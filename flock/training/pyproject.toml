@@ -1,0 +1,11 @@
+[project]
+name = "flock-training"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "flock",
+    "torch>=2.14.1",
+]
+
+[tool.uv]
+package = false
