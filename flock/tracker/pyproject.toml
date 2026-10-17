@@ -1,0 +1,17 @@
+[project]
+name = "flock-tracker"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "asyncpg>=0.32.0",
+    "fastapi>=0.143.3",
+    "fastapi-cli>=0.0.32",
+    "httptools>=0.9.0",
+    "numpy>=2.5.4",
+    "orjson>=3.13.0",
+    "uvicorn>=0.54.0",
+    "uvloop>=0.23.0",
+]
+
+[tool.uv]
+package = false

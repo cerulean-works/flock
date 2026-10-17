@@ -19,13 +19,14 @@ wheel-exclude = ["pyproject.toml"]
 default-groups = ["dev", "components"]
 
 [tool.uv.workspace]
-members = ["flock/eval", "flock/hub", "flock/training", "tests"]
+members = ["flock/eval", "flock/hub", "flock/training", "flock/tracker", "tests"]
 
 [tool.uv.sources]
 flock = { workspace = true }
 flock-eval = { workspace = true }
 flock-hub = { workspace = true }
 flock-training = { workspace = true }
+flock-tracker = { workspace = true }
 
 [tool.ruff]
 target-version = "py314"
@@ -35,7 +36,8 @@ line-length = 100
 ignore = []
 
 [tool.ruff.lint.isort]
-known-first-party = ["flock"]
+# The tracker is an app (flock/tracker/app.py + src/), imported from its own directory.
+known-first-party = ["flock", "src", "app"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]
@@ -43,12 +45,18 @@ known-first-party = ["flock"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["--import-mode=importlib", "--strict-markers"]
+# The tracker's tests import its app and src package the way `fastapi run` does.
+pythonpath = ["flock/tracker"]
+
+[tool.ty.environment]
+extra-paths = ["flock/tracker"]
 
 [dependency-groups]
 components = [
     "flock-eval",
     "flock-hub",
     "flock-training",
+    "flock-tracker",
 ]
 dev = [
     "pytest>=9.1.1",
