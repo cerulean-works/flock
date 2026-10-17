@@ -266,7 +266,7 @@ def test_filter_via_query_string(table_api):
     [{"$bogus": []}, {"config.lr": {"$near": 1}}, {"config.opt": {"$regex": "("}}, [1, 2]],
 )
 def test_invalid_filters_are_rejected(table_api, bad):
-    resp = table_api.post("/api/v1/projects/flock/t/runs", {"filter": bad})
+    resp = table_api.post("/api/v1/projects/flock/t/runs/query", {"filter": bad})
     assert resp.status == 400
     assert "error" in resp.json()
 
@@ -339,7 +339,7 @@ def test_history_selection(curves_api):
     assert [r["id"] for r in explicit] == ["c03", "c01"]
     assert set(explicit[0]["series"]) == {"loss"}
     filtered = curves_api.post(
-        base,
+        f"{base}/query",
         {"keys": ["loss"], "filter": {"config.idx": {"$lt": 5}}, "sort": "config.idx", "limit": 3},
     ).json()["runs"]
     assert [r["id"] for r in filtered] == ["c00", "c01", "c02"]

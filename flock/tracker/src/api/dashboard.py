@@ -65,8 +65,8 @@ class Snapshot:
             *(c for c in names if c.startswith("config.")),
             *(c for c in names if c.startswith("summary.")),
         ]
-        keys = sorted(project.metric_keys["history"])
-        system_keys = sorted(project.metric_keys["system"]) if system else []
+        keys = project.metric_keys("history")
+        system_keys = project.metric_keys("system") if system else []
         n_runs, n_keys = len(runs), len(keys) + len(system_keys)
 
         # ---- table cells: numeric columns as one f64 block, the rest as JSON
@@ -238,7 +238,7 @@ async def stream(
     # Subscribe before computing the replay: anything published from now on is queued, so the
     # replay and the stream overlap rather than leave a gap. Clients drop points they already
     # have by line number.
-    sub = store.live.subscribe(project.entity, project.name, cursors, system)
+    sub = store.live.subscribe(project.pk, cursors, system)
 
     async def events():
         try:
@@ -283,7 +283,7 @@ async def stream(
                     return
                 yield event
         finally:
-            store.live.unsubscribe(project.entity, project.name, sub)
+            store.live.unsubscribe(project.pk, sub)
 
     return StreamingResponse(
         events(),

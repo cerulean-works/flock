@@ -69,7 +69,7 @@ export WANDB_BASE_URL=http://tracker.internal:8080 WANDB_API_KEY=<key>
 | --- | --- |
 | `app.py` | the FastAPI app: lifecycle, error handling and routers |
 | `Dockerfile`, `compose.yaml` | the image and the Compose stack |
-| `src/api/` | HTTP layer: the wandb protocol, the read API, dashboard snapshots and streams |
+| `src/api/` | HTTP layer: the wandb protocol, projects and runs, dashboard snapshots and streams |
 | `src/core/` | in-memory engine: the run store, columnar run table, series and live events |
 | `src/db/` | PostgreSQL connection, migration runner and the SQL migrations |
 | `src/settings.py`, `src/utils.py` | configuration, and the few helpers shared across modules |
@@ -89,8 +89,9 @@ been applied. `tests/tracker/test_migrations.py` checks that the numbering stays
 
 ## What is supported
 
-The server supports logging, viewing and filtering runs. It doesn't implement artifacts,
-sweeps, reports or wandb's own web UI.
+The server supports logging, viewing and filtering runs, plus managing projects and runs
+through its own API (see [Managing projects and runs](#managing-projects-and-runs)). It doesn't
+implement artifacts, sweeps, reports or wandb's own web UI.
 
 | wandb feature | Support |
 | --- | --- |
@@ -108,14 +109,15 @@ sweeps, reports or wandb's own web UI.
 
 Interactive docs are served at `/docs`. Every path below is relative to
 `/api/v1/projects/{entity}/{project}`. Endpoints that select runs accept query parameters via
-GET or the same fields as a JSON body via POST.
+GET, or the same fields as a JSON body via POST to `.../query`.
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /api/v1/projects` | projects with run counts |
+| `GET /api/v1/projects[?entity=]` | projects with run counts, including empty ones |
+| `GET /api/v1/projects/{entity}/{project}` | one project |
 | `GET .../columns?q=&prefix=` | run-table columns, their type and coverage |
-| `GET\|POST .../runs` | filter, sort and page the runs table |
-| `GET\|POST .../history` | curves for many runs (default: newest 50; `running=true` for ongoing ones) |
+| `GET .../runs`, `POST .../runs/query` | filter, sort and page the runs table |
+| `GET .../history`, `POST .../history/query` | curves for many runs (default: newest 50; `running=true` for ongoing ones) |
 | `GET .../runs/{run}` | run attributes, config, summary, history and system metric names |
 | `GET .../runs/{run}/history` | curves for one run |
 | `GET .../runs/{run}/logs` | console output |
@@ -129,7 +131,7 @@ Run-table columns are the run attributes (`name`, `display_name`, `state`, `crea
 `wandb.Api().runs(filters=...)` uses:
 
 ```json
-POST /api/v1/projects/flock/llm/runs
+POST /api/v1/projects/flock/llm/runs/query
 {
   "filter": {"$and": [{"config.optimizer": {"$in": ["adam", "adamw"]}},
                       {"summary.loss": {"$lt": 2.5}},
@@ -149,6 +151,43 @@ response is column-oriented: it has `ids` and `data[column]` lists of the same l
 `history` returns `runs[i].series[key] = {"x": [...], "y": [...]}`. You choose the x-axis with
 `x` (`_step` by default, or `_runtime` or any logged metric such as `epoch`), and you can cap
 each curve's size with `max_points`. Non-finite values come back as `null`.
+
+## Managing projects and runs
+
+Runs are created only by the wandb SDK, and their config, summary, history and logs only change
+through it. The API manages everything else. Paths are relative to `/api/v1/projects`. There is
+no authorization beyond the API key check yet, so any accepted key can rename and delete.
+
+| Endpoint | Effect |
+| --- | --- |
+| `POST /api/v1/projects` `{entity, name, description?}` | create an empty project (`wandb.init` also creates projects); 409 if it exists |
+| `PATCH /{entity}/{project}` `{name?, description?}` | rename it or change its description |
+| `DELETE /{entity}/{project}[?force=true]` | delete it with all its runs, history, logs and files |
+| `PATCH .../runs/{run}` `{display_name, notes, tags, group, job_type, description}` | edit a run; only the fields given change, and `null` clears one |
+| `DELETE .../runs/{run}[?force=true]` | delete a run with everything it logged |
+| `POST .../runs/update` `{selection, set?, add_tags?, remove_tags?}` | edit many runs |
+| `POST .../runs/delete` `{selection, force?}` | delete many runs |
+| `POST .../runs/move` `{selection, to, create?}` | move runs to another project of the same entity |
+
+A *selection* names `runs` (ids), or gives a `filter` (and/or `running: true`), or sets
+`all: true`. A body that selects nothing is rejected rather than taken to mean every run, and
+`dry_run: true` returns the ids that would change without changing them.
+
+Deletes are hard: there is no undo. Project names given through the API must be 1–128
+characters without `/ \ # ? % :`. Operations that conflict answer 409 with the `ids` in the
+way, and change nothing:
+- Renaming a project, or moving a run, while runs are active. Their clients address them by
+  the old path in every request.
+- Deleting active runs, or a project with active runs, without `force=true`. After a forced
+  delete, the run's client finishes normally, but what it still sends is dropped, so the run
+  stays deleted. Its id becomes free again once the client has been quiet for
+  `TRACKER_CRASH_TIMEOUT`.
+- Moving a run into a project that already has a run with its id.
+
+A moved run keeps everything it logged and sorts by its creation time in its new project. A
+renamed project's old name is free again: a client resuming at the old path starts a new run
+there. Edits race with live clients on equal terms: if the SDK later sends tags or notes, they
+replace the edit.
 
 ### System metrics
 
@@ -192,8 +231,11 @@ Otherwise they are stored explicitly at the x offset. Header `runs` carry each r
 - `history` carries new points.
 - `system` carries new system metric samples, against `_runtime`. These are only sent when
   the stream was opened with `system=true`.
-- `run` carries state changes, the line count and changed `summary.*` columns.
-- `created` announces a new run in the project.
+- `run` carries state changes, the line count, changed `summary.*` columns and, after an
+  edit, the changed `attributes`.
+- `created` announces a new run in the project, or one moved in.
+- `deleted` lists runs that were deleted, or moved out (with `moved_to`).
+- `project` says the project was renamed (`renamed_to`) or `deleted`; the stream then ends.
 
 The snapshot records each run's line counts. Pass them back as `runs=<id>:<lines>,...`, or
 `runs=<id>:<lines>:<system_lines>,...` with `system=true`. The stream first replays every
@@ -222,6 +264,10 @@ limit; it reconnects with its latest line counts.
   uncompressed and out of line, so reads skip decompression. Curves of cold runs load in a
   single batched query per request (`run_pk = ANY(...) AND key = ANY(...)`), whatever the
   number of runs.
+- **Changes**: deleting or moving runs rebuilds the affected projects' run tables, keeping rows
+  in creation order (tens of ms for 10k runs × 1.5k columns). Mutations take a lock per
+  project and per run, always in the same order, and writes from a run's client hold its
+  lock, so a run is never deleted halfway through a write.
 - **Startup** loads every run's metadata, config and summary into memory. A 10k-run ×
   1.5k-column project takes a few seconds. Objects loaded at startup are frozen out of the
   cyclic GC so its collections don't pause requests.
@@ -241,6 +287,8 @@ Apple Silicon laptop, with PostgreSQL running in Docker:
 | ongoing runs' curves while those runs stream history | ~1 ms | 10–20 ms |
 | 6-clause filter + sort over 10k runs × 1.5k columns | ~2.5 ms | 20–50 ms |
 | `$or` + regex + string `$in` over 10k runs × 1.5k columns | ~3 ms | 20–50 ms |
+| deleting ~950 runs from 10k runs × 1.5k columns | ~90 ms | 200 ms |
+| moving 500 of those runs to another project | ~50 ms | 200 ms |
 
 ## Tests
 

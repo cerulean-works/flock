@@ -45,7 +45,7 @@ class Hub:
     """Dashboard subscribers per project, and the Server-Sent Events they receive."""
 
     def __init__(self) -> None:
-        self._subscribers: dict[tuple[str, str], set[Subscriber]] = {}
+        self._subscribers: dict[int, set[Subscriber]] = {}  # by project pk
 
     @staticmethod
     def event(name: str, data: Any) -> bytes:
@@ -67,28 +67,32 @@ class Hub:
         series = {key: {"rows": rows, "x": x, "y": y} for key, (rows, x, y) in points.items()}
         return Hub.event(stream, {"run": run, "lines": lines, "series": series})
 
-    def subscribe(
-        self, entity: str, project: str, runs: Iterable[str], system: bool = False
-    ) -> Subscriber:
+    def subscribe(self, project: int, runs: Iterable[str], system: bool = False) -> Subscriber:
+        """Subscribe to runs of the project with primary key ``project``."""
         sub = Subscriber(runs, system)
-        self._subscribers.setdefault((entity, project), set()).add(sub)
+        self._subscribers.setdefault(project, set()).add(sub)
         return sub
 
-    def unsubscribe(self, entity: str, project: str, sub: Subscriber) -> None:
-        subs = self._subscribers.get((entity, project))
+    def unsubscribe(self, project: int, sub: Subscriber) -> None:
+        subs = self._subscribers.get(project)
         if subs is not None:
             subs.discard(sub)
             if not subs:
-                del self._subscribers[(entity, project)]
+                del self._subscribers[project]
 
-    def watching(self, entity: str, project: str, run: str) -> list[Subscriber]:
+    def watching(self, project: int, run: str) -> list[Subscriber]:
         """Subscribers interested in ``run`` (empty in the common no-dashboard case)."""
-        subs = self._subscribers.get((entity, project))
+        subs = self._subscribers.get(project)
         return [s for s in subs if run in s.runs] if subs else []
 
-    def broadcast(self, entity: str, project: str, event: bytes) -> None:
-        for sub in self._subscribers.get((entity, project), ()):
+    def broadcast(self, project: int, event: bytes) -> None:
+        for sub in self._subscribers.get(project, ()):
             sub.push(event)
+
+    def close_project(self, project: int) -> None:
+        """End every stream of a project (after it was renamed or deleted)."""
+        for sub in self._subscribers.pop(project, ()):
+            sub.close()
 
     def close(self) -> None:
         for subs in self._subscribers.values():

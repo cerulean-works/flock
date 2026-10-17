@@ -107,7 +107,7 @@ def test_0002_upgrades_existing_data(postgres, make_tracker, tmp_path):
             await conn.close()
 
     asyncio.run(seed())
-    assert asyncio.run(Migrations().apply(url)) == ["0002_system_metrics"]
+    assert asyncio.run(Migrations().apply(url)) == ["0002_system_metrics", "0003_projects"]
 
     server = make_tracker(database_url=url)  # rebuilds and compacts system metrics on startup
     run = server.store.get_run("flock", "p", "r1")
@@ -131,3 +131,56 @@ def test_0002_upgrades_existing_data(postgres, make_tracker, tmp_path):
         ("system", "_runtime"),
         ("system", "system.cpu"),
     ]
+
+
+def test_0003_creates_projects_from_runs(postgres, make_tracker, tmp_path):
+    """Runs written before projects were records get a project each, from their names."""
+    url = postgres.create(migrated=False)
+    before = tmp_path / "before"
+    before.mkdir()
+    for name in ("0001_initial.sql", "0002_system_metrics.sql"):
+        shutil.copy(Migrations().directory / name, before)
+    asyncio.run(Migrations(before).apply(url))
+
+    async def seed() -> None:
+        conn = await asyncpg.connect(url)
+        try:
+            await conn.executemany(
+                "INSERT INTO runs (entity, project, name, state, created_at, updated_at, "
+                "heartbeat_at) VALUES ($1, $2, $3, 'finished', "
+                "to_timestamp($4), to_timestamp($4), to_timestamp($4))",
+                [
+                    ("flock", "p", "r1", 100.0),
+                    ("flock", "p", "r2", 50.0),
+                    ("flock", "q", "r1", 75.0),
+                    ("lab", "p", "r1", 10.0),
+                ],
+            )
+        finally:
+            await conn.close()
+
+    asyncio.run(seed())
+    assert asyncio.run(Migrations().apply(url)) == ["0003_projects"]
+
+    async def schema() -> tuple[list, list]:
+        conn = await asyncpg.connect(url)
+        try:
+            projects = await conn.fetch(
+                "SELECT entity, name, extract(epoch FROM created_at)::float8 FROM projects"
+            )
+            constraints = await conn.fetch(
+                "SELECT conname FROM pg_constraint WHERE conrelid = 'runs'::regclass "
+                "AND contype = 'u'"
+            )
+            return sorted(tuple(p) for p in projects), [c[0] for c in constraints]
+        finally:
+            await conn.close()
+
+    projects, unique = asyncio.run(schema())
+    assert projects == [("flock", "p", 50.0), ("flock", "q", 75.0), ("lab", "p", 10.0)]
+    assert unique == ["runs_project_pk_name_key"]
+
+    api = make_tracker(database_url=url).client()
+    assert api.runs("p")["ids"] == ["r1", "r2"]  # newest first
+    assert api.runs("p", entity="lab")["ids"] == ["r1"]
+    assert api.get("/api/v1/projects/flock/q").json()["run_count"] == 1

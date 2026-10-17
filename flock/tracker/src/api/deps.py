@@ -4,6 +4,7 @@ from typing import Annotated, Any
 import orjson
 from fastapi import Depends, Request
 from fastapi.responses import Response
+from pydantic import AfterValidator
 
 from src.core.store import Project, Run, Store
 
@@ -21,10 +22,24 @@ class JSONResponse(Response):
 
 
 class APIError(Exception):
-    def __init__(self, status_code: int, message: str) -> None:
+    def __init__(self, status_code: int, message: str, **extra: Any) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.message = message
+        self.extra = extra  # more fields for the error body, e.g. the ids of conflicting runs
+
+
+def check_name(value: str) -> str:
+    """wandb's rule for project names: 1-128 characters, none of ``/ \\ # ? % :``."""
+    if not 1 <= len(value) <= 128 or value != value.strip():
+        raise ValueError("must be 1-128 characters without surrounding whitespace")
+    if any(ch in "/\\#?%:" or not ch.isprintable() for ch in value):
+        raise ValueError("must not contain / \\ # ? % : or control characters")
+    return value
+
+
+# A project or entity name given through the API (names sent by the SDK are taken as they are).
+Name = Annotated[str, AfterValidator(check_name)]
 
 
 def get_store(request: Request) -> Store:

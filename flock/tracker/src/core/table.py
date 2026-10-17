@@ -176,6 +176,63 @@ class ColumnTable:
             column.present[idx] = True
             column.n_num += len(numeric_rows)
 
+    def append_from(self, other: ColumnTable, rows: np.ndarray) -> np.ndarray:
+        """Append copies of ``other``'s ``rows`` (every column); returns their new row numbers."""
+        start = self.n
+        for _ in range(len(rows)):
+            self.add_row()
+        new = np.arange(start, self.n)
+        for name, src in other.columns.items():
+            present = src.present[rows]
+            count = int(np.count_nonzero(present))
+            if not count:
+                continue
+            dst = self.column(name)
+            dst.num[new] = src.num[rows]
+            dst.present[new] = present
+            n_obj = 0
+            if src.obj is not None:
+                obj = src.obj[rows]
+                if dst.obj is None:
+                    dst.obj = np.full(len(dst.num), None, dtype=object)
+                dst.obj[new] = obj
+                n_obj = int(self._scan(obj, lambda v: True).sum())
+            dst.n_obj += n_obj
+            dst.n_num += count - n_obj
+            dst.int_only = dst.int_only and src.int_only
+            dst.has_list = dst.has_list or src.has_list
+        return new
+
+    def take(self, index: np.ndarray) -> None:
+        """Keep only the rows in ``index``, in that order (row ``index[i]`` becomes row ``i``).
+
+        Columns left without values are dropped. Costs O(rows × columns): meant for deleting and
+        moving runs, not for the hot path.
+        """
+        index = np.asarray(index, dtype=np.int64)
+        n = len(index)
+        capacity = max(64, 1 << max(n - 1, 0).bit_length())
+        for name in list(self.columns):
+            column = self.columns[name]
+            present = column.present[index]
+            if not present.any():
+                del self.columns[name]
+                continue
+            num = column.num[index]
+            column.num = np.full(capacity, np.nan)
+            column.num[:n] = num
+            column.present = np.zeros(capacity, dtype=bool)
+            column.present[:n] = present
+            if column.obj is not None:
+                obj = column.obj[index]
+                column.obj = np.full(capacity, None, dtype=object)
+                column.obj[:n] = obj
+                column.n_obj = int(self._scan(obj, lambda v: True).sum())
+            column.n_num = int(np.count_nonzero(present)) - column.n_obj
+        self.n = n
+        self.capacity = capacity
+        self._names_cache = None
+
     @staticmethod
     def canonical(name: str) -> str:
         """Map accepted aliases (``summary_metrics.x``, ``run.x``) onto canonical column names."""

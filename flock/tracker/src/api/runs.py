@@ -4,17 +4,18 @@ import numpy as np
 import orjson
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.api.deps import (
     APIError,
     JSONResponse,
+    Name,
     ProjectDep,
     RunDep,
     StoreDep,
     current_user,
 )
-from src.core.store import Project
+from src.core.store import NotFound, Project, Run
 
 router = APIRouter(prefix="/api/v1", tags=["tracker"], dependencies=[Depends(current_user)])
 
@@ -115,26 +116,53 @@ class HistoryQuery(RunSelection):
         return self.x or ("_step" if self.stream == "history" else "_runtime")
 
 
-# ---------------------------------------------------------------------- projects
+class Selection(RunSelection):
+    """Runs to change: the ``runs`` named, or every run matching ``filter``/``running``, or
+    ``all`` of them. An empty selection is an error, so a bare body never selects everything."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    runs: list[str] = Field(default_factory=list, description="explicit run ids")
+    all: bool = Field(False, description="every run in the project")
+    dry_run: bool = Field(False, description="only report the runs that would change")
+
+    def targets(self, project: Project) -> list[Run]:
+        if self.runs:
+            missing = [name for name in self.runs if name not in project.by_name]
+            if missing:
+                raise APIError(404, "runs not found", ids=missing)
+            return [project.by_name[name] for name in dict.fromkeys(self.runs)]
+        if self.filter is None and not self.running and not self.all:
+            raise APIError(400, "select runs with runs, filter, running or all")
+        return [project.runs[row] for row in self.select(project).tolist()]
 
 
-@router.get("/projects")
-async def list_projects(store: StoreDep) -> Response:
-    """All projects with their run counts."""
-    return JSONResponse(
-        {
-            "projects": [
-                {
-                    "entity": p.entity,
-                    "name": p.name,
-                    "run_count": len(p.runs),
-                    "active_run_count": len(p.active),
-                    "column_count": len(p.table.columns),
-                }
-                for p in store.projects.values()
-            ]
-        }
-    )
+class RunFields(BaseModel):
+    """Editable run attributes; only the fields given change, and ``null`` clears one."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str | None = None
+    notes: str | None = None
+    tags: list[str] | None = None
+    group: str | None = None
+    job_type: str | None = None
+    description: str | None = None
+
+
+class RunUpdate(Selection):
+    set: RunFields = Field(default_factory=RunFields, description="attributes to set")
+    add_tags: list[str] = Field(default_factory=list)
+    remove_tags: list[str] = Field(default_factory=list)
+
+
+class RunDelete(Selection):
+    force: bool = Field(False, description="also delete active runs")
+
+
+class RunMove(Selection):
+    to: Name = Field(description="target project, in the same entity")
+    create: bool = Field(False, description="create the target project if it doesn't exist")
 
 
 @router.get("/projects/{entity}/{project}/columns")
@@ -183,7 +211,7 @@ async def get_runs(
     return await query_runs(project, query)
 
 
-@router.post("/projects/{entity}/{project}/runs")
+@router.post("/projects/{entity}/{project}/runs/query")
 async def query_runs(project: ProjectDep, query: RunsQuery) -> Response:
     """Filter, sort and page the runs table.
 
@@ -243,7 +271,7 @@ async def get_history(
     return await query_history(project, query, store)
 
 
-@router.post("/projects/{entity}/{project}/history")
+@router.post("/projects/{entity}/{project}/history/query")
 async def query_history(project: ProjectDep, query: HistoryQuery, store: StoreDep) -> Response:
     """Curves of ``keys`` for the runs chosen by ``runs`` or by ``filter``/``running``/``sort``.
 
@@ -271,6 +299,74 @@ async def query_history(project: ProjectDep, query: HistoryQuery, store: StoreDe
     return JSONResponse({"stream": query.stream, "x": x, "keys": query.keys, "runs": out})
 
 
+# ---------------------------------------------------------------------- run changes
+
+
+@router.patch("/projects/{entity}/{project}/runs/{run}")
+async def update_run(run: RunDep, body: RunFields, store: StoreDep) -> Response:
+    """Edit a run's display name, notes, tags, group, job type or description."""
+    await store.edit_runs(run.project, [run], body.model_dump(include=body.model_fields_set))
+    return await get_run(run, store)
+
+
+@router.delete("/projects/{entity}/{project}/runs/{run}", status_code=204)
+async def delete_run(
+    run: RunDep,
+    store: StoreDep,
+    force: Annotated[bool, Query(description="delete it even while it is running")] = False,
+) -> Response:
+    """Delete a run with its history, logs and files. There is no undo."""
+    await store.delete_runs(run.project, [run], force)
+    return Response(status_code=204)
+
+
+def changed(runs: list[str], dry_run: bool = False) -> Response:
+    body: dict[str, Any] = {"ids": runs, "count": len(runs)}
+    if dry_run:
+        body["dry_run"] = True
+    return JSONResponse(body)
+
+
+@router.post("/projects/{entity}/{project}/runs/update")
+async def update_runs(project: ProjectDep, body: RunUpdate, store: StoreDep) -> Response:
+    """Edit many runs at once: set attributes, and add or remove tags."""
+    runs = body.targets(project)
+    if body.dry_run:
+        return changed([run.name for run in runs], dry_run=True)
+    values = body.set.model_dump(include=body.set.model_fields_set)
+    edited = await store.edit_runs(project, runs, values, body.add_tags, body.remove_tags)
+    return changed([run.name for run in edited])
+
+
+@router.post("/projects/{entity}/{project}/runs/delete")
+async def delete_runs(project: ProjectDep, body: RunDelete, store: StoreDep) -> Response:
+    """Delete many runs. Refused (409, listing them) if any is active, unless ``force``."""
+    runs = body.targets(project)
+    if body.dry_run:
+        return changed([run.name for run in runs], dry_run=True)
+    return changed(await store.delete_runs(project, runs, body.force))
+
+
+@router.post("/projects/{entity}/{project}/runs/move")
+async def move_runs(project: ProjectDep, body: RunMove, store: StoreDep) -> Response:
+    """Move finished runs to another project of the same entity, with everything they logged.
+
+    Refused (409, listing them) if any run is active or the target has a run with the same id.
+    """
+    runs = body.targets(project)
+    target = store.project(project.entity, body.to)
+    if target is None and not body.create:
+        raise APIError(404, f"project {project.entity}/{body.to} not found")
+    if body.dry_run:
+        return changed([run.name for run in runs], dry_run=True)
+    if target is None:
+        target = await store.ensure_project(project.entity, body.to)
+    try:
+        return changed(await store.move_runs(project, runs, target))
+    except NotFound as exc:
+        raise APIError(404, str(exc)) from exc
+
+
 # ---------------------------------------------------------------------- single run
 
 
@@ -291,7 +387,7 @@ async def get_run(run: RunDep, store: StoreDep) -> Response:
         {
             "id": run.name,
             "entity": run.entity,
-            "project": run.project,
+            "project": run.project.name,
             **run.attributes(),
             "config": config,
             "summary": summary,

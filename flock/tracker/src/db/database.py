@@ -60,6 +60,9 @@ class Database:
     async def fetch(self, query: str, *args: Any) -> list[asyncpg.Record]:
         return await self.pool.fetch(query, *args)
 
+    async def fetchrow(self, query: str, *args: Any) -> asyncpg.Record | None:
+        return await self.pool.fetchrow(query, *args)
+
     async def fetchval(self, query: str, *args: Any) -> Any:
         return await self.pool.fetchval(query, *args)
 

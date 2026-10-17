@@ -386,3 +386,81 @@ def test_killed_client_is_marked_crashed(make_tracker, make_wandb_client, wait_f
     finally:
         if proc.poll() is None:
             proc.kill()
+
+
+def test_force_deleted_run_stays_deleted_while_its_client_finishes(tracker, api, wandb_client):
+    """A run deleted under a live client: the client finishes normally and the run doesn't
+    come back from the client's later requests."""
+    proc = wandb_client.popen(
+        """
+        import sys
+        run = wandb.init(project="doomed", settings=SETTINGS)
+        run.log({"loss": 1.0})
+        print("LOGGED", run.id, flush=True)
+        sys.stdin.readline()  # block until the test has deleted the run
+        for step in range(1, 20):
+            run.log({"loss": 1.0 / (step + 1)})
+        run.summary["after"] = True
+        run.finish()
+        print("FINISHED", flush=True)
+        """
+    )
+    try:
+        line = proc.stdout.readline()
+        assert line.startswith("LOGGED"), line + proc.stderr.read()
+        run_id = line.split()[1]
+        path = f"/api/v1/projects/flock/doomed/runs/{run_id}"
+        refused = api.delete(path)
+        assert refused.status == 409, refused.body
+        assert refused.json()["ids"] == [run_id]
+        assert api.delete(path, force="true").status == 204
+        proc.stdin.write("\n")
+        proc.stdin.flush()
+        assert proc.wait(timeout=120) == 0, proc.stderr.read()
+        assert "FINISHED" in proc.stdout.read()
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    assert api.get(path).status == 404
+    assert api.get("/api/v1/projects/flock/doomed").json()["run_count"] == 0
+
+
+def test_moved_run_is_not_resumed_at_its_old_path(tracker, api, wandb_client):
+    script = """
+        import sys
+        run = wandb.init(project="before", id="mover", resume="allow", settings=SETTINGS)
+        run.log({"loss": float(sys.argv[1])})
+        run.finish()
+    """
+    wandb_client.run(script, "1")
+    moved = api.post("/api/v1/projects/flock/before/runs/move", {"runs": ["mover"], "to": "after"})
+    assert moved.status == 404  # "after" doesn't exist yet
+    body = {"runs": ["mover"], "to": "after", "create": True}
+    assert api.post("/api/v1/projects/flock/before/runs/move", body).json()["ids"] == ["mover"]
+    wandb_client.run(script, "2")  # resume="allow" at the old path starts a new run there
+
+    assert api.run_history("after", "mover", keys="loss")["loss"]["y"] == [1.0]
+    assert api.run_history("before", "mover", keys="loss")["loss"]["y"] == [2.0]
+
+
+def test_offline_run_synced_into_a_deleted_project(tracker, api, wandb_client):
+    wandb_client.run(
+        """
+        run = wandb.init(project="reborn", name="first")
+        run.log({"loss": 1.0})
+        run.finish()
+        """,
+    )
+    assert api.delete("/api/v1/projects/flock/reborn").status == 204
+    wandb_client.run(
+        """
+        run = wandb.init(project="reborn", name="offline")
+        run.log({"loss": 2.0})
+        run.finish()
+        """,
+        WANDB_MODE="offline",
+    )
+    (run_dir,) = (wandb_client.workdir / "wandb").glob("offline-run-*")
+    wandb_client.cli("sync", str(run_dir))
+    row = api.only_run("reborn")
+    assert (row["display_name"], row["summary.loss"]) == ("offline", 2.0)

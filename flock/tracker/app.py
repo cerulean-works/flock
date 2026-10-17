@@ -10,9 +10,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from src.api import dashboard, runs, wandb_protocol
+from src.api import dashboard, projects, runs, wandb_protocol
 from src.api.deps import APIError, JSONResponse
-from src.core.store import Store
+from src.core.store import Conflict, Store
 from src.core.table import FilterError
 from src.settings import Settings
 
@@ -84,8 +84,12 @@ def create_app(store: Store) -> FastAPI:
     @app.exception_handler(APIError)
     async def api_error(request: Request, exc: APIError) -> Response:
         # ``errors`` keeps GraphQL clients (the wandb SDK) able to surface the message.
-        body = {"error": exc.message, "errors": [{"message": exc.message}]}
+        body = {"error": exc.message, "errors": [{"message": exc.message}], **exc.extra}
         return JSONResponse(body, status_code=exc.status_code)
+
+    @app.exception_handler(Conflict)
+    async def conflict(request: Request, exc: Conflict) -> Response:
+        return JSONResponse({"error": exc.message, "ids": exc.ids}, status_code=409)
 
     @app.exception_handler(FilterError)
     async def filter_error(request: Request, exc: FilterError) -> Response:
@@ -95,7 +99,7 @@ def create_app(store: Store) -> FastAPI:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=store.settings.cors_origins,
-            allow_methods=["GET", "POST"],
+            allow_methods=["GET", "POST", "PATCH", "DELETE"],
             allow_headers=["*"],
         )
 
@@ -104,6 +108,7 @@ def create_app(store: Store) -> FastAPI:
         return JSONResponse({"ok": True})
 
     app.include_router(wandb_protocol.router)
+    app.include_router(projects.router)
     app.include_router(runs.router)
     app.include_router(dashboard.router)
     return app

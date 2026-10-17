@@ -209,7 +209,7 @@ class TestSweep:
     RUNS = 10_000
     CONFIG_COLUMNS = 100
     SUMMARY_COLUMNS = 1_400
-    PATH = "/api/v1/projects/flock/sweep/runs"
+    PATH = "/api/v1/projects/flock/sweep/runs/query"
 
     @pytest.fixture(scope="class")
     @classmethod
@@ -341,3 +341,38 @@ class TestSweep:
         timing = Timing.measure(client, "GET", path, params={"q": "metric_13"})
         assert len(timing.data["columns"]) == 100
         timing.check(self.P50_MS, self.P95_MS)
+
+    # Mutations come last: they change the shared dataset.
+
+    def test_bulk_delete_and_move_then_filter(self, sweep):
+        """Deleting ~1k runs and moving 500 rebuild the 10k × 1.5k table; filters stay fast."""
+        client, specs = sweep
+        base = "/api/v1/projects/flock/sweep/runs"
+        finished = [r for r in range(self.RUNS) if r % 7]  # every 7th run is still running
+        doomed = [f"run{r:05d}" for r in finished if r % 9 == 0]
+        moved = [f"run{r:05d}" for r in finished if r % 9 == 1][:500]
+
+        start = time.perf_counter()
+        resp = client.post(f"{base}/delete", {"runs": doomed})
+        delete_ms = (time.perf_counter() - start) * 1000
+        assert resp.status == 200, resp.body
+        assert resp.json()["count"] == len(doomed) > 900
+
+        start = time.perf_counter()
+        resp = client.post(f"{base}/move", {"runs": moved, "to": "archive", "create": True})
+        move_ms = (time.perf_counter() - start) * 1000
+        assert resp.status == 200, resp.body
+        print(f"\ndelete {len(doomed)} runs: {delete_ms:.0f}ms, move {len(moved)}: {move_ms:.0f}ms")
+        assert delete_ms < 200
+        assert move_ms < 200
+
+        gone = {int(name[3:]) for name in doomed + moved}
+        body = {"filter": {"summary.loss": {"$lt": 0.1}}}
+        timing = Timing.measure(client, "POST", self.PATH, body=body)
+        expected = sum(
+            1 for r, (_, summary, _) in enumerate(specs) if summary["loss"] < 0.1 and r not in gone
+        )
+        assert timing.data["total"] == expected
+        timing.check(self.P50_MS, self.P95_MS)
+        archive = client.post("/api/v1/projects/flock/archive/runs/query", body).json()
+        assert archive["total"] == sum(1 for name in moved if specs[int(name[3:])][1]["loss"] < 0.1)

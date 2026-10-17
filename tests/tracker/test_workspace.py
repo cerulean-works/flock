@@ -158,7 +158,7 @@ def test_slow_subscribers_are_disconnected(api, tracker, monkeypatch):
     api.create_run("p", "r1")
 
     async def subscribe():
-        return tracker.store.live.subscribe("flock", "p", ["r1"])
+        return tracker.store.live.subscribe(tracker.store.project("flock", "p").pk, ["r1"])
 
     sub = tracker.call(subscribe())
     for i in range(5):
@@ -170,7 +170,7 @@ def test_slow_subscribers_are_disconnected(api, tracker, monkeypatch):
     assert items[-1] is None  # end-of-stream marker made it into the full queue
 
     async def unsubscribe():
-        tracker.store.live.unsubscribe("flock", "p", sub)
+        tracker.store.live.unsubscribe(tracker.store.project("flock", "p").pk, sub)
 
     tracker.call(unsubscribe())
 

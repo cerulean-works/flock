@@ -11,7 +11,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
 
 from src.api.deps import APIError, JSONResponse, StoreDep, UserDep
-from src.core.store import Store
+from src.core.store import Discarded, NotFound, Store
 from src.utils import encode_id, loads_lenient
 
 router = APIRouter(include_in_schema=False)
@@ -144,7 +144,31 @@ class GraphQL:
             if not isinstance(value, dict):
                 raise GraphQLError(f"{var} must be a JSON object")
             fields[key] = value
-        run, inserted = await self.store.upsert_run(entity, project, name, fields)
+        try:
+            run, inserted = await self.store.upsert_run(entity, project, name, fields)
+        except Discarded as exc:
+            # The run was deleted while this client was logging: answer as if it existed, so
+            # the client finishes normally (its writes are dropped).
+            project, name = exc.project, exc.name
+            return {
+                "upsertBucket": {
+                    "bucket": {
+                        "id": encode_id("Run", "v1", name, project, entity),
+                        "name": name,
+                        "displayName": fields["display_name"],
+                        "description": fields["description"],
+                        "config": orjson.dumps(fields.get("config") or {}).decode(),
+                        "sweepName": fields["sweep"],
+                        "historyLineCount": 0,
+                        "project": {
+                            "id": encode_id("Project", "v1", project, entity),
+                            "name": project,
+                            "entity": {"id": encode_id("Entity", entity), "name": entity},
+                        },
+                    },
+                    "inserted": False,
+                }
+            }
         config = fields.get("config")
         if config is None:
             config = await self.store.read_config(run)
@@ -159,8 +183,8 @@ class GraphQL:
                     "sweepName": run.sweep,
                     "historyLineCount": run.history_line_count,
                     "project": {
-                        "id": encode_id("Project", "v1", run.project, run.entity),
-                        "name": run.project,
+                        "id": encode_id("Project", "v1", run.project.name, run.entity),
+                        "name": run.project.name,
                         "entity": {"id": encode_id("Entity", run.entity), "name": run.entity},
                     },
                 },
@@ -211,23 +235,27 @@ class GraphQL:
         store = self.store
         entity = variables.get("entity") or self.user
         project = variables.get("project") or store.settings.default_project
-        run = store.get_run(entity, project, variables.get("run") or "")
-        if run is None:
+        run_name = variables.get("run") or ""
+        run = store.get_run(entity, project, run_name)
+        # The client of a run deleted while it was running gets URLs whose uploads are dropped.
+        discarded = run is None and store.discarding(entity, project, run_name)
+        if run is None and not discarded:
             raise GraphQLError("run not found")
         base = (store.settings.public_url or str(self.request.base_url)).rstrip("/")
-        prefix = "/".join(quote(part, safe="") for part in (entity, project, run.name))
+        prefix = "/".join(quote(part, safe="") for part in (entity, project, run_name))
         files = []
         for name in variables.get("files") or []:
-            if store.file_path(run, name) is None:
+            if run is not None and store.file_path(run, name) is None:
                 raise GraphQLError(f"invalid file name {name!r}")
-            signature = self.sign(store, entity, project, run.name, name)
+            signature = self.sign(store, entity, project, run_name, name)
             files.append(
                 {
                     "name": name,
                     "uploadUrl": f"{base}/storage/{prefix}/{quote(name)}?sig={signature}",
                 }
             )
-        return {"createRunFiles": {"runID": run.graphql_id, "uploadHeaders": [], "files": files}}
+        run_id = encode_id("Run", "v1", run_name, project, entity)
+        return {"createRunFiles": {"runID": run_id, "uploadHeaders": [], "files": files}}
 
     async def run_state(self, variables: dict) -> dict:
         run = self.store.get_run(
@@ -269,7 +297,10 @@ async def file_stream(
         payload = orjson.loads(body)
     except (orjson.JSONDecodeError, OSError) as exc:  # OSError: corrupt gzip
         raise APIError(400, "invalid request body") from exc
-    await store.file_stream(entity, project, run, payload)
+    try:
+        await store.file_stream(entity, project, run, payload)
+    except NotFound as exc:
+        raise APIError(404, str(exc)) from exc
     return JSONResponse({"exitcode": None, "limits": {}})
 
 
@@ -286,10 +317,14 @@ async def upload(
     if not hmac.compare_digest(sig, GraphQL.sign(store, entity, project, run, name)):
         raise APIError(403, "invalid upload signature")
     target = store.get_run(entity, project, run)
-    if target is None:
-        raise APIError(404, "run not found")
     try:
+        if target is None:
+            raise NotFound("run not found")
         await store.save_file(target, name, await request.body())
+    except NotFound as exc:
+        if store.discarding(entity, project, run):
+            return Response(status_code=200)  # from the client of a deleted run: dropped
+        raise APIError(404, str(exc)) from exc
     except ValueError as exc:
         raise APIError(400, str(exc)) from exc
     return Response(status_code=200)

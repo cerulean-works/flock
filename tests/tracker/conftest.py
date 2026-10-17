@@ -84,6 +84,12 @@ class Client:
     def post(self, path: str, body: Any, **kwargs: Any) -> Response:
         return self.request("POST", path, body=body, **kwargs)
 
+    def patch(self, path: str, body: Any) -> Response:
+        return self.request("PATCH", path, body=body)
+
+    def delete(self, path: str, **params: Any) -> Response:
+        return self.request("DELETE", path, params=params or None)
+
     def graphql(self, query: str, variables: dict | None = None, **kwargs: Any) -> Response:
         return self.post("/graphql", {"query": query, "variables": variables or {}}, **kwargs)
 
@@ -170,7 +176,7 @@ class Client:
 
     def runs(self, project: str, entity: str = "flock", **body: Any) -> dict:
         """Query the runs table (POST, so filters can be plain dicts)."""
-        resp = self.post(f"/api/v1/projects/{entity}/{project}/runs", body)
+        resp = self.post(f"/api/v1/projects/{entity}/{project}/runs/query", body)
         assert resp.status == 200, resp.body
         return resp.json()
 
@@ -384,6 +390,8 @@ class TrackerServer:
         return Client(self.port, api_key)
 
     def stop(self) -> None:
+        # As on SIGTERM in production: end dashboard streams, which never finish on their own.
+        self.loop.call_soon_threadsafe(self.store.live.close)
         self._server.should_exit = True
         self._thread.join(timeout=60)
 
