@@ -23,6 +23,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY app.py /app/
 COPY src /app/src
+COPY scripts /app/scripts
 RUN /opt/venv/bin/python -m compileall -q /app
 
 

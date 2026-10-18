@@ -420,6 +420,37 @@ Apple Silicon laptop, with PostgreSQL running in Docker:
 | home feed, first page and a filtered later page, over 10k runs | ~0.6 ms | 20–50 ms |
 | budget panel over 10k runs' ledger entries | ~3 ms | 20–50 ms |
 
+## Simulating a month
+
+[`scripts/simulate_month.py`](scripts/simulate_month.py) fills an empty database with a month
+of intense use by a mid-size lab, backdated over the past 30 days, so the dashboard has
+something realistic to show:
+- 3 orgs and ~40 users;
+- ~5.7k runs (pretraining, sweeps, fine-tunes, evals, scratch), about 33M points;
+- GPU prices, budgets and a ledger of ~110k GPU hours;
+- avatars and pending invites.
+
+It writes straight to PostgreSQL in about 25 s (about 1.5 GB), because writing through the API
+would stamp everything "now". Stop the tracker, or don't use it, while the script runs, and
+restart it afterwards so it loads the data. Every simulated user's password is
+`flock-demo-password`. The script prints a super admin API key.
+
+```sh
+cd flock/tracker
+uv run --no-sync python -m scripts.simulate_month --reset \
+    --database-url postgresql://tracker:tracker@127.0.0.1:5432/tracker --files-dir tracker-files
+# or, in the Compose stack (the image has the script, and the container's settings):
+docker compose exec -w /app tracker python -m scripts.simulate_month --reset
+docker compose restart tracker
+```
+
+- **`--reset`** deletes everything in the database first. Without it, the script refuses a
+  database that has accounts, orgs or runs.
+- **`--scale 0.1`** makes a tenth of the runs.
+- **`--seed`** picks another month.
+- **`--keep-running`** leaves runs still going at the end as `running`. No client logs to them,
+  so they turn `crashed` after `TRACKER_CRASH_TIMEOUT`.
+
 ## Tests
 
 The tests need PostgreSQL. They use the admin URL in `TRACKER_TEST_DATABASE_URL` if it is set.
