@@ -10,9 +10,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from src.api import dashboard, projects, runs, wandb_protocol
+from src.api import auth, dashboard, orgs, projects, runs, wandb_protocol
 from src.api.deps import APIError, JSONResponse
-from src.core.store import Conflict, Store
+from src.core.errors import Conflict, Forbidden, NotFound
+from src.core.store import Store
 from src.core.table import FilterError
 from src.settings import Settings
 
@@ -25,6 +26,14 @@ def create_app(store: Store) -> FastAPI:
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await store.open()
+        if store.accounts.signup_open:
+            # A fresh server: say where the first account comes from, since every request
+            # (including the dashboard's) is refused until it exists.
+            setup = store.settings.app_url
+            log.warning(
+                "no accounts yet: %s to create the first one, which becomes the super admin",
+                f"open {setup.rstrip('/')}/setup" if setup else "open the dashboard",
+            )
         # Move everything loaded at startup out of the cyclic GC's view so full collections
         # don't stall requests scanning millions of long-lived run-table objects.
         gc.collect()
@@ -91,6 +100,14 @@ def create_app(store: Store) -> FastAPI:
     async def conflict(request: Request, exc: Conflict) -> Response:
         return JSONResponse({"error": exc.message, "ids": exc.ids}, status_code=409)
 
+    @app.exception_handler(Forbidden)
+    async def forbidden(request: Request, exc: Forbidden) -> Response:
+        return JSONResponse({"error": exc.message, "ids": exc.ids}, status_code=403)
+
+    @app.exception_handler(NotFound)
+    async def not_found(request: Request, exc: NotFound) -> Response:
+        return JSONResponse({"error": str(exc)}, status_code=404)
+
     @app.exception_handler(FilterError)
     async def filter_error(request: Request, exc: FilterError) -> Response:
         return JSONResponse({"error": str(exc)}, status_code=400)
@@ -108,6 +125,8 @@ def create_app(store: Store) -> FastAPI:
         return JSONResponse({"ok": True})
 
     app.include_router(wandb_protocol.router)
+    app.include_router(auth.router)
+    app.include_router(orgs.router)
     app.include_router(projects.router)
     app.include_router(runs.router)
     app.include_router(dashboard.router)

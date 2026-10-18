@@ -14,6 +14,8 @@ from typing import Any, ClassVar
 import numpy as np
 import orjson
 
+from src.core.accounts import Accounts
+from src.core.errors import Conflict, Discarded, Forbidden, NotFound
 from src.core.history import History, PointCounter, Series
 from src.core.live import Hub
 from src.core.names import ADJECTIVES, NOUNS
@@ -23,29 +25,6 @@ from src.settings import Settings
 from src.utils import encode_id, flatten, loads_lenient
 
 log = logging.getLogger(__name__)
-
-
-class NotFound(LookupError):
-    """The run or project was deleted, renamed or moved (HTTP 404)."""
-
-
-class Discarded(Exception):
-    """A write from the client of a run deleted while it was running. It is acknowledged and
-    dropped, so the client finishes normally and the run stays deleted."""
-
-    def __init__(self, project: str, name: str) -> None:
-        super().__init__(f"run {project}/{name} was deleted")
-        self.project = project
-        self.name = name
-
-
-class Conflict(Exception):
-    """A mutation that can't be applied as asked (HTTP 409); ``ids`` names the runs in the way."""
-
-    def __init__(self, message: str, ids: Iterable[str] = ()) -> None:
-        super().__init__(message)
-        self.message = message
-        self.ids = list(ids)
 
 
 @dataclass(eq=False)
@@ -70,6 +49,7 @@ class Run:
         "commit",
         "sweep",
         "exitcode",
+        "owner",
     )
 
     pk: int
@@ -91,6 +71,8 @@ class Run:
     description: str | None = None
     sweep: str | None = None
     exitcode: int | None = None
+    # The user who logged the run (a user pk); runs from before accounts existed have none.
+    owner: int | None = None
     history_line_count: int = 0
     events_line_count: int = 0
     log_line_count: int = 0
@@ -131,18 +113,29 @@ class Run:
         return self.history_line_count if stream == "history" else self.events_line_count
 
 
+class Org:
+    """An organization: the wandb entity its projects and runs are logged under."""
+
+    def __init__(self, pk: int, name: str, created_at: float = 0.0, updated_at: float = 0.0):
+        self.pk = pk
+        self.name = name
+        self.created_at = created_at
+        self.updated_at = updated_at
+        self.deleted = False
+
+
 class Project:
     def __init__(
         self,
         pk: int,
-        entity: str,
+        org: Org,
         name: str,
         description: str | None = None,
         created_at: float = 0.0,
         updated_at: float = 0.0,
     ) -> None:
         self.pk = pk
-        self.entity = entity
+        self.org = org
         self.name = name
         self.description = description
         self.created_at = created_at
@@ -157,6 +150,10 @@ class Project:
         # Held to create runs, move runs in or out, delete runs, and rename or delete the project.
         self.lock = asyncio.Lock()
         self.deleted = False
+
+    @property
+    def entity(self) -> str:
+        return self.org.name
 
     @property
     def key(self) -> tuple[str, str]:
@@ -223,12 +220,14 @@ class Store:
         self.settings = settings
         self.files_dir = settings.files_dir
         self.db = Database(settings.database_url, max_size=settings.pool_size)
+        self.orgs: dict[str, Org] = {}
+        self.orgs_by_pk: dict[int, Org] = {}
         self.projects: dict[tuple[str, str], Project] = {}
         self.projects_by_pk: dict[int, Project] = {}
         self.runs_by_pk: dict[int, Run] = {}
         self.active: dict[int, Run] = {}
         self._locks: dict[int, asyncio.Lock] = {}  # per run, by pk
-        # Serializes changes to which (entity, name) maps to which project.
+        # Serializes changes to which name maps to which org, and (entity, name) to which project.
         self._catalog = asyncio.Lock()
         # Runs deleted while a client was still logging to them: (entity, project, run) -> when
         # that client was last heard from (see ``discarding``).
@@ -240,6 +239,7 @@ class Store:
         self._tasks: set[asyncio.Task] = set()
         self.live = Hub()
         self.secret = b""
+        self.accounts = Accounts(self)
 
     @staticmethod
     def _config_columns(config: dict[str, Any]) -> dict[str, Any]:
@@ -286,6 +286,7 @@ class Store:
             secret = await self.db.fetchval("SELECT value FROM meta WHERE key = 'upload_secret'")
             self.secret = bytes.fromhex(secret)
             await self._load()
+            await self.accounts.load()
         except BaseException:
             await self.db.close()
             raise
@@ -297,10 +298,15 @@ class Store:
     async def _load(self) -> None:
         started = time.perf_counter()
         for record in await self.db.fetch(
-            "SELECT pk, entity, name, description, extract(epoch FROM created_at)::float8, "
+            "SELECT pk, name, extract(epoch FROM created_at)::float8, "
+            "extract(epoch FROM updated_at)::float8 FROM orgs"
+        ):
+            self._add_org(Org(*record))
+        for pk, org_pk, *rest in await self.db.fetch(
+            "SELECT pk, org_pk, name, description, extract(epoch FROM created_at)::float8, "
             "extract(epoch FROM updated_at)::float8 FROM projects"
         ):
-            self._add_project(Project(*record))
+            self._add_project(Project(pk, self.orgs_by_pk[org_pk], *rest))
         pending: dict[int, dict[str, tuple[list[int], list[Any]]]] = {}
         query = """
             SELECT pk, project_pk, name, display_name, state,
@@ -308,7 +314,7 @@ class Store:
                    extract(epoch FROM heartbeat_at)::float8, tags, notes, group_name, job_type,
                    host, program, commit_hash, description, sweep, exitcode, history_line_count,
                    events_line_count, log_line_count, history_compacted_line_count,
-                   system_compacted_line_count, config, summary
+                   system_compacted_line_count, config, summary, owner_pk
             FROM runs
             ORDER BY created_at, pk
         """
@@ -339,6 +345,7 @@ class Store:
                     events_line_count=record[19],
                     log_line_count=record[20],
                     compacted={"history": record[21], "system": record[22]},
+                    owner=record[25],
                 )
                 project.add(run)
                 self.runs_by_pk[run.pk] = run
@@ -408,6 +415,14 @@ class Store:
         proj = self.projects.get((entity, project))
         return proj.by_name.get(name) if proj is not None else None
 
+    def _add_org(self, org: Org) -> Org:
+        self.orgs[org.name] = org
+        self.orgs_by_pk[org.pk] = org
+        return org
+
+    def _org_projects(self, org: Org) -> list[Project]:
+        return [project for project in self.projects_by_pk.values() if project.org is org]
+
     def _add_project(self, project: Project) -> Project:
         self.projects[project.key] = project
         self.projects_by_pk[project.pk] = project
@@ -436,25 +451,43 @@ class Store:
                 await stack.enter_async_context(self._run_lock(run))
             yield
 
+    def org(self, name: str) -> Org:
+        org = self.orgs.get(name)
+        if org is None:
+            raise NotFound(f"organization {name} not found")
+        return org
+
+    async def _insert_project(
+        self, org: Org, name: str, description: str | None = None
+    ) -> Project | None:
+        """Insert a project row (call with ``_catalog`` held); None if the name is taken."""
+        record = await self.db.fetchrow(
+            "INSERT INTO projects (org_pk, name, description, created_at, updated_at) "
+            "VALUES ($1, $2, $3, now(), now()) ON CONFLICT (org_pk, name) DO NOTHING "
+            "RETURNING pk, name, description, "
+            "extract(epoch FROM created_at)::float8, extract(epoch FROM updated_at)::float8",
+            org.pk,
+            name,
+            description,
+        )
+        if record is None:
+            return None
+        pk, *rest = record
+        return self._add_project(Project(pk, org, *rest))
+
     async def ensure_project(self, entity: str, name: str) -> Project:
-        """The project ``entity/name``, created if it doesn't exist (as ``wandb.init`` does)."""
+        """The project ``entity/name``, created if it doesn't exist (as ``wandb.init`` does).
+
+        Organizations are never created implicitly: an unknown ``entity`` is ``NotFound``.
+        """
         project = self.projects.get((entity, name))
         if project is not None:
             return project
         async with self._catalog:
             project = self.projects.get((entity, name))
             if project is None:
-                record = await self.db.fetchrow(
-                    "INSERT INTO projects (entity, name, created_at, updated_at) "
-                    "VALUES ($1, $2, now(), now()) "
-                    "ON CONFLICT (entity, name) DO UPDATE SET name = excluded.name "
-                    "RETURNING pk, entity, name, description, "
-                    "extract(epoch FROM created_at)::float8, extract(epoch FROM updated_at)::float8",
-                    entity,
-                    name,
-                )
-                assert record is not None
-                project = self._add_project(Project(*record))
+                project = await self._insert_project(self.org(entity), name)
+                assert project is not None  # only created under _catalog, and it was missing
             return project
 
     @contextlib.asynccontextmanager
@@ -519,12 +552,19 @@ class Store:
     # ------------------------------------------------------------------ mutations
 
     async def upsert_run(
-        self, entity: str, project_name: str | None, name: str | None, fields: dict[str, Any]
+        self,
+        entity: str,
+        project_name: str | None,
+        name: str | None,
+        fields: dict[str, Any],
+        owner: int | None = None,
+        admin: bool = True,
     ) -> tuple[Run, bool]:
         """Create or update a run. ``fields`` holds only the values the client provided.
 
         Recognised fields: the keys of ``FIELD_COLUMNS`` plus ``tags`` (list), ``config``
-        (wandb-style config dict) and ``summary`` (dict).
+        (wandb-style config dict) and ``summary`` (dict). A new run belongs to ``owner``; an
+        existing one can only be updated by its owner, unless ``admin``.
         """
         project_name = project_name or self.settings.default_project
         # Clients that don't name the run get a random 8 character id, as wandb does.
@@ -535,12 +575,20 @@ class Store:
         async with self._writable_project(entity, project_name) as project:
             run = project.by_name.get(name)
             if run is None:
-                return await self._create_run(project, name, fields), True
+                return await self._create_run(project, name, fields, owner), True
+            self._check_owner(run, owner, admin)
             async with self._run_lock(run):
                 await self._update_run(run, fields)
             return run, False
 
-    async def _create_run(self, project: Project, name: str, fields: dict[str, Any]) -> Run:
+    @staticmethod
+    def _check_owner(run: Run, owner: int | None, admin: bool) -> None:
+        if not admin and run.owner != owner:
+            raise Forbidden(f"run {run.path} belongs to another user", [run.name])
+
+    async def _create_run(
+        self, project: Project, name: str, fields: dict[str, Any], owner: int | None = None
+    ) -> Run:
         now = time.time()
         # wandb-style "adjective-noun-N" unless the client named the run.
         display_name = (
@@ -557,9 +605,9 @@ class Store:
             """
             INSERT INTO runs (project_pk, name, display_name, state, created_at, updated_at,
                               heartbeat_at, config, summary, tags, notes, group_name, job_type,
-                              host, program, commit_hash, description, sweep)
+                              host, program, commit_hash, description, sweep, owner_pk)
             VALUES ($1, $2, $3, $4, to_timestamp($5), to_timestamp($5), to_timestamp($5),
-                    $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                    $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
             RETURNING pk
             """,
             project.pk,
@@ -578,6 +626,7 @@ class Store:
             values["commit_hash"],
             values["description"],
             values["sweep"],
+            owner,
         )
         run = Run(
             pk=pk,
@@ -598,6 +647,7 @@ class Store:
             commit=values["commit_hash"],
             description=values["description"],
             sweep=values["sweep"],
+            owner=owner,
         )
         project.add(run)
         self.runs_by_pk[pk] = run
@@ -722,9 +772,15 @@ class Store:
                 self._schedule_compaction(run, stream)
 
     async def file_stream(
-        self, entity: str, project_name: str, name: str, payload: dict[str, Any]
+        self,
+        entity: str,
+        project_name: str,
+        name: str,
+        payload: dict[str, Any],
+        owner: int | None = None,
+        admin: bool = True,
     ) -> None:
-        """Apply one wandb ``file_stream`` request."""
+        """Apply one wandb ``file_stream`` request (from ``owner``, see ``upsert_run``)."""
         files = payload.get("files") or {}
         history = files.get("wandb-history.jsonl")
         summary = files.get("wandb-summary.json")
@@ -751,6 +807,7 @@ class Store:
                 if self.discarding(entity, project_name, name):
                     return
                 raise NotFound(f"run {entity}/{project_name}/{name} not found")
+            self._check_owner(run, owner, admin)
             project = run.project
             pk = run.pk
             now = time.time()
@@ -926,20 +983,12 @@ class Store:
         self, entity: str, name: str, description: str | None = None
     ) -> Project:
         async with self._catalog:
-            if (entity, name) in self.projects:
+            project = None
+            if (entity, name) not in self.projects:
+                project = await self._insert_project(self.org(entity), name, description)
+            if project is None:
                 raise Conflict(f"project {entity}/{name} already exists")
-            record = await self.db.fetchrow(
-                "INSERT INTO projects (entity, name, description, created_at, updated_at) "
-                "VALUES ($1, $2, $3, now(), now()) ON CONFLICT (entity, name) DO NOTHING "
-                "RETURNING pk, entity, name, description, "
-                "extract(epoch FROM created_at)::float8, extract(epoch FROM updated_at)::float8",
-                entity,
-                name,
-                description,
-            )
-            if record is None:
-                raise Conflict(f"project {entity}/{name} already exists")
-            return self._add_project(Project(*record))
+            return project
 
     async def update_project(self, project: Project, fields: dict[str, Any]) -> None:
         """Rename a project and/or change its description (the keys present in ``fields``)."""
@@ -983,16 +1032,106 @@ class Store:
             if project.active and not force:
                 raise Conflict("project has active runs (pass force=true)", project.active)
             await self.db.execute("DELETE FROM projects WHERE pk = $1", project.pk)
-            pks = [run.pk for run in project.runs]
-            self._mark_deleted_live(project.active.values())
-            for run in project.runs:
-                self._forget_run(run)
-            del self.projects[project.key]
-            del self.projects_by_pk[project.pk]
-            project.deleted = True
+            pks = self._drop_project(project)
         self.live.broadcast(project.pk, Hub.event("project", {"deleted": True}))
         self.live.close_project(project.pk)
         await self._remove_files(pks)
+
+    def _drop_project(self, project: Project) -> list[int]:
+        """Forget a project whose delete committed; returns its runs' pks."""
+        pks = [run.pk for run in project.runs]
+        self._mark_deleted_live(project.active.values())
+        for run in project.runs:
+            self._forget_run(run)
+        del self.projects[project.key]
+        del self.projects_by_pk[project.pk]
+        project.deleted = True
+        return pks
+
+    # ------------------------------------------------------------------ organizations
+
+    async def create_org(self, name: str) -> Org:
+        async with self._catalog:
+            record = None
+            if name not in self.orgs:
+                record = await self.db.fetchrow(
+                    "INSERT INTO orgs (name, created_at, updated_at) VALUES ($1, now(), now()) "
+                    "ON CONFLICT (name) DO NOTHING RETURNING pk, name, "
+                    "extract(epoch FROM created_at)::float8, extract(epoch FROM updated_at)::float8",
+                    name,
+                )
+            if record is None:
+                raise Conflict(f"organization {name} already exists")
+            return self._add_org(Org(*record))
+
+    @contextlib.asynccontextmanager
+    async def _org_locked(self, org: Org, all_runs: bool = False) -> AsyncGenerator[list[Project]]:
+        """Hold the locks of every project of ``org``, then ``_catalog`` (so no project can be
+        created in it meanwhile); yields the projects."""
+        while True:
+            projects = self._org_projects(org)
+            async with self._locked(projects, all_runs=all_runs), self._catalog:
+                if org.deleted:
+                    raise NotFound(f"organization {org.name} not found")
+                if set(self._org_projects(org)) != set(projects):
+                    continue  # a project was created while we waited: lock it too
+                yield projects
+                return
+
+    async def update_org(self, org: Org, name: str) -> None:
+        """Rename an organization, which renames the entity of all its projects and runs."""
+        async with self._org_locked(org) as projects:
+            if name == org.name:
+                return
+            active = [f"{p.name}/{run}" for p in projects for run in p.active]
+            if active:
+                # Their clients address them by entity in every request.
+                raise Conflict("cannot rename an organization with active runs", active)
+            if name in self.orgs:
+                raise Conflict(f"organization {name} already exists")
+            now = time.time()
+            await self.db.execute(
+                "UPDATE orgs SET name = $2, updated_at = to_timestamp($3) WHERE pk = $1",
+                org.pk,
+                name,
+                now,
+            )
+            for project in projects:
+                del self.projects[project.key]
+            del self.orgs[org.name]
+            org.name = name
+            org.updated_at = now
+            self.orgs[name] = org
+            for project in projects:
+                self.projects[project.key] = project
+        for project in projects:
+            self.live.broadcast(project.pk, Hub.event("project", {"entity_renamed_to": name}))
+            self.live.close_project(project.pk)
+
+    async def delete_org(self, org: Org, force: bool = False) -> None:
+        """Delete an organization with all its projects and runs; refused while runs are
+        active unless ``force``."""
+        async with self._org_locked(org, all_runs=True) as projects:
+            active = [f"{p.name}/{run}" for p in projects for run in p.active]
+            if active and not force:
+                raise Conflict("organization has active runs (pass force=true)", active)
+            await self.db.execute("DELETE FROM orgs WHERE pk = $1", org.pk)
+            pks = [pk for project in projects for pk in self._drop_project(project)]
+            del self.orgs[org.name]
+            del self.orgs_by_pk[org.pk]
+            org.deleted = True
+            self.accounts.forget_org(org)
+        for project in projects:
+            self.live.broadcast(project.pk, Hub.event("project", {"deleted": True}))
+            self.live.close_project(project.pk)
+        await self._remove_files(pks)
+
+    def forget_owner(self, user: int) -> None:
+        """Runs of a deleted user stay, without an owner (the database sets it to NULL)."""
+        for run in self.runs_by_pk.values():
+            if run.owner == user:
+                run.owner = None
+                run.project.table.clear(run.row, "owner")
 
     async def edit_runs(
         self,

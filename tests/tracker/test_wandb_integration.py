@@ -18,13 +18,14 @@ def test_login_cli_stores_credentials_for_the_server(tracker, wandb_client, api_
     assert api_key in netrc
 
 
-def test_login_cli_rejects_unknown_key(make_tracker, make_wandb_client, api_key):
-    server = make_tracker(api_keys={api_key: "alice"})
-    client = make_wandb_client(server)
-    proc = client.cli("login", "--host", server.url, "z" * 40, check=False)
+def test_login_cli_rejects_unknown_key(tracker, wandb_client):
+    alice = tracker.add_user("alice@lab.test")
+    proc = wandb_client.cli("login", "--host", tracker.url, "z" * 40, check=False)
     assert proc.returncode != 0
-    ok = client.cli("login", "--relogin", "--host", server.url, api_key, WANDB_SILENT="false")
-    assert "alice" in ok.stdout + ok.stderr
+    ok = wandb_client.cli(
+        "login", "--relogin", "--host", tracker.url, alice.api_key, WANDB_SILENT="false"
+    )
+    assert "alice@lab.test" in ok.stdout + ok.stderr
 
 
 def test_init_log_summary_and_config(tracker, api, wandb_client):
@@ -329,21 +330,41 @@ def test_concurrent_runs(tracker, api, wandb_client):
         assert curve["series"]["loss"]["x"] == list(range(100))
 
 
-def test_api_keys_map_to_entities(make_tracker, make_wandb_client, api_key):
-    server = make_tracker(api_keys={api_key: "alice"})
-    make_wandb_client(server).run(
+def test_members_log_to_their_orgs_and_only_resume_their_runs(tracker, make_wandb_client):
+    admin = tracker.client()
+    assert admin.post("/api/v1/orgs", {"name": "lab"}).status == 201
+    alice = tracker.add_user("alice@lab.test", org="lab")
+    bob = tracker.add_user("bob@lab.test", org="lab")
+    make_wandb_client(tracker, alice.api_key).run(
         """
-        run = wandb.init(project="secured", settings=SETTINGS)
-        assert run.entity == "alice", run.entity
+        run = wandb.init(project="secured", id="alice-run", settings=SETTINGS)
+        assert run.entity == "lab", run.entity  # the default org, from Viewer
         run.log({"loss": 1.0})
         run.finish()
         """
     )
-    api = server.client()
-    assert api.only_run("secured", entity="alice")["state"] == "finished"
-    assert server.client(api_key="z" * 40).get("/api/v1/projects").status == 401
+    row = admin.runs("secured", entity="lab", columns="state,owner")
+    assert (row["ids"], row["data"]) == (
+        ["alice-run"],
+        {"state": ["finished"], "owner": [alice.id]},
+    )
 
-    proc = make_wandb_client(server, api_key="z" * 40).run(
+    refused = {
+        # Bob may log to lab, but not into Alice's run.
+        "resume": (bob, 'wandb.init(project="secured", id="alice-run", resume="allow")'),
+        # Alice isn't a member of flock.
+        "other org": (alice, 'wandb.init(entity="flock", project="secured")'),
+    }
+    for case, (user, code) in refused.items():
+        proc = make_wandb_client(tracker, user.api_key).run(
+            f"{code[:-1]}, settings=SETTINGS)", check=False, timeout=120
+        )
+        assert proc.returncode != 0, case
+    assert admin.runs("secured", entity="lab")["ids"] == ["alice-run"]
+    assert admin.get("/api/v1/projects/flock/secured").status == 404
+
+    assert tracker.client(api_key="z" * 40).get("/api/v1/projects").status == 401
+    proc = make_wandb_client(tracker, api_key="z" * 40).run(
         """
         wandb.init(project="secured", settings=SETTINGS)
         """,

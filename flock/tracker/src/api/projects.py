@@ -4,8 +4,18 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict
 
-from src.api.deps import APIError, JSONResponse, Name, ProjectDep, StoreDep, current_user
-from src.core.store import NotFound
+from src.api.deps import (
+    AdminProjectDep,
+    APIError,
+    JSONResponse,
+    Name,
+    ProjectDep,
+    StoreDep,
+    UserDep,
+    current_user,
+    visible_org,
+)
+from src.core.errors import NotFound
 
 router = APIRouter(prefix="/api/v1", tags=["projects"], dependencies=[Depends(current_user)])
 
@@ -29,16 +39,23 @@ class ProjectUpdate(BaseModel):
 
 @router.get("/projects")
 async def list_projects(
-    store: StoreDep, entity: Annotated[str | None, Query(description="only this entity")] = None
+    store: StoreDep,
+    user: UserDep,
+    entity: Annotated[str | None, Query(description="only this entity")] = None,
 ) -> Response:
-    """Projects with their run counts, including projects without runs."""
-    projects = [p for p in store.projects.values() if entity is None or p.entity == entity]
+    """Projects of the user's organizations with their run counts, including empty ones."""
+    projects = [
+        p
+        for p in store.projects.values()
+        if (entity is None or p.entity == entity) and store.accounts.role(user, p.org)
+    ]
     return JSONResponse({"projects": [p.info() for p in projects]})
 
 
 @router.post("/projects", status_code=201)
-async def create_project(body: ProjectCreate, store: StoreDep) -> Response:
-    """Create an empty project (``wandb.init`` also creates projects it logs to)."""
+async def create_project(body: ProjectCreate, store: StoreDep, user: UserDep) -> Response:
+    """Create an empty project in an org of the user (``wandb.init`` also creates projects)."""
+    visible_org(body.entity, store, user)
     project = await store.create_project(body.entity, body.name, body.description)
     return JSONResponse(project.info(), status_code=201)
 
@@ -49,8 +66,10 @@ async def get_project(project: ProjectDep) -> Response:
 
 
 @router.patch("/projects/{entity}/{project}")
-async def update_project(project: ProjectDep, body: ProjectUpdate, store: StoreDep) -> Response:
-    """Rename a project or change its description.
+async def update_project(
+    project: AdminProjectDep, body: ProjectUpdate, store: StoreDep
+) -> Response:
+    """Rename a project or change its description (org admins only).
 
     Renaming is refused (409) while the project has active runs, since their clients address
     them by the old name. Dashboards streaming the project get a ``project`` event.
@@ -65,11 +84,12 @@ async def update_project(project: ProjectDep, body: ProjectUpdate, store: StoreD
 
 @router.delete("/projects/{entity}/{project}", status_code=204)
 async def delete_project(
-    project: ProjectDep,
+    project: AdminProjectDep,
     store: StoreDep,
     force: Annotated[bool, Query(description="also delete active runs")] = False,
 ) -> Response:
-    """Delete a project with all its runs, their history, logs and files. There is no undo."""
+    """Delete a project with all its runs, their history, logs and files (org admins only).
+    There is no undo."""
     try:
         await store.delete_project(project, force)
     except NotFound as exc:

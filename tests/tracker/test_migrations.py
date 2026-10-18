@@ -107,7 +107,11 @@ def test_0002_upgrades_existing_data(postgres, make_tracker, tmp_path):
             await conn.close()
 
     asyncio.run(seed())
-    assert asyncio.run(Migrations().apply(url)) == ["0002_system_metrics", "0003_projects"]
+    assert asyncio.run(Migrations().apply(url)) == [
+        "0002_system_metrics",
+        "0003_projects",
+        "0004_orgs_and_users",
+    ]
 
     server = make_tracker(database_url=url)  # rebuilds and compacts system metrics on startup
     run = server.store.get_run("flock", "p", "r1")
@@ -160,7 +164,8 @@ def test_0003_creates_projects_from_runs(postgres, make_tracker, tmp_path):
             await conn.close()
 
     asyncio.run(seed())
-    assert asyncio.run(Migrations().apply(url)) == ["0003_projects"]
+    shutil.copy(Migrations().directory / "0003_projects.sql", before)
+    assert asyncio.run(Migrations(before).apply(url)) == ["0003_projects"]
 
     async def schema() -> tuple[list, list]:
         conn = await asyncpg.connect(url)
@@ -179,8 +184,63 @@ def test_0003_creates_projects_from_runs(postgres, make_tracker, tmp_path):
     projects, unique = asyncio.run(schema())
     assert projects == [("flock", "p", 50.0), ("flock", "q", 75.0), ("lab", "p", 10.0)]
     assert unique == ["runs_project_pk_name_key"]
+    assert asyncio.run(Migrations().apply(url)) == ["0004_orgs_and_users"]
 
     api = make_tracker(database_url=url).client()
     assert api.runs("p")["ids"] == ["r1", "r2"]  # newest first
     assert api.runs("p", entity="lab")["ids"] == ["r1"]
     assert api.get("/api/v1/projects/flock/q").json()["run_count"] == 1
+
+
+def test_0004_creates_orgs_from_entities(postgres, make_tracker, tmp_path):
+    """Entities of existing projects become orgs; the first account then administers them all."""
+    url = postgres.create(migrated=False)
+    before = tmp_path / "before"
+    before.mkdir()
+    for path in Migrations().files()[:3]:
+        shutil.copy(path, before)
+    asyncio.run(Migrations(before).apply(url))
+
+    async def seed() -> None:
+        conn = await asyncpg.connect(url)
+        try:
+            for entity, project, run in (("flock", "p", "r1"), ("lab", "p", "r1")):
+                pk = await conn.fetchval(
+                    "INSERT INTO projects (entity, name, created_at, updated_at) "
+                    "VALUES ($1, $2, now(), now()) RETURNING pk",
+                    entity,
+                    project,
+                )
+                await conn.execute(
+                    "INSERT INTO runs (project_pk, name, state, created_at, updated_at, "
+                    "heartbeat_at) VALUES ($1, $2, 'finished', now(), now(), now())",
+                    pk,
+                    run,
+                )
+        finally:
+            await conn.close()
+
+    asyncio.run(seed())
+    assert asyncio.run(Migrations().apply(url)) == ["0004_orgs_and_users"]
+
+    async def rows() -> list:
+        conn = await asyncpg.connect(url)
+        try:
+            return await conn.fetch(
+                "SELECT o.name, p.name, r.owner_pk FROM runs r "
+                "JOIN projects p ON p.pk = r.project_pk JOIN orgs o ON o.pk = p.org_pk"
+            )
+        finally:
+            await conn.close()
+
+    assert sorted(tuple(r) for r in asyncio.run(rows())) == [
+        ("flock", "p", None),
+        ("lab", "p", None),
+    ]
+    api = make_tracker(database_url=url).client()
+    assert api.get("/api/v1/projects/lab/p/runs/r1").json()["owner"] is None
+    orgs = api.get("/api/v1/orgs").json()["orgs"]
+    assert [(o["name"], o["role"], o["member_count"]) for o in orgs] == [
+        ("flock", "admin", 1),
+        ("lab", "admin", 1),
+    ]

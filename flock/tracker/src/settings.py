@@ -20,16 +20,34 @@ class Settings:
         doc="apply pending migrations on startup; when off, refuse to start on an old schema",
     )
     default_entity: str = field(
-        default="flock", doc="entity runs land in when API keys are not configured"
+        default="flock", doc="organization created for the first user when there is none"
     )
     default_project: str = field(
         default="uncategorized", doc="project runs land in when none is given"
     )
-    api_keys: dict[str, str] = field(
-        default_factory=dict,
-        doc="accepted keys as user:key,user:key (stored key -> user); empty accepts any key",
+    public_url: str | None = field(
+        default=None, doc="external base URL, used in file upload URLs and the Google callback"
     )
-    public_url: str | None = field(default=None, doc="external base URL, used in file upload URLs")
+    app_url: str | None = field(
+        default=None, doc="dashboard base URL that invite, reset and sign-in links point at"
+    )
+    jwt_secret: str | None = field(
+        default=None, doc="key signing access tokens (default: one generated in the database)"
+    )
+    access_token_ttl: float = field(default=900.0, doc="seconds an access token is valid")
+    refresh_token_ttl: float = field(
+        default=30 * 86400.0, doc="seconds a sign-in lasts without being refreshed"
+    )
+    invite_ttl: float = field(default=7 * 86400.0, doc="seconds an invite link is valid")
+    reset_ttl: float = field(default=86400.0, doc="seconds a password reset link is valid")
+    google_client_id: str | None = field(
+        default=None, doc="OAuth client id enabling Sign in with Google"
+    )
+    google_client_secret: str | None = field(default=None, doc="that OAuth client's secret")
+    google_redirect_url: str | None = field(
+        default=None,
+        doc="Google callback URL (default: <app_url, else public_url>/api/v1/auth/google/callback)",
+    )
     history_cache_points: int = field(
         default=20_000_000,
         doc="history points cached in memory for finished runs (active runs are always kept)",
@@ -63,11 +81,6 @@ class Settings:
                 if raw.lower() not in ("1", "true", "yes", "on", "0", "false", "no", "off"):
                     raise ValueError(f"{spec.name} must be true or false, got {raw!r}")
                 values[spec.name] = raw.lower() in ("1", "true", "yes", "on")
-            elif isinstance(default, dict):  # user:key pairs, stored key -> user
-                pairs = [item.strip().partition(":") for item in raw.split(",") if item.strip()]
-                if not all(user and key for user, _, key in pairs):
-                    raise ValueError(f"{spec.name} must look like user:key,user:key")
-                values[spec.name] = {key: user for user, _, key in pairs}
             elif isinstance(default, list):
                 values[spec.name] = [item.strip() for item in raw.split(",") if item.strip()]
             elif default is None:

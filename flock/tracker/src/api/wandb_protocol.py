@@ -10,8 +10,10 @@ import orjson
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
 
-from src.api.deps import APIError, JSONResponse, StoreDep, UserDep
-from src.core.store import Discarded, NotFound, Store
+from src.api.deps import APIError, JSONResponse, StoreDep, UserDep, visible_org
+from src.core.accounts import User
+from src.core.errors import Discarded, Forbidden, NotFound
+from src.core.store import Org, Store
 from src.utils import encode_id, loads_lenient
 
 router = APIRouter(include_in_schema=False)
@@ -37,8 +39,8 @@ class GraphQL:
         "CreateRunFiles": "create_run_files",
         "RunState": "run_state",
     }
-    # Operations with a fixed answer: feature probes, and organization lookups that don't
-    # apply to a single-tenant server.
+    # Operations with a fixed answer: feature probes, and lookups of wandb's own organization
+    # model (orgs here are plain entities).
     STATIC: ClassVar[dict[str, dict[str, Any]]] = {
         "ServerFeaturesQuery": {
             "serverInfo": {"features": [], "cliVersionInfo": None, "latestLocalVersionInfo": None}
@@ -60,7 +62,7 @@ class GraphQL:
         ("serverInfo", "ServerFeaturesQuery"),
     )
 
-    def __init__(self, store: Store, user: str, request: Request) -> None:
+    def __init__(self, store: Store, user: User, request: Request) -> None:
         self.store = store
         self.user = user
         self.request = request
@@ -92,22 +94,35 @@ class GraphQL:
             return {"data": None, "errors": [{"message": str(exc)}]}
         return {"data": data}
 
+    def org(self, name: str | None) -> tuple[Org, str]:
+        """The org a request names (by default the user's default org) and the user's role."""
+        accounts = self.store.accounts
+        org = self.store.orgs.get(name) if name else accounts.default_org(self.user)
+        role = accounts.role(self.user, org) if org is not None else None
+        if org is None or role is None:
+            raise GraphQLError(
+                f"organization {name} not found" if name else "you are not in any organization"
+            )
+        return org, role
+
     async def viewer(self, variables: dict) -> dict:
         user = self.user
+        default = self.store.accounts.default_org(user)
+        orgs = self.store.orgs_by_pk
         return {
             "viewer": {
-                "id": encode_id("User", user),
-                "entity": user,
-                "username": user,
-                "email": None,
+                "id": encode_id("User", str(user.pk)),
+                "entity": default.name if default else None,
+                "username": user.email,
+                "email": user.email,
                 "flags": "{}",
-                "admin": False,
-                "teams": {"edges": []},
+                "admin": user.is_superadmin,
+                "teams": {"edges": [{"node": {"name": orgs[pk].name}} for pk in user.roles]},
             }
         }
 
     async def upsert_bucket(self, variables: dict) -> dict:
-        entity = variables.get("entity") or self.user
+        entity = variables.get("entity")
         project = variables.get("project")
         name = variables.get("name")
         if variables.get("id") and not name:
@@ -120,6 +135,8 @@ class GraphQL:
                 kind = None
             if kind != "Run":
                 raise GraphQLError(f"invalid run id {variables['id']!r}")
+        org, role = self.org(entity)
+        entity = org.name
         fields: dict[str, Any] = {
             "display_name": variables.get("displayName"),
             "notes": variables.get("notes"),
@@ -145,7 +162,11 @@ class GraphQL:
                 raise GraphQLError(f"{var} must be a JSON object")
             fields[key] = value
         try:
-            run, inserted = await self.store.upsert_run(entity, project, name, fields)
+            run, inserted = await self.store.upsert_run(
+                entity, project, name, fields, owner=self.user.pk, admin=role == "admin"
+            )
+        except (NotFound, Forbidden) as exc:  # the org went away meanwhile, or not their run
+            raise GraphQLError(str(exc)) from exc
         except Discarded as exc:
             # The run was deleted while this client was logging: answer as if it existed, so
             # the client finishes normally (its writes are dropped).
@@ -194,7 +215,7 @@ class GraphQL:
 
     async def run_resume_status(self, variables: dict) -> dict:
         store = self.store
-        entity = variables.get("entity") or self.user
+        entity = self.org(variables.get("entity"))[0].name
         project_name = variables.get("project") or store.settings.default_project
         project = store.project(entity, project_name)
         if project is None:
@@ -233,10 +254,13 @@ class GraphQL:
 
     async def create_run_files(self, variables: dict) -> dict:
         store = self.store
-        entity = variables.get("entity") or self.user
+        org, role = self.org(variables.get("entity"))
+        entity = org.name
         project = variables.get("project") or store.settings.default_project
         run_name = variables.get("run") or ""
         run = store.get_run(entity, project, run_name)
+        if run is not None and role != "admin" and run.owner != self.user.pk:
+            raise GraphQLError(f"run {run.path} belongs to another user")
         # The client of a run deleted while it was running gets URLs whose uploads are dropped.
         discarded = run is None and store.discarding(entity, project, run_name)
         if run is None and not discarded:
@@ -259,7 +283,7 @@ class GraphQL:
 
     async def run_state(self, variables: dict) -> dict:
         run = self.store.get_run(
-            variables.get("entity") or self.user,
+            self.org(variables.get("entity"))[0].name,
             variables.get("project") or self.store.settings.default_project,
             variables.get("run") or "",
         )
@@ -297,8 +321,10 @@ async def file_stream(
         payload = orjson.loads(body)
     except (orjson.JSONDecodeError, OSError) as exc:  # OSError: corrupt gzip
         raise APIError(400, "invalid request body") from exc
+    org = visible_org(entity, store, user)
+    admin = store.accounts.role(user, org) == "admin"
     try:
-        await store.file_stream(entity, project, run, payload)
+        await store.file_stream(entity, project, run, payload, owner=user.pk, admin=admin)
     except NotFound as exc:
         raise APIError(404, str(exc)) from exc
     return JSONResponse({"exitcode": None, "limits": {}})

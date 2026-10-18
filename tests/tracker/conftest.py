@@ -13,6 +13,7 @@ import textwrap
 import threading
 import time
 from collections.abc import Coroutine, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -31,25 +32,29 @@ from src.settings import Settings
 
 
 class Response:
-    def __init__(self, status: int, body: bytes) -> None:
+    def __init__(self, status: int, body: bytes, headers: dict[str, str] | None = None) -> None:
         self.status = status
         self.body = body
+        self.headers = headers or {}  # lowercased names
 
     def json(self) -> Any:
         return orjson.loads(self.body)
 
 
 class Client:
-    """Minimal keep-alive HTTP client (stdlib only) for talking to the tracker in tests."""
+    """Minimal keep-alive HTTP client (stdlib only) for talking to the tracker in tests.
 
-    API_KEY = "k" * 40
+    It authenticates with ``api_key`` (sent as the wandb SDK does) or an access ``token``.
+    """
 
-    def __init__(self, port: int, api_key: str | None = API_KEY) -> None:
+    def __init__(self, port: int, api_key: str | None = None, token: str | None = None) -> None:
         self.port = port
         self.headers: dict[str, str] = {}
         if api_key:  # the wandb SDK's scheme: basic auth with user "api"
-            token = base64.b64encode(f"api:{api_key}".encode()).decode()
-            self.headers["Authorization"] = f"Basic {token}"
+            basic = base64.b64encode(f"api:{api_key}".encode()).decode()
+            self.headers["Authorization"] = f"Basic {basic}"
+        elif token:
+            self.headers["Authorization"] = f"Bearer {token}"
         self._conn = http.client.HTTPConnection("127.0.0.1", port, timeout=60)
 
     def request(
@@ -71,15 +76,16 @@ class Client:
             try:
                 self._conn.request(method, path, body=data, headers=hdrs)
                 resp = self._conn.getresponse()
-                return Response(resp.status, resp.read())
+                headers = {name.lower(): value for name, value in resp.getheaders()}
+                return Response(resp.status, resp.read(), headers)
             except ConnectionError, http.client.HTTPException:
                 self._conn.close()
                 if attempt:
                     raise
         raise AssertionError("unreachable")
 
-    def get(self, path: str, **params: Any) -> Response:
-        return self.request("GET", path, params=params or None)
+    def get(self, path: str, headers: dict[str, str] | None = None, **params: Any) -> Response:
+        return self.request("GET", path, params=params or None, headers=headers)
 
     def post(self, path: str, body: Any, **kwargs: Any) -> Response:
         return self.request("POST", path, body=body, **kwargs)
@@ -354,9 +360,20 @@ class Postgres:
 class TrackerServer:
     """A tracker served by uvicorn on an ephemeral port in a background thread."""
 
-    def __init__(self, database_url: str, files_dir: Path, **settings: Any) -> None:
+    # The account a fresh database is bootstrapped with (see ``bootstrap``).
+    ADMIN_EMAIL = "admin@flock.test"
+
+    def __init__(
+        self,
+        database_url: str,
+        files_dir: Path,
+        api_key: str | None = None,
+        bootstrap: bool = True,
+        **settings: Any,
+    ) -> None:
         self.database_url = database_url
         self.files_dir = files_dir
+        self.api_key = api_key
         self.store = Store(Settings(database_url=database_url, files_dir=files_dir, **settings))
         sock = socket.socket()
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -381,19 +398,65 @@ class TrackerServer:
             if time.monotonic() > deadline or not self._thread.is_alive():
                 raise RuntimeError("tracker server failed to start")
             time.sleep(0.01)
+        if bootstrap and self.api_key is None:
+            self.api_key = self.call(self.bootstrap())
+
+    async def bootstrap(self) -> str:
+        """Sign up the super admin (a member of every org, or of a new ``flock`` org) unless
+        the database has users already; returns a new API key of the super admin."""
+        accounts = self.store.accounts
+        if accounts.signup_open:
+            admin = await accounts.signup(self.ADMIN_EMAIL, "Admin")
+        else:
+            admin = next(u for u in accounts.users.values() if u.is_superadmin)
+        return (await accounts.create_api_key(admin, "tests"))[1]
 
     def call(self, coro: Coroutine) -> Any:
         """Run a coroutine on the server's event loop (where all store mutations happen)."""
         return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout=600)
 
-    def client(self, api_key: str | None = Client.API_KEY) -> Client:
-        return Client(self.port, api_key)
+    def client(self, api_key: str | None = None, token: str | None = None) -> Client:
+        """A client with ``api_key`` or ``token``, else the super admin's API key."""
+        return Client(self.port, api_key or (None if token else self.api_key), token)
+
+    def anonymous(self) -> Client:
+        return Client(self.port)
+
+    def add_user(
+        self, email: str, role: str = "member", org: str = "flock", password: str = "password1"
+    ) -> User:
+        """Invite ``email`` into ``org`` as the super admin, and accept as a new account through
+        the API; returns the user with an ``api`` client (on their new API key)."""
+        admin = self.client()
+        invite = admin.post(f"/api/v1/orgs/{org}/invites", {"email": email, "role": role})
+        assert invite.status == 201, invite.body
+        accepted = self.anonymous().post(
+            f"/api/v1/invites/{invite.json()['token']}/accept",
+            {"name": email.partition("@")[0], "password": password},
+        )
+        assert accepted.status == 201, accepted.body
+        body = accepted.json()
+        user_client = self.client(token=body["access_token"])
+        key = user_client.post("/api/v1/me/api-keys", {"name": "tests"}).json()["key"]
+        return User(body["user"]["id"], email, password, key, self.client(api_key=key), body)
 
     def stop(self) -> None:
         # As on SIGTERM in production: end dashboard streams, which never finish on their own.
         self.loop.call_soon_threadsafe(self.store.live.close)
         self._server.should_exit = True
         self._thread.join(timeout=60)
+
+
+@dataclass
+class User:
+    """An account created through the API, with a client using its API key."""
+
+    id: int
+    email: str
+    password: str
+    api_key: str
+    api: Client
+    signup: dict  # the tokens and profile its sign-up returned
 
 
 class Trackers:
@@ -412,6 +475,7 @@ class Trackers:
     ) -> TrackerServer:
         """A tracker on a fresh database (or ``database_url``), or restarted like ``reuse``."""
         if reuse is not None:
+            settings.setdefault("api_key", reuse.api_key)
             server = TrackerServer(reuse.database_url, reuse.files_dir, **settings)
         else:
             files_dir = self.base / f"tracker-files-{len(self.servers)}"
@@ -435,7 +499,7 @@ import wandb
 SETTINGS = wandb.Settings(x_file_stream_transmit_interval=0.1)
 """
 
-    def __init__(self, server: TrackerServer, workdir: Path, api_key: str = Client.API_KEY) -> None:
+    def __init__(self, server: TrackerServer, workdir: Path, api_key: str | None = None) -> None:
         self.workdir = workdir
         workdir.mkdir(parents=True, exist_ok=True)
         home = workdir / "home"
@@ -444,7 +508,7 @@ SETTINGS = wandb.Settings(x_file_stream_transmit_interval=0.1)
         env.update(
             HOME=str(home),
             WANDB_BASE_URL=server.url,
-            WANDB_API_KEY=api_key,
+            WANDB_API_KEY=api_key or server.api_key or "",
             WANDB_DIR=str(workdir),
             WANDB_CONFIG_DIR=str(home / ".config" / "wandb"),
             WANDB_CACHE_DIR=str(home / ".cache" / "wandb"),
@@ -578,7 +642,7 @@ def make_wandb_client(tmp_path: Path):
     pytest.importorskip("wandb")
     count = itertools.count()
 
-    def make(server: TrackerServer, api_key: str = Client.API_KEY) -> WandbClient:
+    def make(server: TrackerServer, api_key: str | None = None) -> WandbClient:
         return WandbClient(server, tmp_path / f"wandb-client-{next(count)}", api_key)
 
     return make
@@ -621,5 +685,7 @@ def wait_for():
 
 
 @pytest.fixture
-def api_key() -> str:
-    return Client.API_KEY
+def api_key(tracker: TrackerServer) -> str:
+    """The ``tracker`` super admin's API key."""
+    assert tracker.api_key is not None
+    return tracker.api_key

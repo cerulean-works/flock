@@ -20,6 +20,8 @@ def test_create_list_get_and_update(api):
     }
     duplicate = api.post(PROJECTS, {"entity": "flock", "name": "vision"})
     assert duplicate.status == 409
+    assert api.post(PROJECTS, {"entity": "lab", "name": "nlp"}).status == 404  # no such org
+    assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
     assert api.post(PROJECTS, {"entity": "lab", "name": "nlp"}).status == 201
 
     listed = {(p["entity"], p["name"]) for p in api.get(PROJECTS).json()["projects"]}

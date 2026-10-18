@@ -13,9 +13,12 @@ from src.api.deps import (
     ProjectDep,
     RunDep,
     StoreDep,
+    UserDep,
+    check_owner,
     current_user,
 )
-from src.core.store import NotFound, Project, Run
+from src.core.errors import NotFound
+from src.core.store import Project, Run
 
 router = APIRouter(prefix="/api/v1", tags=["tracker"], dependencies=[Depends(current_user)])
 
@@ -303,8 +306,9 @@ async def query_history(project: ProjectDep, query: HistoryQuery, store: StoreDe
 
 
 @router.patch("/projects/{entity}/{project}/runs/{run}")
-async def update_run(run: RunDep, body: RunFields, store: StoreDep) -> Response:
+async def update_run(run: RunDep, body: RunFields, store: StoreDep, user: UserDep) -> Response:
     """Edit a run's display name, notes, tags, group, job type or description."""
+    check_owner(store, user, run.project, [run])
     await store.edit_runs(run.project, [run], body.model_dump(include=body.model_fields_set))
     return await get_run(run, store)
 
@@ -313,9 +317,11 @@ async def update_run(run: RunDep, body: RunFields, store: StoreDep) -> Response:
 async def delete_run(
     run: RunDep,
     store: StoreDep,
+    user: UserDep,
     force: Annotated[bool, Query(description="delete it even while it is running")] = False,
 ) -> Response:
     """Delete a run with its history, logs and files. There is no undo."""
+    check_owner(store, user, run.project, [run])
     await store.delete_runs(run.project, [run], force)
     return Response(status_code=204)
 
@@ -328,9 +334,15 @@ def changed(runs: list[str], dry_run: bool = False) -> Response:
 
 
 @router.post("/projects/{entity}/{project}/runs/update")
-async def update_runs(project: ProjectDep, body: RunUpdate, store: StoreDep) -> Response:
-    """Edit many runs at once: set attributes, and add or remove tags."""
+async def update_runs(
+    project: ProjectDep, body: RunUpdate, store: StoreDep, user: UserDep
+) -> Response:
+    """Edit many runs at once: set attributes, and add or remove tags.
+
+    Members can only select runs they logged (403 lists the others); admins any run.
+    """
     runs = body.targets(project)
+    check_owner(store, user, project, runs)
     if body.dry_run:
         return changed([run.name for run in runs], dry_run=True)
     values = body.set.model_dump(include=body.set.model_fields_set)
@@ -339,21 +351,27 @@ async def update_runs(project: ProjectDep, body: RunUpdate, store: StoreDep) -> 
 
 
 @router.post("/projects/{entity}/{project}/runs/delete")
-async def delete_runs(project: ProjectDep, body: RunDelete, store: StoreDep) -> Response:
-    """Delete many runs. Refused (409, listing them) if any is active, unless ``force``."""
+async def delete_runs(
+    project: ProjectDep, body: RunDelete, store: StoreDep, user: UserDep
+) -> Response:
+    """Delete many runs. Refused (409, listing them) if any is active, unless ``force``, and
+    (403) if a member selects runs they didn't log."""
     runs = body.targets(project)
+    check_owner(store, user, project, runs)
     if body.dry_run:
         return changed([run.name for run in runs], dry_run=True)
     return changed(await store.delete_runs(project, runs, body.force))
 
 
 @router.post("/projects/{entity}/{project}/runs/move")
-async def move_runs(project: ProjectDep, body: RunMove, store: StoreDep) -> Response:
+async def move_runs(project: ProjectDep, body: RunMove, store: StoreDep, user: UserDep) -> Response:
     """Move finished runs to another project of the same entity, with everything they logged.
 
-    Refused (409, listing them) if any run is active or the target has a run with the same id.
+    Refused (409, listing them) if any run is active or the target has a run with the same id,
+    and (403) if a member selects runs they didn't log.
     """
     runs = body.targets(project)
+    check_owner(store, user, project, runs)
     target = store.project(project.entity, body.to)
     if target is None and not body.create:
         raise APIError(404, f"project {project.entity}/{body.to} not found")

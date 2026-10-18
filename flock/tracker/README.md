@@ -23,9 +23,12 @@ variables or an `.env` file next to `compose.yaml`:
 | --- | --- | --- |
 | `POSTGRES_PASSWORD` | `tracker` | database password; **set this outside local testing** |
 | `TRACKER_PORT` | `8080` | host port |
-| `TRACKER_API_KEYS` | (empty) | `user:key,user:key`; empty accepts any key as `TRACKER_DEFAULT_ENTITY` |
-| `TRACKER_DEFAULT_ENTITY` | `flock` | entity runs land in when API keys aren't configured |
-| `TRACKER_PUBLIC_URL` | request URL | external base URL, for upload URLs behind a proxy |
+| `TRACKER_DEFAULT_ENTITY` | `flock` | organization created for the first user when there is none |
+| `TRACKER_PUBLIC_URL` | request URL | external base URL, for upload URLs and the Google callback behind a proxy |
+| `TRACKER_APP_URL` | `http://localhost:5173` | dashboard (flock-ui) base URL that invite, reset and sign-in links point at |
+| `TRACKER_JWT_SECRET` | generated | key signing access tokens; by default one is generated into the database |
+| `TRACKER_GOOGLE_CLIENT_ID`, `TRACKER_GOOGLE_CLIENT_SECRET` | (empty) | enable Sign in with Google |
+| `TRACKER_GOOGLE_REDIRECT_URL` | `<app URL>/api/v1/auth/google/callback` | the callback registered with Google |
 | `TRACKER_CRASH_TIMEOUT` | `600` | seconds without heartbeats before a run is marked `crashed` |
 | `TRACKER_HISTORY_CACHE_POINTS` | `20000000` | history points cached in memory for finished runs |
 | `POSTGRES_SHARED_BUFFERS` | `1GB` | PostgreSQL `shared_buffers` |
@@ -57,11 +60,16 @@ and description.
 
 ### Pointing clients at it
 
+Every request needs credentials (see [Accounts and organizations](#accounts-and-organizations)).
+The SDK uses a personal API key, created with `POST /api/v1/me/api-keys`:
+
 ```sh
-wandb login --host http://tracker.internal:8080 <any 40 character key>
+wandb login --host http://tracker.internal:8080 <your API key>
 # or, per process:
-export WANDB_BASE_URL=http://tracker.internal:8080 WANDB_API_KEY=<key>
+export WANDB_BASE_URL=http://tracker.internal:8080 WANDB_API_KEY=<your API key>
 ```
+
+`wandb.init` logs to your default organization unless you pass `entity=`.
 
 ## Code layout
 
@@ -69,8 +77,8 @@ export WANDB_BASE_URL=http://tracker.internal:8080 WANDB_API_KEY=<key>
 | --- | --- |
 | `app.py` | the FastAPI app: lifecycle, error handling and routers |
 | `Dockerfile`, `compose.yaml` | the image and the Compose stack |
-| `src/api/` | HTTP layer: the wandb protocol, projects and runs, dashboard snapshots and streams |
-| `src/core/` | in-memory engine: the run store, columnar run table, series and live events |
+| `src/api/` | HTTP layer: the wandb protocol, auth, organizations, projects and runs, dashboard snapshots and streams |
+| `src/core/` | in-memory engine: the run store, accounts, columnar run table, series and live events |
 | `src/db/` | PostgreSQL connection, migration runner and the SQL migrations |
 | `src/settings.py`, `src/utils.py` | configuration, and the few helpers shared across modules |
 | `docs/` | further documentation |
@@ -105,6 +113,73 @@ implement artifacts, sweeps, reports or wandb's own web UI.
 | console output, run files (config.yaml, requirements.txt, wandb-metadata.json, ...) | yes |
 | offline runs + `wandb sync` | yes |
 
+## Accounts and organizations
+
+An **organization** is a wandb entity: `wandb.init(entity="acme")` logs into the org `acme`,
+and every project belongs to one. Users belong to any number of orgs, with a role in each.
+
+| Who | Can |
+| --- | --- |
+| super admin | create organizations; manage users; act as an admin of every org |
+| org admin | invite people; change roles and remove members; rename or delete the org; update or delete projects; edit, move or delete any run |
+| member | read everything in the org; create projects (with the API or `wandb.init`); log runs; edit, move or delete the runs they logged |
+
+Orgs you don't belong to answer 404, as if they didn't exist. Changing runs you didn't log
+answers 403 with their `ids`. An org always keeps an admin, and the server a super admin.
+
+**Getting started.** The first account to sign up becomes the super admin, and an admin of
+every org (an org named `TRACKER_DEFAULT_ENTITY` is created if there are none). After that,
+signing up is closed, and people join through invitations. Until that account exists, every
+request is refused; the server logs where to create it, and flock-ui opens on a setup page
+that does. The same with the API:
+
+```sh
+curl -X POST $TRACKER/api/v1/auth/signup -d '{"email": "me@lab.org", "name": "Me", "password": "..."}'
+# -> {"access_token", "refresh_token", "expires_in", "user"}
+curl -X POST $TRACKER/api/v1/orgs/flock/invites -H "authorization: Bearer $TOKEN" \
+     -d '{"email": "colleague@lab.org", "role": "member"}'
+# -> {"url": "<TRACKER_APP_URL>/invite/<token>", ...}: send them the link yourself
+```
+
+The tracker sends no email and verifies no addresses: the link is the proof. Its page accepts
+the invitation with `POST /api/v1/invites/{token}/accept` and `{name, password}`, or, for
+someone who already has an account, signed in as the invited email. Password resets work the
+same way. A super admin (or an admin of an org the user belongs to, unless the user is a super
+admin) creates a one-time link with `POST /api/v1/users/{id}/password-reset`.
+
+**Credentials.** The dashboard signs in with `POST /api/v1/auth/login` and sends
+`Authorization: Bearer <access_token>`. Access tokens are JWTs valid for 15 minutes; refresh
+them with `POST /api/v1/auth/refresh` (each refresh token works once). Logging out, changing
+your password or a password reset end sessions at once, not when their tokens expire. The wandb
+SDK and scripts use API keys, sent as the SDK does (basic auth), as `Bearer <key>` or as
+`x-api-key`. Keys are stored hashed and shown only when created.
+
+**Sign in with Google** runs the OAuth code flow in the tracker. Register
+`<TRACKER_APP_URL>/api/v1/auth/google/callback` with Google: flock-ui proxies
+`/api/v1/auth/google/*` to the tracker, so the tracker needn't be reachable from browsers (set
+`TRACKER_GOOGLE_REDIRECT_URL` if your dashboard doesn't). Then send the browser to
+`/api/v1/auth/google/start[?invite=<token>]`. It comes back to
+`<TRACKER_APP_URL>/auth/google?code=...`, and the dashboard exchanges the code with
+`POST /api/v1/auth/google/exchange`; failures land on `<TRACKER_APP_URL>/login?error=...`.
+Google accounts are matched to existing accounts by verified email.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/v1/auth/config` | whether signup is open and Google is enabled (public) |
+| `POST /api/v1/auth/signup`, `login`, `refresh`, `logout` | sessions |
+| `GET`/`PATCH /api/v1/me`, `POST /api/v1/me/password` | your profile (`name`, `default_org`) and password |
+| `GET`/`POST /api/v1/me/api-keys`, `DELETE .../{id}` | your API keys |
+| `GET /api/v1/orgs`, `POST /api/v1/orgs` | your orgs; create one (super admins) |
+| `GET`/`PATCH`/`DELETE /api/v1/orgs/{org}` | an org; rename or delete it (admins; `?force=true` deletes active runs too) |
+| `GET /api/v1/orgs/{org}/members`, `PATCH`/`DELETE .../{user_id}` | members; change roles or remove them (admins), or leave |
+| `GET`/`POST /api/v1/orgs/{org}/invites`, `DELETE .../{id}` | pending invitations (admins) |
+| `GET /api/v1/invites/{token}`, `POST .../accept` | inspect and accept an invitation (public) |
+| `GET /api/v1/users`, `PATCH`/`DELETE .../{id}` | all users; grant super admin; delete accounts (super admins) |
+| `POST /api/v1/users/{id}/password-reset`; `GET`/`POST /api/v1/password-resets/{token}` | password reset links |
+
+Renaming an org renames the entity of its projects and runs, so like a project rename it's
+refused while runs are active. Deleting one deletes all its projects and runs.
+
 ## Read API
 
 Interactive docs are served at `/docs`. Every path below is relative to
@@ -126,9 +201,9 @@ GET, or the same fields as a JSON body via POST to `.../query`.
 | `GET .../stream?runs=id:lines[:system_lines],...` | Server-Sent Events with live updates (see below) |
 
 Run-table columns are the run attributes (`name`, `display_name`, `state`, `created_at`,
-`tags`, `group`, `job_type`, ...) plus flattened `config.*` and `summary.*` keys
-(`summary.val_loss.min`, `config.model.layers`). Filters use the Mongo-style syntax that
-`wandb.Api().runs(filters=...)` uses:
+`tags`, `group`, `job_type`, `owner`: the id of the user who logged it, ...) plus flattened
+`config.*` and `summary.*` keys (`summary.val_loss.min`, `config.model.layers`). Filters use
+the Mongo-style syntax that `wandb.Api().runs(filters=...)` uses:
 
 ```json
 POST /api/v1/projects/flock/llm/runs/query
@@ -155,8 +230,9 @@ each curve's size with `max_points`. Non-finite values come back as `null`.
 ## Managing projects and runs
 
 Runs are created only by the wandb SDK, and their config, summary, history and logs only change
-through it. The API manages everything else. Paths are relative to `/api/v1/projects`. There is
-no authorization beyond the API key check yet, so any accepted key can rename and delete.
+through it. The API manages everything else. Paths are relative to `/api/v1/projects`. Members
+create projects and change their own runs; updating or deleting projects, and changing other
+people's runs, takes an org admin.
 
 | Endpoint | Effect |
 | --- | --- |
@@ -235,7 +311,8 @@ Otherwise they are stored explicitly at the x offset. Header `runs` carry each r
   edit, the changed `attributes`.
 - `created` announces a new run in the project, or one moved in.
 - `deleted` lists runs that were deleted, or moved out (with `moved_to`).
-- `project` says the project was renamed (`renamed_to`) or `deleted`; the stream then ends.
+- `project` says the project was renamed (`renamed_to`), its organization was renamed
+  (`entity_renamed_to`), or it was `deleted`; the stream then ends.
 
 The snapshot records each run's line counts. Pass them back as `runs=<id>:<lines>,...`, or
 `runs=<id>:<lines>:<system_lines>,...` with `system=true`. The stream first replays every
@@ -268,6 +345,10 @@ limit; it reconnects with its latest line counts.
   in creation order (tens of ms for 10k runs × 1.5k columns). Mutations take a lock per
   project and per run, always in the same order, and writes from a run's client hold its
   lock, so a run is never deleted halfway through a write.
+- **Auth**: users, memberships, API key digests and sessions are loaded into memory, so
+  authenticating a request costs a sha256 (API key) or an HMAC (JWT) and a dict lookup, never a
+  database round trip. Roles aren't put in tokens: they're looked up per request, so changes
+  apply at once. Passwords are hashed with argon2id in a worker thread.
 - **Startup** loads every run's metadata, config and summary into memory. A 10k-run ×
   1.5k-column project takes a few seconds. Objects loaded at startup are frozen out of the
   cyclic GC so its collections don't pause requests.
@@ -294,7 +375,8 @@ Apple Silicon laptop, with PostgreSQL running in Docker:
 
 The tests need PostgreSQL. They use the admin URL in `TRACKER_TEST_DATABASE_URL` if it is set.
 Otherwise they start a throwaway `postgres:18.4` container, which requires Docker. Migrations
-are applied once to a template database, and each test server gets a fresh copy of it.
+are applied once to a template database, and each test server gets a fresh copy of it, with a
+super admin signed up and an API key for it (`TrackerServer.bootstrap`).
 
 ```sh
 uv run python -m pytest tests/tracker
