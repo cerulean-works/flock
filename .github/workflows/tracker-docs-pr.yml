@@ -1,0 +1,23 @@
+name: Tracker docs PR build
+
+# Builds a pull request's tracker docs without secrets; tracker-docs-pr-publish.yml publishes
+# the result to docs-preview.cerulean.works/flock-tracker/pr_<N>/.
+
+on:
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: tracker-docs-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: cerulean-works/doc-builder/.github/workflows/build_docs.yml@main
+    permissions:
+      contents: read
+    with:
+      project: flock-tracker
+      path_to_docs: flock/flock/tracker/docs/source
+      not_python_module: true

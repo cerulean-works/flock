@@ -31,6 +31,7 @@ For shared development tools, use `uv add --group dev <dependency>`.
 uv add --package flock-training <dependency>
 uv add --package flock-eval <dependency>
 uv add --package flock-hub <dependency>
+uv add --package flock-tracker <dependency>
 uv add --package flock-tests <dependency>
 ```
 
@@ -65,3 +66,17 @@ they live and how we organize them. We're designing it around the needs of our
 training and evaluation workflows: making datasets available to experiments,
 saving checkpoints as training progresses, and retrieving them for evaluation
 or further training.
+
+### Tracker
+
+[`flock/tracker`](flock/tracker/) is our wandb-compatible experiment tracking server.
+Training code keeps logging through the regular `wandb` SDK, pointed at our server with
+`wandb login --host`, while dashboards read loss curves and filtered run tables from a
+low-latency JSON API. It stores runs in PostgreSQL and keeps the data it serves in memory, so
+curves for dozens of runs load in a few milliseconds and filters over 10k-run projects return
+in single-digit milliseconds. See [the tracker docs](flock/tracker/README.md) for setup,
+configuration, the API and the design.
+
+```sh
+docker compose -f flock/tracker/compose.yaml up -d --build
+```
