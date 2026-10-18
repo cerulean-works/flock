@@ -61,5 +61,8 @@ All paths are relative to `/api/v1`. In paths, `{entity}` is an organization's n
 | `GET .../runs/{run}/history` | Curves of one run. | [Queries](queries#curves-of-one-run) |
 | `GET .../workspace` | Binary snapshot of a dashboard page. | [Snapshot](dashboard#the-workspace-snapshot) |
 | `GET .../stream` | Server-Sent Events with live updates. | [Snapshot](dashboard#the-live-stream) |
+| `GET /feed` | Recent activity across your projects. | [Home](home#feed) |
+| `GET /orgs/{org}/billing`, `PATCH /orgs/{org}/billing` | GPU prices and monthly budgets. | [Home](home#billing) |
+| `GET /orgs/{org}/budget` | A month's spend against the budget. | [Home](home#budget) |
 
 `.../` stands for `/projects/{entity}/{project}/`. `GET /healthz`, outside `/api/v1`, answers `{"ok":true}` without credentials.

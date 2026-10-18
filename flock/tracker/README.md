@@ -77,8 +77,8 @@ export WANDB_BASE_URL=http://tracker.internal:8080 WANDB_API_KEY=<your API key>
 | --- | --- |
 | `app.py` | the FastAPI app: lifecycle, error handling and routers |
 | `Dockerfile`, `compose.yaml` | the image and the Compose stack |
-| `src/api/` | HTTP layer: the wandb protocol, auth, organizations, projects and runs, dashboard snapshots and streams |
-| `src/core/` | in-memory engine: the run store, accounts, columnar run table, series and live events |
+| `src/api/` | HTTP layer: the wandb protocol, auth, organizations, projects and runs, dashboard snapshots and streams, the home feed and budgets |
+| `src/core/` | in-memory engine: the run store, accounts, columnar run table, series, live events, GPU spend and the home feed |
 | `src/db/` | PostgreSQL connection, migration runner and the SQL migrations |
 | `src/settings.py`, `src/utils.py` | configuration, and the few helpers shared across modules |
 | `docs/` | further documentation |
@@ -201,7 +201,8 @@ GET, or the same fields as a JSON body via POST to `.../query`.
 | `GET .../stream?runs=id:lines[:system_lines],...` | Server-Sent Events with live updates (see below) |
 
 Run-table columns are the run attributes (`name`, `display_name`, `state`, `created_at`,
-`tags`, `group`, `job_type`, `owner`: the id of the user who logged it, ...) plus flattened
+`tags`, `group`, `job_type`, `owner`: the id of the user who logged it, `gpu_type`, `gpu_count`,
+`gpu_hours`, ...) plus flattened
 `config.*` and `summary.*` keys (`summary.val_loss.min`, `config.model.layers`). Filters use
 the Mongo-style syntax that `wandb.Api().runs(filters=...)` uses:
 
@@ -239,7 +240,7 @@ people's runs, takes an org admin.
 | `POST /api/v1/projects` `{entity, name, description?}` | create an empty project (`wandb.init` also creates projects); 409 if it exists |
 | `PATCH /{entity}/{project}` `{name?, description?}` | rename it or change its description |
 | `DELETE /{entity}/{project}[?force=true]` | delete it with all its runs, history, logs and files |
-| `PATCH .../runs/{run}` `{display_name, notes, tags, group, job_type, description}` | edit a run; only the fields given change, and `null` clears one |
+| `PATCH .../runs/{run}` `{display_name, notes, tags, group, job_type, description, gpu_type, gpu_count}` | edit a run; only the fields given change, and `null` clears one (or, for the GPU fields, goes back to the detected value) |
 | `DELETE .../runs/{run}[?force=true]` | delete a run with everything it logged |
 | `POST .../runs/update` `{selection, set?, add_tags?, remove_tags?}` | edit many runs |
 | `POST .../runs/delete` `{selection, force?}` | delete many runs |
@@ -264,6 +265,34 @@ A moved run keeps everything it logged and sorts by its creation time in its new
 renamed project's old name is free again: a client resuming at the old path starts a new run
 there. Edits race with live clients on equal terms: if the SDK later sends tags or notes, they
 replace the edit.
+
+### GPU spend, budgets and the home feed
+
+The tracker reads each run's GPU type and count from the `wandb-metadata.json` the SDK uploads
+(`NVIDIA H100 80GB HBM3` × 8 becomes `gpu_type: H100`, `gpu_count: 8`); owners and admins
+correct them with `PATCH .../runs/{run}` (multi-node runs report one node, and NVML counts
+GPUs hidden by `CUDA_VISIBLE_DEVICES`). Each heartbeat adds the time since the previous one to
+a ledger of seconds per run and UTC month, unless the run was silent longer than
+`TRACKER_CRASH_TIMEOUT` (preemption gaps aren't billed). Ledger rows outlive their runs and
+projects, so deleting never gives budget back. Org admins set prices per GPU hour and a
+monthly budget; cost is GPU hours × the current price.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/v1/feed?org=&project=&owner=me&kinds=&cursor=&limit=` | home feed, newest first: `run_started`, `run_finished`/`run_failed`/`run_crashed`, `project_created` |
+| `GET /api/v1/orgs/{org}/billing` | currency, budgets, prices, and every GPU type the org's runs used |
+| `PATCH /api/v1/orgs/{org}/billing` `{monthly_budget?, currency?, rates?: {"H200": 60, "A100": null}}` | admins: set the budget from this month on, and merge prices (`null` removes one) |
+| `GET /api/v1/orgs/{org}/budget[?month=YYYY-MM]` | spent, remaining, cost per project (`null`: deleted projects), top 5 runs, unpriced GPU hours |
+
+```bash
+curl -s -X PATCH --json '{"monthly_budget": 20000, "rates": {"H200": 60}}' \
+  -H "Authorization: Bearer $TOKEN" $TRACKER/api/v1/orgs/flock/billing
+curl -s -H "Authorization: Bearer $TOKEN" $TRACKER/api/v1/orgs/flock/budget
+```
+
+The feed is derived from runs and projects as they are (no activity log), so it has no
+deletes, renames or membership changes, and isn't pushed live. See
+[`docs/agents/004-home-and-budgets.md`](docs/agents/004-home-and-budgets.md).
 
 ### System metrics
 
@@ -349,6 +378,10 @@ limit; it reconnects with its latest line counts.
   authenticating a request costs a sha256 (API key) or an HMAC (JWT) and a dict lookup, never a
   database round trip. Roles aren't put in tokens: they're looked up per request, so changes
   apply at once. Passwords are hashed with argon2id in a worker thread.
+- **Spend**: the usage ledger (`gpu_usage`), prices and budgets are in memory too. Accruing
+  is one more CTE in the `file_stream` statement; the budget panel reads only the month's
+  ledger entries of one org, and the feed takes the latest rows of each project's run table
+  with `argpartition`.
 - **Startup** loads every run's metadata, config and summary into memory. A 10k-run ×
   1.5k-column project takes a few seconds. Objects loaded at startup are frozen out of the
   cyclic GC so its collections don't pause requests.
@@ -370,6 +403,8 @@ Apple Silicon laptop, with PostgreSQL running in Docker:
 | `$or` + regex + string `$in` over 10k runs × 1.5k columns | ~3 ms | 20–50 ms |
 | deleting ~950 runs from 10k runs × 1.5k columns | ~90 ms | 200 ms |
 | moving 500 of those runs to another project | ~50 ms | 200 ms |
+| home feed, first page and a filtered later page, over 10k runs | ~0.6 ms | 20–50 ms |
+| budget panel over 10k runs' ledger entries | ~3 ms | 20–50 ms |
 
 ## Tests
 

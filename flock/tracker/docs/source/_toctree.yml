@@ -18,6 +18,8 @@ guide:
         title: Managing projects and runs
       - local: dashboards
         title: Building a dashboard
+      - local: home-and-budgets
+        title: GPU costs, budgets and the home feed
   - title: Accounts
     sections:
       - local: accounts
@@ -49,6 +51,8 @@ reference:
         title: Queries and filters
       - local: api/dashboard
         title: Snapshot and live stream
+      - local: api/home
+        title: Home feed and budgets
   - title: Behavior
     sections:
       - local: permissions

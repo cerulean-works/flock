@@ -17,6 +17,7 @@ from src.api.deps import (
     check_owner,
     current_user,
 )
+from src.api.home import GpuType
 from src.core.errors import NotFound
 from src.core.store import Project, Run
 
@@ -141,7 +142,10 @@ class Selection(RunSelection):
 
 
 class RunFields(BaseModel):
-    """Editable run attributes; only the fields given change, and ``null`` clears one."""
+    """Editable run attributes; only the fields given change, and ``null`` clears one.
+
+    ``gpu_type`` and ``gpu_count`` override the GPUs detected from the run's wandb metadata;
+    ``null`` goes back to the detected ones."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -151,6 +155,8 @@ class RunFields(BaseModel):
     group: str | None = None
     job_type: str | None = None
     description: str | None = None
+    gpu_type: GpuType | None = None
+    gpu_count: int | None = Field(None, ge=0, le=1024)
 
 
 class RunUpdate(Selection):
@@ -307,7 +313,7 @@ async def query_history(project: ProjectDep, query: HistoryQuery, store: StoreDe
 
 @router.patch("/projects/{entity}/{project}/runs/{run}")
 async def update_run(run: RunDep, body: RunFields, store: StoreDep, user: UserDep) -> Response:
-    """Edit a run's display name, notes, tags, group, job type or description."""
+    """Edit a run's display name, notes, tags, group, job type, description or GPUs."""
     check_owner(store, user, run.project, [run])
     await store.edit_runs(run.project, [run], body.model_dump(include=body.model_fields_set))
     return await get_run(run, store)
@@ -407,6 +413,9 @@ async def get_run(run: RunDep, store: StoreDep) -> Response:
             "entity": run.entity,
             "project": run.project.name,
             **run.attributes(),
+            "gpu_detected": {"type": run.gpu_type_detected, "count": run.gpu_count_detected},
+            "runtime": run.runtime,
+            "cost": round(store.budgets.run_cost(run), 2),
             "config": config,
             "summary": summary,
             "history_keys": hist.keys(),

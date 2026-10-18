@@ -342,6 +342,23 @@ class TestSweep:
         assert len(timing.data["columns"]) == 100
         timing.check(self.P50_MS, self.P95_MS)
 
+    def test_home_feed(self, sweep):
+        client, _ = sweep
+        first = Timing.measure(client, "GET", "/api/v1/feed", params={"limit": 30})
+        assert len(first.data["items"]) == 30
+        first.check(self.P50_MS, self.P95_MS)
+        params = {"limit": 30, "kinds": "run_failed", "cursor": first.data["next"]}
+        deeper = Timing.measure(client, "GET", "/api/v1/feed", params=params)
+        assert {item["kind"] for item in deeper.data["items"]} == {"run_failed"}
+        deeper.check(self.P50_MS, self.P95_MS)
+
+    def test_budget_panel(self, sweep):
+        """Every run of the project has a usage entry this month."""
+        client, _ = sweep
+        timing = Timing.measure(client, "GET", "/api/v1/orgs/flock/budget")
+        assert timing.data["unknown_gpu"]["runs"] == self.RUNS
+        timing.check(self.P50_MS, self.P95_MS)
+
     # Mutations come last: they change the shared dataset.
 
     def test_bulk_delete_and_move_then_filter(self, sweep):

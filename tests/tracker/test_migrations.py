@@ -111,6 +111,7 @@ def test_0002_upgrades_existing_data(postgres, make_tracker, tmp_path):
         "0002_system_metrics",
         "0003_projects",
         "0004_orgs_and_users",
+        "0005_gpus_and_budgets",
     ]
 
     server = make_tracker(database_url=url)  # rebuilds and compacts system metrics on startup
@@ -184,7 +185,10 @@ def test_0003_creates_projects_from_runs(postgres, make_tracker, tmp_path):
     projects, unique = asyncio.run(schema())
     assert projects == [("flock", "p", 50.0), ("flock", "q", 75.0), ("lab", "p", 10.0)]
     assert unique == ["runs_project_pk_name_key"]
-    assert asyncio.run(Migrations().apply(url)) == ["0004_orgs_and_users"]
+    assert asyncio.run(Migrations().apply(url)) == [
+        "0004_orgs_and_users",
+        "0005_gpus_and_budgets",
+    ]
 
     api = make_tracker(database_url=url).client()
     assert api.runs("p")["ids"] == ["r1", "r2"]  # newest first
@@ -221,7 +225,10 @@ def test_0004_creates_orgs_from_entities(postgres, make_tracker, tmp_path):
             await conn.close()
 
     asyncio.run(seed())
-    assert asyncio.run(Migrations().apply(url)) == ["0004_orgs_and_users"]
+    assert asyncio.run(Migrations().apply(url)) == [
+        "0004_orgs_and_users",
+        "0005_gpus_and_budgets",
+    ]
 
     async def rows() -> list:
         conn = await asyncpg.connect(url)
@@ -244,3 +251,57 @@ def test_0004_creates_orgs_from_entities(postgres, make_tracker, tmp_path):
         ("flock", "admin", 1),
         ("lab", "admin", 1),
     ]
+
+
+def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(postgres, make_tracker, tmp_path):
+    """Runs logged before 0005 are billed from creation to their last heartbeat, split by
+    month, and the GPUs in their already uploaded metadata are read on startup."""
+    url = postgres.create(migrated=False)
+    before = tmp_path / "before"
+    before.mkdir()
+    for path in Migrations().files()[:4]:
+        shutil.copy(path, before)
+    asyncio.run(Migrations(before).apply(url))
+
+    async def seed() -> int:
+        conn = await asyncpg.connect(url)
+        try:
+            org = await conn.fetchval(
+                "INSERT INTO orgs (name, created_at, updated_at) VALUES ('flock', now(), now()) "
+                "RETURNING pk"
+            )
+            project = await conn.fetchval(
+                "INSERT INTO projects (org_pk, name, created_at, updated_at) "
+                "VALUES ($1, 'p', now(), now()) RETURNING pk",
+                org,
+            )
+            # Alive from 23:00 on September 30th to 01:00 on October 1st (UTC).
+            run = await conn.fetchval(
+                "INSERT INTO runs (project_pk, name, state, created_at, updated_at, heartbeat_at) "
+                "VALUES ($1, 'r1', 'finished', '2026-09-30 23:00+00', now(), "
+                "'2026-10-01 01:00+00') RETURNING pk",
+                project,
+            )
+            await conn.execute(
+                "INSERT INTO run_files (run_pk, name, size, updated_at) "
+                "VALUES ($1, 'wandb-metadata.json', 10, now())",
+                run,
+            )
+            return run
+        finally:
+            await conn.close()
+
+    run_pk = asyncio.run(seed())
+    assert asyncio.run(Migrations().apply(url)) == ["0005_gpus_and_budgets"]
+    # The tracker's first files directory (see ``Trackers``) already holds the upload.
+    metadata = tmp_path / "tracker-files-0" / str(run_pk) / "wandb-metadata.json"
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text(json.dumps({"gpu": "NVIDIA H100 80GB HBM3", "gpu_count": 2}))
+
+    api = make_tracker(database_url=url).client()
+    run = api.get("/api/v1/projects/flock/p/runs/r1").json()
+    assert (run["gpu_type"], run["gpu_count"], run["runtime"]) == ("H100", 2, 7200.0)
+    api.patch("/api/v1/orgs/flock/billing", {"rates": {"H100": 10}})
+    for month in ("2026-09", "2026-10"):
+        budget = api.get("/api/v1/orgs/flock/budget", month=month).json()
+        assert (budget["gpu_hours"], budget["spent"]) == (2.0, 20.0)  # an hour, 2 GPUs, each

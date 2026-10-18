@@ -178,6 +178,23 @@ class Client:
         assert resp.status == 200, resp.body
         return resp.json()
 
+    def upload(self, project: str, run: str, name: str, data: bytes, entity: str = "flock"):
+        """Upload a run file as the SDK does: a signed URL from CreateRunFiles, then a PUT."""
+        query = """
+        mutation CreateRunFiles($entity: String!, $project: String!, $run: String!,
+                                $files: [String!]!) {
+          createRunFiles(input: {entityName: $entity, projectName: $project, runName: $run,
+                                 files: $files}) {
+            files { name uploadUrl }
+          }
+        }"""
+        variables = {"entity": entity, "project": project, "run": run, "files": [name]}
+        body = self.graphql(query, variables).json()
+        assert "errors" not in body, body
+        url = body["data"]["createRunFiles"]["files"][0]["uploadUrl"]
+        resp = self.request("PUT", url.split(str(self.port), 1)[1], body=data)
+        assert resp.status == 200, resp.body
+
     # ------------------------------------------------------------------ read API shorthands
 
     def runs(self, project: str, entity: str = "flock", **body: Any) -> dict:

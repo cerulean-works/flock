@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import datetime as dt
 import logging
 import secrets
 import shutil
@@ -14,8 +15,11 @@ from typing import Any, ClassVar
 import numpy as np
 import orjson
 
+from src.core import gpus
 from src.core.accounts import Accounts
+from src.core.budgets import Budgets, Usage
 from src.core.errors import Conflict, Discarded, Forbidden, NotFound
+from src.core.feed import Feed
 from src.core.history import History, PointCounter, Series
 from src.core.live import Hub
 from src.core.names import ADJECTIVES, NOUNS
@@ -50,6 +54,9 @@ class Run:
         "sweep",
         "exitcode",
         "owner",
+        "gpu_type",
+        "gpu_count",
+        "gpu_hours",
     )
 
     pk: int
@@ -73,6 +80,14 @@ class Run:
     exitcode: int | None = None
     # The user who logged the run (a user pk); runs from before accounts existed have none.
     owner: int | None = None
+    # GPUs read from the wandb metadata (a None count: not known yet), and those set by hand,
+    # which take precedence.
+    gpu_type_detected: str | None = None
+    gpu_count_detected: int | None = None
+    gpu_type_override: str | None = None
+    gpu_count_override: int | None = None
+    # Seconds alive per UTC month: the run's entries in its org's usage ledger.
+    usage: dict[dt.date, Usage] = field(default_factory=dict)
     history_line_count: int = 0
     events_line_count: int = 0
     log_line_count: int = 0
@@ -98,6 +113,26 @@ class Run:
         return self.project.entity
 
     @property
+    def gpu_type(self) -> str | None:
+        override = self.gpu_type_override
+        return override if override is not None else self.gpu_type_detected
+
+    @property
+    def gpu_count(self) -> int | None:
+        override = self.gpu_count_override
+        return override if override is not None else self.gpu_count_detected
+
+    @property
+    def runtime(self) -> float:
+        """Seconds the run was alive (sending heartbeats), over all its resumes."""
+        return sum(usage.seconds for usage in self.usage.values())
+
+    @property
+    def gpu_hours(self) -> float | None:
+        count = self.gpu_count
+        return round(self.runtime * count / 3600, 6) if count is not None else None
+
+    @property
     def path(self) -> str:
         return f"{self.project.entity}/{self.project.name}/{self.name}"
 
@@ -116,11 +151,25 @@ class Run:
 class Org:
     """An organization: the wandb entity its projects and runs are logged under."""
 
-    def __init__(self, pk: int, name: str, created_at: float = 0.0, updated_at: float = 0.0):
+    def __init__(
+        self,
+        pk: int,
+        name: str,
+        created_at: float = 0.0,
+        updated_at: float = 0.0,
+        currency: str = "USD",
+    ):
         self.pk = pk
         self.name = name
         self.created_at = created_at
         self.updated_at = updated_at
+        self.currency = currency
+        # GPU prices: lowercased type -> (type as set, hourly cost of one GPU).
+        self.rates: dict[str, tuple[str, float]] = {}
+        # Monthly budgets, by the month they apply from (None: no budget), in month order.
+        self.budgets: list[tuple[dt.date, float | None]] = []
+        # The usage ledger, by month, including entries of deleted runs and projects.
+        self.usage: dict[dt.date, list[Usage]] = {}
         self.deleted = False
 
 
@@ -240,6 +289,8 @@ class Store:
         self.live = Hub()
         self.secret = b""
         self.accounts = Accounts(self)
+        self.budgets = Budgets(self)
+        self.feed = Feed(self)
 
     @staticmethod
     def _config_columns(config: dict[str, Any]) -> dict[str, Any]:
@@ -287,6 +338,8 @@ class Store:
             self.secret = bytes.fromhex(secret)
             await self._load()
             await self.accounts.load()
+            await self.budgets.load()
+            await self._detect_missing_gpus()
         except BaseException:
             await self.db.close()
             raise
@@ -299,7 +352,7 @@ class Store:
         started = time.perf_counter()
         for record in await self.db.fetch(
             "SELECT pk, name, extract(epoch FROM created_at)::float8, "
-            "extract(epoch FROM updated_at)::float8 FROM orgs"
+            "extract(epoch FROM updated_at)::float8, currency FROM orgs"
         ):
             self._add_org(Org(*record))
         for pk, org_pk, *rest in await self.db.fetch(
@@ -314,7 +367,8 @@ class Store:
                    extract(epoch FROM heartbeat_at)::float8, tags, notes, group_name, job_type,
                    host, program, commit_hash, description, sweep, exitcode, history_line_count,
                    events_line_count, log_line_count, history_compacted_line_count,
-                   system_compacted_line_count, config, summary, owner_pk
+                   system_compacted_line_count, config, summary, owner_pk, gpu_type, gpu_count,
+                   gpu_type_override, gpu_count_override
             FROM runs
             ORDER BY created_at, pk
         """
@@ -346,6 +400,10 @@ class Store:
                     log_line_count=record[20],
                     compacted={"history": record[21], "system": record[22]},
                     owner=record[25],
+                    gpu_type_detected=record[26],
+                    gpu_count_detected=record[27],
+                    gpu_type_override=record[28],
+                    gpu_count_override=record[29],
                 )
                 project.add(run)
                 self.runs_by_pk[run.pk] = run
@@ -847,6 +905,7 @@ class Store:
                 if new_from < offset + len(lines):
                     (series,) = await self.histories([run], None, stream)
                     appends[stream] = (series, new_from, lines[new_from - offset :])
+            accrued = self.budgets.accrual(run, now)
 
             # The whole request in one statement, so one round trip and one transaction. Lines
             # are upserted because clients resend chunks they could not confirm.
@@ -864,6 +923,14 @@ class Store:
                     INSERT INTO logs (run_pk, line, data)
                     SELECT $1, line, data FROM unnest($6::int[], $7::text[]) AS t(line, data)
                     ON CONFLICT (run_pk, line) DO UPDATE SET data = excluded.data
+                ), usage AS (
+                    INSERT INTO gpu_usage (org_pk, project_pk, run_pk, run_name, month, seconds,
+                                           gpu_type, gpu_count)
+                    SELECT $15::bigint, $16::bigint, $1, $17::text, month, seconds, $18::text,
+                           $19::int
+                    FROM unnest($20::date[], $21::float8[]) AS t(month, seconds)
+                    ON CONFLICT (run_pk, month)
+                    DO UPDATE SET seconds = gpu_usage.seconds + excluded.seconds
                 )
                 UPDATE runs
                 SET state = $8, exitcode = $9, updated_at = to_timestamp($10),
@@ -885,6 +952,13 @@ class Store:
                 history_count,
                 events_count,
                 log_count,
+                project.org.pk,
+                project.pk,
+                run.name,
+                run.gpu_type,
+                run.gpu_count,
+                [month for month, _ in accrued],
+                [seconds for _, seconds in accrued],
             )
 
             for stream, (series, new_from, lines) in appends.items():
@@ -899,6 +973,7 @@ class Store:
             run.state = state
             run.exitcode = exitcode
             run.updated_at = run.heartbeat_at = now
+            self.budgets.accrue(run, accrued)
             table = project.table
             changed = (
                 self._apply_summary(run, table, summary_data) if summary_data is not None else None
@@ -907,6 +982,8 @@ class Store:
             table.set(run.row, "exitcode", exitcode)
             table.set(run.row, "updated_at", now)
             table.set(run.row, "heartbeat_at", now)
+            if accrued:
+                table.set(run.row, "gpu_hours", run.gpu_hours)
             self._sync_state(run, project)
             subs = self.live.watching(project.pk, name)
             if subs:
@@ -946,6 +1023,78 @@ class Store:
                 len(data),
                 time.time(),
             )
+            if name == self.METADATA_FILE:
+                await self._set_detected_gpus(run, *self._read_gpus(data))
+
+    # The file the wandb SDK describes the machine in, GPUs included.
+    METADATA_FILE: ClassVar[str] = "wandb-metadata.json"
+    METADATA_MAX_BYTES: ClassVar[int] = 1 << 20
+
+    @classmethod
+    def _read_gpus(cls, data: bytes) -> tuple[str | None, int]:
+        if len(data) > cls.METADATA_MAX_BYTES:
+            return None, 0
+        try:
+            return gpus.detect(orjson.loads(data))
+        except ValueError:
+            return None, 0
+
+    async def _set_detected_gpus(self, run: Run, gpu_type: str | None, count: int) -> None:
+        """Record the GPUs found in a run's metadata (call with the run's lock held)."""
+        if (run.gpu_type_detected, run.gpu_count_detected) == (gpu_type, count):
+            return
+        before = (run.gpu_type, run.gpu_count)
+        run.gpu_type_detected, run.gpu_count_detected = gpu_type, count
+        effective = (run.gpu_type, run.gpu_count)
+        await self.db.execute(
+            "WITH usage AS (UPDATE gpu_usage SET gpu_type = $4, gpu_count = $5 WHERE run_pk = $1) "
+            "UPDATE runs SET gpu_type = $2, gpu_count = $3 WHERE pk = $1",
+            run.pk,
+            gpu_type,
+            count,
+            *effective,
+        )
+        if effective != before:
+            self._gpus_changed(run)
+
+    def _gpus_changed(self, run: Run) -> None:
+        """Show a run's new effective GPUs in its ledger entries, table row and dashboards."""
+        self.budgets.sync_gpus(run)
+        changed: dict[str, Any] = {
+            "gpu_type": run.gpu_type,
+            "gpu_count": run.gpu_count,
+            "gpu_hours": run.gpu_hours,
+        }
+        run.project.table.set_many(run.row, changed)
+        self._publish_run(run, attributes=changed)
+
+    async def _detect_missing_gpus(self) -> None:
+        """Read the GPUs of runs whose metadata was uploaded before GPUs were tracked."""
+        pks = await self.db.fetch(
+            "SELECT r.pk FROM runs r JOIN run_files f ON f.run_pk = r.pk AND f.name = $1 "
+            "WHERE r.gpu_count IS NULL",
+            self.METADATA_FILE,
+        )
+        runs = [self.runs_by_pk[pk] for (pk,) in pks if pk in self.runs_by_pk]
+        if not runs:
+            return
+
+        def read() -> list[tuple[str | None, int]]:
+            found = []
+            for run in runs:
+                path = self.file_path(run, self.METADATA_FILE)
+                try:
+                    data = path.read_bytes() if path is not None else b""
+                except OSError:
+                    data = b""
+                found.append(self._read_gpus(data))
+            return found
+
+        for run, (gpu_type, count) in zip(runs, await asyncio.to_thread(read), strict=True):
+            async with self._run_lock(run):
+                if not run.deleted:
+                    await self._set_detected_gpus(run, gpu_type, count)
+        log.info("read the GPUs of %d runs from their metadata", len(runs))
 
     async def set_state(self, run: Run, state: str) -> None:
         async with self._run_lock(run):
@@ -977,7 +1126,14 @@ class Store:
         "group",
         "job_type",
         "description",
+        "gpu_type",
+        "gpu_count",
     )
+    # Editable attributes that override detected values: attribute -> (field, SQL column).
+    OVERRIDES: ClassVar[dict[str, str]] = {
+        "gpu_type": "gpu_type_override",
+        "gpu_count": "gpu_count_override",
+    }
 
     async def create_project(
         self, entity: str, name: str, description: str | None = None
@@ -1040,6 +1196,7 @@ class Store:
     def _drop_project(self, project: Project) -> list[int]:
         """Forget a project whose delete committed; returns its runs' pks."""
         pks = [run.pk for run in project.runs]
+        self.budgets.forget_project(project)
         self._mark_deleted_live(project.active.values())
         for run in project.runs:
             self._forget_run(run)
@@ -1156,31 +1313,65 @@ class Store:
                 )
                 current = list(dict.fromkeys([*current, *add_tags]))
                 tags.append([tag for tag in current if tag not in remove_tags])
-            sets = {self.FIELD_COLUMNS[key]: v for key, v in values.items() if key != "tags"}
+            columns = {**self.FIELD_COLUMNS, **self.OVERRIDES}
+            sets = {columns[key]: v for key, v in values.items() if key != "tags"}
             assignments = "".join(f", {col} = ${i}" for i, col in enumerate(sets, start=4))
             now = time.time()
+            # What each run's GPUs will be, for its usage ledger rows.
+            fields = {self.OVERRIDES.get(key, key): v for key, v in values.items() if key != "tags"}
+            effective = [
+                (
+                    fields.get("gpu_type_override", run.gpu_type_override),
+                    fields.get("gpu_count_override", run.gpu_count_override),
+                )
+                for run in runs
+            ]
+            effective = [
+                (
+                    gpu_type if gpu_type is not None else run.gpu_type_detected,
+                    count if count is not None else run.gpu_count_detected,
+                )
+                for run, (gpu_type, count) in zip(runs, effective, strict=True)
+            ]
+            usage = ""
+            if self.OVERRIDES.keys() & values.keys():
+                usage = (
+                    "WITH usage AS (UPDATE gpu_usage u SET gpu_type = g.gpu_type, "
+                    "gpu_count = g.gpu_count FROM unnest($1::bigint[], "
+                    f"${len(sets) + 4}::text[], ${len(sets) + 5}::int[]) "
+                    "AS g(pk, gpu_type, gpu_count) WHERE u.run_pk = g.pk) "
+                )
             # One statement for the whole selection; each run's tags travel as a JSON array.
             await self.db.execute(
-                "UPDATE runs SET tags = ARRAY(SELECT jsonb_array_elements_text(t.tags::jsonb)), "
+                f"{usage}UPDATE runs SET tags = "
+                "ARRAY(SELECT jsonb_array_elements_text(t.tags::jsonb)), "
                 f"updated_at = to_timestamp($3){assignments} "
                 "FROM unnest($1::bigint[], $2::text[]) AS t(pk, tags) WHERE runs.pk = t.pk",
                 [run.pk for run in runs],
                 [orjson.dumps(run_tags).decode() for run_tags in tags],
                 now,
                 *sets.values(),
+                *([[t for t, _ in effective], [c for _, c in effective]] if usage else []),
             )
             for run, run_tags in zip(runs, tags, strict=True):
                 changed = {
-                    key: value
-                    for key, value in values.items()
-                    if key != "tags" and getattr(run, key) != value
+                    key: value for key, value in fields.items() if getattr(run, key) != value
                 }
                 if run_tags != run.tags:
                     changed["tags"] = run_tags
+                gpus_before = (run.gpu_type, run.gpu_count)
                 for key, value in changed.items():
                     setattr(run, key, value)
+                for attribute, field_name in self.OVERRIDES.items():
+                    if field_name in changed:  # report the effective value, not the override
+                        changed[attribute] = getattr(run, attribute)
+                        del changed[field_name]
                 run.updated_at = now
                 project.table.set_many(run.row, {**changed, "updated_at": now})
+                if (run.gpu_type, run.gpu_count) != gpus_before:
+                    self._gpus_changed(run)
+                    changed.pop("gpu_type", None)
+                    changed.pop("gpu_count", None)
                 if changed:
                     self._publish_run(run, attributes=changed)
             return runs
@@ -1223,6 +1414,7 @@ class Store:
             if clashes:
                 raise Conflict(f"{target.name} already has runs with these ids", clashes)
             await self.db.execute(
+                "WITH usage AS (UPDATE gpu_usage SET project_pk = $2 WHERE run_pk = ANY($1)) "
                 "UPDATE runs SET project_pk = $2 WHERE pk = ANY($1)",
                 [run.pk for run in runs],
                 target.pk,
@@ -1236,6 +1428,7 @@ class Store:
                 source.count_metrics(run, -1)
                 run.project = target
                 run.row = row
+                self.budgets.moved(run)
                 target.add(run)
                 target.count_metrics(run, 1)
             # Keep the target's rows in creation order, so moved runs don't look like new ones.
@@ -1278,6 +1471,7 @@ class Store:
     def _forget_run(self, run: Run) -> None:
         """Drop a deleted run from memory (except its table row: see ``_reindex``)."""
         run.deleted = True
+        self.budgets.forget_run(run)
         project = run.project
         project.by_name.pop(run.name, None)
         project.active.pop(run.name, None)

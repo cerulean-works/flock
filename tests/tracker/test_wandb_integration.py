@@ -6,6 +6,8 @@ import subprocess
 
 import pytest
 
+from src.core import gpus
+
 pytest.importorskip("wandb")
 
 
@@ -124,6 +126,11 @@ def test_init_log_summary_and_config(tracker, api, wandb_client):
     metadata = api.get(f"/api/v1/projects/flock/core/runs/{run_id}/files/wandb-metadata.json")
     assert metadata.status == 200
     assert json.loads(metadata.body)["program"].endswith(".py")
+    # Its GPUs (none on most CI machines) are read from it, and its heartbeats billed.
+    gpu = gpus.detect(json.loads(metadata.body))
+    detail = api.get(f"/api/v1/projects/flock/core/runs/{run_id}").json()
+    assert (detail["gpu_type"], detail["gpu_count"]) == gpu
+    assert detail["runtime"] > 0
 
     match = api.runs(
         "core", filter={"config.optimizer": "adam", "summary.val_loss.min": {"$lt": 1.2}}
