@@ -39,6 +39,8 @@ Signing up, signing in, refreshing, accepting an invitation as a new account, re
 | `default_org` | The organization `wandb.init` logs into when no `entity` is given, or `null` if the user belongs to none. |
 | `orgs` | The user's memberships, as `{"name", "role"}` objects sorted by name. `role` is `admin` or `member`. |
 | `created_at` | When the account was created. |
+| `avatar_url` | The path of the user's [avatar](#avatars) image, such as `/api/v1/avatars/3f2a…`, or `null`. |
+| `avatar_source` | `gravatar` or `upload`: where the avatar came from. `null` without one. |
 
 ## Signing in
 
@@ -108,6 +110,19 @@ Returns your updated user object.
 Changes your password with `{"current": "...", "new": "..."}`. `new` is 8 to 256 characters. Accounts without a password leave out `current`. Answers 204, or 403 if `current` is wrong.
 
 Your other sessions end. The session that made the request continues, and API keys keep working.
+
+## Avatars[[avatars]]
+
+| Endpoint | Meaning |
+|---|---|
+| `GET /avatars/{digest}` | The image behind an `avatar_url`. Public: it needs no credentials. |
+| `PUT /me/avatar` | Sets your avatar. The body is the image itself, not JSON. Returns your user object. |
+| `DELETE /me/avatar` | Removes your avatar. Returns your user object. |
+| `POST /me/avatar/gravatar` | Replaces your avatar with your email's Gravatar. Answers 404 if Gravatar has none, 409 if `TRACKER_GRAVATAR` is off, and 502 if Gravatar can't be reached or sends something that isn't an image. Returns your user object. |
+
+Images must be PNG, JPEG, GIF or WebP, of at most 1 MiB (1,048,576 bytes). The tracker reads the type from the image's first bytes and ignores the `Content-Type` header. Other types, including SVG, answer 415. Larger images answer 413, and an empty body answers 422. Images are stored as they are, without resizing.
+
+`{digest}` is the SHA-256 of the image, in hex. The bytes behind a URL never change, so responses can be cached for good (`Cache-Control: public, max-age=31536000, immutable`), and `If-None-Match` with the `ETag` answers 304. A new avatar has a new URL. An image nobody uses any more is deleted, and its URL answers 404.
 
 ## API keys[[api-keys]]
 

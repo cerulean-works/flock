@@ -51,6 +51,7 @@ def org_info(store: Store, org: Org, user: User) -> dict:
         "project_count": sum(1 for p in store.projects_by_pk.values() if p.org is org),
         "member_count": len(store.accounts.members(org)),
         "role": store.accounts.role(user, org),  # the caller's
+        "avatar_url": store.avatars.url(org.avatar),
     }
 
 
@@ -126,11 +127,7 @@ async def delete_org(
 async def list_members(org: OrgDep, store: StoreDep) -> Response:
     members = sorted(store.accounts.members(org), key=lambda member: member[0].email)
     return JSONResponse(
-        {
-            "members": [
-                {"id": u.pk, "email": u.email, "name": u.name, "role": role} for u, role in members
-            ]
-        }
+        {"members": [{**store.accounts.brief(u), "role": role} for u, role in members]}
     )
 
 

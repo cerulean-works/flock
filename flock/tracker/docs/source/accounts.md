@@ -135,6 +135,27 @@ curl -s --json '{"name": "laptop"}' -H "Authorization: Bearer $TOKEN" $TRACKER/a
 
 The [API overview](api/index#credentials) lists the ways to send a key.
 
+## Avatars
+
+Users and organizations can have an avatar image, which the tracker stores and serves. Responses that show a user or an organization include its `avatar_url`.
+
+**Gravatar.** When an account is created, the tracker looks up the email's [Gravatar](https://gravatar.com) in the background. If there is one, it becomes the account's avatar. Accounts created before then, or whose owner sets up a Gravatar later, fetch it on request:
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" $TRACKER/api/v1/me/avatar/gravatar
+```
+
+Looking up a Gravatar sends gravatar.com the SHA-256 hash of the email. To turn the lookup off, set [`TRACKER_GRAVATAR`](configuration) to `false`.
+
+**Uploads.** Users upload their own avatar, and org admins their organization's. The body is the image file, of at most 1 MiB:
+
+```bash
+curl -s -X PUT --data-binary @me.png -H "Authorization: Bearer $TOKEN" $TRACKER/api/v1/me/avatar
+curl -s -X PUT --data-binary @flock.png -H "Authorization: Bearer $TOKEN" $TRACKER/api/v1/orgs/flock/avatar
+```
+
+**Showing them.** An `avatar_url` loads without credentials, so a page can use it as an `<img>` source. It's a path on the tracker: a dashboard served from another address either forwards `/api/v1/avatars/*` to the tracker, or puts the tracker's address in front. The URL is the image's SHA-256, so it can't be guessed. It changes whenever the image does, which lets browsers cache each one for good. [Avatars](api/auth#avatars) lists the accepted formats.
+
 ## Managing user accounts
 
 Super admins manage every account:

@@ -33,6 +33,8 @@ def test_the_first_signup_becomes_the_super_admin(make_tracker):
         "default_org": "flock",  # created for the first user, as there was no org
         "orgs": [{"name": "flock", "role": "admin"}],
         "created_at": 0,
+        "avatar_url": None,  # Gravatar is off in tests
+        "avatar_source": None,
     }
     root = server.client(token=body["access_token"])
     assert root.get(ME).json()["email"] == "root@x.io"

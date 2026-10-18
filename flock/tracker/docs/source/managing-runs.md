@@ -43,7 +43,7 @@ This deletes the project with all its runs, their history, logs and files. While
 
 ## Editing runs
 
-You can edit these attributes of a run: `display_name`, `notes`, `tags`, `group`, `job_type` and `description`. Patch one run by its id:
+You can edit these attributes of a run: `display_name`, `notes`, `tags`, `group`, `job_type` and `description`, and correct its GPUs with `gpu_type` and `gpu_count` (see [Correcting the GPUs](home-and-budgets#correcting-the-gpus)). Patch one run by its id:
 
 ```bash
 curl -s -X PATCH --json '{"display_name": "gpt-small-baseline", "tags": ["baseline", "v1"], "notes": null}' -H "Authorization: Bearer $TOKEN" $TRACKER/api/v1/projects/flock/llm-pretrain/runs/9fc2v9ee

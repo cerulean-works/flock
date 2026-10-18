@@ -29,6 +29,9 @@ class User:
     default_org: int | None
     created_at: float
     roles: dict[int, str] = field(default_factory=dict)  # org pk -> "admin" or "member"
+    # The digest of the avatar image (see Avatars), and "gravatar" or "upload".
+    avatar: bytes | None = None
+    avatar_source: str | None = None
 
 
 @dataclass(eq=False)
@@ -102,9 +105,12 @@ class Accounts:
         self.secret = secret.encode()
         for record in await db.fetch(
             "SELECT pk, email, name, password_hash, google_sub, is_superadmin, default_org_pk, "
-            "extract(epoch FROM created_at)::float8 FROM users"
+            "extract(epoch FROM created_at)::float8, avatar, avatar_source FROM users"
         ):
-            self._add_user(User(*record))
+            *fields, avatar, avatar_source = record
+            user = User(*fields, avatar=bytes(avatar) if avatar else None)
+            user.avatar_source = avatar_source
+            self._add_user(user)
         for user, org, role in await db.fetch("SELECT user_pk, org_pk, role FROM memberships"):
             self.users[user].roles[org] = role
         for pk, user, name, prefix, digest, created_at in await db.fetch(
@@ -158,6 +164,17 @@ class Accounts:
                 key=lambda org: org["name"],
             ),
             "created_at": user.created_at,
+            "avatar_url": self.store.avatars.url(user.avatar),
+            "avatar_source": user.avatar_source,
+        }
+
+    def brief(self, user: User) -> dict[str, Any]:
+        """A user as shown next to things they did (feed items, run owners, members)."""
+        return {
+            "id": user.pk,
+            "name": user.name,
+            "email": user.email,
+            "avatar_url": self.store.avatars.url(user.avatar),
         }
 
     def can_reset_password(self, actor: User, user: User) -> bool:
@@ -368,7 +385,9 @@ class Accounts:
                     [(user.pk, org.pk) for org in orgs],
                 )
             user.roles = {org.pk: "admin" for org in orgs}
-            return self._add_user(user)
+            self._add_user(user)
+        self.store.avatars.gravatar_later(user)
+        return user
 
     def _last_superadmin(self, user: User) -> bool:
         return [u for u in self.users.values() if u.is_superadmin] == [user]
@@ -414,6 +433,7 @@ class Accounts:
         for pk in [pk for pk, s in self.sessions.items() if s.user == user.pk]:
             del self.sessions[pk]
         self.store.forget_owner(user.pk)
+        await self.store.avatars.release(user.avatar)
 
     async def google_user(
         self, google_sub: str, email: str, name: str, invite: Invite | None = None
@@ -585,7 +605,9 @@ class Accounts:
                 invite.role,
             )
         user.roles[org.pk] = invite.role
-        return self._add_user(user)
+        self._add_user(user)
+        self.store.avatars.gravatar_later(user)
+        return user
 
     # ------------------------------------------------------------------ password resets
 

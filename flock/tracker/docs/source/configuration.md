@@ -21,6 +21,8 @@ The tracker reads its settings from environment variables when it starts. Each s
 | `TRACKER_GOOGLE_CLIENT_ID` | none | OAuth client ID. With the secret, it turns on Sign in with Google. See [Setting up Sign in with Google](google-sign-in). |
 | `TRACKER_GOOGLE_CLIENT_SECRET` | none | That OAuth client's secret. |
 | `TRACKER_GOOGLE_REDIRECT_URL` | `<TRACKER_APP_URL>/api/v1/auth/google/callback` | Callback URL registered with Google. Without `TRACKER_APP_URL`, the default uses `TRACKER_PUBLIC_URL`, else the address of the request. |
+| `TRACKER_GRAVATAR` | `true` | Fetch each new account's avatar from Gravatar. The request sends Gravatar the SHA-256 hash of the account's email. See [Avatars](accounts#avatars). |
+| `TRACKER_GRAVATAR_URL` | `https://gravatar.com/avatar/` | Where avatars are fetched from: the URL that the email's hash is appended to. A Libravatar-compatible server works too. |
 | `TRACKER_HISTORY_CACHE_POINTS` | `20000000` | Curve points of finished runs kept in memory. Curves of active runs are always kept, in addition. See [Memory and startup time](deploying#memory-and-startup-time). |
 | `TRACKER_CRASH_TIMEOUT` | `600` | Seconds without a heartbeat before an active run is marked `crashed`. See [Crash detection](deploying#crash-detection). |
 | `TRACKER_POOL_SIZE` | `16` | Maximum number of database connections. |
@@ -56,6 +58,7 @@ Compose passes these tracker settings through, with these defaults:
 | `TRACKER_JWT_SECRET` | unset |
 | `TRACKER_GOOGLE_CLIENT_ID`, `TRACKER_GOOGLE_CLIENT_SECRET`, `TRACKER_GOOGLE_REDIRECT_URL` | unset |
 | `TRACKER_CRASH_TIMEOUT` | `600` |
+| `TRACKER_GRAVATAR` | `true` |
 | `TRACKER_HISTORY_CACHE_POINTS` | `20000000` |
 
 Compose doesn't pass the other settings, such as `TRACKER_CORS_ORIGINS` or `TRACKER_ACCESS_TOKEN_TTL`. To set one, add it to the `tracker` service's `environment` in a `compose.override.yaml` next to `compose.yaml`, which Compose reads automatically:

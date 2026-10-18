@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from src.api import auth, dashboard, orgs, projects, runs, wandb_protocol
+from src.api import auth, avatars, dashboard, home, orgs, projects, runs, wandb_protocol
 from src.api.deps import APIError, JSONResponse
 from src.core.errors import Conflict, Forbidden, NotFound
 from src.core.store import Store
@@ -130,6 +130,8 @@ def create_app(store: Store) -> FastAPI:
     app.include_router(projects.router)
     app.include_router(runs.router)
     app.include_router(dashboard.router)
+    app.include_router(home.router)
+    app.include_router(avatars.router)
     return app
 
 

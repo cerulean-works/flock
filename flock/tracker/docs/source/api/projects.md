@@ -53,6 +53,8 @@ Every run has these attributes. They are also columns of the [run table](queries
 | `sweep` | The wandb sweep, if the SDK sent one. | no |
 | `exitcode` | The exit code, once the run ended. | no |
 | `owner` | The id of the user who logged the run, or `null` if that account was deleted or the run predates accounts. | no |
+| `gpu_type`, `gpu_count` | The run's GPUs, such as `H200` and `8`: what you set, else what was read from its `wandb-metadata.json`. `gpu_count` is `null` until known, and `0` without a GPU. See [GPUs on runs](home#run-gpus). | yes |
+| `gpu_hours` | `gpu_count` times the hours the run was alive, or `null` while `gpu_count` is unknown. | no |
 
 ### `GET .../runs/{run}`[[get-run]]
 
@@ -66,10 +68,11 @@ Returns a run's attributes and everything about it except its curves:
 | `summary` | The summary, as the SDK sent it, without `_wandb`. |
 | `history_keys`, `system_keys` | The names of its logged metrics and of its system metrics, sorted. |
 | `history_line_count`, `system_line_count`, `log_line_count` | How many history lines, system samples and console lines it has. |
+| `gpu_detected`, `runtime`, `cost` | The GPUs read from its metadata, the seconds it was alive, and its cost at the organization's current prices. See [GPUs on runs](home#run-gpus). |
 
 ### `PATCH .../runs/{run}`[[patch-run]]
 
-Edits the editable attributes: `display_name`, `notes`, `tags`, `group`, `job_type` and `description`. Only the fields you give change, and `null` clears one. Other fields answer 422. Returns the run as [`GET .../runs/{run}`](#get-run) does.
+Edits the editable attributes: `display_name`, `notes`, `tags`, `group`, `job_type`, `description`, `gpu_type` and `gpu_count`. Only the fields you give change, and `null` clears one (for `gpu_type` and `gpu_count`, `null` goes back to the detected value). Other fields answer 422. Returns the run as [`GET .../runs/{run}`](#get-run) does.
 
 Members can edit only runs they logged. Other runs answer 403, with the run's id in `ids`.
 
