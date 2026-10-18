@@ -1,0 +1,22 @@
+name: Tracker docs PR cleanup
+
+# Removes a pull request's tracker docs preview when it closes. Never checks out code.
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions: {}
+
+jobs:
+  delete:
+    uses: cerulean-works/doc-builder/.github/workflows/delete_pr_docs.yml@main
+    permissions:
+      pull-requests: write
+    with:
+      project: flock-tracker
+      pr_number: ${{ github.event.pull_request.number }}
+    secrets:
+      r2_access_key_id: ${{ secrets.DOC_BUILDER_R2_ACCESS_KEY_ID }}
+      r2_secret_access_key: ${{ secrets.DOC_BUILDER_R2_SECRET_ACCESS_KEY }}
+      cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
