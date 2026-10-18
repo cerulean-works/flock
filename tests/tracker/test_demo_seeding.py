@@ -1,6 +1,6 @@
 import asyncio
 
-from scripts.simulate_month import ADMIN_EMAIL, PASSWORD, simulate
+from scripts.seed_demo import ADMIN_EMAIL, PASSWORD, simulate
 
 
 def test_a_simulated_month_loads_into_the_tracker(postgres, make_tracker, tmp_path):
