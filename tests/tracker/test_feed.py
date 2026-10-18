@@ -27,7 +27,12 @@ def test_the_feed_lists_what_happened_newest_first(tracker, api):
     failed = body["items"][1]
     assert failed["id"].startswith("run_failed:")
     assert (failed["org"], failed["project"]) == ("flock", "q")
-    assert failed["actor"] == {"id": alice.id, "name": "alice", "email": alice.email}
+    assert failed["actor"] == {
+        "id": alice.id,
+        "name": "alice",
+        "email": alice.email,
+        "avatar_url": None,
+    }
     assert failed["run"] | {"display_name": None, "runtime": 0} == {
         "id": "a1",
         "display_name": None,

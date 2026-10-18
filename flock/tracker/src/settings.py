@@ -48,6 +48,14 @@ class Settings:
         default=None,
         doc="Google callback URL (default: <app_url, else public_url>/api/v1/auth/google/callback)",
     )
+    gravatar: bool = field(
+        default=True,
+        doc="fetch new accounts' avatars from Gravatar (sends the SHA-256 of their email)",
+    )
+    gravatar_url: str = field(
+        default="https://gravatar.com/avatar/",
+        doc="Gravatar (or a Libravatar-compatible mirror) avatar URL, before the email hash",
+    )
     history_cache_points: int = field(
         default=20_000_000,
         doc="history points cached in memory for finished runs (active runs are always kept)",

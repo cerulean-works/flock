@@ -30,6 +30,7 @@ variables or an `.env` file next to `compose.yaml`:
 | `TRACKER_GOOGLE_CLIENT_ID`, `TRACKER_GOOGLE_CLIENT_SECRET` | (empty) | enable Sign in with Google |
 | `TRACKER_GOOGLE_REDIRECT_URL` | `<app URL>/api/v1/auth/google/callback` | the callback registered with Google |
 | `TRACKER_CRASH_TIMEOUT` | `600` | seconds without heartbeats before a run is marked `crashed` |
+| `TRACKER_GRAVATAR` | `true` | fetch new accounts' avatars from Gravatar (sends it the SHA-256 of the email) |
 | `TRACKER_HISTORY_CACHE_POINTS` | `20000000` | history points cached in memory for finished runs |
 | `POSTGRES_SHARED_BUFFERS` | `1GB` | PostgreSQL `shared_buffers` |
 
@@ -169,6 +170,9 @@ Google accounts are matched to existing accounts by verified email.
 | `POST /api/v1/auth/signup`, `login`, `refresh`, `logout` | sessions |
 | `GET`/`PATCH /api/v1/me`, `POST /api/v1/me/password` | your profile (`name`, `default_org`) and password |
 | `GET`/`POST /api/v1/me/api-keys`, `DELETE .../{id}` | your API keys |
+| `PUT`/`DELETE /api/v1/me/avatar`, `POST /api/v1/me/avatar/gravatar` | your avatar: upload an image, remove it, or fetch your Gravatar |
+| `PUT`/`DELETE /api/v1/orgs/{org}/avatar` | an org's avatar (admins) |
+| `GET /api/v1/avatars/{sha256}` | an avatar image (public: the digest is the secret; cached for good) |
 | `GET /api/v1/orgs`, `POST /api/v1/orgs` | your orgs; create one (super admins) |
 | `GET`/`PATCH`/`DELETE /api/v1/orgs/{org}` | an org; rename or delete it (admins; `?force=true` deletes active runs too) |
 | `GET /api/v1/orgs/{org}/members`, `PATCH`/`DELETE .../{user_id}` | members; change roles or remove them (admins), or leave |
@@ -179,6 +183,16 @@ Google accounts are matched to existing accounts by verified email.
 
 Renaming an org renames the entity of its projects and runs, so like a project rename it's
 refused while runs are active. Deleting one deletes all its projects and runs.
+
+**Avatars.** A new account's Gravatar is fetched in the background and stored in the tracker
+(`TRACKER_GRAVATAR=false` turns that off). Users can upload their own, and org admins their
+org's: the request body is a PNG, JPEG, GIF or WebP image of at most 1 MiB (checked by its
+leading bytes; SVG is refused). Users, members, feed actors, run owners and orgs carry an
+`avatar_url`: a path on the tracker named by the image's SHA-256, served without credentials
+so an `<img>` can load it, and cacheable for good because a new image gets a new URL. A
+dashboard on another origin forwards `/api/v1/avatars/*` to the tracker (as flock-ui does for
+`/api/v1/auth/google/*`), or prefixes the tracker's address. See
+[`docs/agents/005-avatars.md`](docs/agents/005-avatars.md).
 
 ## Read API
 

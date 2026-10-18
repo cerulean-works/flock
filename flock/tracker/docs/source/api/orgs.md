@@ -7,10 +7,10 @@ Endpoints for organizations, their members and their invitations. Paths are rela
 An organization is returned as:
 
 ```json
-{"name": "flock", "created_at": 1792282194.3, "updated_at": 1792282194.3, "project_count": 2, "member_count": 2, "role": "admin"}
+{"name": "flock", "created_at": 1792282194.3, "updated_at": 1792282194.3, "project_count": 2, "member_count": 2, "role": "admin", "avatar_url": null}
 ```
 
-`role` is your own role in it: `admin` or `member`.
+`role` is your own role in it: `admin` or `member`. `avatar_url` is the path of its avatar image, or `null`.
 
 | Endpoint | Who | Meaning |
 |---|---|---|
@@ -19,6 +19,8 @@ An organization is returned as:
 | `GET /orgs/{org}` | members | One organization. |
 | `PATCH /orgs/{org}` | org admins | Renames it, with `{"name": "..."}`. Returns the organization. |
 | `DELETE /orgs/{org}` | org admins | Deletes it, with all its projects and runs. Answers 204. |
+| `PUT /orgs/{org}/avatar` | org admins | Sets its avatar. The body is the image, with the same rules as [`PUT /me/avatar`](auth#avatars). Returns the organization. |
+| `DELETE /orgs/{org}/avatar` | org admins | Removes its avatar. Returns the organization. |
 
 Organization names follow the rules of project names: 1 to 128 characters, with no spaces around them, no control characters and none of `/ \ # ? % :`. Other names answer 422.
 
@@ -36,7 +38,7 @@ Organization names follow the rules of project names: 1 to 128 characters, with 
 
 | Endpoint | Who | Meaning |
 |---|---|---|
-| `GET /orgs/{org}/members` | members | `{"members": [...]}`, sorted by email. Each has `id`, `email`, `name` and `role`. |
+| `GET /orgs/{org}/members` | members | `{"members": [...]}`, sorted by email. Each has `id`, `name`, `email`, `avatar_url` and `role`. |
 | `PATCH /orgs/{org}/members/{id}` | org admins | Changes the role of member `id` to `{"role": "admin"}` or `"member"`. Returns `{"id", "role"}`. |
 | `DELETE /orgs/{org}/members/{id}` | org admins, or the member | Removes a member. Members remove themselves to leave. Their runs stay. Answers 204. |
 
@@ -71,7 +73,7 @@ These are public: the token is the secret.
 What the invitation is for:
 
 ```json
-{"org": "flock", "email": "ben@example.com", "role": "member", "expires_at": 1792887026.87, "account_exists": false}
+{"org": "flock", "org_avatar_url": null, "email": "ben@example.com", "role": "member", "expires_at": 1792887026.87, "account_exists": false}
 ```
 
 `account_exists` says whether an account with this email exists. If it does, the person signs in to accept instead of creating an account.

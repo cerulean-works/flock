@@ -391,6 +391,7 @@ class TrackerServer:
         self.database_url = database_url
         self.files_dir = files_dir
         self.api_key = api_key
+        settings.setdefault("gravatar", False)  # tests needing it use a fake Gravatar
         self.store = Store(Settings(database_url=database_url, files_dir=files_dir, **settings))
         sock = socket.socket()
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

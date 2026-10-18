@@ -205,8 +205,9 @@ class Budgets:
     # ------------------------------------------------------------------ reports
 
     def owner(self, user_pk: int | None) -> dict[str, Any] | None:
-        user = self.store.accounts.users.get(user_pk) if user_pk is not None else None
-        return {"id": user.pk, "name": user.name, "email": user.email} if user else None
+        accounts = self.store.accounts
+        user = accounts.users.get(user_pk) if user_pk is not None else None
+        return accounts.brief(user) if user else None
 
     def billing(self, org: Org) -> dict[str, Any]:
         """An org's prices and budgets, with every GPU type its runs used."""

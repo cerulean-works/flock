@@ -17,6 +17,7 @@ import orjson
 
 from src.core import gpus
 from src.core.accounts import Accounts
+from src.core.avatars import Avatars
 from src.core.budgets import Budgets, Usage
 from src.core.errors import Conflict, Discarded, Forbidden, NotFound
 from src.core.feed import Feed
@@ -158,12 +159,14 @@ class Org:
         created_at: float = 0.0,
         updated_at: float = 0.0,
         currency: str = "USD",
+        avatar: bytes | None = None,
     ):
         self.pk = pk
         self.name = name
         self.created_at = created_at
         self.updated_at = updated_at
         self.currency = currency
+        self.avatar = avatar  # the digest of its avatar image (see Avatars)
         # GPU prices: lowercased type -> (type as set, hourly cost of one GPU).
         self.rates: dict[str, tuple[str, float]] = {}
         # Monthly budgets, by the month they apply from (None: no budget), in month order.
@@ -290,6 +293,7 @@ class Store:
         self.secret = b""
         self.accounts = Accounts(self)
         self.budgets = Budgets(self)
+        self.avatars = Avatars(self)
         self.feed = Feed(self)
 
     @staticmethod
@@ -345,6 +349,7 @@ class Store:
             raise
 
     async def close(self) -> None:
+        await self.avatars.flush()
         await self.flush()
         await self.db.close()
 
@@ -352,9 +357,10 @@ class Store:
         started = time.perf_counter()
         for record in await self.db.fetch(
             "SELECT pk, name, extract(epoch FROM created_at)::float8, "
-            "extract(epoch FROM updated_at)::float8, currency FROM orgs"
+            "extract(epoch FROM updated_at)::float8, currency, avatar FROM orgs"
         ):
-            self._add_org(Org(*record))
+            *fields, avatar = record
+            self._add_org(Org(*fields, avatar=bytes(avatar) if avatar else None))
         for pk, org_pk, *rest in await self.db.fetch(
             "SELECT pk, org_pk, name, description, extract(epoch FROM created_at)::float8, "
             "extract(epoch FROM updated_at)::float8 FROM projects"
@@ -1278,6 +1284,7 @@ class Store:
             del self.orgs_by_pk[org.pk]
             org.deleted = True
             self.accounts.forget_org(org)
+        await self.avatars.release(org.avatar)
         for project in projects:
             self.live.broadcast(project.pk, Hub.event("project", {"deleted": True}))
             self.live.close_project(project.pk)

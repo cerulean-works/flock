@@ -36,6 +36,7 @@ def test_org_crud(tracker):
         "project_count": 0,
         "member_count": 1,  # its creator, as admin
         "role": "admin",
+        "avatar_url": None,
     }
     assert admin.post(ORGS, {"name": "lab"}).status == 409
     assert admin.post(ORGS, {"name": "a/b"}).status == 422
@@ -128,6 +129,7 @@ def test_invites(make_tracker):
     link = f"/api/v1/invites/{invite['token']}"
     assert anon.get(link).json() | {"expires_at": 0} == {
         "org": "flock",
+        "org_avatar_url": None,
         "email": "carol@lab.test",
         "role": "admin",
         "expires_at": 0,

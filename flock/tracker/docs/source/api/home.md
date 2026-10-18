@@ -30,7 +30,7 @@ What happened across the projects you can see, newest first. Super admins see ev
       "at": 1792310034.5,
       "org": "flock",
       "project": "llm-pretrain",
-      "actor": {"id": 3, "name": "Ana", "email": "ana@example.com"},
+      "actor": {"id": 3, "name": "Ana", "email": "ana@example.com", "avatar_url": null},
       "run": {
         "id": "9fc2v9ee",
         "display_name": "gpt-small-baseline",
@@ -118,7 +118,7 @@ What the organization spent in a month, against its budget. Every member can rea
       "id": "9fc2v9ee",
       "display_name": "gpt-small-baseline",
       "state": "finished",
-      "owner": {"id": 3, "name": "Ana", "email": "ana@example.com"},
+      "owner": {"id": 3, "name": "Ana", "email": "ana@example.com", "avatar_url": null},
       "gpu_type": "H200",
       "gpu_count": 8,
       "gpu_hours": 12.0,

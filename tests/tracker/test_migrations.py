@@ -112,6 +112,7 @@ def test_0002_upgrades_existing_data(postgres, make_tracker, tmp_path):
         "0003_projects",
         "0004_orgs_and_users",
         "0005_gpus_and_budgets",
+        "0006_avatars",
     ]
 
     server = make_tracker(database_url=url)  # rebuilds and compacts system metrics on startup
@@ -188,6 +189,7 @@ def test_0003_creates_projects_from_runs(postgres, make_tracker, tmp_path):
     assert asyncio.run(Migrations().apply(url)) == [
         "0004_orgs_and_users",
         "0005_gpus_and_budgets",
+        "0006_avatars",
     ]
 
     api = make_tracker(database_url=url).client()
@@ -228,6 +230,7 @@ def test_0004_creates_orgs_from_entities(postgres, make_tracker, tmp_path):
     assert asyncio.run(Migrations().apply(url)) == [
         "0004_orgs_and_users",
         "0005_gpus_and_budgets",
+        "0006_avatars",
     ]
 
     async def rows() -> list:
@@ -292,7 +295,7 @@ def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(postgres, make_trac
             await conn.close()
 
     run_pk = asyncio.run(seed())
-    assert asyncio.run(Migrations().apply(url)) == ["0005_gpus_and_budgets"]
+    assert asyncio.run(Migrations().apply(url)) == ["0005_gpus_and_budgets", "0006_avatars"]
     # The tracker's first files directory (see ``Trackers``) already holds the upload.
     metadata = tmp_path / "tracker-files-0" / str(run_pk) / "wandb-metadata.json"
     metadata.parent.mkdir(parents=True)
