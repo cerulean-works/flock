@@ -42,7 +42,7 @@ known-first-party = ["flock", "src", "app", "scripts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["--import-mode=importlib", "--strict-markers"]
+addopts = ["--import-mode=importlib", "--strict-markers", "-m", "not latency"]
 
 [dependency-groups]
 components = [

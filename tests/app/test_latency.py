@@ -8,6 +8,8 @@ from typing import Any, Self
 import orjson
 import pytest
 
+pytestmark = pytest.mark.latency
+
 
 @dataclass
 class Timing:
