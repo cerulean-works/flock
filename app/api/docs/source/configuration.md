@@ -21,6 +21,7 @@ Flock reads its settings from environment variables when it starts. Each setting
 | `FLOCK_GOOGLE_REDIRECT_URL` | `<FLOCK_WEB_URL>/api/v1/auth/google/callback` | Callback URL registered with Google. Without `FLOCK_WEB_URL`, the default uses `FLOCK_API_PUBLIC_URL`, else the address of the request. |
 | `FLOCK_GRAVATAR` | `true` | Fetch each new account's avatar from Gravatar. The request sends Gravatar the SHA-256 hash of the account's email. See [Avatars](accounts#avatars). |
 | `FLOCK_GRAVATAR_URL` | `https://gravatar.com/avatar/` | Where avatars are fetched from: the URL that the email's hash is appended to. A Libravatar-compatible server works too. |
+| `FLOCK_WANDB_BASE_URL` | `https://api.wandb.ai` | The W&B server that [imports](importing-from-wandb) read from, when an import doesn't name one. Set it for W&B Dedicated Cloud or a self-managed W&B server. |
 | `FLOCK_HISTORY_CACHE_POINTS` | `20000000` | Curve points of finished runs kept in memory. Curves of active runs are always kept, in addition. See [Memory and startup time](deploying#memory-and-startup-time). |
 | `FLOCK_CRASH_TIMEOUT` | `600` | Seconds without a heartbeat before an active run is marked `crashed`. See [Crash detection](deploying#crash-detection). |
 | `FLOCK_POOL_SIZE` | `16` | Maximum number of database connections. |

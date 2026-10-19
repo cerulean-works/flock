@@ -113,6 +113,7 @@ def test_0002_upgrades_existing_data(postgres, make_flock, tmp_path):
         "0004_orgs_and_users",
         "0005_gpus_and_budgets",
         "0006_avatars",
+        "0007_org_imports",
     ]
 
     server = make_flock(database_url=url)  # rebuilds and compacts system metrics on startup
@@ -190,6 +191,7 @@ def test_0003_creates_projects_from_runs(postgres, make_flock, tmp_path):
         "0004_orgs_and_users",
         "0005_gpus_and_budgets",
         "0006_avatars",
+        "0007_org_imports",
     ]
 
     api = make_flock(database_url=url).client()
@@ -231,6 +233,7 @@ def test_0004_creates_orgs_from_entities(postgres, make_flock, tmp_path):
         "0004_orgs_and_users",
         "0005_gpus_and_budgets",
         "0006_avatars",
+        "0007_org_imports",
     ]
 
     async def rows() -> list:
@@ -295,7 +298,11 @@ def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(postgres, make_floc
             await conn.close()
 
     run_pk = asyncio.run(seed())
-    assert asyncio.run(Migrations().apply(url)) == ["0005_gpus_and_budgets", "0006_avatars"]
+    assert asyncio.run(Migrations().apply(url)) == [
+        "0005_gpus_and_budgets",
+        "0006_avatars",
+        "0007_org_imports",
+    ]
     # Flock's first files directory (see ``Flocks``) already holds the upload.
     metadata = tmp_path / "flock-files-0" / str(run_pk) / "wandb-metadata.json"
     metadata.parent.mkdir(parents=True)

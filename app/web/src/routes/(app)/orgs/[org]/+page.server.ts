@@ -2,16 +2,18 @@ import { fail, isHttpError, redirect } from '@sveltejs/kit';
 import { refreshUser } from '#lib/server/auth.ts';
 import { removeAvatar, setAvatar } from '#lib/server/avatar.ts';
 import { change, refused, flock } from '#lib/server/flock.ts';
-import type { Billing, Invite, Member, OrgInfo, Role, UserInfo } from '#lib/types.ts';
+import type { Billing, Invite, Member, OrgImport, OrgInfo, Role, UserInfo } from '#lib/types.ts';
 import { formText, orgNameError } from '#lib/utils.ts';
+import { IMPORT, wandbImport } from '#lib/wandb.ts';
 import { orgHref } from '#lib/workspace/url.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 const orgPath = (org: string) => `/api/v1/orgs/${encodeURIComponent(org)}`;
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ depends, params }) => {
+	depends(IMPORT);
 	const path = orgPath(params.org);
-	const [org, members, me, billing, invites] = await Promise.all([
+	const [org, members, me, billing, invites, wandb] = await Promise.all([
 		flock(path).then((r) => r.json() as Promise<OrgInfo>),
 		flock(`${path}/members`).then((r) => r.json() as Promise<{ members: Member[] }>),
 		flock('/api/v1/me').then((r) => r.json() as Promise<UserInfo>),
@@ -22,12 +24,20 @@ export const load: PageServerLoad = async ({ params }) => {
 			.catch((e) => {
 				if (isHttpError(e) && e.status === 403) return null;
 				throw e;
+			}),
+		// Its W&B import: none ever (404), or not for members to see (403).
+		flock(`${path}/import`)
+			.then((r) => r.json() as Promise<OrgImport>)
+			.catch((e) => {
+				if (isHttpError(e) && (e.status === 403 || e.status === 404)) return null;
+				throw e;
 			})
 	]);
 	return {
 		org,
 		members: members.members,
 		invites: invites?.invites ?? null,
+		import: wandb,
 		billing,
 		me: { id: me.id, is_superadmin: me.is_superadmin },
 		now: Date.now() / 1000
@@ -145,6 +155,22 @@ export const actions: Actions = {
 			redirect(303, locals.user.is_superadmin ? orgHref(params.org) : '/');
 		}
 		return { removed: user };
+	},
+
+	/** Start a W&B import, or resume one: runs the org already has are skipped. */
+	startImport: async ({ params, request }) => {
+		const wandb = wandbImport(await request.formData(), params.org);
+		if (!wandb) return fail(400, { error: 'Nothing to import' });
+		if ('error' in wandb) return fail(400, { error: wandb.error });
+		const res = await change<OrgImport>('POST', `${orgPath(params.org)}/import`, wandb.value);
+		if (refused(res)) return res;
+		return { import: res.data };
+	},
+
+	cancelImport: async ({ params }) => {
+		const res = await change<OrgImport>('DELETE', `${orgPath(params.org)}/import`);
+		if (refused(res)) return res;
+		return { import: res.data };
 	},
 
 	/** Rename the org: the entity of its projects and runs, so its URLs change too. */

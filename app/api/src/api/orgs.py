@@ -2,7 +2,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from app.api.src.api.deps import (
     AdminOrgDep,
@@ -18,10 +18,36 @@ from app.api.src.api.deps import (
 )
 from app.api.src.core.accounts import Invite, User
 from app.api.src.core.store import Org, Store
+from app.api.src.core.wandb_source import WandbAuthError, WandbError, WandbNotFound, WandbSource
 
 router = APIRouter(prefix="/api/v1", tags=["organizations"])
 
 Role = Literal["admin", "member"]
+
+
+def check_base_url(value: str) -> str:
+    value = value.strip().rstrip("/")
+    if not value.startswith(("https://", "http://")) or " " in value:
+        raise ValueError("must be an http(s) URL")
+    return value
+
+
+class WandbImport(BaseModel):
+    """A W&B entity to copy into an organization. The API key is used for this import only,
+    and never stored."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    entity: Annotated[str, Field(min_length=1, max_length=128)]
+    api_key: Annotated[str, Field(min_length=1, max_length=256)]
+    base_url: Annotated[str, AfterValidator(check_base_url)] | None = None
+
+
+class OrgCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: Name
+    wandb: WandbImport | None = None
 
 
 class OrgBody(BaseModel):
@@ -85,12 +111,45 @@ async def list_orgs(user: UserDep, store: StoreDep) -> Response:
     )
 
 
+async def wandb_source(store: Store, body: WandbImport) -> tuple[WandbSource, dict[str, str]]:
+    """A W&B source for ``body``, checked to work: a bad key or entity is refused now, before
+    anything is created."""
+    source = WandbSource(body.base_url or store.settings.wandb_base_url, body.api_key)
+    try:
+        return source, await source.check(body.entity)
+    except BaseException as exc:
+        await source.close()
+        if isinstance(exc, WandbAuthError):
+            raise APIError(400, "W&B rejected the API key") from exc
+        if isinstance(exc, WandbNotFound):
+            raise APIError(404, f"W&B entity {body.entity} not found") from exc
+        if isinstance(exc, WandbError):
+            raise APIError(502, str(exc)) from exc
+        raise
+
+
 @router.post("/orgs", status_code=201)
-async def create_org(body: OrgBody, user: SuperadminDep, store: StoreDep) -> Response:
-    """Create an organization (super admins only), with its creator as an admin."""
-    org = await store.create_org(body.name)
-    await store.accounts.add_member(user, org, "admin")
-    return JSONResponse(org_info(store, org, user), status_code=201)
+async def create_org(body: OrgCreate, user: SuperadminDep, store: StoreDep) -> Response:
+    """Create an organization (super admins only), with its creator as an admin.
+
+    With ``wandb``, the projects and runs of that W&B entity are then copied into it in the
+    background; the response's ``import`` is its progress (see ``GET /orgs/{org}/import``).
+    """
+    source = members = None
+    if body.wandb is not None:
+        source, members = await wandb_source(store, body.wandb)
+    try:
+        org = await store.create_org(body.name)
+        await store.accounts.add_member(user, org, "admin")
+    except BaseException:
+        if source is not None:
+            await source.close()
+        raise
+    info = org_info(store, org, user)
+    if source is not None and body.wandb is not None and members is not None:
+        job = await store.imports.start(org, source, body.wandb.entity, user, members)
+        info["import"] = job.info()
+    return JSONResponse(info, status_code=201)
 
 
 @router.get("/orgs/{org}")
@@ -118,6 +177,44 @@ async def delete_org(
     """Delete an organization with all its projects and runs. There is no undo."""
     await store.delete_org(org, force)
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------- imports
+
+
+@router.get("/orgs/{org}/import")
+async def get_import(org: AdminOrgDep, store: StoreDep) -> Response:
+    """The progress of the organization's latest W&B import (404 if it never had one)."""
+    job = store.imports.get(org)
+    if job is None:
+        raise APIError(404, f"{org.name} has no import")
+    return JSONResponse(job.info())
+
+
+@router.post("/orgs/{org}/import", status_code=202)
+async def start_import(
+    org: AdminOrgDep, body: WandbImport, user: SuperadminDep, store: StoreDep
+) -> Response:
+    """Copy a W&B entity's projects and runs into the organization (super admins only).
+
+    Runs it already has (by project and run id) are skipped, so this also resumes an import
+    that was interrupted, failed or cancelled. 409 while an import is running.
+    """
+    current = store.imports.get(org)
+    if current is not None and current.state == "running":
+        raise APIError(409, f"an import into {org.name} is already running")
+    source, members = await wandb_source(store, body)
+    job = await store.imports.start(org, source, body.entity, user, members)
+    return JSONResponse(job.info(), status_code=202)
+
+
+@router.delete("/orgs/{org}/import")
+async def cancel_import(org: AdminOrgDep, user: SuperadminDep, store: StoreDep) -> Response:
+    """Stop a running import (super admins only); the runs copied so far stay."""
+    job = await store.imports.cancel(org)
+    if job is None:
+        raise APIError(404, f"{org.name} has no import")
+    return JSONResponse(job.info())
 
 
 # ---------------------------------------------------------------------- members

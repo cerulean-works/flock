@@ -22,6 +22,7 @@ from app.api.src.core.budgets import Budgets, Usage
 from app.api.src.core.errors import Conflict, Discarded, Forbidden, NotFound
 from app.api.src.core.feed import Feed
 from app.api.src.core.history import History, PointCounter, Series
+from app.api.src.core.imports import Imports
 from app.api.src.core.live import Hub
 from app.api.src.core.names import ADJECTIVES, NOUNS
 from app.api.src.core.table import ColumnTable
@@ -149,6 +150,37 @@ class Run:
     def lines(self, stream: str) -> int:
         """Lines received for a series stream: history rows, or system metric samples."""
         return self.history_line_count if stream == "history" else self.events_line_count
+
+
+@dataclass
+class ImportedRun:
+    """A finished run copied from another tracker (see ``Store.import_run``).
+
+    ``history`` and ``events`` are wandb-history.jsonl and wandb-events.jsonl lines, ``logs``
+    output.log lines, and ``files`` run files by name. Times are epoch seconds.
+    """
+
+    name: str
+    display_name: str | None
+    state: str
+    created_at: float
+    heartbeat_at: float
+    config: dict[str, Any] | None = None
+    summary: dict[str, Any] | None = None
+    tags: list[str] = field(default_factory=list)
+    notes: str | None = None
+    group: str | None = None
+    job_type: str | None = None
+    host: str | None = None
+    program: str | None = None
+    commit: str | None = None
+    sweep: str | None = None
+    exitcode: int | None = None
+    owner: int | None = None
+    history: list[str] = field(default_factory=list)
+    events: list[str] = field(default_factory=list)
+    logs: list[str] = field(default_factory=list)
+    files: dict[str, bytes] = field(default_factory=dict)
 
 
 class Org:
@@ -297,6 +329,7 @@ class Store:
         self.budgets = Budgets(self)
         self.avatars = Avatars(self)
         self.feed = Feed(self)
+        self.imports = Imports(self)
 
     @staticmethod
     def _config_columns(config: dict[str, Any]) -> dict[str, Any]:
@@ -345,12 +378,14 @@ class Store:
             await self._load()
             await self.accounts.load()
             await self.budgets.load()
+            await self.imports.load()
             await self._detect_missing_gpus()
         except BaseException:
             await self.db.close()
             raise
 
     async def close(self) -> None:
+        await self.imports.close()
         await self.avatars.flush()
         await self.flush()
         await self.db.close()
@@ -524,9 +559,11 @@ class Store:
         return org
 
     async def _insert_project(
-        self, org: Org, name: str, description: str | None = None
+        self, org: Org, name: str, description: str | None = None, created_at: float | None = None
     ) -> Project | None:
-        """Insert a project row (call with ``_catalog`` held); None if the name is taken."""
+        """Insert a project row (call with ``_catalog`` held); None if the name is taken.
+
+        ``created_at`` is for projects copied from elsewhere, which keep their creation time."""
         # Stamped with this process's clock, like runs: the database's can run ahead of it, which
         # would date a project created by a run's upload after that run started.
         record = await self.db.fetchrow(
@@ -538,7 +575,7 @@ class Store:
             org.pk,
             name,
             description,
-            time.time(),
+            time.time() if created_at is None else created_at,
         )
         if record is None:
             return None
@@ -613,11 +650,17 @@ class Store:
         )
         return [(r[0], r[1], r[2]) for r in rows]
 
-    def file_path(self, run: Run, name: str) -> Path | None:
+    @staticmethod
+    def file_parts(name: str) -> tuple[str, ...] | None:
+        """The path components of a run file's name; None if it would leave the run's directory."""
         parts = Path(name).parts
         if not parts or Path(name).is_absolute() or any(p in ("..", "") for p in parts):
             return None
-        return self.files_dir / str(run.pk) / Path(*parts)
+        return parts
+
+    def file_path(self, run: Run, name: str) -> Path | None:
+        parts = self.file_parts(name)
+        return None if parts is None else self.files_dir / str(run.pk) / Path(*parts)
 
     # ------------------------------------------------------------------ mutations
 
@@ -1217,6 +1260,213 @@ class Store:
         project.deleted = True
         return pks
 
+    # ------------------------------------------------------------------ imports
+
+    async def import_project(
+        self, org: Org, name: str, description: str | None, created_at: float | None
+    ) -> Project:
+        """The project ``name`` of ``org``, created with the given creation time if missing."""
+        async with self._catalog:
+            if org.deleted:
+                raise NotFound(f"organization {org.name} not found")
+            project = self.projects.get((org.name, name))
+            if project is None:
+                project = await self._insert_project(org, name, description, created_at)
+                assert project is not None  # only created under _catalog, and it was missing
+            return project
+
+    async def import_run(self, project: Project, data: ImportedRun) -> Run | None:
+        """Add a finished run copied from elsewhere, with its timestamps, series, logs and
+        files; None if the project already has a run of that name (so imports can resume).
+
+        Series are stored compacted straight away, and its lifetime is entered in the usage
+        ledger as if it had sent heartbeats throughout.
+        """
+        if data.state in Run.ACTIVE_STATES:
+            raise ValueError(f"cannot import a {data.state} run")
+        paths: dict[str, tuple[str, ...]] = {}
+        for name in data.files:
+            parts = self.file_parts(name)
+            if parts is None:
+                raise ValueError(f"invalid file name {name!r}")
+            paths[name] = parts
+        gpu_type, gpu_count = None, None
+        if self.METADATA_FILE in data.files:
+            gpu_type, gpu_count = self._read_gpus(data.files[self.METADATA_FILE])
+        series = {}
+        for stream, lines in (("history", data.history), ("system", data.events)):
+            hist = History()
+            hist.append_rows(0, self._parse_rows(lines))
+            series[stream] = hist
+        columns = [
+            (stream, key, s.n, s.encode())
+            for stream, hist in series.items()
+            for key, s in hist.series.items()
+        ]
+        heartbeat_at = max(data.heartbeat_at, data.created_at)
+        ledger = gpus.split_by_month(data.created_at, heartbeat_at)
+        history, events, logs = (
+            self._pg_text(lines) for lines in (data.history, data.events, data.logs)
+        )
+
+        async with project.lock:
+            if project.deleted:
+                raise NotFound(f"project {project.entity}/{project.name} not found")
+            if data.name in project.by_name:
+                return None
+            async with self.db.pool.acquire() as conn, conn.transaction():
+                pk = await conn.fetchval(
+                    """
+                    INSERT INTO runs (project_pk, name, display_name, state, created_at,
+                        updated_at, heartbeat_at, config, summary, tags, notes, group_name,
+                        job_type, host, program, commit_hash, sweep, exitcode,
+                        history_line_count, events_line_count, log_line_count,
+                        history_compacted_line_count, system_compacted_line_count, owner_pk,
+                        gpu_type, gpu_count)
+                    VALUES ($1, $2, $3, $4, to_timestamp($5), to_timestamp($6), to_timestamp($6),
+                        $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $18,
+                        $19, $21, $22, $23)
+                    RETURNING pk
+                    """,
+                    project.pk,
+                    data.name,
+                    data.display_name,
+                    data.state,
+                    data.created_at,
+                    heartbeat_at,
+                    orjson.dumps(data.config).decode() if data.config is not None else None,
+                    orjson.dumps(data.summary).decode() if data.summary is not None else None,
+                    data.tags,
+                    data.notes,
+                    data.group,
+                    data.job_type,
+                    data.host,
+                    data.program,
+                    data.commit,
+                    data.sweep,
+                    data.exitcode,
+                    len(history),
+                    len(events),
+                    len(logs),
+                    data.owner,
+                    gpu_type,
+                    gpu_count,
+                )
+                for table, lines in (("history", history), ("events", events), ("logs", logs)):
+                    if lines:
+                        await conn.copy_records_to_table(
+                            table,
+                            records=[(pk, i, line) for i, line in enumerate(lines)],
+                            columns=("run_pk", "line", "data"),
+                        )
+                if columns:
+                    await conn.copy_records_to_table(
+                        "history_columns",
+                        records=[(pk, *column) for column in columns],
+                        columns=("run_pk", "stream", "key", "n", "data"),
+                    )
+                if ledger:
+                    await conn.copy_records_to_table(
+                        "gpu_usage",
+                        records=[
+                            (
+                                project.org.pk,
+                                project.pk,
+                                pk,
+                                data.name,
+                                month,
+                                seconds,
+                                gpu_type,
+                                gpu_count,
+                            )
+                            for month, seconds in ledger
+                        ],
+                        columns=(
+                            "org_pk",
+                            "project_pk",
+                            "run_pk",
+                            "run_name",
+                            "month",
+                            "seconds",
+                            "gpu_type",
+                            "gpu_count",
+                        ),
+                    )
+                if data.files:
+                    # Written before the commit: if the commit fails, the startup sweep removes
+                    # the files of a run that doesn't exist.
+                    root = self.files_dir / str(pk)
+
+                    def write() -> None:
+                        for name, content in data.files.items():
+                            path = root.joinpath(*paths[name])
+                            path.parent.mkdir(parents=True, exist_ok=True)
+                            path.write_bytes(content)
+
+                    await asyncio.to_thread(write)
+                    await conn.executemany(
+                        "INSERT INTO run_files (run_pk, name, size, updated_at) "
+                        "VALUES ($1, $2, $3, to_timestamp($4))",
+                        [
+                            (pk, name, len(content), heartbeat_at)
+                            for name, content in data.files.items()
+                        ],
+                    )
+
+            run = Run(
+                pk=pk,
+                project=project,
+                name=data.name,
+                row=project.table.add_row(),
+                display_name=data.display_name,
+                state=data.state,
+                created_at=data.created_at,
+                updated_at=heartbeat_at,
+                heartbeat_at=heartbeat_at,
+                tags=list(data.tags),
+                notes=data.notes,
+                group=data.group,
+                job_type=data.job_type,
+                host=data.host,
+                program=data.program,
+                commit=data.commit,
+                sweep=data.sweep,
+                exitcode=data.exitcode,
+                owner=data.owner,
+                gpu_type_detected=gpu_type,
+                gpu_count_detected=gpu_count,
+                history_line_count=len(history),
+                events_line_count=len(events),
+                log_line_count=len(logs),
+                compacted={"history": len(history), "system": len(events)},
+                compacted_keys={stream: list(hist.series) for stream, hist in series.items()},
+            )
+            project.add(run)
+            self.runs_by_pk[pk] = run
+            for month, seconds in ledger:
+                self.budgets._add(
+                    Usage(
+                        project.org, project, run, pk, run.name, month, seconds, gpu_type, gpu_count
+                    )
+                )
+            values = run.attributes()
+            if data.config:
+                values.update(self._config_columns(data.config))
+            if data.summary:
+                values.update(self._summary_columns(data.summary))
+            project.table.set_many(run.row, values)
+            for stream, hist in series.items():
+                project.note_metrics(run, hist.series, stream)
+            # Imported runs are older than most: keep the rows in creation order.
+            self._reindex(project, sorted(project.runs, key=lambda r: (r.created_at, r.pk)))
+        self.live.broadcast(
+            project.pk,
+            Hub.event(
+                "created", {"run": run.name, "display_name": run.display_name, "state": run.state}
+            ),
+        )
+        return run
+
     # ------------------------------------------------------------------ organizations
 
     async def create_org(self, name: str) -> Org:
@@ -1284,12 +1534,15 @@ class Store:
             active = [f"{p.name}/{run}" for p in projects for run in p.active]
             if active and not force:
                 raise Conflict("organization has active runs (pass force=true)", active)
+            # It waits on the locks held here, so it stops before writing anything more.
+            await self.imports.cancel(org)
             await self.db.execute("DELETE FROM orgs WHERE pk = $1", org.pk)
             pks = [pk for project in projects for pk in self._drop_project(project)]
             del self.orgs[org.name]
             del self.orgs_by_pk[org.pk]
             org.deleted = True
             self.accounts.forget_org(org)
+            self.imports.forget(org)
         await self.avatars.release(org.avatar)
         for project in projects:
             self.live.broadcast(project.pk, Hub.event("project", {"deleted": True}))

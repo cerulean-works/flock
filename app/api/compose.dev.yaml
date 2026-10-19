@@ -21,6 +21,7 @@ services:
       FLOCK_GOOGLE_REDIRECT_URL: ${FLOCK_GOOGLE_REDIRECT_URL:-}
       FLOCK_GRAVATAR: ${FLOCK_GRAVATAR:-}
       FLOCK_GRAVATAR_URL: ${FLOCK_GRAVATAR_URL:-}
+      FLOCK_WANDB_BASE_URL: ${FLOCK_WANDB_BASE_URL:-}
       FLOCK_HISTORY_CACHE_POINTS: ${FLOCK_HISTORY_CACHE_POINTS:-}
       FLOCK_CRASH_TIMEOUT: ${FLOCK_CRASH_TIMEOUT:-}
       FLOCK_POOL_SIZE: ${FLOCK_POOL_SIZE:-}
@@ -52,6 +53,8 @@ services:
       - effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-3GB}
       - -c
       - max_wal_size=4GB
+    ports:
+      - 5432:5432
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:

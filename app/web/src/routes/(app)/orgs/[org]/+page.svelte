@@ -10,6 +10,7 @@
 	import DeleteOrgDialog from '#lib/components/DeleteOrgDialog.svelte';
 	import FormError from '#lib/components/FormError.svelte';
 	import MemberMenu from '#lib/components/MemberMenu.svelte';
+	import OrgImport from '#lib/components/OrgImport.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
@@ -69,6 +70,18 @@
 					you’re a super admin
 				{/if}
 			</p>
+
+			{#if data.import || data.me.is_superadmin}
+				<section class="mt-10 scroll-mt-6" id="import">
+					<h2 class="font-serif text-2xl tracking-[-0.01em]">Import from W&B</h2>
+					<OrgImport
+						org={data.org.name}
+						job={data.import}
+						superadmin={data.me.is_superadmin}
+						now={data.now}
+					/>
+				</section>
+			{/if}
 
 			<section class="mt-10">
 				<h2 class="font-serif text-2xl tracking-[-0.01em]">Members</h2>

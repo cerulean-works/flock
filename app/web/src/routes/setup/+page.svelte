@@ -5,6 +5,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
+	import WandbImportFields from '#lib/components/WandbImportFields.svelte';
 	import type { PageProps, SubmitFunction } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -12,6 +13,8 @@
 	const STEPS = ['Your account', 'Your workspace'];
 	const step = $derived(data.step === 'account' ? 0 : 1);
 
+	let orgName = $derived(form?.org ?? '');
+	let importing = $derived(!!form?.wandb);
 	let pending = $state(false);
 	const submit: SubmitFunction = () => {
 		pending = true;
@@ -123,7 +126,7 @@
 					name="org"
 					autocomplete="organization"
 					placeholder="e.g. cerulean-research"
-					value={form?.org ?? ''}
+					bind:value={orgName}
 					maxlength={128}
 					class="h-10"
 					required
@@ -134,6 +137,12 @@
 					>.
 				</p>
 			</div>
+			<WandbImportFields
+				org={orgName.trim()}
+				bind:on={importing}
+				entity={form?.entity ?? ''}
+				large
+			/>
 			{#if form?.error}
 				<p class="text-[13px] text-destructive" role="alert">
 					{form.error.charAt(0).toUpperCase() + form.error.slice(1)}.

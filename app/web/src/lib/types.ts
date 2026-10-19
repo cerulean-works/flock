@@ -33,6 +33,29 @@ export interface OrgInfo {
 	role: Role | null;
 }
 
+/** Where an organization's W&B import is: `interrupted` means Flock restarted during it. */
+export type ImportState = 'running' | 'finished' | 'failed' | 'cancelled' | 'interrupted';
+
+/** The progress of an organization's latest W&B import (`GET /orgs/{org}/import`). */
+export interface OrgImport {
+	entity: string;
+	base_url: string;
+	state: ImportState;
+	projects_total: number;
+	projects_done: number;
+	runs_total: number;
+	runs_done: number;
+	/** Runs the organization already had, from an earlier attempt. */
+	runs_skipped: number;
+	runs_failed: number;
+	current_project: string | null;
+	/** Why it failed, or the last run that couldn't be copied. */
+	error: string | null;
+	started_by: number | null;
+	started_at: number;
+	finished_at: number | null;
+}
+
 /** An account, as Flock describes it to its owner and to super admins. */
 export interface UserInfo {
 	id: number;
