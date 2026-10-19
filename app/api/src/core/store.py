@@ -525,14 +525,18 @@ class Store:
         self, org: Org, name: str, description: str | None = None
     ) -> Project | None:
         """Insert a project row (call with ``_catalog`` held); None if the name is taken."""
+        # Stamped with this process's clock, like runs: the database's can run ahead of it, which
+        # would date a project created by a run's upload after that run started.
         record = await self.db.fetchrow(
             "INSERT INTO projects (org_pk, name, description, created_at, updated_at) "
-            "VALUES ($1, $2, $3, now(), now()) ON CONFLICT (org_pk, name) DO NOTHING "
+            "VALUES ($1, $2, $3, to_timestamp($4), to_timestamp($4)) "
+            "ON CONFLICT (org_pk, name) DO NOTHING "
             "RETURNING pk, name, description, "
             "extract(epoch FROM created_at)::float8, extract(epoch FROM updated_at)::float8",
             org.pk,
             name,
             description,
+            time.time(),
         )
         if record is None:
             return None

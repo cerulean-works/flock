@@ -4,11 +4,10 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import ChartsPane from '#lib/components/ChartsPane.svelte';
+	import ColumnsMenu from '#lib/components/ColumnsMenu.svelte';
 	import CursorPanel from '#lib/components/CursorPanel.svelte';
 	import FullscreenPanel from '#lib/components/FullscreenPanel.svelte';
-	import Columns3Icon from '@lucide/svelte/icons/columns-3';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
-	import ListFilterIcon from '@lucide/svelte/icons/list-filter';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
@@ -18,20 +17,24 @@
 	import MoveRunsDialog from '#lib/components/MoveRunsDialog.svelte';
 	import LiveStatus from '#lib/components/LiveStatus.svelte';
 	import Pager from '#lib/components/Pager.svelte';
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import PlotSettings from '#lib/components/PlotSettings.svelte';
-	import ProjectMenu from '#lib/components/ProjectMenu.svelte';
+	import RunFilters from '#lib/components/RunFilters.svelte';
+	import { describeFilters } from '#lib/workspace/filters.ts';
+	import RunSearch from '#lib/components/RunSearch.svelte';
 	import TagRunsDialog from '#lib/components/TagRunsDialog.svelte';
-	import RunsTable, { NAME_W } from '#lib/components/RunsTable.svelte';
+	import ResizeHandle from '#lib/components/ResizeHandle.svelte';
+	import RunsTable from '#lib/components/RunsTable.svelte';
+	import { NAME_W, saveWidth } from '#lib/widths.ts';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
-	import * as Popover from '#lib/components/ui/popover/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { clearRunPages, prefetchRunPage } from '#lib/data/cache.ts';
 	import { LiveConnection, type ProjectEvent } from '#lib/data/live.ts';
 	import { entityHref, workspaceHrefWith } from '#lib/workspace/url.ts';
 	import { Workspace, setWorkspace } from '#lib/workspace/workspace.svelte.ts';
+	import { lastView, rememberView, type ProjectView } from '#lib/workspace/project-view.svelte.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -87,7 +90,10 @@
 		}
 	}
 
-	type View = 'table' | 'charts';
+	/** The runs' name column, beside the table's columns or the charts; the viewer can drag it. */
+	let nameW = $derived(data.shell.nameW);
+
+	type View = ProjectView;
 
 	// URL is the source of truth for view and full-screen panel, so both survive reloads and
 	// are server-rendered. Neither is read by a load function, so changing them never fetches.
@@ -95,9 +101,11 @@
 	let viewOverride = $state<View | null>(null);
 	let panelOverride = $state<number | null | undefined>(undefined);
 
-	const urlView = $derived<View>(
-		page.url.searchParams.get('view') === 'charts' ? 'charts' : 'table'
-	);
+	// A URL without a view (a project opened from the sidebar) shows the one picked last.
+	const urlView = $derived.by((): View => {
+		const v = page.url.searchParams.get('view');
+		return v === 'charts' || v === 'table' ? v : lastView(data.shell.projectView);
+	});
 	const urlPanel = $derived.by(() => {
 		const key = page.url.searchParams.get('panel');
 		if (!key) return null;
@@ -117,6 +125,7 @@
 		e?.preventDefault();
 		if (v === view) return;
 		viewOverride = v;
+		rememberView(v);
 		ws.cursor = null;
 		void goto(viewHref(v), { replace: true, reset: false }).finally(() => (viewOverride = null));
 	}
@@ -219,6 +228,18 @@
 			.join(' · ')
 	);
 
+	/** The runs shown are a search's or a filter's, not all of the project's. */
+	const narrowed = $derived(!!ws.page.query.search || ws.page.query.filters.length > 0);
+
+	const noMatch = $derived.by(() => {
+		const { search, filters } = ws.page.query;
+		if (!filters.length) return `No run’s name or id contains “${search}”.`;
+		const kindOf = (key: string) => ws.meta.columns.find((c) => c.key === key)?.kind;
+		const where = describeFilters(filters, kindOf);
+		if (!search) return `No run matches ${where}.`;
+		return `No run matching “${search}” has ${where}.`;
+	});
+
 	// The project's record with the counts the stream keeps current: the dialogs explain
 	// what an active run prevents.
 	const projectInfo = $derived({
@@ -228,7 +249,7 @@
 		created_at: data.project?.created_at ?? 0,
 		updated_at: data.project?.updated_at ?? 0,
 		column_count: ws.meta.columns.length,
-		run_count: ws.page.total,
+		run_count: ws.page.projectTotal,
 		active_run_count: ws.activeRuns
 	});
 </script>
@@ -239,17 +260,14 @@
 
 <svelte:window {onkeydown} />
 
-<div class="flex min-h-0 flex-1 flex-col" data-sveltekit-reset="false" style:--name-w="{NAME_W}px">
-	<div class="flex flex-none flex-wrap items-baseline gap-x-4 gap-y-1 px-5 pt-5 pb-3">
-		<div class="flex min-w-0 items-baseline gap-1">
-			<h1 class="truncate font-serif text-[34px] leading-[1.15] font-normal tracking-[-0.02em]">
-				{ws.meta.project}
-			</h1>
-			<div class="self-center">
-				<ProjectMenu entity={ws.meta.entity} project={projectInfo} from="project" />
-			</div>
-		</div>
-		<div class="ml-auto flex items-center gap-2 self-center">
+<div class="flex min-h-0 flex-1 flex-col" data-sveltekit-reset="false" style:--name-w="{nameW}px">
+	<PageHeader title={ws.meta.project} subtitleTitle={projectInfo.description ?? undefined}>
+		{#snippet subtitle()}
+			{#if projectInfo.description}
+				<span class="description">{projectInfo.description}</span>
+			{/if}
+		{/snippet}
+		{#snippet actions()}
 			{#if ws.newRuns > 0 || ws.removedRuns > 0 || ws.newMetrics > 0}
 				<Button
 					variant="secondary"
@@ -262,113 +280,80 @@
 				</Button>
 			{/if}
 			<LiveStatus />
-		</div>
-	</div>
+		{/snippet}
+		{#snippet toolbar()}
+			<Tabs.Root value={view} onValueChange={(v) => setView(v as View)}>
+				<!-- No counts, so the toggle keeps its width from project to project. -->
+				<Tabs.List aria-label="View">
+					<Tabs.Trigger value="table" title="Table (T)">Table</Tabs.Trigger>
+					<Tabs.Trigger value="charts" title="Charts (C)">Charts</Tabs.Trigger>
+				</Tabs.List>
+			</Tabs.Root>
+			<Separator orientation="vertical" class="mx-1.5 h-5! data-vertical:self-center" />
 
-	{#if projectInfo.description}
-		<p
-			class="description -mt-1.5 max-w-[70ch] flex-none px-5 pb-3 text-[13px] text-muted-foreground"
-		>
-			{projectInfo.description}
-		</p>
-	{/if}
-
-	<div class="flex h-12 flex-none items-center gap-2 border-b px-5">
-		<Tabs.Root value={view} onValueChange={(v) => setView(v as View)}>
-			<Tabs.List aria-label="View">
-				<Tabs.Trigger value="table" title="Table (T)">
-					Table <span class="font-normal text-muted-foreground">{ws.page.total}</span>
-				</Tabs.Trigger>
-				<Tabs.Trigger value="charts" title="Charts (C)">
-					Charts <span class="font-normal text-muted-foreground">{ws.meta.metrics.length}</span>
-				</Tabs.Trigger>
-			</Tabs.List>
-		</Tabs.Root>
-		<Separator orientation="vertical" class="mx-1.5 h-5! data-vertical:self-center" />
-
-		{#if view === 'table' && ws.selectedRows.length}
-			<span class="selection-count mr-1 text-[13px] font-medium tabular-nums" role="status">
-				{ws.selectedRows.length} selected
-			</span>
-			<Button variant="outline" onclick={() => ws.openDialog('tag')}><TagIcon /> Tags</Button>
-			<Button variant="outline" onclick={() => ws.openDialog('move')}>
-				<FolderInputIcon /> Move
-			</Button>
-			<Button variant="outline" class="text-destructive" onclick={() => ws.openDialog('delete')}>
-				<Trash2Icon /> Delete
-			</Button>
-			<Button
-				variant="ghost"
-				size="icon"
-				title="Clear selection (Esc)"
-				aria-label="Clear selection"
-				onclick={() => ws.selected.clear()}
-			>
-				<XIcon />
-			</Button>
-		{:else}
-			<Popover.Root>
-				<Popover.Trigger>
-					{#snippet child({ props })}
-						<Button {...props} variant="outline" title="Filter runs"
-							><ListFilterIcon /> Filter</Button
-						>
-					{/snippet}
-				</Popover.Trigger>
-				<Popover.Content align="start" class="w-72">
-					<p class="text-xs text-muted-foreground">Filters</p>
-					<p class="text-muted-foreground">No filters applied.</p>
-					<Button variant="outline" size="sm" disabled class="self-start">Add filter</Button>
-				</Popover.Content>
-			</Popover.Root>
-
-			{#if view === 'table'}
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger>
-						{#snippet child({ props })}
-							<Button {...props} variant="outline" title="Jump to columns">
-								<Columns3Icon /> Columns
-							</Button>
-						{/snippet}
-					</DropdownMenu.Trigger>
-					<DropdownMenu.Content align="start" class="w-56">
-						<DropdownMenu.Group>
-							<DropdownMenu.Label>Jump to</DropdownMenu.Label>
-							{#each ws.meta.groups as g (g.key)}
-								<DropdownMenu.Item onSelect={() => table?.scrollToColumn(g.start)}>
-									{g.label}
-									<DropdownMenu.Shortcut>{g.end - g.start}</DropdownMenu.Shortcut>
-								</DropdownMenu.Item>
-							{/each}
-						</DropdownMenu.Group>
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
+			{#if view === 'table' && ws.selectedRows.length}
+				<span class="selection-count mr-1 text-[13px] font-medium tabular-nums" role="status">
+					{ws.selectedRows.length} selected
+				</span>
+				<Button variant="outline" onclick={() => ws.openDialog('tag')}><TagIcon /> Tags</Button>
+				<Button variant="outline" onclick={() => ws.openDialog('move')}>
+					<FolderInputIcon /> Move
+				</Button>
+				<Button variant="outline" class="text-destructive" onclick={() => ws.openDialog('delete')}>
+					<Trash2Icon /> Delete
+				</Button>
+				<Button
+					variant="ghost"
+					size="icon"
+					title="Clear selection (Esc)"
+					aria-label="Clear selection"
+					onclick={() => ws.selected.clear()}
+				>
+					<XIcon />
+				</Button>
 			{:else}
-				<PlotSettings />
-			{/if}
-		{/if}
+				<RunSearch />
+				<RunFilters />
 
-		<span class="flex-1"></span>
-		{#if view === 'charts' && focusLabel}
-			<Badge
-				variant="secondary"
-				class="focus-label max-w-[46%] truncate text-muted-foreground"
-				title={focusLabel}
-			>
-				{focusLabel}
-			</Badge>
-		{/if}
-	</div>
+				{#if view === 'table'}
+					<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} />
+				{:else}
+					<PlotSettings />
+				{/if}
+			{/if}
+
+			<span class="flex-1"></span>
+			{#if view === 'charts' && focusLabel}
+				<Badge
+					variant="secondary"
+					class="focus-label max-w-[46%] truncate text-muted-foreground"
+					title={focusLabel}
+				>
+					{focusLabel}
+				</Badge>
+			{/if}
+		{/snippet}
+	</PageHeader>
 
 	<main class="relative min-h-0 flex-1">
-		<RunsTable bind:this={table} mode={view} />
+		<RunsTable bind:this={table} mode={view} {nameW} />
 		<ChartsPane
 			shown={view === 'charts'}
 			active={view === 'charts' && fullscreen == null}
 			{panelHref}
 			onfullscreen={openPanel}
 		/>
-		{#if ws.page.total === 0}
+		{#if ws.page.total === 0 && narrowed}
+			<div class="empty absolute inset-0 z-4 bg-background px-5 pt-[10vh]">
+				<div class="mx-auto max-w-160 font-serif text-[19px] leading-normal">
+					<h2 class="mb-3 text-[28px] leading-tight tracking-[-0.01em]">No matching runs</h2>
+					<p class="mb-4">{noMatch}</p>
+					<Button variant="outline" href={hrefWith({ q: null, filters: null, page: null })}>
+						Show every run
+					</Button>
+				</div>
+			</div>
+		{:else if ws.page.total === 0}
 			<div class="empty absolute inset-0 z-4 bg-background px-5 pt-[10vh]">
 				<div class="mx-auto max-w-160 font-serif text-[19px] leading-normal">
 					<h2 class="mb-3 text-[28px] leading-tight tracking-[-0.01em]">No runs yet</h2>
@@ -389,6 +374,17 @@ run.log(&lbrace;"loss": 0.5&rbrace;)</code
 			</div>
 		{:else}
 			<Pager />
+			<!-- On the name column's edge, above the table and the charts beside it. -->
+			<div class="pointer-events-none absolute inset-y-0 left-0 z-5" style:width="{nameW}px">
+				<ResizeHandle
+					class="pointer-events-auto"
+					value={nameW}
+					bounds={NAME_W}
+					label="Resize the runs column"
+					onresize={(px) => (nameW = px)}
+					oncommit={(px) => saveWidth(NAME_W, px)}
+				/>
+			</div>
 		{/if}
 	</main>
 </div>

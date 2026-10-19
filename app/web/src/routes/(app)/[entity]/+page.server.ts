@@ -8,16 +8,18 @@ import type { Actions, PageServerLoad } from './$types';
 
 /**
  * An organization's latest runs, newest first: the feed's `run_started` items. `?runs=mine`
- * keeps them to the user's own.
+ * keeps them to the user's own, `?project=` to one project.
  */
 export const load: PageServerLoad = async ({ params, url, depends }) => {
 	depends(FEED);
 	const mine = url.searchParams.get('runs') === 'mine';
+	const project = url.searchParams.get('project') || null;
 	const query: Record<string, string> = {
 		org: params.entity,
 		kinds: 'run_started',
 		limit: '50',
-		...(mine && { owner: 'me' })
+		...(mine && { owner: 'me' }),
+		...(project && { project })
 	};
 	// The org answers 404 to non-members (the feed would just be empty).
 	const [org, feed] = await Promise.all([
@@ -27,7 +29,7 @@ export const load: PageServerLoad = async ({ params, url, depends }) => {
 		flock(`/api/v1/feed?${new URLSearchParams(query)}`).then((r) => r.json() as Promise<FeedPage>)
 	]);
 	// Relative times are computed against this, so SSR and hydration print the same text.
-	return { org, feed, query, mine, now: Date.now() / 1000 };
+	return { org, feed, query, mine, project, now: Date.now() / 1000 };
 };
 
 /**

@@ -1,6 +1,7 @@
 import asyncio
 
 from app.api.src.api.dashboard import Snapshot
+from app.api.src.api.runs import RunSelection
 from tests.app.utils import history_rows, system_samples
 
 RUNS = "/api/v1/projects/flock/p/runs"
@@ -143,7 +144,9 @@ def test_delete_while_reading_leaves_nothing_cached(make_flock):
         runs = list(project.runs)
         reads = [
             asyncio.ensure_future(store.histories(runs, ["loss"])),
-            asyncio.ensure_future(Snapshot.build(store, project, None, 0, 100, 500)),
+            asyncio.ensure_future(
+                Snapshot.build(store, project, RunSelection(sort="-created_at"), 0, 100, 500)
+            ),
         ]
         await asyncio.sleep(0)  # both are now waiting on the database
         await store.delete_runs(project, runs[::2])

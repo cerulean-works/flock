@@ -1,23 +1,38 @@
 <script lang="ts">
-	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
-	import { untrack } from 'svelte';
+	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
+	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
+	import PanelRightIcon from '@lucide/svelte/icons/panel-right';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import TagIcon from '@lucide/svelte/icons/tag';
+	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import XIcon from '@lucide/svelte/icons/x';
+	import { onMount, untrack } from 'svelte';
+	import { MediaQuery } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import ChartsPane from '#lib/components/ChartsPane.svelte';
 	import CursorPanel from '#lib/components/CursorPanel.svelte';
+	import DeleteRunsDialog from '#lib/components/DeleteRunsDialog.svelte';
+	import EditRunDialog from '#lib/components/EditRunDialog.svelte';
 	import FullscreenPanel from '#lib/components/FullscreenPanel.svelte';
 	import LiveStatus from '#lib/components/LiveStatus.svelte';
+	import MoveRunsDialog from '#lib/components/MoveRunsDialog.svelte';
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import PlotSettings from '#lib/components/PlotSettings.svelte';
 	import RunFiles from '#lib/components/run/RunFiles.svelte';
 	import RunLogs from '#lib/components/run/RunLogs.svelte';
 	import RunOverview from '#lib/components/run/RunOverview.svelte';
 	import StateBadge from '#lib/components/StateBadge.svelte';
+	import TagRunsDialog from '#lib/components/TagRunsDialog.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
+	import { Separator } from '#lib/components/ui/separator/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { projectUrl } from '#lib/data/cache.ts';
 	import { LiveConnection, type ProjectEvent } from '#lib/data/live.ts';
 	import { runWorkspace } from '#lib/data/run.ts';
 	import { LIVE_STATES } from '#lib/types.ts';
-	import { entityHref, projectHref, withParam } from '#lib/workspace/url.ts';
+	import { entityHref, projectHref, runHref, withParam } from '#lib/workspace/url.ts';
 	import { Workspace, setWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import type { PageProps } from './$types';
 
@@ -54,10 +69,9 @@
 	const runState = $derived(ws.stateOf(0));
 	const name = $derived(ws.nameOf(0));
 
-	type Tab = 'charts' | 'overview' | 'logs' | 'files';
+	type Tab = 'charts' | 'logs' | 'files';
 	const TABS: { value: Tab; label: string }[] = [
 		{ value: 'charts', label: 'Charts' },
-		{ value: 'overview', label: 'Overview' },
 		{ value: 'logs', label: 'Logs' },
 		{ value: 'files', label: 'Files' }
 	];
@@ -77,6 +91,50 @@
 			reset: false
 		}).finally(() => (tabOverride = null));
 	}
+
+	// The overview: a sidebar beside every tab. Open by default on wide screens, where the choice
+	// is remembered; on narrow ones it opens over the tab, for this visit only.
+	const SIDEBAR = 'flock:run-sidebar';
+	const wide = new MediaQuery('(min-width: 64rem)', true);
+	let mounted = $state(false);
+	let widePref = $state(true);
+	let narrowOpen = $state(false);
+	const sidebar = $derived(wide.current ? widePref : narrowOpen);
+
+	onMount(() => {
+		try {
+			const saved = localStorage.getItem(SIDEBAR);
+			// An old overview link opens it, whatever was chosen before (see below).
+			if (saved != null && page.url.searchParams.get('tab') !== 'overview')
+				widePref = saved !== 'closed';
+		} catch {
+			// Open, the default.
+		}
+		mounted = true;
+	});
+
+	function setSidebar(open: boolean, remember = true) {
+		if (!wide.current) {
+			narrowOpen = open;
+			return;
+		}
+		widePref = open;
+		if (!remember) return;
+		try {
+			localStorage.setItem(SIDEBAR, open ? 'open' : 'closed');
+		} catch {
+			// For this visit only.
+		}
+	}
+
+	// The overview used to be a tab: its links land on the charts, with the sidebar open.
+	$effect(() => {
+		if (page.url.searchParams.get('tab') !== 'overview') return;
+		untrack(() => {
+			setSidebar(true, false);
+			void goto(withParam(page.url, 'tab', null), { replace: true, reset: false });
+		});
+	});
 
 	// Full-screen panels, as on the project's page: `?panel=<metric>`.
 	const fullscreen = $derived.by(() => {
@@ -116,90 +174,131 @@
 </svelte:head>
 
 <div class="flex min-h-0 flex-1 flex-col">
-	<div class="flex-none px-5 pt-4 pb-3">
-		<a
-			class="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
-			href={projectHref(data.run.entity, data.run.project)}
-		>
-			<ArrowLeftIcon class="size-3.5" />
-			{data.run.project}
-		</a>
-		<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-			<h1
-				class="min-w-0 truncate font-serif text-[34px] leading-[1.15] font-normal tracking-[-0.02em]"
-			>
-				{name}
-			</h1>
+	<PageHeader title={name}>
+		{#snippet badges()}
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger>
+					{#snippet child({ props })}
+						<Button {...props} variant="ghost" size="icon-sm" aria-label="Run actions">
+							<EllipsisIcon />
+						</Button>
+					{/snippet}
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content align="start" class="w-48">
+					<DropdownMenu.Item onSelect={() => ws.openDialog('edit', 0)}>
+						<PencilIcon /> Edit run…
+					</DropdownMenu.Item>
+					<DropdownMenu.Item onSelect={() => ws.openDialog('tag', 0)}>
+						<TagIcon /> Tags…
+					</DropdownMenu.Item>
+					<DropdownMenu.Item onSelect={() => ws.openDialog('move', 0)}>
+						<FolderInputIcon /> Move to project…
+					</DropdownMenu.Item>
+					<DropdownMenu.Separator />
+					<DropdownMenu.Item variant="destructive" onSelect={() => ws.openDialog('delete', 0)}>
+						<Trash2Icon /> Delete run…
+					</DropdownMenu.Item>
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
 			<StateBadge state={runState} />
-			{#if name !== data.run.id}
-				<span class="font-mono text-[13px] text-muted-foreground">{data.run.id}</span>
+		{/snippet}
+		{#snippet actions()}
+			<LiveStatus />
+			<Button
+				variant="ghost"
+				size="sm"
+				class="aria-pressed:bg-muted aria-pressed:text-foreground"
+				aria-pressed={sidebar}
+				aria-controls="run-overview"
+				title={sidebar ? 'Hide the overview' : 'Show the overview'}
+				onclick={() => setSidebar(!sidebar)}
+			>
+				<PanelRightIcon />
+				<span class="max-sm:sr-only">Overview</span>
+			</Button>
+		{/snippet}
+		{#snippet toolbar()}
+			<Tabs.Root value={tab} onValueChange={(v) => setTab(v as Tab)}>
+				<Tabs.List aria-label="Run">
+					{#each TABS as t (t.value)}
+						<Tabs.Trigger value={t.value}>{t.label}</Tabs.Trigger>
+					{/each}
+				</Tabs.List>
+			</Tabs.Root>
+			{#if tab === 'charts'}
+				<Separator orientation="vertical" class="mx-1.5 h-5! data-vertical:self-center" />
+				<PlotSettings />
 			{/if}
-			<span class="ml-auto"><LiveStatus /></span>
-		</div>
-	</div>
+		{/snippet}
+	</PageHeader>
 
-	<div class="flex h-12 flex-none items-center gap-2 border-b px-5">
-		<Tabs.Root value={tab} onValueChange={(v) => setTab(v as Tab)}>
-			<Tabs.List aria-label="Run">
-				{#each TABS as t (t.value)}
-					<Tabs.Trigger value={t.value}>
-						{t.label}
-						{#if t.value === 'charts'}
-							<span class="font-normal text-muted-foreground">{ws.meta.metrics.length}</span>
-						{:else if t.value === 'logs' && data.run.log_line_count}
-							<span class="font-normal text-muted-foreground">
-								{data.run.log_line_count.toLocaleString('en-US')}
-							</span>
-						{/if}
-					</Tabs.Trigger>
-				{/each}
-			</Tabs.List>
-		</Tabs.Root>
-		{#if tab === 'charts'}
-			<span class="mx-1.5 h-5 w-px bg-border" aria-hidden="true"></span>
-			<PlotSettings />
-		{/if}
-	</div>
-
-	<main class="relative min-h-0 flex-1">
-		{#if tab === 'charts'}
-			{#if ws.meta.metrics.length}
-				<ChartsPane
-					shown
-					active={fullscreen == null}
-					beside={false}
-					{panelHref}
-					onfullscreen={openPanel}
-				/>
+	<div class="relative flex min-h-0 flex-1">
+		<main class="relative min-h-0 min-w-0 flex-1">
+			{#if tab === 'charts'}
+				{#if ws.meta.metrics.length}
+					<ChartsPane
+						shown
+						active={fullscreen == null}
+						beside={false}
+						{panelHref}
+						onfullscreen={openPanel}
+					/>
+				{:else}
+					<p class="px-5 py-6 text-muted-foreground">This run hasn’t logged any metrics.</p>
+				{/if}
+			{:else if tab === 'logs'}
+				{#key data.run.id}
+					<RunLogs
+						url="{base}/logs"
+						total={data.run.log_line_count}
+						live={LIVE_STATES.has(runState)}
+						start={data.run.created_at}
+						{name}
+					/>
+				{/key}
 			{:else}
-				<p class="px-5 py-6 text-muted-foreground">This run hasn’t logged any metrics.</p>
+				{#key data.run.id}
+					<RunFiles url="{base}/files" now={data.now} />
+				{/key}
 			{/if}
-		{:else if tab === 'overview'}
-			<div class="absolute inset-0 overflow-y-auto">
-				<RunOverview
-					run={data.run}
-					{runState}
-					owner={data.owner}
-					currency={data.currency}
-					now={data.now}
-				/>
-			</div>
-		{:else if tab === 'logs'}
-			{#key data.run.id}
-				<RunLogs
-					url="{base}/logs"
-					total={data.run.log_line_count}
-					live={LIVE_STATES.has(runState)}
-					start={data.run.created_at}
-					{name}
-				/>
-			{/key}
-		{:else}
-			{#key data.run.id}
-				<RunFiles url="{base}/files" now={data.now} />
-			{/key}
+		</main>
+		<!-- Before hydration, CSS stands in for the defaults: open on wide screens, closed on narrow. -->
+		{#if sidebar || !mounted}
+			<aside
+				id="run-overview"
+				aria-label="Overview"
+				class={[
+					'flex w-[22rem] flex-none flex-col border-l bg-background',
+					'max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-20 max-lg:w-[min(22rem,100%)] max-lg:shadow-xl',
+					!mounted && 'max-lg:hidden'
+				]}
+			>
+				<div
+					class="flex h-10 flex-none items-center justify-between border-b border-divider pr-2 pl-4"
+				>
+					<h2 class="text-[13px] font-medium">Overview</h2>
+					<Button
+						variant="ghost"
+						size="icon-xs"
+						aria-label="Hide the overview"
+						title="Hide the overview"
+						onclick={() => setSidebar(false)}
+					>
+						<XIcon />
+					</Button>
+				</div>
+				<div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+					<RunOverview
+						run={data.run}
+						{runState}
+						owner={data.owner}
+						currency={data.currency}
+						now={data.now}
+					/>
+				</div>
+			</aside>
 		{/if}
-	</main>
+	</div>
 </div>
 
 {#if fullscreen != null}
@@ -213,3 +312,9 @@
 {/if}
 
 <CursorPanel />
+<EditRunDialog
+	gpu={{ type: data.run.gpu_type, count: data.run.gpu_count, detected: data.run.gpu_detected }}
+/>
+<TagRunsDialog />
+<MoveRunsDialog leave={(to) => runHref(data.run.entity, to, data.run.id)} />
+<DeleteRunsDialog leave={() => projectHref(data.run.entity, data.run.project)} />

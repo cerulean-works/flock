@@ -4,8 +4,8 @@ import { applyRunQuery, readRunQuery } from '#lib/workspace/url.ts';
 import type { PageLoad } from './$types';
 
 // One request per page: Flock snapshot carries the column schema, the runs and their
-// curves together, so nothing waits on anything else. Only `page`, `sort`, `order` and `size`
-// are read, so SvelteKit re-runs this load for those params alone; view switches and full-screen panels
+// curves together, so nothing waits on anything else. Only `page`, `sort`, `order`, `size`, `q`
+// and `filters` are read, so SvelteKit re-runs this load for those params alone; view switches and full-screen panels
 // (`view`, `panel`) are free navigations.
 export const load: PageLoad = async ({ fetch, params, url }) => {
 	const query = readRunQuery(url.searchParams);

@@ -49,14 +49,14 @@ class Snapshot:
         cls,
         store: Store,
         project: Project,
-        sort: Any,
+        selection: RunSelection,
         offset: int,
         limit: int,
         max_points: int,
         system: bool = False,
     ) -> bytes:
         table = project.table
-        rows = RunSelection(sort=sort or "-created_at").select(project)
+        rows = selection.select(project)
         page_rows = rows[offset : offset + limit]
         runs = [project.runs[r] for r in page_rows.tolist()]
         names = table.column_names()
@@ -154,6 +154,7 @@ class Snapshot:
                 "project": project.name,
                 "now": time.time(),
                 "total": len(rows),
+                "runs_total": len(project.runs),
                 "active": len(project.active),
                 "offset": offset,
                 "runs": [
@@ -198,13 +199,18 @@ async def get_workspace(
     project: ProjectDep,
     store: StoreDep,
     sort: Annotated[str | None, Query(description="e.g. -created_at or summary.loss")] = None,
+    filter: Annotated[str | None, Query(description="Mongo-style filter as JSON")] = None,
+    running: Annotated[bool, Query(description="only runs that are currently running")] = False,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=0, le=500)] = 100,
     max_points: Annotated[int, Query(ge=Snapshot.MIN_POINTS, le=10_000)] = 500,
     system: Annotated[bool, Query(description="also include system metric curves")] = False,
 ) -> Response:
-    """A page of runs with every table column and every metric's curve, as one binary blob."""
-    body = await Snapshot.build(store, project, sort, offset, limit, max_points, system)
+    """A page of runs with every table column and every metric's curve, as one binary blob.
+
+    ``filter`` and ``running`` select runs as in ``GET /runs``; ``total`` counts the matches."""
+    selection = RunSelection(sort=sort or "-created_at", filter=filter, running=running)
+    body = await Snapshot.build(store, project, selection, offset, limit, max_points, system)
     return Response(body, media_type="application/octet-stream")
 
 

@@ -1,0 +1,60 @@
+name: flock-app
+
+services:
+  api:
+    image: flock-api:${FLOCK_VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: app/api/Dockerfile
+    environment:
+      FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
+      FLOCK_LOG_LEVEL: ${FLOCK_LOG_LEVEL:-info}
+      FLOCK_DEFAULT_ENTITY: ${FLOCK_DEFAULT_ENTITY:-flock}
+      FLOCK_PUBLIC_URL: ${FLOCK_PUBLIC_URL:-}
+      # Where browsers reach the dashboard; its Compose port by default.
+      FLOCK_APP_URL: ${FLOCK_APP_URL:-${APP_URL:-http://localhost:3000}}
+      FLOCK_JWT_SECRET: ${FLOCK_JWT_SECRET:-}
+      FLOCK_GOOGLE_CLIENT_ID: ${FLOCK_GOOGLE_CLIENT_ID:-}
+      FLOCK_GOOGLE_CLIENT_SECRET: ${FLOCK_GOOGLE_CLIENT_SECRET:-}
+      FLOCK_GOOGLE_REDIRECT_URL: ${FLOCK_GOOGLE_REDIRECT_URL:-}
+      FLOCK_CRASH_TIMEOUT: ${FLOCK_CRASH_TIMEOUT:-600}
+      FLOCK_GRAVATAR: ${FLOCK_GRAVATAR:-true}
+      FLOCK_HISTORY_CACHE_POINTS: ${FLOCK_HISTORY_CACHE_POINTS:-20000000}
+    ports:
+      - 8080:8080
+    volumes:
+      - files:/data/files
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Exactly one replica: the server keeps its working set in memory and holds a database
+    # lock, so a second instance would refuse to start.
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+  postgres:
+    image: postgres:18.4
+    environment:
+      POSTGRES_USER: flock
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flock}
+      POSTGRES_DB: flock
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${POSTGRES_SHARED_BUFFERS:-1GB}
+      - -c
+      - effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-3GB}
+      - -c
+      - max_wal_size=4GB
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flock -d flock"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  files:

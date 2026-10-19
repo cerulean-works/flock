@@ -365,17 +365,23 @@ class Accounts:
         )
 
     async def signup(
-        self, email: str, name: str, password: str | None = None, google_sub: str | None = None
+        self,
+        email: str,
+        name: str,
+        password: str | None = None,
+        google_sub: str | None = None,
+        create_org: bool = True,
     ) -> User:
         """Create the first account: the super admin, an admin of every org. With no orgs yet,
-        the default entity's org is created for it."""
+        the default entity's org is created for it, unless ``create_org`` is false (the
+        dashboard's setup then has the super admin name the first org)."""
         password_hash = await self.hash_password(password) if password is not None else None
         async with self._signup:
             if not self.signup_open:
                 raise Forbidden("signup is closed: ask an admin for an invitation")
             store = self.store
             orgs = list(store.orgs_by_pk.values())
-            if not orgs:
+            if not orgs and create_org:
                 orgs = [await store.create_org(store.settings.default_entity)]
             async with store.db.pool.acquire() as conn, conn.transaction():
                 user = await self._insert_user(conn, email, name, password_hash, google_sub, True)
@@ -459,7 +465,8 @@ class Accounts:
                 raise Forbidden(f"this invitation is for {invite.email}")
             return await self.register(invite, name, google_sub=google_sub)
         if self.signup_open:
-            return await self.signup(email, name, google_sub=google_sub)
+            # Only the dashboard signs in with Google: its setup has the first org named next.
+            return await self.signup(email, name, google_sub=google_sub, create_org=False)
         raise Forbidden(f"there is no account for {email}: ask an admin for an invitation")
 
     # ------------------------------------------------------------------ memberships

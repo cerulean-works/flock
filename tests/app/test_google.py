@@ -113,6 +113,8 @@ def test_google_sign_in_as_the_first_user(make_flock, google):
     user = tokens["user"]
     assert (user["email"], user["name"], user["is_superadmin"]) == ("root@gmail.com", "Root", True)
     assert (user["google"], user["has_password"]) == (True, False)
+    # Signing up with Google is the dashboard's setup, which has the first org named next.
+    assert (user["orgs"], user["default_org"]) == ([], None)
     (exchange,) = google.requests
     assert exchange["client_secret"] == "client-secret"
     assert exchange["grant_type"] == "authorization_code"

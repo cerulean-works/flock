@@ -5,6 +5,9 @@
 	import AvatarField from '#lib/components/AvatarField.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Label } from '#lib/components/ui/label/index.js';
+	import FormError from '#lib/components/FormError.svelte';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
 	import { dateTime, relativeTime } from '#lib/utils.ts';
 	import { entityHref } from '#lib/workspace/url.ts';
@@ -13,6 +16,16 @@
 	let { data }: PageProps = $props();
 
 	const removal = new Mutation({ success: () => 'API key deleted', toastErrors: true });
+	const profile = new Mutation({ success: () => 'Name saved' });
+	let passwordForm = $state<HTMLFormElement>();
+	const password = new Mutation({
+		success: () => (data.profile.has_password ? 'Password changed' : 'Password set'),
+		done: () => passwordForm?.reset()
+	});
+	const defaultOrg = new Mutation<{ org: string }>({
+		success: ({ org }) => `wandb.init now logs to ${org} by default`,
+		toastErrors: true
+	});
 </script>
 
 <svelte:head>
@@ -43,6 +56,108 @@
 			</section>
 
 			<section class="mt-10">
+				<h2 class="font-serif text-2xl tracking-[-0.01em]">Name</h2>
+				<p class="mt-2 max-w-[62ch] text-muted-foreground">
+					What others see on your runs and in member lists.
+				</p>
+				<form
+					method="POST"
+					action="?/profile"
+					class="mt-4 grid max-w-100 gap-3"
+					use:enhance={profile.enhance}
+				>
+					<div class="flex gap-2">
+						<Input
+							name="name"
+							value={data.profile.name}
+							aria-label="Name"
+							autocomplete="name"
+							maxlength={128}
+							required
+						/>
+						<Button type="submit" variant="outline" disabled={profile.pending}>
+							{profile.pending ? 'Saving…' : 'Save'}
+						</Button>
+					</div>
+					<FormError error={profile.error} />
+				</form>
+			</section>
+
+			<section class="mt-10">
+				<h2 class="font-serif text-2xl tracking-[-0.01em]">Password</h2>
+				<p class="mt-2 max-w-[62ch] text-muted-foreground">
+					{#if data.profile.has_password}
+						Changing it signs you out everywhere else.
+					{:else if data.profile.google}
+						You sign in with Google. Set a password to sign in with your email too.
+					{:else}
+						Set a password to sign in with your email.
+					{/if}
+				</p>
+				<form
+					bind:this={passwordForm}
+					method="POST"
+					action="?/password"
+					class="mt-4 grid max-w-100 gap-4"
+					use:enhance={password.enhance}
+				>
+					<!-- For password managers: the account the password belongs to. -->
+					<input
+						type="email"
+						name="email"
+						value={data.profile.email}
+						autocomplete="username"
+						hidden
+						readonly
+					/>
+					{#if data.profile.has_password}
+						<div class="grid gap-2">
+							<Label for="current-password">Current password</Label>
+							<Input
+								id="current-password"
+								name="current"
+								type="password"
+								autocomplete="current-password"
+								required
+							/>
+						</div>
+					{/if}
+					<div class="grid gap-2">
+						<Label for="new-password">New password</Label>
+						<Input
+							id="new-password"
+							name="new"
+							type="password"
+							autocomplete="new-password"
+							minlength={8}
+							required
+						/>
+						<p class="text-xs text-muted-foreground">At least 8 characters.</p>
+					</div>
+					<div class="grid gap-2">
+						<Label for="confirm-password">Confirm new password</Label>
+						<Input
+							id="confirm-password"
+							name="confirm"
+							type="password"
+							autocomplete="new-password"
+							required
+						/>
+					</div>
+					<FormError error={password.error} />
+					<div>
+						<Button type="submit" variant="outline" disabled={password.pending}>
+							{password.pending
+								? 'Saving…'
+								: data.profile.has_password
+									? 'Change password'
+									: 'Set password'}
+						</Button>
+					</div>
+				</form>
+			</section>
+
+			<section class="mt-10">
 				<h2 class="font-serif text-2xl tracking-[-0.01em]">Organizations</h2>
 				{#if data.profile.orgs.length}
 					<ul class="mt-3 border-t border-divider">
@@ -56,6 +171,25 @@
 									<span class="text-xs text-muted-foreground">
 										default for <code class="font-mono">wandb.init</code>
 									</span>
+								{:else}
+									<form
+										method="POST"
+										action="?/defaultOrg"
+										class="ml-auto"
+										use:enhance={defaultOrg.enhance}
+									>
+										<input type="hidden" name="org" value={org.name} />
+										<Button
+											type="submit"
+											variant="ghost"
+											size="sm"
+											class="text-muted-foreground"
+											disabled={defaultOrg.pending}
+											title="Log runs here when wandb.init names no entity"
+										>
+											Make default
+										</Button>
+									</form>
 								{/if}
 							</li>
 						{/each}

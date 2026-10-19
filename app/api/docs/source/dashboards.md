@@ -16,7 +16,7 @@ Flock builds links into the dashboard at `FLOCK_APP_URL`. Your dashboard needs a
 
 | Path | Shown when | The page calls |
 |---|---|---|
-| `/setup` | Flock has no accounts yet. Flock logs this address at startup. | `GET /api/v1/auth/config`, then `POST /api/v1/auth/signup` |
+| `/setup` | Flock has no accounts yet. Flock logs this address at startup. | `GET /api/v1/auth/config`, then `POST /api/v1/auth/signup` (optionally with `"create_org": false`, followed by `POST /api/v1/orgs`) |
 | `/invite/<token>` | Someone opens an invitation link. | `GET /api/v1/invites/{token}`, then `POST /api/v1/invites/{token}/accept` |
 | `/reset/<token>` | Someone opens a password reset link. | `GET /api/v1/password-resets/{token}`, then `POST /api/v1/password-resets/{token}` |
 | `/auth/google?code=<code>` | A Google sign-in succeeded. | `POST /api/v1/auth/google/exchange` |
@@ -43,6 +43,7 @@ curves.get(`${header.runs[0].id}/loss`);  // { x: Float64Array, y: Float32Array 
 
 `decodeSnapshot` is in [Snapshot and live stream](api/dashboard#decoding-a-snapshot), with the full format. A few parameters shape the page:
 - `sort`, `offset` and `limit` choose the runs: by default the 100 newest. `sort` takes a column, such as `summary.loss` or `-created_at`.
+- `filter` keeps the runs that match a [filter](api/queries#filters), such as `{"config.optimizer": "adamw"}`, and `running=true` the active ones. The header's `total` then counts the matches.
 - `max_points` caps the points of each curve (500 by default). The snapshot also shares a total budget of 2,000,000 points between all its curves, so wide pages get fewer points per curve. The header's `points` says which cap applied.
 - `system=true` adds the curves of the system metrics.
 
