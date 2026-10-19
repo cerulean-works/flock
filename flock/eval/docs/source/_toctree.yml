@@ -1,0 +1,12 @@
+# The evaluation suite's documentation, published as the `flock-eval` project. Preview it from
+# the repository root with:
+#
+#   doc-builder preview flock-eval flock/eval/docs/source --not_python_module
+#
+guide:
+  - title: Get started
+    sections:
+      - local: index
+        title: Introduction
+      - local: quickstart
+        title: Quickstart
