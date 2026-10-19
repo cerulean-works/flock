@@ -19,12 +19,13 @@
 	import Pager from '#lib/components/Pager.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import PlotSettings from '#lib/components/PlotSettings.svelte';
-	import ProjectMenu from '#lib/components/ProjectMenu.svelte';
 	import RunFilters from '#lib/components/RunFilters.svelte';
 	import { describeFilters } from '#lib/workspace/filters.ts';
 	import RunSearch from '#lib/components/RunSearch.svelte';
 	import TagRunsDialog from '#lib/components/TagRunsDialog.svelte';
-	import RunsTable, { NAME_W } from '#lib/components/RunsTable.svelte';
+	import ResizeHandle from '#lib/components/ResizeHandle.svelte';
+	import RunsTable from '#lib/components/RunsTable.svelte';
+	import { NAME_W, saveWidth } from '#lib/widths.ts';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
@@ -88,6 +89,9 @@
 			refreshing = false;
 		}
 	}
+
+	/** The runs' name column, beside the table's columns or the charts; the viewer can drag it. */
+	let nameW = $derived(data.shell.nameW);
 
 	type View = ProjectView;
 
@@ -256,11 +260,8 @@
 
 <svelte:window {onkeydown} />
 
-<div class="flex min-h-0 flex-1 flex-col" data-sveltekit-reset="false" style:--name-w="{NAME_W}px">
+<div class="flex min-h-0 flex-1 flex-col" data-sveltekit-reset="false" style:--name-w="{nameW}px">
 	<PageHeader title={ws.meta.project} subtitleTitle={projectInfo.description ?? undefined}>
-		{#snippet badges()}
-			<ProjectMenu entity={ws.meta.entity} project={projectInfo} from="project" />
-		{/snippet}
 		{#snippet subtitle()}
 			{#if projectInfo.description}
 				<span class="description">{projectInfo.description}</span>
@@ -335,7 +336,7 @@
 	</PageHeader>
 
 	<main class="relative min-h-0 flex-1">
-		<RunsTable bind:this={table} mode={view} />
+		<RunsTable bind:this={table} mode={view} {nameW} />
 		<ChartsPane
 			shown={view === 'charts'}
 			active={view === 'charts' && fullscreen == null}
@@ -373,6 +374,17 @@ run.log(&lbrace;"loss": 0.5&rbrace;)</code
 			</div>
 		{:else}
 			<Pager />
+			<!-- On the name column's edge, above the table and the charts beside it. -->
+			<div class="pointer-events-none absolute inset-y-0 left-0 z-5" style:width="{nameW}px">
+				<ResizeHandle
+					class="pointer-events-auto"
+					value={nameW}
+					bounds={NAME_W}
+					label="Resize the runs column"
+					onresize={(px) => (nameW = px)}
+					oncommit={(px) => saveWidth(NAME_W, px)}
+				/>
+			</div>
 		{/if}
 	</main>
 </div>

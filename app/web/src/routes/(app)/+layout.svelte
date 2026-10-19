@@ -6,10 +6,12 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import LogoMark from '#lib/components/LogoMark.svelte';
+	import ResizeHandle from '#lib/components/ResizeHandle.svelte';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import WorkspaceSwitcher from '#lib/components/shell/WorkspaceSwitcher.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Sheet from '#lib/components/ui/sheet/index.js';
+	import { SIDEBAR_W, saveWidth } from '#lib/widths.ts';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
@@ -17,6 +19,7 @@
 	// Wide windows show the sidebar beside the page, or a rail once it's hidden; narrow ones a
 	// top bar that opens it as a drawer. Pages have no header of their own.
 	let collapsed = $derived(data.shell.collapsed);
+	let sidebarW = $derived(data.shell.sidebarW);
 	let drawer = $state(false);
 
 	function setCollapsed(value: boolean) {
@@ -34,12 +37,22 @@
 
 <div class="flex h-full">
 	{#if !collapsed}
-		<aside class="hidden w-64 flex-none border-r border-divider md:block">
+		<aside
+			class="relative hidden flex-none border-r border-divider md:block"
+			style:width="{sidebarW}px"
+		>
 			<Sidebar
 				org={data.shell.org}
 				orgs={data.shell.orgs}
 				projects={data.shell.projects}
 				oncollapse={() => setCollapsed(true)}
+			/>
+			<ResizeHandle
+				value={sidebarW}
+				bounds={SIDEBAR_W}
+				label="Resize sidebar"
+				onresize={(px) => (sidebarW = px)}
+				oncommit={(px) => saveWidth(SIDEBAR_W, px)}
 			/>
 		</aside>
 	{:else}

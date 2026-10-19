@@ -2,7 +2,6 @@
 	export const ROW_H = 40;
 	export const HEAD_H = 40;
 	export const BAND_H = 26;
-	export const NAME_W = 360;
 </script>
 
 <script lang="ts">
@@ -29,9 +28,11 @@
 
 	interface Props {
 		mode: 'table' | 'charts';
+		/** The name column's width, which the viewer can drag. */
+		nameW: number;
 	}
 
-	let { mode }: Props = $props();
+	let { mode, nameW }: Props = $props();
 
 	const ws = getWorkspace();
 	const runs = $derived(ws.page.runs);
@@ -78,7 +79,7 @@
 	const colEnd = $derived(
 		mode === 'charts'
 			? 0
-			: Math.min(widths.length, colAt(scrollX + Math.max(0, viewW - NAME_W)) + 1 + OVERSCAN_COLS)
+			: Math.min(widths.length, colAt(scrollX + Math.max(0, viewW - nameW)) + 1 + OVERSCAN_COLS)
 	);
 	// The sticky header covers the top of the viewport, so body rows are visible over
 	// [scrollY, scrollY + viewH - header height] in body coordinates.
@@ -249,17 +250,17 @@
 	bind:this={scroller}
 	{onscroll}
 	{@attach measure}
-	style:--name-w="{NAME_W}px"
+	style:--name-w="{nameW}px"
 	style:--row-h="{ROW_H}px"
 >
-	<div class="sticky top-0 z-3 bg-background" style:width="{NAME_W + totalW}px">
+	<div class="sticky top-0 z-3 bg-background" style:width="{nameW + totalW}px">
 		<div class="relative flex" style:height="{BAND_H}px">
 			<div class="sticky left-0 z-2 w-(--name-w) flex-none bg-background"></div>
 			{#if mode === 'table'}
 				{#each groups as g (g.key)}
 					<div
 						class="absolute inset-y-0 border-l border-divider text-xs text-muted-foreground"
-						style:left="{NAME_W + offsets[g.start]}px"
+						style:left="{nameW + offsets[g.start]}px"
 						style:width="{offsets[g.end] - offsets[g.start]}px"
 					>
 						<span class="sticky left-[calc(var(--name-w)+12px)] inline-block px-3 pt-1.5">
@@ -344,7 +345,7 @@
 	<div
 		class="body relative"
 		style:height="{runs.length * ROW_H}px"
-		style:width="{NAME_W + totalW}px"
+		style:width="{nameW + totalW}px"
 		{onpointerover}
 		{onpointerleave}
 	>

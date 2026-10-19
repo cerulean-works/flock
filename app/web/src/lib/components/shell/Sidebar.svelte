@@ -13,6 +13,7 @@
 	import { page } from '$app/state';
 	import LogoMark from '#lib/components/LogoMark.svelte';
 	import ProjectDialog from '#lib/components/ProjectDialog.svelte';
+	import ProjectMenu from '#lib/components/ProjectMenu.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import type { ProjectInfo, Role } from '#lib/types.ts';
 	import { entityHref, projectHref } from '#lib/workspace/url.ts';
@@ -172,22 +173,33 @@
 					{/if}
 					<ul>
 						{#each shown as p (p.name)}
-							<li>
+							{@const here = page.params.project === p.name}
+							<!-- The project's menu shows over the row's end while it's hovered, focused or
+							     open, in place of the running dot. -->
+							<li class="group/project relative">
 								<a
-									class={ITEM}
+									class={[ITEM, 'pr-8']}
 									href={projectHref(org, p.name)}
-									aria-current={page.params.project === p.name ? 'page' : undefined}
+									aria-current={here ? 'page' : undefined}
 									title={p.description ?? p.name}
 								>
 									<FolderIcon />
 									<span class="min-w-0 flex-1 truncate">{p.name}</span>
 									{#if p.active_run_count}
 										<span
-											class="size-1.5 flex-none animate-live rounded-full bg-state-running text-state-running motion-reduce:animate-none"
+											class="size-1.5 flex-none animate-live rounded-full bg-state-running text-state-running group-focus-within/project:invisible group-hover/project:invisible motion-reduce:animate-none"
 											title="{p.active_run_count} running"
 										></span>
 									{/if}
 								</a>
+								<div class="absolute inset-y-0 right-1 flex items-center">
+									<ProjectMenu
+										entity={org}
+										project={p}
+										from={here ? 'project' : 'list'}
+										class="text-muted-foreground opacity-0 group-focus-within/project:opacity-100 group-hover/project:opacity-100 aria-expanded:opacity-100"
+									/>
+								</div>
 							</li>
 						{:else}
 							<li class="px-2 py-1 text-[13px] text-muted-foreground">

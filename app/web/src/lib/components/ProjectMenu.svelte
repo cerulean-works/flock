@@ -12,9 +12,11 @@
 		entity: string;
 		project: ProjectInfo;
 		from?: 'project' | 'list';
+		/** For the trigger, e.g. to show it only while its row is hovered. */
+		class?: string;
 	}
 
-	let { entity, project, from = 'list' }: Props = $props();
+	let { entity, project, from = 'list', class: className }: Props = $props();
 
 	let editing = $state(false);
 	let deleting = $state(false);
@@ -23,7 +25,13 @@
 <DropdownMenu.Root>
 	<DropdownMenu.Trigger>
 		{#snippet child({ props })}
-			<Button {...props} variant="ghost" size="icon-sm" aria-label="{project.name} actions">
+			<Button
+				{...props}
+				variant="ghost"
+				size="icon-xs"
+				class={className}
+				aria-label="{project.name} actions"
+			>
 				<EllipsisIcon />
 			</Button>
 		{/snippet}
