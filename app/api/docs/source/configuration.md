@@ -9,7 +9,6 @@ Flock reads its settings from environment variables when it starts. Each setting
 | `FLOCK_DATABASE_URL` | `postgresql://flock:flock@127.0.0.1:5432/flock` | PostgreSQL connection URL. |
 | `FLOCK_FILES_DIR` | `flock-files` | Directory for uploaded run files, relative to the working directory. The Docker image sets `/data/files`. |
 | `FLOCK_MIGRATE_ON_STARTUP` | `true` | Apply pending migrations on startup. With `false`, Flock refuses to start while migrations are pending. See [Migrations and upgrades](deploying#migrations-and-upgrades). |
-| `FLOCK_DEFAULT_ENTITY` | `flock` | Name of the organization created for the first account when there is none. |
 | `FLOCK_DEFAULT_PROJECT` | `uncategorized` | Project that runs land in when the client names none. |
 | `FLOCK_PUBLIC_URL` | the address of each request | External base URL of Flock, such as `https://flock.example.com`. Used in file upload URLs, and as a fallback for `FLOCK_APP_URL`. |
 | `FLOCK_APP_URL` | `FLOCK_PUBLIC_URL`, else the address of each request | Base URL of the dashboard. Invitation, reset and Google sign-in links point there. |
@@ -57,7 +56,6 @@ Compose passes these Flock settings through, with these defaults:
 | Variable | Compose default |
 |---|---|
 | `FLOCK_LOG_LEVEL` | `info` |
-| `FLOCK_DEFAULT_ENTITY` | `flock` |
 | `FLOCK_PUBLIC_URL` | unset for the API; `http://localhost:8080` for the dashboard |
 | `FLOCK_APP_URL` | `APP_URL`, else `http://localhost:3000` |
 | `FLOCK_JWT_SECRET` | unset |

@@ -30,8 +30,8 @@ def test_the_first_signup_becomes_the_super_admin(make_flock):
         "is_superadmin": True,
         "has_password": True,
         "google": False,
-        "default_org": "flock",  # created for the first user, as there was no org
-        "orgs": [{"name": "flock", "role": "admin"}],
+        "default_org": None,
+        "orgs": [],
         "created_at": 0,
         "avatar_url": None,  # Gravatar is off in tests
         "avatar_source": None,
@@ -58,7 +58,7 @@ def test_setting_up_before_any_account_exists(make_flock):
 
     created = anon.post(
         "/api/v1/auth/signup",
-        {"email": "root@x.io", "name": "Root", "password": "rootroot", "create_org": False},
+        {"email": "root@x.io", "name": "Root", "password": "rootroot"},
     )
     assert created.status == 201, created.body
     user = created.json()["user"]
@@ -66,13 +66,23 @@ def test_setting_up_before_any_account_exists(make_flock):
     root = server.client(token=created.json()["access_token"])
     assert root.get("/api/v1/orgs").json() == {"orgs": []}  # setup's second step comes next
 
+    # Leaving setup after the account step must keep the first organization unnamed.
+    server.stop()
+    server = make_flock(reuse=server, bootstrap=False)
+    signed_in = login(server, "root@x.io", "rootroot")
+    assert signed_in.status == 200
+    root = server.client(token=signed_in.json()["access_token"])
+    assert root.get("/api/v1/orgs").json() == {"orgs": []}
+    assert root.post("/api/v1/orgs", {"name": "bad/name"}).status == 422
+    assert root.get("/api/v1/orgs").json() == {"orgs": []}
+
     made = root.post("/api/v1/orgs", {"name": "cerulean"})
     assert made.status == 201, made.body
     me = root.patch(ME, {"default_org": "cerulean"})
     assert me.status == 200, me.body
     assert me.json()["default_org"] == "cerulean"
     assert me.json()["orgs"] == [{"name": "cerulean", "role": "admin"}]
-    assert list(server.store.orgs) == ["cerulean"]  # no default-entity org besides
+    assert list(server.store.orgs) == ["cerulean"]
     assert login(server, "root@x.io", "rootroot").status == 200
 
 

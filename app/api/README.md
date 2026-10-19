@@ -23,7 +23,6 @@ variables or an `.env` file next to `compose.yaml`:
 | --- | --- | --- |
 | `POSTGRES_PASSWORD` | `flock` | database password; **set this outside local testing** |
 | `FLOCK_PORT` | `8080` | host port |
-| `FLOCK_DEFAULT_ENTITY` | `flock` | organization created for the first user when there is none |
 | `FLOCK_PUBLIC_URL` | request URL | external base URL, for upload URLs and the Google callback behind a proxy |
 | `FLOCK_APP_URL` | `http://localhost:3000` | dashboard (flock-ui) base URL that invite, reset and sign-in links point at |
 | `FLOCK_JWT_SECRET` | generated | key signing access tokens; by default one is generated into the database |
@@ -132,7 +131,7 @@ Orgs you don't belong to answer 404, as if they didn't exist. Changing runs you 
 answers 403 with their `ids`. An org always keeps an admin, and the server a super admin.
 
 **Getting started.** The first account to sign up becomes the super admin, and an admin of
-every org (an org named `FLOCK_DEFAULT_ENTITY` is created if there are none). After that,
+every existing org. Setup then asks them to name and create the first organization. After that,
 signing up is closed, and people join through invitations. Until that account exists, every
 request is refused; the server logs where to create it, and flock-ui opens on a setup page
 that does. The same with the API:
@@ -140,6 +139,7 @@ that does. The same with the API:
 ```sh
 curl -X POST $FLOCK/api/v1/auth/signup -d '{"email": "me@lab.org", "name": "Me", "password": "..."}'
 # -> {"access_token", "refresh_token", "expires_in", "user"}
+curl -X POST $FLOCK/api/v1/orgs -H "authorization: Bearer $TOKEN" -d '{"name": "flock"}'
 curl -X POST $FLOCK/api/v1/orgs/flock/invites -H "authorization: Bearer $TOKEN" \
      -d '{"email": "colleague@lab.org", "role": "member"}'
 # -> {"url": "<FLOCK_APP_URL>/invite/<token>", ...}: send them the link yourself

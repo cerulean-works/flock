@@ -16,7 +16,7 @@ Flock builds links into the dashboard at `FLOCK_APP_URL`. Your dashboard needs a
 
 | Path | Shown when | The page calls |
 |---|---|---|
-| `/setup` | Flock has no accounts yet. Flock logs this address at startup. | `GET /api/v1/auth/config`, then `POST /api/v1/auth/signup` (optionally with `"create_org": false`, followed by `POST /api/v1/orgs`) |
+| `/setup` | Flock has no accounts yet. Flock logs this address at startup. | `GET /api/v1/auth/config`, then `POST /api/v1/auth/signup`, then `POST /api/v1/orgs` with the chosen name |
 | `/invite/<token>` | Someone opens an invitation link. | `GET /api/v1/invites/{token}`, then `POST /api/v1/invites/{token}/accept` |
 | `/reset/<token>` | Someone opens a password reset link. | `GET /api/v1/password-resets/{token}`, then `POST /api/v1/password-resets/{token}` |
 | `/auth/google?code=<code>` | A Google sign-in succeeded. | `POST /api/v1/auth/google/exchange` |

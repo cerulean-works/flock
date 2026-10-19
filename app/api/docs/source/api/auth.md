@@ -56,14 +56,13 @@ Public. What a sign-in page should offer:
 
 ### `POST /auth/signup`[[signup]]
 
-Public. Creates the first account, which becomes a super admin.
+Public. Creates the first account, which becomes a super admin. It creates no organization: next call [`POST /orgs`](orgs#organizations) with the name you choose. The dashboard presents this as the second setup screen.
 
 | Field | Type | Meaning |
 |---|---|---|
 | `email` | string | Email address. Stored in lowercase. |
 | `name` | string | Display name, 1 to 128 characters. |
 | `password` | string | 8 to 256 characters. |
-| `create_org` | boolean | Optional, `true` by default. When Flock has no organization yet, create one named after `FLOCK_DEFAULT_ENTITY` for the account. A dashboard that asks for the first organization's name passes `false`, then calls [`POST /orgs`](orgs#organizations). |
 
 Answers 201 with [tokens](#tokens). Once an account exists, it answers 403: other people join through [invitations](orgs#invitation-links).
 

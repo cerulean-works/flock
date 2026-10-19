@@ -19,9 +19,6 @@ class Settings:
         default=True,
         doc="apply pending migrations on startup; when off, refuse to start on an old schema",
     )
-    default_entity: str = field(
-        default="flock", doc="organization created for the first user when there is none"
-    )
     default_project: str = field(
         default="uncategorized", doc="project runs land in when none is given"
     )

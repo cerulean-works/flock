@@ -24,7 +24,6 @@ services:
     environment:
       FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
       FLOCK_LOG_LEVEL: ${FLOCK_LOG_LEVEL:-info}
-      FLOCK_DEFAULT_ENTITY: ${FLOCK_DEFAULT_ENTITY:-flock}
       FLOCK_PUBLIC_URL: ${FLOCK_PUBLIC_URL:-}
       # Where browsers reach the dashboard; its Compose port by default.
       FLOCK_APP_URL: ${FLOCK_APP_URL:-${APP_URL:-http://localhost:3000}}

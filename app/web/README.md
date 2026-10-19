@@ -20,8 +20,8 @@ pnpm test                # unit tests
 
 **First start.** A fresh Flock instance has no accounts, and refuses everything until one exists
 (its log says so). Open the dashboard: it shows **Set up Flock**, where the first account is
-created. That account is the super admin and an admin of the `flock` organization, which the
-Flock creates for it. Its **Runs** page (in the sidebar) walks you through creating an API key
+created. That account is the super admin. The second screen asks them to name and create
+their organization; leaving setup and signing in later resumes at that screen. Its **Runs** page (in the sidebar) walks you through creating an API key
 and logging a first run with the wandb SDK. After that the page is closed;
 everyone else signs in, and joins from an invitation an admin gives them: open an
 organization's **Settings** (in the sidebar's organization menu) and create an invite link. Flock sends

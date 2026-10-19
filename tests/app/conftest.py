@@ -420,11 +420,14 @@ class FlockServer:
             self.api_key = self.call(self.bootstrap())
 
     async def bootstrap(self) -> str:
-        """Sign up the super admin (a member of every org, or of a new ``flock`` org) unless
-        the database has users already; returns a new API key of the super admin."""
+        """Complete setup with an explicit ``flock`` org on fresh databases;
+        returns a new API key of the super admin."""
         accounts = self.store.accounts
         if accounts.signup_open:
             admin = await accounts.signup(self.ADMIN_EMAIL, "Admin")
+            if not self.store.orgs:
+                org = await self.store.create_org("flock")
+                await accounts.add_member(admin, org, "admin")
         else:
             admin = next(u for u in accounts.users.values() if u.is_superadmin)
         return (await accounts.create_api_key(admin, "tests"))[1]
