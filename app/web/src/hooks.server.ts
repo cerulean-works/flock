@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
 import type { Handle } from '@sveltejs/kit/hooks';
-import { FLOCK_API_KEY } from '$app/env/private';
 import { immutable } from '$app/manifest';
 import { loginHref, resolveSession } from '#lib/server/session.ts';
 
@@ -30,7 +29,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (event.url.pathname === '/favicon.ico') return new Response(null, { status: 404 });
 
 	const session = await resolveSession(event.cookies);
-	event.locals.token = session.token ?? FLOCK_API_KEY ?? null;
+	event.locals.token = session.token;
 	event.locals.user = session.user;
 
 	// Signed out: pages go to sign in (which sends a fresh server's first visitor on to

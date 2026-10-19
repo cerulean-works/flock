@@ -62,7 +62,7 @@ An invitation is returned as:
 | `POST /orgs/{org}/invites` | org admins | Invites `{"email": "ben@example.com", "role": "member"}`. `role` defaults to `member`. Answers 201 with the invitation plus `url` and `token`. |
 | `DELETE /orgs/{org}/invites/{id}` | org admins | Withdraws an invitation. Answers 204, or 404 if it doesn't exist. |
 
-The `url` is `<FLOCK_APP_URL>/invite/<token>`. Without `FLOCK_APP_URL`, it starts with `FLOCK_PUBLIC_URL`, else with the address of the request. The token is shown only in this response, and the link is valid for `FLOCK_INVITE_TTL` (7 days by default). Inviting someone who is already a member answers 409. An email that isn't shaped like one answers 422.
+The `url` is `<FLOCK_WEB_URL>/invite/<token>`. Without `FLOCK_WEB_URL`, it starts with `FLOCK_API_PUBLIC_URL`, else with the address of the request. The token is shown only in this response, and the link is valid for `FLOCK_INVITE_TTL` (7 days by default). Inviting someone who is already a member answers 409. An email that isn't shaped like one answers 422.
 
 ## Invitation links[[invitation-links]]
 

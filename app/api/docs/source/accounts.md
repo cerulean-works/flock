@@ -40,15 +40,15 @@ A new Flock instance has no accounts. Until the first one exists, it refuses eve
 WARNING app: no accounts yet: open http://localhost:5173/setup to create the first one, which becomes the super admin
 ```
 
-The address is your dashboard's setup page, built from `FLOCK_APP_URL`. Without a dashboard, sign up through the API:
+The address is your dashboard's setup page, built from `FLOCK_WEB_URL`. Without a dashboard, sign up through the API:
 
 ```bash
 curl -s --json '{"email": "ana@example.com", "name": "Ana Lima", "password": "correct horse battery"}' $FLOCK/api/v1/auth/signup
 ```
 
-The first account becomes a super admin, and an admin of every existing organization. If there are none, Flock creates one named after `FLOCK_DEFAULT_ENTITY` (`flock` by default). After that, signing up answers 403, and accounts are only created from invitations.
+The first account becomes a super admin, and an admin of every existing organization. It creates no organization automatically. After that, signing up answers 403, and accounts are only created from invitations.
 
-The dashboard's setup page works in two steps. It creates the account without an organization (`"create_org": false`), then asks the super admin to name the first one, creates it and makes it their default. Signing in as a super admin while Flock has no organization returns to that second step. A first sign-in with Google also creates the account without an organization, so the dashboard asks for its name next.
+The dashboard's setup page works in two steps. It creates the account without an organization, then asks the super admin to name the first one, creates it and makes it their default. Signing in as a super admin while Flock has no organization returns to that second step. A first sign-in with Google also creates the account without an organization, so the dashboard asks for its name next.
 
 > [!WARNING]
 > Whoever reaches a new Flock instance first becomes its super admin. Sign up before you make Flock reachable by anyone else.
@@ -77,7 +77,7 @@ An invitation belongs to its email address. Accepting it as another account answ
 To list the invitations that are still pending, use `GET /api/v1/orgs/flock/invites`. To withdraw one, delete it by its `id`: `DELETE /api/v1/orgs/flock/invites/1`. Inviting someone who is already a member answers 409.
 
 > [!IMPORTANT]
-> Set `FLOCK_APP_URL` to your dashboard's address. Invitation and reset links point there. Without it, they point at Flock itself, which has no page to show them.
+> Set `FLOCK_WEB_URL` to your dashboard's address. Invitation and reset links point there. Without it, they point at Flock itself, which has no page to show them.
 
 ## Changing roles and removing members
 

@@ -40,7 +40,7 @@ export const load: LayoutServerLoad = async ({ params, cookies }) => {
 	const role = me.is_superadmin ? 'admin' : orgs.find((o) => o.name === org)?.role;
 	return {
 		shell: {
-			/** Who the pages act as: the signed-in user, or FLOCK_API_KEY's. */
+			/** Who the pages act as: the signed-in user. */
 			me: {
 				id: me.id,
 				name: me.name,

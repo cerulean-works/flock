@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { FLOCK_URL } from '$app/env/private';
+import { FLOCK_API_URL } from '$app/env/private';
 import type { RequestHandler } from './$types';
 
 /** Headers of Flock's answer that go on to the browser. */
@@ -21,7 +21,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 	const etag = request.headers.get('if-none-match');
 	let res: Response;
 	try {
-		res = await fetch(`${FLOCK_URL}/api/v1/avatars/${params.digest}`, {
+		res = await fetch(`${FLOCK_API_URL}/api/v1/avatars/${params.digest}`, {
 			headers: etag ? { 'if-none-match': etag } : {}
 		});
 	} catch {

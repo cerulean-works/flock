@@ -15,8 +15,8 @@ The image is built from the repository, so clone it and start the Compose stack 
 
 ```bash
 git clone https://github.com/cerulean-works/flock.git
-cd flock/app
-docker compose up -d --build
+cd flock/app/api
+docker compose -f compose.dev.yaml up -d --build
 ```
 
 Compose starts PostgreSQL and Flock. Flock applies the database migrations when it starts, then listens on port 8080. Check that it answers:
@@ -31,11 +31,12 @@ curl http://localhost:8080/healthz
 
 ## Create the first account
 
-A new Flock instance has no accounts, and it refuses every request that needs one until the first account exists. The first account to sign up becomes the **super admin**. Flock also creates the organization `flock` and makes the super admin its admin.
+A new Flock instance has no accounts, and it refuses every request that needs one until the first account exists. The first account to sign up becomes the **super admin**. The dashboard then asks you to name and create your organization. With the API, create the account and organization explicitly:
 
 ```bash
 export FLOCK=http://localhost:8080
 TOKEN=$(curl -s --json '{"email": "ana@example.com", "name": "Ana Lima", "password": "correct horse battery"}' $FLOCK/api/v1/auth/signup | jq -r .access_token)
+curl --json '{"name": "flock"}' -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/orgs
 ```
 
 The response holds an access token, which is valid for 15 minutes, and a refresh token. From now on, signing up is closed: other people join through invitations, as [Accounts, organizations and roles](accounts#inviting-people) describes.

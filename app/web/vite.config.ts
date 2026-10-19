@@ -18,10 +18,13 @@ export default defineConfig({
 			adapter: adapter(),
 			// The address people open (`http://localhost:3000`), for form posts' origin check. Without
 			// it the origin comes from each request, assumed to be https unless PROTOCOL_HEADER says
-			// otherwise; set at build time (the Docker image's ORIGIN build arg). Paths are absolute:
+			// otherwise; set at build time (the Docker image's FLOCK_WEB_URL build arg). Paths are absolute:
 			// server redirects use the same `resolve()` links as pages, and a relative one would
 			// resolve against the page the browser is on rather than the action that answered.
-			paths: { origin: process.env.ORIGIN || undefined, relative: false }
+			paths: {
+				origin: process.env.FLOCK_WEB_URL?.replace(/\/+$/, '') || undefined,
+				relative: false
+			}
 		})
 	],
 	test: {

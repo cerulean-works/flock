@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { FLOCK_URL } from '$app/env/private';
+import { FLOCK_API_URL } from '$app/env/private';
 import type { RequestHandler } from './$types';
 
 /**
@@ -10,13 +10,13 @@ import type { RequestHandler } from './$types';
  */
 export const GET: RequestHandler = async ({ params, url, request }) => {
 	if (params.step !== 'start' && params.step !== 'callback') error(404, 'Not found');
-	const res = await fetch(`${FLOCK_URL}/api/v1/auth/google/${params.step}${url.search}`, {
+	const res = await fetch(`${FLOCK_API_URL}/api/v1/auth/google/${params.step}${url.search}`, {
 		headers: { cookie: request.headers.get('cookie') ?? '' },
 		redirect: 'manual'
 	}).catch(() => error(502, 'Flock is not reachable'));
 	const headers = new Headers({ 'cache-control': 'no-store' });
 	const location = res.headers.get('location');
-	if (location) headers.set('location', location.replace(FLOCK_URL, url.origin));
+	if (location) headers.set('location', location.replace(FLOCK_API_URL, url.origin));
 	for (const cookie of res.headers.getSetCookie()) headers.append('set-cookie', cookie);
 	if (res.status >= 400) {
 		const body = (await res.json().catch(() => null)) as { error?: string } | null;

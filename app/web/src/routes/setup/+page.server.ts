@@ -32,7 +32,7 @@ export const actions: Actions = {
 		if (!name) return fail(400, { ...kept, error: 'Enter your name' });
 		if (password.length < 8) return fail(400, { ...kept, error: 'Use at least 8 characters' });
 		// No organization yet: the next step names it.
-		const body = { name, email, password, create_org: false };
+		const body = { name, email, password };
 		const res = await signIn(cookies, '/api/v1/auth/signup', body, '/setup');
 		return fail(res.status, { ...kept, ...res.data });
 	},

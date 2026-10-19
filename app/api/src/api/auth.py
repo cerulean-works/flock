@@ -46,11 +46,6 @@ class SignupBody(BaseModel):
     email: Email
     name: DisplayName
     password: Password
-    create_org: bool = Field(
-        True,
-        description="with no organization yet, create the default entity's for the account; "
-        "the dashboard's setup passes false and creates the first organization next",
-    )
 
 
 class LoginBody(BaseModel):
@@ -125,9 +120,7 @@ async def auth_config(store: StoreDep) -> Response:
 async def signup(body: SignupBody, store: StoreDep) -> Response:
     """Create the first account, which becomes the super admin. Everyone else joins through
     an invitation."""
-    user = await store.accounts.signup(
-        body.email, body.name, body.password, create_org=body.create_org
-    )
+    user = await store.accounts.signup(body.email, body.name, body.password)
     return await signed_in(store, user, 201)
 
 
@@ -181,7 +174,7 @@ class Google:
         """Where Google sends the browser back: by default through the dashboard, which proxies
         ``/api/v1/auth/google/*`` here, so Flock itself needn't be reachable from browsers.
         """
-        base = settings.app_url or settings.public_url or str(request.base_url)
+        base = settings.web_url or settings.api_public_url or str(request.base_url)
         return settings.google_redirect_url or f"{base.rstrip('/')}/api/v1/auth/google/callback"
 
     @classmethod

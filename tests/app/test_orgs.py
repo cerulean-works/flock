@@ -116,7 +116,7 @@ def test_delete_org(make_flock):
 
 
 def test_invites(make_flock):
-    server = make_flock(app_url="https://ui.test/")
+    server = make_flock(web_url="https://ui.test/", api_public_url="https://api.test/")
     admin = server.client()
     anon = server.anonymous()
     invites = f"{ORGS}/flock/invites"

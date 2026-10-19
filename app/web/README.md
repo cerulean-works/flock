@@ -8,20 +8,19 @@ the "Paper" prototype in `mockup/`, restyled with the Cerulean Daylight tokens f
 
 ```sh
 # from this directory: start the API and PostgreSQL
-docker compose -f ../compose.yaml up -d --build api
+docker compose -f ../api/compose.dev.yaml up -d --build
 
 # here
 pnpm install
 pnpm dev                 # http://localhost:5173
 pnpm build && pnpm preview
-FLOCK_API_KEY=<key> WORKSPACE=/entity/project pnpm perf   # benchmark (needs `pnpm preview`)
 pnpm test                # unit tests
 ```
 
 **First start.** A fresh Flock instance has no accounts, and refuses everything until one exists
 (its log says so). Open the dashboard: it shows **Set up Flock**, where the first account is
-created. That account is the super admin and an admin of the `flock` organization, which the
-Flock creates for it. Its **Runs** page (in the sidebar) walks you through creating an API key
+created. That account is the super admin. The second screen asks them to name and create
+their organization; leaving setup and signing in later resumes at that screen. Its **Runs** page (in the sidebar) walks you through creating an API key
 and logging a first run with the wandb SDK. After that the page is closed;
 everyone else signs in, and joins from an invitation an admin gives them: open an
 organization's **Settings** (in the sidebar's organization menu) and create an invite link. Flock sends
@@ -32,34 +31,32 @@ The SvelteKit server talks to Flock; the browser only talks to SvelteKit. Config
 
 | Variable             | Default                 | Purpose                                                                                                     |
 | -------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `FLOCK_URL`        | `http://127.0.0.1:8080` | Flock, as this server reaches it                                                                      |
-| `FLOCK_PUBLIC_URL` | `FLOCK_URL`           | Flock as the wandb SDK on your machines reaches it, for the `wandb login --host` line the setup shows |
-| `FLOCK_API_KEY`    | unset                   | a user's API key to act as when nobody is signed in: no sign-in needed (kiosks, `pnpm perf`)                |
+| `FLOCK_API_URL`        | `http://127.0.0.1:8080` | Flock, as this server reaches it                                                                      |
+| `FLOCK_API_PUBLIC_URL` | `FLOCK_API_URL`           | Flock as the wandb SDK on your machines reaches it, for the `wandb login --host` line the setup shows |
 
-Flock's `FLOCK_APP_URL` must point at this dashboard (Compose defaults it to
-`http://localhost:3000`): invitation, password reset and Google sign-in links land here.
-For `pnpm dev`, set `FLOCK_APP_URL=http://localhost:5173` when starting the API.
+Set the API's `FLOCK_WEB_URL` to this dashboard's public origin for invitation, password reset
+and Google sign-in links. The development Compose file defaults it to `http://localhost:5173`.
+For a production web build, supply the same `FLOCK_WEB_URL` at build time:
+
+```sh
+FLOCK_WEB_URL=https://flock.example.com pnpm build
+```
 
 ## Docker
 
-[`../compose.yaml`](../compose.yaml) runs the dashboard, API and PostgreSQL together.
+[`../compose.yaml`](../compose.yaml) runs the dashboard, API and PostgreSQL for deployment.
+It publishes no host ports; route the dashboard domain to `ui:3000` and the SDK domain to
+`api:8080` through your deployment service or reverse proxy. Configure `FLOCK_WEB_URL`,
+`FLOCK_API_PUBLIC_URL` and `POSTGRES_PASSWORD` in `app/.env`, then build from `app` with
+`docker compose up -d --build`. `FLOCK_VERSION` tags both images.
 
-```sh
-docker compose -f ../compose.yaml up -d --build   # http://localhost:3000
-```
+Without Compose, build with `docker build --build-arg FLOCK_WEB_URL=https://flock.example.com
+-t flock-ui .` and run with `FLOCK_API_URL` and `FLOCK_API_PUBLIC_URL`. The image listens on
+3000 and sets `BODY_SIZE_LIMIT=4M` for avatar uploads. Changing `FLOCK_WEB_URL` requires a
+rebuild; the API addresses are read at runtime. The dashboard always requires a signed-in account.
 
-| Variable             | Default                            | Purpose                                                                        |
-| -------------------- | ---------------------------------- | ------------------------------------------------------------------------------ |
-| `APP_URL`            | `http://localhost:3000`            | the address people open (built into the image: changing it takes `up --build`) |
-| `APP_PORT`           | `3000`                             | the port on the host                                                           |
-| `FLOCK_URL`        | `http://api:8080` | Flock as the container reaches it: the API service on the Compose network    |
-| `FLOCK_PUBLIC_URL` | `http://localhost:8080`            | Flock as your machines reach it                                          |
-| `FLOCK_API_KEY`    | unset                              | as above                                                                       |
-
-Set Flock's `FLOCK_APP_URL` to `APP_URL`. Behind an HTTPS proxy, set `APP_URL` to the
-public `https://` address. Without Compose: `docker build --build-arg ORIGIN=<APP_URL> -t
-flock-ui .`, then run it with `FLOCK_URL` and `FLOCK_PUBLIC_URL`; it listens on 3000. The
-image sets `BODY_SIZE_LIMIT=4M`, so uploads aren't held to adapter-node's 512K default.
+See [Environment variables](../api/docs/source/deploying.md#environment-variables) for all
+variables, their consumers and migration from previous names.
 
 ## Styling
 

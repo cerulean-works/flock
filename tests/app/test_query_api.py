@@ -1,5 +1,6 @@
 import json
 import math
+from urllib.parse import urlsplit
 
 import orjson
 import pytest
@@ -130,6 +131,31 @@ def test_uploads_use_signed_urls(api):
     listing = api.get("/api/v1/projects/flock/p/runs/r1/files").json()["files"]
     assert [f["name"] for f in listing] == ["media/images/a.png"]
     assert api.get("/api/v1/projects/flock/p/runs/r1/files/media/images/a.png").body == b"\x89PNG"
+
+
+def test_unnamed_projects_and_public_upload_urls(make_flock):
+    server = make_flock(
+        web_url="https://dashboard.example.com/",
+        api_public_url="https://api.example.com/",
+    )
+    api = server.client()
+    created = api.create_run(None, "r1")
+    assert created["bucket"]["project"]["name"] == "uncategorized"
+    upload = api.graphql(
+        """mutation CreateRunFiles($run: String!, $files: [String!]!) {
+          createRunFiles(input: {runName: $run, files: $files}) {
+            files { name uploadUrl }
+          }
+        }""",
+        {"run": "r1", "files": ["config.yaml"]},
+    ).json()["data"]["createRunFiles"]["files"][0]["uploadUrl"]
+    assert upload.startswith("https://api.example.com/storage/flock/uncategorized/r1/")
+    parsed = urlsplit(upload)
+    assert api.request("PUT", f"{parsed.path}?{parsed.query}", body=b"lr: 0.1").status == 200
+    state = api.graphql(
+        "query RunState($run: String!) { project { run { state } } }", {"run": "r1"}
+    ).json()
+    assert "errors" not in state, state
 
 
 def test_stale_runs_are_marked_crashed_and_revive(make_flock, wait_for):

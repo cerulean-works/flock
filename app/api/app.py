@@ -29,7 +29,7 @@ def create_app(store: Store) -> FastAPI:
         if store.accounts.signup_open:
             # A fresh server: say where the first account comes from, since every request
             # (including the dashboard's) is refused until it exists.
-            setup = store.settings.app_url
+            setup = store.settings.web_url
             log.warning(
                 "no accounts yet: %s to create the first one, which becomes the super admin",
                 f"open {setup.rstrip('/')}/setup" if setup else "open the dashboard",

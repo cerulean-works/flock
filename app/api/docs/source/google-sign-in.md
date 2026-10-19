@@ -39,10 +39,10 @@ Browsers send a cookie only to the host that set it, so the browser must reach t
 The callback URL is where Google sends the browser back. By default it is:
 
 ```text
-<FLOCK_APP_URL>/api/v1/auth/google/callback
+<FLOCK_WEB_URL>/api/v1/auth/google/callback
 ```
 
-This goes through the dashboard, so Flock itself doesn't need to be reachable from browsers. Without `FLOCK_APP_URL`, Flock uses `FLOCK_PUBLIC_URL`, and without that, the address the request reached.
+This goes through the dashboard, so Flock itself doesn't need to be reachable from browsers. Without `FLOCK_WEB_URL`, Flock uses `FLOCK_API_PUBLIC_URL`, and without that, the address the request reached.
 
 If browsers reach Flock directly, or your dashboard proxies another path, set `FLOCK_GOOGLE_REDIRECT_URL` to the full callback URL, for example `https://flock.example.com/api/v1/auth/google/callback`.
 
@@ -57,7 +57,7 @@ Copy the client ID and the client secret.
 Set both values, and the dashboard's address. With Docker Compose, put them in the `.env` file next to `compose.yaml`:
 
 ```bash
-FLOCK_APP_URL=https://flock.example.com
+FLOCK_WEB_URL=https://flock.example.com
 FLOCK_GOOGLE_CLIENT_ID=1234567890-abc123.apps.googleusercontent.com
 FLOCK_GOOGLE_CLIENT_SECRET=GOCSPX-your-client-secret
 ```
@@ -94,7 +94,7 @@ curl -s $FLOCK/api/v1/auth/config
 {"signup_open":false,"google":true}
 ```
 
-Then sign in from your dashboard. When a sign-in fails, Flock redirects the browser to the dashboard's login page with a reason, `<FLOCK_APP_URL>/login?error=<reason>&message=<text>`:
+Then sign in from your dashboard. When a sign-in fails, Flock redirects the browser to the dashboard's login page with a reason, `<FLOCK_WEB_URL>/login?error=<reason>&message=<text>`:
 
 | `error` | Cause |
 |---|---|
