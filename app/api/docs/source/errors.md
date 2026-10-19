@@ -29,14 +29,16 @@ Requests that fail validation (422) have FastAPI's body instead, which lists eac
 |---|---|
 | 200 | Success, with a body. |
 | 201 | Created: a project, organization, invitation, API key, reset link, or an account from signing up or accepting an invitation. |
+| 202 | Accepted: a [W&B import](api/orgs#imports) started in the background. |
 | 204 | Success, with no body: deletes, signing out, changing your password. |
 | 302 | A redirect, in the Google sign-in flow. |
-| 400 | A request Flock can't apply: an invalid filter, a bulk operation that selects nothing, an empty `keys` list, signing out with an API key, or a body that isn't JSON or valid gzip on the wandb protocol endpoints. |
+| 400 | A request Flock can't apply: an invalid filter, a bulk operation that selects nothing, an empty `keys` list, signing out with an API key, a W&B API key that W&B rejects, or a body that isn't JSON or valid gzip on the wandb protocol endpoints. |
 | 401 | Missing, invalid or expired credentials. Also a wrong email or password, an invalid refresh token or Google code, and accepting an invitation with neither a password nor credentials. |
 | 403 | Not allowed: your role doesn't allow it, the runs aren't yours (with `ids`), signing up after the first account, a wrong current password, an invitation for another email, or an invalid upload signature. |
 | 404 | Not found, or in an organization you don't belong to. Also an invalid, expired or used invitation or reset link, and Google sign-in when it isn't configured. |
 | 409 | A conflict. See below. |
 | 422 | The request doesn't match the endpoint's schema: a missing or unknown field, a value of the wrong type, an invalid name or email, or a password of the wrong length. |
+| 502 | W&B couldn't be reached when starting an [import](api/orgs#imports). |
 
 ## Conflicts
 
@@ -51,6 +53,7 @@ A 409 changes nothing. These requests answer it:
 | Move runs | The target project already has runs with these ids. | the clashing runs |
 | Create or rename a project or organization | The name is taken. | none |
 | Invite someone | They're already a member. | none |
+| Start a W&B import | One is already running in the organization. | none |
 | Accept an invitation as a new account | An account with that email exists: sign in to accept. | none |
 | Demote or remove an org admin | They're the organization's last admin. | none |
 | Demote or delete a super admin | They're the last super admin. | none |

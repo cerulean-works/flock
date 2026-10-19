@@ -51,6 +51,10 @@ class Settings:
         default="https://gravatar.com/avatar/",
         doc="Gravatar (or a Libravatar-compatible mirror) avatar URL, before the email hash",
     )
+    wandb_base_url: str = field(
+        default="https://api.wandb.ai",
+        doc="W&B API that organization imports read from, unless the import names another",
+    )
     history_cache_points: int = field(
         default=20_000_000,
         doc="history points cached in memory for finished runs (active runs are always kept)",

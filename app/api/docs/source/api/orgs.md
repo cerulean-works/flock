@@ -15,7 +15,7 @@ An organization is returned as:
 | Endpoint | Who | Meaning |
 |---|---|---|
 | `GET /orgs` | anyone | Your organizations as `{"orgs": [...]}`, sorted by name. Super admins get every organization. |
-| `POST /orgs` | super admins | Creates an organization from `{"name": "vision"}`, with you as its admin. Answers 201, or 409 if the name is taken. |
+| `POST /orgs` | super admins | Creates an organization from `{"name": "vision"}`, with you as its admin. Answers 201, or 409 if the name is taken. Add `wandb` to [import a W&B entity](#imports) into it. |
 | `GET /orgs/{org}` | members | One organization. |
 | `PATCH /orgs/{org}` | org admins | Renames it, with `{"name": "..."}`. Returns the organization. |
 | `DELETE /orgs/{org}` | org admins | Deletes it, with all its projects and runs. Answers 204. |
@@ -33,6 +33,54 @@ Organization names follow the rules of project names: 1 to 128 characters, with 
 - It's refused with 409 while runs are active, listing them in `ids`, unless you add `?force=true`.
 - Dashboards streaming its projects get a `project` event with `"deleted": true`.
 - Users whose default organization it was fall back to the first organization they joined.
+
+## Imports from W&B[[imports]]
+
+An organization can copy every project and run of a W&B entity. The import runs in the background. See [Importing from W&B](../importing-from-wandb) for what is copied.
+
+Start one by adding `wandb` when creating the organization, or with `POST /orgs/{org}/import`. Both take:
+
+| Field | Meaning |
+|---|---|
+| `entity` | The W&B entity (team or user) to copy. Required. |
+| `api_key` | A W&B API key that can read the entity. Required. Flock uses it for this import only and never stores it. |
+| `base_url` | The W&B server's API URL. Defaults to [`FLOCK_WANDB_BASE_URL`](../configuration). |
+
+Flock checks the key and the entity before creating anything:
+
+| Problem | Answer |
+|---|---|
+| W&B rejects the key | 400, `W&B rejected the API key` |
+| The entity doesn't exist, or the key can't see it | 404 |
+| W&B can't be reached | 502 |
+| `base_url` isn't an `http` or `https` URL | 422 |
+
+When `POST /orgs` starts an import, its response adds `import`: the import's progress, as below.
+
+| Endpoint | Who | Meaning |
+|---|---|---|
+| `GET /orgs/{org}/import` | org admins | The progress of the organization's latest import, or 404 if it never had one. |
+| `POST /orgs/{org}/import` | super admins | Starts an import, or resumes one: runs the organization already has are skipped. Answers 202 with its progress, or 409 while an import is running. |
+| `DELETE /orgs/{org}/import` | super admins | Stops a running import, and returns its progress. The runs copied so far stay. 404 if there never was an import. |
+
+The progress is returned as:
+
+```json
+{"entity": "acme", "base_url": "https://api.wandb.ai", "state": "running", "projects_total": 4, "projects_done": 1, "runs_total": 230, "runs_done": 61, "runs_skipped": 0, "runs_failed": 1, "current_project": "llm-pretrain", "error": "llm-pretrain/9fc2v9ee: W&B refused the query: ...", "started_by": 1, "started_at": 1792282194.3, "finished_at": null}
+```
+
+| Field | Meaning |
+|---|---|
+| `state` | `running`; `finished`; `failed` when the import stopped on an error; `cancelled`; or `interrupted` when Flock restarted during it. |
+| `projects_total`, `projects_done` | Projects in the entity, and projects fully copied. |
+| `runs_total` | Runs in the entity, as W&B counts them. |
+| `runs_done`, `runs_skipped`, `runs_failed` | Runs copied, runs already in the organization, and runs that couldn't be copied. |
+| `current_project` | The project being copied, or `null`. |
+| `error` | Why the import failed, or the last run that couldn't be copied, or `null`. |
+| `started_by` | The id of the super admin who started it. |
+| `started_at`, `finished_at` | When it started, and when it ended (`null` while it runs). |
+
+Deleting the organization stops its import.
 
 ## Members[[members]]
 

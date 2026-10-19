@@ -20,6 +20,8 @@ guide:
         title: Building a dashboard
       - local: home-and-budgets
         title: GPU costs, budgets and the home feed
+      - local: importing-from-wandb
+        title: Importing from W&B
   - title: Accounts
     sections:
       - local: accounts
