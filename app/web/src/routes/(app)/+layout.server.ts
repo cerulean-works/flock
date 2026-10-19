@@ -1,5 +1,7 @@
+import { redirect } from '@sveltejs/kit';
 import { flock } from '#lib/server/flock.ts';
 import type { OrgInfo, ProjectInfo, UserInfo } from '#lib/types.ts';
+import { cookieView, VIEW_COOKIE } from '#lib/workspace/project-view.svelte.ts';
 import type { LayoutServerLoad } from './$types';
 
 async function listProjects(org: string) {
@@ -23,6 +25,9 @@ export const load: LayoutServerLoad = async ({ params, cookies }) => {
 			.then((res) => res.json() as Promise<{ orgs: OrgInfo[] }>)
 			.then(({ orgs }) => new Map(orgs.map((o) => [o.name, o.avatar_url])))
 	]);
+	// A super admin sees every organization: with none, the server's setup is halfway (the
+	// account was made, its first workspace not yet), and resumes.
+	if (me.is_superadmin && pictures.size === 0) redirect(303, '/setup');
 	const org = known ?? me.default_org;
 	const projects = listed ?? (org ? await listProjects(org) : []);
 
@@ -48,7 +53,9 @@ export const load: LayoutServerLoad = async ({ params, cookies }) => {
 			orgs: orgs.toSorted((a, b) => a.name.localeCompare(b.name)),
 			projects,
 			/** Kept in a cookie, so the first paint already has the sidebar open or closed. */
-			collapsed: cookies.get('flock_sidebar') === 'collapsed'
+			collapsed: cookies.get('flock_sidebar') === 'collapsed',
+			/** The view projects open in, the one last picked: in a cookie for the same reason. */
+			projectView: cookieView(cookies.get(VIEW_COOKIE))
 		}
 	};
 };

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import BudgetPanel from '#lib/components/home/BudgetPanel.svelte';
+	import FeedFilters from '#lib/components/home/FeedFilters.svelte';
 	import FeedList from '#lib/components/home/FeedList.svelte';
 	import { page } from '$app/state';
 	import { pollFeed } from '#lib/data/feed.svelte.ts';
@@ -46,17 +47,30 @@
 						{/each}
 					</nav>
 				</div>
-				<p class="mt-1 text-muted-foreground">
-					{data.mine ? 'Your runs' : 'Runs and projects'} in {data.org}
-				</p>
-				{#key data.mine}
+				<div class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
+					<p class="text-muted-foreground">
+						{data.mine ? 'Your runs' : 'Runs and projects'} in {data.project
+							? `${data.org} / ${data.project}`
+							: data.org}
+					</p>
+					<div class="ml-auto">
+						<FeedFilters
+							projects={data.shell.projects.map((p) => p.name)}
+							project={data.project ?? null}
+							kinds={data.kinds}
+						/>
+					</div>
+				</div>
+				{#key JSON.stringify(data.query)}
 					<FeedList
 						first={() => data.feed!}
 						query={data.query}
 						now={data.now}
-						empty={data.mine
-							? 'You haven’t logged any runs here yet.'
-							: 'Nothing has happened here yet.'}
+						empty={data.kinds || data.project
+							? 'Nothing like that has happened here yet.'
+							: data.mine
+								? 'You haven’t logged any runs here yet.'
+								: 'Nothing has happened here yet.'}
 					/>
 				{/key}
 			</section>

@@ -32,6 +32,7 @@ interface Header {
 	project: string;
 	now: number;
 	total: number;
+	runs_total?: number;
 	active: number;
 	runs: (Omit<RunInfo, 'systemLines'> & { system_lines: number })[];
 	columns: { key: string; kind: ColumnKind }[];
@@ -60,7 +61,7 @@ const WIDTHS: Record<ColumnKind, number> = {
 	json: 160
 };
 
-function columnDef(key: string, kind: ColumnKind): ColumnDef {
+export function columnDef(key: string, kind: ColumnKind): ColumnDef {
 	let group: ColumnGroup = 'info';
 	let label = INFO_LABELS[key] ?? key;
 	if (key.startsWith('config.')) {
@@ -182,6 +183,8 @@ export function decodeWorkspace(buf: ArrayBuffer, query: RunQuery): WorkspaceDat
 		page: {
 			query,
 			total: header.total,
+			// Flocks from before filters serve no runs_total: every run was on the pages.
+			projectTotal: header.runs_total ?? header.total,
 			active: header.active,
 			runs: header.runs.map(({ system_lines, ...run }) => ({ ...run, systemLines: system_lines })),
 			metricCount: M,

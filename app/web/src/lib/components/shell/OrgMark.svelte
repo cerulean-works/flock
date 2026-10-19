@@ -1,10 +1,12 @@
 <script lang="ts">
 	import type { ClassValue } from 'svelte/elements';
+	import { cn } from '#lib/utils.ts';
 
 	interface Props {
 		name: string;
 		/** The organization's picture (`avatar_url`); its initial without one. */
 		src?: string | null;
+		/** Merged over the defaults, so a size or text class given here replaces theirs. */
 		class?: ClassValue;
 	}
 
@@ -16,10 +18,10 @@
 
 <!-- An organization's picture or initial: square, where a person's avatar is round. -->
 <span
-	class={[
+	class={cn(
 		'grid size-7 flex-none place-items-center overflow-hidden rounded-md bg-deep font-serif text-[14px] text-[#fffdf4]',
 		className
-	]}
+	)}
 	aria-hidden="true"
 >
 	{#if shown}

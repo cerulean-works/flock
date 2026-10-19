@@ -9,6 +9,8 @@ The two endpoints a dashboard page is built on: a binary snapshot of the page, a
 | Parameter | Default | Meaning |
 |---|---|---|
 | `sort` | `-created_at` | [Sort keys](queries#sorting), comma-separated. |
+| `filter` | none | A [filter](queries#filters) as a JSON string. Only the runs that match are on the pages. |
+| `running` | `false` | Only the active runs. |
 | `offset` | `0` | Runs to skip. |
 | `limit` | `100` | Runs on the page, up to 500. |
 | `max_points` | `500` | Maximum points per curve, from 32 to 10,000. |
@@ -36,7 +38,8 @@ Every section starts at a multiple of 8 bytes, so you can read each one as a typ
 |---|---|
 | `entity`, `project` | The project. |
 | `now` | Flock's clock when it built the snapshot, as a Unix timestamp. |
-| `total` | How many runs the project has. |
+| `total` | How many runs match `filter` and `running`: all of the project's without them. |
+| `runs_total` | How many runs the project has, matching or not. Compare it with the stream's `hello` to count runs created since. |
 | `active` | How many of them are active. |
 | `offset` | The `offset` of this page. |
 | `runs` | The runs on the page, in order. See below. |

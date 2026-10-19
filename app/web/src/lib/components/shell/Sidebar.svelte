@@ -109,7 +109,8 @@
 								src={orgs.find((o) => o.name === org)?.avatar_url}
 								class="size-6 text-[13px]"
 							/>
-							<span class="truncate font-serif text-[17px]">{org}</span>
+							<!-- The serif sits high in its line box, like the wordmark's. -->
+							<span class="translate-y-[0.13em] truncate font-serif text-[17px]">{org}</span>
 						</a>
 					{/if}
 				{:else}

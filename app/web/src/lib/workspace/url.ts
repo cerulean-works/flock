@@ -1,6 +1,7 @@
 import { resolve } from '$app/paths';
 import type { ResolvedPathname } from '$app/types';
 import type { RunQuery, SortOrder } from '#lib/types.ts';
+import { readFilters, writeFilters } from './filters.ts';
 
 // App URLs: an entity's projects, and workspaces with the run-page query they carry.
 
@@ -11,18 +12,31 @@ export const PAGE_SIZE = 100;
 /** The page sizes offered; Flock serves at most 500 runs per snapshot. */
 export const PAGE_SIZES = [25, 50, 100, 250, 500] as const;
 
-/** Run-page query from URL search params. Only `page`, `sort`, `order` and `size` affect data. */
+/**
+ * Run-page query from URL search params. Only `page`, `sort`, `order`, `size`, `q` (the search)
+ * and `filters` affect data.
+ */
 export function readRunQuery(params: URLSearchParams): RunQuery {
 	const page = Math.max(1, Math.floor(Number(params.get('page')) || 1));
 	const sort = params.get('sort') || DEFAULT_SORT;
 	const order: SortOrder = params.get('order') === 'asc' ? 'asc' : 'desc';
 	const asked = Number(params.get('size'));
 	const size = (PAGE_SIZES as readonly number[]).includes(asked) ? asked : PAGE_SIZE;
-	return { page, sort, order, size };
+	const search = params.get('q')?.trim() ?? '';
+	return { page, sort, order, size, search, filters: readFilters(params.get('filters')) };
 }
 
 export function runQueryString(q: RunQuery): string {
-	return `page=${q.page}&sort=${encodeURIComponent(q.sort)}&order=${q.order}&size=${q.size}`;
+	const params = new URLSearchParams({
+		page: String(q.page),
+		sort: q.sort,
+		order: q.order,
+		size: String(q.size)
+	});
+	if (q.search) params.set('q', q.search);
+	const filters = writeFilters(q.filters);
+	if (filters) params.set('filters', filters);
+	return params.toString();
 }
 
 /** Search params for a workspace URL, omitting defaults so URLs stay short. */
@@ -38,6 +52,11 @@ export function applyRunQuery(params: URLSearchParams, q: RunQuery) {
 	}
 	if (q.size === PAGE_SIZE) params.delete('size');
 	else params.set('size', String(q.size));
+	if (q.search) params.set('q', q.search);
+	else params.delete('q');
+	const filters = writeFilters(q.filters);
+	if (filters) params.set('filters', filters);
+	else params.delete('filters');
 }
 
 /** Flock's sort syntax: `-column` for descending. The name column sorts by display name. */

@@ -61,6 +61,25 @@ def test_snapshot_downsampling_sorting_and_paging(api):
     assert y == [s + 2 for s in x]  # sampled points are real points
 
 
+def test_snapshot_filters_runs(api):
+    for i in range(4):
+        api.create_run("p", f"r{i}", config={"lr": i / 10, "opt": "adam" if i % 2 else "sgd"})
+        api.stream("p", f"r{i}", history_rows(3, loss=float))
+        if i < 3:
+            api.stream("p", f"r{i}", complete=0)
+    snap = api.workspace(filter='{"config.opt": "adam"}', sort="config.lr")
+    assert snap["total"] == 2 and snap["runs_total"] == 4
+    assert [r["id"] for r in snap["runs"]] == ["r1", "r3"]
+    assert snap["active"] == 1  # the project's live runs, filtered or not
+    assert snap["cells"]["config.lr"] == [0.1, 0.3]
+    snap = api.workspace(filter='{"config.lr": {"$lt": 0.15}}', running="true")
+    assert snap["total"] == 0 and snap["runs"] == []
+    assert [r["id"] for r in api.workspace(running="true")["runs"]] == ["r3"]
+    bad = api.get("/api/v1/projects/flock/p/workspace", filter='{"config.lr": {"$bogus": 1}}')
+    assert bad.status == 400
+    assert api.get("/api/v1/projects/flock/p/workspace", filter="{").status == 400
+
+
 def test_snapshot_point_budget(api, monkeypatch):
     monkeypatch.setattr(Snapshot, "POINT_BUDGET", 200)
     api.create_run("p", "r")

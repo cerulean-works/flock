@@ -164,7 +164,7 @@ export class LiveConnection {
 		this.#ws.activeRuns = data.active;
 		// Runs created since this page was read (they'd shift its rows, so they're offered
 		// as a refresh rather than inserted).
-		this.#ws.newRuns = Math.max(0, data.total - page.total);
+		this.#ws.newRuns = Math.max(0, data.total - page.projectTotal);
 		for (const [id, info] of Object.entries(data.runs)) {
 			const run = page.runs[this.#row(id)];
 			if (run && run.state !== info.state) {

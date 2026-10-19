@@ -1,6 +1,6 @@
 import { Series } from '#lib/chart/series.ts';
 import type { RunDetail, RunHistory, WorkspaceData } from '#lib/types.ts';
-import { metricSections } from './snapshot.ts';
+import { columnDef, metricSections } from './snapshot.ts';
 
 /** A stream's curves in plot order, without wandb's bookkeeping (`_step`, `_runtime`, ...). */
 const keysOf = (history: RunHistory) =>
@@ -14,10 +14,18 @@ const toSeries = ({ x, y }: { x: number[]; y: (number | null)[] }) =>
 		Float64Array.from(x)
 	);
 
+/** The run's attributes its dialogs edit, as the workspace's (text) columns. */
+const EDITABLE = [
+	['tags', 'json'],
+	['group', 'str'],
+	['job_type', 'str'],
+	['notes', 'str']
+] as const;
+
 /**
  * One run as a workspace of one: its panels then work exactly as the project's do (plots,
  * full screen, the cursor panel), and the live stream keeps them current from the run's line
- * counts. It has no table, so no columns.
+ * counts. It has no table; its only columns are what the run's dialogs edit.
  */
 export function runWorkspace(
 	run: RunDetail,
@@ -34,14 +42,15 @@ export function runWorkspace(
 			project: run.project,
 			pageSize: 1,
 			now,
-			columns: [],
+			columns: EDITABLE.map(([key, kind]) => columnDef(key, kind)),
 			groups: [],
 			metrics,
 			sections
 		},
 		page: {
-			query: { page: 1, sort: 'created_at', order: 'desc', size: 1 },
+			query: { page: 1, sort: 'created_at', order: 'desc', size: 1, search: '', filters: [] },
 			total: 1,
+			projectTotal: 1,
 			active: 0,
 			runs: [
 				{
@@ -54,8 +63,8 @@ export function runWorkspace(
 				}
 			],
 			metricCount: metrics.length,
-			num: [],
-			text: [],
+			num: EDITABLE.map(() => null),
+			text: EDITABLE.map(([key]) => [run[key]]),
 			series: [
 				...keys.map((k) => toSeries(history.series[k])),
 				...systemKeys.map((k) => toSeries(system.series[k]))

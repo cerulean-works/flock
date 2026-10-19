@@ -396,7 +396,7 @@ export function elapsed(at: number, start: number): string {
 	return `+${Math.floor(s / 3600)}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}`;
 }
 
-/** `05:08:09`, in UTC like the rest of the dashboard's times. */
+/** `2026-10-08 05:08:09`, in UTC like the rest of the dashboard's times. */
 export function clock(at: number): string {
-	return new Date(at * 1000).toISOString().slice(11, 19);
+	return new Date(at * 1000).toISOString().slice(0, 19).replace('T', ' ');
 }

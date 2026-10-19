@@ -3,7 +3,9 @@
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import ApiKeyCreator from '#lib/components/ApiKeyCreator.svelte';
 	import CopyBlock from '#lib/components/CopyBlock.svelte';
+	import FeedFilters from '#lib/components/home/FeedFilters.svelte';
 	import LatestRuns from '#lib/components/home/LatestRuns.svelte';
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProjectDialog from '#lib/components/ProjectDialog.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { page } from '$app/state';
@@ -18,7 +20,7 @@
 
 	const running = $derived(data.shell.projects.reduce((n, p) => n + p.active_run_count, 0));
 	// Nothing logged yet: how to log the first run, instead of an empty table.
-	const fresh = $derived(!data.mine && !data.feed.items.length);
+	const fresh = $derived(!data.mine && !data.project && !data.feed.items.length);
 
 	const TABS = [
 		['', 'Everyone'],
@@ -32,25 +34,47 @@
 	<title>Runs · {params.entity}</title>
 </svelte:head>
 
-<div class="flex flex-none flex-wrap items-baseline gap-x-4 gap-y-1 px-5 pt-5 pb-4">
-	<h1 class="font-serif text-[34px] leading-[1.15] font-normal tracking-[-0.02em]">
-		{params.entity}
-	</h1>
-	<p class="order-last basis-full text-[13px] text-muted-foreground sm:order-none sm:basis-auto">
+<!-- The feed's own controls, under the title once there are runs to show. -->
+{#snippet feedToolbar()}
+	<h2 class="text-[13px] font-medium whitespace-nowrap max-sm:sr-only">Latest runs</h2>
+	<div class="ml-auto">
+		<FeedFilters projects={data.shell.projects.map((p) => p.name)} project={data.project} />
+	</div>
+	<nav class="flex gap-1 rounded-lg bg-muted p-0.5 text-[13px]" aria-label="Show">
+		{#each TABS as [key, label] (key)}
+			{@const on = (key === 'mine') === data.mine}
+			<a
+				class={[
+					'rounded-md px-2.5 py-1 text-muted-foreground hover:text-foreground',
+					on && 'bg-background text-foreground shadow-xs'
+				]}
+				href={withParam(page.url, 'runs', key || null)}
+				data-sveltekit-noscroll
+				data-sveltekit-replacestate
+				aria-current={on ? 'page' : undefined}
+			>
+				{label}
+			</a>
+		{/each}
+	</nav>
+{/snippet}
+
+<PageHeader title={params.entity} toolbar={fresh ? undefined : feedToolbar}>
+	{#snippet subtitle()}
 		{count(data.org.project_count, 'project')} · {count(data.org.member_count, 'member')}
 		{#if running}
 			· <span class="text-state-running">{count(running, 'run')} running</span>
 		{/if}
-	</p>
-	<div class="ml-auto flex gap-2 self-center">
+	{/snippet}
+	{#snippet actions()}
 		<Button variant="ghost" href={orgHref(params.entity)}>
-			<SettingsIcon /> Settings
+			<SettingsIcon /> <span class="max-sm:sr-only">Settings</span>
 		</Button>
 		<Button variant="outline" onclick={() => (creating = true)}>
-			<PlusIcon /> New project
+			<PlusIcon /> <span class="max-sm:sr-only">New project</span>
 		</Button>
-	</div>
-</div>
+	{/snippet}
+</PageHeader>
 
 {#if fresh}
 	<main class="min-h-0 flex-1 overflow-y-auto px-5 pb-16">
@@ -83,33 +107,17 @@
 		</div>
 	</main>
 {:else}
-	<div class="flex flex-none items-center gap-3 px-5 pb-3">
-		<h2 class="text-[13px] font-medium">Latest runs</h2>
-		<nav class="ml-auto flex gap-1 rounded-lg bg-muted p-0.5 text-[13px]" aria-label="Show">
-			{#each TABS as [key, label] (key)}
-				{@const on = (key === 'mine') === data.mine}
-				<a
-					class={[
-						'rounded-md px-2.5 py-1 text-muted-foreground hover:text-foreground',
-						on && 'bg-background text-foreground shadow-xs'
-					]}
-					href={withParam(page.url, 'runs', key || null)}
-					data-sveltekit-noscroll
-					data-sveltekit-replacestate
-					aria-current={on ? 'page' : undefined}
-				>
-					{label}
-				</a>
-			{/each}
-		</nav>
-	</div>
 	<main class="min-h-0 flex-1 overflow-y-auto pb-10">
-		{#key data.mine}
+		{#key JSON.stringify(data.query)}
 			<LatestRuns
 				first={() => data.feed}
 				query={data.query}
 				now={data.now}
-				empty={data.mine ? 'You haven’t logged any runs here yet.' : 'No runs yet.'}
+				empty={data.project
+					? `No runs in ${data.project}${data.mine ? ' by you' : ''} yet.`
+					: data.mine
+						? 'You haven’t logged any runs here yet.'
+						: 'No runs yet.'}
 			/>
 		{/key}
 	</main>

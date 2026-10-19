@@ -1,10 +1,12 @@
 <script lang="ts">
 	import type { ClassValue } from 'svelte/elements';
+	import { cn } from '#lib/utils.ts';
 
 	interface Props {
 		name: string;
 		/** The picture (`avatar_url`); initials without one, or if it fails to load. */
 		src?: string | null;
+		/** Merged over the defaults, so a size or text class given here replaces theirs. */
 		class?: ClassValue;
 	}
 
@@ -25,10 +27,10 @@
 </script>
 
 <span
-	class={[
+	class={cn(
 		'grid size-7 flex-none place-items-center overflow-hidden rounded-full bg-deep text-[11px] font-medium text-[#fffdf4]',
 		className
-	]}
+	)}
 	aria-hidden="true"
 >
 	{#if shown}

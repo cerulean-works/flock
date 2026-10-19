@@ -1,4 +1,6 @@
 import type { SubmitFunction } from '$app/forms';
+import { goto } from '$app/navigation';
+import type { ResolvedPathname } from '$app/types';
 import { toast } from 'svelte-sonner';
 import { clearRunPages } from './cache.ts';
 
@@ -13,6 +15,11 @@ interface Options<T> {
 	success?: (data: T) => string;
 	/** Called after that, e.g. to close the dialog. */
 	done?: (data: T) => void;
+	/**
+	 * Where to go once the change lands, instead of reloading this page: a run's own page after
+	 * the run was deleted or moved away has nothing left to load.
+	 */
+	leave?: (data: T) => ResolvedPathname | null | undefined;
 	/** Toast refusals too, for forms with no room to show them (menu items, row buttons). */
 	toastErrors?: boolean;
 }
@@ -63,11 +70,14 @@ export class Mutation<T = Record<string, unknown>> {
 					return;
 				}
 				if (this.#opts.runs) clearRunPages();
+				const data = (result.type === 'success' ? result.data : {}) as T;
 				// Reloads the page's data, or follows the action's redirect. Some forms post to
 				// another page's action (the workspace edits its project through `/{entity}`):
 				// stay on this page rather than land on that one.
-				await update({ reset: false, navigate: false });
-				const data = (result.type === 'success' ? result.data : {}) as T;
+				const to = this.#opts.leave?.(data);
+				// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved by its type
+				if (to) await goto(to, { replace: true, refreshAll: true });
+				else await update({ reset: false, navigate: false });
 				if (this.#opts.success) toast.success(this.#opts.success(data));
 				this.#opts.done?.(data);
 			} finally {

@@ -47,8 +47,8 @@
 <DropdownMenu.Root>
 	<DropdownMenu.Trigger
 		class={[
-			'flex items-center gap-2.5 rounded-lg text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 aria-expanded:bg-muted',
-			compact ? 'p-1' : 'w-full px-2 py-1.5'
+			'group flex items-center gap-3 rounded-lg text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 aria-expanded:bg-muted',
+			compact ? 'p-1.5' : 'w-full px-2 py-2.5'
 		]}
 		aria-label="{org ?? 'No organization'} · {me.name}"
 		title={compact ? `${org ?? 'No organization'} · ${me.name}` : undefined}
@@ -56,11 +56,12 @@
 		<span class="relative flex-none">
 			{#if org}
 				<OrgMark name={org} src={current?.avatar_url} />
-				<!-- Who is signed in, on the organization's corner. -->
+				<!-- Who is signed in: a badge on the organization's corner, ringed in the
+				     background so it reads as separate from the mark. -->
 				<Avatar
 					name={me.name}
 					src={me.avatar_url}
-					class="absolute -right-1 -bottom-1 size-4 text-[7px] ring-2 ring-sidebar"
+					class="absolute -right-1.5 -bottom-1.5 size-4 text-[7px] ring-2 ring-sidebar group-hover:ring-muted group-aria-expanded:ring-muted"
 				/>
 			{:else}
 				<Avatar name={me.name} src={me.avatar_url} />
@@ -105,7 +106,7 @@
 		{/if}
 		<DropdownMenu.Group>
 			<DropdownMenu.Label class="flex items-center gap-2.5 font-normal">
-				<Avatar name={me.name} src={me.avatar_url} class="size-8 text-[12px]" />
+				<Avatar name={me.name} src={me.avatar_url} class="size-6 text-[10px]" />
 				<span class="grid min-w-0 leading-tight">
 					<span class="truncate font-medium text-foreground">{me.name}</span>
 					<span class="truncate text-xs text-muted-foreground">{me.email}</span>

@@ -16,9 +16,12 @@
 					: 'bg-faint'
 		]}
 	></span>
-	{ws.connection === 'live'
-		? 'Live'
-		: ws.connection === 'offline'
-			? 'Reconnecting…'
-			: 'Connecting…'}
+	<!-- Just the dot on phones, where the page header's title needs the room. -->
+	<span class="max-sm:sr-only">
+		{ws.connection === 'live'
+			? 'Live'
+			: ws.connection === 'offline'
+				? 'Reconnecting…'
+				: 'Connecting…'}
+	</span>
 </span>

@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { base64ToBytes } from '#lib/utils.ts';
 import { decodeWorkspace, metricSections } from './snapshot.ts';
 
-const QUERY = { page: 1, sort: 'created_at', order: 'desc' as const, size: 100 };
+const QUERY = {
+	page: 1,
+	sort: 'created_at',
+	order: 'desc' as const,
+	size: 100,
+	search: '',
+	filters: []
+};
 
 interface TestSeries {
 	y: number[];

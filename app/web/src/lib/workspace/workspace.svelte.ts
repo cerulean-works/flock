@@ -2,6 +2,17 @@ import { createContext } from 'svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { LIVE_STATES, type ProjectMeta, type RunPage, type SectionDef } from '#lib/types.ts';
 import { toggle } from '#lib/utils.ts';
+import { LOCKED_COLUMNS, parseHidden } from './columns.ts';
+import {
+	EMPTY_LAYOUT,
+	type PanelLayout,
+	arrange,
+	mergeOrder,
+	moveKey,
+	parseLayout
+} from './layout.ts';
+
+export type { PanelLayout } from './layout.ts';
 
 /**
  * Run colors. The first eight are a CVD-checked categorical order; the next eight are the same
@@ -49,20 +60,31 @@ export interface Cursor {
 
 export type XRange = readonly [number, number];
 
-/** How the viewer arranged a project's panels: per section, its order and plot height. */
-export interface PanelLayout {
-	/** Metric keys in the order they were arranged; metrics logged since go after them. */
-	order: Readonly<Record<string, readonly string[]>>;
-	height: Readonly<Record<string, number>>;
-}
-
 /** Plot height of a panel in the grid, unless its section was resized. */
 export const PLOT_H = 196;
 export const MIN_PLOT_H = 120;
 export const MAX_PLOT_H = 720;
 
-const EMPTY_LAYOUT: PanelLayout = { order: {}, height: {} };
 const layoutKey = (entity: string, project: string) => `flock:panels:${entity}/${project}`;
+const columnsKey = (entity: string, project: string) => `flock:columns:${entity}/${project}`;
+const NO_HIDDEN: readonly string[] = [];
+
+/** A value this browser kept, or null when there's none (or storage is blocked or unreadable). */
+function readStored(key: string): unknown {
+	try {
+		return JSON.parse(localStorage.getItem(key) ?? 'null');
+	} catch {
+		return null;
+	}
+}
+
+function store(key: string, value: unknown) {
+	try {
+		localStorage.setItem(key, JSON.stringify(value));
+	} catch {
+		// Kept for this visit only.
+	}
+}
 
 /** A change to some runs, asked for from a row's menu or for the selection. */
 export interface RunDialog {
@@ -112,6 +134,8 @@ export class Workspace {
 	sectionPage = $state.raw<Readonly<Record<string, number>>>({});
 	/** Panel layouts by project, read from this browser once the page is showing. */
 	layouts = $state.raw<Readonly<Record<string, PanelLayout>>>({});
+	/** Table columns hidden, by project, read from this browser once the page is showing. */
+	hiddenByProject = $state.raw<Readonly<Record<string, readonly string[]>>>({});
 
 	/** Bumped when live points arrive for a metric. */
 	readonly metricVersion = new SvelteMap<string, number>();
@@ -270,47 +294,35 @@ export class Workspace {
 		return this.layouts[layoutKey(this.meta.entity, this.meta.project)] ?? EMPTY_LAYOUT;
 	}
 
-	/** Sections with their panels in the viewer's order. */
+	/** Sections in the viewer's order, with their panels in the viewer's order. */
 	sections = $derived.by((): SectionDef[] => {
-		const { order } = this.layout;
+		const { order, sections } = this.layout;
 		const metrics = this.meta.metrics;
-		return this.meta.sections.map((sec) => {
-			const keys = order[sec.key];
-			if (!keys) return sec;
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a lookup, rebuilt with the sections
-			const rank = new Map(keys.map((k, i) => [k, i]));
-			const at = (m: number) => rank.get(metrics[m].key) ?? Infinity;
-			return { ...sec, metrics: sec.metrics.toSorted((a, b) => at(a) - at(b)) };
-		});
+		return arrange(this.meta.sections, (s) => s.key, sections).map((sec) =>
+			order[sec.key]
+				? { ...sec, metrics: arrange(sec.metrics, (m) => metrics[m].key, order[sec.key]) }
+				: sec
+		);
 	});
 
 	/**
-	 * Read this project's layout from the browser. Called after hydration, so the page the
-	 * server rendered (in the default layout) is what hydrates.
+	 * Read this project's layout and hidden columns from the browser. Called after hydration,
+	 * so the page the server rendered (in the default layout) is what hydrates.
 	 */
 	restoreLayout() {
-		const key = layoutKey(this.meta.entity, this.meta.project);
-		if (key in this.layouts) return;
-		let saved: PanelLayout = EMPTY_LAYOUT;
-		try {
-			const parsed = JSON.parse(localStorage.getItem(key) ?? 'null');
-			if (parsed && typeof parsed === 'object')
-				saved = { order: parsed.order ?? {}, height: parsed.height ?? {} };
-		} catch {
-			// Unreadable or blocked storage: the default layout.
-		}
-		this.layouts = { ...this.layouts, [key]: saved };
+		const { entity, project } = this.meta;
+		const key = layoutKey(entity, project);
+		if (!(key in this.layouts))
+			this.layouts = { ...this.layouts, [key]: parseLayout(readStored(key)) };
+		const cols = columnsKey(entity, project);
+		if (!(cols in this.hiddenByProject))
+			this.hiddenByProject = { ...this.hiddenByProject, [cols]: parseHidden(readStored(cols)) };
 	}
 
 	#saveLayout(layout: PanelLayout, persist = true) {
 		const key = layoutKey(this.meta.entity, this.meta.project);
 		this.layouts = { ...this.layouts, [key]: layout };
-		if (!persist) return;
-		try {
-			localStorage.setItem(key, JSON.stringify(layout));
-		} catch {
-			// Kept for this visit only.
-		}
+		if (persist) store(key, layout);
 	}
 
 	/** Move a panel to `to`, an index into its section's (arranged) panels. */
@@ -319,11 +331,22 @@ export class Workspace {
 		if (!sec) return;
 		const keys = sec.metrics.map((m) => this.meta.metrics[m].key);
 		const from = sec.metrics.indexOf(metric);
-		to = Math.max(0, Math.min(keys.length - 1, to));
-		if (from === -1 || from === to) return;
-		keys.splice(to, 0, ...keys.splice(from, 1));
-		const { order, height } = this.layout;
-		this.#saveLayout({ order: { ...order, [section]: keys }, height });
+		const moved = moveKey(keys, from, to);
+		if (from === -1 || moved[from] === keys[from]) return;
+		const { order } = this.layout;
+		this.#saveLayout({
+			...this.layout,
+			order: { ...order, [section]: mergeOrder(order[section] ?? [], moved) }
+		});
+	}
+
+	/** Move a section to `to`, an index into the (arranged) sections. */
+	moveSection(section: string, to: number) {
+		const keys = this.sections.map((s) => s.key);
+		const from = keys.indexOf(section);
+		const moved = moveKey(keys, from, to);
+		if (from === -1 || moved[from] === keys[from]) return;
+		this.#saveLayout({ ...this.layout, sections: mergeOrder(this.layout.sections, moved) });
 	}
 
 	/** Plot height of a section's panels. */
@@ -336,11 +359,52 @@ export class Workspace {
 	 * a drag is still going: it's saved once, when the drag ends.
 	 */
 	setHeight(section: string, px: number | null, persist = true) {
-		const { order, height } = this.layout;
-		const next = { ...height };
+		const next = { ...this.layout.height };
 		if (px == null) delete next[section];
 		else next[section] = Math.round(Math.max(MIN_PLOT_H, Math.min(MAX_PLOT_H, px)));
-		this.#saveLayout({ order, height: next }, persist);
+		this.#saveLayout({ ...this.layout, height: next }, persist);
+	}
+
+	// ------------------------------------------------------------------------------------------
+	// Table columns the viewer hid, kept per project in this browser.
+
+	/** Keys of this project's hidden columns. */
+	hiddenColumns = $derived.by((): ReadonlySet<string> => {
+		const key = columnsKey(this.meta.entity, this.meta.project);
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- replaced, never mutated
+		return new Set(this.hiddenByProject[key] ?? NO_HIDDEN);
+	});
+
+	/** Indices into `meta.columns` of the columns the table shows, in order. */
+	shownColumns = $derived.by(() => {
+		const hidden = this.hiddenColumns;
+		const out: number[] = [];
+		this.meta.columns.forEach((c, i) => {
+			if (!hidden.has(c.key) || LOCKED_COLUMNS.has(c.key)) out.push(i);
+		});
+		return out;
+	});
+
+	/** Show or hide some columns (the locked ones always show). */
+	setColumnsHidden(keys: readonly string[], hide: boolean) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a draft, saved as a list
+		const next = new Set(this.hiddenColumns);
+		for (const k of keys) {
+			if (hide && !LOCKED_COLUMNS.has(k)) next.add(k);
+			else next.delete(k);
+		}
+		this.#saveHidden([...next]);
+	}
+
+	/** Show every column again. */
+	showAllColumns() {
+		this.#saveHidden([]);
+	}
+
+	#saveHidden(keys: readonly string[]) {
+		const key = columnsKey(this.meta.entity, this.meta.project);
+		this.hiddenByProject = { ...this.hiddenByProject, [key]: keys };
+		store(key, keys);
 	}
 
 	toggleSection(key: string) {

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import type { ResolvedPathname } from '$app/types';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
@@ -8,6 +9,13 @@
 	import { LIVE_STATES } from '#lib/types.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import FormError from './FormError.svelte';
+
+	interface Props {
+		/** Where to go once the runs are deleted, rather than reload this page. */
+		leave?: () => ResolvedPathname;
+	}
+
+	let { leave }: Props = $props();
 
 	const ws = getWorkspace();
 
@@ -26,6 +34,7 @@
 	const mutation = new Mutation<{ count: number }>({
 		runs: true,
 		submit: () => ids.forEach((id) => ws.removing.add(id)),
+		leave: () => leave?.(),
 		success: ({ count }) => `Deleted ${runs(count)}`,
 		done: () => {
 			for (const id of ids) ws.selected.delete(id);

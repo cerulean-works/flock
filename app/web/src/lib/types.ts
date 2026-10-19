@@ -1,4 +1,5 @@
 import type { Series } from './chart/series.ts';
+import type { RunFilter } from './workspace/filters.ts';
 
 /** Flock run states; `running` and `preempting` are live. */
 export type RunState = 'running' | 'preempting' | 'finished' | 'failed' | 'crashed';
@@ -221,6 +222,10 @@ export interface RunQuery {
 	order: SortOrder;
 	/** Runs per page (one of `PAGE_SIZES`); every run on a page is also plotted. */
 	size: number;
+	/** Text a run's name or id contains; empty for every run. */
+	search: string;
+	/** Conditions every run shown meets. */
+	filters: RunFilter[];
 }
 
 export interface RunInfo {
@@ -241,8 +246,10 @@ export interface RunInfo {
 /** One page of runs. Live updates mutate it in place (see #lib/data/live.ts). */
 export interface RunPage {
 	query: RunQuery;
-	/** Runs in the project. */
+	/** Runs matching the page's search and filters: all of the project's without them. */
 	total: number;
+	/** Runs in the project. */
+	projectTotal: number;
 	/** Live runs in the project. */
 	active: number;
 	runs: RunInfo[];
@@ -282,8 +289,11 @@ export interface RunDetail {
 	exitcode: number | null;
 	/** The account that logged it. */
 	owner: number | null;
+	/** In effect: set by hand, else detected. */
 	gpu_type: string | null;
 	gpu_count: number | null;
+	/** What wandb's metadata says the run used. */
+	gpu_detected: { type: string | null; count: number | null };
 	gpu_hours: number;
 	runtime: number;
 	/** What its GPU hours cost at the org's prices, in its currency. */

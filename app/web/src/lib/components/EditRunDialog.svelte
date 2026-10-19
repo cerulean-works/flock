@@ -7,8 +7,23 @@
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { Textarea } from '#lib/components/ui/textarea/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
+	import { gpus } from '#lib/utils.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import FormError from './FormError.svelte';
+
+	interface Props {
+		/**
+		 * The run's GPUs, to correct them: those in effect and those wandb detected (set by hand
+		 * where they differ). Without them the dialog leaves GPUs alone.
+		 */
+		gpu?: {
+			type: string | null;
+			count: number | null;
+			detected: { type: string | null; count: number | null };
+		};
+	}
+
+	let { gpu }: Props = $props();
 
 	const ws = getWorkspace();
 
@@ -91,6 +106,36 @@
 						<Input id="run-job-type" name="job_type" value={run.jobType} autocomplete="off" />
 					</div>
 				</div>
+				{#if gpu}
+					{@const detected = gpus(gpu.detected.type, gpu.detected.count)}
+					<div class="grid grid-cols-[minmax(0,1fr)_7rem] gap-3">
+						<div class="grid gap-2">
+							<Label for="run-gpu-type">GPU type</Label>
+							<Input
+								id="run-gpu-type"
+								name="gpu_type"
+								value={gpu.type !== gpu.detected.type ? (gpu.type ?? '') : ''}
+								placeholder={gpu.detected.type ?? 'e.g. H100'}
+								autocomplete="off"
+							/>
+						</div>
+						<div class="grid gap-2">
+							<Label for="run-gpu-count">GPUs</Label>
+							<Input
+								id="run-gpu-count"
+								name="gpu_count"
+								type="number"
+								min="0"
+								step="1"
+								value={gpu.count !== gpu.detected.count ? (gpu.count ?? '') : ''}
+								placeholder={gpu.detected.count == null ? '' : String(gpu.detected.count)}
+							/>
+						</div>
+					</div>
+					<p class="-mt-2 text-xs text-muted-foreground">
+						For its cost. Leave blank for what wandb detected{detected ? ` (${detected})` : ''}.
+					</p>
+				{/if}
 				<div class="grid gap-2">
 					<Label for="run-notes">Notes</Label>
 					<Textarea id="run-notes" name="notes" value={run.notes} rows={3} />

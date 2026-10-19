@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import type { ResolvedPathname } from '$app/types';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
@@ -10,6 +11,13 @@
 	import { formText, projectNameError } from '#lib/utils.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import FormError from './FormError.svelte';
+
+	interface Props {
+		/** Where to go once the runs are moved to project `to`, rather than reload this page. */
+		leave?: (to: string) => ResolvedPathname;
+	}
+
+	let { leave }: Props = $props();
 
 	const ws = getWorkspace();
 
@@ -59,6 +67,7 @@
 		validate: (form) =>
 			formText(form, 'to') ? projectNameError(formText(form, 'to')) : 'Choose a project',
 		submit: () => ids.forEach((id) => ws.removing.add(id)),
+		leave: ({ to }) => leave?.(to),
 		success: ({ count, to }) => `Moved ${runs(count)} to ${to}`,
 		done: () => {
 			for (const id of ids) ws.selected.delete(id);

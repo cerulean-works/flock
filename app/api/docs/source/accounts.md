@@ -46,7 +46,9 @@ The address is your dashboard's setup page, built from `FLOCK_APP_URL`. Without 
 curl -s --json '{"email": "ana@example.com", "name": "Ana Lima", "password": "correct horse battery"}' $FLOCK/api/v1/auth/signup
 ```
 
-The first account becomes a super admin, and an admin of every existing organization. If there are none, Flock creates one named after `FLOCK_DEFAULT_ENTITY` (`flock` by default). After that, signing up answers 403, and accounts are only created from invitations. A first sign-in with Google works the same way.
+The first account becomes a super admin, and an admin of every existing organization. If there are none, Flock creates one named after `FLOCK_DEFAULT_ENTITY` (`flock` by default). After that, signing up answers 403, and accounts are only created from invitations.
+
+The dashboard's setup page works in two steps. It creates the account without an organization (`"create_org": false`), then asks the super admin to name the first one, creates it and makes it their default. Signing in as a super admin while Flock has no organization returns to that second step. A first sign-in with Google also creates the account without an organization, so the dashboard asks for its name next.
 
 > [!WARNING]
 > Whoever reaches a new Flock instance first becomes its super admin. Sign up before you make Flock reachable by anyone else.

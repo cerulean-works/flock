@@ -226,7 +226,7 @@ class Client:
         # Each run's curves: history metrics, then system metrics (when requested).
         runs, metrics = header["runs"], header["metrics"] + header["system_metrics"]
         n_num = len(header["numeric"]) * len(runs)
-        num = np.frombuffer(body, "<f8", n_num, pos).reshape(-1, len(runs) or 1)
+        num = np.frombuffer(body, "<f8", n_num, pos).reshape(len(header["numeric"]), len(runs))
         pos += n_num * 8
         meta = np.frombuffer(body, "<f8", len(runs) * len(metrics) * 6, pos).reshape(-1, 6)
         pos += meta.size * 8

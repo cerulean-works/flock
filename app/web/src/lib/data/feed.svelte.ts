@@ -4,6 +4,18 @@ import type { FeedItem, FeedPage } from '#lib/types.ts';
 /** What feed pages depend on: polling invalidates it. */
 export const FEED = 'flock:feed';
 
+/** What a feed can be narrowed to, as its `?kinds=` param: Flock's feed kinds. */
+export const FEED_KINDS = [
+	['run_started', 'Runs started'],
+	['run_finished', 'Runs finished'],
+	['run_failed,run_crashed', 'Failed or crashed'],
+	['project_created', 'New projects']
+] as const;
+
+/** A `?kinds=` param the feed offers, else null for everything. */
+export const feedKinds = (param: string | null) =>
+	FEED_KINDS.find(([k]) => k === param)?.[0] ?? null;
+
 /** The feed isn't pushed: re-run the page's load this often while the tab is visible. */
 export function pollFeed(ms = 30_000) {
 	const id = setInterval(() => {

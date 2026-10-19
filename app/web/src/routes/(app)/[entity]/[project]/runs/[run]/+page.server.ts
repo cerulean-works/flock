@@ -1,7 +1,8 @@
 import { isHttpError } from '@sveltejs/kit';
 import { projectPath, flock } from '#lib/server/flock.ts';
+import { runActions } from '#lib/server/runs.ts';
 import type { Billing, Member, RunDetail, RunHistory } from '#lib/types.ts';
-import type { PageServerLoad } from './$types';
+import type { Actions, PageServerLoad } from './$types';
 
 /** Points per curve: plenty for one run's panels, and a few MB at most. */
 const MAX_POINTS = 2000;
@@ -50,3 +51,6 @@ export const load: PageServerLoad = async ({ params }) => {
 		now: Date.now() / 1000
 	};
 };
+
+/** Editing, moving and deleting the run, as from the project's runs table. */
+export const actions: Actions = runActions;

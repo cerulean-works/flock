@@ -46,6 +46,36 @@ def test_the_first_signup_becomes_the_super_admin(make_flock):
     assert login(server, "ROOT@x.io", "rootroot").status == 200
 
 
+def test_setting_up_before_any_account_exists(make_flock):
+    """The dashboard's setup: signing in first is refused like any wrong password (nobody to
+    sign in as), then the super admin signs up without an org and creates its first one."""
+    server = make_flock(bootstrap=False)
+    anon = server.anonymous()
+    refused = login(server, "root@x.io", "rootroot")
+    assert refused.status == 401, refused.body
+    assert refused.json()["error"] == "invalid email or password"
+    assert anon.get("/api/v1/auth/config").json()["signup_open"] is True
+
+    created = anon.post(
+        "/api/v1/auth/signup",
+        {"email": "root@x.io", "name": "Root", "password": "rootroot", "create_org": False},
+    )
+    assert created.status == 201, created.body
+    user = created.json()["user"]
+    assert (user["is_superadmin"], user["orgs"], user["default_org"]) == (True, [], None)
+    root = server.client(token=created.json()["access_token"])
+    assert root.get("/api/v1/orgs").json() == {"orgs": []}  # setup's second step comes next
+
+    made = root.post("/api/v1/orgs", {"name": "cerulean"})
+    assert made.status == 201, made.body
+    me = root.patch(ME, {"default_org": "cerulean"})
+    assert me.status == 200, me.body
+    assert me.json()["default_org"] == "cerulean"
+    assert me.json()["orgs"] == [{"name": "cerulean", "role": "admin"}]
+    assert list(server.store.orgs) == ["cerulean"]  # no default-entity org besides
+    assert login(server, "root@x.io", "rootroot").status == 200
+
+
 def test_login_refresh_and_logout(flock):
     alice = flock.add_user("alice@lab.test")
     assert login(flock, alice.email, "wrong password").status == 401

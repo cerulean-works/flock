@@ -8,6 +8,7 @@
 <script lang="ts">
 	import { page as appPage } from '$app/state';
 	import { prefetchRunPage } from '#lib/data/cache.ts';
+	import { columnGroups } from '#lib/data/snapshot.ts';
 	import type { ColumnDef, RunQuery } from '#lib/types.ts';
 	import {
 		dateTime,
@@ -17,6 +18,7 @@
 		range,
 		relativeTime
 	} from '#lib/utils.ts';
+	import { writeFilters } from '#lib/workspace/filters.ts';
 	import { applyRunQuery, runHref, workspaceHref } from '#lib/workspace/url.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import { Badge } from '#lib/components/ui/badge/index.js';
@@ -33,7 +35,11 @@
 
 	const ws = getWorkspace();
 	const runs = $derived(ws.page.runs);
-	const columns = $derived(ws.meta.columns);
+	// The columns the viewer shows: `shown[c]` is shown column c's index into the project's
+	// columns (and the page's cells); everything below indexes shown columns.
+	const shown = $derived(ws.shownColumns);
+	const columns = $derived(shown.map((i) => ws.meta.columns[i]));
+	const groups = $derived(columnGroups(columns));
 
 	// Widths are user-resizable. Overrides are kept by column key because the column list can
 	// change from page to page as runs log new config or summary keys.
@@ -99,12 +105,18 @@
 		return () => ro.disconnect();
 	}
 
-	// A new page of runs starts at the top; horizontal position is kept so sorting by a
+	// A new page of runs (or other runs: a search, a filter) starts at the top; horizontal position is kept so sorting by a
 	// column leaves that column in view.
 	let lastQuery: RunQuery | null = null;
 	$effect.pre(() => {
 		const q = ws.page.query;
-		if (lastQuery && scroller && (q.page !== lastQuery.page || q.sort !== lastQuery.sort)) {
+		const moved =
+			lastQuery &&
+			(q.page !== lastQuery.page ||
+				q.sort !== lastQuery.sort ||
+				q.search !== lastQuery.search ||
+				writeFilters(q.filters) !== writeFilters(lastQuery.filters));
+		if (moved && scroller) {
 			scroller.scrollTop = 0;
 			scrollY = 0;
 		}
@@ -118,8 +130,9 @@
 	function cellText(c: number, r: number): string {
 		void ws.tableVersion;
 		const col = columns[c];
-		const nums = ws.page.num[c];
-		const v = nums ? nums[r] : ws.page.text[c]?.[r];
+		const i = shown[c];
+		const nums = ws.page.num[i];
+		const v = nums ? nums[r] : ws.page.text[i]?.[r];
 		if (typeof v === 'number') {
 			if (col.kind === 'time')
 				return col.key === 'created_at' ? relativeTime(v, ws.meta.now) : dateTime(v);
@@ -139,10 +152,10 @@
 	function sortQuery(key: string): RunQuery {
 		const same = query.sort === key;
 		return {
+			...query,
 			page: 1,
 			sort: key,
-			order: same && query.order === 'desc' ? 'asc' : 'desc',
-			size: query.size
+			order: same && query.order === 'desc' ? 'asc' : 'desc'
 		};
 	}
 
@@ -202,9 +215,18 @@
 		if (mode === 'charts') ws.hover = null;
 	}
 
-	/** Scroll the table so a column group starts at the left edge. */
-	export function scrollToColumn(c: number) {
-		scroller?.scrollTo({ left: offsets[c] });
+	/** The column last jumped to, marked for a moment so the eye finds it. */
+	let jumped = $state<string | null>(null);
+	let unmark: ReturnType<typeof setTimeout> | undefined;
+
+	/** Scroll the table so a (shown) column starts at the left edge, just past the names. */
+	export function scrollToColumn(key: string) {
+		const c = columns.findIndex((col) => col.key === key);
+		if (c === -1 || !scroller) return;
+		scroller.scrollTo({ left: offsets[c] });
+		jumped = key;
+		clearTimeout(unmark);
+		unmark = setTimeout(() => (jumped = null), 1200);
 	}
 
 	// Static class strings, shared by every row (hundreds of cells re-render while scrolling).
@@ -234,7 +256,7 @@
 		<div class="relative flex" style:height="{BAND_H}px">
 			<div class="sticky left-0 z-2 w-(--name-w) flex-none bg-background"></div>
 			{#if mode === 'table'}
-				{#each ws.meta.groups as g (g.key)}
+				{#each groups as g (g.key)}
 					<div
 						class="absolute inset-y-0 border-l border-divider text-xs text-muted-foreground"
 						style:left="{NAME_W + offsets[g.start]}px"
@@ -289,7 +311,10 @@
 			{#each visibleCols as c (c)}
 				{@const col = columns[c]}
 				<div
-					class="hcell group/h relative flex flex-none items-center px-3 hover:bg-muted"
+					class={[
+						'hcell group/h relative flex flex-none items-center px-3 transition-colors duration-500 hover:bg-muted',
+						jumped === col.key && 'bg-selection/60'
+					]}
 					style:width="{widths[c]}px"
 				>
 					<a
