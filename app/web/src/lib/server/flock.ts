@@ -1,5 +1,5 @@
 import { error, fail, isActionFailure, redirect, type ActionFailure } from '@sveltejs/kit';
-import { FLOCK_URL } from '$app/env/private';
+import { FLOCK_API_URL } from '$app/env/private';
 import { getRequestEvent } from '$app/server';
 import { endSession, loginHref } from './session.ts';
 
@@ -50,11 +50,11 @@ function messageOf(body: ErrorBody | null, status: number): string {
 export async function flock(path: string, init: RequestInit = {}): Promise<Response> {
 	let res: Response;
 	try {
-		res = await fetch(`${FLOCK_URL}${path}`, authorized(init));
+		res = await fetch(`${FLOCK_API_URL}${path}`, authorized(init));
 	} catch (cause) {
 		if (init.signal?.aborted) throw cause;
-		console.error(`flock unreachable at ${FLOCK_URL}`, cause);
-		error(502, `Flock at ${FLOCK_URL} is not reachable`);
+		console.error(`flock unreachable at ${FLOCK_API_URL}`, cause);
+		error(502, `Flock at ${FLOCK_API_URL} is not reachable`);
 	}
 	if (res.status === 401 && !path.startsWith('/api/v1/auth/')) signedOut();
 	if (!res.ok) {
@@ -85,7 +85,7 @@ export async function change<T = null>(
 	let res: Response;
 	try {
 		res = await fetch(
-			`${FLOCK_URL}${path}`,
+			`${FLOCK_API_URL}${path}`,
 			authorized({
 				method,
 				headers:
@@ -98,7 +98,7 @@ export async function change<T = null>(
 			})
 		);
 	} catch (cause) {
-		console.error(`flock unreachable at ${FLOCK_URL}`, cause);
+		console.error(`flock unreachable at ${FLOCK_API_URL}`, cause);
 		return fail(502, { error: 'Flock is not reachable' });
 	}
 	if (res.status === 401 && !path.startsWith('/api/v1/auth/')) signedOut();

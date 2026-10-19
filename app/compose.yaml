@@ -2,15 +2,14 @@ name: flock-app
 
 services:
   ui:
-    image: flock-ui:${UI_VERSION:-latest}
+    image: flock-ui:${FLOCK_VERSION:-latest}
     build:
       context: ./web
       args:
-        ORIGIN: ${APP_URL:-http://localhost:3000}
+        FLOCK_WEB_URL: ${FLOCK_WEB_URL:-http://localhost:3000}
     environment:
-      FLOCK_URL: ${FLOCK_URL:-http://api:8080}
-      FLOCK_PUBLIC_URL: ${FLOCK_PUBLIC_URL:-http://localhost:8080}
-      FLOCK_API_KEY: ${FLOCK_API_KEY:-}
+      FLOCK_API_URL: ${FLOCK_API_URL:-http://api:8080}
+      FLOCK_API_PUBLIC_URL: ${FLOCK_API_PUBLIC_URL:-http://localhost:8080}
     depends_on:
       api:
         condition: service_healthy
@@ -23,17 +22,24 @@ services:
       dockerfile: app/api/Dockerfile
     environment:
       FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
-      FLOCK_LOG_LEVEL: ${FLOCK_LOG_LEVEL:-info}
-      FLOCK_PUBLIC_URL: ${FLOCK_PUBLIC_URL:-}
-      # Where browsers reach the dashboard; its Compose port by default.
-      FLOCK_APP_URL: ${FLOCK_APP_URL:-${APP_URL:-http://localhost:3000}}
+      FLOCK_WEB_URL: ${FLOCK_WEB_URL:-http://localhost:3000}
+      FLOCK_API_PUBLIC_URL: ${FLOCK_API_PUBLIC_URL:-http://localhost:8080}
+      FLOCK_MIGRATE_ON_STARTUP: ${FLOCK_MIGRATE_ON_STARTUP:-}
       FLOCK_JWT_SECRET: ${FLOCK_JWT_SECRET:-}
+      FLOCK_ACCESS_TOKEN_TTL: ${FLOCK_ACCESS_TOKEN_TTL:-}
+      FLOCK_REFRESH_TOKEN_TTL: ${FLOCK_REFRESH_TOKEN_TTL:-}
+      FLOCK_INVITE_TTL: ${FLOCK_INVITE_TTL:-}
+      FLOCK_RESET_TTL: ${FLOCK_RESET_TTL:-}
       FLOCK_GOOGLE_CLIENT_ID: ${FLOCK_GOOGLE_CLIENT_ID:-}
       FLOCK_GOOGLE_CLIENT_SECRET: ${FLOCK_GOOGLE_CLIENT_SECRET:-}
       FLOCK_GOOGLE_REDIRECT_URL: ${FLOCK_GOOGLE_REDIRECT_URL:-}
-      FLOCK_CRASH_TIMEOUT: ${FLOCK_CRASH_TIMEOUT:-600}
-      FLOCK_GRAVATAR: ${FLOCK_GRAVATAR:-true}
-      FLOCK_HISTORY_CACHE_POINTS: ${FLOCK_HISTORY_CACHE_POINTS:-20000000}
+      FLOCK_GRAVATAR: ${FLOCK_GRAVATAR:-}
+      FLOCK_GRAVATAR_URL: ${FLOCK_GRAVATAR_URL:-}
+      FLOCK_HISTORY_CACHE_POINTS: ${FLOCK_HISTORY_CACHE_POINTS:-}
+      FLOCK_CRASH_TIMEOUT: ${FLOCK_CRASH_TIMEOUT:-}
+      FLOCK_POOL_SIZE: ${FLOCK_POOL_SIZE:-}
+      FLOCK_CORS_ORIGINS: ${FLOCK_CORS_ORIGINS:-}
+      FLOCK_LOG_LEVEL: ${FLOCK_LOG_LEVEL:-}
     volumes:
       - files:/data/files
     depends_on:

@@ -114,7 +114,7 @@ SuperadminDep = Annotated[User, Depends(get_superadmin)]
 def app_link(request: Request, store: Store, path: str) -> str:
     """A URL in the dashboard (where invite, reset and sign-in links land)."""
     settings = store.settings
-    base = settings.app_url or settings.public_url or str(request.base_url)
+    base = settings.web_url or settings.api_public_url or str(request.base_url)
     return f"{base.rstrip('/')}/{path}"
 
 

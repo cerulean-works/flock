@@ -15,8 +15,8 @@ The image is built from the repository, so clone it and start the Compose stack 
 
 ```bash
 git clone https://github.com/cerulean-works/flock.git
-cd flock/app
-docker compose up -d --build
+cd flock/app/api
+docker compose -f compose.dev.yaml up -d --build
 ```
 
 Compose starts PostgreSQL and Flock. Flock applies the database migrations when it starts, then listens on port 8080. Check that it answers:

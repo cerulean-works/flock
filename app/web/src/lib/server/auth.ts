@@ -1,5 +1,5 @@
 import { error, fail, isHttpError, redirect, type Cookies } from '@sveltejs/kit';
-import { FLOCK_URL } from '$app/env/private';
+import { FLOCK_API_URL } from '$app/env/private';
 import { getRequestEvent } from '$app/server';
 import type { OrgInfo, UserInfo } from '#lib/types.ts';
 import { change, refused, flock } from './flock.ts';
@@ -11,8 +11,8 @@ export async function authConfig() {
 	try {
 		return (await res.json()) as { signup_open: boolean; google: boolean };
 	} catch {
-		// Something else answers at FLOCK_URL (a web page, a proxy's error).
-		error(502, `Flock at ${FLOCK_URL} answered something other than its API`);
+		// Something else answers at FLOCK_API_URL (a web page, a proxy's error).
+		error(502, `Flock at ${FLOCK_API_URL} answered something other than its API`);
 	}
 }
 

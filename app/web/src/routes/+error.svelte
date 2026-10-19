@@ -26,8 +26,8 @@
 			<code class="rounded-md bg-muted px-1.5 py-0.5 font-mono text-sm"
 				>docker compose up -d --build</code
 			>
-			in <code class="rounded-md bg-muted px-1.5 py-0.5 font-mono text-sm">app</code>, or
-			set <code class="rounded-md bg-muted px-1.5 py-0.5 font-mono text-sm">FLOCK_URL</code>.
+			in <code class="rounded-md bg-muted px-1.5 py-0.5 font-mono text-sm">app</code>, or set
+			<code class="rounded-md bg-muted px-1.5 py-0.5 font-mono text-sm">FLOCK_API_URL</code>.
 		</p>
 	{/if}
 	{#if page.status === 401}

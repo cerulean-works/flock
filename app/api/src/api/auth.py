@@ -174,7 +174,7 @@ class Google:
         """Where Google sends the browser back: by default through the dashboard, which proxies
         ``/api/v1/auth/google/*`` here, so Flock itself needn't be reachable from browsers.
         """
-        base = settings.app_url or settings.public_url or str(request.base_url)
+        base = settings.web_url or settings.api_public_url or str(request.base_url)
         return settings.google_redirect_url or f"{base.rstrip('/')}/api/v1/auth/google/callback"
 
     @classmethod

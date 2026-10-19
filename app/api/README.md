@@ -15,23 +15,15 @@ The API applies pending migrations when it starts. From this directory:
 docker compose -f ../compose.yaml up -d --build
 ```
 
-The server listens on port 8080. Data lives in two named volumes: `postgres-data` for the
-database and `files` for uploaded run files. Configure it through environment
-variables or an `.env` file next to `compose.yaml`:
+The deployment Compose file publishes no host ports: route your dashboard domain to `ui:3000`
+and your SDK/API domain to `api:8080`. Set `POSTGRES_PASSWORD`, `FLOCK_WEB_URL` and
+`FLOCK_API_PUBLIC_URL` in `app/.env` or your deployment service. The [deployment guide](docs/source/deploying.md#environment-variables)
+explains every deployment variable and how to migrate old names.
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `POSTGRES_PASSWORD` | `flock` | database password; **set this outside local testing** |
-| `FLOCK_PORT` | `8080` | host port |
-| `FLOCK_PUBLIC_URL` | request URL | external base URL, for upload URLs and the Google callback behind a proxy |
-| `FLOCK_APP_URL` | `http://localhost:3000` | dashboard (flock-ui) base URL that invite, reset and sign-in links point at |
-| `FLOCK_JWT_SECRET` | generated | key signing access tokens; by default one is generated into the database |
-| `FLOCK_GOOGLE_CLIENT_ID`, `FLOCK_GOOGLE_CLIENT_SECRET` | (empty) | enable Sign in with Google |
-| `FLOCK_GOOGLE_REDIRECT_URL` | `<app URL>/api/v1/auth/google/callback` | the callback registered with Google |
-| `FLOCK_CRASH_TIMEOUT` | `600` | seconds without heartbeats before a run is marked `crashed` |
-| `FLOCK_GRAVATAR` | `true` | fetch new accounts' avatars from Gravatar (sends it the SHA-256 of the email) |
-| `FLOCK_HISTORY_CACHE_POINTS` | `20000000` | history points cached in memory for finished runs |
-| `POSTGRES_SHARED_BUFFERS` | `1GB` | PostgreSQL `shared_buffers` |
+For local API development, use `docker compose -f compose.dev.yaml up -d --build` from this
+directory. It publishes the API on port 8080 and defaults the dashboard URL to `http://localhost:5173`
+for `pnpm dev`. Data lives in two named volumes: `postgres-data` for the database and `files`
+for uploaded run files.
 
 Run exactly one Flock server per database. The server keeps its working set in memory and holds a
 database lock, so a second instance refuses to start.
@@ -142,7 +134,7 @@ curl -X POST $FLOCK/api/v1/auth/signup -d '{"email": "me@lab.org", "name": "Me",
 curl -X POST $FLOCK/api/v1/orgs -H "authorization: Bearer $TOKEN" -d '{"name": "flock"}'
 curl -X POST $FLOCK/api/v1/orgs/flock/invites -H "authorization: Bearer $TOKEN" \
      -d '{"email": "colleague@lab.org", "role": "member"}'
-# -> {"url": "<FLOCK_APP_URL>/invite/<token>", ...}: send them the link yourself
+# -> {"url": "<FLOCK_WEB_URL>/invite/<token>", ...}: send them the link yourself
 ```
 
 Flock sends no email and verifies no addresses: the link is the proof. Its page accepts
@@ -159,12 +151,12 @@ SDK and scripts use API keys, sent as the SDK does (basic auth), as `Bearer <key
 `x-api-key`. Keys are stored hashed and shown only when created.
 
 **Sign in with Google** runs the OAuth code flow in Flock. Register
-`<FLOCK_APP_URL>/api/v1/auth/google/callback` with Google: flock-ui proxies
+`<FLOCK_WEB_URL>/api/v1/auth/google/callback` with Google: flock-ui proxies
 `/api/v1/auth/google/*` to Flock, so Flock needn't be reachable from browsers (set
 `FLOCK_GOOGLE_REDIRECT_URL` if your dashboard doesn't). Then send the browser to
 `/api/v1/auth/google/start[?invite=<token>]`. It comes back to
-`<FLOCK_APP_URL>/auth/google?code=...`, and the dashboard exchanges the code with
-`POST /api/v1/auth/google/exchange`; failures land on `<FLOCK_APP_URL>/login?error=...`.
+`<FLOCK_WEB_URL>/auth/google?code=...`, and the dashboard exchanges the code with
+`POST /api/v1/auth/google/exchange`; failures land on `<FLOCK_WEB_URL>/login?error=...`.
 Google accounts are matched to existing accounts by verified email.
 
 | Endpoint | Purpose |

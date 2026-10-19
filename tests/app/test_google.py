@@ -102,7 +102,8 @@ def google(monkeypatch) -> Iterator[FakeGoogle]:
 GOOGLE_SETTINGS = {
     "google_client_id": CLIENT_ID,
     "google_client_secret": "client-secret",
-    "app_url": APP_URL,
+    "web_url": APP_URL,
+    "api_public_url": "https://api.test",
 }
 
 
@@ -178,7 +179,7 @@ def test_google_errors_and_configuration(make_flock, google):
 
 
 def test_google_callback_defaults_to_the_flock_without_a_dashboard_url(make_flock):
-    settings = {k: v for k, v in GOOGLE_SETTINGS.items() if k != "app_url"}
+    settings = {k: v for k, v in GOOGLE_SETTINGS.items() if k not in ("web_url", "api_public_url")}
     server = make_flock(bootstrap=False, **settings)
     start = server.anonymous().get("/api/v1/auth/google/start")
     query = parse_qs(urlparse(start.headers["location"]).query)

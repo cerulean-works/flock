@@ -113,7 +113,7 @@ class Client:
     # ------------------------------------------------------------------ protocol shorthands
 
     def create_run(
-        self, project: str, name: str, config=None, tags=None, display_name=None
+        self, project: str | None, name: str, config=None, tags=None, display_name=None
     ) -> dict:
         """Create or update a run the way the SDK does (UpsertBucket); returns the payload."""
         query = """

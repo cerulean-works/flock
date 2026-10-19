@@ -31,6 +31,8 @@ from app.api.src.utils import encode_id, flatten, loads_lenient
 
 log = logging.getLogger(__name__)
 
+DEFAULT_PROJECT = "uncategorized"
+
 
 @dataclass(eq=False)
 class Run:
@@ -634,7 +636,7 @@ class Store:
         (wandb-style config dict) and ``summary`` (dict). A new run belongs to ``owner``; an
         existing one can only be updated by its owner, unless ``admin``.
         """
-        project_name = project_name or self.settings.default_project
+        project_name = project_name or DEFAULT_PROJECT
         # Clients that don't name the run get a random 8 character id, as wandb does.
         alphabet = string.ascii_lowercase + string.digits
         name = name or "".join(secrets.choice(alphabet) for _ in range(8))

@@ -13,7 +13,7 @@ from fastapi.responses import Response
 from app.api.src.api.deps import APIError, JSONResponse, StoreDep, UserDep, visible_org
 from app.api.src.core.accounts import User
 from app.api.src.core.errors import Discarded, Forbidden, NotFound
-from app.api.src.core.store import Org, Store
+from app.api.src.core.store import DEFAULT_PROJECT, Org, Store
 from app.api.src.utils import encode_id, loads_lenient
 
 router = APIRouter(include_in_schema=False)
@@ -216,7 +216,7 @@ class GraphQL:
     async def run_resume_status(self, variables: dict) -> dict:
         store = self.store
         entity = self.org(variables.get("entity"))[0].name
-        project_name = variables.get("project") or store.settings.default_project
+        project_name = variables.get("project") or DEFAULT_PROJECT
         project = store.project(entity, project_name)
         if project is None:
             return {"model": None}
@@ -256,7 +256,7 @@ class GraphQL:
         store = self.store
         org, role = self.org(variables.get("entity"))
         entity = org.name
-        project = variables.get("project") or store.settings.default_project
+        project = variables.get("project") or DEFAULT_PROJECT
         run_name = variables.get("run") or ""
         run = store.get_run(entity, project, run_name)
         if run is not None and role != "admin" and run.owner != self.user.pk:
@@ -265,7 +265,7 @@ class GraphQL:
         discarded = run is None and store.discarding(entity, project, run_name)
         if run is None and not discarded:
             raise GraphQLError("run not found")
-        base = (store.settings.public_url or str(self.request.base_url)).rstrip("/")
+        base = (store.settings.api_public_url or str(self.request.base_url)).rstrip("/")
         prefix = "/".join(quote(part, safe="") for part in (entity, project, run_name))
         files = []
         for name in variables.get("files") or []:
@@ -284,7 +284,7 @@ class GraphQL:
     async def run_state(self, variables: dict) -> dict:
         run = self.store.get_run(
             self.org(variables.get("entity"))[0].name,
-            variables.get("project") or self.store.settings.default_project,
+            variables.get("project") or DEFAULT_PROJECT,
             variables.get("run") or "",
         )
         if run is None:

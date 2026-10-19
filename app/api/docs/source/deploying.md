@@ -23,8 +23,8 @@ So Flock doesn't scale out with replicas. It's built to answer a team's dashboar
 
 ```bash
 POSTGRES_PASSWORD=a-long-random-password
-FLOCK_PUBLIC_URL=https://flock.example.com
-FLOCK_APP_URL=https://flock.example.com
+FLOCK_WEB_URL=https://flock.example.com
+FLOCK_API_PUBLIC_URL=https://api.flock.example.com
 ```
 
 Then build and start it from `app`:
@@ -33,9 +33,9 @@ Then build and start it from `app`:
 docker compose up -d --build
 ```
 
-- **Ports:** Flock listens on port 8080 of the host. Change it with `FLOCK_PORT`.
+- **Routing:** this Compose file publishes no host ports. In Dokploy or your reverse proxy, route the dashboard domain to `ui:3000` and the SDK/API domain to `api:8080`. Both public URLs must be reachable by their clients. For local API development, `app/api/compose.dev.yaml` publishes port 8080; run `docker compose -f app/api/compose.dev.yaml up -d --build` from the repository root and `pnpm dev` from `app/web`. Its dashboard URL defaults to `http://localhost:5173`.
 - **Data:** two named volumes hold the data. `postgres-data` is the database, and `files` is the files directory, mounted at `/data/files`.
-- **Settings:** Compose passes only some `FLOCK_*` settings through to Flock. [Docker Compose variables](configuration#docker-compose-variables) lists them, and how to set the others.
+- **Settings:** use the variables below. API tuning settings pass through to the API; empty values use the defaults in [Settings](configuration).
 
 The image installs Flock's dependencies at the versions locked in the repository's `uv.lock`. The build context is the repository root, so Docker can read the lockfile and API source together. Compose sets this for you. With plain Docker, run from the repository root:
 
@@ -49,6 +49,42 @@ dependency metadata in the context.
 
 The image runs as an unprivileged user (uid 10001), serves on port 8080, and stores files in `/data/files`.
 
+## Environment variables
+
+Keep deployment values in `app/.env` (start with `app/.env.example`), or configure them in your deployment service. The three URL settings describe different network routes:
+
+| Variable | Compose default | Meaning and consumer |
+|---|---|---|
+| `FLOCK_WEB_URL` | `http://localhost:3000` | Public dashboard origin, such as `https://flock.example.com`, with no path. Compose supplies it to the web image build for redirects and form origin checks, and to the API at runtime for setup, invitation, password reset and Google sign-in links. Rebuild the web image when it changes. |
+| `FLOCK_API_PUBLIC_URL` | `http://localhost:8080` | Public API address that training machines reach. The API uses it for signed file upload URLs; the dashboard shows it in `wandb login --host` instructions. Set the same value for both services. Restart them when it changes. |
+| `FLOCK_API_URL` | `http://api:8080` | Internal API address used only by the web server. Keep the default on the Compose network. Outside Compose it defaults to `http://127.0.0.1:8080`. Browsers and training machines never use this address. |
+
+The SDK needs the API's wandb routes, including `/graphql`, `/files/...` and `/storage/...`. The dashboard does not proxy those routes. You can use one public origin only if your reverse proxy sends those routes to the API and dashboard routes to the web service. With two domains, route each domain to its service as shown above.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `POSTGRES_PASSWORD` | `flock` | Password of the Compose database user. Compose uses it for PostgreSQL and constructs the API's `FLOCK_DATABASE_URL` from it. Change it before first deployment. On an existing volume, changing this variable alone does not rotate the stored database password. |
+| `FLOCK_VERSION` | `latest` | Shared image tag for `flock-api` and `flock-ui`; both images come from the same release. |
+| `POSTGRES_SHARED_BUFFERS` | `1GB` | PostgreSQL's shared buffer allocation. |
+| `POSTGRES_EFFECTIVE_CACHE_SIZE` | `3GB` | PostgreSQL's estimate of memory available for caching; it does not allocate that amount. |
+
+All other API settings in [Settings](configuration#flock-settings) pass through both Compose files, except the database URL and files directory, which are fixed to the Compose database and mounted volume. This includes Google credentials, token lifetimes, Gravatar, cache limits, crash detection, CORS and logging. Optional entries are empty in Compose so their defaults are defined once in the API's `Settings`. With plain Docker or Python, set `FLOCK_DATABASE_URL` and `FLOCK_FILES_DIR` yourself.
+
+`FLOCK_GOOGLE_CLIENT_ID` and `FLOCK_GOOGLE_CLIENT_SECRET` enable Google sign-in together. The callback defaults to `<FLOCK_WEB_URL>/api/v1/auth/google/callback`; use `FLOCK_GOOGLE_REDIRECT_URL` only when the registered callback differs. `FLOCK_JWT_SECRET` can remain unset: the API generates and persists a signing key in PostgreSQL.
+
+### Migrating existing environment files
+
+Rename these variables before rebuilding and restarting. Old names are no longer read:
+
+| Previous name | Current name |
+|---|---|
+| `APP_URL`, `FLOCK_APP_URL`, web build argument `ORIGIN` | `FLOCK_WEB_URL` (one dashboard origin) |
+| `FLOCK_PUBLIC_URL` | `FLOCK_API_PUBLIC_URL` |
+| `FLOCK_URL` | `FLOCK_API_URL` |
+| `UI_VERSION` | `FLOCK_VERSION` (shared by both images) |
+
+Remove `FLOCK_DEFAULT_PROJECT`: unnamed projects always use `uncategorized`. Remove dashboard `FLOCK_API_KEY` and `FLOCK_WEB_API_KEY`: the dashboard now requires a signed-in account. Remove `FLOCK_DEFAULT_ENTITY`: setup now asks the super admin to name the first organization. Remove `APP_PORT` and `FLOCK_PORT` from the production Compose environment: it publishes no ports, so these variables have no effect. Use reverse proxy routing, or explicit `ports` entries in a Compose override for host access.
+
 ## Without Docker
 
 Flock is a FastAPI app that needs Python 3.14. From `app/api` in a checkout of the repository:
@@ -61,7 +97,7 @@ Set `FLOCK_FILES_DIR` to a directory that survives restarts: the default is `flo
 
 ## Behind a reverse proxy
 
-- **Set `FLOCK_PUBLIC_URL`** to the address clients use, such as `https://flock.example.com`. The SDK uploads run files to URLs Flock builds from it. Without it, Flock uses the address the request reached, which behind a proxy is often an internal one.
+- **Set `FLOCK_API_PUBLIC_URL`** to the address clients use, such as `https://flock.example.com`. The SDK uploads run files to URLs Flock builds from it. Without it, Flock uses the address the request reached, which behind a proxy is often an internal one.
 - **Don't buffer the event stream.** Dashboards read `GET /api/v1/projects/{entity}/{project}/stream` as Server-Sent Events. Flock sends `X-Accel-Buffering: no`, which nginx honors. Turn buffering off for that path on other proxies.
 - **Keep idle connections open.** The stream sends a keep-alive comment every 15 seconds when nothing else happens (`ping_seconds`). Proxy read timeouts must be longer than that.
 - **Allow large uploads.** The SDK uploads run files with `PUT /storage/...`. Proxies with a request size limit, such as nginx's `client_max_body_size`, reject larger files.

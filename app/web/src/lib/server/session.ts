@@ -1,5 +1,5 @@
 import type { Cookies } from '@sveltejs/kit';
-import { FLOCK_URL } from '$app/env/private';
+import { FLOCK_API_URL } from '$app/env/private';
 
 /**
  * Sign-in sessions, kept by this server.
@@ -87,7 +87,7 @@ const refreshing = new Map<string, Promise<Tokens | null | 'unreachable'>>();
 function refresh(token: string) {
 	let pending = refreshing.get(token);
 	if (!pending) {
-		pending = fetch(`${FLOCK_URL}/api/v1/auth/refresh`, {
+		pending = fetch(`${FLOCK_API_URL}/api/v1/auth/refresh`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ refresh_token: token })

@@ -27,7 +27,6 @@
 	let { org, orgs, stay, compact = false }: Props = $props();
 
 	const me = $derived(page.data.shell!.me);
-	// FLOCK_API_KEY acts as someone without a session: nothing to sign out of.
 	const session = $derived(!!page.data.user);
 	const current = $derived(orgs.find((o) => o.name === org));
 

@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
-# The dashboard as a Node server (adapter-node). ORIGIN, the address people open, is fixed at
-# build time; FLOCK_URL and FLOCK_PUBLIC_URL are read at run time (see README). compose.yaml
+# The dashboard as a Node server (adapter-node). FLOCK_WEB_URL, the address people open, is fixed at
+# build time; FLOCK_API_URL and FLOCK_API_PUBLIC_URL are read at run time (see README). compose.yaml
 # runs it with Flock.
-#   docker build --build-arg ORIGIN=https://flock.example.com -t flock-ui .
+#   docker build --build-arg FLOCK_WEB_URL=https://flock.example.com -t flock-ui .
 
 FROM node:24-slim AS build
 RUN npm install --global pnpm@12.4.1
@@ -14,8 +14,8 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 
 COPY . .
-ARG ORIGIN=http://localhost:3000
-RUN ORIGIN=$ORIGIN pnpm build
+ARG FLOCK_WEB_URL=http://localhost:3000
+RUN FLOCK_WEB_URL=$FLOCK_WEB_URL pnpm build
 
 
 # Every package is bundled into build/ at build time: the server needs no node_modules.

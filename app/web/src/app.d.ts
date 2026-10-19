@@ -6,9 +6,9 @@ declare global {
 	namespace App {
 		// interface Error {}
 		interface Locals {
-			/** What requests to Flock authenticate with: the session's access token, else FLOCK_API_KEY. */
+			/** What requests to Flock authenticate with: the session's access token. */
 			token: string | null;
-			/** The signed-in user; null when nobody is (or only FLOCK_API_KEY is used). */
+			/** The signed-in user; null when nobody is signed in. */
 			user: SessionUser | null;
 		}
 		// interface PageData {}

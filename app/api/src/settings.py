@@ -19,14 +19,12 @@ class Settings:
         default=True,
         doc="apply pending migrations on startup; when off, refuse to start on an old schema",
     )
-    default_project: str = field(
-        default="uncategorized", doc="project runs land in when none is given"
+    api_public_url: str | None = field(
+        default=None, doc="public API base URL for SDK file uploads; request URL when unset"
     )
-    public_url: str | None = field(
-        default=None, doc="external base URL, used in file upload URLs and the Google callback"
-    )
-    app_url: str | None = field(
-        default=None, doc="dashboard base URL that invite, reset and sign-in links point at"
+    web_url: str | None = field(
+        default=None,
+        doc="public dashboard origin for setup, invitation, reset and Google sign-in links",
     )
     jwt_secret: str | None = field(
         default=None, doc="key signing access tokens (default: one generated in the database)"
@@ -43,7 +41,7 @@ class Settings:
     google_client_secret: str | None = field(default=None, doc="that OAuth client's secret")
     google_redirect_url: str | None = field(
         default=None,
-        doc="Google callback URL (default: <app_url, else public_url>/api/v1/auth/google/callback)",
+        doc="Google callback URL (default: <web_url, else api_public_url>/api/v1/auth/google/callback)",
     )
     gravatar: bool = field(
         default=True,

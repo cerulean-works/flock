@@ -12,7 +12,7 @@ If the dashboard calls Flock from the browser on another origin, list that origi
 
 ## Pages your dashboard provides
 
-Flock builds links into the dashboard at `FLOCK_APP_URL`. Your dashboard needs a page at each of these paths:
+Flock builds links into the dashboard at `FLOCK_WEB_URL`. Your dashboard needs a page at each of these paths:
 
 | Path | Shown when | The page calls |
 |---|---|---|

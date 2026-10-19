@@ -40,7 +40,7 @@ A new Flock instance has no accounts. Until the first one exists, it refuses eve
 WARNING app: no accounts yet: open http://localhost:5173/setup to create the first one, which becomes the super admin
 ```
 
-The address is your dashboard's setup page, built from `FLOCK_APP_URL`. Without a dashboard, sign up through the API:
+The address is your dashboard's setup page, built from `FLOCK_WEB_URL`. Without a dashboard, sign up through the API:
 
 ```bash
 curl -s --json '{"email": "ana@example.com", "name": "Ana Lima", "password": "correct horse battery"}' $FLOCK/api/v1/auth/signup
@@ -77,7 +77,7 @@ An invitation belongs to its email address. Accepting it as another account answ
 To list the invitations that are still pending, use `GET /api/v1/orgs/flock/invites`. To withdraw one, delete it by its `id`: `DELETE /api/v1/orgs/flock/invites/1`. Inviting someone who is already a member answers 409.
 
 > [!IMPORTANT]
-> Set `FLOCK_APP_URL` to your dashboard's address. Invitation and reset links point there. Without it, they point at Flock itself, which has no page to show them.
+> Set `FLOCK_WEB_URL` to your dashboard's address. Invitation and reset links point there. Without it, they point at Flock itself, which has no page to show them.
 
 ## Changing roles and removing members
 
