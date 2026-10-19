@@ -45,6 +45,8 @@ Project names that arrive from the SDK are accepted as they are. Names given thr
 | `run.log({...})` | One history line per step. Numbers become curves, and booleans become curves of 0 and 1. Nested dicts are flattened: `{"train": {"acc": 0.9}}` becomes the metric `train.acc`. |
 | `run.summary[...]`, `run.summary.update(...)` | The summary. By default it holds the last logged value of each metric. Its keys become `summary.*` columns. |
 | `run.define_metric("val_loss", summary="min")` | The summary entry `{"val_loss": {"min": ...}}`, which becomes the column `summary.val_loss.min`. |
+| `run.define_metric("*", step_metric="train/global_step")` | The metric's step metric: dashboards plot it against `train/global_step` by default, as wandb does. See [Step metrics](#step-metrics). |
+| `run.define_metric("debug", hidden=True)` | A hidden metric: dashboards give it no chart of its own. |
 | Console output | Log lines, read with [`GET .../runs/{run}/logs`](api/projects#run-logs). |
 | Files the SDK uploads | Run files such as `config.yaml`, `requirements.txt`, `wandb-metadata.json` and `wandb-summary.json`, read with [`GET .../runs/{run}/files`](api/projects#run-files). |
 | The SDK's system monitor | System metrics such as `system.cpu` and `system.gpu.0.gpu`. See [System metrics](#system-metrics). |
@@ -53,8 +55,26 @@ Project names that arrive from the SDK are accepted as they are. Names given thr
 A few details matter when you read the data back:
 - **Only numbers are plotted.** Strings and media values, such as `wandb.Histogram`, are kept in the history lines and in the summary, but they don't become curves.
 - **`NaN` and infinity are kept.** They come back as `null` in curves, which charts draw as gaps.
-- **Any metric can be the x-axis.** Curves use `_step` by default. You can plot against `_runtime`, `_timestamp` or a metric you log, such as `epoch`. Passing `step=` to `run.log` sets `_step` explicitly.
+- **Any metric can be the x-axis.** The query API returns curves against `_step` by default. You can plot against `_runtime`, `_timestamp` or a metric you log, such as `epoch`. Passing `step=` to `run.log` sets `_step` explicitly.
 - **Run attributes are filterable.** Config, summary and attributes all become columns of the [run table](api/queries#the-run-table).
+
+## Step metrics
+
+`_step` counts `run.log` calls, so it's not always the step you think of. Trainers that log every few steps, such as the Hugging Face `Trainer`, log their own step and tell wandb to plot against it:
+
+```python
+run.define_metric("train/global_step")
+run.define_metric("*", step_metric="train/global_step", step_sync=True)
+for step in range(16, 1601, 16):
+    run.log({"train/global_step": step, "train/loss": loss})
+```
+
+Flock reads these definitions from the run's config, where the SDK records them. Dashboards then plot each metric against its step metric, here at x = 16, 32, 48 and so on, rather than at `_step` 0, 1, 2. The rules are wandb's:
+- A metric's own definition takes precedence over globs. A glob is a name ending in `*`, and it matches every key that starts with what comes before the `*`.
+- A metric without a step metric, such as `train/global_step` above, is plotted against `_step`.
+- A step metric still gets a chart of its own. Pass `hidden=True` to `define_metric` to leave a metric out of the charts.
+
+The [snapshot](api/dashboard#metric-definitions) and the [run detail](api/projects#get-run) carry each run's definitions, and the snapshot carries what a dashboard needs to switch the x-axis without fetching again. The [query endpoints](api/queries) still return curves against `_step` unless you pass `x`.
 
 ## System metrics
 

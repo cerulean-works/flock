@@ -3,10 +3,12 @@
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import ApiKeyCreator from '#lib/components/ApiKeyCreator.svelte';
 	import CopyBlock from '#lib/components/CopyBlock.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import FeedFilters from '#lib/components/home/FeedFilters.svelte';
 	import LatestRuns from '#lib/components/home/LatestRuns.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProjectDialog from '#lib/components/ProjectDialog.svelte';
+	import SegmentedNav from '#lib/components/SegmentedNav.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { page } from '$app/state';
 	import { pollFeed } from '#lib/data/feed.svelte.ts';
@@ -40,23 +42,14 @@
 	<div class="ml-auto">
 		<FeedFilters projects={data.shell.projects.map((p) => p.name)} project={data.project} />
 	</div>
-	<nav class="flex gap-1 rounded-lg bg-muted p-0.5 text-[13px]" aria-label="Show">
-		{#each TABS as [key, label] (key)}
-			{@const on = (key === 'mine') === data.mine}
-			<a
-				class={[
-					'rounded-md px-2.5 py-1 text-muted-foreground hover:text-foreground',
-					on && 'bg-background text-foreground shadow-xs'
-				]}
-				href={withParam(page.url, 'runs', key || null)}
-				data-sveltekit-noscroll
-				data-sveltekit-replacestate
-				aria-current={on ? 'page' : undefined}
-			>
-				{label}
-			</a>
-		{/each}
-	</nav>
+	<SegmentedNav
+		label="Show"
+		items={TABS.map(([key, label]) => ({
+			href: withParam(page.url, 'runs', key || null),
+			label,
+			current: (key === 'mine') === data.mine
+		}))}
+	/>
 {/snippet}
 
 <PageHeader title={params.entity} toolbar={fresh ? undefined : feedToolbar}>
@@ -77,12 +70,9 @@
 </PageHeader>
 
 {#if fresh}
-	<main class="min-h-0 flex-1 overflow-y-auto px-5 pb-16">
-		<div class="mx-auto mt-[6vh] max-w-160">
-			<h2 class="font-serif text-[28px] leading-tight tracking-[-0.01em]">Log your first run</h2>
-			<p class="mt-2 font-serif text-[19px] leading-normal">
-				Runs appear here once they’re logged.
-			</p>
+	<main class="min-h-0 flex-1 overflow-y-auto">
+		<EmptyState variant="onboarding" title="Log your first run">
+			{#snippet lead()}Runs appear here once they’re logged.{/snippet}
 			<ol class="mt-8 grid gap-8">
 				<li class="grid gap-3">
 					<p>
@@ -104,7 +94,7 @@
 					create an empty project
 				</Button>.
 			</p>
-		</div>
+		</EmptyState>
 	</main>
 {:else}
 	<main class="min-h-0 flex-1 overflow-y-auto pb-10">

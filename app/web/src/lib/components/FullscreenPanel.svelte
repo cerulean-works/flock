@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { ResolvedPathname } from '$app/types';
 	import { downloadCsv, downloadPng } from '#lib/chart/export.ts';
@@ -12,23 +13,24 @@
 	import { Switch } from '#lib/components/ui/switch/index.js';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import LinePlot from './LinePlot.svelte';
+	import PanelLegend from './PanelLegend.svelte';
 	import PanelMenu from './PanelMenu.svelte';
 	import RunEye from './RunEye.svelte';
 
 	interface Props {
-		metric: number;
+		panel: number;
 		closeHref: ResolvedPathname;
 		prevHref: ResolvedPathname | null;
 		nextHref: ResolvedPathname | null;
 		onclose: (e?: MouseEvent) => void;
 	}
 
-	let { metric, closeHref, prevHref, nextHref, onclose }: Props = $props();
+	let { panel, closeHref, prevHref, nextHref, onclose }: Props = $props();
 
 	const ws = getWorkspace();
-	const def = $derived(ws.meta.metrics[metric]);
-	const section = $derived(ws.sections.find((s) => s.key === def.section)!);
-	const position = $derived(section.metrics.indexOf(metric) + 1);
+	const view = $derived(ws.panels[panel]);
+	const section = $derived(ws.sections.find((s) => s.key === view.section)!);
+	const position = $derived(section.panels.indexOf(panel) + 1);
 
 	let plot = $state<LinePlot>();
 </script>
@@ -43,31 +45,34 @@
 		<header class="flex items-end gap-4 border-b border-divider px-7 pt-5 pb-4">
 			<div class="min-w-0 flex-1">
 				<Dialog.Description class="text-[13px]">
-					{def.section} · {position} of {section.metrics.length}
+					{view.section} · {position} of {section.panels.length}
 				</Dialog.Description>
 				<Dialog.Title
 					class="mt-0.5 truncate font-serif text-[34px] leading-[1.15] font-normal tracking-[-0.02em]"
 				>
-					{def.key}
+					{view.title}
 				</Dialog.Title>
 			</div>
 			<div class="flex items-center gap-1.5">
-				{#if ws.zoomOf(metric) != null}
-					<Button variant="outline" onclick={() => ws.setZoom(metric, null)}>Reset zoom</Button>
+				{#if ws.zoomOf(panel) != null}
+					<Button variant="outline" onclick={() => ws.setZoom(panel, null)}>Reset zoom</Button>
 				{/if}
 				<div class="flex items-center gap-2 px-2">
 					<Switch
 						id="fullscreen-log"
-						checked={ws.isLog(metric)}
-						onCheckedChange={() => ws.toggleLog(metric)}
+						checked={ws.isLog(panel)}
+						onCheckedChange={() => ws.toggleLog(panel)}
 					/>
 					<Label for="fullscreen-log">Log scale</Label>
 				</div>
+				<Button variant="outline" onclick={() => ws.editPanel(panel)}>
+					<PencilIcon /> Edit panel
+				</Button>
 				<PanelMenu
-					{metric}
+					{panel}
 					logToggle={false}
-					onpng={() => downloadPng(plot?.snapshot() ?? null, def.key)}
-					oncsv={() => downloadCsv(ws, metric)}
+					onpng={() => downloadPng(plot?.snapshot() ?? null, view.title)}
+					oncsv={() => downloadCsv(ws, panel)}
 				/>
 				<Separator orientation="vertical" class="mx-1.5 h-5! data-vertical:self-center" />
 				<Button
@@ -108,23 +113,25 @@
 		</header>
 		<div class="flex min-h-0 flex-1">
 			<div class="flex min-w-0 flex-1 flex-col pt-6 pr-6 pb-3 pl-3">
+				<PanelLegend {view} metricsOnly class="mb-3 ml-16 text-[13px]" />
 				<div class="min-h-0 flex-1">
-					<LinePlot bind:this={plot} {metric} surface="fullscreen" active={true} />
+					<LinePlot bind:this={plot} {panel} surface="fullscreen" active={true} />
 				</div>
 				<p class="mt-2.5 ml-16 text-xs text-faint">
 					Drag to zoom · double-click to reset · click a line to pin its run
 				</p>
 			</div>
-			<aside class="flex w-[340px] flex-none flex-col border-l border-divider" aria-label="Runs">
+			<!-- As wide as a run's overview, its text on the same 16px inset as its heading. -->
+			<aside class="flex w-[22rem] flex-none flex-col border-l border-divider" aria-label="Runs">
 				<p class="px-4 pt-3.5 pb-2.5 text-[13px] text-muted-foreground">
 					{ws.visible.length} of {ws.page.runs.length} runs plotted
 				</p>
-				<ul class="flex-1 overflow-y-auto px-1.5 pb-4">
+				<ul class="flex-1 overflow-y-auto px-2 pb-4">
 					{#each ws.page.runs as run, row (run.id)}
 						{@const shown = !ws.hidden.has(run.id)}
 						<li
 							class={[
-								'flex h-[30px] items-center gap-2 rounded-md px-1.5 text-[13px]',
+								'flex h-[30px] items-center gap-2 rounded-md px-2 text-[13px]',
 								ws.focus === row && 'bg-accent'
 							]}
 							onpointerenter={() => (ws.hover = row)}

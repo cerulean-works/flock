@@ -66,6 +66,7 @@ Returns a run's attributes and everything about it except its curves:
 | the [attributes](#run-attributes) | One field each. |
 | `config` | The config, with nested values as nested objects. wandb's internal `_wandb` key is left out. |
 | `summary` | The summary, as the SDK sent it, without `_wandb`. |
+| `metric_defs` | Its metric definitions from `run.define_metric`, as the [snapshot](dashboard#metric-definitions) describes them. |
 | `history_keys`, `system_keys` | The names of its logged metrics and of its system metrics, sorted. |
 | `history_line_count`, `system_line_count`, `log_line_count` | How many history lines, system samples and console lines it has. |
 | `gpu_detected`, `runtime`, `cost` | The GPUs read from its metadata, the seconds it was alive, and its cost at the organization's current prices. See [GPUs on runs](home#run-gpus). |

@@ -29,7 +29,7 @@
 <div class="flex flex-wrap items-center gap-2">
 	{#if kinds !== undefined}
 		<Select.Root type="single" value={kinds ?? ALL} onValueChange={(v) => set('kinds', v)}>
-			<Select.Trigger size="sm" class="min-w-36" aria-label="Kind of activity">
+			<Select.Trigger class="min-w-36" aria-label="Kind of activity">
 				{FEED_KINDS.find(([k]) => k === kinds)?.[1] ?? 'All activity'}
 			</Select.Trigger>
 			<Select.Content>
@@ -42,7 +42,7 @@
 	{/if}
 	{#if projects.length > 1 || project}
 		<Select.Root type="single" value={project ?? ALL} onValueChange={(v) => set('project', v)}>
-			<Select.Trigger size="sm" class="max-w-56 min-w-36" aria-label="Project">
+			<Select.Trigger class="max-w-56 min-w-36" aria-label="Project">
 				<span class="truncate">{project ?? 'All projects'}</span>
 			</Select.Trigger>
 			<Select.Content>

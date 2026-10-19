@@ -24,6 +24,7 @@ from app.api.src.core.feed import Feed
 from app.api.src.core.history import History, PointCounter, Series
 from app.api.src.core.imports import Imports
 from app.api.src.core.live import Hub
+from app.api.src.core.metric_defs import parse_metric_defs
 from app.api.src.core.names import ADJECTIVES, NOUNS
 from app.api.src.core.table import ColumnTable
 from app.api.src.db.database import Database
@@ -103,6 +104,8 @@ class Run:
     )
     # Flattened summary of an active run, kept to diff successive summary updates.
     summary_flat: dict[str, Any] | None = None
+    # What ``wandb.define_metric`` set for plotting: step metrics and hidden metrics.
+    metric_defs: list[dict[str, Any]] = field(default_factory=list)
     # Plottable metrics this run logged, per stream (its share of the project's key counts).
     keys: dict[str, set[str]] = field(default_factory=lambda: {"history": set(), "system": set()})
     # Set once the run's delete commits: code still holding the run must not write to it.
@@ -453,7 +456,9 @@ class Store:
                 values = run.attributes()
                 config_raw, summary_raw = record[23], record[24]
                 if config_raw:
-                    values.update(self._config_columns(loads_lenient(config_raw)))
+                    config = loads_lenient(config_raw)
+                    values.update(self._config_columns(config))
+                    run.metric_defs = parse_metric_defs(config)
                 if summary_raw:
                     values.update(self._summary_columns(loads_lenient(summary_raw)))
                 columns = pending.setdefault(project.pk, {})
@@ -769,6 +774,7 @@ class Store:
         table_values = run.attributes()
         if config:
             table_values.update(self._config_columns(config))
+            run.metric_defs = parse_metric_defs(config)
         if summary:
             table_values.update(self._summary_columns(summary))
             if run.active:
@@ -816,10 +822,16 @@ class Store:
         self._sync_state(run, project)
         table = project.table
         table.set_many(run.row, run.attributes())
+        defs = None
         if config is not None:
             self._replace_columns(table, run.row, "config.", self._config_columns(config))
+            defs = parse_metric_defs(config)
+            if defs == run.metric_defs:
+                defs = None
+            else:
+                run.metric_defs = defs
         changed = self._apply_summary(run, table, summary) if summary is not None else None
-        self._publish_run(run, changed)
+        self._publish_run(run, changed, metric_defs=defs)
 
     @staticmethod
     def _replace_columns(table: ColumnTable, row: int, prefix: str, values: dict[str, Any]):
@@ -853,9 +865,10 @@ class Store:
         run: Run,
         summary: dict[str, Any] | None = None,
         attributes: dict[str, Any] | None = None,
+        metric_defs: list[dict[str, Any]] | None = None,
     ) -> None:
-        """Tell dashboards showing ``run`` about its state, line count, summary and edited
-        attributes."""
+        """Tell dashboards showing ``run`` about its state, line count, summary, edited
+        attributes and changed metric definitions."""
         subs = self.live.watching(run.project.pk, run.name)
         if not subs:
             return
@@ -869,6 +882,8 @@ class Store:
             data["summary"] = summary
         if attributes:
             data["attributes"] = attributes
+        if metric_defs is not None:
+            data["metric_defs"] = metric_defs
         event = Hub.event("run", data)
         for sub in subs:
             sub.push(event)

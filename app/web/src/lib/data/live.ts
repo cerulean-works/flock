@@ -1,5 +1,11 @@
 import { Series, slotOf } from '#lib/chart/series.ts';
-import { LIVE_STATES, type MetricStream, type ProjectMeta, type RunPage } from '#lib/types.ts';
+import {
+	LIVE_STATES,
+	type MetricDefinition,
+	type MetricStream,
+	type ProjectMeta,
+	type RunPage
+} from '#lib/types.ts';
 import type { Workspace } from '#lib/workspace/workspace.svelte.ts';
 import { projectUrl } from './cache.ts';
 
@@ -15,6 +21,8 @@ import { projectUrl } from './cache.ts';
  *
  * Points carry their line numbers; anything at or below a run's cursor for that stream is
  * already on the page and is dropped, so replays after a reconnect never duplicate points.
+ * Points of a run's x-axis mappings (`_runtime`, `_timestamp`, its step metrics) grow those
+ * too, so curves keep growing on any x axis.
  *
  * Changes made elsewhere arrive too: edited attributes update the page in place; runs created,
  * moved in, deleted or moved away shift page boundaries, so they are offered as a refresh. A
@@ -41,6 +49,8 @@ interface RunEvent {
 	summary?: Record<string, unknown>;
 	/** Attributes someone edited: display_name, tags, notes, group, job_type, description. */
 	attributes?: Record<string, unknown>;
+	/** The run's metric definitions, when they changed. */
+	metric_defs?: MetricDefinition[];
 }
 
 interface CreatedEvent {
@@ -182,7 +192,16 @@ export class LiveConnection {
 		const run = page.runs[r];
 		const field = stream === 'history' ? 'lines' : 'systemLines';
 		const cursor = run[field];
+		const axes = page.axes[r]?.[stream];
 		for (const [key, points] of Object.entries(data.series)) {
+			// A step metric defined since the page loaded has none: its curve maps instead.
+			const axis = axes?.get(key);
+			if (axis) {
+				let from = 0;
+				while (from < points.rows.length && points.rows[from] < cursor) from++;
+				if (axis.append(points.x.slice(from), points.y.slice(from))) this.#dirtyMetrics.add(key);
+			}
+			if (key.startsWith('_')) continue; // wandb's times: mappings only
 			const m = this.#metrics[stream].get(key);
 			if (m === undefined) {
 				// A metric no run had logged when the page loaded: offered as a refresh.
@@ -229,6 +248,10 @@ export class LiveConnection {
 			}
 		}
 		if (data.attributes) this.#attributes(r, data.attributes);
+		if (data.metric_defs) {
+			run.defs = data.metric_defs;
+			this.#ws.defsVersion += 1;
+		}
 		this.#schedule();
 	}
 

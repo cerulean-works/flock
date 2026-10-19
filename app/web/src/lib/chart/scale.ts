@@ -34,6 +34,21 @@ export function timeTicks(lo: number, hi: number, count = 4): Ticks {
 	return ticksEvery(lo, hi, step);
 }
 
+/**
+ * Ticks for an axis of epoch seconds, on round times of the viewer's clock: `tz` is its offset
+ * from UTC in minutes, as `Date.getTimezoneOffset` gives it (positive west of UTC).
+ */
+export function wallTicks(
+	lo: number,
+	hi: number,
+	count = 4,
+	tz = new Date(lo * 1000).getTimezoneOffset()
+): Ticks {
+	const shift = -tz * 60;
+	const { values, step } = timeTicks(lo + shift, hi + shift, count);
+	return { values: values.map((v) => v - shift), step };
+}
+
 /** Pad a data extent so lines never touch the plot frame. */
 export function niceDomain(lo: number, hi: number): [number, number] {
 	if (!Number.isFinite(lo) || !Number.isFinite(hi)) return [0, 1];

@@ -14,6 +14,7 @@
 	import { replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { ResolvedPathname } from '$app/types';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { clock, elapsed, parseLine, type Level, type LogLine, type Span } from '#lib/logs.ts';
@@ -499,7 +500,7 @@
 <!-- A log panel in the page's own theme, one step deeper than the page like a chart panel. -->
 <div class="absolute inset-0 flex flex-col bg-card text-foreground">
 	<div
-		class="flex flex-none flex-wrap items-center gap-1.5 border-b border-divider bg-background px-3 py-2"
+		class="flex min-h-10 flex-none flex-wrap items-center gap-1.5 border-b border-divider bg-background px-5 py-1"
 	>
 		<label
 			class="flex h-7 max-w-md min-w-48 flex-1 items-center gap-2 rounded-[min(var(--radius-md),10px)] border border-input bg-background pr-1 pl-2 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
@@ -673,7 +674,7 @@
 	>
 		<div bind:offsetHeight={headH}>
 			{#if first > 0 && lines.length}
-				<div class="flex items-center gap-3 px-4 pt-3 pb-2 text-[13px] text-muted-foreground">
+				<div class="flex items-center gap-3 px-5 pt-3 pb-2 text-[13px] text-muted-foreground">
 					<Button variant="outline" size="sm" onclick={earlier} disabled={loading}>
 						{loading ? 'Loading…' : 'Show earlier lines'}
 					</Button>
@@ -683,18 +684,16 @@
 		</div>
 
 		{#if failed}
-			<p class="px-4 py-6 text-ansi-red">Couldn’t load the console output</p>
+			<EmptyState tone="error">Couldn’t load the console output</EmptyState>
 		{:else if !lines.length}
-			<p class="px-4 py-6 text-muted-foreground">
-				{loading ? 'Loading…' : 'Nothing printed to the console'}
-			</p>
+			<EmptyState>{loading ? 'Loading…' : 'Nothing printed to the console'}</EmptyState>
 		{:else if !shown.lines.length}
-			<p class="px-4 py-6 text-muted-foreground">
+			<EmptyState>
 				No lines at the levels shown.
 				<button class="text-link hover:underline" onclick={() => ((hidden = []), remember())}>
 					Show all levels
 				</button>
-			</p>
+			</EmptyState>
 		{:else}
 			<div class="relative" style:height="{offsets[shown.lines.length]}px">
 				<div
@@ -709,7 +708,7 @@
 						{@const level = shown.levels[row]}
 						<div
 							class={[
-								'group/line flex border-l-2 py-0.5 pr-4',
+								'group/line flex border-l-2 py-0.5 pr-5',
 								selected === l.line
 									? 'border-link bg-selection/45'
 									: level
@@ -763,7 +762,7 @@
 					{/each}
 				</div>
 			</div>
-			<div class="px-4 py-3 text-xs text-muted-foreground">
+			<div class="px-5 py-3 text-xs text-muted-foreground">
 				{#if laterCount > 0}
 					<Button variant="outline" size="sm" onclick={later} disabled={loadingLater}>
 						{loadingLater ? 'Loading…' : 'Show later lines'}

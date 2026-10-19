@@ -30,6 +30,11 @@
 	const session = $derived(!!page.data.user);
 	const current = $derived(orgs.find((o) => o.name === org));
 
+	// Menu rows lead with a 24px-wide slot and an 8px gap, so marks, avatars and icons share a column
+	// and every label starts at the same place.
+	const ROW = 'gap-2';
+	const SLOT = 'grid w-6 flex-none place-items-center';
+
 	let form = $state<HTMLFormElement>();
 	let signOut = $state<HTMLFormElement>();
 	let target = $state('');
@@ -87,16 +92,20 @@
 					Organizations
 				</DropdownMenu.Label>
 				{#each orgs as o (o.name)}
-					<DropdownMenu.Item onSelect={() => choose(o.name)}>
-						<OrgMark name={o.name} src={o.avatar_url} class="size-5 text-[11px]" />
+					<DropdownMenu.Item class={ROW} onSelect={() => choose(o.name)}>
+						<span class={SLOT}>
+							<OrgMark name={o.name} src={o.avatar_url} class="size-5 text-[11px]" />
+						</span>
 						<span class="min-w-0 flex-1 truncate">{o.name}</span>
 						{#if o.name === org}<CheckIcon class="text-muted-foreground" />{/if}
 					</DropdownMenu.Item>
 				{/each}
 				{#if org}
-					<DropdownMenu.Item>
+					<DropdownMenu.Item class={ROW}>
 						{#snippet child({ props })}
-							<a href={orgHref(org)} {...props}><SettingsIcon /> Settings and members</a>
+							<a href={orgHref(org)} {...props}>
+								<span class={SLOT}><SettingsIcon /></span> Settings and members
+							</a>
 						{/snippet}
 					</DropdownMenu.Item>
 				{/if}
@@ -104,28 +113,34 @@
 			<DropdownMenu.Separator />
 		{/if}
 		<DropdownMenu.Group>
-			<DropdownMenu.Label class="flex items-center gap-2.5 font-normal">
-				<Avatar name={me.name} src={me.avatar_url} class="size-6 text-[10px]" />
+			<DropdownMenu.Label class={['flex items-center font-normal', ROW]}>
+				<span class={SLOT}>
+					<Avatar name={me.name} src={me.avatar_url} class="size-6 text-[10px]" />
+				</span>
 				<span class="grid min-w-0 leading-tight">
 					<span class="truncate font-medium text-foreground">{me.name}</span>
 					<span class="truncate text-xs text-muted-foreground">{me.email}</span>
 				</span>
 			</DropdownMenu.Label>
-			<DropdownMenu.Item>
+			<DropdownMenu.Item class={ROW}>
 				{#snippet child({ props })}
-					<a href={resolve('/(app)/account')} {...props}><KeyRoundIcon /> Account and API keys</a>
+					<a href={resolve('/(app)/account')} {...props}>
+						<span class={SLOT}><KeyRoundIcon /></span> Account and API keys
+					</a>
 				{/snippet}
 			</DropdownMenu.Item>
 			{#if me.is_superadmin}
-				<DropdownMenu.Item>
+				<DropdownMenu.Item class={ROW}>
 					{#snippet child({ props })}
-						<a href={resolve('/(app)/admin')} {...props}><ShieldIcon /> Super admin</a>
+						<a href={resolve('/(app)/admin')} {...props}>
+							<span class={SLOT}><ShieldIcon /></span> Super admin
+						</a>
 					{/snippet}
 				</DropdownMenu.Item>
 			{/if}
 			{#if session}
-				<DropdownMenu.Item onSelect={() => signOut?.requestSubmit()}>
-					<LogOutIcon /> Sign out
+				<DropdownMenu.Item class={ROW} onSelect={() => signOut?.requestSubmit()}>
+					<span class={SLOT}><LogOutIcon /></span> Sign out
 				</DropdownMenu.Item>
 			{/if}
 		</DropdownMenu.Group>

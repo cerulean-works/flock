@@ -1,3 +1,4 @@
+import type { RunAxes } from './chart/axes.ts';
 import type { Series } from './chart/series.ts';
 import type { RunFilter } from './workspace/filters.ts';
 
@@ -208,12 +209,44 @@ export interface MetricDef {
 	section: string;
 	format: MetricFormat;
 	stream: MetricStream;
+	/** Its name in legends and readouts: the key, or a system metric's ("GPU 0 Memory (%)"). */
+	label: string;
+}
+
+/**
+ * One chart: a title and the metrics it plots, all of one stream (so one x axis). A logged
+ * metric is a panel of its own; system metrics are grouped (every GPU's power on one chart).
+ */
+export interface PanelDef {
+	/**
+	 * Stable across pages and runs, so layouts, zoom and customizations can be kept by it: a
+	 * logged metric's key, or `system:<chart>` (`system:gpu.powerWatts`).
+	 */
+	id: string;
+	title: string;
+	section: string;
+	stream: MetricStream;
+	format: MetricFormat;
+	/** Indices into `ProjectMeta.metrics`. */
+	metrics: number[];
+}
+
+/**
+ * A run's `wandb.define_metric` for one key or glob (`train/*`), as far as plotting goes: the
+ * step metric it is plotted against by default, and whether it is left out of the charts.
+ */
+export interface MetricDefinition {
+	key?: string;
+	/** Ends in `*`: every key starting with what comes before it. */
+	glob?: string;
+	step?: string;
+	hidden?: boolean;
 }
 
 export interface SectionDef {
 	key: string;
-	/** Indices into `ProjectMeta.metrics`. */
-	metrics: number[];
+	/** Indices into `ProjectMeta.panels`. */
+	panels: number[];
 }
 
 export interface ColumnGroupSpan {
@@ -234,6 +267,7 @@ export interface ProjectMeta {
 	/** Contiguous column groups, in schema order. */
 	groups: ColumnGroupSpan[];
 	metrics: MetricDef[];
+	panels: PanelDef[];
 	sections: SectionDef[];
 }
 
@@ -264,6 +298,8 @@ export interface RunInfo {
 	lines: number;
 	/** The same for system metric samples. */
 	systemLines: number;
+	/** Its metric definitions (step metrics, hidden metrics); updated live. */
+	defs: MetricDefinition[];
 }
 
 /** One page of runs. Live updates mutate it in place (see #lib/data/live.ts). */
@@ -283,6 +319,8 @@ export interface RunPage {
 	text: (unknown[] | null)[];
 	/** Series for run `r` and metric `m` at `r * metricCount + m`; null when not logged. */
 	series: (Series | null)[];
+	/** Per run, its x-axis mappings (see #lib/chart/axes.ts); grown by live updates. */
+	axes: RunAxes[];
 }
 
 export interface WorkspaceData {
@@ -323,6 +361,8 @@ export interface RunDetail {
 	cost: number;
 	config: Record<string, unknown>;
 	summary: Record<string, unknown>;
+	/** Flocks from before metric definitions were read send none. */
+	metric_defs?: MetricDefinition[];
 	history_keys: string[];
 	system_keys: string[];
 	history_line_count: number;

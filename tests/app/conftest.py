@@ -233,7 +233,14 @@ class Client:
         xs = np.frombuffer(body, "<f8", header["x_len"], pos)
         pos += header["x_len"] * 8
         ys = np.frombuffer(body, "<f4", header["y_len"], pos)
-        assert pos + header["y_len"] * 4 == len(body)
+        pos += header["y_len"] * 4 + header["y_len"] % 2 * 4
+        # Per run, its x-axis mappings: knots (x, y) of each axis against _step, then of each
+        # system axis against _runtime.
+        axes = header["axes"] + header["system_axes"]
+        axis_meta = np.frombuffer(body, "<f8", len(runs) * len(axes) * 2, pos).reshape(-1, 2)
+        pos += axis_meta.size * 8
+        axis_values = np.frombuffer(body, "<f8", header["axes_len"], pos)
+        assert pos + header["axes_len"] * 8 == len(body)
 
         columns = [c["key"] for c in header["columns"]]
         cells: dict[str, list] = {}
@@ -254,7 +261,17 @@ class Client:
                 x = xs[int(x_off) : int(x_off) + count] if x_off >= 0 else x0 + dx * k
                 y = ys[int(y_off) : int(y_off) + count]
                 curves[(run["id"], key)] = (x.tolist(), y.tolist())
-        return {**header, "cells": cells, "curves": curves}
+        mappings: dict[tuple[str, str], tuple[list[float], list[float]]] = {}
+        for r, run in enumerate(runs):
+            for a, key in enumerate(axes):
+                off, count = (int(v) for v in axis_meta[r * len(axes) + a])
+                if count:
+                    stream = "system:" if a >= len(header["axes"]) else ""
+                    mappings[(run["id"], stream + key)] = (
+                        axis_values[off : off + count].tolist(),
+                        axis_values[off + count : off + 2 * count].tolist(),
+                    )
+        return {**header, "cells": cells, "curves": curves, "mappings": mappings}
 
 
 class EventStream:

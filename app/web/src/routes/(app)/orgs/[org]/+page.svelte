@@ -104,7 +104,7 @@
 							>
 								{ROLES[member.role]}
 							</Badge>
-							<span class="w-8">
+							<span class="flex w-8 flex-none justify-end">
 								<MemberMenu org={data.org.name} {member} {self} {admin} />
 							</span>
 						</li>
@@ -231,7 +231,7 @@
 					<form
 						method="POST"
 						action="?/rename"
-						class="mt-8 grid max-w-md gap-2"
+						class="mt-8 grid max-w-100 gap-2"
 						use:enhance={renaming.enhance}
 					>
 						<Label for="org-name">Name</Label>

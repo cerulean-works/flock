@@ -1,9 +1,14 @@
 /**
- * Which table columns a viewer shows, and the folder tree they're picked from. Column keys are
- * dotted paths (`config.model.depth`), so each group (Run, Config, Summary) is a folder whose
- * label path is split on `.` into nested folders.
+ * Which table columns a viewer shows, in what order, and the folder tree they're picked from.
+ * Column keys are dotted paths (`config.model.depth`), so each group (Run, Config, Summary) is a
+ * folder whose label path is split on `.` into nested folders.
  */
-import type { ColumnDef } from '#lib/types.ts';
+import type { ColumnDef, ColumnGroup } from '#lib/types.ts';
+import { arrange, mergeOrder, moveKey } from './layout.ts';
+
+export type { ColumnGroup };
+
+type Column = Pick<ColumnDef, 'key' | 'label' | 'group'>;
 
 /** Columns every table shows: a run's state and id. */
 export const LOCKED_COLUMNS: ReadonlySet<string> = new Set(['state', 'name']);
@@ -43,7 +48,7 @@ function folder(id: string, name: string): ColumnFolder {
  * The columns as folders: one per group, then one per dotted label segment. Folders and
  * columns keep table order (a folder sits where its first column does).
  */
-export function columnTree(columns: readonly Pick<ColumnDef, 'key' | 'label' | 'group'>[]) {
+export function columnTree(columns: readonly Column[]) {
 	const roots: ColumnFolder[] = [];
 	const folders = new Map<string, ColumnFolder>();
 	const at = (id: string, name: string, parent: ColumnFolder | null) => {
@@ -112,4 +117,113 @@ export function parseHidden(raw: unknown): string[] {
 	return [
 		...new Set(raw.filter((k): k is string => typeof k === 'string' && !LOCKED_COLUMNS.has(k)))
 	];
+}
+
+/** Every column key in a tree, in its order: the table's order. */
+export function leafKeys(nodes: readonly ColumnNode[]): string[] {
+	return nodes.flatMap((n) => (n.kind === 'folder' ? leafKeys(n.children) : [n.key]));
+}
+
+/** How the viewer set up a project's table, as kept in this browser. */
+export interface ColumnPrefs {
+	hidden: readonly string[];
+	/** Column keys in the order they were arranged; columns logged since go after them. */
+	order: readonly string[];
+	/** Groups in the order they were arranged. */
+	groups: readonly ColumnGroup[];
+}
+
+export const NO_COLUMN_PREFS: ColumnPrefs = { hidden: [], order: [], groups: [] };
+
+const isGroup = (g: unknown): g is ColumnGroup => typeof g === 'string' && g in GROUP_LABELS;
+
+const uniqueStrings = (v: unknown): string[] =>
+	Array.isArray(v) ? [...new Set(v.filter((s): s is string => typeof s === 'string'))] : [];
+
+/**
+ * Column settings read back from storage. Those saved before columns could be moved are the
+ * list of hidden keys alone; anything malformed is dropped rather than trusted.
+ */
+export function parseColumnPrefs(raw: unknown): ColumnPrefs {
+	if (Array.isArray(raw)) return { ...NO_COLUMN_PREFS, hidden: parseHidden(raw) };
+	if (!raw || typeof raw !== 'object') return NO_COLUMN_PREFS;
+	const r = raw as Record<string, unknown>;
+	return {
+		hidden: parseHidden(r.hidden),
+		order: uniqueStrings(r.order),
+		groups: uniqueStrings(r.groups).filter(isGroup)
+	};
+}
+
+/**
+ * Indices into `columns` in the viewer's order: groups as arranged, then within each its
+ * columns as arranged, the locked ones first. Columns and groups not in a saved order go after
+ * the ordered ones, in schema order; a folder's columns stay together, where its first one is.
+ */
+export function arrangeColumns(
+	columns: readonly Column[],
+	prefs: Pick<ColumnPrefs, 'order' | 'groups'>
+): number[] {
+	const groups = arrange([...new Set(columns.map((c) => c.group))], (g) => g, prefs.groups);
+	const rank = new Map(groups.map((g, i) => [g, i]));
+	const pin = (i: number) => (LOCKED_COLUMNS.has(columns[i].key) ? i - columns.length : 0);
+	const idx = arrange(
+		columns.map((_, i) => i),
+		(i) => columns[i].key,
+		prefs.order
+	).toSorted(
+		(a, b) => rank.get(columns[a].group)! - rank.get(columns[b].group)! || pin(a) - pin(b)
+	);
+	const at = new Map(columns.map((c, i) => [c.key, i]));
+	return leafKeys(columnTree(idx.map((i) => columns[i]))).map((k) => at.get(k)!);
+}
+
+/** The folder with this id in a tree, if any. */
+export function findFolder(nodes: readonly ColumnNode[], id: string): ColumnFolder | null {
+	for (const n of nodes) {
+		if (n.kind !== 'folder') continue;
+		if (n.id === id) return n;
+		const found = findFolder(n.children, id);
+		if (found) return found;
+	}
+	return null;
+}
+
+/**
+ * The column order to save once the child at `from` of folder `parent` (a column, or a folder
+ * with all of its own) moved to `to`, among the `arranged` columns. Locked columns keep their
+ * places at the front; null when nothing moves.
+ */
+export function moveColumn(
+	arranged: readonly Column[],
+	saved: readonly string[],
+	parent: string,
+	from: number,
+	to: number
+): string[] | null {
+	const tree = columnTree(arranged);
+	const folder = findFolder(tree, parent);
+	if (!folder) return null;
+	const kids = folder.children;
+	const free = kids.findIndex((n) => n.kind === 'folder' || !n.locked);
+	const lead = free === -1 ? kids.length : free;
+	if (from < lead || from >= kids.length) return null;
+	to = Math.max(lead, Math.min(kids.length - 1, to));
+	if (to === from) return null;
+	kids.splice(to, 0, ...kids.splice(from, 1));
+	return mergeOrder(saved, leafKeys(tree));
+}
+
+/** The group order to save once `group` moved to `to` among the `arranged` columns' groups. */
+export function moveGroup(
+	arranged: readonly Column[],
+	saved: readonly ColumnGroup[],
+	group: ColumnGroup,
+	to: number
+): ColumnGroup[] | null {
+	const groups = [...new Set(arranged.map((c) => c.group))];
+	const from = groups.indexOf(group);
+	const moved = moveKey(groups, from, to);
+	if (from === -1 || moved[from] === groups[from]) return null;
+	return mergeOrder(saved, moved).filter(isGroup);
 }

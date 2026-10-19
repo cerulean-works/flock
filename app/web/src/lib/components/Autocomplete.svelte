@@ -18,6 +18,8 @@
 		options: readonly AutocompleteOption[];
 		/** Called as the value is typed or picked. */
 		onValueChange?: (value: string) => void;
+		/** Called when an option is picked (clicked, or Enter on it), after `onValueChange`. */
+		onPick?: (option: AutocompleteOption) => void;
 		/** Options in a monospace font, like column names. */
 		mono?: boolean;
 		placeholder?: string;
@@ -30,6 +32,7 @@
 		value = $bindable(''),
 		options,
 		onValueChange,
+		onPick,
 		mono = false,
 		placeholder,
 		disabled = false,
@@ -80,6 +83,7 @@
 		value = o.value;
 		onValueChange?.(o.value);
 		open = false;
+		onPick?.(o);
 	}
 
 	function move(by: number) {

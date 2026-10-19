@@ -1,19 +1,20 @@
 <script lang="ts">
 	import DownloadIcon from '@lucide/svelte/icons/download';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Settings2Icon from '@lucide/svelte/icons/settings-2';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 
 	interface Props {
-		metric: number;
+		panel: number;
 		onpng: () => void;
 		oncsv: () => void;
 		/** Hide the log-scale toggle where the panel already shows one. */
 		logToggle?: boolean;
 	}
 
-	let { metric, onpng, oncsv, logToggle = true }: Props = $props();
+	let { panel, onpng, oncsv, logToggle = true }: Props = $props();
 
 	const ws = getWorkspace();
 </script>
@@ -34,18 +35,21 @@
 	</DropdownMenu.Trigger>
 	<DropdownMenu.Content align="end" class="w-56">
 		<DropdownMenu.Group>
-			<DropdownMenu.Label class="truncate">{ws.meta.metrics[metric].key}</DropdownMenu.Label>
+			<DropdownMenu.Label class="truncate">{ws.panels[panel].title}</DropdownMenu.Label>
+			<DropdownMenu.Item onSelect={() => ws.editPanel(panel)}>
+				<PencilIcon /> Edit panel…
+			</DropdownMenu.Item>
 			{#if logToggle}
 				<DropdownMenu.CheckboxItem
-					checked={ws.isLog(metric)}
-					onCheckedChange={() => ws.toggleLog(metric)}
+					checked={ws.isLog(panel)}
+					onCheckedChange={() => ws.toggleLog(panel)}
 				>
 					Log scale (y)
 				</DropdownMenu.CheckboxItem>
 			{/if}
 			<DropdownMenu.Item
-				disabled={ws.zoomOf(metric) == null}
-				onSelect={() => ws.setZoom(metric, null)}
+				disabled={ws.zoomOf(panel) == null}
+				onSelect={() => ws.setZoom(panel, null)}
 			>
 				Reset zoom
 			</DropdownMenu.Item>
