@@ -42,6 +42,9 @@ known-first-party = ["flock", "src", "app", "scripts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "latency: tests that measure app response latency",
+]
 addopts = ["--import-mode=importlib", "--strict-markers", "-m", "not latency"]
 
 [dependency-groups]
