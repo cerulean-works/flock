@@ -44,9 +44,6 @@ known-first-party = ["flock", "src", "app", "scripts"]
 testpaths = ["tests"]
 addopts = ["--import-mode=importlib", "--strict-markers"]
 
-[tool.ty.environment]
-extra-paths = ["app/api"]
-
 [dependency-groups]
 components = [
     "flock-cli",

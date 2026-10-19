@@ -20,7 +20,7 @@ jobs:
         run: uv python install
 
       - name: Install Dependencies
-        run: uv sync --all-extras --dev --frozen
+        run: uv sync --all-extras --all-packages --dev --frozen
 
       - name: Run ruff's linter
         run: uv run ruff check .
@@ -41,7 +41,7 @@ jobs:
         run: uv python install
 
       - name: Install Dependencies
-        run: uv sync --all-extras --dev --frozen
+        run: uv sync --all-extras --all-packages --dev --frozen
 
       - name: Run ruff's format checker
         run: uv run ruff format --check .
@@ -62,7 +62,7 @@ jobs:
         run: uv python install
 
       - name: Install Dependencies
-        run: uv sync --all-extras --dev --frozen
+        run: uv sync --all-extras --all-packages --dev --frozen
 
       - name: Run ty
         run: uv run ty check
@@ -83,7 +83,7 @@ jobs:
         run: uv python install
 
       - name: Install Dependencies
-        run: uv sync --all-extras --dev --frozen
+        run: uv sync --all-extras --all-packages --dev --frozen
 
       - name: Run tests
         run: uv run python -m pytest -q tests
