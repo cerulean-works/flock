@@ -3,6 +3,7 @@ import { refreshUser } from '#lib/server/auth.ts';
 import { change, refused, flock } from '#lib/server/flock.ts';
 import type { OrgInfo, UserInfo } from '#lib/types.ts';
 import { formText, orgNameError } from '#lib/utils.ts';
+import { wandbImport } from '#lib/wandb.ts';
 import { orgHref } from '#lib/workspace/url.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -22,12 +23,21 @@ function userId(form: FormData) {
 }
 
 export const actions: Actions = {
-	/** A new organization, with its creator as its first admin: on to inviting people. */
+	/**
+	 * A new organization, with its creator as its first admin: on to inviting people, and to the
+	 * progress of its W&B import if it has one.
+	 */
 	createOrg: async ({ request }) => {
-		const name = formText(await request.formData(), 'name');
+		const form = await request.formData();
+		const name = formText(form, 'name');
 		const invalid = orgNameError(name);
 		if (invalid) return fail(400, { error: invalid });
-		const res = await change<OrgInfo>('POST', '/api/v1/orgs', { name });
+		const wandb = wandbImport(form, name);
+		if (wandb && 'error' in wandb) return fail(400, { error: wandb.error });
+		const res = await change<OrgInfo>('POST', '/api/v1/orgs', {
+			name,
+			...(wandb ? { wandb: wandb.value } : {})
+		});
 		if (refused(res)) return res;
 		await refreshUser();
 		redirect(303, orgHref(name));

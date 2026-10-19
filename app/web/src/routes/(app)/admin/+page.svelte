@@ -6,6 +6,7 @@
 	import OrgMark from '#lib/components/shell/OrgMark.svelte';
 	import FormError from '#lib/components/FormError.svelte';
 	import UserMenu from '#lib/components/UserMenu.svelte';
+	import WandbImportFields from '#lib/components/WandbImportFields.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
@@ -13,6 +14,7 @@
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
 	import { count, dateTime, formText, orgNameError, relativeTime } from '#lib/utils.ts';
+	import { wandbImport } from '#lib/wandb.ts';
 	import { entityHref, orgHref } from '#lib/workspace/url.ts';
 	import type { PageProps } from './$types';
 
@@ -21,9 +23,15 @@
 	const me = $derived(page.data.shell?.me.id ?? page.data.user?.id);
 
 	let creating = $state(false);
+	let orgName = $state('');
+	let importing = $state(false);
 	const creation = new Mutation({
-		validate: (form) => orgNameError(formText(form, 'name')),
-		success: () => 'Organization created'
+		validate: (form) => {
+			const name = formText(form, 'name');
+			const wandb = wandbImport(form, name);
+			return orgNameError(name) ?? (wandb && 'error' in wandb ? wandb.error : null);
+		},
+		success: () => (importing ? 'Organization created, importing from W&B' : 'Organization created')
 	});
 
 	const ORG_GRID =
@@ -143,7 +151,15 @@
 	</main>
 </div>
 
-<Dialog.Root bind:open={creating} onOpenChange={(o) => o || creation.reset()}>
+<Dialog.Root
+	bind:open={creating}
+	onOpenChange={(o) => {
+		if (o) return;
+		creation.reset();
+		orgName = '';
+		importing = false;
+	}}
+>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
 			<Dialog.Title>New organization</Dialog.Title>
@@ -160,9 +176,11 @@
 					spellcheck="false"
 					required
 					maxlength={128}
+					bind:value={orgName}
 					aria-invalid={!!creation.error}
 				/>
 			</div>
+			<WandbImportFields id="new-org-wandb" org={orgName.trim()} bind:on={importing} />
 			<FormError error={creation.error} />
 			<Dialog.Footer>
 				<Dialog.Close>
