@@ -9,10 +9,10 @@ resolution-markers = [
 [manifest]
 members = [
     "flock",
+    "flock-app-api",
+    "flock-cli",
     "flock-eval",
-    "flock-hub",
     "flock-tests",
-    "flock-tracker",
     "flock-training",
 ]
 
@@ -644,9 +644,8 @@ default-groups = ["components", "dev"]
 
 [package.dev-dependencies]
 components = [
+    { name = "flock-cli" },
     { name = "flock-eval" },
-    { name = "flock-hub" },
-    { name = "flock-tracker" },
     { name = "flock-training" },
 ]
 dev = [
@@ -659,9 +658,8 @@ dev = [
 
 [package.metadata.requires-dev]
 components = [
+    { name = "flock-cli", virtual = "flock/cli" },
     { name = "flock-eval", virtual = "flock/eval" },
-    { name = "flock-hub", virtual = "flock/hub" },
-    { name = "flock-tracker", virtual = "flock/tracker" },
     { name = "flock-training", virtual = "flock/training" },
 ]
 dev = [
@@ -671,9 +669,42 @@ dev = [
 ]
 
 [[package]]
-name = "flock-eval"
+name = "flock-app-api"
 version = "0.1.0"
-source = { virtual = "flock/eval" }
+source = { virtual = "app/api" }
+dependencies = [
+    { name = "argon2-cffi" },
+    { name = "asyncpg" },
+    { name = "fastapi" },
+    { name = "fastapi-cli" },
+    { name = "flock" },
+    { name = "httptools" },
+    { name = "numpy" },
+    { name = "orjson" },
+    { name = "pyjwt" },
+    { name = "uvicorn" },
+    { name = "uvloop" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "argon2-cffi", specifier = ">=25.1.0" },
+    { name = "asyncpg", specifier = ">=0.32.0" },
+    { name = "fastapi", specifier = ">=0.143.3" },
+    { name = "fastapi-cli", specifier = ">=0.0.32" },
+    { name = "flock", editable = "." },
+    { name = "httptools", specifier = ">=0.9.0" },
+    { name = "numpy", specifier = ">=2.5.4" },
+    { name = "orjson", specifier = ">=3.13.0" },
+    { name = "pyjwt", specifier = ">=2.10.1" },
+    { name = "uvicorn", specifier = ">=0.54.0" },
+    { name = "uvloop", specifier = ">=0.23.0" },
+]
+
+[[package]]
+name = "flock-cli"
+version = "0.1.0"
+source = { virtual = "flock/cli" }
 dependencies = [
     { name = "flock" },
 ]
@@ -682,9 +713,9 @@ dependencies = [
 requires-dist = [{ name = "flock", editable = "." }]
 
 [[package]]
-name = "flock-hub"
+name = "flock-eval"
 version = "0.1.0"
-source = { virtual = "flock/hub" }
+source = { virtual = "flock/eval" }
 dependencies = [
     { name = "flock" },
 ]
@@ -705,37 +736,6 @@ dependencies = [
 requires-dist = [
     { name = "modal", specifier = ">=1.6.2" },
     { name = "wandb", specifier = ">=0.31.0" },
-]
-
-[[package]]
-name = "flock-tracker"
-version = "0.1.0"
-source = { virtual = "flock/tracker" }
-dependencies = [
-    { name = "argon2-cffi" },
-    { name = "asyncpg" },
-    { name = "fastapi" },
-    { name = "fastapi-cli" },
-    { name = "httptools" },
-    { name = "numpy" },
-    { name = "orjson" },
-    { name = "pyjwt" },
-    { name = "uvicorn" },
-    { name = "uvloop" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "argon2-cffi", specifier = ">=25.1.0" },
-    { name = "asyncpg", specifier = ">=0.32.0" },
-    { name = "fastapi", specifier = ">=0.143.3" },
-    { name = "fastapi-cli", specifier = ">=0.0.32" },
-    { name = "httptools", specifier = ">=0.9.0" },
-    { name = "numpy", specifier = ">=2.5.4" },
-    { name = "orjson", specifier = ">=3.13.0" },
-    { name = "pyjwt", specifier = ">=2.10.1" },
-    { name = "uvicorn", specifier = ">=0.54.0" },
-    { name = "uvloop", specifier = ">=0.23.0" },
 ]
 
 [[package]]

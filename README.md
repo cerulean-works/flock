@@ -16,8 +16,8 @@ development tools, with Flock in editable mode so source changes take effect
 without reinstalling.
 
 ```sh
-uv sync --locked
-uv run python -c "import flock.training; import flock.eval; import flock.hub"
+uv sync --all-packages --locked
+uv run --all-packages python -c "import flock.training; import flock.eval; import flock.cli; import app.api.app"
 ```
 
 ### Adding new dependencies
@@ -30,8 +30,8 @@ For shared development tools, use `uv add --group dev <dependency>`.
 ```sh
 uv add --package flock-training <dependency>
 uv add --package flock-eval <dependency>
-uv add --package flock-hub <dependency>
-uv add --package flock-tracker <dependency>
+uv add --package flock-cli <dependency>
+uv add --package flock-app-api <dependency>
 uv add --package flock-tests <dependency>
 ```
 
@@ -57,26 +57,23 @@ way to run them across models and checkpoints. The goal is to make evaluation a
 routine part of experimentation, so we can understand what changes between
 training runs and compare results under a consistent setup.
 
-### Hub
+### CLI
 
-[`flock.hub`](flock/hub/) is where we're building our S3-backed storage for datasets
-and model training checkpoints. It aims to replace our reliance on Hugging Face
-for storing and accessing these artifacts, giving us direct control over where
-they live and how we organize them. We're designing it around the needs of our
-training and evaluation workflows: making datasets available to experiments,
-saving checkpoints as training progresses, and retrieving them for evaluation
-or further training.
+[`flock.cli`](flock/cli/) is where we're building command-line tools for our
+training and evaluation workflows, including managing datasets and model
+checkpoints in our own storage infrastructure.
 
-### Tracker
+### Flock
 
-[`flock/tracker`](flock/tracker/) is our wandb-compatible experiment tracking server.
+[`app/api`](app/api/) is our wandb-compatible experiment tracking server, and
+[`app/web`](app/web/) is its dashboard.
 Training code keeps logging through the regular `wandb` SDK, pointed at our server with
 `wandb login --host`, while dashboards read loss curves and filtered run tables from a
 low-latency JSON API. It stores runs in PostgreSQL and keeps the data it serves in memory, so
 curves for dozens of runs load in a few milliseconds and filters over 10k-run projects return
-in single-digit milliseconds. See [the tracker docs](flock/tracker/README.md) for setup,
+in single-digit milliseconds. See [Flock docs](app/api/README.md) for setup,
 configuration, the API and the design.
 
 ```sh
-docker compose -f flock/tracker/compose.yaml up -d --build
+docker compose -f app/compose.yaml up -d --build
 ```
