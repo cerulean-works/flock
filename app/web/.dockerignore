@@ -1,0 +1,10 @@
+node_modules
+.svelte-kit
+build
+.git
+.env
+.env.*
+.DS_Store
+.claude
+.cursor
+.vscode

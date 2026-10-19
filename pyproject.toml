@@ -12,21 +12,20 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-root = ""
-module-name = ["flock.eval", "flock.hub", "flock.training"]
+module-name = ["flock.cli", "flock.eval", "flock.training", "app.api"]
 wheel-exclude = ["pyproject.toml"]
 
 [tool.uv]
 default-groups = ["dev", "components"]
 
 [tool.uv.workspace]
-members = ["flock/eval", "flock/hub", "flock/training", "flock/tracker", "tests"]
+members = ["flock/cli", "flock/eval", "flock/training", "app/api", "tests"]
 
 [tool.uv.sources]
 flock = { workspace = true }
+flock-cli = { workspace = true }
 flock-eval = { workspace = true }
-flock-hub = { workspace = true }
 flock-training = { workspace = true }
-flock-tracker = { workspace = true }
 
 [tool.ruff]
 target-version = "py314"
@@ -36,7 +35,6 @@ line-length = 100
 ignore = []
 
 [tool.ruff.lint.isort]
-# The tracker is an app (flock/tracker/app.py + src/), imported from its own directory.
 known-first-party = ["flock", "src", "app", "scripts"]
 
 [tool.ruff.lint.per-file-ignores]
@@ -44,19 +42,16 @@ known-first-party = ["flock", "src", "app", "scripts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["--import-mode=importlib", "--strict-markers"]
-# The tracker's tests import its app and src package the way `fastapi run` does.
-pythonpath = ["flock/tracker"]
-
-[tool.ty.environment]
-extra-paths = ["flock/tracker"]
+markers = [
+    "latency: tests that measure app response latency",
+]
+addopts = ["--import-mode=importlib", "--strict-markers", "-m", "not latency"]
 
 [dependency-groups]
 components = [
+    "flock-cli",
     "flock-eval",
-    "flock-hub",
     "flock-training",
-    "flock-tracker",
 ]
 dev = [
     "pytest>=9.1.1",
