@@ -31,8 +31,9 @@
 		}
 	});
 
+	// Narrow screens give the GPU its own line, with its hours and price under it.
 	const GRID =
-		'grid grid-cols-[minmax(0,1fr)_80px_128px] sm:grid-cols-[minmax(0,1fr)_96px_64px_144px] items-center gap-x-4';
+		'grid grid-cols-[minmax(0,1fr)_128px] sm:grid-cols-[minmax(0,1fr)_96px_64px_144px] items-center gap-x-4 gap-y-1';
 </script>
 
 <form method="POST" action="?/billing" class="mt-4 grid gap-6" use:enhance={saving.enhance}>
@@ -69,7 +70,7 @@
 		<div class="mt-2 border-t border-divider">
 			<div class={[GRID, 'h-9 border-b border-divider text-xs font-medium text-muted-foreground']}>
 				<span>GPU</span>
-				<span class="text-right">GPU hours</span>
+				<span class="hidden text-right sm:block">GPU hours</span>
 				<span class="hidden text-right sm:block">Runs</span>
 				<span>Price</span>
 			</div>
@@ -77,9 +78,12 @@
 				<ul>
 					{#each types as t (t.gpu_type)}
 						<li class={[GRID, 'min-h-11 border-b border-divider py-1.5']}>
-							<label for="rate-{t.gpu_type}" class="truncate font-medium">{t.gpu_type}</label>
-							<span class="text-right text-muted-foreground tabular-nums">{hours(t.gpu_hours)}</span
-							>
+							<label for="rate-{t.gpu_type}" class="truncate font-medium max-sm:col-span-2">
+								{t.gpu_type}
+							</label>
+							<span class="text-muted-foreground tabular-nums sm:text-right">
+								{hours(t.gpu_hours)}<span class="ml-1 sm:hidden">GPU hours</span>
+							</span>
 							<span class="hidden text-right text-muted-foreground tabular-nums sm:block">
 								{t.runs.toLocaleString('en-US')}
 							</span>
@@ -104,7 +108,7 @@
 						<li class={[GRID, 'min-h-11 border-b border-divider py-1.5']}>
 							<Input
 								name="new_type"
-								class="h-8"
+								class="h-8 max-sm:col-span-2"
 								placeholder="Another GPU, e.g. H200"
 								aria-label="GPU type to price"
 								autocomplete="off"

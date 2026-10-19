@@ -189,17 +189,22 @@ class History:
             x = x.astype(np.int64)
         return x, y
 
+    # wandb bookkeeping logged on every line, which dashboards can use as x axes.
+    TIME_KEYS = ("_runtime", "_timestamp")
+
     def delta(
         self, from_row: int, x_key: str = "_step"
     ) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
-        """Points logged at or after line ``from_row``: ``{key: (rows, x, y)}`` per metric.
+        """Points logged at or after line ``from_row``: ``{key: (rows, x, y)}`` per metric, and
+        for ``TIME_KEYS`` other than ``x_key``.
 
         Used to stream new points to dashboards and to replay what a dashboard missed between
         rendering a snapshot (which records each run's line count) and subscribing.
         """
         out = {}
         for key in self.keys():
-            if key.startswith("_"):  # wandb bookkeeping (_step, _runtime, ...), not a metric
+            # Other wandb bookkeeping (_step, _wandb.runtime, ...) is not a metric.
+            if key.startswith("_") and (key not in self.TIME_KEYS or key == x_key):
                 continue
             series = self.get(key)
             if series is None or series.n == 0:

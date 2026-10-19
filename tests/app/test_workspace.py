@@ -1,8 +1,10 @@
+import numpy as np
 import pytest
 
 from app.api.src.api.dashboard import Snapshot
 from app.api.src.core.live import Subscriber
-from tests.app.utils import history_rows
+from app.api.src.core.metric_defs import parse_metric_defs
+from tests.app.utils import history_rows, system_samples
 
 # ---------------------------------------------------------------------- snapshot
 
@@ -85,8 +87,8 @@ def test_snapshot_point_budget(api, monkeypatch):
     api.create_run("p", "r")
     api.stream("p", "r", history_rows(1000, a=float, b=float))
     snap = api.workspace()
-    assert snap["points"] == 100
-    assert len(snap["curves"][("r", "a")][0]) == 100
+    assert snap["points"] == 66  # a, b and the _runtime mapping share the budget
+    assert len(snap["curves"][("r", "a")][0]) == 66
 
 
 def test_unknown_project_and_metric_keys_survive_restart(make_flock):
@@ -106,6 +108,103 @@ def test_unknown_project_and_metric_keys_survive_restart(make_flock):
     assert snap["metrics"] == ["eval/acc", "loss"]
     assert snap["curves"][("done", "eval/acc")] == ([0, 1, 2, 3, 4], [0, 1, 2, 3, 4])
     api.close()
+
+
+# ---------------------------------------------------------------------- x axes
+
+# What wandb-core records for Hugging Face's WandbCallback (``define_metric("train/global_step")``,
+# ``define_metric("*", step_metric="train/global_step", step_sync=True)``) and for
+# ``define_metric("debug", hidden=True)``.
+HF_METRICS = [
+    {"1": "train/global_step", "6": [3], "7": []},
+    {"2": "*", "5": 1, "6": [1], "7": []},
+    {"1": "debug", "6": [3, 2], "7": []},
+]
+
+
+def test_metric_definitions_are_parsed_from_the_config():
+    config = {"lr": {"value": 0.1}, "_wandb": {"value": {"m": HF_METRICS}}}
+    assert parse_metric_defs(config) == [
+        {"key": "train/global_step"},
+        {"glob": "*", "step": "train/global_step"},
+        {"key": "debug", "hidden": True},
+    ]
+    # Older SDKs name the step metric; broken and self-referencing records are skipped.
+    legacy = [
+        {"1": "loss", "4": "epoch"},
+        {"1": "epoch", "5": 2},
+        {"2": "eval/", "5": 1},
+        {"1": "acc", "5": 99},
+        "junk",
+        {"6": [2]},
+    ]
+    assert parse_metric_defs({"_wandb": {"value": {"m": legacy}}}) == [
+        {"key": "loss", "step": "epoch"},
+        {"key": "epoch"},
+        {"key": "acc"},
+    ]
+    assert parse_metric_defs({}) == parse_metric_defs({"_wandb": {"value": {"m": 3}}}) == []
+
+
+def test_snapshot_carries_metric_definitions_and_axis_mappings(api):
+    api.create_run("p", "hf", config={"lr": 0.1, "_wandb": {"m": HF_METRICS}})
+    rows = []
+    for s in range(40):
+        # Every 10th line is an evaluation at the same global step as the line before it.
+        gs = 16 * (s - s // 10)
+        row = {"_step": s, "_runtime": s * 0.5, "_timestamp": 1.79e9 + s * 0.5}
+        row |= {"eval/loss": 1 / gs} if s % 10 == 9 else {"train/loss": 1 / (gs + 16)}
+        rows.append(row | {"train/global_step": gs + (0 if s % 10 == 9 else 16)})
+    api.stream("p", "hf", rows, events=system_samples(3, {"system.cpu": float}))
+    api.create_run("p", "plain")
+    api.stream("p", "plain", history_rows(5, loss=float))
+
+    snap = api.workspace(system="true", sort="created_at")
+    hf, plain = snap["runs"]
+    assert hf["metric_defs"] == [
+        {"key": "train/global_step"},
+        {"glob": "*", "step": "train/global_step"},
+        {"key": "debug", "hidden": True},
+    ]
+    assert plain["metric_defs"] == []
+    assert snap["axes"] == ["_runtime", "_timestamp", "train/global_step"]
+    assert snap["system_axes"] == ["_timestamp"]
+
+    maps = snap["mappings"]
+    # A mapping keeps only the knots interpolation needs: the ends and where the stride
+    # changes. Wall times keep full float64 precision.
+    steps, values = maps[("hf", "train/global_step")]
+    assert len(steps) < 20
+    interpolated = np.interp(np.arange(40), steps, values)
+    assert interpolated.tolist() == [r["train/global_step"] for r in rows]
+    assert maps[("hf", "_timestamp")] == ([0, 39], [1.79e9, 1.79e9 + 19.5])
+    assert maps[("hf", "_runtime")] == ([0, 39], [0, 19.5])
+    assert maps[("hf", "system:_timestamp")] == ([0.25, 3.25], [1.79e9, 1.79e9 + 3])
+    steps, runtimes = maps[("plain", "_runtime")]
+    assert steps[0] == 0 and steps[-1] == 4 and runtimes[-1] == pytest.approx(0.4)
+    assert ("plain", "train/global_step") not in maps
+    # Metrics are still sent against _step.
+    assert snap["curves"][("hf", "train/loss")][0][:3] == [0, 1, 2]
+
+    # A page whose runs define no step metrics maps wandb's times only.
+    bare = api.workspace("p", filter='{"name": "plain"}')
+    assert bare["axes"] == ["_runtime", "_timestamp"] and bare["system_axes"] == []
+
+
+def test_stream_announces_new_metric_definitions(api, events):
+    api.create_run("p", "r1", config={"lr": 0.1})
+    live = events("p", "r1:0")
+    live.next_of("hello")
+    api.create_run("p", "r1", config={"lr": 0.1, "_wandb": {"m": HF_METRICS}})
+    update = live.next_of("run")
+    assert update["metric_defs"][1] == {"glob": "*", "step": "train/global_step"}
+    api.create_run("p", "r1", config={"lr": 0.2, "_wandb": {"m": HF_METRICS}})  # unchanged
+    assert "metric_defs" not in live.next_of("run")
+    rows = [{"_step": 0, "_runtime": 0.5, "_timestamp": 1.79e9, "loss": 1.0}]
+    api.stream("p", "r1", rows)
+    series = live.next_of("history")["series"]
+    assert series["_timestamp"] == {"rows": [0], "x": [0], "y": [1.79e9]}
+    assert "_step" not in series
 
 
 # ---------------------------------------------------------------------- live stream
@@ -134,6 +233,8 @@ def test_stream_replays_missed_points_then_streams_new_ones(api, events):
     assert new["series"] == {
         "loss": {"rows": [5], "x": [5], "y": [5.0]},
         "acc": {"rows": [5], "x": [5], "y": [0.5]},
+        # Streamed too, so dashboards can plot against time.
+        "_runtime": {"rows": [5], "x": [5], "y": [0.5]},
     }
 
 

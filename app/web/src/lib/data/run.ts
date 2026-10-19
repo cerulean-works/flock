@@ -1,12 +1,25 @@
+import { AxisCurve, noAxes } from '#lib/chart/axes.ts';
 import { Series } from '#lib/chart/series.ts';
 import type { RunDetail, RunHistory, WorkspaceData } from '#lib/types.ts';
-import { columnDef, metricSections } from './snapshot.ts';
+import { columnDef, hiddenMetrics, metricSections } from './snapshot.ts';
 
 /** A stream's curves in plot order, without wandb's bookkeeping (`_step`, `_runtime`, ...). */
 const keysOf = (history: RunHistory) =>
 	Object.keys(history.series)
 		.filter((k) => !k.startsWith('_'))
 		.sort();
+
+/** x-axis mappings this page can draw from: wandb's times, and every step metric. */
+function runAxes(history: RunHistory, system: RunHistory, steps: Iterable<string>) {
+	const axes = noAxes();
+	const add = (into: Map<string, AxisCurve>, h: RunHistory, key: string) => {
+		const s = h.series[key];
+		into.set(key, new AxisCurve(s?.x ?? [], s?.y.map((v) => v ?? NaN) ?? []));
+	};
+	for (const key of ['_runtime', '_timestamp', ...steps]) add(axes.history, history, key);
+	add(axes.system, system, '_timestamp');
+	return axes;
+}
 
 const toSeries = ({ x, y }: { x: number[]; y: (number | null)[] }) =>
 	new Series(
@@ -35,7 +48,13 @@ export function runWorkspace(
 ): WorkspaceData {
 	const keys = keysOf(history);
 	const systemKeys = keysOf(system);
-	const { metrics, sections } = metricSections(keys, systemKeys);
+	const defs = run.metric_defs ?? [];
+	const steps = new Set(defs.flatMap((d) => (d.step ? [d.step] : [])));
+	const { metrics, panels, sections } = metricSections(
+		keys,
+		systemKeys,
+		hiddenMetrics(keys, [defs])
+	);
 	return {
 		meta: {
 			entity: run.entity,
@@ -45,6 +64,7 @@ export function runWorkspace(
 			columns: EDITABLE.map(([key, kind]) => columnDef(key, kind)),
 			groups: [],
 			metrics,
+			panels,
 			sections
 		},
 		page: {
@@ -59,7 +79,8 @@ export function runWorkspace(
 					state: run.state,
 					ordinal: 0,
 					lines: run.history_line_count,
-					systemLines: run.system_line_count
+					systemLines: run.system_line_count,
+					defs
 				}
 			],
 			metricCount: metrics.length,
@@ -68,7 +89,8 @@ export function runWorkspace(
 			series: [
 				...keys.map((k) => toSeries(history.series[k])),
 				...systemKeys.map((k) => toSeries(system.series[k]))
-			]
+			],
+			axes: [runAxes(history, system, steps)]
 		}
 	};
 }

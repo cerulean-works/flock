@@ -282,6 +282,9 @@
 						onCheckedChange={() => ws.toggleSelectAll()}
 						aria-label={allSelected ? 'Deselect all runs' : 'Select all runs on this page'}
 					/>
+				{:else}
+					<!-- The checkbox's place stays, so names don't shift between the table and charts. -->
+					<span class="size-4 flex-none"></span>
 				{/if}
 				<RunEye
 					shown={allShown}
@@ -379,6 +382,8 @@
 							onCheckedChange={() => ws.toggleSelected(r)}
 							aria-label="Select {ws.nameOf(r)}"
 						/>
+					{:else}
+						<span class="size-4 flex-none"></span>
 					{/if}
 					<RunEye
 						color={ws.colors[r]}

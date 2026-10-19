@@ -4,6 +4,7 @@ import os
 import signal
 import subprocess
 
+import numpy as np
 import pytest
 
 from app.api.src.core import gpus
@@ -492,3 +493,38 @@ def test_offline_run_synced_into_a_deleted_project(flock, api, wandb_client):
     wandb_client.cli("sync", str(run_dir))
     row = api.only_run("reborn")
     assert (row["display_name"], row["summary.loss"]) == ("offline", 2.0)
+
+
+def test_step_metric_definitions_reach_the_dashboard(flock, api, wandb_client):
+    """Hugging Face's WandbCallback plots every metric against train/global_step."""
+    wandb_client.run(
+        """
+        run = wandb.init(project="hf", settings=SETTINGS)
+        run.define_metric("train/global_step")
+        run.define_metric("*", step_metric="train/global_step", step_sync=True)
+        run.define_metric("debug", hidden=True)
+        for i in range(1, 21):
+            run.log({"train/global_step": 16 * i, "train/loss": 1 / i})
+            if i % 5 == 0:
+                run.log({"eval/loss": 2 / i})  # step_sync adds train/global_step
+            run.log({"debug": i})
+        run.finish()
+        """
+    )
+    (run_id,) = api.runs("hf")["ids"]
+    snap = api.workspace("hf")
+    # wandb-core lists them in no particular order.
+    assert sorted(snap["runs"][0]["metric_defs"], key=str) == [
+        {"glob": "*", "step": "train/global_step"},
+        {"key": "debug", "hidden": True},
+        {"key": "train/global_step"},
+    ]
+    assert (
+        api.get(f"/api/v1/projects/flock/hf/runs/{run_id}").json()["metric_defs"]
+        == (snap["runs"][0]["metric_defs"])
+    )
+    steps, values = snap["mappings"][(run_id, "train/global_step")]
+    loss_steps = snap["curves"][(run_id, "train/loss")][0]
+    assert np.interp(loss_steps, steps, values).tolist() == [16 * i for i in range(1, 21)]
+    eval_steps = snap["curves"][(run_id, "eval/loss")][0]
+    assert np.interp(eval_steps, steps, values).tolist() == [80, 160, 240, 320]

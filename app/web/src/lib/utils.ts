@@ -307,6 +307,35 @@ export function dateTime(ts: number): string {
 	return `${MONTHS[d.getUTCMonth()]} ${p(d.getUTCDate())} '${p(d.getUTCFullYear() % 100)} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
 }
 
+// Wall-clock axes read in the viewer's time zone. They are only drawn in the browser (an x axis
+// other than steps is a choice made there), so server and client never disagree about them.
+
+const local = (ts: number) => {
+	const d = new Date(ts * 1000);
+	const p = (n: number) => String(n).padStart(2, '0');
+	return {
+		day: `${MONTHS[d.getMonth()]} ${p(d.getDate())}`,
+		time: `${p(d.getHours())}:${p(d.getMinutes())}`,
+		seconds: p(d.getSeconds()),
+		midnight: !d.getHours() && !d.getMinutes() && !d.getSeconds()
+	};
+};
+
+/** Axis label for a wall time in epoch seconds: the date at midnights and for days apart. */
+export function formatWallTick(ts: number, step: number): string {
+	if (!Number.isFinite(ts)) return '–';
+	const t = local(ts);
+	if (step >= 86_400 || t.midnight) return t.day;
+	return step < 60 ? `${t.time}:${t.seconds}` : t.time;
+}
+
+/** A wall time in epoch seconds for readouts: `Oct 20 14:03:05`. */
+export function formatWallTime(ts: number): string {
+	if (!Number.isFinite(ts)) return '–';
+	const t = local(ts);
+	return `${t.day} ${t.time}:${t.seconds}`;
+}
+
 /** A JSON table cell: strings as-is, lists joined, media values by type. */
 export function formatValue(v: unknown): string {
 	if (v == null || v === '') return '–';

@@ -35,7 +35,8 @@
 </script>
 
 <section aria-labelledby="budget-title" class="grid gap-6">
-	<div class="flex items-center gap-1">
+	<!-- The same 40px band as the activity's heading beside it. -->
+	<div class="flex h-10 items-center gap-1">
 		<h2 id="budget-title" class="flex-1 font-serif text-[22px] tracking-[-0.01em]">Budget</h2>
 		<Button
 			variant="ghost"

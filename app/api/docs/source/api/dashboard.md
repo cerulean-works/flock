@@ -4,7 +4,7 @@ The two endpoints a dashboard page is built on: a binary snapshot of the page, a
 
 ## The workspace snapshot[[the-workspace-snapshot]]
 
-`GET /workspace` returns a page of the run table with every column, and every metric's curve for each run on the page, as one binary response (`application/octet-stream`).
+`GET /workspace` returns a page of the run table with every column, and every metric's curve for each run on the page, as one binary response (`application/octet-stream`). Each run also carries what a dashboard needs to plot its curves against another x-axis: its metric definitions and its x-axis mappings.
 
 | Parameter | Default | Meaning |
 |---|---|---|
@@ -27,10 +27,12 @@ header                   JSON, then zero bytes up to a multiple of 8 bytes from 
 f64[numeric × runs]      numeric table cells, column after column (NaN = no value)
 f64[runs × series × 6]   six numbers describing each curve
 f64[x_len]               x values of the curves that aren't evenly spaced
-f32[y_len]               y values of every curve
+f32[y_len]               y values of every curve, then 4 zero bytes if y_len is odd
+f64[runs × axes × 2]     two numbers describing each x-axis mapping
+f64[axes_len]            the mappings' knots
 ```
 
-Every section starts at a multiple of 8 bytes, so you can read each one as a typed array without copying.
+Every section starts at a multiple of 8 bytes, so you can read each one as a typed array without copying. The last two sections came later than the others: a header without `axes` has neither, and older clients can ignore them.
 
 ### Header[[header]]
 
@@ -50,6 +52,9 @@ Every section starts at a multiple of 8 bytes, so you can read each one as a typ
 | `text` | The other columns' cells, as an object that maps a column's index (as a string) to a list with one value per run. |
 | `points` | The maximum number of points per curve that applied. See [Point budget](#point-budget). |
 | `x_len`, `y_len` | The lengths of the x and y sections, in values. |
+| `axes` | The keys of the x-axis mappings against `_step`: `_runtime`, `_timestamp`, then every step metric the page's runs define, sorted. See [X-axis mappings](#x-axis-mappings). |
+| `system_axes` | The keys of the mappings against `_runtime`: `["_timestamp"]` with `system=true`, else an empty list. |
+| `axes_len` | The length of the knots section, in values. |
 
 Each entry of `runs` has:
 
@@ -61,6 +66,7 @@ Each entry of `runs` has:
 | `ordinal` | The run's position in the project's creation order, from 0 for the oldest. Deleting or moving runs renumbers it. |
 | `lines` | The number of history lines: the cursor to pass to the [stream](#the-live-stream). |
 | `system_lines` | The number of system samples, the cursor for system metrics. |
+| `metric_defs` | The run's metric definitions. See [Metric definitions](#metric-definitions). |
 
 `columns` lists the run attributes `state`, `name`, `created_at`, `updated_at`, `tags`, `group`, `job_type`, `notes`, `host`, `program`, `commit`, `sweep` and `exitcode`, leaving out those no run has. Then come the `config.*` columns, then the `summary.*` columns, each sorted by name. `display_name` isn't a column, since it's each run's `name` in `runs`. Neither are `description`, `heartbeat_at` and `owner`: read them from the [run table](queries#the-run-table).
 
@@ -98,13 +104,44 @@ k_i = (i·(N−1) + (n−1)//2) // (n−1)    for i = 0 … n−1
 
 The formula uses integer division only, so a client computes the same indices as Flock. When the x values are evenly spaced, which is the usual case for `_step`, they aren't sent: point `i` has `x = x0 + dx·k_i`. Otherwise the x section holds them explicitly, starting at the x offset.
 
+### Metric definitions[[metric-definitions]]
+
+A run's `metric_defs` are what its `run.define_metric` calls said about plotting, in the SDK's order. Each is an object with:
+
+| Field | Meaning |
+|---|---|
+| `key` or `glob` | The metric's name, or a glob: a name ending in `*` that matches every key starting with what comes before the `*`. |
+| `step` | The metric's step metric, its default x-axis. Missing when it has none. |
+| `hidden` | `true` when the metric should get no chart of its own. Missing otherwise. |
+
+To find a metric's definition, look for one with its `key` first, then for the glob with the longest prefix it starts with. wandb's chart for a metric plots it against its definition's `step`, or against `_step` without one. Hugging Face's `Trainer`, for example, gives every run these definitions:
+
+```json
+[{"key": "train/global_step"}, {"glob": "*", "step": "train/global_step"}]
+```
+
+### X-axis mappings[[x-axis-mappings]]
+
+Curves are always sent against `_step`, and system metrics against `_runtime`. To plot one against something else, such as its step metric or the wall-clock time, interpolate the run's mapping of that key at the curve's x values. A mapping is the key's curve against the same x, kept to its knots: Flock leaves out every point that is in line with both its neighbors, because interpolating over it gives the same value. A step metric logged at a fixed stride shrinks to its two ends.
+
+Each run has one mapping per name in `axes`, against `_step`, followed by one per name in `system_axes`, against `_runtime`. Mapping `a` of run `r` is described by the two numbers at position `(r × (len(axes) + len(system_axes)) + a) × 2` of its section:
+
+| Number | Meaning |
+|---|---|
+| offset | Where the mapping's knots start in the knots section. |
+| `n` | How many knots it has. `0` means the run never logged the key. |
+
+The knots section holds the mapping's `n` x values, then its `n` values, both as `f64`, so wall-clock times keep their precision. Mappings of `_runtime` and `_timestamp` are sampled like curves when they have more knots than the point cap. Mappings of step metrics keep up to 2,048 knots, or the cap if it is higher.
+
+The stream sends the points of `_runtime` and `_timestamp` too, so mappings can grow with the curves. See [Events](#events).
+
 ### Point budget[[point-budget]]
 
-A snapshot aims at 2,000,000 points in total, shared between its curves. The cap per curve, in the header's `points`, is the smaller of `max_points` and 2,000,000 divided by the number of curves that have data, but never fewer than 32. Curves with fewer points than the cap are sent whole.
+A snapshot aims at 2,000,000 points in total, shared between its curves and its mappings. The cap per curve, in the header's `points`, is the smaller of `max_points` and 2,000,000 divided by the number of curves and mappings that have data, but never fewer than 32. Curves with fewer points than the cap are sent whole.
 
 ### Decoding a snapshot[[decoding-a-snapshot]]
 
-This TypeScript function decodes a snapshot into its header, its table cells by column, and its curves by run and metric:
+This TypeScript function decodes a snapshot into its header, its table cells by column, its curves by run and metric, and its x-axis mappings by run and key:
 
 ```ts
 type Curve = { x: Float64Array; y: Float32Array };
@@ -128,6 +165,12 @@ export function decodeSnapshot(buffer: ArrayBuffer) {
   const xs = new Float64Array(buffer, pos, header.x_len);
   pos += xs.byteLength;
   const ys = new Float32Array(buffer, pos, header.y_len);
+  pos = Math.ceil((pos + ys.byteLength) / 8) * 8;
+  // Two values per (run, mapping): offset, n. Snapshots without `axes` have none.
+  const axes: string[] = [...(header.axes ?? []), ...(header.system_axes ?? [])];
+  const axisMeta = new Float64Array(buffer, pos, header.axes ? nRuns * axes.length * 2 : 0);
+  pos += axisMeta.byteLength;
+  const knots = new Float64Array(buffer, pos, header.axes_len ?? 0);
 
   const cells = new Map<string, unknown[]>();
   header.numeric.forEach((column: number, i: number) => {
@@ -158,7 +201,21 @@ export function decodeSnapshot(buffer: ArrayBuffer) {
       curves.set(`${run.id}/${metric}`, { x, y: ys.subarray(yOffset, yOffset + n) });
     });
   });
-  return { header, cells, curves };
+
+  // Keyed by `${runId}/${key}`, and `${runId}/system:${key}` for those against _runtime.
+  const mappings = new Map<string, { x: Float64Array; y: Float64Array }>();
+  header.runs.forEach((run: { id: string }, r: number) => {
+    axes.forEach((key, a) => {
+      const o = (r * axes.length + a) * 2;
+      const [offset, n] = [axisMeta[o], axisMeta[o + 1]];
+      const stream = a < header.axes.length ? "" : "system:";
+      mappings.set(`${run.id}/${stream}${key}`, {
+        x: knots.subarray(offset, offset + n),
+        y: knots.subarray(offset + n, offset + 2 * n),
+      });
+    });
+  });
+  return { header, cells, curves, mappings };
 }
 ```
 
@@ -183,7 +240,7 @@ Each event is an `event:` line naming it and a `data:` line of JSON. Keep-alive 
 | `hello` | the new subscriber, first | `active` and `total` runs in the project, and `runs`: for each watched run, its `state` and `lines`, and its `system_lines` with `system=true`. |
 | `history` | subscribers watching the run | New points of logged metrics: `run`, `lines` (the run's new history line count) and `series`. |
 | `system` | subscribers watching the run, with `system=true` | New system samples, in the same shape as `history`, with `_runtime` as x. |
-| `run` | subscribers watching the run | `run`, `state`, `lines` and `updated_at`, plus `summary` with the `summary.*` columns that changed (`null` for removed ones), and `attributes` with the attributes an edit changed. |
+| `run` | subscribers watching the run | `run`, `state`, `lines` and `updated_at`, plus `summary` with the `summary.*` columns that changed (`null` for removed ones), `attributes` with the attributes an edit changed, and `metric_defs` with the run's [metric definitions](#metric-definitions) when they changed. |
 | `created` | every subscriber of the project | A run was created, or moved in: `run`, `display_name` and `state`. |
 | `deleted` | every subscriber of the project | Runs were deleted: `runs`, a list of run ids. Runs that moved out also carry `moved_to`, the target project's name. |
 | `project` | every subscriber of the project | `{"renamed_to": "<name>"}` when the project was renamed, `{"entity_renamed_to": "<name>"}` when its organization was renamed, or `{"deleted": true}`. The stream ends after it. |
@@ -195,7 +252,7 @@ event: history
 data: {"run":"9fc2v9ee","lines":203,"series":{"loss":{"rows":[200,201,202],"x":[200,201,202],"y":[1.83,1.82,1.82]}}}
 ```
 
-`rows` are the points' line numbers. The replay and the first live events can overlap, so drop points whose line you already have. wandb's own keys, such as `_step` and `_runtime`, aren't sent as metrics.
+`rows` are the points' line numbers. The replay and the first live events can overlap, so drop points whose line you already have. Of wandb's own keys, only `_runtime` and `_timestamp` are sent, for the [x-axis mappings](#x-axis-mappings): `history` events carry both, and `system` events carry `_timestamp`. They aren't metrics.
 
 A `run` event comes when a run's state or summary changes, when its client updates its metadata, and when someone edits its attributes. Crash detection sends one too.
 

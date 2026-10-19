@@ -7,10 +7,11 @@
 	import * as Card from '#lib/components/ui/card/index.js';
 	import { getWorkspace, MAX_PLOT_H, MIN_PLOT_H } from '#lib/workspace/workspace.svelte.ts';
 	import LinePlot from './LinePlot.svelte';
+	import PanelLegend from './PanelLegend.svelte';
 	import PanelMenu from './PanelMenu.svelte';
 
 	interface Props {
-		metric: number;
+		panel: number;
 		active: boolean;
 		root: HTMLElement | null;
 		fullscreenHref: ResolvedPathname;
@@ -24,7 +25,7 @@
 	}
 
 	let {
-		metric,
+		panel,
 		active,
 		root,
 		fullscreenHref,
@@ -35,16 +36,12 @@
 	}: Props = $props();
 
 	const ws = getWorkspace();
-	const def = $derived(ws.meta.metrics[metric]);
-	// The muted prefix: `train/` of `train/loss`, `system.` of `system.gpu.0.gpu`.
-	const prefix = $derived(
-		def.stream === 'system' && def.key.startsWith('system.') ? 7 : def.key.indexOf('/') + 1
-	);
-	// Names the few runs plotted; a run's own page has just the one.
-	const legend = $derived(ws.visible.length <= 5 && ws.page.runs.length > 1 ? ws.visible : null);
-	const zoomed = $derived(ws.zoomOf(metric) != null);
+	const view = $derived(ws.panels[panel]);
+	const section = $derived(view.section);
+
+	const zoomed = $derived(ws.zoomOf(panel) != null);
 	// Panels of a section share one height, so its rows stay even.
-	const height = $derived(ws.heightOf(def.section));
+	const height = $derived(ws.heightOf(section));
 
 	let plot = $state<LinePlot>();
 	let resizing = $state(false);
@@ -57,12 +54,12 @@
 		el.setPointerCapture(e.pointerId);
 		const y0 = e.clientY;
 		const h0 = height;
-		const section = def.section;
+		const sec = section;
 		resizing = true;
 		ws.cursor = null;
-		const move = (ev: PointerEvent) => ws.setHeight(section, h0 + ev.clientY - y0, false);
+		const move = (ev: PointerEvent) => ws.setHeight(sec, h0 + ev.clientY - y0, false);
 		const up = (ev: PointerEvent) => {
-			ws.setHeight(section, h0 + ev.clientY - y0);
+			ws.setHeight(sec, h0 + ev.clientY - y0);
 			resizing = false;
 			el.removeEventListener('pointermove', move);
 			el.removeEventListener('pointerup', up);
@@ -77,7 +74,7 @@
 		const by = { ArrowUp: -16, ArrowDown: 16 }[e.key];
 		if (by == null) return;
 		e.preventDefault();
-		ws.setHeight(def.section, height + by);
+		ws.setHeight(section, height + by);
 	}
 
 	function gripKey(e: KeyboardEvent) {
@@ -96,29 +93,29 @@
 		'card relative min-w-0 gap-1.5 pb-2 transition-shadow',
 		dragging && 'shadow-xl ring-foreground/20'
 	]}
-	aria-label={def.key}
+	aria-label={view.title}
 >
 	<!-- The header is the handle; its buttons keep their clicks. -->
 	<Card.Header
 		class={['min-h-7 items-center', dragging ? 'cursor-grabbing' : 'cursor-grab']}
 		onpointerdown={ongrab}
 	>
-		<Card.Title class="flex min-w-0 items-center leading-7" title={def.key}>
+		<Card.Title class="flex min-w-0 items-center leading-7" title={view.title}>
 			<button
 				class={[
 					'-ml-1.5 grid h-6 w-4 flex-none cursor-[inherit] place-items-center rounded text-faint transition-opacity outline-none hover:text-muted-foreground focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50',
 					dragging ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-100'
 				]}
 				data-grip
-				aria-label="Move {def.key} (arrow keys)"
+				aria-label="Move {view.title} (arrow keys)"
 				title="Drag to move"
 				onkeydown={gripKey}
 			>
 				<GripVerticalIcon class="size-3.5" />
 			</button>
 			<span class="min-w-0 truncate">
-				<span class="font-normal text-muted-foreground">{def.key.slice(0, prefix)}</span
-				>{def.key.slice(prefix)}
+				<span class="font-normal text-muted-foreground">{view.title.slice(0, view.prefix)}</span
+				>{view.title.slice(view.prefix)}
 			</span>
 		</Card.Title>
 		<Card.Action
@@ -129,8 +126,7 @@
 			]}
 		>
 			{#if zoomed}
-				<Button variant="link" size="xs" onclick={() => ws.setZoom(metric, null)}>Reset zoom</Button
-				>
+				<Button variant="link" size="xs" onclick={() => ws.setZoom(panel, null)}>Reset zoom</Button>
 			{/if}
 			<Button
 				variant="ghost"
@@ -138,38 +134,21 @@
 				href={fullscreenHref}
 				onclick={onfullscreen}
 				title="Full screen"
-				aria-label="{def.key} full screen"
+				aria-label="{view.title} full screen"
 			>
 				<Maximize2Icon />
 			</Button>
 			<PanelMenu
-				{metric}
-				onpng={() => downloadPng(plot?.snapshot() ?? null, def.key)}
-				oncsv={() => downloadCsv(ws, metric)}
+				{panel}
+				onpng={() => downloadPng(plot?.snapshot() ?? null, view.title)}
+				oncsv={() => downloadCsv(ws, panel)}
 			/>
 		</Card.Action>
 	</Card.Header>
 	<Card.Content class="flex flex-col gap-1.5 pl-1.5">
-		{#if legend}
-			<ul class="flex flex-col gap-0.5 pl-1.5 text-xs">
-				{#each legend as row (ws.page.runs[row].id)}
-					<li
-						class={[
-							'flex min-w-0 items-center gap-2 transition-opacity',
-							ws.focus != null && ws.focus !== row && 'opacity-45'
-						]}
-						onpointerenter={() => (ws.hover = row)}
-						onpointerleave={() => (ws.hover = null)}
-					>
-						<span class="h-0.5 w-3.5 flex-none rounded-full" style:background={ws.colors[row]}
-						></span>
-						<span class="truncate">{ws.page.runs[row].name}</span>
-					</li>
-				{/each}
-			</ul>
-		{/if}
+		<PanelLegend {view} />
 		<div style:height="{height}px">
-			<LinePlot bind:this={plot} {metric} surface="grid" {active} {root} />
+			<LinePlot bind:this={plot} {panel} surface="grid" {active} {root} />
 		</div>
 	</Card.Content>
 	<!-- Resizes the section's panels; double-click goes back to the default height. A focusable
@@ -183,14 +162,14 @@
 		]}
 		role="separator"
 		aria-orientation="horizontal"
-		aria-label="Resize {def.section} panels"
+		aria-label="Resize {section} panels"
 		aria-valuenow={height}
 		aria-valuemin={MIN_PLOT_H}
 		aria-valuemax={MAX_PLOT_H}
 		tabindex="0"
 		title="Drag to resize · double-click to reset"
 		onpointerdown={startResize}
-		ondblclick={() => ws.setHeight(def.section, null)}
+		ondblclick={() => ws.setHeight(section, null)}
 		onkeydown={resizeKey}
 	></div>
 </Card.Root>

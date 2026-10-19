@@ -14,7 +14,9 @@
 	import CursorPanel from '#lib/components/CursorPanel.svelte';
 	import DeleteRunsDialog from '#lib/components/DeleteRunsDialog.svelte';
 	import EditRunDialog from '#lib/components/EditRunDialog.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import FullscreenPanel from '#lib/components/FullscreenPanel.svelte';
+	import PanelEditor from '#lib/components/PanelEditor.svelte';
 	import LiveStatus from '#lib/components/LiveStatus.svelte';
 	import MoveRunsDialog from '#lib/components/MoveRunsDialog.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
@@ -136,16 +138,16 @@
 		});
 	});
 
-	// Full-screen panels, as on the project's page: `?panel=<metric>`.
+	// Full-screen panels, as on the project's page: `?panel=<panel id>`.
 	const fullscreen = $derived.by(() => {
-		const key = page.url.searchParams.get('panel');
-		const i = key ? ws.meta.metrics.findIndex((m) => m.key === key) : -1;
+		const id = page.url.searchParams.get('panel');
+		const i = id ? ws.findPanel(id) : -1;
 		return i === -1 || tab !== 'charts' ? null : i;
 	});
-	const panelHref = (m: number) => withParam(page.url, 'panel', ws.meta.metrics[m].key);
+	const panelHref = (p: number) => withParam(page.url, 'panel', ws.meta.panels[p].id);
 	const neighbours = $derived.by(() => {
 		if (fullscreen == null) return { prev: null, next: null };
-		const flat = ws.sections.flatMap((s) => s.metrics);
+		const flat = ws.sections.flatMap((s) => s.panels);
 		const i = flat.indexOf(fullscreen);
 		return { prev: i > 0 ? flat[i - 1] : null, next: i < flat.length - 1 ? flat[i + 1] : null };
 	});
@@ -244,7 +246,7 @@
 						onfullscreen={openPanel}
 					/>
 				{:else}
-					<p class="px-5 py-6 text-muted-foreground">This run hasn’t logged any metrics.</p>
+					<EmptyState>This run hasn’t logged any metrics.</EmptyState>
 				{/if}
 			{:else if tab === 'logs'}
 				{#key data.run.id}
@@ -303,7 +305,7 @@
 
 {#if fullscreen != null}
 	<FullscreenPanel
-		metric={fullscreen}
+		panel={fullscreen}
 		closeHref={withParam(page.url, 'panel', null)}
 		prevHref={neighbours.prev != null ? panelHref(neighbours.prev) : null}
 		nextHref={neighbours.next != null ? panelHref(neighbours.next) : null}
@@ -311,6 +313,7 @@
 	/>
 {/if}
 
+<PanelEditor />
 <CursorPanel />
 <EditRunDialog
 	gpu={{ type: data.run.gpu_type, count: data.run.gpu_count, detected: data.run.gpu_detected }}

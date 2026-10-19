@@ -101,6 +101,7 @@ implement artifacts, sweeps, reports or wandb's own web UI.
 | `wandb login` / `wandb.init` (name, config, tags, notes, group, job_type, `id`) | yes |
 | `run.log` (incl. nested dicts, explicit `step`, NaN/inf, media values) | yes |
 | `run.summary`, `define_metric(summary=...)` | yes |
+| `define_metric(step_metric=..., hidden=...)`, with globs (dashboards plot against step metrics) | yes |
 | `run.config.update`, `run.tags`, `run.notes` | yes |
 | `resume="allow" \| "must"` | yes |
 | exit codes (`finished` / `failed`), preemption, crash detection | yes |
@@ -329,7 +330,9 @@ b"FLK2"  u32 header length  header JSON  (zero-padded to 8 bytes)
 f64[numeric columns × runs]        numeric table cells, column-major (NaN = missing)
 f64[runs × series × 6]             per series: y offset, n, raw count N, x0, dx, x offset
 f64[...]                           x values of irregular series
-f32[...]                           y values
+f32[...]                           y values (zero-padded to 8 bytes)
+f64[runs × axes × 2]               per x-axis mapping: offset, n
+f64[...]                           mapping knots: n x values, then n values
 ```
 
 Each run's series are the header's `metrics` against `_step`, followed by its
@@ -338,15 +341,25 @@ for, so the layout is unchanged for clients that don't ask. Series are sampled a
 indices `k_i = (i·(N-1) + (n-1)//2) // (n-1)`. When a series' x values are evenly spaced, which
 is the usual case for `_step`, they are `x0 + dx·k_i` and aren't sent, so the x offset is -1.
 Otherwise they are stored explicitly at the x offset. Header `runs` carry each run's history
-`lines` and `system_lines` counts.
+`lines` and `system_lines` counts, and its `metric_defs`: what `define_metric` set for plotting
+(step metrics, globs, hidden metrics), parsed from the `m` list wandb-core keeps in the config's
+`_wandb` entry.
+
+So that a dashboard can switch x axes without refetching, each run also carries x-axis mappings:
+the header's `axes` (`_runtime`, `_timestamp` and every step metric the page's runs define)
+against `_step`, then `system_axes` (`_timestamp` with `system=true`) against `_runtime`, as
+float64 knots. Points in line with both neighbours are dropped, since interpolating over them is
+exact, so a step metric logged at a fixed stride is two knots. Mappings share the point budget
+with curves. Snapshots from before mappings have no `axes` and end after the y values.
 
 `GET .../stream` sends Server-Sent Events about the runs on a page:
 - `hello` carries the current state of every watched run.
-- `history` carries new points.
-- `system` carries new system metric samples, against `_runtime`. These are only sent when
-  the stream was opened with `system=true`.
+- `history` carries new points, including `_runtime` and `_timestamp` for the x-axis mappings.
+- `system` carries new system metric samples, against `_runtime`, including `_timestamp`. These
+  are only sent when the stream was opened with `system=true`.
 - `run` carries state changes, the line count, changed `summary.*` columns and, after an
-  edit, the changed `attributes`.
+  edit, the changed `attributes`. When the run's metric definitions change, it carries them
+  as `metric_defs`.
 - `created` announces a new run in the project, or one moved in.
 - `deleted` lists runs that were deleted, or moved out (with `moved_to`).
 - `project` says the project was renamed (`renamed_to`), its organization was renamed

@@ -396,7 +396,8 @@ async def move_runs(project: ProjectDep, body: RunMove, store: StoreDep, user: U
 
 @router.get("/projects/{entity}/{project}/runs/{run}")
 async def get_run(run: RunDep, store: StoreDep) -> Response:
-    """Run attributes, unwrapped config, summary and the names of its logged/system metrics."""
+    """Run attributes, unwrapped config, summary, the names of its logged/system metrics and
+    its metric definitions (``metric_defs``: step metrics and hidden metrics)."""
     summary = await store.read_summary(run)
     summary.pop("_wandb", None)
     (hist,) = await store.histories([run], ())
@@ -418,6 +419,7 @@ async def get_run(run: RunDep, store: StoreDep) -> Response:
             "cost": round(store.budgets.run_cost(run), 2),
             "config": config,
             "summary": summary,
+            "metric_defs": run.metric_defs,
             "history_keys": hist.keys(),
             "system_keys": system.keys(),
             "history_line_count": run.history_line_count,

@@ -7,12 +7,14 @@
 	import ColumnsMenu from '#lib/components/ColumnsMenu.svelte';
 	import CursorPanel from '#lib/components/CursorPanel.svelte';
 	import FullscreenPanel from '#lib/components/FullscreenPanel.svelte';
+	import PanelEditor from '#lib/components/PanelEditor.svelte';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { toast } from 'svelte-sonner';
 	import DeleteRunsDialog from '#lib/components/DeleteRunsDialog.svelte';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import EditRunDialog from '#lib/components/EditRunDialog.svelte';
 	import MoveRunsDialog from '#lib/components/MoveRunsDialog.svelte';
 	import LiveStatus from '#lib/components/LiveStatus.svelte';
@@ -107,9 +109,9 @@
 		return v === 'charts' || v === 'table' ? v : lastView(data.shell.projectView);
 	});
 	const urlPanel = $derived.by(() => {
-		const key = page.url.searchParams.get('panel');
-		if (!key) return null;
-		const i = ws.meta.metrics.findIndex((m) => m.key === key);
+		const id = page.url.searchParams.get('panel');
+		if (!id) return null;
+		const i = ws.findPanel(id);
 		return i === -1 ? null : i;
 	});
 	const view = $derived(viewOverride ?? urlView);
@@ -119,7 +121,7 @@
 		workspaceHrefWith(ws.meta.entity, ws.meta.project, page.url.search, changes);
 
 	const viewHref = (v: View) => hrefWith({ view: v === 'table' ? null : v });
-	const panelHref = (m: number) => hrefWith({ panel: ws.meta.metrics[m].key, view: 'charts' });
+	const panelHref = (p: number) => hrefWith({ panel: ws.meta.panels[p].id, view: 'charts' });
 
 	function setView(v: View, e?: MouseEvent) {
 		e?.preventDefault();
@@ -162,7 +164,7 @@
 
 	const neighbours = $derived.by(() => {
 		if (fullscreen == null) return { prev: null, next: null };
-		const flat = ws.sections.flatMap((s) => s.metrics);
+		const flat = ws.sections.flatMap((s) => s.panels);
 		const i = flat.indexOf(fullscreen);
 		return { prev: i > 0 ? flat[i - 1] : null, next: i < flat.length - 1 ? flat[i + 1] : null };
 	});
@@ -181,7 +183,7 @@
 			return;
 		// Open menus, popovers and the full-screen dialog handle their own keys (Escape included).
 		if (t.closest('[role="menu"], [role="listbox"], [role="slider"], [role="tablist"]')) return;
-		if (document.querySelector(OPEN_LAYER)) return;
+		if (document.querySelector(OPEN_LAYER) || ws.editing != null) return;
 		if (e.key === 'Escape') {
 			if (fullscreen == null && view === 'table' && ws.selected.size) ws.selected.clear();
 			else if (fullscreen == null) ws.pinnedId = null;
@@ -344,34 +346,40 @@
 			onfullscreen={openPanel}
 		/>
 		{#if ws.page.total === 0 && narrowed}
-			<div class="empty absolute inset-0 z-4 bg-background px-5 pt-[10vh]">
-				<div class="mx-auto max-w-160 font-serif text-[19px] leading-normal">
-					<h2 class="mb-3 text-[28px] leading-tight tracking-[-0.01em]">No matching runs</h2>
-					<p class="mb-4">{noMatch}</p>
-					<Button variant="outline" href={hrefWith({ q: null, filters: null, page: null })}>
-						Show every run
-					</Button>
-				</div>
-			</div>
+			<EmptyState
+				variant="onboarding"
+				class="empty absolute inset-0 z-4 bg-background"
+				title="No matching runs"
+			>
+				{#snippet lead()}{noMatch}{/snippet}
+				<Button
+					class="mt-4"
+					variant="outline"
+					href={hrefWith({ q: null, filters: null, page: null })}
+				>
+					Show every run
+				</Button>
+			</EmptyState>
 		{:else if ws.page.total === 0}
-			<div class="empty absolute inset-0 z-4 bg-background px-5 pt-[10vh]">
-				<div class="mx-auto max-w-160 font-serif text-[19px] leading-normal">
-					<h2 class="mb-3 text-[28px] leading-tight tracking-[-0.01em]">No runs yet</h2>
-					<p class="mb-4">
-						The SDK needs an API key: <a
-							class="text-link underline-offset-3 hover:underline"
-							href={resolve('/(app)/account')}>create one</a
-						>.
-					</p>
-					<pre
-						class="overflow-x-auto rounded-lg bg-muted px-4 py-3.5 font-mono text-[13px] leading-relaxed"><code
-							>import wandb
+			<EmptyState
+				variant="onboarding"
+				class="empty absolute inset-0 z-4 bg-background"
+				title="No runs yet"
+			>
+				{#snippet lead()}
+					The SDK needs an API key: <a
+						class="text-link underline-offset-3 hover:underline"
+						href={resolve('/(app)/account')}>create one</a
+					>.
+				{/snippet}
+				<pre
+					class="mt-4 overflow-x-auto rounded-lg bg-muted px-4 py-3.5 font-mono text-[13px] leading-relaxed"><code
+						>import wandb
 
 run = wandb.init(entity="{ws.meta.entity}", project="{ws.meta.project}")
 run.log(&lbrace;"loss": 0.5&rbrace;)</code
-						></pre>
-				</div>
-			</div>
+					></pre>
+			</EmptyState>
 		{:else}
 			<Pager />
 			<!-- On the name column's edge, above the table and the charts beside it. -->
@@ -391,7 +399,7 @@ run.log(&lbrace;"loss": 0.5&rbrace;)</code
 
 {#if fullscreen != null}
 	<FullscreenPanel
-		metric={fullscreen}
+		panel={fullscreen}
 		closeHref={hrefWith({ panel: null })}
 		prevHref={neighbours.prev != null ? panelHref(neighbours.prev) : null}
 		nextHref={neighbours.next != null ? panelHref(neighbours.next) : null}
@@ -399,6 +407,7 @@ run.log(&lbrace;"loss": 0.5&rbrace;)</code
 	/>
 {/if}
 
+<PanelEditor />
 <CursorPanel />
 <EditRunDialog />
 <TagRunsDialog />

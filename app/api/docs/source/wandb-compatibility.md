@@ -10,6 +10,7 @@ What Flock supports of the `wandb` SDK, where it behaves differently from wandb'
 | `wandb.init` with `entity`, `project`, `name`, `id`, `config`, `tags`, `notes`, `group` and `job_type` | yes |
 | `run.log`, with nested dicts, an explicit `step`, `NaN` and infinity, and media values | yes. Media values aren't plotted. |
 | `run.summary`, and `run.define_metric(..., summary=...)` | yes |
+| `run.define_metric(..., step_metric=...)`, with globs, and `hidden=True` | yes. Dashboards plot metrics against their step metric. See [Step metrics](logging#step-metrics). |
 | `run.config.update`, and changing `run.tags` or `run.notes` | yes |
 | `resume="allow"` and `resume="must"` | yes |
 | Exit codes, preemption, and crash detection | yes |

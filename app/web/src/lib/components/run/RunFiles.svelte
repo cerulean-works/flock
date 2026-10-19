@@ -2,6 +2,7 @@
 	import FileIcon from '@lucide/svelte/icons/file';
 	import { onMount } from 'svelte';
 	import type { ResolvedPathname } from '$app/types';
+	import EmptyState from '#lib/components/EmptyState.svelte';
 	import type { RunFile } from '#lib/types.ts';
 	import { bytes, dateTime, relativeTime } from '#lib/utils.ts';
 
@@ -30,14 +31,17 @@
 		`${url}/${name.split('/').map(encodeURIComponent).join('/')}` as ResolvedPathname;
 </script>
 
+<!-- On the page's left gutter, as the other tabs are; kept to a width a list of files reads at. -->
 <div class="absolute inset-0 overflow-y-auto">
-	<div class="mx-auto max-w-200 px-5 pt-6 pb-16">
-		{#if failed}
-			<p class="text-destructive">Couldn’t load the run’s files</p>
-		{:else if !files}
-			<p class="text-muted-foreground">Loading…</p>
-		{:else}
-			<div class="overflow-hidden rounded-xl ring-1 ring-foreground/10">
+	{#if failed}
+		<EmptyState tone="error">Couldn’t load the run’s files</EmptyState>
+	{:else if !files}
+		<EmptyState>Loading…</EmptyState>
+	{:else if !files.length}
+		<EmptyState>No files uploaded</EmptyState>
+	{:else}
+		<div class="px-5 pt-6 pb-16">
+			<div class="max-w-200 overflow-hidden rounded-xl ring-1 ring-foreground/10">
 				<table class="w-full text-[13.5px]">
 					<thead class="border-b text-xs text-muted-foreground">
 						<tr>
@@ -72,13 +76,10 @@
 									{relativeTime(f.updated_at, now)}
 								</td>
 							</tr>
-						{:else}
-							<tr><td colspan="3" class="px-3 py-4 text-muted-foreground">No files uploaded</td></tr
-							>
 						{/each}
 					</tbody>
 				</table>
 			</div>
-		{/if}
-	</div>
+		</div>
+	{/if}
 </div>

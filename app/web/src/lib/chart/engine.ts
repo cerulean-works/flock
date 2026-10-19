@@ -1,4 +1,5 @@
-import { logTicks, niceDomain, niceTicks, timeTicks, type Ticks } from './scale.ts';
+import type { AxisKind } from './axes.ts';
+import { logTicks, niceDomain, niceTicks, timeTicks, wallTicks, type Ticks } from './scale.ts';
 import type { Series } from './series.ts';
 
 export interface Domain {
@@ -24,12 +25,17 @@ export interface DomainOptions {
 	zoom: readonly [number, number] | null;
 	log: boolean;
 	ignoreOutliers: boolean;
-	/** The x axis is time in seconds (system metrics), so its ticks fall on round times. */
-	timeX?: boolean;
+	/** What the x values are: durations and wall times get ticks on round times. */
+	xKind?: AxisKind;
 	/** Approximate tick counts. */
 	xTicks?: number;
 	yTicks?: number;
+	/** Fixed y bounds set on the panel, in data units (not log10); null leaves that end automatic. */
+	yRange?: readonly [number | null, number | null] | null;
 }
+
+/** Share of the x span left empty on each side of an unzoomed plot, so end points clear the frame. */
+const X_PAD = 0.02;
 
 /** Visible index window of a series for an x range, padded by one point on each side. */
 function window(s: Series, x0: number, x1: number, zoomed: boolean) {
@@ -37,46 +43,74 @@ function window(s: Series, x0: number, x1: number, zoomed: boolean) {
 	return [Math.max(0, s.indexNear(x0) - 1), Math.min(s.n - 1, s.indexNear(x1) + 1)];
 }
 
+/** Indices of the points with steps inside [x0, x1]; empty when the first exceeds the second. */
+function inside(s: Series, x0: number, x1: number): [number, number] {
+	let i0 = s.indexNear(x0);
+	if (s.stepAt(i0) < x0) i0++;
+	let i1 = s.indexNear(x1);
+	if (s.stepAt(i1) > x1) i1--;
+	return [i0, i1];
+}
+
 export function computeDomain(series: PlotSeries[], opts: DomainOptions): Domain {
 	let x0 = Infinity;
 	let x1 = -Infinity;
-	if (opts.zoom) [x0, x1] = opts.zoom;
-	else
+	if (opts.zoom) {
+		[x0, x1] = opts.zoom;
+		if (!(x1 > x0)) x1 = x0 + 1;
+	} else {
 		for (const { series: s } of series) {
 			if (!s.n) continue;
 			x0 = Math.min(x0, s.firstStep);
 			x1 = Math.max(x1, s.lastStep);
 		}
-	if (!Number.isFinite(x0)) x0 = 0;
-	if (!(x1 > x0)) x1 = x0 + 1;
+		if (!Number.isFinite(x0)) [x0, x1] = [0, 1];
+		// Like W&B, an axis whose data starts close to zero starts at zero.
+		if (x0 > 0 && x0 < (x1 - x0) * 0.1) x0 = 0;
+		if (!(x1 > x0)) [x0, x1] = [x0 - 0.5, x0 + 0.5];
+		const pad = (x1 - x0) * X_PAD;
+		x0 -= pad;
+		x1 += pad;
+	}
 
 	let lo = Infinity;
 	let hi = -Infinity;
 	const fast = !opts.zoom && !opts.log && !opts.ignoreOutliers;
 	if (fast) {
-		// Series keep their extents up to date as points arrive.
+		// Series keep their extents up to date as points arrive; smoothed values stay within them.
 		for (const { series: s } of series) {
 			if (s.min < lo) lo = s.min;
 			if (s.max > hi) hi = s.max;
 		}
 	} else {
 		const sample: number[] = [];
-		for (const { series: s } of series) {
+		const add = (v: number) => {
+			if (!Number.isFinite(v)) return;
+			if (opts.ignoreOutliers) sample.push(v);
+			else {
+				if (v < lo) lo = v;
+				if (v > hi) hi = v;
+			}
+		};
+		for (const { series: s, values } of series) {
 			if (!s.n) continue;
+			const [i0, i1] = opts.zoom ? inside(s, x0, x1) : [0, s.n - 1];
 			const raw = s.y;
-			const [i0, i1] = window(s, x0, x1, !!opts.zoom);
-			for (let i = i0; i <= i1; i++) {
-				let v = raw[i];
-				if (Number.isNaN(v)) continue;
-				if (opts.log) {
-					if (!(v > 0)) continue;
-					v = Math.log10(v);
-				}
-				if (opts.ignoreOutliers) sample.push(v);
-				else {
-					if (v < lo) lo = v;
-					if (v > hi) hi = v;
-				}
+			// Fit what is drawn: the smoothed line and the faded original.
+			for (const ys of values.buffer === raw.buffer ? [raw] : [raw, values]) {
+				const n = Math.min(s.n, ys.length);
+				const at = (i: number) => (opts.log ? (ys[i] > 0 ? Math.log10(ys[i]) : NaN) : ys[i]);
+				for (let i = Math.max(0, i0); i <= Math.min(i1, n - 1); i++) add(at(i));
+				if (!opts.zoom) continue;
+				// Where the line crosses the frame edges, between point `a` and the next.
+				const cross = (a: number, x: number) => {
+					if (a < 0 || a + 1 >= n) return;
+					const xa = s.stepAt(a);
+					const va = at(a);
+					add(va + (at(a + 1) - va) * ((x - xa) / (s.stepAt(a + 1) - xa)));
+				};
+				cross(i0 - 1, x0);
+				cross(i1, x1);
 			}
 		}
 		if (opts.ignoreOutliers && sample.length) {
@@ -88,14 +122,31 @@ export function computeDomain(series: PlotSeries[], opts: DomainOptions): Domain
 	}
 	if (!Number.isFinite(lo)) [lo, hi] = opts.log ? [-1, 0] : [0, 1];
 
-	const [y0, y1] = niceDomain(lo, hi);
+	// Fixed ends are used exactly; the automatic end is padded against the full span.
+	const fixed = (v: number | null | undefined) =>
+		v == null || !Number.isFinite(v) ? null : opts.log ? (v > 0 ? Math.log10(v) : null) : v;
+	const fixLo = fixed(opts.yRange?.[0]);
+	const fixHi = fixed(opts.yRange?.[1]);
+	let [y0, y1] = niceDomain(fixLo ?? lo, fixHi ?? hi);
+	if (fixLo != null) y0 = fixLo;
+	if (fixHi != null) y1 = fixHi;
+	if (!(y1 > y0)) {
+		const d = Math.abs(fixLo ?? fixHi ?? 0) * 0.1 || 1;
+		if (fixLo != null && fixHi == null) y1 = y0 + d;
+		else if (fixHi != null && fixLo == null) y0 = y1 - d;
+		else [y0, y1] = niceDomain(lo, hi);
+	}
 	return {
 		x0,
 		x1,
 		y0,
 		y1,
 		log: opts.log,
-		xTicks: (opts.timeX ? timeTicks : niceTicks)(x0, x1, opts.xTicks ?? 5),
+		xTicks: (opts.xKind === 'duration' ? timeTicks : opts.xKind === 'time' ? wallTicks : niceTicks)(
+			x0,
+			x1,
+			opts.xTicks ?? 5
+		),
 		yTicks: opts.log ? logTicks(y0, y1) : niceTicks(y0, y1, opts.yTicks ?? 4)
 	};
 }

@@ -34,8 +34,9 @@
 		success: () => (importing ? 'Organization created, importing from W&B' : 'Organization created')
 	});
 
+	// One fixed action column, so the header and every row agree on where the others fall.
 	const ORG_GRID =
-		'grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_88px_88px_96px_auto] items-center gap-x-4';
+		'grid grid-cols-[minmax(0,1fr)_80px] sm:grid-cols-[minmax(0,1fr)_88px_88px_96px_80px] items-center gap-x-4';
 </script>
 
 <svelte:head>
@@ -44,7 +45,7 @@
 
 <div class="flex min-h-0 flex-1 flex-col">
 	<main class="min-h-0 flex-1 overflow-y-auto px-5 pb-16">
-		<div class="mx-auto max-w-200">
+		<div class="mx-auto max-w-180">
 			<h1 class="pt-8 font-serif text-[34px] leading-[1.15] tracking-[-0.02em]">Super admin</h1>
 			<p class="mt-1 text-muted-foreground">
 				{count(data.orgs.length, 'organization')} · {count(data.users.length, 'account')}
@@ -68,7 +69,7 @@
 						<span class="text-right">Projects</span>
 						<span class="text-right">Members</span>
 						<span>Created</span>
-						<span class="w-17"></span>
+						<span></span>
 					</div>
 					<ul>
 						{#each data.orgs as org (org.name)}
@@ -92,7 +93,9 @@
 								>
 									{relativeTime(org.created_at, data.now)}
 								</span>
-								<Button variant="ghost" size="sm" href={orgHref(org.name)}>Members</Button>
+								<Button variant="ghost" size="sm" class="justify-self-end" href={orgHref(org.name)}>
+									Members
+								</Button>
 							</li>
 						{:else}
 							<li class="border-b border-divider py-4 text-muted-foreground">
@@ -107,7 +110,7 @@
 				<h2 class="font-serif text-2xl tracking-[-0.01em]">Accounts</h2>
 				<ul class="mt-4 border-t border-divider">
 					{#each data.users as user (user.id)}
-						<li class="flex min-h-16 items-center gap-3 border-b border-divider py-2.5">
+						<li class="flex min-h-14 items-center gap-3 border-b border-divider py-2">
 							<Avatar name={user.name} src={user.avatar_url} />
 							<div class="min-w-0 flex-1">
 								<p class="flex items-center gap-2">
@@ -142,7 +145,9 @@
 							>
 								{relativeTime(user.created_at, data.now)}
 							</span>
-							<span class="w-8"><UserMenu {user} self={user.id === me} /></span>
+							<span class="flex w-8 flex-none justify-end">
+								<UserMenu {user} self={user.id === me} />
+							</span>
 						</li>
 					{/each}
 				</ul>

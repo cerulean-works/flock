@@ -9,7 +9,9 @@ from fastapi.responses import Response, StreamingResponse
 
 from app.api.src.api.deps import ProjectDep, StoreDep, current_user
 from app.api.src.api.runs import RunSelection
+from app.api.src.core.history import History
 from app.api.src.core.live import Hub
+from app.api.src.core.metric_defs import step_metrics
 from app.api.src.core.store import Project, Store
 
 router = APIRouter(prefix="/api/v1", tags=["dashboard"], dependencies=[Depends(current_user)])
@@ -25,6 +27,8 @@ class Snapshot:
     # Total points per snapshot; per-series resolution shrinks as runs × metrics grows.
     POINT_BUDGET = 2_000_000
     MIN_POINTS = 32
+    # Most knots an x-axis mapping of a step metric keeps; they rarely need many (see _knots).
+    AXIS_POINTS = 2048
     # Run attributes shown before config.* and summary.*; display_name is the row label.
     INFO_COLUMNS = (
         "state",
@@ -100,9 +104,14 @@ class Snapshot:
 
         # ---- curves: per run, every history metric against _step, then (if requested) every
         # system metric against _runtime
-        histories = await store.histories(runs, [*keys, "_step"])
+        # ---- x-axis mappings: per run, wandb's times and every step metric its metric
+        # definitions name, against _step (system metrics: wall time against _runtime)
+        steps = sorted(set().union(*(step_metrics(run.metric_defs) for run in runs)))
+        axes = [*History.TIME_KEYS, *steps]
+        system_axes = ["_timestamp"] if system else []
+        histories = await store.histories(runs, [*keys, "_step", *axes])
         if system:
-            systems = await store.histories(runs, [*system_keys, "_runtime"], "system")
+            systems = await store.histories(runs, [*system_keys, *History.TIME_KEYS], "system")
         else:
             systems = [None] * n_runs
         curves = [
@@ -112,7 +121,19 @@ class Snapshot:
             ]
             for hist, sys in zip(histories, systems, strict=True)
         ]
-        present = sum(1 for run in curves for h, k, _ in run if h and h.series.get(k) is not None)
+        mappings = [
+            [
+                *((hist, key, "_step") for key in axes),
+                *((sys, key, "_runtime") for key in system_axes),
+            ]
+            for hist, sys in zip(histories, systems, strict=True)
+        ]
+        present = sum(
+            1
+            for run in (*curves, *mappings)
+            for h, k, _ in run
+            if h and h.series.get(k) is not None
+        )
         points = min(max_points, max(cls.MIN_POINTS, cls.POINT_BUDGET // max(1, present)))
         meta = np.zeros((n_runs * n_keys, 6), dtype="<f8")
         meta[:, 5] = -1
@@ -148,6 +169,22 @@ class Snapshot:
                 ys.append(y[idx].astype("<f4"))
                 y_len += len(idx)
 
+        # Mappings keep float64 values (wall times) and their own x values, as knots.
+        n_axes = len(axes) + len(system_axes)
+        axis_meta = np.zeros((n_runs * n_axes, 2), dtype="<f8")
+        axis_values: list[np.ndarray] = []
+        axes_len = 0
+        for r, run_mappings in enumerate(mappings):
+            for a, (hist, key, x_key) in enumerate(run_mappings):
+                xy = hist.curve(key, x_key) if hist and key in hist.series else None
+                if xy is None:
+                    continue
+                cap = points if key in History.TIME_KEYS else max(points, cls.AXIS_POINTS)
+                x, y = cls._knots(xy[0].astype(np.float64), xy[1], cap)
+                axis_meta[r * n_axes + a] = axes_len, len(x)
+                axis_values += [x, y]
+                axes_len += 2 * len(x)
+
         header = orjson.dumps(
             {
                 "entity": project.entity,
@@ -165,6 +202,7 @@ class Snapshot:
                         "ordinal": run.row,
                         "lines": run.history_line_count,
                         "system_lines": run.events_line_count,
+                        "metric_defs": run.metric_defs,
                     }
                     for run in runs
                 ],
@@ -176,6 +214,9 @@ class Snapshot:
                 "points": points,
                 "x_len": x_len,
                 "y_len": y_len,
+                "axes": axes,
+                "system_axes": system_axes,
+                "axes_len": axes_len,
             },
             option=orjson.OPT_SERIALIZE_NUMPY,
         )
@@ -190,8 +231,32 @@ class Snapshot:
                 meta.tobytes(),
                 *(x.astype("<f8").tobytes() for x in xs),
                 *(y.tobytes() for y in ys),
+                b"\0" * (y_len % 2 * 4),  # back to 8-byte alignment
+                axis_meta.tobytes(),
+                *(v.astype("<f8").tobytes() for v in axis_values),
             ]
         )
+
+    @staticmethod
+    def _knots(x: np.ndarray, y: np.ndarray, cap: int) -> tuple[np.ndarray, np.ndarray]:
+        """The points of a mapping curve that interpolating between them needs, at most ``cap``.
+
+        Points in line with both neighbors are dropped: interpolating over them is exact, so
+        a step metric logged at a fixed stride (``train/global_step`` = 16·``_step``) shrinks
+        to its ends and the steps where its stride changes. If more than ``cap`` remain, they
+        are sampled like curves are.
+        """
+        n = len(x)
+        if n > 2:
+            dx, dy = np.diff(x), np.diff(y)
+            bend = dy[:-1] * dx[1:] != dy[1:] * dx[:-1]
+            keep = np.concatenate(([True], bend, [True]))
+            x, y = x[keep], y[keep]
+            n = len(x)
+        if n > cap > 1:
+            idx = (np.arange(cap, dtype=np.int64) * (n - 1) + (cap - 1) // 2) // (cap - 1)
+            x, y = x[idx], y[idx]
+        return x, y
 
 
 @router.get("/projects/{entity}/{project}/workspace")

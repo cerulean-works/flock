@@ -1,18 +1,47 @@
 import { createContext } from 'svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import { LIVE_STATES, type ProjectMeta, type RunPage, type SectionDef } from '#lib/types.ts';
+import {
+	DEFAULT_X_AXIS,
+	remapped,
+	resolveAxis,
+	sharedStepMetric,
+	type MapSource,
+	type XAxis
+} from '#lib/chart/axes.ts';
+import { slotOf, type Series } from '#lib/chart/series.ts';
+import {
+	LIVE_STATES,
+	type MetricStream,
+	type ProjectMeta,
+	type RunPage,
+	type SectionDef
+} from '#lib/types.ts';
 import { toggle } from '#lib/utils.ts';
-import { LOCKED_COLUMNS, parseHidden } from './columns.ts';
+import {
+	type ColumnGroup,
+	type ColumnPrefs,
+	LOCKED_COLUMNS,
+	NO_COLUMN_PREFS,
+	arrangeColumns,
+	moveColumn,
+	moveGroup,
+	parseColumnPrefs
+} from './columns.ts';
 import {
 	EMPTY_LAYOUT,
+	type PanelConfig,
 	type PanelLayout,
 	arrange,
+	clampRows,
 	mergeOrder,
+	migrateOrder,
 	moveKey,
 	parseLayout
 } from './layout.ts';
+import { resolvePanel, type PanelView } from './panels.ts';
 
-export type { PanelLayout } from './layout.ts';
+export type { PanelConfig, PanelLayout } from './layout.ts';
+export type { PanelView } from './panels.ts';
 
 /**
  * Run colors. The first eight are a CVD-checked categorical order; the next eight are the same
@@ -42,23 +71,44 @@ const PALETTE = [
 
 const runColor = (ordinal: number) => PALETTE[ordinal % PALETTE.length];
 
+/**
+ * Color of the `k`th metric of a panel, when its lines are told apart by metric (one run, as on
+ * a run's page): the run palette again, so a panel's first line keeps the first color.
+ */
+export const metricColor = (k: number) => PALETTE[k % PALETTE.length];
+
+/** Where a plot is drawn: a grid card, the full-screen panel, or the panel editor's preview. */
+export type Surface = 'grid' | 'fullscreen' | 'editor';
+
 export interface Cursor {
 	/**
-	 * x under the pointer: a step, or runtime seconds for system metrics. Shared so every panel
-	 * with the same kind of x axis draws the same crosshair.
+	 * x under the pointer, in the units of `axis`. Shared so every panel on the same x axis
+	 * draws the same crosshair.
 	 */
 	step: number;
-	/** Metric of the panel the pointer is in. */
-	metric: number;
-	/** Which rendering of that panel owns the pointer (grid card or full screen). */
-	surface: 'grid' | 'fullscreen';
+	/** `XAxis.id` of the panel the pointer is in. */
+	axis: string;
+	/** Panel the pointer is in. */
+	panel: number;
+	/** That panel as drawn there (the editor previews unsaved settings). */
+	view: PanelView;
+	/** Which rendering of that panel owns the pointer. */
+	surface: Surface;
 	clientX: number;
 	clientY: number;
 	/** Page row of the run nearest the pointer, if any. */
 	nearest: number | null;
+	/** Metric of the line nearest the pointer, if any. */
+	line: number | null;
 }
 
 export type XRange = readonly [number, number];
+
+/** A drag-zoom, in the units of the x axis it was made on. */
+interface Zoom {
+	axis: string;
+	range: XRange;
+}
 
 /** Plot height of a panel in the grid, unless its section was resized. */
 export const PLOT_H = 196;
@@ -67,7 +117,6 @@ export const MAX_PLOT_H = 720;
 
 const layoutKey = (entity: string, project: string) => `flock:panels:${entity}/${project}`;
 const columnsKey = (entity: string, project: string) => `flock:columns:${entity}/${project}`;
-const NO_HIDDEN: readonly string[] = [];
 
 /** A value this browser kept, or null when there's none (or storage is blocked or unreadable). */
 function readStored(key: string): unknown {
@@ -126,16 +175,34 @@ export class Workspace {
 	smoothing = $state(0);
 	showOriginal = $state(true);
 	ignoreOutliers = $state(false);
-	panelsPerPage = $state(6);
-	/** Per-panel settings, keyed by metric name: the metric list can differ between pages. */
-	readonly logScale = new SvelteSet<string>();
-	readonly zoom = new SvelteMap<string, XRange>();
+	/** The x axis of panels that don't set their own: one of `X_AXES`, or a metric key. */
+	xAxis = $state(DEFAULT_X_AXIS);
+	/** Bumped when live updates change a run's metric definitions. */
+	defsVersion = $state(0);
+	/** Rows of panels a section's page shows, unless the section was resized. */
+	defaultRows = $state(2);
+	/**
+	 * A panel or section is being moved, or a section resized: plots don't follow the pointer
+	 * (no crosshair, no hover) until it's let go.
+	 */
+	dragging = $state(false);
+	/**
+	 * Drag-zoom per panel, keyed by panel id: the panel list can differ between pages. The
+	 * rest of a panel's settings are kept in its layout (`panelConfig`).
+	 */
+	readonly zoom = new SvelteMap<string, Zoom>();
+	/** Id of the panel open in the panel editor. */
+	editing = $state<string | null>(null);
 	readonly collapsed = new SvelteSet<string>();
-	sectionPage = $state.raw<Readonly<Record<string, number>>>({});
+	/**
+	 * Per section, the index of the first panel on the page shown (see `pageAt`): a page number
+	 * would show other panels once pages hold more or fewer of them.
+	 */
+	sectionStart = $state.raw<Readonly<Record<string, number>>>({});
 	/** Panel layouts by project, read from this browser once the page is showing. */
 	layouts = $state.raw<Readonly<Record<string, PanelLayout>>>({});
-	/** Table columns hidden, by project, read from this browser once the page is showing. */
-	hiddenByProject = $state.raw<Readonly<Record<string, readonly string[]>>>({});
+	/** Table column settings by project, read from this browser once the page is showing. */
+	columnsByProject = $state.raw<Readonly<Record<string, ColumnPrefs>>>({});
 
 	/** Bumped when live points arrive for a metric. */
 	readonly metricVersion = new SvelteMap<string, number>();
@@ -189,9 +256,79 @@ export class Workspace {
 		return f != null && !this.hidden.has(this.page.runs[f]?.id) ? f : null;
 	});
 
-	/** Version of a metric's curves on this page; read it to repaint on live points. */
-	version(metric: number) {
-		return this.metricVersion.get(this.meta.metrics[metric].key) ?? 0;
+	/**
+	 * Version of a panel's curves on this page (of every metric it plots); read it to repaint
+	 * on live points. Versions only grow, so their sum changes whenever any of them does.
+	 */
+	version(view: PanelView) {
+		let v = this.defsVersion;
+		for (const m of view.metrics) v += this.metricVersion.get(this.meta.metrics[m].key) ?? 0;
+		const map = this.axisOf(view).map;
+		if (map) v += this.metricVersion.get(map) ?? 0;
+		return v;
+	}
+
+	// ------------------------------------------------------------------------------------------
+	// X axes (see #lib/chart/axes.ts)
+
+	/**
+	 * A logged metric's step metric, as the first of the page's runs to define the metric says
+	 * (`sharedStepMetric`). Memoised until the page or a run's definitions change.
+	 */
+	#steps = $derived.by(() => {
+		void this.defsVersion;
+		const defs = this.page.runs.map((r) => r.defs);
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a memo, never rendered
+		const memo = new Map<string, string | null>();
+		return (key: string) => {
+			let step = memo.get(key);
+			if (step === undefined) memo.set(key, (step = sharedStepMetric(defs, key)));
+			return step;
+		};
+	});
+
+	/** The step metric `key` is plotted against on "Step", if its runs defined one. */
+	stepMetric(key: string): string | null {
+		return this.#steps(key);
+	}
+
+	/** The x axis a panel plots on: its own choice, else the workspace's. */
+	axisOf(view: PanelView): XAxis {
+		const first = this.meta.metrics[view.metrics[0]];
+		const step = view.stream === 'history' && first ? this.stepMetric(first.key) : null;
+		return resolveAxis(view.config.xAxis ?? this.xAxis, view.stream, step);
+	}
+
+	/**
+	 * What gives run `row`'s x values for mapping `key`: the run's mapping, else the curve of
+	 * the metric of that name (a metric chosen as the x axis, or a step metric defined since
+	 * the page loaded).
+	 */
+	#mapping(row: number, stream: PanelView['stream'], key: string): MapSource | null {
+		const page = this.page;
+		const axis = page.axes[row]?.[stream].get(key);
+		if (axis?.n) return axis;
+		const m = this.metricOf(stream, key);
+		const own = m === undefined ? null : page.series[slotOf(page.metricCount, row, m)];
+		return own?.n ? own : (axis ?? null);
+	}
+
+	/** When run `row` started, in epoch seconds: its first wall time, of either stream. */
+	#startOf(row: number): number {
+		const axes = this.page.axes[row];
+		const a = axes?.history.get('_timestamp')?.first ?? NaN;
+		const b = axes?.system.get('_timestamp')?.first ?? NaN;
+		return Number.isNaN(a) ? b : Number.isNaN(b) ? a : Math.min(a, b);
+	}
+
+	/** Run `row`'s curve of metric `m` on `axis`, or null when it has none there. */
+	lineSeries(row: number, m: number, axis: XAxis): Series | null {
+		const page = this.page;
+		const s = page.series[slotOf(page.metricCount, row, m)];
+		if (!s || !axis.map) return s;
+		const map = this.#mapping(row, this.meta.metrics[m].stream, axis.map);
+		if (!map) return null;
+		return remapped(s, axis.id, map, axis.relative ? -this.#startOf(row) : 0);
 	}
 
 	/** A run's current state; reactive to live updates. */
@@ -271,22 +408,118 @@ export class Workspace {
 		this.pinnedId = this.pinnedId === id ? null : id;
 	}
 
-	isLog(metric: number) {
-		return this.logScale.has(this.meta.metrics[metric].key);
+	// ------------------------------------------------------------------------------------------
+	// Panels, as the viewer set them up.
+
+	/** Metric index by stream and key; a system metric can share a logged metric's name. */
+	#metricIndex = $derived.by(() => {
+		/* eslint-disable svelte/prefer-svelte-reactivity -- rebuilt, never mutated */
+		const out: Record<MetricStream, Map<string, number>> = {
+			history: new Map(),
+			system: new Map()
+		};
+		/* eslint-enable svelte/prefer-svelte-reactivity */
+		this.meta.metrics.forEach((m, i) => out[m.stream].set(m.key, i));
+		return out;
+	});
+
+	/**
+	 * Panel id by the metric keys that used to name panels before system metrics were grouped
+	 * (`system.gpu.0.gpu` → `system:gpu.gpu`): for saved orders and old full-screen links.
+	 */
+	#aliases = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- rebuilt, never mutated
+		const out = new Map<string, string>();
+		const metrics = this.meta.metrics;
+		for (const p of this.meta.panels)
+			for (const m of p.metrics) if (metrics[m].key !== p.id) out.set(metrics[m].key, p.id);
+		return out;
+	});
+
+	/** Every panel of the page with its settings applied, as `meta.panels` orders them. */
+	panels = $derived.by((): PanelView[] => {
+		const configs = this.layout.panels;
+		const metrics = this.meta.metrics;
+		const index = this.#metricIndex;
+		return this.meta.panels.map((p) =>
+			resolvePanel(p, configs[p.id], metrics, (stream, key) => index[stream].get(key))
+		);
+	});
+
+	/** Index of a panel by id (or by a metric key it plots, from older links); -1 for none. */
+	findPanel(id: string) {
+		const panels = this.meta.panels;
+		const i = panels.findIndex((p) => p.id === id);
+		if (i !== -1) return i;
+		const alias = this.#aliases.get(id);
+		return alias ? panels.findIndex((p) => p.id === alias) : -1;
 	}
 
-	toggleLog(metric: number) {
-		toggle(this.logScale, this.meta.metrics[metric].key);
+	/** Metric index of `key` in a stream, if this page has it. */
+	metricOf(stream: MetricStream, key: string) {
+		return this.#metricIndex[stream].get(key);
 	}
 
-	zoomOf(metric: number): XRange | null {
-		return this.zoom.get(this.meta.metrics[metric].key) ?? null;
+	/**
+	 * Whether a panel's lines are colored by metric rather than by run: when it plots several
+	 * metrics of one run, as W&B does. With several runs, run colors stay (a run keeps its color
+	 * everywhere), and the legend and cursor panel name each line's metric.
+	 */
+	byMetric(view: PanelView) {
+		return view.metrics.length > 1 && this.visible.length <= 1;
 	}
 
-	setZoom(metric: number, range: XRange | null) {
-		const key = this.meta.metrics[metric].key;
-		if (range) this.zoom.set(key, range);
-		else this.zoom.delete(key);
+	/** Color of a panel's line for run `row` and its `k`th metric. */
+	lineColor(view: PanelView, row: number, k: number) {
+		return this.byMetric(view) ? metricColor(k) : this.colors[row];
+	}
+
+	/** A panel's settings (empty without any). */
+	panelConfig(panel: number): PanelConfig {
+		return this.panels[panel].config;
+	}
+
+	/** Replace a panel's settings; empty or null goes back to its defaults. */
+	setPanelConfig(panel: number, config: PanelConfig | null) {
+		const id = this.meta.panels[panel].id;
+		const next = { ...this.layout.panels };
+		if (config && Object.keys(config).length) next[id] = config;
+		else delete next[id];
+		this.#saveLayout({ ...this.layout, panels: next });
+	}
+
+	/** Open a panel in the panel editor. */
+	editPanel(panel: number) {
+		this.cursor = null;
+		this.editing = this.meta.panels[panel].id;
+	}
+
+	isLog(panel: number) {
+		return this.panels[panel].config.log ?? false;
+	}
+
+	toggleLog(panel: number) {
+		const { log, ...rest } = this.panelConfig(panel);
+		this.setPanelConfig(panel, log ? rest : { ...rest, log: true });
+	}
+
+	/**
+	 * The panel's drag-zoom on `axis` (by default the one it plots on), if the viewer zoomed
+	 * in there. Switching axes leaves a zoom behind rather than misreading its units.
+	 */
+	zoomOf(panel: number, axis = this.axisOf(this.panels[panel]).id): XRange | null {
+		const zoom = this.zoom.get(this.meta.panels[panel].id);
+		return zoom?.axis === axis ? zoom.range : null;
+	}
+
+	/**
+	 * Zoom a panel in on `axis` (by default the one it plots on); null goes back to its x range
+	 * (set in its settings, else the data's).
+	 */
+	setZoom(panel: number, range: XRange | null, axis = this.axisOf(this.panels[panel]).id) {
+		const id = this.meta.panels[panel].id;
+		if (range) this.zoom.set(id, { axis, range });
+		else this.zoom.delete(id);
 	}
 
 	/** This project's panel layout. */
@@ -294,19 +527,26 @@ export class Workspace {
 		return this.layouts[layoutKey(this.meta.entity, this.meta.project)] ?? EMPTY_LAYOUT;
 	}
 
+	/** A section's saved panel order, in today's panel ids. */
+	#orderOf(section: string): readonly string[] {
+		const saved = this.layout.order[section];
+		const aliases = this.#aliases;
+		return saved && aliases.size ? migrateOrder(saved, (k) => aliases.get(k)) : (saved ?? []);
+	}
+
 	/** Sections in the viewer's order, with their panels in the viewer's order. */
 	sections = $derived.by((): SectionDef[] => {
 		const { order, sections } = this.layout;
-		const metrics = this.meta.metrics;
+		const panels = this.meta.panels;
 		return arrange(this.meta.sections, (s) => s.key, sections).map((sec) =>
 			order[sec.key]
-				? { ...sec, metrics: arrange(sec.metrics, (m) => metrics[m].key, order[sec.key]) }
+				? { ...sec, panels: arrange(sec.panels, (p) => panels[p].id, this.#orderOf(sec.key)) }
 				: sec
 		);
 	});
 
 	/**
-	 * Read this project's layout and hidden columns from the browser. Called after hydration,
+	 * Read this project's layout and column settings from the browser. Called after hydration,
 	 * so the page the server rendered (in the default layout) is what hydrates.
 	 */
 	restoreLayout() {
@@ -315,8 +555,11 @@ export class Workspace {
 		if (!(key in this.layouts))
 			this.layouts = { ...this.layouts, [key]: parseLayout(readStored(key)) };
 		const cols = columnsKey(entity, project);
-		if (!(cols in this.hiddenByProject))
-			this.hiddenByProject = { ...this.hiddenByProject, [cols]: parseHidden(readStored(cols)) };
+		if (!(cols in this.columnsByProject))
+			this.columnsByProject = {
+				...this.columnsByProject,
+				[cols]: parseColumnPrefs(readStored(cols))
+			};
 	}
 
 	#saveLayout(layout: PanelLayout, persist = true) {
@@ -326,17 +569,17 @@ export class Workspace {
 	}
 
 	/** Move a panel to `to`, an index into its section's (arranged) panels. */
-	movePanel(section: string, metric: number, to: number) {
+	movePanel(section: string, panel: number, to: number) {
 		const sec = this.sections.find((s) => s.key === section);
 		if (!sec) return;
-		const keys = sec.metrics.map((m) => this.meta.metrics[m].key);
-		const from = sec.metrics.indexOf(metric);
-		const moved = moveKey(keys, from, to);
-		if (from === -1 || moved[from] === keys[from]) return;
-		const { order } = this.layout;
+		const ids = sec.panels.map((p) => this.meta.panels[p].id);
+		const from = sec.panels.indexOf(panel);
+		const moved = moveKey(ids, from, to);
+		if (from === -1 || moved[from] === ids[from]) return;
+		// Saved in today's ids, so metric keys of an older layout are replaced as it's saved.
 		this.#saveLayout({
 			...this.layout,
-			order: { ...order, [section]: mergeOrder(order[section] ?? [], moved) }
+			order: { ...this.layout.order, [section]: mergeOrder(this.#orderOf(section), moved) }
 		});
 	}
 
@@ -365,24 +608,52 @@ export class Workspace {
 		this.#saveLayout({ ...this.layout, height: next }, persist);
 	}
 
+	/** Rows of panels a section's page shows (it may have fewer to show). */
+	sectionRows(section: string) {
+		return this.layout.rows[section] ?? this.defaultRows;
+	}
+
+	/**
+	 * Show more or fewer rows of a section's panels; null goes back to the default. `persist`
+	 * false while a drag is still going: it's saved once, when the drag ends.
+	 */
+	setSectionRows(section: string, rows: number | null, persist = true) {
+		const next = { ...this.layout.rows };
+		if (rows == null) delete next[section];
+		else next[section] = clampRows(rows);
+		this.#saveLayout({ ...this.layout, rows: next }, persist);
+	}
+
 	// ------------------------------------------------------------------------------------------
-	// Table columns the viewer hid, kept per project in this browser.
+	// Table columns the viewer hid or moved, kept per project in this browser.
+
+	/** This project's column settings. */
+	columnPrefs = $derived(
+		this.columnsByProject[columnsKey(this.meta.entity, this.meta.project)] ?? NO_COLUMN_PREFS
+	);
 
 	/** Keys of this project's hidden columns. */
 	hiddenColumns = $derived.by((): ReadonlySet<string> => {
-		const key = columnsKey(this.meta.entity, this.meta.project);
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- replaced, never mutated
-		return new Set(this.hiddenByProject[key] ?? NO_HIDDEN);
+		return new Set(this.columnPrefs.hidden);
+	});
+
+	/** Indices into `meta.columns` of every column, in the viewer's order. */
+	arrangedColumns = $derived(arrangeColumns(this.meta.columns, this.columnPrefs));
+
+	/** Whether the viewer's order differs from the default one. */
+	columnsMoved = $derived.by(() => {
+		const def = arrangeColumns(this.meta.columns, NO_COLUMN_PREFS);
+		return this.arrangedColumns.some((c, i) => c !== def[i]);
 	});
 
 	/** Indices into `meta.columns` of the columns the table shows, in order. */
 	shownColumns = $derived.by(() => {
 		const hidden = this.hiddenColumns;
-		const out: number[] = [];
-		this.meta.columns.forEach((c, i) => {
-			if (!hidden.has(c.key) || LOCKED_COLUMNS.has(c.key)) out.push(i);
+		return this.arrangedColumns.filter((i) => {
+			const key = this.meta.columns[i].key;
+			return !hidden.has(key) || LOCKED_COLUMNS.has(key);
 		});
-		return out;
 	});
 
 	/** Show or hide some columns (the locked ones always show). */
@@ -393,26 +664,49 @@ export class Workspace {
 			if (hide && !LOCKED_COLUMNS.has(k)) next.add(k);
 			else next.delete(k);
 		}
-		this.#saveHidden([...next]);
+		this.#saveColumns({ ...this.columnPrefs, hidden: [...next] });
 	}
 
 	/** Show every column again. */
 	showAllColumns() {
-		this.#saveHidden([]);
+		this.#saveColumns({ ...this.columnPrefs, hidden: [] });
 	}
 
-	#saveHidden(keys: readonly string[]) {
+	/**
+	 * Move the child at `from` of a column folder (a group's id, or a folder's) to `to`, among
+	 * the arranged columns. A folder moves with its columns; nothing leaves its folder.
+	 */
+	moveColumn(parent: string, from: number, to: number) {
+		const arranged = this.arrangedColumns.map((i) => this.meta.columns[i]);
+		const order = moveColumn(arranged, this.columnPrefs.order, parent, from, to);
+		if (order) this.#saveColumns({ ...this.columnPrefs, order });
+	}
+
+	/** Move a column group to `to`, an index into the (arranged) groups. */
+	moveColumnGroup(group: ColumnGroup, to: number) {
+		const arranged = this.arrangedColumns.map((i) => this.meta.columns[i]);
+		const groups = moveGroup(arranged, this.columnPrefs.groups, group, to);
+		if (groups) this.#saveColumns({ ...this.columnPrefs, groups });
+	}
+
+	/** Put the columns back in their default order (hidden ones stay hidden). */
+	resetColumnOrder() {
+		this.#saveColumns({ ...this.columnPrefs, order: [], groups: [] });
+	}
+
+	#saveColumns(prefs: ColumnPrefs) {
 		const key = columnsKey(this.meta.entity, this.meta.project);
-		this.hiddenByProject = { ...this.hiddenByProject, [key]: keys };
-		store(key, keys);
+		this.columnsByProject = { ...this.columnsByProject, [key]: prefs };
+		store(key, prefs);
 	}
 
 	toggleSection(key: string) {
 		toggle(this.collapsed, key);
 	}
 
-	setSectionPage(key: string, page: number) {
-		this.sectionPage = { ...this.sectionPage, [key]: page };
+	/** Show the page of a section's panels that starts at panel `start`. */
+	setSectionStart(key: string, start: number) {
+		this.sectionStart = { ...this.sectionStart, [key]: start };
 	}
 }
 
