@@ -1,0 +1,17 @@
+# The API builds from the repository root. Include only its source and lock metadata.
+**
+!pyproject.toml
+!uv.lock
+!app/
+!app/api/
+!app/api/pyproject.toml
+!app/api/app.py
+!app/api/__init__.py
+!app/api/src/
+!app/api/src/**
+!app/api/scripts/
+!app/api/scripts/**
+
+**/__pycache__
+**/*.pyc
+**/.DS_Store

@@ -37,11 +37,15 @@ docker compose up -d --build
 - **Data:** two named volumes hold the data. `postgres-data` is the database, and `files` is the files directory, mounted at `/data/files`.
 - **Settings:** Compose passes only some `FLOCK_*` settings through to Flock. [Docker Compose variables](configuration#docker-compose-variables) lists them, and how to set the others.
 
-The image installs Flock's dependencies at the versions locked in the repository's `uv.lock`, which is at the repository root, outside `app/api`. The build therefore takes the repository root as an extra build context named `workspace`. Compose passes it for you. With plain Docker, pass it yourself, from `app/api`:
+The image installs Flock's dependencies at the versions locked in the repository's `uv.lock`. The build context is the repository root, so Docker can read the lockfile and API source together. Compose sets this for you. With plain Docker, run from the repository root:
 
 ```bash
-docker build --build-context workspace=../.. -t flock-api .
+docker build -f app/api/Dockerfile -t flock-api .
 ```
+
+For deployment services, set the build context to `.` and the Dockerfile path to
+`app/api/Dockerfile`. The adjacent `Dockerfile.dockerignore` includes only the API source and
+dependency metadata in the context.
 
 The image runs as an unprivileged user (uid 10001), serves on port 8080, and stores files in `/data/files`.
 

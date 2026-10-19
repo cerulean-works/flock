@@ -38,13 +38,16 @@ Run exactly one Flock server per database. The server keeps its working set in m
 database lock, so a second instance refuses to start.
 
 The image installs this directory's `pyproject.toml` dependencies at the versions locked in the
-workspace's `uv.lock`. That lockfile lives at the repository root, outside this directory, so
-the build takes the repository root as an extra `workspace` context. Compose passes it
-automatically; with plain Docker, pass it yourself:
+workspace's `uv.lock`. Build with the repository root as the context so Docker can read both
+files. Compose sets this automatically. With plain Docker, run from the repository root:
 
 ```sh
-docker build --build-context workspace=../.. -t flock-api .
+docker build -f app/api/Dockerfile -t flock-api .
 ```
+
+For a deployment service, set the build context to `.` and the Dockerfile path to
+`app/api/Dockerfile`. `Dockerfile.dockerignore` limits the context to the API source and
+dependency metadata.
 
 ### Locally
 

@@ -21,10 +21,8 @@ services:
   api:
     image: flock-api:${FLOCK_VERSION:-latest}
     build:
-      context: ./api
-      # Dependencies resolve through the workspace's uv.lock at the repository root.
-      additional_contexts:
-        workspace: ..
+      context: ..
+      dockerfile: app/api/Dockerfile
     environment:
       FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
       FLOCK_LOG_LEVEL: ${FLOCK_LOG_LEVEL:-info}
