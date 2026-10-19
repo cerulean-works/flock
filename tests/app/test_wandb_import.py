@@ -41,6 +41,24 @@ def wandb_run(name: str, **fields: Any) -> dict[str, Any]:
     }
 
 
+# Every field and argument W&B's schema has that the importer may ask for (see
+# ``test_queries_use_only_fields_the_wandb_sdk_uses``). Anything else is refused, as W&B does.
+FIELDS = {
+    "viewer", "username", "entity", "name", "members", "email", "models", "entityName",
+    "first", "after", "pageInfo", "endCursor", "hasNextPage", "edges", "node", "createdAt",
+    "runCount", "project", "runs", "order", "displayName", "state", "config", "summaryMetrics",
+    "tags", "notes", "group", "jobType", "sweepName", "commit", "heartbeatAt",
+    "historyLineCount", "historyKeys", "user", "run", "history", "minStep", "maxStep",
+    "samples", "events", "files", "names", "sizeBytes", "url", "upload",
+}  # fmt: skip
+
+
+def selected(query: str) -> set[str]:
+    """The fields and arguments a query names (not its operation, variables or types)."""
+    body = re.sub(r'\$\w+|"[^"]*"', "", query[query.index("{") :])
+    return set(re.findall(r"[A-Za-z_]\w*", body)) - {"true", "false", "null"}
+
+
 class FakeWandb:
     """A W&B server answering the GraphQL queries Flock's importer sends, and serving files.
 
@@ -53,6 +71,7 @@ class FakeWandb:
         self.members = [{"username": "alice", "email": "Alice@flock.test"}]
         self.projects: dict[str, dict[str, Any]] = {}
         self.broken: set[str] = set()  # runs whose files can't be listed
+        self.refused: set[str] = set()  # files ("<run>/<name>") whose download is refused
         self.gate = threading.Event()
         self.gate.set()
         self.queries: list[str] = []
@@ -76,6 +95,9 @@ class FakeWandb:
                 request = json.loads(self.rfile.read(int(self.headers["content-length"])))
                 operation = re.findall(r"query (\w+)", request["query"])[0]
                 fake.queries.append(operation)
+                if unknown := sorted(selected(request["query"]) - FIELDS):
+                    message = f'Cannot query field "{unknown[0]}"'
+                    return self.reply(200, json.dumps({"errors": [{"message": message}]}).encode())
                 try:
                     data = fake.answer(operation, request["variables"])
                 except LookupError as exc:
@@ -83,8 +105,15 @@ class FakeWandb:
                 self.reply(200, json.dumps({"data": data}).encode())
 
             def do_GET(self) -> None:  # file downloads: /files/<project>/<run>/<name>
+                # As W&B's file route does: the API key is required.
+                if not self.authorized():
+                    return self.reply(401, b"unauthorized")
                 _, _, project, run, name = (unquote(p) for p in self.path.split("/", 4))
+                if f"{run}/{name}" in fake.refused:
+                    return self.reply(403, b"forbidden")
                 content = fake.run(project, run)["_files"][name]
+                if not content:  # listed, but never stored (as W&B does with empty files)
+                    return self.reply(404, b"not found")
                 self.reply(200, content, "application/octet-stream")
 
             def log_message(self, format: str, *args: Any) -> None:
@@ -95,9 +124,7 @@ class FakeWandb:
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
 
     def add(self, project: str, *runs: dict[str, Any], created: str = CREATED) -> None:
-        found = self.projects.setdefault(
-            project, {"description": f"{project} runs", "createdAt": created, "runs": []}
-        )
+        found = self.projects.setdefault(project, {"createdAt": created, "runs": []})
         found["runs"] += runs
 
     def run(self, project: str, name: str) -> dict[str, Any]:
@@ -127,8 +154,7 @@ class FakeWandb:
         if operation == "FlockProjects":
             names, info = page(sorted(self.projects), v["cursor"])
             edges = [
-                {"node": {"name": n, "description": self.projects[n]["description"],
-                          "createdAt": self.projects[n]["createdAt"],
+                {"node": {"name": n, "createdAt": self.projects[n]["createdAt"],
                           "runCount": len(self.projects[n]["runs"])}}
                 for n in names
             ]  # fmt: skip
@@ -150,7 +176,7 @@ class FakeWandb:
                 raise LookupError("files are unavailable")
             edges = [
                 {"node": {"name": name, "sizeBytes": len(content),
-                          "directUrl": f"{self.url}/files/{v['project']}/{v['run']}/{name}"}}
+                          "url": f"{self.url}/files/{v['project']}/{v['run']}/{name}"}}
                 for name, content in run["_files"].items()
                 if name in v["names"]
             ]  # fmt: skip
@@ -225,7 +251,6 @@ def test_create_org_imports_wandb_projects_and_runs(flock, api, wandb, wait_for)
     projects = {p["name"]: p for p in api.get("/api/v1/projects", entity="lab").json()["projects"]}
     assert set(projects) == {"vision", "audio"}
     assert projects["audio"]["created_at"] == parse_time("2024-06-01T00:00:00")
-    assert projects["vision"]["description"] == "vision runs"
 
     # Rows are in creation order (r3 is the oldest), and states are finished ones.
     runs = api.runs("vision", entity="lab", columns=["state", "owner"], sort="created_at")
@@ -287,7 +312,8 @@ def test_import_problems_are_refused_before_creating_the_org(flock, api, wandb):
 
 
 def test_failed_runs_are_counted_and_imports_resume(flock, api, wandb, wait_for):
-    wandb.add("p", *(wandb_run(f"r{i}") for i in range(5)))
+    logged = {"output.log": b"hello\n", "requirements.txt": b"torch\n"}
+    wandb.add("p", *(wandb_run(f"r{i}", _files=logged) for i in range(5)))
     wandb.broken = {"r3"}
     assert api.post("/api/v1/orgs", {"name": "lab", "wandb": source(wandb)}).status == 201
     job = finished(api, wait_for)
@@ -295,6 +321,8 @@ def test_failed_runs_are_counted_and_imports_resume(flock, api, wandb, wait_for)
     assert (job["runs_done"], job["runs_failed"]) == (4, 1)
     assert job["error"].startswith("p/r3: ")
     assert api.runs("p", entity="lab")["total"] == 4
+    # Files are downloaded with the API key.
+    assert api.get("/api/v1/projects/lab/p/runs/r0/logs").json()["lines"][0]["text"] == "hello"
 
     # Starting again copies only what is missing.
     wandb.broken = set()
@@ -345,3 +373,54 @@ def test_imports_cut_short_by_a_restart_are_interrupted(make_flock, wandb, wait_
     assert api.post("/api/v1/orgs/lab/import", source(wandb)).status == 202
     assert finished(api, wait_for)["state"] == "finished"
     assert api.runs("p", entity="lab")["ids"] == ["r1"]
+
+
+def test_queries_use_only_fields_the_wandb_sdk_uses():
+    """W&B refuses unknown fields; the run, project and file fields are the SDK's own."""
+    pytest.importorskip("wandb")
+    from wandb.apis._generated.operations import GET_PROJECTS_GQL
+    from wandb.apis.public.files import FILE_FRAGMENT
+    from wandb.apis.public.runs import RUN_FRAGMENT, _create_runs_query
+
+    from app.api.src.core import wandb_source
+
+    known = (
+        selected(RUN_FRAGMENT)
+        | selected(GET_PROJECTS_GQL)
+        | selected(_create_runs_query(lazy=False))
+        | selected(FILE_FRAGMENT)
+        | {"run"}  # project { run(name:) }, from the SDK's Run query (built inside Run.load)
+    )
+    assert selected(wandb_source.RUNS) <= known, selected(wandb_source.RUNS) - known
+    assert selected(wandb_source.PROJECTS) <= known, selected(wandb_source.PROJECTS) - known
+    assert selected(wandb_source.FILES) <= known, selected(wandb_source.FILES) - known
+    for query in (wandb_source.VIEWER, wandb_source.MEMBERS, wandb_source.HISTORY,
+                  wandb_source.EVENTS):  # fmt: skip
+        assert selected(query) <= FIELDS, selected(query) - FIELDS
+
+
+def test_a_file_that_cannot_be_downloaded_is_skipped(flock, api, wandb, wait_for):
+    wandb.add(
+        "p",
+        wandb_run("r1", _files={"output.log": b"hello\n", "requirements.txt": b"torch\n"}),
+    )
+    wandb.refused = {"r1/output.log"}
+    assert api.post("/api/v1/orgs", {"name": "lab", "wandb": source(wandb)}).status == 201
+    job = finished(api, wait_for)
+    assert (job["state"], job["runs_done"], job["runs_failed"]) == ("finished", 1, 0)
+    assert job["error"] == "p/r1: skipped output.log: could not download a run file (403)"
+    files = api.get("/api/v1/projects/lab/p/runs/r1/files").json()["files"]
+    assert [f["name"] for f in files] == ["requirements.txt"]
+    assert api.get("/api/v1/projects/lab/p/runs/r1/logs").json()["lines"] == []
+
+
+def test_files_listed_but_not_stored_are_not_failures(flock, api, wandb, wait_for):
+    # As on wandb.ai: wandb-events.jsonl is listed with no content, and the system metrics
+    # come from the run's events.
+    events = [{"_runtime": t, "_timestamp": t, "system.cpu": t} for t in range(3)]
+    wandb.add("p", wandb_run("r1", _events=events, _files={"wandb-events.jsonl": b""}))
+    assert api.post("/api/v1/orgs", {"name": "lab", "wandb": source(wandb)}).status == 201
+    job = finished(api, wait_for)
+    assert (job["state"], job["runs_done"], job["error"]) == ("finished", 1, None)
+    system = api.run_history("p", "r1", entity="lab", stream="system")
+    assert system["system.cpu"] == {"x": [0, 1, 2], "y": [0, 1, 2]}

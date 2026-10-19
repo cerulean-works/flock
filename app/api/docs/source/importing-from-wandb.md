@@ -12,6 +12,10 @@ The examples use `curl` with a super admin's access token in `$TOKEN` and Flock'
 
 ## Starting an import
 
+In the dashboard, switch on **Import runs from W&B** when you create the organization: on the setup page for the first one, or with **New organization** on the **Super admin** page. Enter the entity and the API key. The organization's settings page then shows the import's progress, with buttons to cancel or resume it.
+
+With the API:
+
 1. Create the organization with a `wandb` field:
    ```bash
    curl -s --json '{"name": "acme", "wandb": {"entity": "acme-ml", "api_key": "'"$WANDB_API_KEY"'"}}' -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/orgs
@@ -30,7 +34,7 @@ To import into an organization that already exists, send the same `wandb` fields
 
 ## What is copied
 
-Each W&B project becomes a project of the same name, with its description and creation time. Each run keeps its id, so links and scripts that use run ids still work in Flock.
+Each W&B project becomes a project of the same name, with its creation time. Project descriptions aren’t copied. Each run keeps its id, so links and scripts that use run ids still work in Flock.
 
 | Copied | Not copied |
 |---|---|
@@ -58,6 +62,7 @@ Each W&B project becomes a project of the same name, with its description and cr
 ## When runs fail or an import stops
 
 - **A run that can't be copied** is counted in `runs_failed` and skipped, and `error` names the last one. The import goes on with the other runs.
+- **A file that can't be downloaded** is left out, and the run is copied without it. `error` names it, as `<project>/<run>: skipped <file>: ...`.
 - **An import that can't go on**, for example because W&B now rejects the key, ends with `state` set to `failed` and the reason in `error`.
 - **Restarting Flock** during an import stops it, and its `state` becomes `interrupted`. Flock doesn't store the API key, so it can't continue on its own.
 - **Cancelling** with `DELETE /api/v1/orgs/acme/import` stops it, and its `state` becomes `cancelled`.

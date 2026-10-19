@@ -2,6 +2,8 @@
 
 The wandb SDK's public API would do, but it runs a separate Go process, is synchronous and
 fetches lazily (a request per run per attribute); these few queries are what it sends.
+Only fields the SDK's own queries ask for are used: W&B's schema changes, and older fields
+(``tagNames``, say) are refused by newer servers.
 """
 
 import asyncio
@@ -10,7 +12,6 @@ import logging
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlsplit
 
 import httpx
 import orjson
@@ -37,7 +38,6 @@ class WandbNotFound(WandbError):
 @dataclass
 class SourceProject:
     name: str
-    description: str | None
     created_at: float | None
     run_count: int
 
@@ -83,7 +83,7 @@ PROJECTS = """
 query FlockProjects($entity: String!, $cursor: String) {
   models(entityName: $entity, first: 100, after: $cursor) {
     pageInfo { endCursor hasNextPage }
-    edges { node { name description createdAt runCount } }
+    edges { node { name createdAt runCount } }
   }
 }
 """
@@ -95,7 +95,7 @@ query FlockRuns($entity: String!, $project: String!, $cursor: String) {
       pageInfo { endCursor hasNextPage }
       edges {
         node {
-          name displayName state config summaryMetrics tags: tagNames notes group jobType
+          name displayName state config summaryMetrics tags notes group jobType
           sweepName commit createdAt heartbeatAt historyLineCount historyKeys
           user { username }
         }
@@ -125,11 +125,11 @@ query FlockEvents($entity: String!, $project: String!, $run: String!, $samples: 
 """
 
 FILES = """
-query FlockFiles($entity: String!, $project: String!, $run: String!, $names: [String!]!) {
+query FlockFiles($entity: String!, $project: String!, $run: String!, $names: [String]) {
   project(name: $project, entityName: $entity) {
     run(name: $run) {
       files(names: $names, first: 100) {
-        edges { node { name sizeBytes directUrl } }
+        edges { node { name sizeBytes url(upload: false) } }
       }
     }
   }
@@ -149,7 +149,6 @@ class WandbSource:
     def __init__(self, base_url: str, api_key: str, timeout: float = 60.0) -> None:
         self.base_url = base_url.rstrip("/")
         self._auth = httpx.BasicAuth("api", api_key)
-        self._origin = urlsplit(self.base_url)[:2]
         self._client = httpx.AsyncClient(timeout=timeout, follow_redirects=True)
 
     async def close(self) -> None:
@@ -201,17 +200,22 @@ class WandbSource:
         return body.get("data") or {}
 
     async def download(self, url: str, max_bytes: int) -> bytes | None:
-        """A file's content; None if it is larger than ``max_bytes``. The API key is only
-        sent to the W&B server itself, not to the storage its signed URLs point at."""
-        same_origin = urlsplit(url)[:2] == self._origin
-        auth = self._auth if same_origin else httpx.USE_CLIENT_DEFAULT
+        """A run file's content, from its ``url``; None if it is larger than ``max_bytes``,
+        or W&B doesn't have it (404).
+
+        As the wandb SDK does, the request carries the API key: ``url`` is the W&B server's
+        own file route, which redirects to storage. httpx drops the key from redirects to
+        another origin. (``directUrl``, the storage address itself, can refuse a direct read.)
+        """
         delay = 1.0
         for attempt in range(self.RETRIES):
             last = attempt == self.RETRIES - 1
             try:
-                async with self._client.stream("GET", url, auth=auth) as response:
+                async with self._client.stream("GET", url, auth=self._auth) as response:
                     status = response.status_code
                     if status != 429 and status < 500:
+                        if status == 404:
+                            return None
                         if status >= 400:
                             raise WandbError(f"could not download a run file ({status})")
                         chunks, size = [], 0
@@ -261,7 +265,6 @@ class WandbSource:
                 projects.append(
                     SourceProject(
                         name=node["name"],
-                        description=node.get("description") or None,
                         created_at=parse_time(node.get("createdAt")),
                         run_count=int(node.get("runCount") or 0),
                     )
@@ -320,7 +323,7 @@ class WandbSource:
             node = edge.get("node") or {}
             if node.get("name") in names:
                 files[node["name"]] = SourceFile(
-                    node["name"], int(node.get("sizeBytes") or 0), node.get("directUrl")
+                    node["name"], int(node.get("sizeBytes") or 0), node.get("url")
                 )
         return files
 

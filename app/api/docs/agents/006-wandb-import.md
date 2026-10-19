@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | applied (API); flock-ui pages pending |
+| Status | applied |
 | Date | 2026-10-19 |
 | Builds on | [003](003-organizations-and-auth.md), [004](004-home-and-budgets.md) |
 | Keeps | D2 (one server per database, small state in memory), D18 (orgs are wandb entities), D25–D29 (usage ledger) |
@@ -24,8 +24,7 @@ API key, and Flock copies every project and run of that entity into the new org.
 **Out of scope:**
 - media, tables, checkpoints and other run files; artifacts; reports; sweeps;
 - updating runs already copied (a re-import skips them);
-- continuing an import after a restart without the key (it is never stored);
-- the flock-ui pages (the setup and admin forms, the progress card), a later stage.
+- continuing an import after a restart without the key (it is never stored).
 
 ---
 
@@ -47,13 +46,14 @@ lazily: a request per run per attribute unless `lazy=False`. Its importer module
 | `FlockProjects` | `models(entityName:)`, paginated, with `runCount` |
 | `FlockRuns` | `project.runs(order: "+created_at")`, paginated, every field in one query |
 | `FlockHistory` | `history(minStep, maxStep, samples)` in windows of 1000 steps up to `historyKeys.lastStep` |
-| `FlockFiles` / `FlockEvents` | the light files by name; sampled `events` only when there is no `wandb-events.jsonl` |
+| `FlockFiles` / `FlockEvents` | the light files by name, downloaded from their `url`; sampled `events` only when there is no `wandb-events.jsonl` |
 
 Rate limits (429), server errors and dropped connections are retried with exponential
 backoff, honouring `Retry-After`. The pre-check (`FlockViewer`) isn't retried, since someone
-is waiting on it. File downloads only send the key to the W&B server itself, never to the
-storage its signed `directUrl`s point at. httpx's per-request INFO logs are silenced, since
-they would log those signed URLs.
+is waiting on it. Like the SDK, file downloads send the key to a file's `url`
+(W&B's file route), never to the storage that route redirects to: httpx drops it on redirects
+to another origin. httpx's per-request INFO logs are silenced, since they would log signed
+storage URLs.
 
 ### D36. Imported runs are written straight to their final, compacted form
 
@@ -77,6 +77,7 @@ it registers the run in memory as `_load` does and re-sorts the project's rows b
 - **Usage.** The ledger gets the time from `createdAt` to `heartbeatAt`, split by month, with
   the GPUs read from `wandb-metadata.json`. Imported runs count towards past months' spend.
 - **Projects** keep W&B's `createdAt`: `_insert_project` takes an optional `created_at`.
+  Their descriptions aren't copied (see section 4).
 
 ### D37. Progress is persisted, the key is not
 
@@ -135,6 +136,9 @@ query is optional. Runs with no match belong to the super admin who started the 
 5. `tests/app/test_wandb_import.py` against a fake W&B GraphQL and file server.
 6. Docs: the guide page `importing-from-wandb.md`, `api/orgs.md`, `configuration.md`,
    `errors.md`.
+7. flock-ui: an "Import runs from W&B" switch with entity, API key and server fields on the
+   setup page's workspace step and the admin "New organization" dialog; an "Import from W&B"
+   section on the org settings page with the progress, cancel, and resume or start forms.
 
 ## 4. How it was actually built
 
@@ -144,5 +148,22 @@ exercised. They cover the full copy (times, states, owners, curves, system metri
 files, GPUs and compaction), the pre-checks, failed runs and resuming, cancelling and
 deleting the org mid-import, and a restart leaving an import interrupted.
 
-The importer hasn't been run against wandb.ai itself. The query shapes follow the wandb SDK's
-own (`wandb/apis/public`); check them against a real entity before relying on them.
+In flock-ui, the settings page polls `GET /orgs/{org}/import` every 3 seconds while the
+import runs, by invalidating its load. It reloads the sidebar's project list too when the
+import moves to another project or ends. The API key is never sent back to the page in a
+form failure. Setup with an import lands on the org's settings, to follow it, rather than on
+its runs.
+
+A first run against wandb.ai stopped on `Cannot query field "tagNames" on type "Run"`: an
+alias older SDKs used (`tags: tagNames`), which W&B's current schema dropped for `tags`. The
+queries now use only fields the SDK's own queries ask for, which also dropped the project
+`description` (no SDK query reads it; descriptions aren't copied). Two guards keep it so:
+`test_queries_use_only_fields_the_wandb_sdk_uses` checks the run and project fields against
+the installed SDK's `RUN_FRAGMENT`, runs query and projects query, and `FakeWandb` refuses any
+field outside a list taken from them, as W&B does.
+
+The next run failed every run with `could not download a run file (403)`: files were read
+from `directUrl`, the storage address, which refused. The SDK reads them from `url`, W&B's own
+file route, with the API key; that route redirects to storage, and httpx drops the key from
+redirects to another origin. Files now come from `url`. A file that still can't be read is
+left out (logged, and named in `error`) rather than failing its run.

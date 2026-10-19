@@ -267,9 +267,7 @@ class Imports:
     ) -> None:
         if job.org.deleted:
             raise NotFound(f"organization {job.org.name} not found")
-        project = await self.store.import_project(
-            job.org, found.name, found.description, found.created_at
-        )
+        project = await self.store.import_project(job.org, found.name, None, found.created_at)
         limit = asyncio.Semaphore(self.CONCURRENCY)
         seen = 0
 
@@ -326,9 +324,17 @@ class Imports:
         files: dict[str, bytes] = {}
         for file_name in [*FILES, LOG_FILE, EVENTS_FILE]:
             file = found.get(file_name)
-            if file is None or not file.url or file.size > FILE_MAX_BYTES:
+            # W&B lists files it never stored, such as an empty wandb-events.jsonl on runs
+            # whose system metrics live elsewhere (``events`` below still has them).
+            if file is None or not file.url or not 0 < file.size <= FILE_MAX_BYTES:
                 continue
-            content = await source.download(file.url, FILE_MAX_BYTES)
+            # A file that can't be read leaves the run without it, rather than uncopied.
+            try:
+                content = await source.download(file.url, FILE_MAX_BYTES)
+            except WandbError as exc:
+                log.warning("run %s/%s: skipped %s: %s", project, name, file_name, exc)
+                job.error = f"{project}/{name}: skipped {file_name}: {exc}"
+                continue
             if content is not None:
                 files[file_name] = content
 
