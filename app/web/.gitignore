@@ -1,5 +1,4 @@
 node_modules
-!/app/web/src/lib/
 
 # Output
 .output
