@@ -1,6 +1,8 @@
 import json
+import sys
 
 import pytest
+from click.testing import CliRunner
 
 from flock.eval import cli, run
 from flock.eval.model import ScoringModel
@@ -82,18 +84,21 @@ def test_eval_config_rejects_counts_below_one():
 
 @pytest.mark.parametrize("flag", ["--limit", "--batch-tokens"])
 def test_cli_rejects_counts_below_one(flag):
-    with pytest.raises(SystemExit):
-        cli.parse_args(["run", "--model", "m@0", "--task", "arc_easy", "--out", "o", flag, "0"])
+    argv = ["run", "--model", "m@0", "--task", "arc_easy", "--out", "o", flag, "0"]
+    result = CliRunner().invoke(cli.main, argv)
+
+    assert result.exit_code == 2
+    assert "x>=1" in result.output
 
 
-def test_cli_runs_and_prints_primary_metric_first(offline_model, tmp_path, capsys, monkeypatch):
+def test_cli_runs_and_prints_primary_metric_first(offline_model, tmp_path, monkeypatch):
     argv = ["run", "--model", "tiny@0", "--task", "arc_easy", "--out", str(tmp_path)]
-    args = cli.parse_args(argv)
-    assert (args.model, args.tasks, args.limit) == ("tiny@0", ["arc_easy"], None)
-
     monkeypatch.setitem(run.TASKS, "arc_easy", TASK)
-    cli.main(argv)
-    out = capsys.readouterr().out.splitlines()
+    monkeypatch.setattr(sys, "argv", ["flock-eval", *argv])
+
+    result = CliRunner().invoke(cli.main, argv, catch_exceptions=False)
+
+    out = result.output.splitlines()
     assert out[0] == "model tiny@0  flock abc123"
     assert out[2].split() == ["acc_per_char", out[2].split()[1]]
     data = json.loads((tmp_path / "results.json").read_text())

@@ -156,7 +156,7 @@ Nothing in scoring is random, so there are no seeds to record.
 `run.evaluate(EvalConfig) -> Results` loads the model and runs tasks. `EvalConfig` is a frozen
 dataclass of plain fields, so it pickles to a remote worker. `run.score_task(ScoringModel, task)`
 scores an already loaded model, which a training loop can call between steps. `flock-eval run`
-is a thin argparse layer over `evaluate`, registered as a console script in the root
+is a thin click layer over `evaluate`, registered as a console script in the root
 `pyproject.toml`. The root project is the only package that builds a wheel, since the member
 `pyproject.toml` files only declare dependencies.
 
