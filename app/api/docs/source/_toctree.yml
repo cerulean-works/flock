@@ -1,7 +1,7 @@
 # Flock's documentation, published as the `flock` project. Preview it from the
 # repository root with:
 #
-#   doc-builder preview flock app/api/docs/source --mock_deps torch,transformers,huggingface_hub,datasets,wandb
+#   doc-builder preview flock app/api/docs/source
 #
 guide:
   - title: Get started
@@ -32,18 +32,6 @@ guide:
         title: Deploying and operating
       - local: how-it-works
         title: How it works
-  - title: Evaluating models
-    sections:
-      - local: eval/index
-        title: Introduction
-      - local: eval/quickstart
-        title: Quickstart
-      - local: eval/adding-a-task
-        title: Adding a task
-      - local: eval/scoring-during-training
-        title: Scoring during training
-      - local: eval/how-scoring-works
-        title: How scoring works
 reference:
   - title: Configuration
     sections:
@@ -73,15 +61,3 @@ reference:
         title: Errors and status codes
       - local: wandb-compatibility
         title: wandb compatibility
-  - title: Evaluation
-    sections:
-      - local: eval/cli
-        title: Command line
-      - local: eval/api
-        title: Python API
-      - local: eval/tasks
-        title: Tasks
-      - local: eval/metrics
-        title: Metrics
-      - local: eval/results
-        title: Results files

@@ -39,4 +39,4 @@ Log the metrics with the training run's own `wandb` run, as any other metric:
 run.log({f"eval/arc_easy/{name}": value for name, value in result.metrics.items()}, step=step)
 ```
 
-The curves then show up in Flock next to the training loss. See [Logging from training code](../logging).
+The curves then show up in Flock next to the training loss. See [Logging from training code](https://docs.cerulean.works/flock/latest/guide/logging).

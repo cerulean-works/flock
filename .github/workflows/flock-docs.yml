@@ -28,8 +28,6 @@ jobs:
       # The build checks the repository out into a folder named after it.
       path_to_docs: flock/app/api/docs/source
       python_version: "3.14"
-      # Autodoc imports flock.eval; its heavy dependencies are mocked instead of installed.
-      mock_deps: torch,transformers,huggingface_hub,datasets,wandb
 
   publish:
     needs: build

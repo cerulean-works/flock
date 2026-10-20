@@ -1,0 +1,32 @@
+# flock.eval's documentation. Preview it from the repository root with:
+#
+#   doc-builder preview flock flock/eval/docs/source --mock_deps torch,transformers,huggingface_hub,datasets,wandb
+#
+guide:
+  - title: Get started
+    sections:
+      - local: index
+        title: Introduction
+      - local: quickstart
+        title: Quickstart
+  - title: Using flock.eval
+    sections:
+      - local: adding-a-task
+        title: Adding a task
+      - local: scoring-during-training
+        title: Scoring during training
+      - local: how-scoring-works
+        title: How scoring works
+reference:
+  - title: Reference
+    sections:
+      - local: cli
+        title: Command line
+      - local: api
+        title: Python API
+      - local: tasks
+        title: Tasks
+      - local: metrics
+        title: Metrics
+      - local: results
+        title: Results files

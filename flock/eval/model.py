@@ -258,6 +258,10 @@ class ScoringModel:
             targets.append([pad] * (keep - len(continuation)) + window[-len(continuation) :])
             scored.append([False] * (keep - len(continuation)) + [True] * len(continuation))
 
+        # TODO: try FlashAttention 3 from the `kernels` package and packed sequences (cu_seqlens)
+        # instead of padding. Measure the speedup first, and record the kernel in the provenance:
+        # a different kernel changes bfloat16 scores slightly. Packing also changes which
+        # positions `logits_to_keep` must keep.
         device = self.device
         inputs_t, mask_t, positions_t = (
             torch.tensor(x).to(device, non_blocking=True) for x in (inputs, mask, positions)
