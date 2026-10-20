@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import AuthShell from '#lib/components/AuthShell.svelte';
 	import GoogleButton from '#lib/components/GoogleButton.svelte';
+	import OrgIdentityFields from '#lib/components/OrgIdentityFields.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
@@ -13,7 +14,8 @@
 	const STEPS = ['Your account', 'Your workspace'];
 	const step = $derived(data.step === 'account' ? 0 : 1);
 
-	let orgName = $derived(form?.org ?? '');
+	let displayName = $derived(form?.displayName ?? '');
+	let orgId = $derived(form?.org ?? '');
 	let importing = $derived(!!form?.wandb);
 	let pending = $state(false);
 	const submit: SubmitFunction = () => {
@@ -119,30 +121,8 @@
 		</p>
 
 		<form method="POST" action="?/workspace" class="mt-8 grid gap-4" use:enhance={submit}>
-			<div class="grid gap-2">
-				<Label for="org">Organization name</Label>
-				<Input
-					id="org"
-					name="org"
-					autocomplete="organization"
-					placeholder="e.g. cerulean-research"
-					bind:value={orgName}
-					maxlength={128}
-					class="h-10"
-					required
-				/>
-				<p class="text-xs leading-relaxed text-muted-foreground">
-					It appears in links, and the wandb SDK logs to it as the <code
-						class="rounded bg-muted px-1 py-px font-mono text-[11px]">entity</code
-					>.
-				</p>
-			</div>
-			<WandbImportFields
-				org={orgName.trim()}
-				bind:on={importing}
-				entity={form?.entity ?? ''}
-				large
-			/>
+			<OrgIdentityFields bind:displayName bind:id={orgId} large />
+			<WandbImportFields org={orgId.trim()} bind:on={importing} entity={form?.entity ?? ''} large />
 			{#if form?.error}
 				<p class="text-[13px] text-destructive" role="alert">
 					{form.error.charAt(0).toUpperCase() + form.error.slice(1)}.

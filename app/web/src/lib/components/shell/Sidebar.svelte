@@ -11,13 +11,14 @@
 	import ProjectDialog from '#lib/components/ProjectDialog.svelte';
 	import ProjectMenu from '#lib/components/ProjectMenu.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import type { ProjectInfo, Role } from '#lib/types.ts';
+	import type { OrgEntry, ProjectInfo } from '#lib/types.ts';
 	import { entityHref, projectHref } from '#lib/workspace/url.ts';
 	import WorkspaceSwitcher from './WorkspaceSwitcher.svelte';
 
 	interface Props {
+		/** The organization in view, by ID. */
 		org: string | null;
-		orgs: { name: string; role: Role; avatar_url: string | null }[];
+		orgs: OrgEntry[];
 		projects: ProjectInfo[];
 		/** Hide the sidebar (wide windows only: the drawer closes by itself). */
 		oncollapse?: () => void;

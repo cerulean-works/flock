@@ -23,7 +23,10 @@ export type Role = 'admin' | 'member';
 
 /** An organization (a wandb entity), with the caller's role in it. */
 export interface OrgInfo {
+	/** Its ID: the `{org}` and `[entity]` of URLs and the wandb SDK's `entity`. Never changes. */
 	name: string;
+	/** What people see it called; admins change it freely. */
+	display_name: string;
 	created_at: number;
 	updated_at: number;
 	project_count: number;
@@ -67,11 +70,20 @@ export interface UserInfo {
 	/** Signs in with Google. */
 	google: boolean;
 	default_org: string | null;
-	orgs: { name: string; role: Role }[];
+	orgs: { name: string; display_name: string; role: Role }[];
 	created_at: number;
 	avatar_url: string | null;
 	/** Where the picture came from (only `/me` says). */
 	avatar_source?: 'gravatar' | 'upload' | null;
+}
+
+/** An organization as the sidebar's switcher lists it. */
+export interface OrgEntry {
+	/** The org's ID. */
+	name: string;
+	display_name: string;
+	role: Role;
+	avatar_url: string | null;
 }
 
 export interface Member {

@@ -2,7 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import { refreshUser } from '#lib/server/auth.ts';
 import { change, refused, flock } from '#lib/server/flock.ts';
 import type { OrgInfo, UserInfo } from '#lib/types.ts';
-import { formText, orgNameError } from '#lib/utils.ts';
+import { formText, orgDisplayNameError, orgIdError } from '#lib/utils.ts';
 import { wandbImport } from '#lib/wandb.ts';
 import { orgHref } from '#lib/workspace/url.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -29,13 +29,15 @@ export const actions: Actions = {
 	 */
 	createOrg: async ({ request }) => {
 		const form = await request.formData();
-		const name = formText(form, 'name');
-		const invalid = orgNameError(name);
+		const displayName = formText(form, 'display_name');
+		const name = formText(form, 'id');
+		const invalid = orgDisplayNameError(displayName) ?? orgIdError(name);
 		if (invalid) return fail(400, { error: invalid });
 		const wandb = wandbImport(form, name);
 		if (wandb && 'error' in wandb) return fail(400, { error: wandb.error });
 		const res = await change<OrgInfo>('POST', '/api/v1/orgs', {
 			name,
+			display_name: displayName,
 			...(wandb ? { wandb: wandb.value } : {})
 		});
 		if (refused(res)) return res;

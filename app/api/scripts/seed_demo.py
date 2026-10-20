@@ -137,6 +137,9 @@ KINDS = {
     ),
 }  # fmt: skip
 
+# What each org is called (its ID is the key of ORGS).
+DISPLAY_NAMES = {"flock": "Flock Research", "vision": "Vision Lab", "speech": "Speech Team"}
+
 # org -> (currency, GPU prices, members besides the super admin, [(project, kind, runs, about)])
 ORGS: dict[str, tuple[str, dict[str, float], int, list[tuple[str, str, int, str | None]]]] = {
     "flock": (
@@ -198,6 +201,7 @@ class Person:
 @dataclass(eq=False)
 class OrgPlan:
     name: str
+    display_name: str
     currency: str
     rates: dict[str, float]
     members: dict[Person, str] = field(default_factory=dict)  # -> role
@@ -344,7 +348,13 @@ class Planner:
 
     def _org(self, name: str, currency: str, rates: dict[str, float], members: int) -> OrgPlan:
         rng = self.rng
-        org = OrgPlan(name, currency, dict(rates), avatar=identicon(f"org:{name}"))
+        org = OrgPlan(
+            name,
+            DISPLAY_NAMES.get(name, name),
+            currency,
+            dict(rates),
+            avatar=identicon(f"org:{name}"),
+        )
         org.members[self.people[0]] = "admin"
         founders = [p for p in self.people[1:] if p.created_at < self.start]
         later = [p for p in self.people[1:] if p.created_at >= self.start]
@@ -855,9 +865,10 @@ class Writer:
         )
         for org in plan.orgs:
             org.pk = await conn.fetchval(
-                "INSERT INTO orgs (name, created_at, updated_at, currency, avatar) "
-                "VALUES ($1, $2, $2, $3, $4) RETURNING pk",
+                "INSERT INTO orgs (name, display_name, created_at, updated_at, currency, avatar) "
+                "VALUES ($1, $2, $3, $3, $4, $5) RETURNING pk",
                 org.name,
+                org.display_name,
                 utc(plan.start - 90 * DAY),
                 org.currency,
                 hashlib.sha256(org.avatar).digest() if org.avatar else None,

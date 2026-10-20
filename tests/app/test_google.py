@@ -141,7 +141,7 @@ def test_google_links_existing_accounts_and_accepts_invites(make_flock, google):
     joined = google.tokens(
         server, google.sign_in(server, "carol@gmail.com", invite=invite["token"])
     )
-    assert joined["user"]["orgs"] == [{"name": "flock", "role": "member"}]
+    assert joined["user"]["orgs"] == [{"name": "flock", "display_name": "flock", "role": "member"}]
     used = google.sign_in(server, "carol@gmail.com", sub="other", invite=invite["token"])
     assert used.startswith("https://ui.test/login?error=invite")
 

@@ -11,13 +11,14 @@
 	import { page } from '$app/state';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
-	import type { Role } from '#lib/types.ts';
+	import type { OrgEntry } from '#lib/types.ts';
 	import { orgHref } from '#lib/workspace/url.ts';
 	import OrgMark from './OrgMark.svelte';
 
 	interface Props {
+		/** The organization in view, by ID. */
 		org: string | null;
-		orgs: { name: string; role: Role; avatar_url: string | null }[];
+		orgs: OrgEntry[];
 		/** Where switching lands: this page (home, account) or the org's own runs. */
 		stay: boolean;
 		/** Just the picture, for the collapsed sidebar's rail. */
@@ -29,6 +30,8 @@
 	const me = $derived(page.data.shell!.me);
 	const session = $derived(!!page.data.user);
 	const current = $derived(orgs.find((o) => o.name === org));
+	// What people call it; its ID only shows in URLs and settings.
+	const label = $derived(org ? (current?.display_name ?? org) : null);
 
 	// Menu rows lead with a 24px-wide slot and an 8px gap, so marks, avatars and icons share a column
 	// and every label starts at the same place.
@@ -54,12 +57,12 @@
 			'group flex items-center gap-3 rounded-lg text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 aria-expanded:bg-muted',
 			compact ? 'p-1.5' : 'w-full px-2 py-2.5'
 		]}
-		aria-label="{org ?? 'No organization'} · {me.name}"
-		title={compact ? `${org ?? 'No organization'} · ${me.name}` : undefined}
+		aria-label="{label ?? 'No organization'} · {me.name}"
+		title={compact ? `${label ?? 'No organization'} · ${me.name}` : undefined}
 	>
 		<span class="relative flex-none">
-			{#if org}
-				<OrgMark name={org} src={current?.avatar_url} />
+			{#if label}
+				<OrgMark name={label} src={current?.avatar_url} />
 				<!-- Who is signed in: a badge on the organization's corner, ringed in the
 				     background so it reads as separate from the mark. -->
 				<Avatar
@@ -73,9 +76,9 @@
 		</span>
 		{#if !compact}
 			<span class="grid min-w-0 flex-1 leading-tight">
-				<span class="truncate font-medium">{org ?? me.name}</span>
+				<span class="truncate font-medium">{label ?? me.name}</span>
 				<span class="truncate text-xs text-muted-foreground">
-					{org ? me.name : 'No organization yet'}
+					{label ? me.name : 'No organization yet'}
 				</span>
 			</span>
 			<ChevronsUpDownIcon class="size-4 flex-none text-muted-foreground" />
@@ -92,11 +95,11 @@
 					Organizations
 				</DropdownMenu.Label>
 				{#each orgs as o (o.name)}
-					<DropdownMenu.Item class={ROW} onSelect={() => choose(o.name)}>
+					<DropdownMenu.Item class={ROW} onSelect={() => choose(o.name)} title={o.name}>
 						<span class={SLOT}>
-							<OrgMark name={o.name} src={o.avatar_url} class="size-5 text-[11px]" />
+							<OrgMark name={o.display_name} src={o.avatar_url} class="size-5 text-[11px]" />
 						</span>
-						<span class="min-w-0 flex-1 truncate">{o.name}</span>
+						<span class="min-w-0 flex-1 truncate">{o.display_name}</span>
 						{#if o.name === org}<CheckIcon class="text-muted-foreground" />{/if}
 					</DropdownMenu.Item>
 				{/each}

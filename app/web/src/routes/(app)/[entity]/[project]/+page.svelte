@@ -57,7 +57,7 @@
 
 	// Live updates for the runs on the page being shown. A different page (paging, sorting, a
 	// refresh) resubscribes with that page's cursors and replays whatever it missed.
-	// Someone else renamed or deleted the project (or renamed its org): follow it, or leave.
+	// Someone else renamed or deleted the project: follow it, or leave.
 	// The same toast id as the dialogs' own, so a change made here isn't announced twice.
 	function onproject(e: ProjectEvent) {
 		const { entity, project } = ws.meta;
@@ -66,10 +66,10 @@
 			void goto(entityHref(entity), { replaceState: true });
 			return;
 		}
-		const to = { entity: e.entity_renamed_to ?? entity, project: e.renamed_to ?? project };
-		toast(`Project renamed to ${to.entity} / ${to.project}`, { id: 'project' });
+		const to = e.renamed_to ?? project;
+		toast(`Project renamed to ${to}`, { id: 'project' });
 		clearRunPages();
-		void goto(workspaceHrefWith(to.entity, to.project, page.url.search, {}), {
+		void goto(workspaceHrefWith(entity, to, page.url.search, {}), {
 			replaceState: true
 		});
 	}
@@ -256,7 +256,7 @@
 </script>
 
 <svelte:head>
-	<title>{ws.meta.project} · {ws.meta.entity}</title>
+	<title>{ws.meta.project} · {data.shell.orgName ?? ws.meta.entity}</title>
 </svelte:head>
 
 <svelte:window {onkeydown} />

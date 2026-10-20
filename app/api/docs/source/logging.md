@@ -98,7 +98,7 @@ Read them with `stream=system` on the [curve endpoints](api/queries#curves).
 | `failed` | The run ended with another exit code. An uncaught exception ends it with exit code 1, and `run.finish(exit_code=2)` with exit code 2. |
 | `crashed` | Flock heard nothing from the client for `FLOCK_CRASH_TIMEOUT` seconds (600 by default). |
 
-`running` and `preempting` runs are **active**. While a run is active, you can't move it or rename its project or organization, and deleting it needs `force`. Its client addresses it by `entity/project/run` in every request, so moving it would split it in two.
+`running` and `preempting` runs are **active**. While a run is active, you can't move it or rename its project, and deleting it needs `force`. Its client addresses it by `entity/project/run` in every request, so moving it would split it in two.
 
 A crashed run isn't final. If its client sends data again, for example after a network outage, the run returns to `running`. [Crash detection](deploying#crash-detection) explains the timing.
 

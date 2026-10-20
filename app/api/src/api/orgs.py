@@ -11,6 +11,7 @@ from app.api.src.api.deps import (
     JSONResponse,
     Name,
     OrgDep,
+    OrgDisplayName,
     StoreDep,
     SuperadminDep,
     UserDep,
@@ -46,14 +47,19 @@ class WandbImport(BaseModel):
 class OrgCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: Name
+    name: Name  # the ID, fixed from now on
+    display_name: OrgDisplayName | None = None  # defaults to the ID
     wandb: WandbImport | None = None
 
 
-class OrgBody(BaseModel):
+class OrgUpdate(BaseModel):
+    """Fields to change. ``name`` (the ID) can't change: it is accepted only as it is, so a
+    client can send back the organization it read."""
+
     model_config = ConfigDict(extra="forbid")
 
-    name: Name
+    display_name: OrgDisplayName | None = None
+    name: str | None = None
 
 
 class RoleBody(BaseModel):
@@ -72,6 +78,7 @@ class InviteCreate(BaseModel):
 def org_info(store: Store, org: Org, user: User) -> dict:
     return {
         "name": org.name,
+        "display_name": org.display_name,
         "created_at": org.created_at,
         "updated_at": org.updated_at,
         "project_count": sum(1 for p in store.projects_by_pk.values() if p.org is org),
@@ -106,9 +113,8 @@ def find_member(store: Store, org: Org, user_id: int) -> User:
 async def list_orgs(user: UserDep, store: StoreDep) -> Response:
     """The user's organizations (every organization, for super admins)."""
     orgs = [org for org in store.orgs.values() if store.accounts.role(user, org)]
-    return JSONResponse(
-        {"orgs": [org_info(store, org, user) for org in sorted(orgs, key=lambda o: o.name)]}
-    )
+    orgs.sort(key=lambda org: (org.display_name.casefold(), org.name))
+    return JSONResponse({"orgs": [org_info(store, org, user) for org in orgs]})
 
 
 async def wandb_source(store: Store, body: WandbImport) -> tuple[WandbSource, dict[str, str]]:
@@ -139,7 +145,7 @@ async def create_org(body: OrgCreate, user: SuperadminDep, store: StoreDep) -> R
     if body.wandb is not None:
         source, members = await wandb_source(store, body.wandb)
     try:
-        org = await store.create_org(body.name)
+        org = await store.create_org(body.name, body.display_name)
         await store.accounts.add_member(user, org, "admin")
     except BaseException:
         if source is not None:
@@ -158,13 +164,16 @@ async def get_org(org: OrgDep, user: UserDep, store: StoreDep) -> Response:
 
 
 @router.patch("/orgs/{org}")
-async def rename_org(org: AdminOrgDep, body: OrgBody, user: UserDep, store: StoreDep) -> Response:
-    """Rename an organization, the entity of its projects and runs.
+async def update_org(org: AdminOrgDep, body: OrgUpdate, user: UserDep, store: StoreDep) -> Response:
+    """Change an organization's display name.
 
-    Refused (409, listing them as project/run) while runs are active, since their clients
-    address them by entity. Dashboards streaming its projects get a ``project`` event.
+    Its ID (``name``) is fixed: projects, runs, URLs and wandb clients address the organization
+    by it. A different ``name`` answers 400.
     """
-    await store.update_org(org, body.name)
+    if body.name is not None and body.name != org.name:
+        raise APIError(400, "an organization's ID (name) can't be changed")
+    if body.display_name is not None:
+        await store.set_org_display_name(org, body.display_name)
     return JSONResponse(org_info(store, org, user))
 
 

@@ -23,7 +23,10 @@
 		done: () => passwordForm?.reset()
 	});
 	const defaultOrg = new Mutation<{ org: string }>({
-		success: ({ org }) => `wandb.init now logs to ${org} by default`,
+		success: ({ org }) => {
+			const name = data.profile.orgs.find((o) => o.name === org)?.display_name ?? org;
+			return `wandb.init now logs to ${name} by default`;
+		},
 		toastErrors: true
 	});
 </script>
@@ -163,7 +166,11 @@
 					<ul class="mt-3 border-t border-divider">
 						{#each data.profile.orgs as org (org.name)}
 							<li class="flex h-12 items-center gap-3 border-b border-divider">
-								<a class="font-medium hover:text-link" href={entityHref(org.name)}>{org.name}</a>
+								<a
+									class="min-w-0 truncate font-medium hover:text-link"
+									href={entityHref(org.name)}
+									title={org.name}>{org.display_name}</a
+								>
 								<Badge variant="secondary" class="text-muted-foreground">
 									{org.role === 'admin' ? 'Admin' : 'Member'}
 								</Badge>

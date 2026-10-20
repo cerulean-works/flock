@@ -37,7 +37,7 @@ Signing up, signing in, refreshing, accepting an invitation as a new account, re
 | `has_password` | Whether the account has a password. Accounts created through Google don't. |
 | `google` | Whether a Google account is linked. |
 | `default_org` | The organization `wandb.init` logs into when no `entity` is given, or `null` if the user belongs to none. |
-| `orgs` | The user's memberships, as `{"name", "role"}` objects sorted by name. `role` is `admin` or `member`. |
+| `orgs` | The user's memberships, as `{"name", "display_name", "role"}` objects sorted by display name. `name` is the organization's ID. `role` is `admin` or `member`. |
 | `created_at` | When the account was created. |
 | `avatar_url` | The path of the user's [avatar](#avatars) image, such as `/api/v1/avatars/3f2a…`, or `null`. |
 | `avatar_source` | `gravatar` or `upload`: where the avatar came from. `null` without one. |

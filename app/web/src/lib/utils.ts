@@ -59,10 +59,37 @@ const RESERVED = [
 	'setup'
 ];
 
-/** Why an organization name is invalid (a project name's rule, and not a dashboard page). */
-export function orgNameError(name: string): string | null {
-	if (RESERVED.includes(name.toLowerCase()) || name.startsWith('_')) return `“${name}” is reserved`;
-	return projectNameError(name);
+/**
+ * Why an organization ID is invalid (a project name's rule, and not a dashboard page). The ID is
+ * the org's name in URLs and the wandb SDK's `entity`; it can't change once the org exists.
+ */
+export function orgIdError(id: string): string | null {
+	if (!id.trim()) return 'Enter an ID';
+	if (RESERVED.includes(id.toLowerCase()) || id.startsWith('_')) return `“${id}” is reserved`;
+	return projectNameError(id);
+}
+
+/** Why an organization's display name is invalid: any text, up to 128 characters. */
+export function orgDisplayNameError(name: string): string | null {
+	if (!name.trim()) return 'Enter a display name';
+	if (name.length > 128) return 'Use at most 128 characters';
+	// eslint-disable-next-line no-control-regex
+	if (/[\u0000-\u001f\u007f]/.test(name)) return 'Remove the control characters';
+	return null;
+}
+
+/**
+ * An ID suggested for a display name: lowercase ASCII letters and digits, words joined by
+ * dashes ("Cerulean Labs" -> "cerulean-labs"). Empty when nothing in it is usable.
+ */
+export function slugify(name: string, max = 64): string {
+	return name
+		.normalize('NFKD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.slice(0, max)
+		.replace(/^-+|-+$/g, '');
 }
 
 /** The image types Flock takes for avatars (it checks the bytes; SVG is refused). */

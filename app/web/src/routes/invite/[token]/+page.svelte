@@ -27,7 +27,7 @@
 </script>
 
 <svelte:head>
-	<title>{data.invite ? `Join ${data.invite.org}` : 'Invitation'} · Flock</title>
+	<title>{data.invite ? `Join ${data.invite.org_display_name}` : 'Invitation'} · Flock</title>
 </svelte:head>
 
 <AuthShell>
@@ -41,10 +41,14 @@
 		<Button variant="outline" class="mt-8 h-10 w-full text-sm" href="/">Go to Flock</Button>
 	{:else}
 		{@const invite = data.invite}
-		<OrgMark name={invite.org} src={invite.org_avatar_url} class="mb-5 size-12 text-[24px]" />
+		<OrgMark
+			name={invite.org_display_name}
+			src={invite.org_avatar_url}
+			class="mb-5 size-12 text-[24px]"
+		/>
 		<p class="text-[13px] text-muted-foreground">You’re invited to</p>
 		<h1 class="mt-1 font-serif text-[34px] leading-[1.15] tracking-[-0.02em]">
-			Join {invite.org}
+			Join {invite.org_display_name}
 		</h1>
 		<p class="mt-3 leading-relaxed text-muted-foreground">
 			As {as}, with <span class="text-foreground">{invite.email}</span>.
@@ -55,7 +59,7 @@
 				<input type="hidden" name="org" value={invite.org} />
 				<FormError error={form?.error ?? null} />
 				<Button type="submit" class="h-10 w-full text-sm" disabled={pending}>
-					{pending ? 'Joining…' : `Join ${invite.org}`}
+					{pending ? 'Joining…' : `Join ${invite.org_display_name}`}
 				</Button>
 			</form>
 		{:else if data.user}

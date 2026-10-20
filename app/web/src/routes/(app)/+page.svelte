@@ -49,8 +49,8 @@
 				</div>
 				<p class="mt-1 text-muted-foreground">
 					{data.mine ? 'Your runs' : 'Runs and projects'} in {data.project
-						? `${data.org} / ${data.project}`
-						: data.org}
+						? `${data.shell.orgName} / ${data.project}`
+						: data.shell.orgName}
 				</p>
 				{#key JSON.stringify(data.query)}
 					<FeedList

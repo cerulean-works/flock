@@ -12,7 +12,10 @@
 	import { pollImport, wandbImport } from '#lib/wandb.ts';
 
 	interface Props {
+		/** The org's ID: the W&B entity imported when none is entered. */
 		org: string;
+		/** What people call it. */
+		label: string;
 		/** The org's latest import, or null if it never had one. */
 		job: OrgImport | null;
 		/** Only super admins start and cancel imports. */
@@ -20,7 +23,7 @@
 		now: number;
 	}
 
-	let { org, job, superadmin, now }: Props = $props();
+	let { org, label, job, superadmin, now }: Props = $props();
 
 	const running = $derived(job?.state === 'running');
 	$effect(() => {
@@ -153,7 +156,7 @@
 	</div>
 {:else if superadmin && !resuming}
 	<p class="mt-2 max-w-[62ch] text-muted-foreground">
-		Copy every project and run of a W&B team or user into {org}.
+		Copy every project and run of a W&B team or user into {label}.
 	</p>
 	<div class="mt-4">
 		<Button variant="outline" onclick={() => (resuming = true)}>
@@ -177,7 +180,7 @@
 			always
 		/>
 		<p class="text-[13px] text-muted-foreground">
-			Runs {org} already has are skipped, so only what’s missing is copied.
+			Runs {label} already has are skipped, so only what’s missing is copied.
 		</p>
 		<FormError error={starting.error} />
 		<div class="flex gap-2">

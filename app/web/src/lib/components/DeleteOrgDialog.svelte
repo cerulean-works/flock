@@ -12,9 +12,10 @@
 
 	let { open = $bindable(), org }: { open: boolean; org: OrgInfo } = $props();
 
-	const mutation = new Mutation({ success: () => `Deleted ${org.name}` });
+	const mutation = new Mutation({ success: () => `Deleted ${org.display_name}` });
 
-	// Typing the name is the confirmation; reset whenever the dialog opens.
+	// Typing its ID (unique, where display names may not be) is the confirmation; reset whenever
+	// the dialog opens.
 	let typed = $derived.by(() => {
 		void open;
 		return '';
@@ -31,7 +32,7 @@
 <AlertDialog.Root bind:open onOpenChange={(o) => o || mutation.reset()}>
 	<AlertDialog.Content class="sm:max-w-md">
 		<AlertDialog.Header>
-			<AlertDialog.Title>Delete {org.name}?</AlertDialog.Title>
+			<AlertDialog.Title>Delete {org.display_name}?</AlertDialog.Title>
 			<AlertDialog.Description>
 				{#if org.project_count}
 					Deletes its {count(org.project_count, 'project')} and their runs. Members keep their accounts.
@@ -44,7 +45,7 @@
 		<form method="POST" action="?/delete" class="grid gap-4" use:enhance={mutation.enhance}>
 			<div class="grid gap-2">
 				<Label for="delete-org-name">
-					Type <span class="font-mono text-[12.5px]">{org.name}</span> to confirm
+					Type its ID, <span class="font-mono text-[12.5px]">{org.name}</span>, to confirm
 				</Label>
 				<Input id="delete-org-name" bind:value={typed} autocomplete="off" spellcheck="false" />
 			</div>

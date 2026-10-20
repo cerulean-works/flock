@@ -454,6 +454,7 @@ async def get_invite(token: str, store: StoreDep) -> Response:
     return JSONResponse(
         {
             "org": org.name,
+            "org_display_name": org.display_name,
             "org_avatar_url": store.avatars.url(org.avatar),
             "email": invite.email,
             "role": invite.role,

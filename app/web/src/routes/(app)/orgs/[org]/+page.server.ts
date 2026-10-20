@@ -3,7 +3,7 @@ import { refreshUser } from '#lib/server/auth.ts';
 import { removeAvatar, setAvatar } from '#lib/server/avatar.ts';
 import { change, refused, flock } from '#lib/server/flock.ts';
 import type { Billing, Invite, Member, OrgImport, OrgInfo, Role, UserInfo } from '#lib/types.ts';
-import { formText, orgNameError } from '#lib/utils.ts';
+import { formText, orgDisplayNameError } from '#lib/utils.ts';
 import { IMPORT, wandbImport } from '#lib/wandb.ts';
 import { orgHref } from '#lib/workspace/url.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -173,16 +173,16 @@ export const actions: Actions = {
 		return { import: res.data };
 	},
 
-	/** Rename the org: the entity of its projects and runs, so its URLs change too. */
-	rename: async ({ params, request }) => {
-		const name = formText(await request.formData(), 'name');
-		const invalid = orgNameError(name);
+	/** The name people see. The org's ID (its URLs, the wandb entity) never changes. */
+	displayName: async ({ params, request }) => {
+		const displayName = formText(await request.formData(), 'display_name');
+		const invalid = orgDisplayNameError(displayName);
 		if (invalid) return fail(400, { error: invalid });
-		if (name === params.org) return { renamed: name };
-		const res = await change<OrgInfo>('PATCH', orgPath(params.org), { name });
+		const res = await change<OrgInfo>('PATCH', orgPath(params.org), {
+			display_name: displayName
+		});
 		if (refused(res)) return res;
-		await refreshUser();
-		redirect(303, orgHref(name));
+		return { org: res.data };
 	},
 
 	delete: async ({ locals, params, request }) => {

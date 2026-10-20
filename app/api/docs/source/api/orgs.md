@@ -1,33 +1,37 @@
 # Organizations and invites
 
-Endpoints for organizations, their members and their invitations. Paths are relative to `/api/v1`, and `{org}` is an organization's name. Organizations you don't belong to answer 404 to every endpoint here, as if they didn't exist. Super admins belong to every organization as admins. For how roles work, see [Accounts, organizations and roles](../accounts).
+Endpoints for organizations, their members and their invitations. Paths are relative to `/api/v1`, and `{org}` is an organization's ID (its `name`). Organizations you don't belong to answer 404 to every endpoint here, as if they didn't exist. Super admins belong to every organization as admins. For how roles work, see [Accounts, organizations and roles](../accounts).
 
 ## Organizations[[organizations]]
 
 An organization is returned as:
 
 ```json
-{"name": "flock", "created_at": 1792282194.3, "updated_at": 1792282194.3, "project_count": 2, "member_count": 2, "role": "admin", "avatar_url": null}
+{"name": "flock", "display_name": "Flock Research", "created_at": 1792282194.3, "updated_at": 1792282194.3, "project_count": 2, "member_count": 2, "role": "admin", "avatar_url": null}
 ```
 
-`role` is your own role in it: `admin` or `member`. `avatar_url` is the path of its avatar image, or `null`.
+| Field | Meaning |
+|---|---|
+| `name` | The organization's ID: the entity in URLs, API paths and `wandb.init(entity=...)`. It's set at creation and never changes. |
+| `display_name` | What people see it called. Org admins can change it. |
+| `role` | Your own role in it: `admin` or `member`. |
+| `avatar_url` | The path of its avatar image, or `null`. |
 
 | Endpoint | Who | Meaning |
 |---|---|---|
-| `GET /orgs` | anyone | Your organizations as `{"orgs": [...]}`, sorted by name. Super admins get every organization. |
-| `POST /orgs` | super admins | Creates an organization from `{"name": "vision"}`, with you as its admin. Answers 201, or 409 if the name is taken. Add `wandb` to [import a W&B entity](#imports) into it. |
+| `GET /orgs` | anyone | Your organizations as `{"orgs": [...]}`, sorted by display name, then by ID. Super admins get every organization. |
+| `POST /orgs` | super admins | Creates an organization from `{"name": "vision", "display_name": "Vision Lab"}`, with you as its admin. `display_name` defaults to `name`. Answers 201, or 409 if the ID is taken. Add `wandb` to [import a W&B entity](#imports) into it. |
 | `GET /orgs/{org}` | members | One organization. |
-| `PATCH /orgs/{org}` | org admins | Renames it, with `{"name": "..."}`. Returns the organization. |
+| `PATCH /orgs/{org}` | org admins | Changes its display name, with `{"display_name": "..."}`. Returns the organization. |
 | `DELETE /orgs/{org}` | org admins | Deletes it, with all its projects and runs. Answers 204. |
 | `PUT /orgs/{org}/avatar` | org admins | Sets its avatar. The body is the image, with the same rules as [`PUT /me/avatar`](auth#avatars). Returns the organization. |
 | `DELETE /orgs/{org}/avatar` | org admins | Removes its avatar. Returns the organization. |
 
-Organization names follow the rules of project names: 1 to 128 characters, with no spaces around them, no control characters and none of `/ \ # ? % :`. Other names answer 422.
+Organization IDs follow the rules of project names: 1 to 128 characters, with no spaces around them, no control characters and none of `/ \ # ? % :`. Other IDs answer 422.
 
-**Renaming** changes the entity of every project and run in the organization:
-- It's refused with 409 while any run of the organization is active, and `ids` lists them as `<project>/<run>`.
-- A name that another organization uses answers 409.
-- Dashboards streaming its projects get a `project` event with `entity_renamed_to`, and their streams end.
+Display names are free text: 1 to 128 characters after Flock trims the spaces around them, with no control characters. Other display names answer 422. Two organizations can have the same display name.
+
+**The ID can't change.** Projects, runs, URLs and wandb clients address the organization by it. `PATCH` accepts `name` only with the current ID, so a client can send back the organization it read. A different `name` answers 400. Changing the display name works while runs are active, and dashboards streaming its projects aren't interrupted.
 
 **Deleting** is permanent:
 - It's refused with 409 while runs are active, listing them in `ids`, unless you add `?force=true`.
@@ -121,8 +125,10 @@ These are public: the token is the secret.
 What the invitation is for:
 
 ```json
-{"org": "flock", "org_avatar_url": null, "email": "ben@example.com", "role": "member", "expires_at": 1792887026.87, "account_exists": false}
+{"org": "flock", "org_display_name": "Flock Research", "org_avatar_url": null, "email": "ben@example.com", "role": "member", "expires_at": 1792887026.87, "account_exists": false}
 ```
+
+`org` is the organization's ID, and `org_display_name` what to call it.
 
 `account_exists` says whether an account with this email exists. If it does, the person signs in to accept instead of creating an account.
 

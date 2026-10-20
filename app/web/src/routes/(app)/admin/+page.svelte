@@ -5,15 +5,21 @@
 	import Avatar from '#lib/components/Avatar.svelte';
 	import OrgMark from '#lib/components/shell/OrgMark.svelte';
 	import FormError from '#lib/components/FormError.svelte';
+	import OrgIdentityFields from '#lib/components/OrgIdentityFields.svelte';
 	import UserMenu from '#lib/components/UserMenu.svelte';
 	import WandbImportFields from '#lib/components/WandbImportFields.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
-	import { Input } from '#lib/components/ui/input/index.js';
-	import { Label } from '#lib/components/ui/label/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
-	import { count, dateTime, formText, orgNameError, relativeTime } from '#lib/utils.ts';
+	import {
+		count,
+		dateTime,
+		formText,
+		orgDisplayNameError,
+		orgIdError,
+		relativeTime
+	} from '#lib/utils.ts';
 	import { wandbImport } from '#lib/wandb.ts';
 	import { entityHref, orgHref } from '#lib/workspace/url.ts';
 	import type { PageProps } from './$types';
@@ -23,13 +29,18 @@
 	const me = $derived(page.data.shell?.me.id ?? page.data.user?.id);
 
 	let creating = $state(false);
-	let orgName = $state('');
+	let displayName = $state('');
+	let orgId = $state('');
 	let importing = $state(false);
 	const creation = new Mutation({
 		validate: (form) => {
-			const name = formText(form, 'name');
+			const name = formText(form, 'id');
 			const wandb = wandbImport(form, name);
-			return orgNameError(name) ?? (wandb && 'error' in wandb ? wandb.error : null);
+			return (
+				orgDisplayNameError(formText(form, 'display_name')) ??
+				orgIdError(name) ??
+				(wandb && 'error' in wandb ? wandb.error : null)
+			);
 		},
 		success: () => (importing ? 'Organization created, importing from W&B' : 'Organization created')
 	});
@@ -78,8 +89,17 @@
 									class="flex min-w-0 items-center gap-2.5 font-medium hover:text-link"
 									href={entityHref(org.name)}
 								>
-									<OrgMark name={org.name} src={org.avatar_url} class="size-6 text-[13px]" />
-									<span class="truncate">{org.name}</span>
+									<OrgMark
+										name={org.display_name}
+										src={org.avatar_url}
+										class="size-6 text-[13px]"
+									/>
+									<span class="truncate">{org.display_name}</span>
+									{#if org.display_name !== org.name}
+										<span class="truncate font-mono text-[12px] font-normal text-muted-foreground">
+											{org.name}
+										</span>
+									{/if}
 								</a>
 								<span class="hidden text-right tabular-nums sm:block">
 									{org.project_count.toLocaleString('en-US')}
@@ -161,7 +181,8 @@
 	onOpenChange={(o) => {
 		if (o) return;
 		creation.reset();
-		orgName = '';
+		displayName = '';
+		orgId = '';
 		importing = false;
 	}}
 >
@@ -171,21 +192,13 @@
 			<Dialog.Description>You become its first admin.</Dialog.Description>
 		</Dialog.Header>
 		<form method="POST" action="?/createOrg" class="grid gap-4" use:enhance={creation.enhance}>
-			<div class="grid gap-2">
-				<Label for="org-name">Name</Label>
-				<Input
-					id="org-name"
-					name="name"
-					placeholder="e.g. cerulean-research"
-					autocomplete="off"
-					spellcheck="false"
-					required
-					maxlength={128}
-					bind:value={orgName}
-					aria-invalid={!!creation.error}
-				/>
-			</div>
-			<WandbImportFields id="new-org-wandb" org={orgName.trim()} bind:on={importing} />
+			<OrgIdentityFields
+				prefix="new-org"
+				bind:displayName
+				bind:id={orgId}
+				invalid={!!creation.error}
+			/>
+			<WandbImportFields id="new-org-wandb" org={orgId.trim()} bind:on={importing} />
 			<FormError error={creation.error} />
 			<Dialog.Footer>
 				<Dialog.Close>

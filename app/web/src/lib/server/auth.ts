@@ -56,7 +56,7 @@ export async function needsWorkspace() {
 	return orgs.length === 0;
 }
 
-/** Re-read the signed-in user's profile once a change touched it (an org joined, renamed or
+/** Re-read the signed-in user's profile once a change touched it (an org joined, created or
  * left; super admin given up). */
 export async function refreshUser() {
 	const { cookies, locals } = getRequestEvent();
