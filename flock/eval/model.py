@@ -276,8 +276,17 @@ class ScoringModel:
         targets_t, scored_t = (
             torch.tensor(x).to(logits.device, non_blocking=True) for x in (targets, scored)
         )
-        # log_softmax at the target only: one float32 copy of the logits, not two.
-        target_logits = logits.gather(-1, targets_t[..., None]).squeeze(-1).float()
-        token_logprob = target_logits - logits.float().logsumexp(-1)
+
+        # `logits` is [rows, keep, vocab], up to `batch_tokens * vocab` for short requests, which
+        # are nearly all continuation. A float32 copy of all of it would double peak memory, so
+        # log-softmax runs at the targets only, a few rows at a time.
+        rows_per_chunk = max(1, 4096 // keep)
+        token_logprob = torch.empty(targets_t.shape, dtype=torch.float32, device=logits.device)
+        for start in range(0, len(logits), rows_per_chunk):
+            rows = slice(start, start + rows_per_chunk)
+            chunk = logits[rows].float()
+            target_logits = chunk.gather(-1, targets_t[rows, :, None]).squeeze(-1)
+            token_logprob[rows] = target_logits - chunk.logsumexp(-1)
+
         # `where`, not a product: logits at padding positions may not be finite.
         return token_logprob.where(scored_t, 0.0).sum(-1).to(device, non_blocking=True)
