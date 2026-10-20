@@ -4,8 +4,9 @@ from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
 from transformers import LlamaConfig, LlamaForCausalLM, PreTrainedTokenizerFast
 
 from flock.eval.model import ScoringModel
-from flock.eval.tasks import Dataset, Fewshot, MultipleChoiceTask
-from flock.eval.tasks.arc import arc_doc
+from flock.eval.tasks import Dataset
+
+from .toy import ROWS
 
 CORPUS = [
     "Question: Which gas do plants take in?\nAnswer: carbon dioxide",
@@ -60,47 +61,7 @@ def scorer(lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast) -> ScoringM
     return ScoringModel(lm, tokenizer, name="tiny@0")
 
 
-ROWS = {
-    "train": [
-        {
-            "id": "shot-1",
-            "question": "Which gas do plants take in?",
-            "choices": {"text": ["oxygen", "carbon dioxide"], "label": ["A", "B"]},
-            "answerKey": "B",
-        },
-        {
-            "id": "shot-2",
-            "question": "臺灣最高的山是哪一座？",
-            "choices": {"text": ["玉山", "雪山", "合歡山"], "label": ["1", "2", "3"]},
-            "answerKey": "1",
-        },
-    ],
-    "test": [
-        {
-            "id": "q-1",
-            "question": "What do bees make?",
-            "choices": {"text": ["honey", "milk", "silk"], "label": ["A", "B", "C"]},
-            "answerKey": "A",
-        },
-        {
-            "id": "q-2",
-            "question": "哪一個是水果？",
-            "choices": {"text": ["石頭", "蘋果", "椅子", "雲"], "label": ["1", "2", "3", "4"]},
-            "answerKey": "2",
-        },
-    ],
-}
-
-TASK = MultipleChoiceTask(
-    name="toy",
-    dataset=Dataset("cerulean/toy", "0" * 40, None, "test"),
-    to_doc=arc_doc,
-    primary_metric="acc_per_char",
-    fewshot=Fewshot("train", ("shot-2", "shot-1")),
-)
-
-
 @pytest.fixture(autouse=True)
 def offline_rows(monkeypatch):
-    """Tasks read the rows above instead of downloading."""
+    """Every task in every eval test reads `toy.ROWS` by split instead of downloading. A test that loads another task must patch `Dataset.load` with rows in that task's format."""
     monkeypatch.setattr(Dataset, "load", lambda self, split=None: ROWS[split or self.split])

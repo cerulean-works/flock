@@ -57,7 +57,7 @@ def scores(**overrides) -> ChoiceScores:
         ({}, {"acc_per_char": 0.0}),
         # per byte: same counts as chars here
         ({}, {"acc_per_byte": 0.0}),
-        # per byte differs from per char once the wrong choice is multi-byte
+        # per byte differs from per char when byte and character counts disagree
         ({"num_bytes": torch.tensor([[2, 1]])}, {"acc_per_byte": 1.0, "acc_per_char": 0.0}),
         # PMI: -4 - (-9) = 5 beats -3 - (-4) = 1
         ({"logprob_uncond": torch.tensor([[-9.0, -4.0]])}, {"acc_uncond": 1.0}),
@@ -76,6 +76,7 @@ def test_multiple_choice_reports_gold_bpb_and_skips_uncond_without_it():
     assert list(metrics) == ["acc_raw", "acc_per_token", "acc_per_char", "acc_per_byte", "bpb"]
 
 
-def test_multiple_choice_metrics_lists_every_name():
+def test_multiple_choice_metrics_lists_every_name_in_order():
+    # results.json writes the metrics in this order.
     metrics = multiple_choice(scores(logprob_uncond=torch.tensor([[-5.0, -5.0]])))
-    assert set(metrics) == set(MULTIPLE_CHOICE_METRICS)
+    assert list(metrics) == list(MULTIPLE_CHOICE_METRICS)

@@ -110,12 +110,12 @@ def test_loglikelihood_matches_unbatched_reference(scorer):
 
 @pytest.mark.parametrize("batch_tokens", [1, 40, 100, 10_000])
 def test_loglikelihood_is_batch_size_and_padding_invariant(scorer, batch_tokens):
-    # batch_tokens=1 scores each request alone; larger budgets left-pad short requests next
-    # to long ones.
-    alone = scorer.loglikelihood(REQUESTS)
+    # The default budget puts every request in one batch. batch_tokens=1 scores each request
+    # alone, and the budgets between left-pad short requests next to long ones.
+    one_batch = scorer.loglikelihood(REQUESTS)
     scorer.batch_tokens = batch_tokens
     torch.testing.assert_close(
-        scorer.loglikelihood(REQUESTS).logprob, alone.logprob, atol=1e-4, rtol=1e-5
+        scorer.loglikelihood(REQUESTS).logprob, one_batch.logprob, atol=1e-4, rtol=1e-5
     )
 
 
@@ -133,10 +133,13 @@ def test_empty_continuation_raises(scorer):
 def test_loglikelihood_restores_each_module_mode(scorer):
     scorer.model.train()
     frozen = scorer.model.model.embed_tokens.eval()
-    scorer.loglikelihood(REQUESTS)
-    assert scorer.model.training
-    assert not frozen.training
-    scorer.model.eval()
+    try:
+        scorer.loglikelihood(REQUESTS)
+        assert scorer.model.training
+        assert not frozen.training
+    finally:
+        # The model is shared by the whole session, so later tests must get it back in eval mode.
+        scorer.model.eval()
 
 
 def test_score_rejects_a_model_that_ignores_logits_to_keep(scorer, monkeypatch):
@@ -176,3 +179,42 @@ def test_continuation_longer_than_max_length_raises(lm, tokenizer):
     scorer = ScoringModel(lm, tokenizer, name="tiny@0", max_length=2)
     with pytest.raises(ValueError, match="longer than 2 tokens"):
         scorer.loglikelihood([Request("Answer:", " jumps over the lazy dog.")])
+
+
+@pytest.mark.parametrize("chunk_positions", [1, 5, 11, 4096])
+def test_target_logprobs_is_the_same_in_any_chunks(chunk_positions):
+    # 3 rows of 5 positions: chunks of 1 row, 1 row, 2 rows (uneven last chunk) and all rows.
+    torch.manual_seed(0)
+    logits = torch.randn(3, 5, 7, dtype=torch.bfloat16)
+    targets = torch.randint(7, (3, 5))
+
+    chunked = model._target_logprobs(logits, targets, chunk_positions)
+
+    whole = logits.float().log_softmax(-1).gather(-1, targets[..., None]).squeeze(-1)
+    assert chunked.dtype == torch.float32
+    torch.testing.assert_close(chunked, whole)
+    assert torch.equal(chunked, model._target_logprobs(logits, targets, 15))
+
+
+def test_batched_rows_do_not_see_each_other(scorer, monkeypatch):
+    # The gradient of one request's score reaches only its own row's real tokens, so nothing
+    # leaks across rows or from padding through the attention mask or position ids.
+    inputs = []
+    forward = scorer.model.forward
+
+    def embedded_forward(input_ids, attention_mask, **kwargs):
+        embedded = scorer.model.get_input_embeddings()(input_ids).detach().requires_grad_()
+        inputs.append((embedded, attention_mask))
+        return forward(inputs_embeds=embedded, attention_mask=attention_mask, **kwargs)
+
+    monkeypatch.setattr(scorer.model, "forward", embedded_forward)
+    # `_score` runs one forward pass over all the requests, so there is exactly one input.
+    logprob = scorer._score(scorer._encode(REQUESTS))
+    [(embedded, attention_mask)] = inputs
+
+    for i in range(len(REQUESTS)):
+        [grad] = torch.autograd.grad(logprob[i], embedded, retain_graph=True)
+        reaches = grad.ne(0).any(-1)
+        own_tokens = torch.zeros_like(reaches)
+        own_tokens[i] = attention_mask[i].bool()
+        assert torch.equal(reaches, own_tokens)

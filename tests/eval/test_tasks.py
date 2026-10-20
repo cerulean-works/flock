@@ -7,12 +7,15 @@ from flock.eval.requests import Scores
 from flock.eval.tasks import TASKS, Dataset, Fewshot, MCDoc
 from flock.eval.tasks.arc import ARC_EASY, arc_doc
 
-from .conftest import ROWS, TASK
+from .toy import ROWS, TASK
 
 
 @pytest.mark.parametrize(
     ("primary_metric", "unconditional_context"),
-    [("acc_per_chars", "Answer:"), ("acc_uncond", None)],
+    [
+        pytest.param("acc_per_chars", "Answer:", id="unknown-name"),
+        pytest.param("acc_uncond", None, id="uncond-without-context"),
+    ],
 )
 def test_task_rejects_unreported_primary_metric(primary_metric, unconditional_context):
     with pytest.raises(ValueError, match="primary_metric"):
@@ -73,22 +76,34 @@ def test_requests_cover_every_choice_then_the_unconditional_ones():
     assert [r.continuation for r in uncond] == [r.continuation for r in contexted]
 
 
-def test_choice_scores_layout_counts_leading_space_and_bytes():
+def test_choice_scores_lays_requests_out_per_doc():
     built = TASK.requests(*TASK.load())
     n = len(built.requests)
+    # Request i scores -i with i + 1 tokens, so each cell shows which request it came from.
     scores = Scores(-torch.arange(n, dtype=torch.float32), torch.arange(n) + 1)
     layout = built.choice_scores(scores)
+
+    # Doc 0 has 3 choices (requests 0 to 2), doc 1 has 4 (requests 3 to 6).
     assert layout.valid.tolist() == [[True, True, True, False], [True, True, True, True]]
     assert layout.logprob[:, :3].tolist() == [[0, -1, -2], [-3, -4, -5]]
     assert layout.logprob[1, 3].item() == -6
+    assert layout.num_tokens[0, :3].tolist() == [1, 2, 3]
+    assert layout.gold.tolist() == [0, 1]
+
+    # The unconditional requests follow the 7 conditional ones, so doc 1's are 7 + 3 to 7 + 6.
     assert layout.logprob_uncond is not None
     assert layout.logprob_uncond[1].tolist() == [-10, -11, -12, -13]
-    assert layout.num_tokens[0, :3].tolist() == [1, 2, 3]
+
+
+def test_choice_scores_counts_leading_space_and_bytes():
+    built = TASK.requests(*TASK.load())
+    n = len(built.requests)
+    layout = built.choice_scores(Scores(torch.zeros(n), torch.ones(n, dtype=torch.int64)))
+
     # " 石頭": a space and two 3-byte characters
     assert layout.num_chars[1, 0].item() == 3
     assert layout.num_bytes[1, 0].item() == 7
     assert layout.num_bytes[0, 0].item() == len(" honey")
-    assert layout.gold.tolist() == [0, 1]
 
 
 def test_without_unconditional_context_there_is_no_pmi():
@@ -114,23 +129,55 @@ def test_choice_scores_rejects_no_docs():
         built.choice_scores(Scores(torch.zeros(0), torch.zeros(0, dtype=torch.int64)))
 
 
-def test_hash_is_stable_and_tracks_what_is_scored():
+def test_hash_is_stable():
     docs, shots = TASK.load()
     base = TASK.requests(docs, shots).hash
     assert base == TASK.requests(*TASK.load()).hash
     assert len(base) == 64
 
-    changed = [
-        TASK.requests(docs[:1], shots),
-        TASK.requests(docs, shots[:1]),
-        TASK.requests([dataclasses.replace(docs[0], gold=2), docs[1]], shots),
-        dataclasses.replace(TASK, answer_prefix="A:").requests(docs, shots),
-        dataclasses.replace(TASK, unconditional_context=None).requests(docs, shots),
-        dataclasses.replace(TASK, dataset=Dataset("cerulean/toy", "1" * 40, None, "test")).requests(
-            docs, shots
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        pytest.param(lambda docs, shots: TASK.requests(docs[:1], shots), id="docs"),
+        pytest.param(lambda docs, shots: TASK.requests(docs, shots[:1]), id="shots"),
+        pytest.param(
+            lambda docs, shots: TASK.requests(
+                [dataclasses.replace(docs[0], gold=2), docs[1]], shots
+            ),
+            id="gold",
         ),
-    ]
-    assert len({base, *(c.hash for c in changed)}) == 1 + len(changed)
+        pytest.param(
+            lambda docs, shots: dataclasses.replace(TASK, answer_prefix="A:").requests(docs, shots),
+            id="prompt",
+        ),
+        pytest.param(
+            lambda docs, shots: dataclasses.replace(TASK, unconditional_context=None).requests(
+                docs, shots
+            ),
+            id="uncond",
+        ),
+        pytest.param(
+            lambda docs, shots: dataclasses.replace(
+                TASK, dataset=Dataset("cerulean/toy", "1" * 40, None, "test")
+            ).requests(docs, shots),
+            id="revision",
+        ),
+        pytest.param(
+            lambda docs, shots: dataclasses.replace(TASK, name="toy2").requests(docs, shots),
+            id="name",
+        ),
+        pytest.param(
+            lambda docs, shots: dataclasses.replace(TASK, primary_metric="acc_raw").requests(
+                docs, shots
+            ),
+            id="primary-metric",
+        ),
+    ],
+)
+def test_hash_tracks_what_is_scored(change):
+    docs, shots = TASK.load()
+    assert change(docs, shots).hash != TASK.requests(docs, shots).hash
 
 
 def test_registry_has_arc_easy_with_olmes_shots():

@@ -2,13 +2,17 @@ import json
 import sys
 
 import pytest
+import torch
 from click.testing import CliRunner
 
 from flock.eval import cli, run
+from flock.eval.metrics import MULTIPLE_CHOICE_METRICS, ChoiceScores
 from flock.eval.model import ScoringModel
+from flock.eval.results import prediction_rows
 from flock.eval.run import EvalConfig, evaluate, score_task
+from flock.eval.tasks import MCDoc
 
-from .conftest import TASK
+from .toy import TASK
 
 
 @pytest.fixture
@@ -32,14 +36,7 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
     assert task["task"] == "toy"
     assert task["num_docs"] == 2
     assert task["task_hash"] == TASK.requests(*TASK.load()).hash
-    assert set(task["metrics"]) == {
-        "acc_raw",
-        "acc_per_token",
-        "acc_per_char",
-        "acc_per_byte",
-        "acc_uncond",
-        "bpb",
-    }
+    assert set(task["metrics"]) == set(MULTIPLE_CHOICE_METRICS)
     assert all(0 <= task["metrics"][m] <= 1 for m in task["metrics"] if m.startswith("acc"))
     assert task["metrics"]["bpb"] > 0
     assert task["docs_per_second"] > 0
@@ -51,10 +48,33 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
     assert len(second["logprob_uncond"]) == 4
 
 
+def test_prediction_rows_drop_padded_choices():
+    docs = [
+        MCDoc(id="a", question="?", choices=("x", "y"), gold=1),
+        MCDoc(id="b", question="?", choices=("x", "y", "z"), gold=0),
+    ]
+    counts = torch.tensor([[1, 2, 0], [3, 4, 5]])
+    scores = ChoiceScores(
+        logprob=-counts.float(),
+        num_tokens=counts,
+        num_chars=counts,
+        num_bytes=counts,
+        valid=counts > 0,
+        gold=torch.tensor([1, 0]),
+    )
+
+    rows = prediction_rows(docs, scores)
+
+    assert rows == [
+        {"id": "a", "gold": 1, "logprob": [-1.0, -2.0], "num_tokens": [1, 2]},
+        {"id": "b", "gold": 0, "logprob": [-3.0, -4.0, -5.0], "num_tokens": [3, 4, 5]},
+    ]
+
+
 def test_score_task_does_not_depend_on_batching(scorer):
-    alone = score_task(scorer, TASK)
+    one_batch = score_task(scorer, TASK)
     scorer.batch_tokens = 1
-    assert score_task(scorer, TASK).metrics == pytest.approx(alone.metrics, abs=1e-5)
+    assert score_task(scorer, TASK).metrics == pytest.approx(one_batch.metrics, abs=1e-5)
 
 
 def test_evaluate_rejects_unknown_task():
@@ -93,13 +113,16 @@ def test_cli_rejects_counts_below_one(flag):
 
 def test_cli_runs_and_prints_primary_metric_first(offline_model, tmp_path, monkeypatch):
     argv = ["run", "--model", "tiny@0", "--task", "arc_easy", "--out", str(tmp_path)]
+    # `--task` only accepts registered names, fixed when the CLI is imported, so the toy task
+    # runs under the name `arc_easy`.
     monkeypatch.setitem(run.TASKS, "arc_easy", TASK)
+    # The CLI records `sys.argv`, which `CliRunner` leaves alone.
     monkeypatch.setattr(sys, "argv", ["flock-eval", *argv])
 
     result = CliRunner().invoke(cli.main, argv, catch_exceptions=False)
 
     out = result.output.splitlines()
     assert out[0] == "model tiny@0  flock abc123"
-    assert out[2].split() == ["acc_per_char", out[2].split()[1]]
+    assert out[2].split()[0] == "acc_per_char"
     data = json.loads((tmp_path / "results.json").read_text())
     assert data["provenance"]["command"] == "flock-eval " + " ".join(argv)
