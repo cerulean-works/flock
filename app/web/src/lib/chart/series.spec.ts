@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ema, Series, smoothed } from './series.ts';
+import { ema, pointAt, Series, smoothed, snapStep } from './series.ts';
 
 /** Flock's sampling (Snapshot.build in app/api/src/api/dashboard.py). */
 function sampleIndices(raw: number, n: number) {
@@ -34,12 +34,37 @@ describe('regular series', () => {
 		expect(s.lastStep).toBe(x0 + dx * (raw - 1));
 	});
 
-	it('clamps and checks coverage', () => {
+	it('clamps', () => {
 		const s = regular(10, 100, 0, 1);
 		expect(s.indexNear(-50)).toBe(0);
 		expect(s.indexNear(10_000)).toBe(9);
-		expect(s.covers(50)).toBe(true);
-		expect(s.covers(300)).toBe(false);
+	});
+});
+
+describe('reading out at a step', () => {
+	const sparse = new Series(Float32Array.from([1, 2, 3]), Float64Array.from([0, 500, 1000]));
+	const once = new Series(Float32Array.from([7]), Float64Array.from([500]));
+
+	it('reads a line at its nearest point within its span', () => {
+		expect(pointAt(sparse, 437, 0)).toBe(1);
+		expect(pointAt(sparse, 800, 0)).toBe(2);
+		expect(pointAt(regular(10, 100, 0, 1), 50, 0)).toBe(5);
+	});
+
+	it('reads past its ends, and a lone point, only within the tolerance', () => {
+		expect(pointAt(sparse, 1010, 5)).toBe(-1);
+		expect(pointAt(sparse, 1004, 5)).toBe(2);
+		// Logged once: a pointer is never exactly on its step.
+		expect(pointAt(once, 503.7, 0)).toBe(-1);
+		expect(pointAt(once, 503.7, 5)).toBe(0);
+		expect(pointAt(new Series(new Float32Array(0), new Float64Array(0)), 0, 5)).toBe(-1);
+	});
+
+	it('snaps to the nearest logged step of any line', () => {
+		expect(snapStep([sparse, once], 480)).toBe(500);
+		expect(snapStep([sparse], 260)).toBe(500);
+		expect(snapStep([regular(10, 100, 0, 1)], 41)).toBe(44);
+		expect(snapStep([], 41.5)).toBe(41.5);
 	});
 });
 

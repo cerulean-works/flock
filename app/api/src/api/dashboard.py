@@ -69,8 +69,11 @@ class Snapshot:
             *(c for c in names if c.startswith("config.")),
             *(c for c in names if c.startswith("summary.")),
         ]
-        keys = project.metric_keys("history")
-        system_keys = project.metric_keys("system") if system else []
+        # The metrics the page's runs logged: they are all a dashboard can plot. The project's
+        # other runs (other pages, or filtered out) may log metrics none of these do, which
+        # would otherwise make empty charts.
+        keys = sorted(set().union(*(run.keys["history"] for run in runs)))
+        system_keys = sorted(set().union(*(run.keys["system"] for run in runs))) if system else []
         n_runs, n_keys = len(runs), len(keys) + len(system_keys)
 
         # ---- table cells: numeric columns as one f64 block, the rest as JSON

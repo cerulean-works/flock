@@ -46,8 +46,8 @@ Every section starts at a multiple of 8 bytes, so you can read each one as a typ
 | `offset` | The `offset` of this page. |
 | `runs` | The runs on the page, in order. See below. |
 | `columns` | The table's columns, as `{"key", "kind"}` objects. See below. |
-| `metrics` | The names of the logged metrics, sorted. Every run on the page has a curve slot for each. |
-| `system_metrics` | The names of the system metrics, sorted, or an empty list without `system=true`. |
+| `metrics` | The names of the metrics the runs on the page logged, sorted. Metrics that only the project's other runs logged aren't listed. Every run on the page has a curve slot for each. |
+| `system_metrics` | The names of the system metrics the runs on the page logged, sorted, or an empty list without `system=true`. |
 | `numeric` | Indices into `columns` of the columns whose cells are in the numeric section, in that section's order. |
 | `text` | The other columns' cells, as an object that maps a column's index (as a string) to a list with one value per run. |
 | `points` | The maximum number of points per curve that applied. See [Point budget](#point-budget). |
