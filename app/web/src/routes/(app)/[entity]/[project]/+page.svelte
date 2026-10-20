@@ -5,7 +5,6 @@
 	import { page } from '$app/state';
 	import ChartsPane from '#lib/components/ChartsPane.svelte';
 	import ColumnsMenu from '#lib/components/ColumnsMenu.svelte';
-	import CursorPanel from '#lib/components/CursorPanel.svelte';
 	import FullscreenPanel from '#lib/components/FullscreenPanel.svelte';
 	import PanelEditor from '#lib/components/PanelEditor.svelte';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
@@ -408,7 +407,6 @@ run.log(&lbrace;"loss": 0.5&rbrace;)</code
 {/if}
 
 <PanelEditor />
-<CursorPanel />
 <EditRunDialog />
 <TagRunsDialog />
 <MoveRunsDialog />

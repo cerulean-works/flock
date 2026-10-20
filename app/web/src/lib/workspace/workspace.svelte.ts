@@ -46,7 +46,7 @@ export type { PanelView } from './panels.ts';
 /**
  * Run colors. The first eight are a CVD-checked categorical order; the next eight are the same
  * hues one step deeper. A project has far more runs than any palette has distinguishable hues,
- * so colors repeat every 16 runs; identity is recovered through hover, the cursor panel and the
+ * so colors repeat every 16 runs; identity is recovered through hover, the chart tooltips and the
  * run list rather than color alone. Color follows the run's position in the project, never its
  * rank on the current page, so sorting and paging never repaint a run.
  */
@@ -97,8 +97,8 @@ export interface Cursor {
 	view: PanelView;
 	/** Which rendering of that panel owns the pointer. */
 	surface: Surface;
-	clientX: number;
-	clientY: number;
+	/** Pointer height in that panel's plot, as a share of it from the top: tooltips follow it. */
+	fy: number;
 	/** Page row of the run nearest the pointer, if any. */
 	nearest: number | null;
 	/** Metric of the line nearest the pointer, if any. */
@@ -466,7 +466,7 @@ export class Workspace {
 	/**
 	 * Whether a panel's lines are colored by metric rather than by run: when it plots several
 	 * metrics of one run, as W&B does. With several runs, run colors stay (a run keeps its color
-	 * everywhere), and the legend and cursor panel name each line's metric.
+	 * everywhere), and the legend and tooltips name each line's metric.
 	 */
 	byMetric(view: PanelView) {
 		return view.metrics.length > 1 && this.visible.length <= 1;

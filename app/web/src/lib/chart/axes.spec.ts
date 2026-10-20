@@ -4,6 +4,7 @@ import {
 	definitionOf,
 	formatX,
 	formatXTick,
+	formatXValue,
 	remap,
 	remapped,
 	resolveAxis,
@@ -134,5 +135,9 @@ describe('resolveAxis', () => {
 		expect(formatX(runtime, 185)).toBe('Runtime 3m 05s');
 		expect(formatX(wall, 185)).toBe('Wall time 3m 05s');
 		expect(formatX(runtime, 1.274)).toBe('Runtime 1.27s');
+		// Tooltip rows, under a header that names the axis.
+		expect(formatXValue(step, 1200)).toBe('1,200');
+		expect(formatXValue(metric, 1.25)).toBe('1.25');
+		expect(formatXValue(runtime, 185)).toBe('3m 05s');
 	});
 });

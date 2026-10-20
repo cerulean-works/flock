@@ -272,20 +272,23 @@ export function drawBase(s: Surface, series: PlotSeries[], d: Domain, o: BaseOpt
 	ctx.restore();
 }
 
-/** A line's point at the cursor, in data units. */
-export interface Marker {
-	step: number;
-	value: number;
-	color: string;
-	/** On a line drawn over the others: marked larger. */
-	focused: boolean;
+/**
+ * The lines' points at the cursor, in data units, as parallel arrays (see `Readout`, which
+ * keeps them across frames). A focused point is on a line drawn over the others: marked larger.
+ */
+export interface Markers {
+	count: number;
+	step: ArrayLike<number>;
+	value: ArrayLike<number>;
+	color: readonly string[];
+	focused: ArrayLike<number>;
 }
 
 export interface OverlayOptions {
 	/** Lines drawn over the others (the focused run's). */
 	focus: readonly PlotSeries[];
 	/** Every line's point at the cursor. */
-	markers: readonly Marker[];
+	markers: Markers;
 	crosshair: number | null;
 	/** Drag-to-zoom selection in CSS pixels. */
 	selection: readonly [number, number] | null;
@@ -348,18 +351,19 @@ export function drawOverlay(s: Surface, d: Domain, o: OverlayOptions) {
 	}
 
 	// Focused markers last, so they sit on top.
-	for (const pass of [false, true]) {
-		for (const m of o.markers) {
-			if (m.focused !== pass) continue;
-			const v = d.log ? Math.log10(m.value) : m.value;
+	const m = o.markers;
+	for (let pass = 0; pass < 2; pass++) {
+		for (let k = 0; k < m.count; k++) {
+			if ((m.focused[k] ? 1 : 0) !== pass) continue;
+			const v = d.log ? Math.log10(m.value[k]) : m.value[k];
 			if (!Number.isFinite(v)) continue;
-			const x = (m.step - d.x0) * sx;
+			const x = (m.step[k] - d.x0) * sx;
 			const y = h - (v - d.y0) * sy;
 			if (x < -4 || x > w + 4 || y < -4 || y > h + 4) continue;
 			ctx.globalAlpha = !pass && o.dim ? 0.35 : 1;
 			ctx.beginPath();
 			ctx.arc(x, y, pass ? 4 : 3, 0, Math.PI * 2);
-			ctx.fillStyle = m.color;
+			ctx.fillStyle = m.color[k];
 			ctx.fill();
 			ctx.lineWidth = pass ? 2 : 1.5;
 			ctx.strokeStyle = o.paper;

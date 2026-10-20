@@ -155,7 +155,7 @@ function si(v: number, digits = 3) {
 	return String(+v.toPrecision(digits));
 }
 
-/** A metric value for the cursor panel: precise but compact. */
+/** A metric value for chart tooltips: precise but compact. */
 export function formatMetric(v: number, format: MetricFormat): string {
 	if (!Number.isFinite(v)) return '–';
 	switch (format) {

@@ -6,19 +6,20 @@
 		prepare,
 		stepFromX,
 		yToPx,
-		type Marker,
 		type PlotSeries
 	} from '#lib/chart/engine.ts';
-	import { formatXTick } from '#lib/chart/axes.ts';
+	import { formatX, formatXTick, formatXValue } from '#lib/chart/axes.ts';
+	import { Readout, tooltipPosition, tooltipRows } from '#lib/chart/readout.ts';
 	import { cancel, schedule } from '#lib/chart/scheduler.ts';
 	import { pointAt, SNAP_PX, smoothed, snapStep } from '#lib/chart/series.ts';
-	import { formatTick, sameItems } from '#lib/utils.ts';
+	import { formatMetric, formatTick, sameItems } from '#lib/utils.ts';
 	import {
 		getWorkspace,
 		type PanelView,
 		type Surface,
 		type XRange
 	} from '#lib/workspace/workspace.svelte.ts';
+	import PlotTooltip, { TIP_METRICS, TIP_WIDTH, type Tip, type TipRow } from './PlotTooltip.svelte';
 
 	interface Props {
 		panel: number;
@@ -123,9 +124,14 @@
 		})
 	);
 
-	// Axis titles: what the panel sets; the larger plots name the x axis anyway, as W&B does.
-	const xLabel = $derived(config.xLabel ?? (surface === 'grid' ? null : axis.label));
+	// Axis titles: what the panel sets, else the x axis' name (`Step`, `train/global_step`...),
+	// which W&B shows under every chart's x ticks.
+	const xLabel = $derived(config.xLabel ?? axis.label);
 	const yLabel = $derived(config.yLabel ?? null);
+	/** Plot area insets in CSS pixels: the y tick gutter, and the x tick band and title below. */
+	const gutter = $derived((surface === 'grid' ? 46 : 64) + (yLabel ? 16 : 0));
+	const below = $derived(surface === 'grid' ? 36 : 38);
+	const PLOT_TOP = 6;
 
 	const pct = (v: number, lo: number, hi: number) => ((v - lo) / (hi - lo)) * 100;
 	const yTicks = $derived(
@@ -235,35 +241,100 @@
 
 	/**
 	 * Every line's point at the cursor, wherever it is: in this plot, or in another on the same
-	 * x axis. A lookup per line, so following the cursor never retraces the lines.
+	 * x axis. A lookup per line into buffers kept across frames, so following the cursor never
+	 * retraces the lines, and allocates little.
 	 */
-	const markers = $derived.by((): Marker[] => {
-		if (!cursor) return [];
-		const out: Marker[] = [];
-		for (const line of series) {
-			const i = pointAt(line.series, cursor.step, tol);
-			if (i < 0 || Number.isNaN(line.values[i])) continue;
-			out.push({
-				step: line.series.stepAt(i),
-				value: line.values[i],
+	const readout = new Readout();
+
+	/**
+	 * This plot's tooltip: its lines' values at the crosshair, in every plot on the hovered
+	 * plot's x axis (as on W&B), not only the hovered one. Set as the overlay is drawn.
+	 */
+	let tip = $state.raw<Tip | null>(null);
+	// None while something is dragged over the plots, nor in grid cards behind the editor.
+	const tips = $derived(!ws.dragging && !(surface === 'grid' && ws.editing != null));
+
+	/**
+	 * The tooltip for the readings just taken: rows sorted high to low, as many as fit in the
+	 * plot, windowed around the focused line; beside the crosshair, inside the plot.
+	 */
+	function layoutTip(
+		lines: readonly Line[],
+		step: number,
+		fy: number,
+		d: typeof domain,
+		[cw, ch]: [number, number]
+	): Tip | null {
+		const n = readout.count;
+		if (!n) return null;
+		const x = ((step - d.x0) / (d.x1 - d.x0)) * cw;
+		if (!(x >= 0 && x <= cw)) return null;
+		const size = surface === 'grid' ? 'compact' : 'roomy';
+		const boxW = gutter + cw + 6;
+		const boxH = PLOT_TOP + ch + below;
+		const order = readout.order;
+		let at = -1;
+		for (let r = 0; r < n; r++)
+			if (readout.focused[order[r]]) {
+				at = r;
+				break;
+			}
+		const fit = tooltipRows(n, at, boxH - 4, TIP_METRICS[size]);
+		const width = Math.min(TIP_WIDTH[size], boxW - 4);
+		const pos = tooltipPosition(gutter + x, PLOT_TOP + fy * ch, width, fit.height, boxW, boxH);
+		const fmt = view.format;
+		const raw = smoothing > 0;
+		const byMetric = ws.byMetric(view);
+		const several = view.metrics.length > 1;
+		const rows: TipRow[] = [];
+		for (let r = fit.start; r < fit.start + fit.rows; r++) {
+			const k = order[r];
+			const line = lines[readout.line[k]];
+			const label = ws.meta.metrics[line.metric].label;
+			const xAt = readout.step[k];
+			rows.push({
+				key: `${line.row}:${line.metric}`,
 				color: line.color,
-				focused: focused.includes(line)
+				value: formatMetric(readout.value[k], fmt),
+				raw: raw ? formatMetric(line.series.y[readout.point[k]], fmt) : null,
+				name: byMetric ? label : ws.page.runs[line.row].name,
+				metric: !byMetric && several ? label : null,
+				step: xAt !== step ? formatXValue(axis, xAt) : null,
+				focused: readout.focused[k] === 1
 			});
 		}
-		return out;
-	});
+		return {
+			...pos,
+			width,
+			header: formatX(axis, step),
+			rows,
+			above: fit.above,
+			below: fit.below
+		};
+	}
 
 	const overlayKey = {};
 	$effect(() => {
 		const ready = overlay && w && h && active && onScreen;
-		if (!ready) return;
+		if (!ready) {
+			// Covered or scrolled away: no tooltip, nor a pending one to come back.
+			cancel(overlayKey);
+			tip = null;
+			return;
+		}
 		const canvas = overlay!;
-		const [cw, ch, cdpr] = [w, h, dpr];
+		const size: [number, number] = [w, h];
+		const cdpr = dpr;
 		const d = domain;
+		const c = cursor;
+		const lines = series;
+		const focus = focused;
+		const within = tol;
+		const withTip = tips;
 		const opts = {
-			focus: focused,
-			markers,
-			crosshair: cursor?.step ?? null,
+			focus,
+			markers: readout,
+			crosshair: c?.step ?? null,
 			selection:
 				dragFrom != null && dragTo != null ? ([dragFrom, dragTo] as [number, number]) : null,
 			zoomed: !!xRange,
@@ -271,12 +342,15 @@
 			...palette
 		};
 		// In the next frame, as one draw however many moves came before it: hovering one plot
-		// redraws every plot on its x axis.
+		// redraws every plot on its x axis, and lays out its tooltip.
 		schedule(
 			overlayKey,
 			() => {
-				const surf = prepare(canvas, cw, ch, cdpr);
+				if (c) readout.read(lines, c.step, within, focus);
+				else readout.clear();
+				const surf = prepare(canvas, size[0], size[1], cdpr);
 				if (surf) drawOverlay(surf, d, opts);
+				tip = withTip && c ? layoutTip(lines, c.step, c.fy, d, size) : null;
 			},
 			'urgent'
 		);
@@ -300,7 +374,7 @@
 			const i = pointAt(s.series, step, tol);
 			if (i < 0) continue;
 			const v = s.values[i];
-			if (Number.isNaN(v)) continue;
+			if (!Number.isFinite(v)) continue;
 			const dist = Math.abs(yToPx(domain, h, v) - y);
 			if (dist < bestDist) {
 				bestDist = dist;
@@ -332,8 +406,7 @@
 			panel,
 			view,
 			surface,
-			clientX: e.clientX,
-			clientY: e.clientY,
+			fy: Math.max(0, Math.min(1, y / h)),
 			nearest,
 			line: line?.metric ?? null
 		};
@@ -403,8 +476,8 @@
 		'plot relative h-full min-h-0 text-muted-foreground tabular-nums select-none',
 		surface === 'grid' ? 'text-[11px]' : 'text-[12.5px]'
 	]}
-	style:--gutter="{(surface === 'grid' ? 46 : 64) + (yLabel ? 16 : 0)}px"
-	style:--below="{xLabel ? 38 : 22}px"
+	style:--gutter="{gutter}px"
+	style:--below="{below}px"
 >
 	{#if yLabel}
 		<span
@@ -458,7 +531,7 @@
 	</div>
 	<div
 		class="absolute right-1.5 left-(--gutter) h-[18px]"
-		style:bottom="{xLabel ? 16 : 0}px"
+		style:bottom="{surface === 'grid' ? 14 : 16}px"
 		aria-hidden="true"
 	>
 		{#each xTicks as tick (tick.t)}
@@ -467,10 +540,16 @@
 			>
 		{/each}
 	</div>
-	{#if xLabel}
-		<span
-			class="absolute right-1.5 bottom-0 left-(--gutter) truncate text-center leading-4 text-foreground/80"
-			title={xLabel}>{xLabel}</span
-		>
+	<!-- The x axis' name, at its right end under the ticks, as W&B puts it. -->
+	<span
+		class={[
+			'absolute right-1.5 bottom-0 left-(--gutter) truncate text-right',
+			surface === 'grid' ? 'text-[10.5px] leading-[14px]' : 'text-[11.5px] leading-4',
+			config.xLabel ? 'text-foreground/80' : 'text-faint'
+		]}
+		title={xLabel}>{xLabel}</span
+	>
+	{#if tip}
+		<PlotTooltip {tip} compact={surface === 'grid'} />
 	{/if}
 </div>

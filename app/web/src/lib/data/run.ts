@@ -37,7 +37,7 @@ const EDITABLE = [
 
 /**
  * One run as a workspace of one: its panels then work exactly as the project's do (plots,
- * full screen, the cursor panel), and the live stream keeps them current from the run's line
+ * full screen, tooltips), and the live stream keeps them current from the run's line
  * counts. It has no table; its only columns are what the run's dialogs edit.
  */
 export function runWorkspace(
