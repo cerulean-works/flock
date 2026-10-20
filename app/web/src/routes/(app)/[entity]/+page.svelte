@@ -33,7 +33,7 @@
 </script>
 
 <svelte:head>
-	<title>Runs · {params.entity}</title>
+	<title>Runs · {data.org.display_name}</title>
 </svelte:head>
 
 <!-- The feed's own controls, under the title once there are runs to show. -->
@@ -52,7 +52,7 @@
 	/>
 {/snippet}
 
-<PageHeader title={params.entity} toolbar={fresh ? undefined : feedToolbar}>
+<PageHeader title={data.org.display_name} toolbar={fresh ? undefined : feedToolbar}>
 	{#snippet subtitle()}
 		{count(data.org.project_count, 'project')} · {count(data.org.member_count, 'member')}
 		{#if running}
@@ -82,7 +82,9 @@
 					<ApiKeyCreator />
 				</li>
 				<li class="grid gap-3">
-					<p><span class="mr-2 text-muted-foreground">2</span>Log a run to {params.entity}:</p>
+					<p>
+						<span class="mr-2 text-muted-foreground">2</span>Log a run to {data.org.display_name}:
+					</p>
 					<CopyBlock
 						code={`import wandb\n\nrun = wandb.init(entity="${params.entity}", project="my-project")\nfor step in range(100):\n    run.log({"loss": 1 / (step + 1)})\nrun.finish()`}
 					/>

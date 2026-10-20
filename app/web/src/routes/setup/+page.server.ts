@@ -3,7 +3,7 @@ import { authConfig, needsWorkspace, refreshUser, signIn } from '#lib/server/aut
 import { change, refused } from '#lib/server/flock.ts';
 import { loginHref } from '#lib/server/session.ts';
 import type { OrgInfo } from '#lib/types.ts';
-import { formText, orgNameError } from '#lib/utils.ts';
+import { formText, orgDisplayNameError, orgIdError } from '#lib/utils.ts';
 import { wandbImport } from '#lib/wandb.ts';
 import { entityHref, orgHref } from '#lib/workspace/url.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -44,13 +44,23 @@ export const actions: Actions = {
 	 */
 	workspace: async ({ request }) => {
 		const form = await request.formData();
-		const org = formText(form, 'org');
+		const displayName = formText(form, 'display_name');
+		const org = formText(form, 'id');
 		const wandb = wandbImport(form, org);
-		const kept = { org, wandb: wandb !== null, entity: formText(form, 'wandb_entity') };
-		const invalid = orgNameError(org) ?? (wandb && 'error' in wandb ? wandb.error : null);
+		const kept = {
+			displayName,
+			org,
+			wandb: wandb !== null,
+			entity: formText(form, 'wandb_entity')
+		};
+		const invalid =
+			orgDisplayNameError(displayName) ??
+			orgIdError(org) ??
+			(wandb && 'error' in wandb ? wandb.error : null);
 		if (invalid) return fail(400, { ...kept, error: invalid });
 		const created = await change<OrgInfo>('POST', '/api/v1/orgs', {
 			name: org,
+			display_name: displayName,
 			...(wandb && 'value' in wandb ? { wandb: wandb.value } : {})
 		});
 		if (refused(created)) return fail(created.status, { ...kept, ...created.data });

@@ -117,7 +117,7 @@ and every project belongs to one. Users belong to any number of orgs, with a rol
 | Who | Can |
 | --- | --- |
 | super admin | create organizations; manage users; act as an admin of every org |
-| org admin | invite people; change roles and remove members; rename or delete the org; update or delete projects; edit, move or delete any run |
+| org admin | invite people; change roles and remove members; change the org's display name or delete it; update or delete projects; edit, move or delete any run |
 | member | read everything in the org; create projects (with the API or `wandb.init`); log runs; edit, move or delete the runs they logged |
 
 Orgs you don't belong to answer 404, as if they didn't exist. Changing runs you didn't log
@@ -170,15 +170,16 @@ Google accounts are matched to existing accounts by verified email.
 | `PUT`/`DELETE /api/v1/orgs/{org}/avatar` | an org's avatar (admins) |
 | `GET /api/v1/avatars/{sha256}` | an avatar image (public: the digest is the secret; cached for good) |
 | `GET /api/v1/orgs`, `POST /api/v1/orgs` | your orgs; create one (super admins) |
-| `GET`/`PATCH`/`DELETE /api/v1/orgs/{org}` | an org; rename or delete it (admins; `?force=true` deletes active runs too) |
+| `GET`/`PATCH`/`DELETE /api/v1/orgs/{org}` | an org; change its display name or delete it (admins; `?force=true` deletes active runs too) |
 | `GET /api/v1/orgs/{org}/members`, `PATCH`/`DELETE .../{user_id}` | members; change roles or remove them (admins), or leave |
 | `GET`/`POST /api/v1/orgs/{org}/invites`, `DELETE .../{id}` | pending invitations (admins) |
 | `GET /api/v1/invites/{token}`, `POST .../accept` | inspect and accept an invitation (public) |
 | `GET /api/v1/users`, `PATCH`/`DELETE .../{id}` | all users; grant super admin; delete accounts (super admins) |
 | `POST /api/v1/users/{id}/password-reset`; `GET`/`POST /api/v1/password-resets/{token}` | password reset links |
 
-Renaming an org renames the entity of its projects and runs, so like a project rename it's
-refused while runs are active. Deleting one deletes all its projects and runs.
+An org's `name` is its ID: the entity in URLs, API paths and `wandb.init(entity=...)`, fixed at
+creation. Its `display_name` is what people see, and admins change it at any time (`PATCH` with a
+different `name` answers 400). Deleting an org deletes all its projects and runs.
 
 **Avatars.** A new account's Gravatar is fetched in the background and stored in Flock
 (`FLOCK_GRAVATAR=false` turns that off). Users can upload their own, and org admins their
@@ -362,8 +363,8 @@ with curves. Snapshots from before mappings have no `axes` and end after the y v
   as `metric_defs`.
 - `created` announces a new run in the project, or one moved in.
 - `deleted` lists runs that were deleted, or moved out (with `moved_to`).
-- `project` says the project was renamed (`renamed_to`), its organization was renamed
-  (`entity_renamed_to`), or it was `deleted`; the stream then ends.
+- `project` says the project was renamed (`renamed_to`), or it or its organization was
+  `deleted`; the stream then ends.
 
 The snapshot records each run's line counts. Pass them back as `runs=<id>:<lines>,...`, or
 `runs=<id>:<lines>:<system_lines>,...` with `system=true`. The stream first replays every

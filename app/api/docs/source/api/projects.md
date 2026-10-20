@@ -12,7 +12,7 @@ A project is returned as:
 
 | Field | Meaning |
 |---|---|
-| `entity` | The organization's name. |
+| `entity` | The organization's ID. |
 | `name` | The project's name. |
 | `description` | Free text, or `null`. |
 | `created_at`, `updated_at` | When the project was created, and when its name or description last changed. |

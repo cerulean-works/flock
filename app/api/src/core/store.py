@@ -192,7 +192,11 @@ class ImportedRun:
 
 
 class Org:
-    """An organization: the wandb entity its projects and runs are logged under."""
+    """An organization: the wandb entity its projects and runs are logged under.
+
+    ``name`` is its ID: the entity in URLs, API paths and the wandb SDK, fixed at creation.
+    ``display_name`` is what people see, and changes freely.
+    """
 
     def __init__(
         self,
@@ -202,9 +206,11 @@ class Org:
         updated_at: float = 0.0,
         currency: str = "USD",
         avatar: bytes | None = None,
+        display_name: str | None = None,
     ):
         self.pk = pk
         self.name = name
+        self.display_name = display_name if display_name is not None else name
         self.created_at = created_at
         self.updated_at = updated_at
         self.currency = currency
@@ -379,10 +385,11 @@ class Store:
         started = time.perf_counter()
         for record in await self.db.fetch(
             "SELECT pk, name, extract(epoch FROM created_at)::float8, "
-            "extract(epoch FROM updated_at)::float8, currency, avatar FROM orgs"
+            "extract(epoch FROM updated_at)::float8, currency, avatar, display_name FROM orgs"
         ):
-            *fields, avatar = record
-            self._add_org(Org(*fields, avatar=bytes(avatar) if avatar else None))
+            *fields, avatar, display_name = record
+            avatar = bytes(avatar) if avatar else None
+            self._add_org(Org(*fields, avatar=avatar, display_name=display_name))
         for pk, org_pk, *rest in await self.db.fetch(
             "SELECT pk, org_pk, name, description, extract(epoch FROM created_at)::float8, "
             "extract(epoch FROM updated_at)::float8 FROM projects"
@@ -1466,19 +1473,24 @@ class Store:
 
     # ------------------------------------------------------------------ organizations
 
-    async def create_org(self, name: str) -> Org:
+    async def create_org(self, name: str, display_name: str | None = None) -> Org:
+        """Create the organization ``name`` (its ID, which never changes), shown as
+        ``display_name`` (``name`` if not given)."""
+        display_name = display_name if display_name is not None else name
         async with self._catalog:
             record = None
             if name not in self.orgs:
                 record = await self.db.fetchrow(
-                    "INSERT INTO orgs (name, created_at, updated_at) VALUES ($1, now(), now()) "
-                    "ON CONFLICT (name) DO NOTHING RETURNING pk, name, "
-                    "extract(epoch FROM created_at)::float8, extract(epoch FROM updated_at)::float8",
+                    "INSERT INTO orgs (name, display_name, created_at, updated_at) "
+                    "VALUES ($1, $2, now(), now()) ON CONFLICT (name) DO NOTHING RETURNING pk, "
+                    "name, extract(epoch FROM created_at)::float8, "
+                    "extract(epoch FROM updated_at)::float8",
                     name,
+                    display_name,
                 )
             if record is None:
                 raise Conflict(f"organization {name} already exists")
-            return self._add_org(Org(*record))
+            return self._add_org(Org(*record, display_name=display_name))
 
     @contextlib.asynccontextmanager
     async def _org_locked(self, org: Org, all_runs: bool = False) -> AsyncGenerator[list[Project]]:
@@ -1494,35 +1506,23 @@ class Store:
                 yield projects
                 return
 
-    async def update_org(self, org: Org, name: str) -> None:
-        """Rename an organization, which renames the entity of all its projects and runs."""
-        async with self._org_locked(org) as projects:
-            if name == org.name:
+    async def set_org_display_name(self, org: Org, display_name: str) -> None:
+        """Change what an organization is called. Its ID (``name``), which its projects, runs
+        and clients address it by, never changes."""
+        async with self._catalog:
+            if org.deleted:
+                raise NotFound(f"organization {org.name} not found")
+            if display_name == org.display_name:
                 return
-            active = [f"{p.name}/{run}" for p in projects for run in p.active]
-            if active:
-                # Their clients address them by entity in every request.
-                raise Conflict("cannot rename an organization with active runs", active)
-            if name in self.orgs:
-                raise Conflict(f"organization {name} already exists")
             now = time.time()
             await self.db.execute(
-                "UPDATE orgs SET name = $2, updated_at = to_timestamp($3) WHERE pk = $1",
+                "UPDATE orgs SET display_name = $2, updated_at = to_timestamp($3) WHERE pk = $1",
                 org.pk,
-                name,
+                display_name,
                 now,
             )
-            for project in projects:
-                del self.projects[project.key]
-            del self.orgs[org.name]
-            org.name = name
+            org.display_name = display_name
             org.updated_at = now
-            self.orgs[name] = org
-            for project in projects:
-                self.projects[project.key] = project
-        for project in projects:
-            self.live.broadcast(project.pk, Hub.event("project", {"entity_renamed_to": name}))
-            self.live.close_project(project.pk)
 
     async def delete_org(self, org: Org, force: bool = False) -> None:
         """Delete an organization with all its projects and runs; refused while runs are

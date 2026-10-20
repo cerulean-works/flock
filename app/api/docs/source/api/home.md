@@ -1,6 +1,6 @@
 # Home feed and budgets
 
-Endpoints for a dashboard's home page: the activity feed, an organization's GPU prices and budget, and what it spent. Paths are relative to `/api/v1`, and `{org}` is an organization's name. Organizations you don't belong to answer 404. [GPU costs, budgets and the home feed](../home-and-budgets) explains how GPUs are detected and run time is counted.
+Endpoints for a dashboard's home page: the activity feed, an organization's GPU prices and budget, and what it spent. Paths are relative to `/api/v1`, and `{org}` is an organization's ID (its `name`). Organizations you don't belong to answer 404. [GPU costs, budgets and the home feed](../home-and-budgets) explains how GPUs are detected and run time is counted.
 
 ## `GET /feed`[[feed]]
 

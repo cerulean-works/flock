@@ -113,7 +113,7 @@ Flock looks for the account in this order:
 1. The account already linked to this Google account. Google identifies the account by its own user id, so this works even after the Google email changes.
 2. An account with the same email address. Google has verified the address, so Flock links the two.
 3. The invitation passed to the start as `?invite=<token>`, if its email matches. Flock creates the account as a member of the invitation's organization.
-4. If Flock has no accounts at all, this is the [first account](accounts#the-first-account), and it becomes the super admin. Flock creates no organization for it: the dashboard asks for the first organization's name next.
+4. If Flock has no accounts at all, this is the [first account](accounts#the-first-account), and it becomes the super admin. Flock creates no organization for it: the dashboard asks for the first organization's display name and ID next.
 
 Otherwise the sign-in is refused with `forbidden`: the person needs an invitation. An email address can be linked to only one Google account.
 

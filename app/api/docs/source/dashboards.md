@@ -16,7 +16,7 @@ Flock builds links into the dashboard at `FLOCK_WEB_URL`. Your dashboard needs a
 
 | Path | Shown when | The page calls |
 |---|---|---|
-| `/setup` | Flock has no accounts yet. Flock logs this address at startup. | `GET /api/v1/auth/config`, then `POST /api/v1/auth/signup`, then `POST /api/v1/orgs` with the chosen name |
+| `/setup` | Flock has no accounts yet. Flock logs this address at startup. | `GET /api/v1/auth/config`, then `POST /api/v1/auth/signup`, then `POST /api/v1/orgs` with the chosen ID and display name |
 | `/invite/<token>` | Someone opens an invitation link. | `GET /api/v1/invites/{token}`, then `POST /api/v1/invites/{token}/accept` |
 | `/reset/<token>` | Someone opens a password reset link. | `GET /api/v1/password-resets/{token}`, then `POST /api/v1/password-resets/{token}` |
 | `/auth/google?code=<code>` | A Google sign-in succeeded. | `POST /api/v1/auth/google/exchange` |
@@ -95,7 +95,7 @@ Then handle the events:
 - **`history`**: append the new points to the run's curves. Each point carries its line number in `rows`. The replay and the live events can overlap, so drop points whose line you already have, and keep the event's `lines` as the run's new cursor.
 - **`run`**: update the run's state, and the `summary.*` cells or edited `attributes` it carries.
 - **`created`** and **`deleted`**: a run appeared in the project or left it. Fetch a new snapshot, or add or remove the row.
-- **`project`**: the project was renamed, its organization was renamed, or it was deleted. Follow the new name or leave the page. The stream ends after this event.
+- **`project`**: the project was renamed, or it or its organization was deleted. Follow the new name or leave the page. The stream ends after this event.
 
 The stream also ends when the dashboard falls too far behind (512 queued events), and when Flock restarts. In both cases, reconnect with your latest line counts, and the replay fills the gap. [Snapshot and live stream](api/dashboard#the-live-stream) lists every event and its fields.
 

@@ -8,22 +8,28 @@ The examples use `curl` with an admin's access token in `$TOKEN` and Flock's URL
 
 An organization is a wandb entity. `wandb.init(entity="flock")` logs into the organization `flock`, and every project belongs to one organization. A user can belong to any number of organizations, with a role in each.
 
+An organization has two names:
+- **Its ID** (`name` in the API) is the entity. It appears in URLs, in API paths and in `wandb.init(entity=...)`. It's set when the organization is created and never changes, so scripts and links keep working.
+- **Its display name** (`display_name`) is what the dashboard shows, such as `Flock Research`. It's free text, and admins can change it at any time.
+
 Only super admins create organizations. A super admin becomes an admin of each organization they create:
 
 ```bash
-curl -s --json '{"name": "vision"}' -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/orgs
+curl -s --json '{"name": "vision", "display_name": "Vision Lab"}' -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/orgs
 ```
+
+Without `display_name`, the organization is shown by its ID. The dashboard suggests an ID from the display name you type, such as `vision-lab` for `Vision Lab`, and you can edit it before creating the organization.
 
 To people outside it, an organization doesn't exist: every request about it, or about anything in it, answers 404.
 
-An admin can rename an organization with `PATCH /api/v1/orgs/{org}`. That renames the entity of all its projects and runs, so it's refused while any of its runs is active. Deleting an organization deletes all its projects and runs, permanently.
+An admin changes the display name with `PATCH /api/v1/orgs/{org}`, even while runs are active, since clients address the organization by its ID. The ID itself can't be changed. Deleting an organization deletes all its projects and runs, permanently.
 
 ## Roles
 
 | Role | Can |
 |---|---|
 | member | Read everything in the organization, create projects, log runs, and edit, move or delete the runs they logged. |
-| org admin | Everything a member can, plus invite people, change roles, remove members, rename or delete the organization, update or delete projects, and change any run. |
+| org admin | Everything a member can, plus invite people, change roles, remove members, change the organization's display name or delete it, update or delete projects, and change any run. |
 | super admin | Everything an org admin can, in every organization, whether or not they're a member. Also create organizations and manage user accounts. |
 
 Roles are looked up on every request, so a change applies at once. [Permissions](permissions) has the full matrix.
@@ -48,7 +54,7 @@ curl -s --json '{"email": "ana@example.com", "name": "Ana Lima", "password": "co
 
 The first account becomes a super admin, and an admin of every existing organization. It creates no organization automatically. After that, signing up answers 403, and accounts are only created from invitations.
 
-The dashboard's setup page works in two steps. It creates the account without an organization, then asks the super admin to name the first one, creates it and makes it their default. Signing in as a super admin while Flock has no organization returns to that second step. A first sign-in with Google also creates the account without an organization, so the dashboard asks for its name next.
+The dashboard's setup page works in two steps. It creates the account without an organization, then asks the super admin for the first one's display name and ID, creates it and makes it their default. Signing in as a super admin while Flock has no organization returns to that second step. A first sign-in with Google also creates the account without an organization, so the dashboard asks for its name next.
 
 > [!WARNING]
 > Whoever reaches a new Flock instance first becomes its super admin. Sign up before you make Flock reachable by anyone else.

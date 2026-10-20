@@ -26,7 +26,7 @@ import { projectUrl } from './cache.ts';
  *
  * Changes made elsewhere arrive too: edited attributes update the page in place; runs created,
  * moved in, deleted or moved away shift page boundaries, so they are offered as a refresh. A
- * renamed or deleted project (or org) ends the stream and is handed to `onproject`.
+ * renamed or deleted project (or a deleted org) ends the stream and is handed to `onproject`.
  */
 
 interface HelloEvent {
@@ -64,10 +64,9 @@ interface DeletedEvent {
 	moved_to?: string;
 }
 
-/** The project was renamed or deleted, or its org was renamed. The stream ends after it. */
+/** The project was renamed or deleted (an org's ID never changes). The stream ends after it. */
 export interface ProjectEvent {
 	renamed_to?: string;
-	entity_renamed_to?: string;
 	deleted?: boolean;
 }
 

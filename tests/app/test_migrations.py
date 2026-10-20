@@ -114,6 +114,7 @@ def test_0002_upgrades_existing_data(postgres, make_flock, tmp_path):
         "0005_gpus_and_budgets",
         "0006_avatars",
         "0007_org_imports",
+        "0008_org_display_names",
     ]
 
     server = make_flock(database_url=url)  # rebuilds and compacts system metrics on startup
@@ -192,6 +193,7 @@ def test_0003_creates_projects_from_runs(postgres, make_flock, tmp_path):
         "0005_gpus_and_budgets",
         "0006_avatars",
         "0007_org_imports",
+        "0008_org_display_names",
     ]
 
     api = make_flock(database_url=url).client()
@@ -234,6 +236,7 @@ def test_0004_creates_orgs_from_entities(postgres, make_flock, tmp_path):
         "0005_gpus_and_budgets",
         "0006_avatars",
         "0007_org_imports",
+        "0008_org_display_names",
     ]
 
     async def rows() -> list:
@@ -302,6 +305,7 @@ def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(postgres, make_floc
         "0005_gpus_and_budgets",
         "0006_avatars",
         "0007_org_imports",
+        "0008_org_display_names",
     ]
     # Flock's first files directory (see ``Flocks``) already holds the upload.
     metadata = tmp_path / "flock-files-0" / str(run_pk) / "wandb-metadata.json"
@@ -315,3 +319,47 @@ def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(postgres, make_floc
     for month in ("2026-09", "2026-10"):
         budget = api.get("/api/v1/orgs/flock/budget", month=month).json()
         assert (budget["gpu_hours"], budget["spent"]) == (2.0, 20.0)  # an hour, 2 GPUs, each
+
+
+def test_0008_shows_existing_orgs_by_their_name(postgres, make_flock, tmp_path):
+    """Organizations from before display names are shown as they were named, and keep that
+    name as their ID."""
+    url = postgres.create(migrated=False)
+    before = tmp_path / "before"
+    before.mkdir()
+    for path in Migrations().files()[:7]:
+        shutil.copy(path, before)
+    asyncio.run(Migrations(before).apply(url))
+
+    async def seed() -> None:
+        conn = await asyncpg.connect(url)
+        try:
+            await conn.executemany(
+                "INSERT INTO orgs (name, created_at, updated_at) VALUES ($1, now(), now())",
+                [("flock",), ("Cerulean Labs",)],
+            )
+        finally:
+            await conn.close()
+
+    asyncio.run(seed())
+    assert asyncio.run(Migrations().apply(url)) == ["0008_org_display_names"]
+
+    async def nullable() -> str:
+        conn = await asyncpg.connect(url)
+        try:
+            return await conn.fetchval(
+                "SELECT is_nullable FROM information_schema.columns "
+                "WHERE table_name = 'orgs' AND column_name = 'display_name'"
+            )
+        finally:
+            await conn.close()
+
+    assert asyncio.run(nullable()) == "NO"
+    api = make_flock(database_url=url).client()
+    orgs = api.get("/api/v1/orgs").json()["orgs"]
+    assert [(o["name"], o["display_name"]) for o in orgs] == [
+        ("Cerulean Labs", "Cerulean Labs"),
+        ("flock", "flock"),
+    ]
+    renamed = api.patch("/api/v1/orgs/Cerulean%20Labs", {"display_name": "Cerulean"}).json()
+    assert (renamed["name"], renamed["display_name"]) == ("Cerulean Labs", "Cerulean")

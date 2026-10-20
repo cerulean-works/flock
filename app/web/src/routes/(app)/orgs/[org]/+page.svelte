@@ -7,6 +7,7 @@
 	import OrgMark from '#lib/components/shell/OrgMark.svelte';
 	import BillingForm from '#lib/components/BillingForm.svelte';
 	import CopyBlock from '#lib/components/CopyBlock.svelte';
+	import CopyButton from '#lib/components/CopyButton.svelte';
 	import DeleteOrgDialog from '#lib/components/DeleteOrgDialog.svelte';
 	import FormError from '#lib/components/FormError.svelte';
 	import MemberMenu from '#lib/components/MemberMenu.svelte';
@@ -18,7 +19,14 @@
 	import * as Select from '#lib/components/ui/select/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
 	import type { Role } from '#lib/types.ts';
-	import { count, dateTime, duration, formText, orgNameError, relativeTime } from '#lib/utils.ts';
+	import {
+		count,
+		dateTime,
+		duration,
+		formText,
+		orgDisplayNameError,
+		relativeTime
+	} from '#lib/utils.ts';
 	import { entityHref } from '#lib/workspace/url.ts';
 	import type { PageProps } from './$types';
 
@@ -37,16 +45,17 @@
 	});
 	const revoking = new Mutation({ toastErrors: true, success: () => 'Invitation withdrawn' });
 
-	const renaming = new Mutation({
-		validate: (form) => orgNameError(formText(form, 'name')),
-		success: () => 'Organization renamed'
+	// Its display name is free to change; its ID (data.org.name) never does.
+	const naming = new Mutation({
+		validate: (form) => orgDisplayNameError(formText(form, 'display_name')),
+		success: () => 'Display name saved'
 	});
-	let name = $derived(data.org.name);
+	let displayName = $derived(data.org.display_name);
 	let deleting = $state(false);
 </script>
 
 <svelte:head>
-	<title>Settings · {data.org.name}</title>
+	<title>Settings · {data.org.display_name}</title>
 </svelte:head>
 
 <div class="flex min-h-0 flex-1 flex-col">
@@ -55,10 +64,15 @@
 			<h1
 				class="flex items-center gap-3 pt-8 font-serif text-[34px] leading-[1.15] tracking-[-0.02em]"
 			>
-				<OrgMark name={data.org.name} src={data.org.avatar_url} class="size-10 text-[20px]" />
-				<span class="min-w-0 truncate">{data.org.name}</span>
+				<OrgMark
+					name={data.org.display_name}
+					src={data.org.avatar_url}
+					class="size-10 text-[20px]"
+				/>
+				<span class="min-w-0 truncate">{data.org.display_name}</span>
 			</h1>
 			<p class="mt-1 text-muted-foreground">
+				<span class="font-mono text-[13px]" title="Its ID">{data.org.name}</span> ·
 				{count(data.org.member_count, 'member')} ·
 				<a class="hover:text-link" href={entityHref(data.org.name)}>
 					{count(data.org.project_count, 'project')}
@@ -76,6 +90,7 @@
 					<h2 class="font-serif text-2xl tracking-[-0.01em]">Import from W&B</h2>
 					<OrgImport
 						org={data.org.name}
+						label={data.org.display_name}
 						job={data.import}
 						superadmin={data.me.is_superadmin}
 						now={data.now}
@@ -105,7 +120,7 @@
 								{ROLES[member.role]}
 							</Badge>
 							<span class="flex w-8 flex-none justify-end">
-								<MemberMenu org={data.org.name} {member} {self} {admin} />
+								<MemberMenu org={data.org.display_name} {member} {self} {admin} />
 							</span>
 						</li>
 					{:else}
@@ -226,40 +241,55 @@
 				<section class="mt-10">
 					<h2 class="font-serif text-2xl tracking-[-0.01em]">Organization</h2>
 					<div class="mt-4">
-						<AvatarField kind="org" name={data.org.name} src={data.org.avatar_url} />
+						<AvatarField kind="org" name={data.org.display_name} src={data.org.avatar_url} />
 					</div>
 					<form
 						method="POST"
-						action="?/rename"
+						action="?/displayName"
 						class="mt-8 grid max-w-100 gap-2"
-						use:enhance={renaming.enhance}
+						use:enhance={naming.enhance}
 					>
-						<Label for="org-name">Name</Label>
+						<Label for="org-display-name">Display name</Label>
 						<div class="flex gap-2">
 							<Input
-								id="org-name"
-								name="name"
-								bind:value={name}
+								id="org-display-name"
+								name="display_name"
+								bind:value={displayName}
 								autocomplete="off"
-								spellcheck="false"
 								maxlength={128}
-								aria-invalid={!!renaming.error}
+								aria-invalid={!!naming.error}
 							/>
 							<Button
 								type="submit"
 								variant="outline"
-								disabled={name === data.org.name || renaming.pending}
+								disabled={displayName.trim() === data.org.display_name || naming.pending}
 							>
-								{renaming.pending ? 'Renaming…' : 'Rename'}
+								{naming.pending ? 'Saving…' : 'Save'}
 							</Button>
 						</div>
-						<FormError error={renaming.error} ids={renaming.ids} />
+						<FormError error={naming.error} />
 						<p class="text-[13px] text-muted-foreground">
-							Scripts using <code class="font-mono text-[12.5px]"
-								>wandb.init(entity="{data.org.name}")</code
-							> need updating after a rename. Not allowed while runs are running.
+							What people see in Flock. Links and scripts use the ID, so they keep working.
 						</p>
 					</form>
+
+					<div class="mt-8 grid max-w-100 gap-2">
+						<Label for="org-id">ID</Label>
+						<div class="flex items-center gap-2">
+							<Input
+								id="org-id"
+								value={data.org.name}
+								readonly
+								class="bg-muted font-mono text-[13px] text-muted-foreground focus-visible:text-foreground"
+							/>
+							<CopyButton text={data.org.name} label="Copy ID" />
+						</div>
+						<p class="text-[13px] text-muted-foreground">
+							Used in links and by the wandb SDK, as in <code class="font-mono text-[12.5px]"
+								>wandb.init(entity="{data.org.name}")</code
+							>. It can’t be changed.
+						</p>
+					</div>
 
 					<div class="mt-8">
 						<Button

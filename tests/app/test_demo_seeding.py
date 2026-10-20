@@ -22,7 +22,11 @@ def test_a_simulated_month_loads_into_the_flock(postgres, make_flock, tmp_path):
     assert login.status == 200
 
     orgs = api.get("/api/v1/orgs").json()["orgs"]
-    assert [o["name"] for o in orgs] == ["flock", "speech", "vision"]
+    assert [(o["name"], o["display_name"]) for o in orgs] == [
+        ("flock", "Flock Research"),
+        ("speech", "Speech Team"),
+        ("vision", "Vision Lab"),
+    ]
     assert all(o["avatar_url"] for o in orgs)
 
     feed = api.get("/api/v1/feed", limit=100).json()["items"]

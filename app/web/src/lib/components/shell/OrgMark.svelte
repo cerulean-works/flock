@@ -16,10 +16,15 @@
 	const shown = $derived(src && src !== broken ? src : null);
 </script>
 
-<!-- An organization's picture or initial: square, where a person's avatar is round. -->
+<!-- An organization's picture or initial: square, where a person's avatar is round. The tile
+     colour is for the initial only: under a picture it would show through its transparent parts
+     and, at the rounded corners, as a dark hairline where the clipped edge is antialiased. The
+     picture takes the tile's rounding itself instead (whatever size or radius a caller gives).
+     Evening's --deep is nearly its background, so the tile is the selection blue there. -->
 <span
 	class={cn(
-		'grid size-7 flex-none place-items-center overflow-hidden rounded-md bg-deep font-serif text-[14px] text-[#fffdf4]',
+		'grid size-7 flex-none place-items-center rounded-md font-serif text-[14px] text-[#fffdf4]',
+		!shown && 'bg-deep dark:bg-selection',
 		className
 	)}
 	aria-hidden="true"
@@ -28,7 +33,7 @@
 		<img
 			src={shown}
 			alt=""
-			class="size-full object-cover"
+			class="size-full rounded-[inherit] object-cover"
 			decoding="async"
 			onerror={() => (broken = shown)}
 		/>

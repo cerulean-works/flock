@@ -41,8 +41,22 @@ def check_name(value: str) -> str:
     return value
 
 
-# A project or organization name given through the API (names the SDK sends are taken as is).
+# A project name or organization ID given through the API (names the SDK sends are taken as is).
 Name = Annotated[str, AfterValidator(check_name)]
+
+
+def check_display_name(value: str) -> str:
+    """An organization's display name: any text of 1-128 characters once surrounding
+    whitespace is dropped, without control characters."""
+    value = value.strip()
+    if not 1 <= len(value) <= 128:
+        raise ValueError("must be 1-128 characters")
+    if not all(ch.isprintable() for ch in value):
+        raise ValueError("must not contain control characters")
+    return value
+
+
+OrgDisplayName = Annotated[str, AfterValidator(check_display_name)]
 
 
 def get_store(request: Request) -> Store:

@@ -26,9 +26,12 @@
 	const shown = $derived(src && src !== broken ? src : null);
 </script>
 
+<!-- The tile colour is for the initials only (see OrgMark): under a picture it would show at
+     the antialiased edge as a dark hairline. -->
 <span
 	class={cn(
-		'grid size-7 flex-none place-items-center overflow-hidden rounded-full bg-deep text-[11px] font-medium text-[#fffdf4]',
+		'grid size-7 flex-none place-items-center rounded-full text-[11px] font-medium text-[#fffdf4]',
+		!shown && 'bg-deep dark:bg-selection',
 		className
 	)}
 	aria-hidden="true"
@@ -37,7 +40,7 @@
 		<img
 			src={shown}
 			alt=""
-			class="size-full object-cover"
+			class="size-full rounded-[inherit] object-cover"
 			decoding="async"
 			onerror={() => (broken = shown)}
 		/>

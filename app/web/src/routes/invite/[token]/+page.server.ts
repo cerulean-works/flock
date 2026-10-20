@@ -7,7 +7,10 @@ import { entityHref } from '#lib/workspace/url.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export interface InviteDetails {
+	/** The organization's ID (in its URLs). */
 	org: string;
+	/** What people see it called. */
+	org_display_name: string;
 	email: string;
 	role: Role;
 	expires_at: number;

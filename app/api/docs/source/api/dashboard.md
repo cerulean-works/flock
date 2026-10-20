@@ -243,7 +243,7 @@ Each event is an `event:` line naming it and a `data:` line of JSON. Keep-alive 
 | `run` | subscribers watching the run | `run`, `state`, `lines` and `updated_at`, plus `summary` with the `summary.*` columns that changed (`null` for removed ones), `attributes` with the attributes an edit changed, and `metric_defs` with the run's [metric definitions](#metric-definitions) when they changed. |
 | `created` | every subscriber of the project | A run was created, or moved in: `run`, `display_name` and `state`. |
 | `deleted` | every subscriber of the project | Runs were deleted: `runs`, a list of run ids. Runs that moved out also carry `moved_to`, the target project's name. |
-| `project` | every subscriber of the project | `{"renamed_to": "<name>"}` when the project was renamed, `{"entity_renamed_to": "<name>"}` when its organization was renamed, or `{"deleted": true}`. The stream ends after it. |
+| `project` | every subscriber of the project | `{"renamed_to": "<name>"}` when the project was renamed, or `{"deleted": true}` when it or its organization was deleted. The stream ends after it. |
 
 `history` and `system` events carry each metric's new points as three aligned lists:
 

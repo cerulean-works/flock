@@ -106,7 +106,8 @@ pnpm dlx shadcn-svelte@latest add <component>   # aliases already point at #lib
   `/api/v1/avatars/*` through to it, without credentials and cached for a year.
 - **Organization settings** (`/orgs/{org}`): everyone sees the members; admins invite people
   by link (as member or admin), withdraw invitations, change roles, create password reset links,
-  remove members, and rename or delete the organization. Members can leave. Its **Budget**
+  remove members, change the organization's display name (its ID, shown read-only, never
+  changes) or delete it. Members can leave. Its **Budget**
   section sets the monthly budget, the currency and a price per GPU hour for each GPU type
   (admins; members see them). Links land on
   `/invite/{token}` (create an account, or join with the one you're signed in to, by password or

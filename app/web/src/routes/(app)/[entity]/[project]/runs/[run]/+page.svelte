@@ -56,10 +56,7 @@
 	function onproject(e: ProjectEvent) {
 		// Renamed or deleted under us: the project's page knows where it went.
 		if (e.deleted) void goto(entityHref(data.run.entity), { replace: true });
-		else
-			void goto(
-				projectHref(e.entity_renamed_to ?? data.run.entity, e.renamed_to ?? data.run.project)
-			);
+		else void goto(projectHref(data.run.entity, e.renamed_to ?? data.run.project));
 	}
 	const live = new LiveConnection(ws, onproject);
 	$effect(() => {

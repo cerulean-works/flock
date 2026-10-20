@@ -13,11 +13,13 @@ import {
 	money,
 	monthName,
 	monthOf,
-	orgNameError,
+	orgDisplayNameError,
+	orgIdError,
 	parseTags,
 	projectNameError,
 	relativeTime,
-	shiftMonth
+	shiftMonth,
+	slugify
 } from './utils.ts';
 
 describe('formatNumber', () => {
@@ -108,14 +110,41 @@ describe('projectNameError', () => {
 	);
 });
 
-describe('orgNameError', () => {
-	it('accepts names the dashboard can open', () => {
-		expect(orgNameError('cerulean-research')).toBeNull();
+describe('orgIdError', () => {
+	it('accepts IDs the dashboard can open', () => {
+		expect(orgIdError('cerulean-research')).toBeNull();
 	});
 
 	it.each(['admin', 'Login', 'orgs', '_app', 'favicon.ico', 'a/b', ''])('rejects %j', (name) =>
-		expect(orgNameError(name)).toBeTypeOf('string')
+		expect(orgIdError(name)).toBeTypeOf('string')
 	);
+});
+
+describe('orgDisplayNameError', () => {
+	it.each(['Cerulean Labs', 'R&D / Vision #2', 'admin'])('accepts %j', (name) =>
+		expect(orgDisplayNameError(name)).toBeNull()
+	);
+
+	it.each(['', '   ', 'x'.repeat(129), 'tab\there'])('rejects %j', (name) =>
+		expect(orgDisplayNameError(name)).toBeTypeOf('string')
+	);
+});
+
+describe('slugify', () => {
+	it.each([
+		['Cerulean Labs', 'cerulean-labs'],
+		['  R&D / Vision #2 ', 'r-d-vision-2'],
+		['Café Zürich', 'cafe-zurich'],
+		['---', ''],
+		['日本', '']
+	])('%j -> %j', (name, slug) => expect(slugify(name)).toBe(slug));
+
+	it('makes IDs that pass the ID rule', () => {
+		const slug = slugify('A very long organization name '.repeat(5));
+		expect(slug.length).toBeLessThanOrEqual(64);
+		expect(slug.endsWith('-')).toBe(false);
+		expect(orgIdError(slug)).toBeNull();
+	});
 });
 
 describe('money', () => {

@@ -159,10 +159,13 @@ class Accounts:
             "has_password": user.password_hash is not None,
             "google": user.google_sub is not None,
             "default_org": default.name if default else None,
-            "orgs": sorted(
-                ({"name": orgs[pk].name, "role": role} for pk, role in user.roles.items()),
-                key=lambda org: org["name"],
-            ),
+            "orgs": [
+                {"name": org.name, "display_name": org.display_name, "role": user.roles[org.pk]}
+                for org in sorted(
+                    (orgs[pk] for pk in user.roles),
+                    key=lambda org: (org.display_name.casefold(), org.name),
+                )
+            ],
             "created_at": user.created_at,
             "avatar_url": self.store.avatars.url(user.avatar),
             "avatar_source": user.avatar_source,

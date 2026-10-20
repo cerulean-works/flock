@@ -81,7 +81,7 @@ def test_setting_up_before_any_account_exists(make_flock):
     me = root.patch(ME, {"default_org": "cerulean"})
     assert me.status == 200, me.body
     assert me.json()["default_org"] == "cerulean"
-    assert me.json()["orgs"] == [{"name": "cerulean", "role": "admin"}]
+    assert me.json()["orgs"] == [{"name": "cerulean", "display_name": "cerulean", "role": "admin"}]
     assert list(server.store.orgs) == ["cerulean"]
     assert login(server, "root@x.io", "rootroot").status == 200
 
@@ -93,7 +93,7 @@ def test_login_refresh_and_logout(flock):
 
     tokens = login(flock, alice.email, alice.password).json()
     assert tokens["token_type"] == "bearer"
-    assert tokens["user"]["orgs"] == [{"name": "flock", "role": "member"}]
+    assert tokens["user"]["orgs"] == [{"name": "flock", "display_name": "flock", "role": "member"}]
     api = flock.client(token=tokens["access_token"])
     assert api.get(ME).json()["id"] == alice.id
 

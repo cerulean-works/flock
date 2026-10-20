@@ -1,7 +1,5 @@
 import time
 
-import pytest
-
 from tests.app.utils import history_rows
 
 ORGS = "/api/v1/orgs"
@@ -31,6 +29,7 @@ def test_org_crud(flock):
     assert created.status == 201
     assert created.json() | {"created_at": 0, "updated_at": 0} == {
         "name": "lab",
+        "display_name": "lab",  # the ID, when none is given
         "created_at": 0,
         "updated_at": 0,
         "project_count": 0,
@@ -45,40 +44,91 @@ def test_org_crud(flock):
     assert [o["name"] for o in alice.api.get(ORGS).json()["orgs"]] == ["flock"]
     assert [o["name"] for o in admin.get(ORGS).json()["orgs"]] == ["flock", "lab"]
     assert alice.api.get(f"{ORGS}/lab").status == 404  # not a member: as if it didn't exist
-    assert alice.api.patch(f"{ORGS}/flock", {"name": "x"}).status == 403
+    assert alice.api.patch(f"{ORGS}/flock", {"display_name": "x"}).status == 403
     assert alice.api.delete(f"{ORGS}/flock").status == 403
-    assert admin.patch(f"{ORGS}/lab", {"name": "flock"}).status == 409
 
 
-def test_rename_org(make_flock, events):
+def test_org_display_names(make_flock, events):
     server = make_flock()
     api = server.client()
+    created = api.post(ORGS, {"name": "cerulean-labs", "display_name": "  Cerulean Labs "})
+    assert created.status == 201
+    assert (created.json()["name"], created.json()["display_name"]) == (
+        "cerulean-labs",
+        "Cerulean Labs",  # without the surrounding spaces
+    )
+    # Display names are free text (and needn't be unique); IDs keep the project-name rule.
+    assert api.post(ORGS, {"name": "acme", "display_name": "R&D / Vision #2?"}).status == 201
+    assert api.post(ORGS, {"name": "other", "display_name": "Cerulean Labs"}).status == 201
+    for bad in ("", "   ", "tab\there", "x" * 129):
+        assert api.post(ORGS, {"name": "bad", "display_name": bad}).status == 422, bad
+        assert api.patch(f"{ORGS}/acme", {"display_name": bad}).status == 422, bad
+    assert api.post(ORGS, {"name": "a/b", "display_name": "Fine"}).status == 422
+
+    # Lists are sorted by what people see; the ID breaks ties.
+    orgs = api.get(ORGS).json()["orgs"]
+    assert [(o["display_name"], o["name"]) for o in orgs] == [
+        ("Cerulean Labs", "cerulean-labs"),
+        ("Cerulean Labs", "other"),
+        ("flock", "flock"),
+        ("R&D / Vision #2?", "acme"),
+    ]
+    me = api.get("/api/v1/me").json()
+    assert me["orgs"][0] == {
+        "name": "cerulean-labs",
+        "display_name": "Cerulean Labs",
+        "role": "admin",
+    }
+
+    # Changing it is fine while runs are active: clients address the org by its ID.
     api.create_run("p", "r1")
-    api.stream("p", "r1", history_rows(3, loss=float))
     live = events("p", "r1", client=api)
     live.next_of("hello")
+    changed = api.patch(f"{ORGS}/flock", {"display_name": "Flock Research"})
+    assert changed.status == 200
+    assert (changed.json()["name"], changed.json()["display_name"]) == ("flock", "Flock Research")
+    api.stream("p", "r1", history_rows(2, loss=float))
+    assert live.next_of("history")["run"] == "r1"  # the stream goes on
+    assert upsert_error(api, "flock", "p", "r2") is None
 
-    refused = api.patch(f"{ORGS}/flock", {"name": "acme"})
-    assert refused.status == 409  # r1's client addresses it as flock/p/r1
-    assert refused.json()["ids"] == ["p/r1"]
-    api.stream("p", "r1", complete=0)
-    renamed = api.patch(f"{ORGS}/flock", {"name": "acme"})
-    assert renamed.json()["name"] == "acme"
-    assert live.next_of("project") == {"entity_renamed_to": "acme"}
-    with pytest.raises(AssertionError, match="stream ended"):
-        live.next()
+    # The ID can't change: sent back as it is, it's accepted; anything else is refused.
+    assert api.patch(f"{ORGS}/flock", {"name": "flock", "display_name": "Flock"}).status == 200
+    refused = api.patch(f"{ORGS}/flock", {"name": "acme2"})
+    assert refused.status == 400
+    assert "can't be changed" in refused.json()["error"]
+    assert api.patch(f"{ORGS}/flock", {}).json()["display_name"] == "Flock"
+
+    # Invitations name the org as people know it.
+    invite = api.post(f"{ORGS}/flock/invites", {"email": "ben@lab.test"}).json()
+    details = server.anonymous().get(f"/api/v1/invites/{invite['token']}").json()
+    assert (details["org"], details["org_display_name"]) == ("flock", "Flock")
 
     def check(client) -> None:
-        assert client.get("/api/v1/projects/flock/p").status == 404
-        assert client.only_run("p", entity="acme")["state"] == "finished"
-        assert client.get("/api/v1/me").json()["default_org"] == "acme"
-        assert upsert_error(client, None, "p", "r2") is None  # the default entity follows
-        assert client.get("/api/v1/projects/acme/p").json()["run_count"] == 2
-        assert client.delete("/api/v1/projects/acme/p/runs/r2", force="true").status == 204
+        org = client.get(f"{ORGS}/flock").json()
+        assert (org["name"], org["display_name"]) == ("flock", "Flock")
+        assert client.get(f"{ORGS}/acme2").status == 404
+        assert client.get("/api/v1/projects/flock/p").json()["run_count"] == 2
 
     check(api)
     server.stop()
     check(make_flock(reuse=server).client())
+
+
+def test_only_org_admins_change_display_names(flock):
+    admin = flock.client()
+    alice = flock.add_user("alice@lab.test")  # a member
+    bob = flock.add_user("bob@lab.test", role="admin")
+    assert alice.api.patch(f"{ORGS}/flock", {"display_name": "Alice's"}).status == 403
+    assert alice.api.get(f"{ORGS}/flock").json()["display_name"] == "flock"
+    assert bob.api.patch(f"{ORGS}/flock", {"display_name": "Bob's"}).status == 200
+    assert admin.post(ORGS, {"name": "lab", "display_name": "Lab"}).status == 201
+    # Not a member: as if it didn't exist.
+    assert bob.api.patch(f"{ORGS}/lab", {"display_name": "Mine"}).status == 404
+    # Super admins administer every org.
+    assert admin.patch(f"{ORGS}/flock", {"display_name": "Flock"}).status == 200
+    assert alice.api.get("/api/v1/me").json()["orgs"] == [
+        {"name": "flock", "display_name": "Flock", "role": "member"}
+    ]
 
 
 def test_delete_org(make_flock):
@@ -129,6 +179,7 @@ def test_invites(make_flock):
     link = f"/api/v1/invites/{invite['token']}"
     assert anon.get(link).json() | {"expires_at": 0} == {
         "org": "flock",
+        "org_display_name": "flock",
         "org_avatar_url": None,
         "email": "carol@lab.test",
         "role": "admin",
@@ -139,7 +190,9 @@ def test_invites(make_flock):
     assert anon.post(f"{link}/accept", {}).status == 401  # neither a new account nor signed in
     accepted = anon.post(f"{link}/accept", {"name": "Carol", "password": "carolcarol"})
     assert accepted.status == 201
-    assert accepted.json()["user"]["orgs"] == [{"name": "flock", "role": "admin"}]
+    assert accepted.json()["user"]["orgs"] == [
+        {"name": "flock", "display_name": "flock", "role": "admin"}
+    ]
     assert anon.get(link).status == 404  # used up
     reused = anon.post(f"{link}/accept", {"name": "Eve", "password": "evilevil"})
     assert reused.status == 404
@@ -158,7 +211,10 @@ def test_invites(make_flock):
     assert carol.post(f"/api/v1/invites/{token}/accept", {}).status == 403  # not carol's
     assert bob.api.post(f"/api/v1/invites/{token}/accept", {}).status == 200
     orgs = bob.api.get("/api/v1/me").json()["orgs"]
-    assert orgs == [{"name": "flock", "role": "member"}, {"name": "lab", "role": "member"}]
+    assert orgs == [
+        {"name": "flock", "display_name": "flock", "role": "member"},
+        {"name": "lab", "display_name": "lab", "role": "member"},
+    ]
 
     withdrawn = admin.post(invites, {"email": "dave@lab.test"}).json()
     assert carol.delete(f"{invites}/{withdrawn['id']}").status == 204  # carol is an admin

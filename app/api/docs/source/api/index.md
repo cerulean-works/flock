@@ -29,7 +29,7 @@ Errors are described in [Errors and status codes](../errors).
 
 ## Endpoints
 
-All paths are relative to `/api/v1`. In paths, `{entity}` is an organization's name.
+All paths are relative to `/api/v1`. In paths, `{entity}` is an organization's ID (its `name`), which never changes.
 
 | Endpoint | Purpose | Page |
 |---|---|---|
