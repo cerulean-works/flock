@@ -55,7 +55,8 @@ answers using entropy, along with a CLI for running evaluations. These evaluator
 will provide reusable building blocks for new tasks and benchmarks, with a common
 way to run them across models and checkpoints. The goal is to make evaluation a
 routine part of experimentation, so we can understand what changes between
-training runs and compare results under a consistent setup.
+training runs and compare results under a consistent setup. Its docs start at
+[`flock/eval/docs/source/index.md`](flock/eval/docs/source/index.md).
 
 ### CLI
 

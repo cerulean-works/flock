@@ -15,8 +15,8 @@
 |---|---|
 | task | A benchmark scored one way, such as `arc_easy`. A task is a short definition: a pinned dataset, a function from a dataset row to a question, and few-shot examples. |
 | doc | One question of a task, with its answer choices and the index of the correct one. |
-| request | One (context, continuation) pair whose log-probability the model computes. A doc with four choices makes four requests, and four more for PMI. |
-| task hash | The sha256 of a task's definition and every string it scores. Two results with the same task hash scored the same requests. |
+| request | One (context, continuation) pair whose log-probability the model computes. A doc with four choices makes four requests, and four more for pointwise mutual information (PMI). |
+| task hash | A fingerprint of exactly what a task scored, recorded in each result. [Results files](results) defines it. |
 
 ## Where to go next
 

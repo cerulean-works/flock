@@ -16,9 +16,9 @@ result = score_task(scorer, TASKS["arc_easy"])
 print(result.metrics["bpb"])
 ```
 
-`name` is how results refer to the model. Use the run and step, so you can tell checkpoints apart.
+`name` labels the model in log messages, such as the truncation warning. Use the run and step, so you can tell checkpoints apart. The training loop records the step with the metrics itself.
 
-`score_task` returns a [`~eval.results.TaskResult`] with each metric's mean over docs. It writes nothing unless you pass `out`.
+`score_task` returns a [`~eval.results.TaskResult`] with each metric's mean over docs. It writes nothing unless you pass `out`, and then only `out/predictions/<task>.jsonl`, replacing an existing file. It never writes `results.json`.
 
 ## What it does to the model
 
@@ -33,10 +33,10 @@ print(result.metrics["bpb"])
 
 ## Logging to the tracker
 
-Log the metrics with the training run's own `wandb` run, as any other metric:
+Log the metrics with the training run's own `wandb` run, as any other metric. Use the `<task>/<metric>` keys that `flock-eval run --wandb-project` writes to its run summary, so one metric has one name everywhere:
 
 ```python
-run.log({f"eval/arc_easy/{name}": value for name, value in result.metrics.items()}, step=step)
+run.log({f"arc_easy/{name}": value for name, value in result.metrics.items()}, step=step)
 ```
 
 The curves then show up in Flock next to the training loss. See [Logging from training code](https://docs.cerulean.works/flock/latest/guide/logging).

@@ -29,31 +29,15 @@ A run with an output directory writes `results.json` and one predictions file pe
 }
 ```
 
-| Field | Meaning |
-|---|---|
-| `task` | The task's name. |
-| `task_hash` | The sha256 of the task's definition and every scored string. Equal hashes mean the same requests were scored. |
-| `primary_metric` | The metric to read first. |
-| `metrics` | Each metric's mean over docs. See [Metrics](metrics). |
-| `num_docs` | How many docs were scored. |
-| `limit` | The `--limit` of the run, or `null` for the whole split. |
-| `seconds`, `docs_per_second` | Scoring time and throughput, without data and model loading. |
-| `schema_version` | The file format's version. It changes when fields change. |
+The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.results.TaskResult`] plus its `docs_per_second`, and `provenance` is described below. The class docstrings at the end of this page define every field.
+
+### The task hash
+
+`task_hash` is the sha256 of the task's definition (every field but `to_doc`, so its name and primary metric too), every scored context and continuation, and every gold index. Changing the dataset revision, the few-shot examples, the prompt, the task's name or primary metric, or the question, choices or gold index that `to_doc` returns changes it. Doc ids aren't hashed. Two results with the same hash scored the same requests under the same task definition.
 
 ## Provenance
 
-| Field | Meaning |
-|---|---|
-| `model` | The model as `repo@commit`. |
-| `flock_commit` | The flock commit that ran, from the `FLOCK_COMMIT` environment variable or git. A `-dirty` suffix means the checkout had uncommitted changes. |
-| `command` | The command line, or `python` when [`~eval.run.evaluate`] was called directly. |
-| `device` | The GPU's name, or `cpu`. |
-| `dtype` | The weights' dtype, such as `bfloat16`. |
-| `batch_tokens` | The forward-pass budget in padded tokens. |
-| `max_length` | The longest input the model saw. Longer inputs lost tokens from the left. |
-| `attention` | The attention implementation, such as `sdpa`. It changes bfloat16 scores. |
-| `torch`, `transformers`, `python` | Library and interpreter versions. |
-| `created_at` | When the run finished, in ISO 8601 UTC. |
+`provenance` records what produced the run, so a number can be traced to the exact model, code and settings: [`~eval.provenance.Provenance`] at the end of this page defines each field. `created_at` is taken after scoring, when `results.json` is assembled.
 
 ## Predictions
 
@@ -65,7 +49,7 @@ Each line of `predictions/<task>.jsonl` is one doc:
 | `gold` | The index of the correct choice. |
 | `logprob` | Each choice's summed log-probability. |
 | `num_tokens` | Each choice's token count. |
-| `logprob_uncond` | Each choice's log-probability after the unconditional context, for tasks that score PMI. |
+| `logprob_uncond` | Each choice's log-probability after the unconditional context, for tasks that score pointwise mutual information (PMI). |
 
 ## Classes
 
@@ -73,4 +57,4 @@ Each line of `predictions/<task>.jsonl` is one doc:
 
 [[autodoc]] eval.results.TaskResult
 
-[[autodoc]] eval.results.Provenance
+[[autodoc]] eval.provenance.Provenance

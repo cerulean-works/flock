@@ -6,7 +6,7 @@
 | Date | 2026-10-19 |
 | Builds on | nothing (first eval stage) |
 | Keeps | n/a |
-| Result | 61 tests in `tests/eval/` pass on CPU in about 1 s; see [section 5](#5-how-it-was-actually-built) |
+| Result | 77 tests in `tests/eval/` pass on CPU in about 1 s; see [section 5](#5-how-it-was-actually-built) |
 
 ## 1. Goal
 
@@ -44,13 +44,15 @@ details the papers leave out, and we don't depend on it. A later stage checks pa
 ### D2. Tokenize the way OLMES does
 
 `ScoringModel.encode` copies lm-evaluation-harness's `_encode_pair`, which OLMES uses:
-- whitespace at the end of the context moves to the start of the continuation;
+- whitespace at the end of the context moves to the start of the continuation
+  (`_move_whitespace`);
 - the continuation's tokens are `tokenize(context + continuation)[len(tokenize(context)):]`, so a
   token that spans the boundary counts as continuation;
 - no special tokens are added. OLMES only adds a BOS for Gemma models, so OLMo 2 and Llama 3.2
   see no BOS;
 - an empty context (after moving its whitespace) becomes the BOS token, or EOS if there's no BOS
-  (a tokenizer with neither raises);
+  (`_prefix_token`; a tokenizer with neither raises). lm-evaluation-harness checks for an empty
+  context before moving whitespace, so a whitespace-only context is the one case that differs;
 - inputs longer than `max_length` (default: the config's `max_position_embeddings`) lose
   tokens from the left.
 
@@ -59,27 +61,35 @@ nothing) would rank it above every real choice.
 
 ### D3. Batch by a token budget, no syncs of our own
 
-Requests are sorted longest first (as lm-evaluation-harness does) and packed greedily into
-batches of at most `batch_tokens` padded tokens (default 32768). Rows are left-padded with an
-attention mask and explicit position ids, so every continuation ends at the last position. The
-model's own forward then runs with `logits_to_keep` set to the batch's longest continuation, so
-full-vocabulary logits are never built for the few-shot context, and any rescaling the model
-applies after its LM head (Gemma's soft-capping, Granite's `logits_scaling`) is kept. Only those
-logits are used: the target's logit, in float32, minus the float32 `logsumexp` over the
-vocabulary, which builds one float32 copy of them where `log_softmax` then `gather` builds two.
-Since a batch's rows times `keep` is at most `batch_tokens`, the logits hold at most
-`batch_tokens` times the vocabulary size: about 6.6 GB in bfloat16 for OLMo 2's 100k vocabulary
-at the default budget, plus 13 GB for the float32 copy. Tokenizing a call's requests is one batched tokenizer
-call for the joint context-plus-continuation strings and one for the distinct contexts, so a
-few-shot context repeated across choices is tokenized alone once. Index tensors are built on the
-host before the forward pass, and per-request sums are written into one tensor on the device, so
-our code reads nothing from the GPU until the task's mean metrics are computed. transformers'
-own mask handling may still sync once per batch (its SDPA path checks the padding mask on the
-host).
-With weights split across devices, the targets move to the device the logits come out on.
+- **Sorting and packing.** Requests are sorted longest first (as lm-evaluation-harness does)
+  and packed greedily into batches of at most `batch_tokens` padded tokens (default 32768,
+  `_batches`). A request's length is its model-input length after truncation
+  (`_input_length`).
+- **Padding.** Rows are left-padded with an attention mask and explicit position ids, so every
+  continuation ends at the last position (`_pad_batch`, which returns a `_PaddedBatch`).
+- **Only continuation logits.** The model's own forward runs with `logits_to_keep` set to the
+  batch's longest continuation, so full-vocabulary logits are never built for the few-shot
+  context, and any rescaling the model applies after its LM head (Gemma's soft-capping,
+  Granite's `logits_scaling`) is kept.
+- **Float32 log-softmax in chunks.** A target's log-probability is its logit in float32 minus
+  the float32 `logsumexp` over the vocabulary (`_target_logprobs`). Since a batch's rows times
+  `keep` is at most `batch_tokens`, the logits hold at most `batch_tokens` times the vocabulary
+  size: about 6.6 GB in bfloat16 for OLMo 2's 100k vocabulary at the default budget. A float32
+  copy of all of them would add 13 GB, so rows are converted a few at a time, at most 4096
+  positions (about 1.6 GB) per chunk.
+- **Batched tokenization.** One tokenizer call covers the joint context-plus-continuation
+  strings and one the distinct contexts (`_tokenize_contexts`), so a few-shot context repeated
+  across choices is tokenized alone once.
+- **No host syncs of our own.** Index tensors are built on the host before the forward pass,
+  and per-request sums are written into one tensor on the device, so our code reads nothing
+  from the GPU until the task's mean metrics are computed. transformers' own mask handling may
+  still sync once per batch (its SDPA path checks the padding mask on the host).
+- **Several devices.** With weights split across devices, the targets move to the device the
+  logits come out on.
 
 Weights load in bfloat16, and log-softmax runs in float32. The model is switched to eval mode
-for scoring and each module is put back in the mode it was in, so a training loop can score between steps.
+for scoring and each module is put back in the mode it was in, so a training loop can score
+between steps.
 
 ### D4. Metrics are pure functions of `[docs, choices]` tensors
 
@@ -137,14 +147,15 @@ renamed task gets a new hash on purpose: a number scored differently is a differ
 ### D8. One results file per run, with provenance
 
 `results.json` (schema version 2, which added `max_length`) holds each task's mean metrics, doc
-count, wall time and throughput, plus a `Provenance`:
+count, wall time and throughput, plus a `Provenance` (`provenance.py`):
 - the model as `repo@commit`. Branches and tags are resolved to a commit through the Hub, and
   a run fails if the Hub reports none. A full commit hash is used as is, so pinned models load
   offline from the cache;
 - the flock commit, from `FLOCK_COMMIT` (job scripts set it) or `git rev-parse HEAD` with a
   `-dirty` suffix;
 - the command line, device name, dtype, batch budget, `max_length` (the left-truncation
-  window, which can change scores), the attention implementation (which changes bfloat16 scores), and the torch, transformers and Python versions.
+  window, which can change scores), the attention implementation (which changes bfloat16
+  scores), and the torch, transformers and Python versions.
 
 `predictions/<task>.jsonl` keeps each doc's per-choice log-probabilities and token counts, so
 two runs can be compared doc by doc.
@@ -166,6 +177,10 @@ With `--wandb-project`, `tracking.log_to_tracker` logs one `eval` run through th
 the provenance and task hashes as config, and `<task>/<metric>` as summary. The SDK's own login
 decides the host. The results file is always written.
 
+Later: stream rolling scores while a task runs. Requests are scored longest first, so a running
+mean over the docs scored so far would be biased toward long questions. Streaming needs the docs
+scored in shuffled chunks, each sorted by length on its own.
+
 ---
 
 ## 3. Plan
@@ -178,7 +193,8 @@ decides the host. The results file is always written.
 5. `results.py`, `run.py`, `tracking.py`, `cli.py`.
 6. CPU tests with a tiny random Llama and a byte-level BPE tokenizer trained in the test.
 7. Smoke test: OLMo 2 1B on ARC-Easy on one H200.
-8. User docs: introduction and quickstart.
+8. User docs: introduction, quickstart, adding a task, scoring during training, how scoring
+   works, and reference pages for the CLI, the Python API, tasks, metrics and results files.
 
 ---
 
@@ -190,16 +206,21 @@ BOS, like OLMo 2) in the test. Nothing is downloaded: dataset rows come from a f
   Chinese strings and an empty context.
 - **Batch-size and padding invariance:** budgets from 1 token (one request per batch) to
   10,000 give the same scores within 1e-4. Reversing the request order reverses the scores.
+- **No leaks between rows:** in one left-padded batch, the gradient of each request's score
+  reaches its own row's real tokens and nothing else, neither other rows nor its own padding.
+- **Chunked log-softmax:** `_target_logprobs` gives the same values for every chunk size and
+  matches `log_softmax` then `gather`.
 - **The boundary:** context and continuation tokens concatenate to the joint tokenization, and
   trailing context whitespace moves to the continuation.
 - **Edge cases:** empty continuations and contexts, a tokenizer with no BOS or EOS, left
   truncation, over-long continuations, and the model's train mode being restored.
 - **Metrics:** bits per byte against a hand value (`" 玉山"` is 7 bytes), each normalization
   on a case where it changes the winner, tie-breaking, and padded choices.
-- **Tasks:** a `primary_metric` the task doesn't report is rejected, the exact few-shot prompt, request layout with 3 and 4 choices, character and
-  byte counts with multi-byte text, and a hash that is stable and changes with each input.
+- **Tasks:** a `primary_metric` the task doesn't report is rejected, the exact few-shot
+  prompt, request layout with 3 and 4 choices, character and byte counts with multi-byte text,
+  and a hash that is stable and changes with each input.
 - **End to end:** `evaluate` and the CLI write `results.json` and predictions with the expected
-  fields.
+  fields, and `prediction_rows` drops each doc's padded choices.
 
 The tests pin torch to one CPU thread. On a shared machine, more threads made the suite 50x
 slower.

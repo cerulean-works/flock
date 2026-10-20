@@ -7,7 +7,10 @@
 Scores one model on one or more tasks, writes the results, and prints each task's metrics with the primary metric first.
 
 ```bash
-uv run flock-eval run --model <repo>@<revision> --task <task> [--task <task> ...] --out <dir>
+uv run flock-eval run \
+  --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf \
+  --task arc_easy \
+  --out results/olmo2-1b
 ```
 
 | Flag | Default | Meaning |
