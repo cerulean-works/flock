@@ -130,9 +130,9 @@ class MultipleChoiceTask:
         dataset (`Dataset`):
             Where the scored rows come from.
         to_doc (`Callable[[dict], MCDoc]`):
-            Turns one dataset row into an [`MCDoc`].
+            Turns one dataset row into an [`~eval.tasks.MCDoc`].
         primary_metric (`str`):
-            The metric reported first, one of [`~metrics.multiple_choice`]'s names.
+            The metric reported first, one of [`~eval.metrics.multiple_choice`]'s names.
         fewshot (`Fewshot`, *optional*):
             The few-shot examples, from the same dataset. Zero-shot if not set.
         question_prefix (`str`, *optional*, defaults to `"Question: "`):

@@ -30,7 +30,7 @@ class Provenance:
         flock_commit (`str`):
             The flock commit that ran, from `FLOCK_COMMIT` or git. A `-dirty` suffix means the checkout had uncommitted changes.
         command (`str`):
-            The command line, or `"python"` when [`~run.evaluate`] was called directly.
+            The command line, or `"python"` when [`~eval.run.evaluate`] was called directly.
         device (`str`):
             The accelerator's name, or `"cpu"`.
         dtype (`str`):

@@ -28,3 +28,4 @@ These docs use one example throughout: an organization `flock`, which Flock crea
 - Run Flock and log a first run: [Quickstart](quickstart).
 - Put Flock into production: [Deploying and operating](deploying).
 - Look up an endpoint: [HTTP API overview](api/index).
+- Score models on benchmarks with `flock.eval`: [Evaluating models](eval/index).

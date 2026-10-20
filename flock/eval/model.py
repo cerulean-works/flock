@@ -59,7 +59,7 @@ class ModelRef:
 
 class ScoringModel:
     """
-    A causal LM and its tokenizer that answer loglikelihood [`Request`]s in batches.
+    A causal LM and its tokenizer that answer loglikelihood [`~eval.requests.Request`]s in batches.
 
     Context and continuation are tokenized as OLMES does: whitespace at the end of the context moves to the start of the continuation, the pair is tokenized together, and the continuation's tokens are those after the context's own tokenization. No special tokens are added. Requests are sorted longest first and packed into left-padded batches of at most `batch_tokens` padded tokens. Inputs longer than `max_length` lose tokens from the left.
 

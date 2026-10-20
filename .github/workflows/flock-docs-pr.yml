@@ -20,4 +20,6 @@ jobs:
     with:
       project: flock
       path_to_docs: flock/app/api/docs/source
-      not_python_module: true
+      python_version: "3.14"
+      # Autodoc imports flock.eval; its heavy dependencies are mocked instead of installed.
+      mock_deps: torch,transformers,huggingface_hub,datasets,wandb
