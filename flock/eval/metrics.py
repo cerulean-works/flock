@@ -5,9 +5,9 @@ from dataclasses import dataclass
 
 import torch
 
-# Every name `multiple_choice` can return, kept next to it so the two change together.
-# Tasks check their `primary_metric` against this. `acc_uncond` is only reported by tasks
-# that score pointwise mutual information (see `multiple_choice`).
+# Every name `multiple_choice` can return, in its order. Add a name here whenever it gains a
+# metric: tasks check their `primary_metric` against this. `acc_uncond` is only reported by
+# tasks that score pointwise mutual information (see `multiple_choice`).
 MULTIPLE_CHOICE_METRICS = (
     "acc_raw",
     "acc_per_token",
@@ -21,23 +21,25 @@ MULTIPLE_CHOICE_METRICS = (
 @dataclass(frozen=True, slots=True)
 class ChoiceScores:
     """
-    Every doc's answer choices, padded to `[docs, max_choices]`.
+    Every doc's answer-choice scores, padded to `[docs, max_choices]`.
+
+    [`~eval.tasks.MCRequests.choice_scores`] builds it from the per-request [`~eval.requests.Scores`]. Docs with fewer choices than the widest doc have padded cells past their last choice. Those cells hold request 0's values, so every metric must mask them out with `valid`.
 
     Args:
         logprob (`torch.Tensor`):
-            float32, each choice's summed log-probability given the doc's context.
+            float32 `[docs, max_choices]`, each choice's summed natural-log probability given the doc's context.
         num_tokens (`torch.Tensor`):
-            Each choice's token count.
+            int64 `[docs, max_choices]`, each choice's token count.
         num_chars (`torch.Tensor`):
-            Each choice's character count, including its leading space.
+            int64 `[docs, max_choices]`, each choice's character count, including its leading space.
         num_bytes (`torch.Tensor`):
-            Each choice's UTF-8 byte count, including its leading space.
+            int64 `[docs, max_choices]`, each choice's UTF-8 byte count, including its leading space.
         valid (`torch.Tensor`):
-            bool, False where a doc has fewer choices than the widest doc.
+            bool `[docs, max_choices]`, False in the padded cells past a doc's last choice.
         gold (`torch.Tensor`):
             int64 `[docs]`, the index of each doc's correct choice.
         logprob_uncond (`torch.Tensor`, *optional*):
-            float32 `[docs, max_choices]`, each choice's summed log-probability after the unconditional context `"Answer:"` instead of the question. Used for pointwise mutual information (PMI).
+            float32 `[docs, max_choices]`, each choice's summed natural-log probability after the task's unconditional context instead of the question. Used for pointwise mutual information (PMI).
     """
 
     logprob: torch.Tensor
@@ -51,9 +53,18 @@ class ChoiceScores:
 
 def bits_per_byte(logprob: torch.Tensor, num_bytes: torch.Tensor) -> torch.Tensor:
     """
-    Negative log-likelihood in bits per UTF-8 byte, counting at least one byte.
+    Converts a summed natural-log probability to bits per UTF-8 byte: its negation, divided by the byte count, in base 2.
 
-    This is the metric of OLMo 3's Base Easy suite (arXiv 2512.13961, sec. 3.3.2). Dividing by bytes instead of tokens makes it independent of the tokenizer.
+    This is the metric of OLMo 3's Base Easy suite (arXiv 2512.13961, sec. 3.3.2). Dividing by bytes instead of tokens makes it independent of the tokenizer. The paper doesn't name the log base. Bits follow the code of the Open Language Model Evaluation Standard (OLMES, arXiv 2406.08446), which multiplies nats per byte by `LOG_2_OF_E` (`oe_eval/metrics/metric.py`).
+
+    Args:
+        logprob (`torch.Tensor`):
+            Summed natural-log probabilities, any shape.
+        num_bytes (`torch.Tensor`):
+            UTF-8 byte counts, the same shape. A count of 0 is treated as 1.
+
+    Returns:
+        `torch.Tensor`: bits per byte, the same shape.
     """
     nats_per_byte = -logprob / num_bytes.clamp(min=1)
 
@@ -62,9 +73,20 @@ def bits_per_byte(logprob: torch.Tensor, num_bytes: torch.Tensor) -> torch.Tenso
 
 def accuracy(score: torch.Tensor, valid: torch.Tensor, gold: torch.Tensor) -> torch.Tensor:
     """
-    1.0 where the highest-scoring valid choice is gold, else 0.0, per doc.
+    Checks, per doc, whether the highest-scoring valid choice is gold.
 
-    Ties go to the first choice, as in OLMES.
+    Ties go to the first choice, as OLMES's `MCAccuracy` does with `list.index(max(...))` (`oe_eval/metrics/metric.py`).
+
+    Args:
+        score (`torch.Tensor`):
+            `[docs, max_choices]`, higher is better.
+        valid (`torch.Tensor`):
+            bool `[docs, max_choices]`, False in padded cells, which are never picked.
+        gold (`torch.Tensor`):
+            int64 `[docs]`, the index of each doc's correct choice.
+
+    Returns:
+        `torch.Tensor`: float32 `[docs]`, 1.0 where the pick is gold, else 0.0.
     """
     predicted = score.masked_fill(~valid, -math.inf).argmax(dim=-1)
 
@@ -73,14 +95,14 @@ def accuracy(score: torch.Tensor, valid: torch.Tensor, gold: torch.Tensor) -> to
 
 def multiple_choice(scores: ChoiceScores) -> dict[str, torch.Tensor]:
     """
-    Per-doc OLMES multiple-choice metrics (Gu et al. 2024, sec. 3.3).
+    Computes OLMES's multiple-choice metrics per doc (OLMES, sec. 3.3).
 
-    Each metric picks the choice with the highest score, and they differ in how a choice is scored. Lengths count the choice's leading space and are at least 1.
+    Each metric picks the choice with the highest score, and they differ in how a choice is scored. Lengths count the choice's leading space (OLMES, sec. 3.5) and are at least 1, as OLMES's code clamps them with `max(..., 1)`.
 
     - `acc_raw`: the summed log-probability.
     - `acc_per_token`: the log-probability divided by the token count.
     - `acc_per_char`: the log-probability divided by the character count.
-    - `acc_per_byte`: the lowest bits per byte.
+    - `acc_per_byte`: the log-probability divided by the byte count, which ranks choices as the lowest bits per byte does.
     - `acc_uncond`: pointwise mutual information (PMI), the log-probability minus the log-probability after the unconditional context. This rewards choices the question makes more likely, not choices that are likely anyway. Only set when `logprob_uncond` is.
 
     `bpb` is the gold choice's bits per byte (see [`bits_per_byte`]), not an accuracy.
@@ -96,6 +118,7 @@ def multiple_choice(scores: ChoiceScores) -> dict[str, torch.Tensor]:
         "acc_raw": accuracy(scores.logprob, scores.valid, scores.gold),
         "acc_per_token": accuracy(per_token, scores.valid, scores.gold),
         "acc_per_char": accuracy(per_char, scores.valid, scores.gold),
+        # Negated: `accuracy` picks the highest score, and lower bits per byte is better.
         "acc_per_byte": accuracy(-bpb, scores.valid, scores.gold),
     }
 
@@ -103,6 +126,8 @@ def multiple_choice(scores: ChoiceScores) -> dict[str, torch.Tensor]:
         pmi = scores.logprob - scores.logprob_uncond
         metrics["acc_uncond"] = accuracy(pmi, scores.valid, scores.gold)
 
+    # Each doc's gold column. Added last so the keys keep `MULTIPLE_CHOICE_METRICS`'s order,
+    # which results.json follows.
     metrics["bpb"] = bpb.gather(-1, scores.gold[:, None]).squeeze(-1)
 
     return metrics

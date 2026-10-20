@@ -31,7 +31,7 @@ def main() -> None:
     "--out",
     type=click.Path(path_type=Path),
     required=True,
-    help="Directory for results.json.",
+    help="New or empty directory for results.json and predictions/.",
 )
 @click.option(
     "--limit",
@@ -72,7 +72,7 @@ def run(
 
 
 def format_results(results: Results) -> str:
-    """One line per task and metric, primary metric first."""
+    """Formats a header with the model and commit, then per task a summary line and one line per metric, primary first."""
     lines = [f"model {results.provenance.model}  flock {results.provenance.flock_commit}"]
 
     for task in results.tasks:
@@ -80,7 +80,10 @@ def format_results(results: Results) -> str:
             f"{task.task}  docs {task.num_docs}  {task.docs_per_second:.1f} docs/s  "
             f"hash {task.task_hash[:12]}"
         )
-        names = [task.primary_metric] + [m for m in task.metrics if m != task.primary_metric]
-        lines += [f"  {name:<14} {task.metrics[name]:.4f}" for name in names]
+        names = [task.primary_metric] + [
+            name for name in task.metrics if name != task.primary_metric
+        ]
+        width = max(len(name) for name in names) + 1
+        lines += [f"  {name:<{width}} {task.metrics[name]:.4f}" for name in names]
 
     return "\n".join(lines)
