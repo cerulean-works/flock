@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { formatX } from '#lib/chart/axes.ts';
-	import { smoothed } from '#lib/chart/series.ts';
+	import { pointAt, smoothed } from '#lib/chart/series.ts';
 	import { formatMetric } from '#lib/utils.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 
@@ -24,6 +24,8 @@
 		color: string;
 		value: number;
 		raw: number;
+		/** Where the line's point is: the cursor's step, unless the line logged none there. */
+		step: number;
 	}
 
 	const readout = $derived.by(() => {
@@ -34,26 +36,18 @@
 		const axis = ws.axisOf(v);
 		const smoothing = v.config.smoothing ?? ws.smoothing;
 		const rows: Row[] = [];
-		// Read out at a logged point: the nearest line's, else the closest of any line's.
-		let step = c.step;
-		let snapped = false;
-		let closest = Infinity;
+		// The plot snapped the cursor to a logged step; each line reads out at its point there
+		// (its nearest, for lines logged at other steps).
 		for (const row of ws.visible) {
 			v.metrics.forEach((metric, k) => {
 				const s = ws.lineSeries(row, metric, axis);
-				if (!s || !s.covers(c.step)) return;
-				const i = s.indexNear(c.step);
-				const x = s.stepAt(i);
-				if (row === c.nearest && (c.line == null || metric === c.line)) {
-					step = x;
-					snapped = true;
-				} else if (!snapped && Math.abs(x - c.step) < closest) {
-					closest = Math.abs(x - c.step);
-					step = x;
-				}
+				if (!s) return;
+				const i = pointAt(s, c.step, c.tol);
+				if (i < 0) return;
 				const value = smoothed(s, smoothing)[i];
 				const color = ws.lineColor(v, row, k);
-				if (!Number.isNaN(value)) rows.push({ row, metric, color, value, raw: s.y[i] });
+				if (!Number.isNaN(value))
+					rows.push({ row, metric, color, value, raw: s.y[i], step: s.stepAt(i) });
 			});
 		}
 		rows.sort((a, b) => b.value - a.value);
@@ -66,7 +60,7 @@
 		const start =
 			at < 0 ? 0 : Math.max(0, Math.min(at - Math.floor(MAX_ROWS / 2), rows.length - MAX_ROWS));
 		return {
-			step,
+			step: c.step,
 			axis,
 			smoothing,
 			total: rows.length,
@@ -141,6 +135,10 @@
 								· {label}</span
 							>{/if}</span
 					>
+				{/if}
+				{#if r.step !== readout.step}
+					<!-- Logged at another step than the crosshair's: say which. -->
+					<span class="ml-auto flex-none text-faint">{formatX(readout.axis, r.step)}</span>
 				{/if}
 			</div>
 		{/each}

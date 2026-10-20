@@ -272,20 +272,35 @@ export function drawBase(s: Surface, series: PlotSeries[], d: Domain, o: BaseOpt
 	ctx.restore();
 }
 
+/** A line's point at the cursor, in data units. */
+export interface Marker {
+	step: number;
+	value: number;
+	color: string;
+	/** On a line drawn over the others: marked larger. */
+	focused: boolean;
+}
+
 export interface OverlayOptions {
-	focus: PlotSeries | null;
-	/** Point on the focused series to mark, in data units. */
-	marker: { step: number; value: number } | null;
+	/** Lines drawn over the others (the focused run's). */
+	focus: readonly PlotSeries[];
+	/** Every line's point at the cursor. */
+	markers: readonly Marker[];
 	crosshair: number | null;
 	/** Drag-to-zoom selection in CSS pixels. */
 	selection: readonly [number, number] | null;
 	zoomed: boolean;
+	/** The base layer is faded behind a focused run: so are the other lines' markers. */
+	dim: boolean;
 	ink: string;
 	paper: string;
 	wash: string;
 }
 
-/** Focus line, crosshair, marker and zoom selection. Cheap; redrawn on every pointer move. */
+/**
+ * Focus lines, crosshair, markers and zoom selection. Cheap (no line but the focused ones is
+ * traced); redrawn as the cursor moves, in this panel or in another on the same x axis.
+ */
 export function drawOverlay(s: Surface, d: Domain, o: OverlayOptions) {
 	const { ctx, w, h } = s;
 	const sx = w / (d.x1 - d.x0);
@@ -299,7 +314,7 @@ export function drawOverlay(s: Surface, d: Domain, o: OverlayOptions) {
 		ctx.globalAlpha = 1;
 	}
 
-	if (o.focus) {
+	if (o.focus.length) {
 		ctx.save();
 		ctx.beginPath();
 		ctx.rect(0, -2, w, h + 4);
@@ -307,10 +322,12 @@ export function drawOverlay(s: Surface, d: Domain, o: OverlayOptions) {
 		ctx.lineJoin = 'round';
 		ctx.lineCap = 'round';
 		ctx.lineWidth = 2.25;
-		ctx.strokeStyle = o.focus.color;
-		ctx.beginPath();
-		trace(s, o.focus.series, o.focus.values, d, o.zoomed);
-		ctx.stroke();
+		for (const line of o.focus) {
+			ctx.strokeStyle = line.color;
+			ctx.beginPath();
+			trace(s, line.series, line.values, d, o.zoomed);
+			ctx.stroke();
+		}
 		ctx.restore();
 	}
 
@@ -330,20 +347,26 @@ export function drawOverlay(s: Surface, d: Domain, o: OverlayOptions) {
 		}
 	}
 
-	if (o.marker && o.focus) {
-		const v = d.log ? Math.log10(o.marker.value) : o.marker.value;
-		if (Number.isFinite(v)) {
-			const x = (o.marker.step - d.x0) * sx;
+	// Focused markers last, so they sit on top.
+	for (const pass of [false, true]) {
+		for (const m of o.markers) {
+			if (m.focused !== pass) continue;
+			const v = d.log ? Math.log10(m.value) : m.value;
+			if (!Number.isFinite(v)) continue;
+			const x = (m.step - d.x0) * sx;
 			const y = h - (v - d.y0) * sy;
+			if (x < -4 || x > w + 4 || y < -4 || y > h + 4) continue;
+			ctx.globalAlpha = !pass && o.dim ? 0.35 : 1;
 			ctx.beginPath();
-			ctx.arc(x, y, 4, 0, Math.PI * 2);
-			ctx.fillStyle = o.focus.color;
+			ctx.arc(x, y, pass ? 4 : 3, 0, Math.PI * 2);
+			ctx.fillStyle = m.color;
 			ctx.fill();
-			ctx.lineWidth = 2;
+			ctx.lineWidth = pass ? 2 : 1.5;
 			ctx.strokeStyle = o.paper;
 			ctx.stroke();
 		}
 	}
+	ctx.globalAlpha = 1;
 }
 
 /** Data-space position of a CSS-pixel coordinate inside the plot. */

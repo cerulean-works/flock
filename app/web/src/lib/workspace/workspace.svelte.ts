@@ -82,10 +82,13 @@ export type Surface = 'grid' | 'fullscreen' | 'editor';
 
 export interface Cursor {
 	/**
-	 * x under the pointer, in the units of `axis`. Shared so every panel on the same x axis
-	 * draws the same crosshair.
+	 * x under the pointer, in the units of `axis`, snapped to the nearest step a line of the
+	 * panel logged. Shared so every panel on the same x axis draws the same crosshair and marks
+	 * its own points there.
 	 */
 	step: number;
+	/** How far from `step` (in its units) a point reads out: a few pixels of that panel. */
+	tol: number;
 	/** `XAxis.id` of the panel the pointer is in. */
 	axis: string;
 	/** Panel the pointer is in. */

@@ -82,6 +82,21 @@ def test_snapshot_filters_runs(api):
     assert api.get("/api/v1/projects/flock/p/workspace", filter="{").status == 400
 
 
+def test_snapshot_lists_only_the_metrics_of_its_runs(api):
+    # Old runs logged metrics newer ones don't: their pages would chart them empty.
+    api.create_run("p", "old", config={"kind": "old"})
+    api.stream("p", "old", history_rows(3, loss=float, **{"lr/group0": float, "perf/mfu": float}))
+    api.stream("p", "old", complete=0)
+    api.create_run("p", "new", config={"kind": "new"})
+    api.stream("p", "new", history_rows(3, loss=float, **{"eval/acc": float}))
+    api.stream("p", "new", complete=0)
+    assert api.workspace()["metrics"] == ["eval/acc", "loss", "lr/group0", "perf/mfu"]
+    assert api.workspace(limit=1)["metrics"] == ["eval/acc", "loss"]  # "new" only
+    assert api.workspace(offset=1, limit=1)["metrics"] == ["loss", "lr/group0", "perf/mfu"]
+    assert api.workspace(filter='{"config.kind": "new"}')["metrics"] == ["eval/acc", "loss"]
+    assert api.workspace(filter='{"config.kind": "none"}')["metrics"] == []
+
+
 def test_snapshot_point_budget(api, monkeypatch):
     monkeypatch.setattr(Snapshot, "POINT_BUDGET", 200)
     api.create_run("p", "r")

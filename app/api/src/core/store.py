@@ -6,7 +6,7 @@ import secrets
 import shutil
 import string
 import time
-from collections import Counter, OrderedDict
+from collections import OrderedDict
 from collections.abc import AsyncGenerator, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -106,7 +106,7 @@ class Run:
     summary_flat: dict[str, Any] | None = None
     # What ``wandb.define_metric`` set for plotting: step metrics and hidden metrics.
     metric_defs: list[dict[str, Any]] = field(default_factory=list)
-    # Plottable metrics this run logged, per stream (its share of the project's key counts).
+    # Plottable metrics this run logged, per stream (dashboards chart those of a page's runs).
     keys: dict[str, set[str]] = field(default_factory=lambda: {"history": set(), "system": set()})
     # Set once the run's delete commits: code still holding the run must not write to it.
     deleted: bool = False
@@ -114,6 +114,11 @@ class Run:
     @property
     def active(self) -> bool:
         return self.state in self.ACTIVE_STATES
+
+    def note_metrics(self, keys: Iterable[str], stream: str = "history") -> None:
+        """Record metrics the run logged to a series stream."""
+        # Skip wandb bookkeeping (_step, _runtime, _wandb, ...), which every row carries.
+        self.keys[stream].update(key for key in keys if not key.startswith("_"))
 
     @property
     def entity(self) -> str:
@@ -234,8 +239,6 @@ class Project:
         self.by_name: dict[str, Run] = {}
         self.table = ColumnTable()
         self.active: dict[str, Run] = {}
-        # How many runs logged each plottable metric, per stream (dashboards chart these).
-        self.metric_counts: dict[str, Counter[str]] = {"history": Counter(), "system": Counter()}
         # Held to create runs, move runs in or out, delete runs, and rename or delete the project.
         self.lock = asyncio.Lock()
         self.deleted = False
@@ -247,27 +250,6 @@ class Project:
     @property
     def key(self) -> tuple[str, str]:
         return (self.entity, self.name)
-
-    def metric_keys(self, stream: str = "history") -> list[str]:
-        return sorted(self.metric_counts[stream])
-
-    def note_metrics(self, run: Run, keys: Iterable[str], stream: str = "history") -> None:
-        known = run.keys[stream]
-        counts = self.metric_counts[stream]
-        for key in keys:
-            # Skip wandb bookkeeping (_step, _runtime, _wandb, ...), which every row carries.
-            if key not in known and not key.startswith("_"):
-                known.add(key)
-                counts[key] += 1
-
-    def count_metrics(self, run: Run, sign: int) -> None:
-        """Add (``sign=1``) or remove (``-1``) a run's metrics from the project's key counts."""
-        for stream, keys in run.keys.items():
-            counts = self.metric_counts[stream]
-            for key in keys:
-                counts[key] += sign
-                if counts[key] <= 0:
-                    del counts[key]
 
     def add(self, run: Run) -> None:
         self.runs.append(run)
@@ -481,7 +463,7 @@ class Store:
         ):
             run = self.runs_by_pk[pk]
             run.compacted_keys[stream] = list(keys)
-            run.project.note_metrics(run, keys, stream)
+            run.note_metrics(keys, stream)
         # Active runs are always kept in memory. Streams that stopped before being compacted
         # (a crash, or system metrics logged before migration 0002) are rebuilt so their metric
         # keys are known, one run at a time so memory stays bounded while they compact.
@@ -489,7 +471,7 @@ class Store:
             for run in list(self.runs_by_pk.values()):
                 if run.active or run.compacted[stream] < run.lines(stream):
                     (hist,) = await self.histories([run], (), stream)
-                    run.project.note_metrics(run, hist.series, stream)
+                    run.note_metrics(hist.series, stream)
                     await self.flush()
 
         # Files of runs whose delete committed but whose files were not removed (a crash).
@@ -1035,7 +1017,7 @@ class Store:
                 if self._history.get((pk, stream)) is not series:  # evicted while we wrote
                     self._cache_history((pk, stream), series)
                 series.append_rows(new_from, self._parse_rows(lines))
-                project.note_metrics(run, series.series, stream)
+                run.note_metrics(series.series, stream)
             previous_state = run.state
             run.history_line_count = history_count
             run.events_line_count = events_count
@@ -1471,7 +1453,7 @@ class Store:
                 values.update(self._summary_columns(data.summary))
             project.table.set_many(run.row, values)
             for stream, hist in series.items():
-                project.note_metrics(run, hist.series, stream)
+                run.note_metrics(hist.series, stream)
             # Imported runs are older than most: keep the rows in creation order.
             self._reindex(project, sorted(project.runs, key=lambda r: (r.created_at, r.pk)))
         self.live.broadcast(
@@ -1706,12 +1688,10 @@ class Store:
             self._reindex(source, [run for run in source.runs if run not in moving])
             for run, row in zip(runs, new_rows, strict=True):
                 del source.by_name[run.name]
-                source.count_metrics(run, -1)
                 run.project = target
                 run.row = row
                 self.budgets.moved(run)
                 target.add(run)
-                target.count_metrics(run, 1)
             # Keep the target's rows in creation order, so moved runs don't look like new ones.
             self._reindex(target, sorted(target.runs, key=lambda r: (r.created_at, r.pk)))
             names = [run.name for run in runs]
@@ -1756,7 +1736,6 @@ class Store:
         project = run.project
         project.by_name.pop(run.name, None)
         project.active.pop(run.name, None)
-        project.count_metrics(run, -1)
         self.active.pop(run.pk, None)
         self.runs_by_pk.pop(run.pk, None)
         self._locks.pop(run.pk, None)

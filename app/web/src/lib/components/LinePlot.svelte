@@ -6,11 +6,12 @@
 		prepare,
 		stepFromX,
 		yToPx,
+		type Marker,
 		type PlotSeries
 	} from '#lib/chart/engine.ts';
 	import { formatXTick } from '#lib/chart/axes.ts';
 	import { cancel, schedule } from '#lib/chart/scheduler.ts';
-	import { smoothed } from '#lib/chart/series.ts';
+	import { pointAt, SNAP_PX, smoothed, snapStep } from '#lib/chart/series.ts';
 	import { formatTick, sameItems } from '#lib/utils.ts';
 	import {
 		getWorkspace,
@@ -214,6 +215,9 @@
 	const cursor = $derived(ws.cursor && ws.cursor.axis === axis.id ? ws.cursor : null);
 	const here = $derived(cursor?.panel === panel && cursor.surface === surface);
 
+	/** How far from the cursor (in x units) a point reads out: a few pixels of this plot. */
+	const tol = $derived(w ? (SNAP_PX * (domain.x1 - domain.x0)) / w : 0);
+
 	/**
 	 * Lines drawn over the others: the focused run's, or only the line under the pointer when
 	 * it is in this plot (one run's eight GPUs are told apart that way).
@@ -229,35 +233,56 @@
 		return mine;
 	});
 
-	const markers = $derived(
-		focused.map((line) => {
-			if (!cursor || !line.series.covers(cursor.step)) return null;
-			const i = line.series.indexNear(cursor.step);
-			return { step: line.series.stepAt(i), value: line.values[i] };
-		})
-	);
+	/**
+	 * Every line's point at the cursor, wherever it is: in this plot, or in another on the same
+	 * x axis. A lookup per line, so following the cursor never retraces the lines.
+	 */
+	const markers = $derived.by((): Marker[] => {
+		if (!cursor) return [];
+		const out: Marker[] = [];
+		for (const line of series) {
+			const i = pointAt(line.series, cursor.step, tol);
+			if (i < 0 || Number.isNaN(line.values[i])) continue;
+			out.push({
+				step: line.series.stepAt(i),
+				value: line.values[i],
+				color: line.color,
+				focused: focused.includes(line)
+			});
+		}
+		return out;
+	});
 
+	const overlayKey = {};
 	$effect(() => {
 		const ready = overlay && w && h && active && onScreen;
 		if (!ready) return;
-		const surf = prepare(overlay!, w, h, dpr);
-		if (!surf) return;
-		const crosshair = cursor ? (markers.find((m) => m)?.step ?? cursor.step) : null;
-		const selection: [number, number] | null =
-			dragFrom != null && dragTo != null ? [dragFrom, dragTo] : null;
-		const lines = focused.length ? focused : [null];
-		// One pass per focused line; the crosshair and selection are drawn once, by the first.
-		lines.forEach((focus, i) =>
-			drawOverlay(surf, domain, {
-				focus,
-				marker: markers[i] ?? null,
-				crosshair: i ? null : crosshair,
-				selection: i ? null : selection,
-				zoomed: !!xRange,
-				...palette
-			})
+		const canvas = overlay!;
+		const [cw, ch, cdpr] = [w, h, dpr];
+		const d = domain;
+		const opts = {
+			focus: focused,
+			markers,
+			crosshair: cursor?.step ?? null,
+			selection:
+				dragFrom != null && dragTo != null ? ([dragFrom, dragTo] as [number, number]) : null,
+			zoomed: !!xRange,
+			dim: ws.focus != null,
+			...palette
+		};
+		// In the next frame, as one draw however many moves came before it: hovering one plot
+		// redraws every plot on its x axis.
+		schedule(
+			overlayKey,
+			() => {
+				const surf = prepare(canvas, cw, ch, cdpr);
+				if (surf) drawOverlay(surf, d, opts);
+			},
+			'urgent'
 		);
 	});
+
+	$effect(() => () => cancel(overlayKey));
 
 	function local(e: PointerEvent | MouseEvent) {
 		const rect = area!.getBoundingClientRect();
@@ -267,12 +292,14 @@
 		};
 	}
 
+	/** The line nearest the pointer, within a few dozen pixels of it, with a point at `step`. */
 	function nearestLine(step: number, y: number): Line | null {
 		let best: Line | null = null;
 		let bestDist = surface === 'grid' ? 40 : 60;
 		for (const s of series) {
-			if (!s.series.covers(step)) continue;
-			const v = s.values[s.series.indexNear(step)];
+			const i = pointAt(s.series, step, tol);
+			if (i < 0) continue;
+			const v = s.values[i];
 			if (Number.isNaN(v)) continue;
 			const dist = Math.abs(yToPx(domain, h, v) - y);
 			if (dist < bestDist) {
@@ -288,11 +315,19 @@
 		if (!area || !w || ws.dragging) return;
 		const { x, y } = local(e);
 		if (dragFrom != null) dragTo = x;
-		const step = stepFromX(domain, w, x);
+		// Read out where a line logged a point, as W&B does: sparse lines (an eval every few
+		// hundred steps, a metric logged once) have no point under most of the plot.
+		const raw = stepFromX(domain, w, x);
+		const snapped = snapStep(
+			series.map((s) => s.series),
+			raw
+		);
+		const step = snapped >= domain.x0 && snapped <= domain.x1 ? snapped : raw;
 		const line = nearestLine(step, y);
 		const nearest = line?.row ?? null;
 		ws.cursor = {
 			step,
+			tol,
 			axis: axis.id,
 			panel,
 			view,

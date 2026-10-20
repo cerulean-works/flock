@@ -69,15 +69,6 @@ export class Series {
 		return this.n ? this.stepAt(this.n - 1) : 0;
 	}
 
-	/** Whether `step` falls within the logged range (give or take one sampling interval). */
-	covers(step: number): boolean {
-		if (!this.n) return false;
-		const first = this.firstStep;
-		const last = this.lastStep;
-		const gap = this.n > 1 ? (last - first) / (this.n - 1) : 0;
-		return step >= first - gap && step <= last + gap;
-	}
-
 	/** Index of the point nearest to `step`, clamped to the series. */
 	indexNear(step: number): number {
 		const n = this.n;
@@ -164,6 +155,40 @@ export class Series {
 			if (v > this.max) this.max = v;
 		}
 	}
+}
+
+/** Pixels from the cursor within which a point past a line's ends (or a lone one) reads out. */
+export const SNAP_PX = 8;
+
+/**
+ * Index of the point of `s` that reads out at `step`, or -1 for none: its nearest point, while
+ * `step` is within the line's span or within `tol` (in steps) of that point. A line logged once,
+ * or past its ends, reads out near its points rather than only at their exact steps.
+ */
+export function pointAt(s: Series, step: number, tol: number): number {
+	if (!s.n) return -1;
+	const i = s.indexNear(step);
+	if (Math.abs(s.stepAt(i) - step) <= tol) return i;
+	return step >= s.firstStep && step <= s.lastStep ? i : -1;
+}
+
+/**
+ * The logged step nearest to `step` among the points of `lines`, for a cursor to snap to: a
+ * readout is then of points actually logged there. `step` itself when they have none.
+ */
+export function snapStep(lines: Iterable<Series>, step: number): number {
+	let best = step;
+	let dist = Infinity;
+	for (const s of lines) {
+		if (!s.n) continue;
+		const x = s.stepAt(s.indexNear(step));
+		const d = Math.abs(x - step);
+		if (d < dist) {
+			dist = d;
+			best = x;
+		}
+	}
+	return best;
 }
 
 /**
