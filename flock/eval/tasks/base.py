@@ -66,7 +66,7 @@ class MCRequests:
     """
     A multiple-choice task's requests for a list of docs, and how their scores map back.
 
-    `requests` holds each doc's choices in doc order, followed by the same choices after the unconditional context when `has_uncond` is set, for PMI.
+    `requests` holds each doc's choices in doc order, followed by the same choices after the unconditional context when `has_uncond` is set, for pointwise mutual information (PMI).
     """
 
     docs: list[MCDoc]
@@ -140,7 +140,7 @@ class MultipleChoiceTask:
         answer_prefix (`str`, *optional*, defaults to `"Answer:"`):
             Written on the line after each question.
         unconditional_context (`str`, *optional*, defaults to `"Answer:"`):
-            The context for PMI's unconditional scores. PMI is skipped if `None`.
+            The context for the unconditional scores of pointwise mutual information (PMI). PMI is skipped if `None`.
 
     Raises:
         `ValueError`: if `primary_metric` isn't a metric the task reports.

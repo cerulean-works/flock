@@ -185,6 +185,9 @@ class ScoringModel:
         # Few-shot contexts repeat once per choice, so each is tokenized alone only once.
         contexts = sorted({context for context, _ in pairs if context})
         context_ids = dict(zip(contexts, self._tokenize(contexts), strict=True))
+
+        # Not padding: an empty context still needs one real token for the continuation's first
+        # token to be predicted from. lm-evaluation-harness's `prefix_token_id` uses BOS, else EOS.
         prefix = self.tokenizer.bos_token_id
         if prefix is None:
             prefix = self.tokenizer.eos_token_id
@@ -192,6 +195,7 @@ class ScoringModel:
             raise ValueError(
                 "an empty context needs a BOS or EOS token, and the tokenizer has neither"
             )
+
         encoded = []
         for (context, _), ids in zip(pairs, self._tokenize([c + t for c, t in pairs]), strict=True):
             if not context:
@@ -226,7 +230,10 @@ class ScoringModel:
         # computes logits for only the last `keep` positions: full-vocabulary logits for the
         # few-shot context would dominate memory.
         keep = max(len(continuation) for _, continuation in encoded)
-        pad = 0  # Masked out and never scored; 0 is always a valid embedding row.
+        # The pad id never matters: padding is masked out of attention and never scored. 0 is used
+        # instead of `tokenizer.pad_token_id` because that can be None, or added after the
+        # embedding matrix was sized.
+        pad = 0
         inputs, mask, positions, targets, scored = [], [], [], [], []
         for window, (_, continuation) in zip(windows, encoded, strict=True):
             length = len(window) - 1
@@ -247,6 +254,7 @@ class ScoringModel:
             use_cache=False,
             logits_to_keep=keep,
         ).logits
+
         if logits.shape[1] != keep:
             raise ValueError(f"{self.name} ignored logits_to_keep: got {logits.shape[1]} positions")
         # With weights on several devices, the logits come out on the last one.
