@@ -312,17 +312,31 @@ export function formatXTick(axis: XAxis, t: number, step: number): string {
 	}
 }
 
-/** Where the crosshair is, for the cursor panel: `Step 1,200`, `Runtime 3m 05s`... */
+/** Where the crosshair is, for chart tooltips: `Step 1,200`, `Runtime 3m 05s`... */
 export function formatX(axis: XAxis, v: number): string {
 	switch (axis.kind) {
 		case 'step':
-			return `Step ${formatStep(v)}`;
+			return `Step ${formatXValue(axis, v)}`;
+		case 'duration':
+			return `${axis.relative ? 'Wall time' : 'Runtime'} ${formatXValue(axis, v)}`;
+		case 'time':
+			return formatXValue(axis, v);
+		default:
+			return `${axis.label} ${formatXValue(axis, v)}`;
+	}
+}
+
+/** An x value without the axis' name (`1,200`, `3m 05s`), for a tooltip row under `formatX`. */
+export function formatXValue(axis: XAxis, v: number): string {
+	switch (axis.kind) {
+		case 'step':
+			return formatStep(v);
 		case 'duration':
 			// Short runs read to the hundredth of a second.
-			return `${axis.relative ? 'Wall time' : 'Runtime'} ${Math.abs(v) < 10 ? `${+v.toFixed(2)}s` : duration(v)}`;
+			return Math.abs(v) < 10 ? `${+v.toFixed(2)}s` : duration(v);
 		case 'time':
 			return formatWallTime(v);
 		default:
-			return `${axis.label} ${formatNumber(v)}`;
+			return formatNumber(v);
 	}
 }

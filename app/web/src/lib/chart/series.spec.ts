@@ -120,3 +120,25 @@ describe('ema', () => {
 		expect(out[2]).toBeCloseTo(2, 5);
 	});
 });
+
+describe('non-finite values', () => {
+	it('are left out of the extent, so one inf does not swallow the domain', () => {
+		const s = new Series(Float32Array.from([30, Infinity, 20, NaN, -Infinity, 25]), null);
+		expect([s.min, s.max]).toEqual([20, 30]);
+		s.append([6, 7], [Infinity, 10]);
+		expect([s.min, s.max]).toEqual([10, 30]);
+	});
+
+	it('leave an empty extent when no value is finite', () => {
+		const s = new Series(Float32Array.from([Infinity, NaN]), null);
+		expect([s.min, s.max]).toEqual([Infinity, -Infinity]);
+	});
+
+	it('are gaps in the smoothed line and do not feed the average', () => {
+		const out = ema(new Float32Array([2, Infinity, 2, -Infinity, 2]), 0.5);
+		expect(Number.isNaN(out[1])).toBe(true);
+		expect(Number.isNaN(out[3])).toBe(true);
+		expect(out[2]).toBeCloseTo(2, 5);
+		expect(out[4]).toBeCloseTo(2, 5);
+	});
+});

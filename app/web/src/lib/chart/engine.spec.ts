@@ -127,3 +127,44 @@ describe('computeDomain yRange', () => {
 		expect(d2.y0).toBeGreaterThan(auto.y0 - 0.2);
 	});
 });
+
+describe('computeDomain with non-finite values', () => {
+	// eval/ppl = exp(eval/loss): a loss spike to ~500 overflows float32 (the snapshot's y type).
+	const ppl = plot([0, 100, 200, 300, 400], [40, Infinity, 32, NaN, 28]);
+	const healthy = plot([0, 100, 200, 300, 400], [45, 38, 33, 30, 29]);
+
+	it('fits the finite values rather than falling back to 0..1', () => {
+		for (const o of [opts(), opts({ ignoreOutliers: true })]) {
+			const d = computeDomain([ppl, healthy], o);
+			expect(d.y0).toBeGreaterThan(20);
+			expect(d.y0).toBeLessThan(29);
+			expect(d.y1).toBeGreaterThan(44);
+			expect(d.y1).toBeLessThan(60);
+		}
+		// Zoomed past step 0: up to where `healthy` crosses the left edge (41.5 at step 50).
+		const d = computeDomain([ppl, healthy], opts({ zoom: [50, 450] }));
+		expect(d.y0).toBeLessThan(28);
+		expect(d.y0).toBeGreaterThan(20);
+		expect(d.y1).toBeGreaterThan(41.5);
+		expect(d.y1).toBeLessThan(50);
+	});
+
+	it('fits the finite values on a log axis', () => {
+		const d = computeDomain([ppl], opts({ log: true }));
+		expect(d.y0).toBeLessThan(Math.log10(28));
+		expect(d.y1).toBeGreaterThan(Math.log10(40));
+		expect(d.y1).toBeLessThan(2);
+	});
+
+	it('fits the smoothed line, which skips the inf too', () => {
+		const p = plot(Array.from(ppl.series.x), Array.from(ppl.series.y), 0.6);
+		const d = computeDomain([p], opts());
+		expect(d.y1).toBeLessThan(60);
+		expect(d.y0).toBeGreaterThan(20);
+	});
+
+	it('falls back to the empty plot domain only when nothing is finite', () => {
+		const d = computeDomain([plot([0, 1], [Infinity, NaN])], opts());
+		expect(d).toEqual(computeDomain([], opts({ zoom: [d.x0, d.x1] })));
+	});
+});

@@ -14,6 +14,7 @@ export class Series {
 	private readonly x0: number;
 	private readonly dx: number;
 	private readonly raw: number;
+	/** Extent of the finite values: an overflowed (±inf) or missing (NaN) point is a gap. */
 	min = Infinity;
 	max = -Infinity;
 	/** Bumped on every change; caches derived from the series (smoothing) check it. */
@@ -151,6 +152,8 @@ export class Series {
 		const ys = this.ys;
 		for (let i = from; i < this.n; i++) {
 			const v = ys[i];
+			// One inf (a perplexity past float32's range) would leave no finite domain to draw in.
+			if (!Number.isFinite(v)) continue;
 			if (v < this.min) this.min = v;
 			if (v > this.max) this.max = v;
 		}
@@ -193,7 +196,8 @@ export function snapStep(lines: Iterable<Series>, step: number): number {
 
 /**
  * Debiased exponential moving average, the same smoothing W&B applies by default.
- * `weight` 0 returns the input unchanged.
+ * `weight` 0 returns the input unchanged. Non-finite points stay gaps and don't feed the average,
+ * so one inf doesn't turn the rest of the smoothed line into inf.
  */
 export function ema(src: Float32Array, weight: number): Float32Array {
 	if (weight <= 0) return src;
@@ -202,7 +206,7 @@ export function ema(src: Float32Array, weight: number): Float32Array {
 	let norm = 0;
 	for (let i = 0; i < src.length; i++) {
 		const v = src[i];
-		if (Number.isNaN(v)) {
+		if (!Number.isFinite(v)) {
 			out[i] = NaN;
 			continue;
 		}

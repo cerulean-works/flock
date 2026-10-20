@@ -145,8 +145,9 @@ pnpm dlx shadcn-svelte@latest add <component>   # aliases already point at #lib
   screen as they arrive, summary
   columns and run states update in the table, the header counts running runs, and runs created
   after the page loaded are offered as a refresh ("2 new runs · Show").
-- **Cursor panel**: every plotted run's value at the crosshair step, sorted, windowed around the
-  focused run, with raw values shown next to smoothed ones.
+- **Chart tooltips**: hovering one chart shows a tooltip in every chart on the same x axis, with
+  each run's value at the crosshair step, sorted, windowed around the focused run, with raw values
+  shown next to smoothed ones.
 - **Full screen**: per panel, deep-linkable (`?panel=train%2Floss`), server-rendered on reload,
   ←/→ to move between panels, Esc or back to close, full run legend.
 - **Settings**: smoothing (debiased EMA), show original under smoothing, ignore outliers, panels per

@@ -11,7 +11,6 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import ChartsPane from '#lib/components/ChartsPane.svelte';
-	import CursorPanel from '#lib/components/CursorPanel.svelte';
 	import DeleteRunsDialog from '#lib/components/DeleteRunsDialog.svelte';
 	import EditRunDialog from '#lib/components/EditRunDialog.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
@@ -314,7 +313,6 @@
 {/if}
 
 <PanelEditor />
-<CursorPanel />
 <EditRunDialog
 	gpu={{ type: data.run.gpu_type, count: data.run.gpu_count, detected: data.run.gpu_detected }}
 />
