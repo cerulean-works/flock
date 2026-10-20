@@ -163,6 +163,15 @@ def test_long_inputs_truncate_from_the_left(lm, tokenizer):
     )
 
 
+def test_truncation_is_logged(lm, tokenizer, caplog):
+    scorer = ScoringModel(lm, tokenizer, name="tiny@0", max_length=8)
+    requests = [Request("The quick brown fox jumps over the lazy dog.", " fox"), Request("A", " b")]
+
+    scorer.loglikelihood(requests)
+
+    assert "1 of 2 requests exceed 8 tokens" in caplog.text
+
+
 def test_continuation_longer_than_max_length_raises(lm, tokenizer):
     scorer = ScoringModel(lm, tokenizer, name="tiny@0", max_length=2)
     with pytest.raises(ValueError, match="longer than 2 tokens"):

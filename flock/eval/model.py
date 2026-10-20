@@ -1,5 +1,6 @@
 """Batched loglikelihood scoring with a causal language model, kept on the model's device."""
 
+import logging
 import re
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
@@ -17,6 +18,8 @@ from flock.eval.requests import Request, Scores
 
 DEFAULT_BATCH_TOKENS = 32768
 COMMIT_HASH = re.compile(r"[0-9a-f]{40}")
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +163,18 @@ class ScoringModel:
                 raise ValueError(f"continuation has no tokens: {request}")
             if len(continuation) > self.max_length:
                 raise ValueError(f"continuation longer than {self.max_length} tokens: {request}")
+        # Too-long inputs keep their whole continuation and lose context from the left, as in
+        # lm-evaluation-harness. That changes what is scored, so say how often it happens.
+        truncated = sum(len(c) + len(t) > self.max_length + 1 for c, t in encoded)
+        if truncated:
+            logger.warning(
+                "%s: %d of %d requests exceed %d tokens; their contexts are left-truncated",
+                self.name,
+                truncated,
+                len(encoded),
+                self.max_length,
+            )
+
         lengths = [min(len(c) + len(t), self.max_length + 1) - 1 for c, t in encoded]
         order = sorted(range(len(encoded)), key=lambda i: -lengths[i])
 
