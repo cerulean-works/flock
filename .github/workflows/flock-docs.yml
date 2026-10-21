@@ -27,7 +27,7 @@ jobs:
       project: flock
       # The build checks the repository out into a folder named after it.
       path_to_docs: flock/app/api/docs/source
-      not_python_module: true
+      python_version: "3.14"
 
   publish:
     needs: build

@@ -1,7 +1,7 @@
 # Flock's documentation, published as the `flock` project. Preview it from the
 # repository root with:
 #
-#   doc-builder preview flock app/api/docs/source --not_python_module
+#   doc-builder preview flock app/api/docs/source
 #
 guide:
   - title: Get started
