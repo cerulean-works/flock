@@ -186,7 +186,7 @@ class ScoringModel:
         """
         encoded = self._encode(requests)
         self._check_continuations(requests, encoded)
-        tokens_cut = [max(0, _window_length(pair) - (self.max_length + 1)) for pair in encoded]
+        tokens_cut = [_tokens_cut(pair, self.max_length) for pair in encoded]
         self._warn_truncated(tokens_cut)
 
         input_lengths = [_input_length(pair, self.max_length) for pair in encoded]
@@ -445,6 +445,11 @@ def _input_length(encoded: _Encoded, max_length: int) -> int:
     # A window holds at most `max_length + 1` tokens: the model's input, then one last token that
     # is only ever a target.
     return min(_window_length(encoded), max_length + 1) - 1
+
+
+def _tokens_cut(encoded: _Encoded, max_length: int) -> int:
+    """The number of context tokens one request loses to left truncation, 0 if it fits."""
+    return _window_length(encoded) - 1 - _input_length(encoded, max_length)
 
 
 def _move_whitespace(request: Request) -> tuple[str, str]:

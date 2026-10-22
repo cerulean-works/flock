@@ -94,7 +94,7 @@ def test_encode_empty_context_uses_eos_without_bos(scorer, tokenizer):
 
 
 def test_empty_context_scores_after_eos_without_bos(scorer, tokenizer):
-    # Qwen's tokenizers, like OLMo 2's and this one, have no BOS token.
+    # Qwen's tokenizers, like this one, have no BOS token (Qwen3's `bos_token` is null).
     assert tokenizer.bos_token_id is None
     ids = [tokenizer.eos_token_id, *tokenizer.encode(" fox", add_special_tokens=False)]
     with torch.no_grad():

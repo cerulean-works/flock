@@ -146,11 +146,16 @@ def test_truncation_is_zero_when_nothing_is_cut():
 
 def test_truncation_counts_requests_and_their_docs():
     built = TASK.requests(*TASK.load())
-    # Doc 1's first choice (request 3) and its unconditional twin (7 + 5) are cut, and nothing
-    # in doc 0: two requests, one doc.
+    # Doc 1's first choice (request 3) and doc 0's first unconditional request (7 + 0) are cut:
+    # two requests in two docs. Mapping the unconditional half to the wrong docs would give 1.
     cut = [0] * len(built.requests)
-    cut[3], cut[7 + 5] = 5, 2
+    cut[3], cut[7 + 0] = 5, 2
+    assert built.truncation(uniform_scores(len(cut), cut)) == Truncation(
+        requests=2, docs=2, max_tokens_cut=5
+    )
 
+    # A request and its own unconditional twin (7 + 3) are one doc.
+    cut[7 + 0], cut[7 + 3] = 0, 2
     assert built.truncation(uniform_scores(len(cut), cut)) == Truncation(
         requests=2, docs=1, max_tokens_cut=5
     )
