@@ -83,8 +83,8 @@ once per task, so this stays within D3.
 
 ### D15. Tokenizers without a BOS token
 
-`_prefix_token` already falls back to EOS (D2). The test tokenizer has no BOS, as OLMo 2's
-and Qwen's tokenizers do, and a new test scores an empty-context request end to end against an
+`_prefix_token` already falls back to EOS (D2). The test tokenizer has no BOS, as Qwen3's
+tokenizer has none (its `bos_token` is null; OLMo 2's is `<|endoftext|>`), and a new test scores an empty-context request end to end against an
 unbatched forward pass that starts from EOS. No code changes.
 
 ---
@@ -105,7 +105,8 @@ unbatched forward pass that starts from EOS. No code changes.
 ## 4. How it was actually built
 
 - **Lock.** On the tiny model and ARC-Easy's request strings, every score and both task hashes
-  match the previous stage bit for bit. `results.json` differs only by the `truncation` object and
+  match `4333ba4` (the merge of 001) bit for bit: the scorer's outputs and hashes were saved
+  from both trees with the same script and compared for exact equality. `results.json` differs only by the `truncation` object and
   `schema_version: 3`, and the predictions files are identical.
 - **Why `Scores` stays on the device.** `tokens_cut` is host data, and reducing it on the host
   would skip one tiny copy. It travels on the device anyway, like `num_tokens`, so `Scores` keeps

@@ -201,7 +201,7 @@ scored in shuffled chunks, each sorted by length on its own.
 ## 4. Tests
 
 `tests/eval/` builds a 2-layer, 32-wide Llama and a 300-token byte-level BPE tokenizer (no
-BOS, like OLMo 2) in the test. Nothing is downloaded: dataset rows come from a fixture.
+BOS, like Qwen's) in the test. Nothing is downloaded: dataset rows come from a fixture.
 - **Scoring** matches an unbatched, unpadded forward pass per request, including Traditional
   Chinese strings and an empty context.
 - **Batch-size and padding invariance:** budgets from 1 token (one request per batch) to
