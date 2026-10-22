@@ -80,14 +80,17 @@ def test_score_task_does_not_depend_on_batching(scorer):
 
 def test_score_task_records_truncation(lm, tokenizer):
     scorer = ScoringModel(lm, tokenizer, name="tiny@0", max_length=16)
-    requests = TASK.requests(*TASK.load()).requests
-    cuts = [max(0, sum(map(len, scorer.encode(r))) - 17) for r in requests]
-    # The few-shot contexts are cut, the short unconditional ones aren't.
-    assert all(cuts[:7]) and not any(cuts[7:])
+    built = TASK.requests(*TASK.load())
+    conditional = sum(len(doc.choices) for doc in built.docs)
+    # A window holds `max_length + 1` tokens: the model's input, then the last target.
+    window = scorer.max_length + 1
+    cuts = [max(0, sum(map(len, scorer.encode(r))) - window) for r in built.requests]
+    # The few-shot contexts are cut, the short unconditional ones that follow them aren't.
+    assert all(cuts[:conditional]) and not any(cuts[conditional:])
 
     truncation = score_task(scorer, TASK).truncation
 
-    assert (truncation.requests, truncation.docs) == (7, 2)
+    assert (truncation.requests, truncation.docs) == (conditional, len(built.docs))
     assert truncation.max_tokens_cut == max(cuts)
 
 

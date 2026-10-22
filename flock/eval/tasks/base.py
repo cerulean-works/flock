@@ -161,15 +161,20 @@ class MCRequests:
         Raises:
             `ValueError`: if there are no docs, or not one request per choice (two with `has_uncond`).
         """
-        self._check_layout()
+        num_choices = self._check_layout()
         tokens_cut = scores.tokens_cut
         device = tokens_cut.device
 
-        # Each request's doc, in request order: every doc's choices, then again for PMI.
-        doc_index = [i for i, doc in enumerate(self.docs) for _ in doc.choices]
+        # Each conditional request's doc, read off the same layout `choice_scores` uses.
+        choice_index = self._choice_index()
+        valid = choice_index >= 0
+        docs_of_cells = torch.arange(len(self.docs))[:, None].expand_as(choice_index)
+        doc_index = torch.empty(num_choices, dtype=torch.int64)
+        doc_index[choice_index[valid]] = docs_of_cells[valid]
         if self.has_uncond:
-            doc_index *= 2
-        index = torch.tensor(doc_index).to(device, non_blocking=True)
+            # The unconditional requests follow all conditional ones, in the same order.
+            doc_index = doc_index.repeat(2)
+        index = doc_index.to(device, non_blocking=True)
 
         truncated = tokens_cut > 0
         per_doc = torch.zeros(len(self.docs), dtype=torch.int64, device=device)

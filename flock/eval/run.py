@@ -144,6 +144,7 @@ def score_task(
     seconds = time.perf_counter() - start
     # `means` follows the order of `per_doc`'s keys.
     metrics = dict(zip(per_doc, means, strict=True))
+    truncation = prepared.truncation(request_scores)
 
     if out is not None:
         write_predictions(out / "predictions" / f"{task.name}.jsonl", prepared.docs, scores)
@@ -156,5 +157,5 @@ def score_task(
         num_docs=len(prepared.docs),
         limit=limit,
         seconds=seconds,
-        truncation=prepared.truncation(request_scores),
+        truncation=truncation,
     )
