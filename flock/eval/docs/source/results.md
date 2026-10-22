@@ -38,7 +38,7 @@ The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.resu
 
 ### Truncation
 
-A context too long for the model loses tokens from the left, and the continuation is kept whole (see [How scoring works](how-scoring-works)). `truncation` says how often that happened in the task: how many requests were cut, how many docs had at least one cut request, and the most tokens cut from one request. Metrics on cut contexts can differ from metrics on whole ones, so check `docs` before comparing a task across models with different `max_length`. All three are 0 when nothing was cut.
+A context too long for the model loses tokens from the left, and the continuation is kept whole (see [How scoring works](how-scoring-works)). `truncation` says how often that happened in the task: how many requests were cut, how many docs had at least one cut request, and the most tokens cut from one request. Metrics on cut contexts can differ from metrics on whole ones, so check `docs` before comparing a task across models: a different `max_length` or tokenizer cuts different requests. `max_tokens_cut` counts the model's own tokens. All three are 0 when nothing was cut.
 
 ## Provenance
 

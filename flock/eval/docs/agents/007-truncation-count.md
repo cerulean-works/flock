@@ -2,11 +2,11 @@
 
 | | |
 | --- | --- |
-| Status | design |
+| Status | in review |
 | Date | 2026-10-22 |
 | Builds on | [001](001-eval-core.md) |
 | Keeps | D2 (left truncation, whole continuation), D3 (no host syncs of our own), D8 (one results file) |
-| Result | n/a |
+| Result | 85 tests in `tests/eval/` pass on CPU; scores and task hashes unchanged; see [section 4](#4-how-it-was-actually-built) |
 
 ## 1. Goal
 
@@ -49,13 +49,14 @@ setting that changes what is scored must show in the results file.
 ### D12. Counted on the host from token lengths, carried with the scores
 
 A request's cut is `max(0, len(context) + len(continuation) - (max_length + 1))`, known from the
-token ids before any forward pass, so counting needs no GPU work and no host sync.
+token ids before any forward pass, so the per-request count needs no GPU work.
 
 - `Scores` gains `tokens_cut`, int64 `[len(requests)]` on the model's device like `num_tokens`:
   the tokens cut from each request's context, 0 if it fit. The warning reads the same list.
-- `MCRequests.truncation(scores) -> Truncation` maps requests to docs (each doc's choices, then
-  the same choices again for PMI) and reduces on the device: `requests` and `max_tokens_cut`
-  directly, `docs` through an `index_add_` of truncated requests per doc. It copies the three
+- `MCRequests.truncation(scores) -> Truncation` maps requests to docs through the same
+  `_choice_index` layout `choice_scores` uses (each doc's choices, then the same choices again
+  for PMI) and reduces on the device: `requests` and `max_tokens_cut` directly, `docs` through
+  an `index_add_` of truncated requests per doc. It copies the three
   numbers to the host once, which is one sync per task, after the metric means have already
   waited for the GPU.
 - `Truncation` is a frozen dataclass of three ints in `tasks/base.py`, and `TaskResult` gains a
@@ -103,4 +104,13 @@ unbatched forward pass that starts from EOS. No code changes.
 
 ## 4. How it was actually built
 
-Filled in when the stage is built.
+- **Lock.** On the tiny model and ARC-Easy's request strings, every score and both task hashes
+  match the previous stage bit for bit. `results.json` differs only by the `truncation` object and
+  `schema_version: 3`, and the predictions files are identical.
+- **Why `Scores` stays on the device.** `tokens_cut` is host data, and reducing it on the host
+  would skip one tiny copy. It travels on the device anyway, like `num_tokens`, so `Scores` keeps
+  one device and later per-request fields need no special case. The cost is one copy of three
+  numbers per task, after the metric means have already waited for the GPU.
+- **Order in `score_task`.** Truncation is counted before the predictions file is written, so a
+  failed count never leaves predictions for a task with no result.
+- **Docs.** `results.md` documents the field and `how-scoring-works.md` links to it.
