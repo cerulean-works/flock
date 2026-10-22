@@ -8,7 +8,7 @@ from typing import Any
 
 from flock.eval.metrics import ChoiceScores
 from flock.eval.provenance import Provenance
-from flock.eval.tasks.base import MCDoc
+from flock.eval.tasks.base import MCDoc, Truncation
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +31,8 @@ class TaskResult:
             The doc limit the run used, or `None` for the whole split.
         seconds (`float`):
             Wall time of scoring, excluding data and model loading.
+        truncation (`Truncation`):
+            How many requests and docs had their contexts cut from the left to fit the model.
     """
 
     task: str
@@ -40,6 +42,7 @@ class TaskResult:
     num_docs: int
     limit: int | None
     seconds: float
+    truncation: Truncation
 
     @property
     def docs_per_second(self) -> float:
@@ -57,13 +60,13 @@ class Results:
             What produced the run.
         tasks (`list[TaskResult]`):
             Each task's scores, in run order.
-        schema_version (`int`, *optional*, defaults to 2):
+        schema_version (`int`, *optional*, defaults to 3):
             The version of the file's layout, bumped when a field changes.
     """
 
     provenance: Provenance
     tasks: list[TaskResult]
-    schema_version: int = 2
+    schema_version: int = 3
 
     def to_dict(self) -> dict[str, Any]:
         """Returns the results as plain JSON-ready data, with each task's `docs_per_second` added."""

@@ -135,7 +135,8 @@ def score_task(
     prepared = task.requests(docs, shots)
 
     start = time.perf_counter()
-    scores = prepared.choice_scores(model.loglikelihood(prepared.requests))
+    request_scores = model.loglikelihood(prepared.requests)
+    scores = prepared.choice_scores(request_scores)
     per_doc = multiple_choice(scores)
     # One host copy for every metric's mean. It also waits for the GPU, so `seconds` times the
     # scoring.
@@ -155,4 +156,5 @@ def score_task(
         num_docs=len(prepared.docs),
         limit=limit,
         seconds=seconds,
+        truncation=prepared.truncation(request_scores),
     )

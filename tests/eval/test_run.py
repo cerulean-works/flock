@@ -26,7 +26,7 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
     results = evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path))
 
     data = json.loads((tmp_path / "results.json").read_text())
-    assert data["schema_version"] == 2
+    assert data["schema_version"] == 3
     assert data["provenance"]["model"] == "tiny@0"
     assert data["provenance"]["flock_commit"] == "abc123"
     assert data["provenance"]["dtype"] == "float32"
@@ -40,6 +40,7 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
     assert all(0 <= task["metrics"][m] <= 1 for m in task["metrics"] if m.startswith("acc"))
     assert task["metrics"]["bpb"] > 0
     assert task["docs_per_second"] > 0
+    assert task["truncation"] == {"requests": 0, "docs": 0, "max_tokens_cut": 0}
     assert results.tasks[0].metrics == task["metrics"]
 
     lines = (tmp_path / "predictions" / "toy.jsonl").read_text().splitlines()
@@ -75,6 +76,19 @@ def test_score_task_does_not_depend_on_batching(scorer):
     one_batch = score_task(scorer, TASK)
     scorer.batch_tokens = 1
     assert score_task(scorer, TASK).metrics == pytest.approx(one_batch.metrics, abs=1e-5)
+
+
+def test_score_task_records_truncation(lm, tokenizer):
+    scorer = ScoringModel(lm, tokenizer, name="tiny@0", max_length=16)
+    requests = TASK.requests(*TASK.load()).requests
+    cuts = [max(0, sum(map(len, scorer.encode(r))) - 17) for r in requests]
+    # The few-shot contexts are cut, the short unconditional ones aren't.
+    assert all(cuts[:7]) and not any(cuts[7:])
+
+    truncation = score_task(scorer, TASK).truncation
+
+    assert (truncation.requests, truncation.docs) == (7, 2)
+    assert truncation.max_tokens_cut == max(cuts)
 
 
 def test_evaluate_rejects_unknown_task():

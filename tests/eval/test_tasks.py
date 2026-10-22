@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from flock.eval.requests import Scores
-from flock.eval.tasks import TASKS, Dataset, Fewshot, MCDoc
+from flock.eval.tasks import TASKS, Dataset, Fewshot, MCDoc, Truncation
 from flock.eval.tasks.arc import ARC_EASY, arc_doc
 
 from .toy import ROWS, TASK
@@ -76,11 +76,21 @@ def test_requests_cover_every_choice_then_the_unconditional_ones():
     assert [r.continuation for r in uncond] == [r.continuation for r in contexted]
 
 
+def uniform_scores(n: int, tokens_cut: list[int] | None = None) -> Scores:
+    """Scores for `n` requests: log-probability 0, one token each, and `tokens_cut` (default none)."""
+    cut = torch.tensor(tokens_cut) if tokens_cut is not None else torch.zeros(n, dtype=torch.int64)
+    return Scores(torch.zeros(n), torch.ones(n, dtype=torch.int64), cut)
+
+
 def test_choice_scores_lays_requests_out_per_doc():
     built = TASK.requests(*TASK.load())
     n = len(built.requests)
     # Request i scores -i with i + 1 tokens, so each cell shows which request it came from.
-    scores = Scores(-torch.arange(n, dtype=torch.float32), torch.arange(n) + 1)
+    scores = Scores(
+        -torch.arange(n, dtype=torch.float32),
+        torch.arange(n) + 1,
+        torch.zeros_like(torch.arange(n)),
+    )
     layout = built.choice_scores(scores)
 
     # Doc 0 has 3 choices (requests 0 to 2), doc 1 has 4 (requests 3 to 6).
@@ -98,7 +108,7 @@ def test_choice_scores_lays_requests_out_per_doc():
 def test_choice_scores_counts_leading_space_and_bytes():
     built = TASK.requests(*TASK.load())
     n = len(built.requests)
-    layout = built.choice_scores(Scores(torch.zeros(n), torch.ones(n, dtype=torch.int64)))
+    layout = built.choice_scores(uniform_scores(n))
 
     # " 石頭": a space and two 3-byte characters
     assert layout.num_chars[1, 0].item() == 3
@@ -111,7 +121,7 @@ def test_without_unconditional_context_there_is_no_pmi():
     built = task.requests(*task.load())
     assert len(built.requests) == 7
     n = len(built.requests)
-    layout = built.choice_scores(Scores(torch.zeros(n), torch.ones(n, dtype=torch.int64)))
+    layout = built.choice_scores(uniform_scores(n))
     assert layout.logprob_uncond is None
 
 
@@ -120,13 +130,35 @@ def test_choice_scores_rejects_mismatched_request_count():
     broken = dataclasses.replace(built, requests=built.requests[:-1])
     n = len(broken.requests)
     with pytest.raises(ValueError, match="13 requests for 7 choices"):
-        broken.choice_scores(Scores(torch.zeros(n), torch.ones(n, dtype=torch.int64)))
+        broken.choice_scores(uniform_scores(n))
 
 
 def test_choice_scores_rejects_no_docs():
     built = TASK.requests([], [])
     with pytest.raises(ValueError, match="no docs"):
-        built.choice_scores(Scores(torch.zeros(0), torch.zeros(0, dtype=torch.int64)))
+        built.choice_scores(uniform_scores(0))
+
+
+def test_truncation_is_zero_when_nothing_is_cut():
+    built = TASK.requests(*TASK.load())
+    assert built.truncation(uniform_scores(len(built.requests))) == Truncation(0, 0, 0)
+
+
+def test_truncation_counts_requests_and_their_docs():
+    built = TASK.requests(*TASK.load())
+    # Doc 1's first choice (request 3) and its unconditional twin (7 + 5) are cut, and nothing
+    # in doc 0: two requests, one doc.
+    cut = [0] * len(built.requests)
+    cut[3], cut[7 + 5] = 5, 2
+
+    assert built.truncation(uniform_scores(len(cut), cut)) == Truncation(
+        requests=2, docs=1, max_tokens_cut=5
+    )
+
+
+def test_truncation_rejects_no_docs():
+    with pytest.raises(ValueError, match="no docs"):
+        TASK.requests([], []).truncation(uniform_scores(0))
 
 
 def test_hash_is_stable():

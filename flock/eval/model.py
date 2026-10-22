@@ -177,7 +177,7 @@ class ScoringModel:
     @torch.no_grad()  # Not inference_mode: buffers rebuilt here must stay usable in training.
     def loglikelihood(self, requests: Sequence[Request]) -> Scores:
         """
-        Scores every request, in order.
+        Scores every request, in order, and counts the context tokens each lost to left truncation.
 
         The model runs in eval mode, and each module is put back in the mode it was in. The scores stay on the model's device: nothing here waits for the GPU.
 
@@ -186,7 +186,8 @@ class ScoringModel:
         """
         encoded = self._encode(requests)
         self._check_continuations(requests, encoded)
-        self._warn_truncated(encoded)
+        tokens_cut = [max(0, _window_length(pair) - (self.max_length + 1)) for pair in encoded]
+        self._warn_truncated(tokens_cut)
 
         input_lengths = [_input_length(pair, self.max_length) for pair in encoded]
         # Longest first, as lm-evaluation-harness sorts (`_collate` in `_loglikelihood_tokens`),
@@ -204,7 +205,11 @@ class ScoringModel:
         num_tokens = torch.tensor(
             [len(continuation) for _, continuation in encoded], dtype=torch.int64
         )
-        return Scores(logprob, num_tokens.to(self.device, non_blocking=True))
+        return Scores(
+            logprob,
+            num_tokens.to(self.device, non_blocking=True),
+            torch.tensor(tokens_cut, dtype=torch.int64).to(self.device, non_blocking=True),
+        )
 
     def _encode(self, requests: Sequence[Request]) -> list[_Encoded]:
         """[`encode`] for many requests, with one tokenizer call for the distinct contexts and one for the joined texts."""
@@ -278,15 +283,15 @@ class ScoringModel:
             if len(continuation) > self.max_length:
                 raise ValueError(f"continuation longer than {self.max_length} tokens: {request}")
 
-    def _warn_truncated(self, encoded: list[_Encoded]) -> None:
-        """Logs how many requests lose context from the left, since that changes what is scored."""
-        truncated = sum(_window_length(pair) > self.max_length + 1 for pair in encoded)
+    def _warn_truncated(self, tokens_cut: list[int]) -> None:
+        """Logs how many requests lose context from the left, given each one's cut, since that changes what is scored."""
+        truncated = sum(cut > 0 for cut in tokens_cut)
         if truncated:
             logger.warning(
                 "%s: %d of %d requests exceed %d tokens; their contexts are left-truncated",
                 self.name,
                 truncated,
-                len(encoded),
+                len(tokens_cut),
                 self.max_length,
             )
 
