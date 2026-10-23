@@ -2,6 +2,7 @@
 
 import dataclasses
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -84,7 +85,7 @@ class Results:
         return path
 
 
-def write_predictions(path: Path, docs: list[MCDoc], scores: ChoiceScores) -> None:
+def write_predictions(path: Path, docs: Sequence[MCDoc], scores: ChoiceScores) -> None:
     """Writes `prediction_rows` to `path` as JSON lines, creating its directory if needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -93,7 +94,7 @@ def write_predictions(path: Path, docs: list[MCDoc], scores: ChoiceScores) -> No
             f.write(json.dumps(row) + "\n")
 
 
-def prediction_rows(docs: list[MCDoc], scores: ChoiceScores) -> list[dict[str, Any]]:
+def prediction_rows(docs: Sequence[MCDoc], scores: ChoiceScores) -> list[dict[str, Any]]:
     """Returns one row per doc with its id, gold index and each choice's raw scores, dropping the padding past each doc's last choice."""
     # One host copy per field, not per doc.
     logprob = scores.logprob.tolist()
