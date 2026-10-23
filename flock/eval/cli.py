@@ -64,19 +64,20 @@ def run(
     wandb_project: str | None,
 ) -> None:
     """Score a model on tasks and suites and write results.json."""
-    if not tasks and not suites:
-        raise click.UsageError("Give at least one --task or --suite.")
-    config = EvalConfig(
-        model=model,
-        tasks=tasks,
-        suites=suites,
-        out=out,
-        limit=limit,
-        batch_tokens=batch_tokens,
-        device=device,
-        wandb_project=wandb_project,
-        command=shlex.join(["flock-eval", *sys.argv[1:]]),
-    )
+    try:
+        config = EvalConfig(
+            model=model,
+            tasks=tasks,
+            suites=suites,
+            out=out,
+            limit=limit,
+            batch_tokens=batch_tokens,
+            device=device,
+            wandb_project=wandb_project,
+            command=shlex.join(["flock-eval", *sys.argv[1:]]),
+        )
+    except ValueError as error:
+        raise click.UsageError(str(error)) from None
 
     click.echo(format_results(evaluate(config)))
 

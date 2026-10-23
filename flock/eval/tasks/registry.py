@@ -3,8 +3,8 @@
 from flock.eval.tasks.arc import ARC_EASY
 from flock.eval.tasks.base import MultipleChoiceTask
 from flock.eval.tasks.base_easy import BASE_EASY
-from flock.eval.tasks.suite import Suite
+from flock.eval.tasks.suite import Suite, by_name
 
-TASKS: dict[str, MultipleChoiceTask] = {task.name: task for task in (ARC_EASY,)}
+TASKS: dict[str, MultipleChoiceTask] = by_name((ARC_EASY,))
 
-SUITES: dict[str, Suite] = {suite.name: suite for suite in BASE_EASY.suites}
+SUITES: dict[str, Suite] = by_name(BASE_EASY.suites)
