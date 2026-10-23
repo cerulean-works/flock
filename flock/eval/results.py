@@ -52,6 +52,28 @@ class TaskResult:
 
 
 @dataclass(frozen=True, slots=True)
+class SuiteResult:
+    """
+    One suite's score.
+
+    Args:
+        suite (`str`):
+            The suite's registry name.
+        members (`list[str]`):
+            Its members' names, tasks and suites, each with an entry of its own in the results.
+        metric (`str`, *optional*):
+            The metric read from each member task, or `None` for each task's primary metric.
+        score (`float`, *optional*):
+            The unweighted mean of the members' scores, or `None` for a suite that only groups others.
+    """
+
+    suite: str
+    members: list[str]
+    metric: str | None
+    score: float | None
+
+
+@dataclass(frozen=True, slots=True)
 class Results:
     """
     Every task's scores from one run, and its provenance.
@@ -61,13 +83,16 @@ class Results:
             What produced the run.
         tasks (`list[TaskResult]`):
             Each task's scores, in run order.
-        schema_version (`int`, *optional*, defaults to 3):
+        suites (`list[SuiteResult]`):
+            Each suite's score, every suite after the suites it holds.
+        schema_version (`int`, *optional*, defaults to 4):
             The version of the file's layout, bumped when a field changes.
     """
 
     provenance: Provenance
     tasks: list[TaskResult]
-    schema_version: int = 3
+    suites: list[SuiteResult]
+    schema_version: int = 4
 
     def to_dict(self) -> dict[str, Any]:
         """Returns the results as plain JSON-ready data, with each task's `docs_per_second` added."""
