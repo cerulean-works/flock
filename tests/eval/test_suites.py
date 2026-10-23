@@ -75,6 +75,11 @@ def test_score_needs_every_member_tasks_metric():
             id="mixed-suites",
         ),
         pytest.param(
+            {"members": (Suite("rc", (TASK,)),), "metric": "bpb"},
+            "metric reads member tasks only",
+            id="metric-over-suite",
+        ),
+        pytest.param(
             {"members": (Suite("a", (Suite("x", (TASK,)),)), Suite("b", (Suite("x", (OTHER,)),)))},
             "two different definitions are named x",
             id="suite-name-clash",

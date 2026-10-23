@@ -18,7 +18,7 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `base_easy:qa_bpb` | `arc_easy` | `bpb` | `olmo3:base_easy:qa_bpb` |
 | `base_easy` | `base_easy:qa_rc`, `base_easy:qa_bpb` | unscored | none |
 
-The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. Compare a suite's score only between results that list the same members (see [Suites in results](results#suites)).
+The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. See [Suites in results](results#suites) for when two suite scores compare.
 
 ## Classes
 
