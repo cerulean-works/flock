@@ -22,10 +22,11 @@ A run with an output directory writes `results.json` and one predictions file pe
       "num_docs": 2376,
       "limit": null,
       "seconds": ...,
+      "truncation": {"requests": 0, "docs": 0, "max_tokens_cut": 0},
       "docs_per_second": ...
     }
   ],
-  "schema_version": 2
+  "schema_version": 3
 }
 ```
 
@@ -34,6 +35,10 @@ The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.resu
 ### The task hash
 
 `task_hash` is the sha256 of the task's definition (every field but `to_doc`, so its name and primary metric too), every scored context and continuation, and every gold index. Changing the dataset revision, the few-shot examples, the prompt, the task's name or primary metric, or the question, choices or gold index that `to_doc` returns changes it. Doc ids aren't hashed. Two results with the same hash scored the same requests under the same task definition.
+
+### Truncation
+
+A context too long for the model loses tokens from the left, and the continuation is kept whole (see [How scoring works](how-scoring-works)). `truncation` says how often that happened in the task: how many requests were cut, how many docs had at least one cut request, and the most tokens cut from one request. Metrics on cut contexts can differ from metrics on whole ones, so check `docs` before comparing a task across models: a different `max_length` or tokenizer cuts different requests. `max_tokens_cut` counts the model's own tokens. All three are 0 when nothing was cut.
 
 ## Provenance
 
@@ -56,5 +61,7 @@ Each line of `predictions/<task>.jsonl` is one doc:
 [[autodoc]] eval.results.Results
 
 [[autodoc]] eval.results.TaskResult
+
+[[autodoc]] eval.tasks.Truncation
 
 [[autodoc]] eval.provenance.Provenance

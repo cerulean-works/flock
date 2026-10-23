@@ -9,7 +9,7 @@ A request is a context and a continuation, and its score is the summed log-proba
 1. Whitespace at the end of the context moves to the start of the continuation.
 2. The context and the continuation are tokenized together. The continuation's tokens are the ones after the context's own tokenization, so a token that spans the boundary counts as continuation.
 3. No special tokens are added. An empty context becomes the beginning-of-sequence (BOS) token, or the end-of-sequence (EOS) token if the tokenizer has no BOS. A whitespace-only context counts as empty once its whitespace has moved. lm-evaluation-harness checks for an empty context before moving whitespace, so this one case differs from it.
-4. An input longer than the model's `max_length` loses tokens from the left, so the context is cut and the continuation is scored in full.
+4. An input longer than the model's `max_length` loses tokens from the left, so the context is cut and the continuation is scored in full. The results file counts the cuts per task ([Truncation](results#truncation)).
 
 A continuation with no tokens raises an error, since scoring it as 0 would rank it above every real choice. So does a continuation longer than `max_length` on its own.
 

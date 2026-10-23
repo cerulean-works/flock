@@ -26,7 +26,7 @@ def one_thread():
 
 @pytest.fixture(scope="session")
 def tokenizer() -> PreTrainedTokenizerFast:
-    """A byte-level BPE tokenizer trained on a tiny corpus, with no BOS (like OLMo 2)."""
+    """A byte-level BPE tokenizer trained on a tiny corpus, with no BOS (like Qwen's)."""
     tok = Tokenizer(models.BPE())
     tok.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
     tok.decoder = decoders.ByteLevel()

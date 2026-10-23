@@ -83,6 +83,25 @@ class MCDoc:
 
 
 @dataclass(frozen=True, slots=True)
+class Truncation:
+    """
+    How much of a task's scoring saw contexts cut from the left to fit the model's `max_length`.
+
+    Args:
+        requests (`int`):
+            Requests whose context lost tokens, conditional and unconditional alike.
+        docs (`int`):
+            Docs with at least one such request, whose metrics may have changed.
+        max_tokens_cut (`int`):
+            The most tokens cut from any one request.
+    """
+
+    requests: int
+    docs: int
+    max_tokens_cut: int
+
+
+@dataclass(frozen=True, slots=True)
 class MCRequests:
     """
     A multiple-choice task's requests for a list of docs, and how their scores map back.
@@ -110,12 +129,7 @@ class MCRequests:
         Raises:
             `ValueError`: if there are no docs, or not one request per choice (two with `has_uncond`).
         """
-        if not self.docs:
-            raise ValueError("no docs to score")
-        num_choices = sum(len(doc.choices) for doc in self.docs)
-        if len(self.requests) != (2 if self.has_uncond else 1) * num_choices:
-            raise ValueError(f"{len(self.requests)} requests for {num_choices} choices")
-
+        num_choices = self._check_layout()
         device = scores.logprob.device
         index = self._choice_index().to(device)
         valid = index >= 0
@@ -139,6 +153,52 @@ class MCRequests:
             gold=gold,
             logprob_uncond=logprob_uncond,
         )
+
+    def truncation(self, scores: Scores) -> Truncation:
+        """
+        Counts the requests and docs whose contexts `scores` says were cut, copying three numbers to the host once.
+
+        Raises:
+            `ValueError`: if there are no docs, or not one request per choice (two with `has_uncond`).
+        """
+        num_choices = self._check_layout()
+        tokens_cut = scores.tokens_cut
+        device = tokens_cut.device
+
+        # Each conditional request's doc, read off the same layout `choice_scores` uses.
+        choice_index = self._choice_index()
+        valid = choice_index >= 0
+        docs_of_cells = torch.arange(len(self.docs))[:, None].expand_as(choice_index)
+        doc_index = torch.empty(num_choices, dtype=torch.int64)
+        doc_index[choice_index[valid]] = docs_of_cells[valid]
+        if self.has_uncond:
+            # The unconditional requests follow all conditional ones, in the same order.
+            doc_index = doc_index.repeat(2)
+        index = doc_index.to(device, non_blocking=True)
+
+        truncated = tokens_cut > 0
+        per_doc = torch.zeros(len(self.docs), dtype=torch.int64, device=device)
+        per_doc.index_add_(0, index, truncated.long())
+        requests, docs, max_tokens_cut = torch.stack(
+            [truncated.sum(), (per_doc > 0).sum(), tokens_cut.max()]
+        ).tolist()
+
+        return Truncation(requests=requests, docs=docs, max_tokens_cut=max_tokens_cut)
+
+    def _check_layout(self) -> int:
+        """
+        Returns the number of choices over all docs, after checking that there is one request per choice (two with `has_uncond`).
+
+        Raises:
+            `ValueError`: if there are no docs, or the request count doesn't match the choices.
+        """
+        if not self.docs:
+            raise ValueError("no docs to score")
+        num_choices = sum(len(doc.choices) for doc in self.docs)
+        if len(self.requests) != (2 if self.has_uncond else 1) * num_choices:
+            raise ValueError(f"{len(self.requests)} requests for {num_choices} choices")
+
+        return num_choices
 
     def _continuation_lengths(
         self, num_choices: int, device: torch.device

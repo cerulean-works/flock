@@ -21,8 +21,16 @@ def test_bits_per_byte_matches_hand_value():
     assert bits_per_byte(logprob, num_bytes).item() == pytest.approx(1.0)
 
 
-def test_bits_per_byte_counts_at_least_one_byte():
-    assert bits_per_byte(torch.tensor([-math.log(2)]), torch.tensor([0])).item() == pytest.approx(1)
+def test_bits_per_byte_counts_at_least_one_byte_and_warns(caplog):
+    bpb = bits_per_byte(torch.tensor([-math.log(2)] * 3), torch.tensor([0, -1, 1]))
+
+    assert bpb.tolist() == pytest.approx([1, 1, 1])
+    assert "2 byte counts are below 1" in caplog.text
+
+
+def test_bits_per_byte_is_quiet_on_valid_counts(caplog):
+    bits_per_byte(torch.tensor([-1.0]), torch.tensor([1]))
+    assert not caplog.records
 
 
 def test_accuracy_ignores_padding_and_breaks_ties_to_first():

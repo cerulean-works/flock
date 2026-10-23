@@ -1,9 +1,12 @@
 """Metrics over scored answer choices, computed as tensor operations on the scores' device."""
 
+import logging
 import math
 from dataclasses import dataclass
 
 import torch
+
+logger = logging.getLogger(__name__)
 
 # Every name `multiple_choice` can return, in its order. Add a name here whenever it gains a
 # metric: tasks check their `primary_metric` against this. `acc_uncond` is only reported by
@@ -61,11 +64,17 @@ def bits_per_byte(logprob: torch.Tensor, num_bytes: torch.Tensor) -> torch.Tenso
         logprob (`torch.Tensor`):
             Summed natural-log probabilities, any shape.
         num_bytes (`torch.Tensor`):
-            UTF-8 byte counts, the same shape. A count of 0 is treated as 1.
+            UTF-8 byte counts, the same shape. A count below 1 is treated as 1, with a warning.
 
     Returns:
         `torch.Tensor`: bits per byte, the same shape.
     """
+    # One host copy per call. Every current caller passes non-empty continuations, so this only
+    # catches a future caller that doesn't check its byte counts.
+    below_one = (num_bytes < 1).sum().item()
+    if below_one:
+        logger.warning("%d byte counts are below 1; bits per byte treats them as 1", below_one)
+
     nats_per_byte = -logprob / num_bytes.clamp(min=1)
 
     return nats_per_byte / math.log(2)

@@ -31,7 +31,10 @@ class Scores:
             float32 `[len(requests)]`, the summed natural-log probability of each continuation's tokens.
         num_tokens (`torch.Tensor`):
             int64 `[len(requests)]`, the number of tokens each continuation was scored over.
+        tokens_cut (`torch.Tensor`):
+            int64 `[len(requests)]`, the number of tokens cut from the left of each context to fit `max_length`, 0 if it fit.
     """
 
     logprob: torch.Tensor
     num_tokens: torch.Tensor
+    tokens_cut: torch.Tensor
