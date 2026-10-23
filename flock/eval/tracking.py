@@ -9,7 +9,7 @@ from flock.eval.results import Results
 
 def log_to_tracker(results: Results, project: str) -> None:
     """
-    Logs one `eval` run to `project`: the provenance, each task's hash (`task_hashes`) and each suite's members (`suite_members`) as its config, and each task's metrics and `docs_per_second` as its summary, named `<task>/<metric>`, with each scored suite's score as `<suite>/score`.
+    Logs one `eval` run to `project`: the provenance, each task's hash (`task_hashes`) and each suite's members (`suite_members`) as its config, and each task's metrics and `docs_per_second` as its summary, named `<task>/<metric>`, with each scored suite's score as `suites/<suite>`.
 
     The SDK's own settings decide where it goes (`wandb login --host` for the flock tracker).
     """
@@ -20,7 +20,7 @@ def log_to_tracker(results: Results, project: str) -> None:
         summary[f"{task.task}/docs_per_second"] = task.docs_per_second
     for suite in results.suites:
         if suite.score is not None:
-            summary[f"{suite.suite}/score"] = suite.score
+            summary[f"suites/{suite.suite}"] = suite.score
 
     config = {
         **dataclasses.asdict(results.provenance),

@@ -43,7 +43,7 @@ The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.resu
 
 ### Suites
 
-`suites` holds the suites the run was given and every suite they hold, each after its members, and is empty for a run of tasks only. Each entry lists its members by name, and every member has its own entry in `tasks` or `suites`, so you can recompute the score: the mean of each member task's `metric` (its `primary_metric` when `metric` is `null`) and each member suite's `score`. A suite that only groups others has a `null` score. A suite's members can grow between versions of `flock-eval`, so compare two scores only when their `members` match.
+`suites` holds the suites the run was given and every suite they hold, each after its members, and is empty for a run of tasks only. Each entry lists its members by name, and every member has its own entry in `tasks` or `suites`, so you can recompute the score: the mean of each member task's `metric` (its `primary_metric` when `metric` is `null`) and each member suite's `score`. A suite that only groups others has a `null` score. A suite's members can grow between versions of `flock-eval`, so compare two suite scores only when their `members` match, every member task has the same `task_hash`, and neither run used a `limit`.
 
 ### Truncation
 
