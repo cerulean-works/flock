@@ -53,12 +53,15 @@ class Suite:
             raise ValueError(f"{self.name}: a suite needs members")
         if len(set(names)) != len(names):
             raise ValueError(f"{self.name}: members repeat a name: {names}")
+
         if self.scored:
             self._check_scored_members()
+            self._check_one_scale()
         elif self.metric is not None or any(
             isinstance(member, MultipleChoiceTask) for member in self.members
         ):
             raise ValueError(f"{self.name}: an unscored suite groups only suites and has no metric")
+
         try:
             by_name(self._walk_tasks())
             by_name(self._walk_suites())
@@ -66,10 +69,11 @@ class Suite:
             raise ValueError(f"{self.name}: {error}") from None
 
     def _check_scored_members(self) -> None:
-        """Raises `ValueError` if a member can't give a score under this suite, or the members' scores don't average."""
+        """Raises `ValueError` if a member can't give a score under this suite."""
         for member in self.members:
             if isinstance(member, Suite):
-                # A member suite is scored under its own metric, so this one's would misname the score.
+                # A member suite is scored under its own metric, so this one's would misname the
+                # score.
                 if self.metric is not None:
                     raise ValueError(
                         f"{self.name}: metric reads member tasks only, not {member.name}"
@@ -78,12 +82,19 @@ class Suite:
                     raise ValueError(f"{self.name}: member {member.name} has no score")
             elif (metric := self.metric or member.primary_metric) not in member.reported_metrics:
                 raise ValueError(f"{self.name}: member {member.name} doesn't report {metric}")
+
+    def _check_one_scale(self) -> None:
+        """Raises `ValueError` if the members mix accuracies and `bpb`."""
+        # OLMES doesn't check this: its suites keep `rc` and `bpb` apart by name only. A mean of
+        # an accuracy (higher is better) and a `bpb` (lower is better) has no meaning.
         if len({self._is_bpb(member) for member in self.members}) > 1:
             raise ValueError(f"{self.name}: members mix accuracies and bpb, which don't average")
 
     def _is_bpb(self, member: MultipleChoiceTask | Suite) -> bool:
         """Whether the member's score under this suite is a `bpb`, rather than an accuracy."""
         if isinstance(member, Suite):
+            # A suite's members share one scale, checked when it was built, so its first member
+            # stands for all of them.
             return member._is_bpb(member.members[0])
 
         return (self.metric or member.primary_metric) == "bpb"
@@ -108,12 +119,13 @@ class Suite:
         """
         if not self.scored:
             raise ValueError(f"{self.name}: an unscored suite has no score")
-        member_scores = [
-            member.score(metrics)
-            if isinstance(member, Suite)
-            else metrics[member.name][self.metric or member.primary_metric]
-            for member in self.members
-        ]
+
+        member_scores = []
+        for member in self.members:
+            if isinstance(member, Suite):
+                member_scores.append(member.score(metrics))
+            else:
+                member_scores.append(metrics[member.name][self.metric or member.primary_metric])
 
         return sum(member_scores) / len(member_scores)
 
