@@ -186,7 +186,10 @@ class ScoringModel:
         """
         encoded = self._encode(requests)
         self._check_continuations(requests, encoded)
-        tokens_cut = [_tokens_cut(pair, self.max_length) for pair in encoded]
+        input_lengths = [_input_length(pair, self.max_length) for pair in encoded]
+        tokens_cut = [
+            _window_length(pair) - 1 - length for pair, length in zip(encoded, input_lengths)
+        ]
         # Left truncation changes what is scored, so it is never silent.
         truncated = sum(cut > 0 for cut in tokens_cut)
         if truncated:
@@ -198,7 +201,6 @@ class ScoringModel:
                 self.max_length,
             )
 
-        input_lengths = [_input_length(pair, self.max_length) for pair in encoded]
         # Longest first, as lm-evaluation-harness sorts (`_collate` in `_loglikelihood_tokens`),
         # so the first request of each batch sets its padded width.
         order = sorted(range(len(encoded)), key=lambda i: -input_lengths[i])
@@ -442,11 +444,6 @@ def _input_length(encoded: _Encoded, max_length: int) -> int:
     # A window holds at most `max_length + 1` tokens: the model's input, then one last token that
     # is only ever a target.
     return min(_window_length(encoded), max_length + 1) - 1
-
-
-def _tokens_cut(encoded: _Encoded, max_length: int) -> int:
-    """The number of context tokens one request loses to left truncation, 0 if it fits."""
-    return _window_length(encoded) - 1 - _input_length(encoded, max_length)
 
 
 def _move_whitespace(request: Request) -> tuple[str, str]:
