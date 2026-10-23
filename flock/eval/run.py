@@ -1,9 +1,9 @@
 """Run tasks against a model: the one entry point the CLI and job runners call."""
 
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import torch
 
@@ -110,7 +110,7 @@ def evaluate(config: EvalConfig) -> Results:
     return results
 
 
-def _check_names(kind: str, names: tuple[str, ...], registry: dict[str, Any]) -> None:
+def _check_names(kind: str, names: tuple[str, ...], registry: Mapping[str, object]) -> None:
     """Raises `KeyError` if a name isn't in its registry, before any model loads."""
     # Checked here, not in `EvalConfig`: a config is plain data that may be built where the
     # registry differs from the worker's.
@@ -121,25 +121,27 @@ def _check_names(kind: str, names: tuple[str, ...], registry: dict[str, Any]) ->
 
 def _tasks_to_run(names: tuple[str, ...], suites: list[Suite]) -> list[MultipleChoiceTask]:
     """Returns the named tasks, then each suite's tasks not yet listed, each name once."""
-    named = (TASKS[name] for name in names)
+    tasks = [TASKS[name] for name in names]
+    for suite in suites:
+        tasks.extend(suite.tasks)
 
-    return list(by_name((*named, *(task for suite in suites for task in suite.tasks))).values())
+    return list(by_name(tasks).values())
 
 
 def _suite_results(suites: list[Suite], task_results: list[TaskResult]) -> list[SuiteResult]:
     """Scores each suite and the suites it holds, each after its members and each once."""
     metrics = {result.task: result.metrics for result in task_results}
-    unique = by_name(held for suite in suites for held in suite.suites)
+    held = []
+    for suite in suites:
+        held.extend(suite.suites)
 
-    return [
-        SuiteResult(
-            suite=suite.name,
-            members=[member.name for member in suite.members],
-            metric=suite.metric,
-            score=suite.score(metrics) if suite.scored else None,
-        )
-        for suite in unique.values()
-    ]
+    results = []
+    for suite in by_name(held).values():
+        score = suite.score(metrics) if suite.scored else None
+        members = [member.name for member in suite.members]
+        results.append(SuiteResult(suite.name, members, suite.metric, score))
+
+    return results
 
 
 def _check_out(out: Path | None) -> None:
