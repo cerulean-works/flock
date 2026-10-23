@@ -1,4 +1,4 @@
-"""Task definitions and the registry of tasks by name."""
+"""Task and suite definitions, and the registries of both by name."""
 
 from flock.eval.tasks.base import (
     Choice,
@@ -10,9 +10,11 @@ from flock.eval.tasks.base import (
     Truncation,
     cloze,
 )
-from flock.eval.tasks.registry import TASKS
+from flock.eval.tasks.registry import SUITES, TASKS
+from flock.eval.tasks.suite import Suite
 
 __all__ = [
+    "SUITES",
     "TASKS",
     "Choice",
     "Dataset",
@@ -20,6 +22,7 @@ __all__ = [
     "MCDoc",
     "MCRequests",
     "MultipleChoiceTask",
+    "Suite",
     "Truncation",
     "cloze",
 ]

@@ -3,14 +3,15 @@
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import torch
 
 from flock.eval.metrics import multiple_choice
 from flock.eval.model import DEFAULT_BATCH_TOKENS, ScoringModel
 from flock.eval.provenance import Provenance
-from flock.eval.results import Results, TaskResult, write_predictions
-from flock.eval.tasks import TASKS, MultipleChoiceTask
+from flock.eval.results import Results, SuiteResult, TaskResult, write_predictions
+from flock.eval.tasks import SUITES, TASKS, MultipleChoiceTask, Suite
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,8 +22,10 @@ class EvalConfig:
     Args:
         model (`str`):
             The model as `repo@revision`.
-        tasks (`tuple[str, ...]`):
+        tasks (`tuple[str, ...]`, *optional*):
             Registry names of the tasks to run, in order.
+        suites (`tuple[str, ...]`, *optional*):
+            Registry names of the suites to run. Their tasks run after `tasks`, each task once, and each suite and the suites it holds are scored.
         out (`Path`, *optional*):
             Where to write `results.json` and `predictions/<task>.jsonl`. Nothing is written if not set.
         limit (`int`, *optional*):
@@ -37,11 +40,12 @@ class EvalConfig:
             The command line recorded in the provenance. The default marks a run started from the Python API. The CLI passes its own command line.
 
     Raises:
-        `ValueError`: if a task repeats, or `limit` or `batch_tokens` is less than 1, before any model loads.
+        `ValueError`: if no task or suite is given, a task or suite repeats, or `limit` or `batch_tokens` is less than 1, before any model loads.
     """
 
     model: str
-    tasks: tuple[str, ...]
+    tasks: tuple[str, ...] = ()
+    suites: tuple[str, ...] = ()
     out: Path | None = None
     limit: int | None = None
     batch_tokens: int = DEFAULT_BATCH_TOKENS
@@ -50,8 +54,12 @@ class EvalConfig:
     command: str = "python"
 
     def __post_init__(self) -> None:
+        if not self.tasks and not self.suites:
+            raise ValueError("give at least one task or suite")
         if len(set(self.tasks)) != len(self.tasks):
             raise ValueError(f"tasks repeat: {self.tasks}")
+        if len(set(self.suites)) != len(self.suites):
+            raise ValueError(f"suites repeat: {self.suites}")
         if self.limit is not None and self.limit < 1:
             raise ValueError(f"limit must be at least 1, got {self.limit}")
         if self.batch_tokens < 1:
@@ -60,21 +68,23 @@ class EvalConfig:
 
 def evaluate(config: EvalConfig) -> Results:
     """
-    Loads the model, scores every task and writes the results, then logs them to the tracker if `wandb_project` is set.
+    Loads the model, scores every task and suite and writes the results, then logs them to the tracker if `wandb_project` is set.
 
     Raises:
-        `KeyError`: if a task name isn't in the registry.
+        `KeyError`: if a task or suite name isn't in its registry.
+        `ValueError`: if two different tasks to run share a name.
         `FileExistsError`: if `config.out` exists and isn't an empty directory.
     """
-    _check_tasks(config.tasks)
+    _check_names("tasks", config.tasks, TASKS)
+    _check_names("suites", config.suites, SUITES)
+    suites = [SUITES[name] for name in config.suites]
+    tasks = _tasks_to_run(config.tasks, suites)
     _check_out(config.out)
 
     model = ScoringModel.from_pretrained(
         config.model, device=config.device, batch_tokens=config.batch_tokens
     )
-    task_results = []
-    for name in config.tasks:
-        task_results.append(score_task(model, TASKS[name], config.limit, config.out))
+    task_results = [score_task(model, task, config.limit, config.out) for task in tasks]
 
     provenance = Provenance.collect(
         model=model.name,
@@ -85,7 +95,7 @@ def evaluate(config: EvalConfig) -> Results:
         max_length=model.max_length,
         attention=model.attention,
     )
-    results = Results(provenance, task_results)
+    results = Results(provenance, task_results, _suite_results(suites, task_results))
 
     if config.out is not None:
         results.write(config.out)
@@ -99,13 +109,40 @@ def evaluate(config: EvalConfig) -> Results:
     return results
 
 
-def _check_tasks(names: tuple[str, ...]) -> None:
-    """Raises `KeyError` if a task isn't in the registry, before any model loads."""
+def _check_names(kind: str, names: tuple[str, ...], registry: dict[str, Any]) -> None:
+    """Raises `KeyError` if a name isn't in its registry, before any model loads."""
     # Checked here, not in `EvalConfig`: a config is plain data that may be built where the
     # registry differs from the worker's.
-    unknown = [name for name in names if name not in TASKS]
+    unknown = [name for name in names if name not in registry]
     if unknown:
-        raise KeyError(f"unknown tasks {unknown}; known: {sorted(TASKS)}")
+        raise KeyError(f"unknown {kind} {unknown}; known: {sorted(registry)}")
+
+
+def _tasks_to_run(names: tuple[str, ...], suites: list[Suite]) -> list[MultipleChoiceTask]:
+    """Returns the named tasks, then each suite's tasks not yet listed, each name once."""
+    tasks: dict[str, MultipleChoiceTask] = {}
+    for task in (*(TASKS[name] for name in names), *(t for suite in suites for t in suite.tasks)):
+        # Results are keyed by task name, so two tasks under one name would score as one.
+        if tasks.setdefault(task.name, task) != task:
+            raise ValueError(f"two different tasks are named {task.name}")
+
+    return list(tasks.values())
+
+
+def _suite_results(suites: list[Suite], task_results: list[TaskResult]) -> list[SuiteResult]:
+    """Scores each suite and the suites it holds, each after its members and each once."""
+    metrics = {result.task: result.metrics for result in task_results}
+    unique = {held.name: held for suite in suites for held in suite.suites}
+
+    return [
+        SuiteResult(
+            suite=suite.name,
+            members=[member.name for member in suite.members],
+            metric=suite.metric,
+            score=suite.score(metrics) if suite.scored else None,
+        )
+        for suite in unique.values()
+    ]
 
 
 def _check_out(out: Path | None) -> None:
