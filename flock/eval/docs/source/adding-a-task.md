@@ -17,6 +17,7 @@ This is the whole task, `flock/eval/tasks/arc.py`:
 5. **Register the task.** In `flock/eval/tasks/registry.py`, import it and add it to the tuple that builds `TASKS`. `flock-eval run --task` accepts it from then on.
 6. **Test the row function.** Add a test in `tests/eval/test_tasks.py` that maps a hand-written row to the expected [`~eval.tasks.MCDoc`], as `test_arc_doc_maps_letter_and_digit_keys` does. Tests never download: `tests/eval/conftest.py` makes every task read the toy rows in `tests/eval/toy.py`.
 7. **List the task** in the table of [Tasks](tasks#available-tasks).
+8. **Add it to its suite**, if it belongs to one, such as `_QA_TASKS` in `flock/eval/tasks/base_easy.py` for a Base Easy QA task. See [Suites](tasks#suites).
 
 To check a new task, print the first doc's prompt:
 
