@@ -187,7 +187,16 @@ class ScoringModel:
         encoded = self._encode(requests)
         self._check_continuations(requests, encoded)
         tokens_cut = [_tokens_cut(pair, self.max_length) for pair in encoded]
-        self._warn_truncated(tokens_cut)
+        # Left truncation changes what is scored, so it is never silent.
+        truncated = sum(cut > 0 for cut in tokens_cut)
+        if truncated:
+            logger.warning(
+                "%s: %d of %d requests exceed %d tokens; their contexts are left-truncated",
+                self.name,
+                truncated,
+                len(requests),
+                self.max_length,
+            )
 
         input_lengths = [_input_length(pair, self.max_length) for pair in encoded]
         # Longest first, as lm-evaluation-harness sorts (`_collate` in `_loglikelihood_tokens`),
@@ -282,18 +291,6 @@ class ScoringModel:
                 raise ValueError(f"continuation has no tokens: {request}")
             if len(continuation) > self.max_length:
                 raise ValueError(f"continuation longer than {self.max_length} tokens: {request}")
-
-    def _warn_truncated(self, tokens_cut: list[int]) -> None:
-        """Logs how many requests lose context from the left, given each one's cut, since that changes what is scored."""
-        truncated = sum(cut > 0 for cut in tokens_cut)
-        if truncated:
-            logger.warning(
-                "%s: %d of %d requests exceed %d tokens; their contexts are left-truncated",
-                self.name,
-                truncated,
-                len(tokens_cut),
-                self.max_length,
-            )
 
     def _batches(self, order: list[int], input_lengths: list[int]) -> Iterator[list[int]]:
         """Splits `order` (longest first) into runs whose padded size fits `batch_tokens`, given each request's model-input length."""
