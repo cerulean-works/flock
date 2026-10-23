@@ -1,4 +1,4 @@
-# 007: record truncated requests in results.json
+# 002: record truncated requests in results.json
 
 | | |
 | --- | --- |
