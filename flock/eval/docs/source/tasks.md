@@ -18,4 +18,8 @@ A task is a [`~eval.tasks.MultipleChoiceTask`] registered by name in `TASKS`. [A
 
 [[autodoc]] eval.tasks.MCDoc
 
+[[autodoc]] eval.tasks.Choice
+
+[[autodoc]] eval.tasks.cloze
+
 [[autodoc]] eval.tasks.MCRequests
