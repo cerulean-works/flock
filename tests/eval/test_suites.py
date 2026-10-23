@@ -112,7 +112,7 @@ def test_suite_rejects_bad_definitions(kwargs, match):
 
 
 def test_registry_suites_hold_registered_tasks():
-    assert SUITES["base_easy"].tasks == (TASKS["arc_easy"],)
+    assert SUITES["base_easy"].tasks[:2] == (TASKS["arc_easy"], TASKS["arc_challenge"])
     assert SUITES["base_easy:qa_bpb"].metric == "bpb"
     for suite in SUITES.values():
         assert all(TASKS[task.name] is task for task in suite.tasks)

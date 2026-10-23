@@ -1,5 +1,6 @@
 """ARC (Clark et al. 2018, 1803.05457): grade-school science questions."""
 
+import dataclasses
 from typing import Any
 
 from flock.eval.tasks.base import Dataset, Fewshot, MCDoc, MultipleChoiceTask, cloze
@@ -38,6 +39,25 @@ ARC_EASY = MultipleChoiceTask(
             "MCAS_2004_8_27",
             "NYSEDREGENTS_2006_8_10",
             "Mercury_7013388",
+        ),
+    ),
+)
+
+ARC_CHALLENGE = MultipleChoiceTask(
+    name="arc_challenge",
+    dataset=dataclasses.replace(ARC_EASY.dataset, subset="ARC-Challenge"),
+    to_doc=arc_doc,
+    # OLMES's `arc_challenge:rc::olmes` scores PMI (`oe_eval/configs/tasks.py`).
+    primary_metric="acc_uncond",
+    # The first 5 of OLMES's curated `FEWSHOT_SOURCES["OLMES:ARC-Challenge"]`, all train rows.
+    fewshot=Fewshot(
+        split="train",
+        ids=(
+            "Mercury_SC_415702",
+            "MCAS_2009_5_6516",
+            "Mercury_7233695",
+            "Mercury_7041615",
+            "MCAS_1998_4_3",
         ),
     ),
 )
