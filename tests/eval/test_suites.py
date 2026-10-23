@@ -7,11 +7,13 @@ from flock.eval.tasks import SUITES, TASKS, Suite
 from .toy import TASK
 
 OTHER = dataclasses.replace(TASK, name="other", primary_metric="acc_raw")
+THIRD = dataclasses.replace(TASK, name="third", primary_metric="acc_raw")
 GOLD_ONLY = dataclasses.replace(TASK, name="gold", metrics=("bpb",), primary_metric="bpb")
 
 METRICS = {
     "toy": {"acc_per_char": 0.5, "acc_raw": 0.4, "bpb": 1.0},
     "other": {"acc_per_char": 0.3, "acc_raw": 0.9, "bpb": 2.0},
+    "third": {"acc_raw": 0.7},
     "gold": {"bpb": 4.0},
 }
 
@@ -22,11 +24,18 @@ def test_score_reads_each_tasks_primary_metric_unless_metric_is_set():
 
 
 def test_nested_suites_count_as_one_member_under_their_own_metric():
-    inner = Suite("inner", (OTHER, GOLD_ONLY), metric="bpb")
+    inner = Suite("inner", (OTHER, THIRD), metric="acc_raw")
     outer = Suite("outer", (TASK, inner))
 
-    # The inner mean (2 + 4) / 2 weighs as much as the one task beside it.
-    assert outer.score(METRICS) == pytest.approx((0.5 + 3.0) / 2)
+    # The inner mean (0.9 + 0.7) / 2 weighs as much as the one task beside it.
+    assert outer.score(METRICS) == pytest.approx((0.5 + 0.8) / 2)
+    bpb = Suite("bpb", (GOLD_ONLY, Suite("inner", (TASK, OTHER), metric="bpb")))
+    assert bpb.score(METRICS) == pytest.approx((4.0 + 1.5) / 2)
+
+
+def test_a_suite_may_share_a_name_with_a_task():
+    # Tasks and suites are separate namespaces in the registries and in results.json.
+    assert Suite("toy", (TASK,)).tasks == (TASK,)
 
 
 def test_two_suites_over_one_task_list_share_their_tasks():
@@ -58,6 +67,17 @@ def test_score_needs_every_member_tasks_metric():
             {"members": (TASK, GOLD_ONLY), "metric": "acc_raw"},
             "gold doesn't report acc_raw",
             id="metric",
+        ),
+        pytest.param({"members": (TASK, GOLD_ONLY)}, "mix accuracies and bpb", id="mixed-tasks"),
+        pytest.param(
+            {"members": (TASK, Suite("inner", (OTHER,), metric="bpb"))},
+            "mix accuracies and bpb",
+            id="mixed-suites",
+        ),
+        pytest.param(
+            {"members": (Suite("a", (Suite("x", (TASK,)),)), Suite("b", (Suite("x", (OTHER,)),)))},
+            "two different definitions are named x",
+            id="suite-name-clash",
         ),
         pytest.param(
             {"members": (Suite("g", (Suite("rc", (TASK,)),), scored=False),)},

@@ -12,6 +12,7 @@ from flock.eval.model import DEFAULT_BATCH_TOKENS, ScoringModel
 from flock.eval.provenance import Provenance
 from flock.eval.results import Results, SuiteResult, TaskResult, write_predictions
 from flock.eval.tasks import SUITES, TASKS, MultipleChoiceTask, Suite
+from flock.eval.tasks.suite import by_name
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,8 +25,6 @@ class EvalConfig:
             The model as `repo@revision`.
         tasks (`tuple[str, ...]`, *optional*):
             Registry names of the tasks to run, in order.
-        suites (`tuple[str, ...]`, *optional*):
-            Registry names of the suites to run. Their tasks run after `tasks`, each task once, and each suite and the suites it holds are scored.
         out (`Path`, *optional*):
             Where to write `results.json` and `predictions/<task>.jsonl`. Nothing is written if not set.
         limit (`int`, *optional*):
@@ -38,6 +37,8 @@ class EvalConfig:
             Also log the summary to this tracker project through the `wandb` SDK.
         command (`str`, *optional*, defaults to `"python"`):
             The command line recorded in the provenance. The default marks a run started from the Python API. The CLI passes its own command line.
+        suites (`tuple[str, ...]`, *optional*):
+            Registry names of the suites to run. Their tasks run after `tasks`, each task once, and each suite and the suites it holds are scored.
 
     Raises:
         `ValueError`: if no task or suite is given, a task or suite repeats, or `limit` or `batch_tokens` is less than 1, before any model loads.
@@ -45,13 +46,13 @@ class EvalConfig:
 
     model: str
     tasks: tuple[str, ...] = ()
-    suites: tuple[str, ...] = ()
     out: Path | None = None
     limit: int | None = None
     batch_tokens: int = DEFAULT_BATCH_TOKENS
     device: str | None = None
     wandb_project: str | None = None
     command: str = "python"
+    suites: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.tasks and not self.suites:
@@ -72,7 +73,7 @@ def evaluate(config: EvalConfig) -> Results:
 
     Raises:
         `KeyError`: if a task or suite name isn't in its registry.
-        `ValueError`: if two different tasks to run share a name.
+        `ValueError`: if two different tasks, or two different suites, to run share a name.
         `FileExistsError`: if `config.out` exists and isn't an empty directory.
     """
     _check_names("tasks", config.tasks, TASKS)
@@ -120,19 +121,15 @@ def _check_names(kind: str, names: tuple[str, ...], registry: dict[str, Any]) ->
 
 def _tasks_to_run(names: tuple[str, ...], suites: list[Suite]) -> list[MultipleChoiceTask]:
     """Returns the named tasks, then each suite's tasks not yet listed, each name once."""
-    tasks: dict[str, MultipleChoiceTask] = {}
-    for task in (*(TASKS[name] for name in names), *(t for suite in suites for t in suite.tasks)):
-        # Results are keyed by task name, so two tasks under one name would score as one.
-        if tasks.setdefault(task.name, task) != task:
-            raise ValueError(f"two different tasks are named {task.name}")
+    named = (TASKS[name] for name in names)
 
-    return list(tasks.values())
+    return list(by_name((*named, *(task for suite in suites for task in suite.tasks))).values())
 
 
 def _suite_results(suites: list[Suite], task_results: list[TaskResult]) -> list[SuiteResult]:
     """Scores each suite and the suites it holds, each after its members and each once."""
     metrics = {result.task: result.metrics for result in task_results}
-    unique = {held.name: held for suite in suites for held in suite.suites}
+    unique = by_name(held for suite in suites for held in suite.suites)
 
     return [
         SuiteResult(

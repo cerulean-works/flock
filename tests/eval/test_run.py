@@ -88,8 +88,15 @@ def test_evaluate_scores_suites_and_each_task_once(toy_suites, tmp_path):
 
 def test_evaluate_rejects_two_tasks_under_one_name(toy_suites, monkeypatch):
     monkeypatch.setitem(run.TASKS, "other", dataclasses.replace(OTHER, description="x"))
-    with pytest.raises(ValueError, match="two different tasks are named other"):
+    with pytest.raises(ValueError, match="two different definitions are named other"):
         evaluate(EvalConfig(model="tiny@0", tasks=("other",), suites=("toy:rc",)))
+
+
+def test_evaluate_rejects_two_suites_under_one_name(toy_suites, monkeypatch):
+    clash = Suite("toy:rc", (TASK,))
+    monkeypatch.setitem(run.SUITES, "other", Suite("other", (clash,)))
+    with pytest.raises(ValueError, match="two different definitions are named toy:rc"):
+        evaluate(EvalConfig(model="tiny@0", suites=("toys", "other")))
 
 
 def test_prediction_rows_drop_padded_choices():
@@ -208,7 +215,7 @@ def test_cli_needs_a_task_or_suite():
     result = CliRunner().invoke(cli.main, ["run", "--model", "m@0", "--out", "o"])
 
     assert result.exit_code == 2
-    assert "at least one --task or --suite" in result.output
+    assert "at least one task or suite" in result.output
 
 
 def test_cli_prints_suite_scores(toy_suites, tmp_path, monkeypatch):

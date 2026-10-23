@@ -10,7 +10,7 @@ A task is a [`~eval.tasks.MultipleChoiceTask`] registered by name in `TASKS`, an
 
 ## Suites
 
-A suite's score is the unweighted mean of its members' scores, as OLMES's `macro` aggregate. A member task gives the suite's `metric`, or its own primary metric if the suite sets none. A member suite counts as one member, whatever its size. `base_easy` has no score of its own: it groups suites whose scores don't average, so that one name runs them all.
+A suite's score is the unweighted mean of its members' scores, as OLMES's `macro` aggregate. A member task gives the suite's `metric`, or its own primary metric if the suite sets none. A member suite counts as one member, whatever its size. A scored suite's members are all accuracies or all `bpb`, since the two don't average. `base_easy` has no score of its own: it groups suites whose scores don't average, so that one name runs them all.
 
 | Name | Members | Metric | OLMES suite |
 |---|---|---|---|
