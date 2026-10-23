@@ -34,12 +34,12 @@ class Suite:
         members (`tuple[MultipleChoiceTask | Suite, ...]`):
             The tasks and suites it groups, each name once.
         metric (`str`, *optional*):
-            The metric read from every member task. Each task's primary metric if not set. Member suites keep their own, so a suite with a `metric` holds only tasks.
+            The metric read from every member task. Each task's primary metric if not set. Member suites keep their own, so a suite with a `metric` holds only tasks and suites with the same `metric`, such as MMLU's `bpb` group inside `base_easy:qa_bpb`.
         scored (`bool`, *optional*, defaults to `True`):
             Whether the suite has a score. An unscored suite only groups suites whose scores don't average, such as an accuracy and a `bpb`, so that one name runs them all.
 
     Raises:
-        `ValueError`: if `members` is empty or repeats a name, a member task doesn't report the metric read from it, members mix accuracies and `bpb`, `metric` is set next to a member suite, or `scored` is `False` with a `metric` or a direct member task. Also if a scored suite holds an unscored one, or two different tasks, or two different suites, under it share a name.
+        `ValueError`: if `members` is empty or repeats a name, a member task doesn't report the metric read from it, members mix accuracies and `bpb`, `metric` is set next to a member suite with another `metric`, or `scored` is `False` with a `metric` or a direct member task. Also if a scored suite holds an unscored one, or two different tasks, or two different suites, under it share a name.
     """
 
     name: str
@@ -72,11 +72,11 @@ class Suite:
         """Raises `ValueError` if a member can't give a score under this suite."""
         for member in self.members:
             if isinstance(member, Suite):
-                # A member suite is scored under its own metric, so this one's would misname the
-                # score.
-                if self.metric is not None:
+                # A member suite is scored under its own metric, so another one here would
+                # misname the score.
+                if self.metric is not None and member.metric != self.metric:
                     raise ValueError(
-                        f"{self.name}: metric reads member tasks only, not {member.name}"
+                        f"{self.name}: member {member.name} isn't scored by {self.metric}"
                     )
                 if not member.scored:
                     raise ValueError(f"{self.name}: member {member.name} has no score")
