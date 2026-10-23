@@ -12,7 +12,8 @@ from flock.eval.tasks.winogrande import WINOGRANDE
 # OLMES's `olmo3:base_easy:qa_rc` and `olmo3:base_easy:qa_bpb` (`oe_eval/configs/task_suites.py`):
 # the same tasks, read by their primary metric and by `bpb`, so a run scores each task once.
 # MMLU is one member, through a suite of each kind. OLMES lists ARC as one suite with no metric
-# of its own; we count ARC-Easy and ARC-Challenge as two members.
+# of its own, which by our reading leaves its suite unscored, so we count ARC-Easy and
+# ARC-Challenge as two members (stage file 003, D18).
 _QA_TASKS = (ARC_EASY, ARC_CHALLENGE, CSQA, HELLASWAG, WINOGRANDE, SOCIALIQA, PIQA)
 
 QA_RC = Suite("base_easy:qa_rc", (*_QA_TASKS, MMLU))

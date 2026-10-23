@@ -23,7 +23,7 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 
 | Name | Members | Metric | OLMES suite |
 |---|---|---|---|
-| `mmlu` | the 57 `mmlu_<subject>` tasks | `acc_per_char` | `mmlu:rc::olmes` |
+| `mmlu` | the 57 `mmlu_<subject>` tasks | each task's primary metric (`acc_per_char`) | `mmlu:rc::olmes` |
 | `mmlu:bpb` | the 57 `mmlu_<subject>` tasks | `bpb` | `mmlu:rc:bpb::olmes` |
 | `base_easy:qa_rc` | `arc_easy`, `arc_challenge`, `csqa`, `hellaswag`, `winogrande`, `socialiqa`, `piqa`, `mmlu` | each task's primary metric | `olmo3:base_easy:qa_rc` |
 | `base_easy:qa_bpb` | the same tasks, and `mmlu:bpb` | `bpb` | `olmo3:base_easy:qa_bpb` |
