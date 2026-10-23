@@ -29,20 +29,33 @@ class Dataset:
             The configuration name, for example `ARC-Easy`.
         split (`str`):
             The split a task is scored on.
+        row_index (`bool`, *optional*, defaults to `False`):
+            Whether each row gets its position in its split as `"index"`, for datasets with no id column. A `to_doc` then reads the doc's id as `str(row["index"])`, as OLMES does for MMLU (`oe_eval/tasks/oe_eval_tasks/mmlu.py`).
     """
 
     repo: str
     revision: str
     subset: str | None
     split: str
+    row_index: bool = False
 
     def load(self, split: str | None = None) -> list[dict[str, Any]]:
-        """Returns the rows of `split`, defaulting to the scored split."""
+        """
+        Returns the rows of `split`, defaulting to the scored split.
+
+        Raises:
+            `ValueError`: if `row_index` is set and the rows already have an `"index"` column.
+        """
         rows = datasets.load_dataset(
             self.repo, self.subset, revision=self.revision, split=split or self.split
         )
+        if not self.row_index:
+            return list(rows)
 
-        return list(rows)
+        if "index" in rows.column_names:
+            raise ValueError(f"{self.repo} already has an index column")
+
+        return [{**row, "index": position} for position, row in enumerate(rows)]
 
 
 @dataclass(frozen=True, slots=True)
