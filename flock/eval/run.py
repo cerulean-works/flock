@@ -137,7 +137,8 @@ def score_task(
     start = time.perf_counter()
     request_scores = model.loglikelihood(prepared.requests)
     scores = prepared.choice_scores(request_scores)
-    per_doc = multiple_choice(scores)
+    reported = task.reported_metrics
+    per_doc = {name: values for name, values in multiple_choice(scores).items() if name in reported}
     # One host copy for every metric's mean. It also waits for the GPU, so `seconds` times the
     # scoring.
     means = torch.stack(list(per_doc.values())).mean(dim=1).tolist()
