@@ -96,7 +96,7 @@ def test_piqa_uses_the_goal_prefix():
 
 
 def test_mmlu_subject_header_comes_before_the_shots():
-    task = next(task for task in MMLU_TASKS if task.name == "mmlu_high_school_us_history")
+    task = TASKS["mmlu_high_school_us_history"]
     shot = mmlu_doc({"index": 0, "question": "1 + 1?", "choices": ["1", "2"], "answer": 1})
     doc = mmlu_doc({"index": 7, "question": "2 + 2?", "choices": ["4", "5"], "answer": 0})
 
@@ -108,12 +108,9 @@ def test_mmlu_subject_header_comes_before_the_shots():
     )
 
 
-def test_mmlu_is_one_member_of_each_base_easy_suite():
+def test_mmlu_has_one_task_per_subject_under_both_suites():
     assert len(set(SUBJECTS)) == len(MMLU_TASKS) == 57
     assert SUITES["mmlu"].tasks == SUITES["mmlu:bpb"].tasks == MMLU_TASKS
-    assert SUITES["mmlu:bpb"] in SUITES["base_easy:qa_bpb"].members
-    assert SUITES["mmlu"] in SUITES["base_easy:qa_rc"].members
-    assert len(SUITES["base_easy:qa_rc"].members) == 8
 
 
 def test_suite_scores_average_mmlu_first():

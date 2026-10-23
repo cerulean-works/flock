@@ -15,7 +15,7 @@ A task is a [`~eval.tasks.MultipleChoiceTask`] registered by name in `TASKS`, an
 | `piqa` | [PIQA](https://huggingface.co/datasets/ybisk/piqa) | `validation` | 1838 | 5, the curated OLMES examples | `acc_per_char` |
 | `mmlu_<subject>` (57) | [MMLU](https://huggingface.co/datasets/cais/mmlu) | `test` | 14042 in all | the subject's first 5 `dev` rows | `acc_per_char` |
 
-Every task's requests are identical, string for string, to OLMES's for the same OLMo 3 Base Easy task (`<task>:rc::olmes:full`, and `mmlu_<subject>:rc::olmes`). HellaSwag, WinoGrande, SocialIQA, PIQA and MMLU have no usable id column, so a doc's id is its row's position in its split, as in OLMES (HellaSwag's `ind` repeats within a split). SocialIQA and PIQA read the Hub's parquet conversion of their loading scripts, which `datasets` no longer runs. A few HellaSwag choices start with two spaces, where OLMES's markup cleanup leaves one; we keep them for parity.
+Every task's requests are identical, string for string, to OLMES's for the same OLMo 3 Base Easy task (`<task>:rc::olmes:full`, and `mmlu_<subject>:rc::olmes`). HellaSwag, WinoGrande, SocialIQA, PIQA and MMLU have no usable id column, so a doc's id is its row's position in its split, as in OLMES (HellaSwag's `ind` repeats within a split). SocialIQA and PIQA read the Hub's parquet conversion of their loading scripts, which `datasets` no longer runs. A few HellaSwag choices start with two spaces: removing a leading `[step]` tag leaves a space before the continuation's own, in OLMES too, so we keep it for parity.
 
 ## Suites
 

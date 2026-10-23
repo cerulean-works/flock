@@ -9,8 +9,8 @@ from flock.eval.tasks.base import Choice, Dataset, Fewshot, MCDoc, MultipleChoic
 def preprocess(text: str) -> str:
     """Removes WikiHow's bracketed markup, as OLMES's `HellaSwag.preprocess` does."""
     text = text.strip()
-    text = re.sub("\\.? \\[title\\]", ". ", text)
-    text = re.sub("\\[.*?\\]", "", text)
+    text = re.sub(r"\.? \[title\]", ". ", text)
+    text = re.sub(r"\[.*?\]", "", text)
 
     return text.replace("  ", " ")
 

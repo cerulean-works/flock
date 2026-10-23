@@ -30,7 +30,7 @@ class Dataset:
         split (`str`):
             The split a task is scored on.
         row_index (`bool`, *optional*, defaults to `False`):
-            Whether each row gets its position in its split as `"index"`, for datasets with no id column. A `to_doc` then reads the doc's id as `str(row["index"])`, as OLMES does for MMLU (`oe_eval/tasks/oe_eval_tasks/mmlu.py`).
+            Whether each row gets its position in its split as `"index"`, for datasets with no id column. A `to_doc` then reads the doc's id as `str(row["index"])`, as OLMES does for MMLU (`oe_eval/tasks/oe_eval_tasks/mmlu.py`). Written-out `Fewshot.rows` don't go through `load`, so they need an `"index"` of their own.
     """
 
     repo: str
