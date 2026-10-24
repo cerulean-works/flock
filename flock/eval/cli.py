@@ -9,7 +9,7 @@ import click
 from flock.eval.model import DEFAULT_BATCH_TOKENS
 from flock.eval.results import Results
 from flock.eval.run import EvalConfig, evaluate
-from flock.eval.tasks import TASKS
+from flock.eval.tasks import SUITES, TASKS
 
 
 @click.group(name="eval")
@@ -23,9 +23,15 @@ def main() -> None:
     "--task",
     "tasks",
     multiple=True,
-    required=True,
     type=click.Choice(sorted(TASKS)),
     help="Task to run; repeat for several.",
+)
+@click.option(
+    "--suite",
+    "suites",
+    multiple=True,
+    type=click.Choice(sorted(SUITES)),
+    help="Suite to run and score; repeat for several. Each task runs once.",
 )
 @click.option(
     "--out",
@@ -50,29 +56,34 @@ def main() -> None:
 def run(
     model: str,
     tasks: tuple[str, ...],
+    suites: tuple[str, ...],
     out: Path,
     limit: int | None,
     batch_tokens: int,
     device: str | None,
     wandb_project: str | None,
 ) -> None:
-    """Score a model on tasks and write results.json."""
-    config = EvalConfig(
-        model=model,
-        tasks=tasks,
-        out=out,
-        limit=limit,
-        batch_tokens=batch_tokens,
-        device=device,
-        wandb_project=wandb_project,
-        command=shlex.join(["flock-eval", *sys.argv[1:]]),
-    )
+    """Score a model on tasks and suites and write results.json."""
+    try:
+        config = EvalConfig(
+            model=model,
+            tasks=tasks,
+            suites=suites,
+            out=out,
+            limit=limit,
+            batch_tokens=batch_tokens,
+            device=device,
+            wandb_project=wandb_project,
+            command=shlex.join(["flock-eval", *sys.argv[1:]]),
+        )
+    except ValueError as error:
+        raise click.UsageError(str(error)) from None
 
     click.echo(format_results(evaluate(config)))
 
 
 def format_results(results: Results) -> str:
-    """Formats a header with the model and commit, then per task a summary line and one line per metric, primary first."""
+    """Formats a header with the model and commit, then per task a summary line and one line per metric, primary first, then one line per suite."""
     lines = [f"model {results.provenance.model}  flock {results.provenance.flock_commit}"]
 
     for task in results.tasks:
@@ -85,5 +96,9 @@ def format_results(results: Results) -> str:
         ]
         width = max(len(name) for name in names) + 1
         lines += [f"  {name:<{width}} {task.metrics[name]:.4f}" for name in names]
+
+    for suite in results.suites:
+        score = "unscored" if suite.score is None else f"{suite.score:.4f}"
+        lines.append(f"{suite.suite}  {score}  ({', '.join(suite.members)})")
 
     return "\n".join(lines)

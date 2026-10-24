@@ -2,11 +2,11 @@
 
 | | |
 | --- | --- |
-| Status | PR 1 (core) built; PRs 2 to 6 to follow |
-| Date | 2026-10-22 (design), 2026-10-23 (PR 1 and the calibration) |
+| Status | PR 1 (core) and PR 2 (suites) built; PRs 3 to 6 to follow |
+| Date | 2026-10-22 (design), 2026-10-23 (PR 1, the calibration and PR 2) |
 | Builds on | [001](001-eval-core.md) (scoring core, tasks as data, ARC-Easy) |
 | Keeps | 001's scoring, batching, metrics and results file; changes how a task describes its requests |
-| Result | `Choice`, `cloze`, the new `MCDoc`, `description`, `metrics`, `Fewshot.rows` and `num_shots`; ARC-Easy rewritten with identical requests; the bfloat16 tolerance calibrated and fixed (D22) |
+| Result | `Choice`, `cloze`, the new `MCDoc`, `description`, `metrics`, `Fewshot.rows` and `num_shots`; ARC-Easy rewritten with identical requests; the bfloat16 tolerance calibrated and fixed (D22); `Suite`, the `suites` section of `results.json` and `run --suite` (D18) |
 
 ## 1. Goal
 
@@ -148,9 +148,10 @@ class Suite:
     name: str
     members: tuple[MultipleChoiceTask | Suite, ...]
     metric: str | None = None  # None: each member's primary metric
+    scored: bool = True  # False: only groups suites, has no score
 ```
 
-A suite's score is the unweighted mean of its members' scores, a nested suite first, as OLMES's `_macro` (`oe_eval/tasks/aggregate_tasks.py:147-149`). `qa_rc` and `qa_bpb` are two suites over the same task objects, with `metric=None` and `metric="bpb"`, so `run --suite base-easy` scores each task once. `results.json` gains a `suites` section next to `tasks`; each entry lists its members by name, so a reader can recompute it.
+A suite's score is the unweighted mean of its members' scores, a nested suite first, as OLMES's `_macro` (`oe_eval/tasks/aggregate_tasks.py:147-149`). `qa_rc` and `qa_bpb` are two suites over the same task objects, with `metric=None` and `metric="bpb"`, so `run --suite base_easy` scores each task once. Suites take OLMES's names without the `olmo3:` prefix (`base_easy:qa_rc`), so each maps to OLMES's one to one. OLMES has no score over all of Base Easy, since an accuracy and a `bpb` don't average, so `base_easy` is an unscored suite that only groups the others. `results.json` gains a `suites` section next to `tasks`; each entry lists its members by name, so a reader can recompute it.
 
 OLMES's `arc:rc::olmes:full` has no `primary_metric` of its own (`oe_eval/configs/task_suites.py:128-130`). By our reading of `aggregate_tasks.py`, that means ARC never forms a group and OLMES's `qa_rc` would have no score. This is checked on the first OLMES run. We count ARC-Easy and ARC-Challenge as two members of `qa_rc`, and the stage file records what OLMES actually did.
 
@@ -250,3 +251,13 @@ Parity (D22) runs on each group of tasks as it lands, and a group's PR reports i
 - **`question_prefix` and `answer_prefix` left the task.** Rendering moved into `to_doc`, and `cloze` takes `question_prefix` for tasks such as PIQA (`Goal: `). Its signature is `cloze(question, answers, question_prefix="Question: ")`: no `gold`, which belongs to the `MCDoc`. A bare string as `answers` raises, since it would render one choice per character; a gold-only doc passes `(answer,)`.
 - **Check.** Every ARC-Easy request string, doc id and gold index is identical before and after (all 19002 requests compared). The task hash changes once, as D16 says. On an H200 in bfloat16 the branch scores within run-to-run noise of `main`: bfloat16 scoring is not bit-reproducible, even for one commit run twice on one node (about 5% of requests move, by at most 0.29 nats, so `acc_raw` moves by up to 0.08 points and `bpb` by 5e-5). The branch differs from its base by no more than that, and `acc_per_char` is 0.7677 in every run.
 
+### PR 2: suites (D18)
+
+- **`Suite`** lives in `flock/eval/tasks/suite.py`, and the Base Easy suites in `flock/eval/tasks/base_easy.py`, holding only `arc_easy` until PR 3 adds tasks. `SUITES` is built from `base_easy`'s own suite tree, so a suite can't be held without being registered.
+- **A member suite is scored under its own `metric`**, not the outer suite's. Nothing passes down, so a suite's score reads off its own definition. `qa_bpb` will then hold a `bpb` twin of each nested group (MMLU's 57 subjects in PR 3) rather than reuse the `qa_rc` one.
+- **Checks at definition time.** A suite raises on no members, a repeated member name, a member task that doesn't report the metric read from it, members that mix accuracies and `bpb` (they don't average, which is also why `base_easy` is unscored), a scored suite holding an unscored one, a `metric` next to a member suite (which keeps its own), an unscored suite with a `metric` or a direct task, and two different tasks, or two different suites, under one name. Results are keyed by name, so two definitions under one name would silently score as one. One helper, `by_name`, makes that last check for suites, for `evaluate` across `--task` and every `--suite`, and for the registries. Tasks and suites are separate namespaces, as they are in `results.json`.
+- **`evaluate` runs the given tasks first, then each suite's tasks not yet run**, each once, and writes every suite reached, each after its members. Suite scores are means of the per-task means already on the host, so they add no GPU work.
+- **`results.json` is schema 4**: `suites` is a list of `{suite, members, metric, score}`, empty for a run of tasks only. The tracker logs `suites/<suite>` for each scored suite, and each suite's members in the run's config, since a suite's score compares only between runs with the same members. `--task` is no longer required; at least one `--task` or `--suite` is.
+- **`EvalConfig.suites` is its last field**, so positional calls written before suites keep working, and the CLI shows a config's `ValueError` as a usage error.
+- **`TASKS` includes every task in a suite**, so adding a task to its suite registers it.
+- **Check.** The four gates pass, and the tests cover nested means on hand values, `qa_rc` and `qa_bpb` reading one scored task, the order and contents of the `suites` section, and every definition check. Scores of tasks are unchanged: the scoring path is untouched.
