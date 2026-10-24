@@ -40,7 +40,7 @@ uv run flock-eval run \
 
 ## The prompt format
 
-Each [`~eval.tasks.Choice`] of a doc is one request: its `continuation` is scored after the task's `description`, the few-shot examples and its `context`. Each example is its gold choice's context and continuation, followed by a blank line. With [`~eval.tasks.cloze`], every choice shares the context `Question: <question>\nAnswer:` and its continuation is `" <choice>"`:
+Each [`~eval.tasks.Choice`] of a doc is one request: its `continuation` is scored after the task's `description`, the few-shot examples and its `context`. Each example is its gold choice's context and continuation (or the doc's `example`, below), followed by a blank line. With [`~eval.tasks.cloze`], every choice shares the context `Question: <question>\nAnswer:` and its continuation is `" <choice>"`:
 
 ```text
 Question: <few-shot question 1>
@@ -57,7 +57,8 @@ For pointwise mutual information (PMI, `acc_uncond`), each choice is scored a se
 A task with another format writes its own choices in `to_doc`:
 - **Other prefixes:** `cloze(goal, answers, question_prefix="Goal: ")`.
 - **A context per choice:** give each `Choice` its own `context` and the same `continuation`, as WinoGrande does.
-- **A gold text only**, such as a math solution: one `Choice` with `gold=0`, and `metrics=("bpb",)` on the task, since an accuracy over one choice is always 1.
+- **A gold text only**, such as a math solution: one `Choice` with `gold=0`, and `metrics=("bpb",)` on the task, since an accuracy over one choice is always 1. Set `unconditional_context=None` too, since PMI has nothing to compare.
+- **Examples that read differently from the scored text:** set the doc's `example`. HumanEval's examples put a space before the solution that the scored doc doesn't have, as OLMES does.
 - **Text before the examples**, such as a subject header: the task's `description`.
 - **Examples from the scored split:** set `Fewshot.num_shots` and list one id more than it. Each doc is shown the first `num_shots` examples that aren't the doc itself. The ids must come from the split the task scores, since an id identifies a doc within one split; the task rejects any other.
 
