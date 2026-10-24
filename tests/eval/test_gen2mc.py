@@ -75,7 +75,10 @@ def test_gen2mc_shots_render_olmes_heads():
         task = TASKS[name]
         assert task.fewshot is not None
         shots = [task.to_doc(row) for row in task.fewshot.rows]
-        assert hashlib.sha256(task._head(shots).encode()).hexdigest()[:16] == digest
+        doc = shots[0]
+        context = task.requests([doc], shots).requests[0].context
+        head = context.removesuffix(doc.choices[0].context)
+        assert hashlib.sha256(head.encode()).hexdigest()[:16] == digest
 
 
 def test_gen2mc_rejects_a_key_that_is_not_one_letter():

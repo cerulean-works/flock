@@ -43,7 +43,7 @@ def jeopardy_doc(row: dict[str, Any]) -> MCDoc:
     return MCDoc(
         id=row["id"],
         choices=cloze(
-            clue.lstrip(),
+            clue,
             row["choices"]["text"],
             question_prefix=f"Category: {category}\nQuestion: ",
         ),
@@ -418,7 +418,7 @@ def _gen2mc_task(
     split: str,
     revision: str,
     to_doc: Callable[[dict[str, Any]], MCDoc],
-    shots: tuple[dict[str, Any], ...],
+    shots: tuple[dict[str, Any], ...] | None,
 ) -> MultipleChoiceTask:
     """OLMES's `<name>:rc::gen2mc:xlarge`, scored by accuracy per character on the one split its dataset has (`oe_eval/configs/tasks.py`)."""
     return MultipleChoiceTask(
@@ -431,8 +431,7 @@ def _gen2mc_task(
         ),
         to_doc=to_doc,
         primary_metric="acc_per_char",
-        # Zero-shot when there are no rows: CoQA's prompts already hold a long story.
-        fewshot=Fewshot(rows=shots) if shots else None,
+        fewshot=None if shots is None else Fewshot(rows=shots),
     )
 
 
@@ -445,7 +444,8 @@ COQA = _gen2mc_task(
     "validation",
     "5e0394a08cc63398a22b745541e5cedf9c171bf3",
     coqa_doc,
-    (),
+    # Zero-shot in OLMES: each prompt already holds a long story.
+    None,
 )
 DROP = _gen2mc_task(
     "drop",
