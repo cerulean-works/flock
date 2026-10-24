@@ -55,7 +55,7 @@ class Dataset:
         Returns the rows of `split`, defaulting to the scored split.
 
         Raises:
-            `ValueError`: if `row_index` is set and the rows already have an `"index"` column.
+            `ValueError`: if `row_index` is set and the rows already have an `"index"` column, or, from `datasets`, if `data_file` is set and `split` isn't the scored split.
         """
         if self.data_file is None:
             rows = datasets.load_dataset(

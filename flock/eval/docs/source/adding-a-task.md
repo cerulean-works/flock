@@ -10,7 +10,7 @@ This is the whole task, `flock/eval/tasks/arc.py`:
 
 ## Steps
 
-1. **Pin the dataset** to a commit hash. Find it on the dataset's **Files and versions** tab, or with `huggingface_hub.HfApi().dataset_info(repo).sha`. A repo with a loading script, which `datasets` no longer runs, can still be read file by file: `Dataset(data_file=...)` names a JSON file in the repo that holds the scored split, as basic skills does.
+1. **Pin the dataset** to a commit hash. Find it on the dataset's **Files and versions** tab, or with `huggingface_hub.HfApi().dataset_info(repo).sha`. A repo with a loading script, which `datasets` no longer runs, can still be read file by file: `Dataset(data_file=...)` names a JSON file in the repo that holds the scored split, as basic skills does. Its few-shot examples then come from that split too.
 2. **Write a function** that turns one dataset row into an [`~eval.tasks.MCDoc`]. It renders each choice as the model sees it: [`~eval.tasks.cloze`] gives OLMES's `Question: ... Answer:` format, as `arc_doc` uses. [The prompt format](#the-prompt-format) covers other formats.
 3. **Choose the few-shot examples** by id. Use the curated OLMES examples when the task has them, so results compare with published numbers. Examples that aren't rows of the dataset go in `Fewshot.rows`, in the dataset's row format.
 4. **Choose the primary metric.** Follow OLMES or OLMo 3 for the task. [Metrics](metrics) lists the options.

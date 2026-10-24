@@ -61,6 +61,8 @@ MEDQA_EN = MultipleChoiceTask(
     ),
     to_doc=medqa_doc,
     primary_metric="acc_per_char",
+    # The same ids as SciQ's, correctly: both train splits (10178 and 11679 rows) draw from
+    # `Random(1234)` with the same number of bits, so the two samples coincide (checked with OLMES).
     fewshot=Fewshot(split="train", ids=("7220", "1914", "122", "1485", "9539")),
     # OLMES's `MedQAEn.unconditioned_prompt` is `None`, so it reports no PMI.
     unconditional_context=None,
