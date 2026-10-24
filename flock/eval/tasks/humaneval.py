@@ -43,7 +43,8 @@ HUMANEVAL = MultipleChoiceTask(
         ids=("HumanEval/112", "HumanEval/29", "HumanEval/1", "HumanEval/23"),
         num_shots=3,
     ),
-    # One choice, so an accuracy is always 1 and PMI has nothing to compare.
+    # One choice, so an accuracy is always 1 and pointwise mutual information (PMI) has nothing
+    # to compare.
     unconditional_context=None,
     metrics=("bpb",),
 )

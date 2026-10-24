@@ -107,7 +107,8 @@ MINERVA_MATH_TASKS = tuple(
         to_doc=minerva_doc,
         primary_metric="bpb",
         fewshot=Fewshot(rows=_SHOTS),
-        # One choice, so an accuracy is always 1 and PMI has nothing to compare.
+        # One choice, so an accuracy is always 1 and pointwise mutual information (PMI) has nothing
+        # to compare.
         unconditional_context=None,
         metrics=("bpb",),
     )
