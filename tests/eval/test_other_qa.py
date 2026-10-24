@@ -134,6 +134,11 @@ def test_data_file_takes_no_subset():
 def test_registry_suites_list_exactly_their_members():
     qa = [
         "arc_easy",
+        "coqa",
+        "drop",
+        "jeopardy",
+        "naturalqs",
+        "squad",
         "sciq",
         "qasper_yesno",
         "sciriff_yesno",
