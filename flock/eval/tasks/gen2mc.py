@@ -303,7 +303,9 @@ _SQUAD_SHOTS = (
             "the main drive (and in a direct line that connects through 3 statues and the Gold "
             "Dome), is a simple, modern stone statue of Mary."
         ),
-        "question_original": "To whom did the Virgin Mary allegedly appear in 1858 in Lourdes France?",
+        "question_original": (
+            "To whom did the Virgin Mary allegedly appear in 1858 in Lourdes France?"
+        ),
         "choices": {
             "text": [
                 "Saint Thomas Aquinas",
@@ -394,7 +396,9 @@ _SQUAD_SHOTS = (
             "high efficacy against many bacterial species and strains, have become less "
             "effective, due to the increased resistance of many bacterial strains."
         ),
-        "question_original": "Which two antibiotics that have high efficacy are much less useful now?",
+        "question_original": (
+            "Which two antibiotics that have high efficacy are much less useful now?"
+        ),
         "choices": {
             "text": [
                 "Ciprofloxacin and vancomycin",
