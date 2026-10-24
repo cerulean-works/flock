@@ -76,16 +76,19 @@ _SHOTS: tuple[dict[str, Any], ...] = (
 
 def minerva_doc(row: dict[str, Any]) -> MCDoc:
     """A MATH row as a gold-only doc in OLMES's Minerva format: `Problem:\\n<problem>\\n\\nSolution:`, then the solution (`oe_eval/tasks/oe_eval_tasks/minerva_math.py`)."""
+    context = f"Problem:\n{row['problem']}\n\nSolution:"
     solution = row["solution"]
-    # OLMES adds a leading space unless the text starts with one or a newline
+    # OLMES scores the solution with a leading space unless it starts with one or a newline
     # (`construct_basic_generation_requests` in `oe_eval/tasks/base_task.py`).
     if not solution.startswith((" ", "\n")):
         solution = " " + solution
 
     return MCDoc(
         id=str(row["index"]),
-        choices=(Choice(f"Problem:\n{row['problem']}\n\nSolution:", solution),),
+        choices=(Choice(context, solution),),
         gold=0,
+        # As an example, OLMES's `doc_to_target` adds the space always.
+        example=context + " " + row["solution"],
     )
 
 

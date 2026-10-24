@@ -24,12 +24,19 @@ A run with an output directory writes `results.json` and one predictions file pe
       "seconds": ...,
       "truncation": {"requests": 0, "docs": 0, "max_tokens_cut": 0},
       "docs_per_second": ...
-    }
+    },
+    ...
   ],
   "suites": [
     {"suite": "base_easy:qa_rc", "members": ["arc_easy"], "metric": null, "score": ...},
     {"suite": "base_easy:qa_bpb", "members": ["arc_easy"], "metric": "bpb", "score": ...},
-    {"suite": "base_easy", "members": ["base_easy:qa_rc", "base_easy:qa_bpb"], "metric": null, "score": null}
+    ...,
+    {
+      "suite": "base_easy",
+      "members": ["base_easy:qa_rc", "base_easy:qa_bpb", "base_easy:math_bpb", "base_easy:code_bpb"],
+      "metric": null,
+      "score": null
+    }
   ],
   "schema_version": 4
 }

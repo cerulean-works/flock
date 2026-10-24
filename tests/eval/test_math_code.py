@@ -9,15 +9,15 @@ from flock.eval.tasks.minerva_math import MINERVA_MATH_TASKS, SUBJECTS, minerva_
 
 def test_minerva_scores_the_solution_after_one_space():
     doc = minerva_doc({"index": 4, "problem": "What is $1+1$?", "solution": "It is $\\boxed{2}$."})
-    assert doc == MCDoc(
-        "4", (Choice("Problem:\nWhat is $1+1$?\n\nSolution:", " It is $\\boxed{2}$."),), 0
-    )
+    context = "Problem:\nWhat is $1+1$?\n\nSolution:"
+    assert doc.choices == (Choice(context, " It is $\\boxed{2}$."),)
+    assert doc.example == context + " It is $\\boxed{2}$."
 
-    # A solution that already starts with a space or a newline gets none added.
-    assert (
-        minerva_doc({"index": 5, "problem": "p", "solution": "\n2"}).choices[0].continuation
-        == "\n2"
-    )
+    # A solution that already starts with a newline is scored without a space, but OLMES's
+    # examples add one anyway.
+    doc = minerva_doc({"index": 5, "problem": "p", "solution": "\n2"})
+    assert doc.choices[0].continuation == "\n2"
+    assert doc.example == "Problem:\np\n\nSolution: \n2"
 
 
 def test_minerva_shots_are_olmes_literal_problems():

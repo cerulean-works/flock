@@ -34,7 +34,8 @@ _SHOTS = Fewshot(split="prompt", ids=("3", "9", "4"))
 
 def mbpp_doc(row: dict[str, Any]) -> MCDoc:
     """An MBPP row as a gold-only doc in OLMES's `inloop_bpb` format: the description, an open code fence, then the code and the closing fence, with no leading space (`codex_mbpp.py`)."""
-    code = row["code"].rstrip("\n").rstrip().replace("\r", "")
+    # OLMES's `.rstrip("\n").rstrip()`, which is one `.rstrip()`, then every `\r` dropped.
+    code = row["code"].rstrip().replace("\r", "")
 
     return MCDoc(
         id=str(row["task_id"]),
