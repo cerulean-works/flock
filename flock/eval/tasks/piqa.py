@@ -26,6 +26,7 @@ PIQA = MultipleChoiceTask(
         row_index=True,
     ),
     to_doc=piqa_doc,
+    # OLMES's `piqa:rc::olmes` scores accuracy per character (`oe_eval/configs/tasks.py`).
     primary_metric="acc_per_char",
     # The first 5 of OLMES's curated `FEWSHOT_SOURCES["OLMES:piqa"]`, found among the train rows
     # by content.

@@ -9,6 +9,7 @@ def winogrande_doc(row: dict[str, Any]) -> MCDoc:
     """A WinoGrande row as a doc: each option fills the blank in its own context, and both score the rest of the sentence (`oe_eval/tasks/oe_eval_tasks/winogrande.py`)."""
     blank = row["sentence"].index("_")
     before = row["sentence"][:blank]
+    # Skip the blank itself: the continuation is the text after it, behind one space.
     after = " " + row["sentence"][blank + 1 :].strip()
 
     return MCDoc(
@@ -29,10 +30,12 @@ WINOGRANDE = MultipleChoiceTask(
         row_index=True,
     ),
     to_doc=winogrande_doc,
+    # OLMES's `winogrande:rc::olmes` scores raw accuracy (`oe_eval/configs/tasks.py`).
     primary_metric="acc_raw",
     # The first 5 of OLMES's curated `FEWSHOT_SOURCES["OLMES:winogrande"]`, found among the train
     # rows by content.
     fewshot=Fewshot(split="train", ids=("19875", "26035", "2302", "13568", "7412")),
-    # Every choice scores the same continuation, so PMI can't tell them apart, and OLMES skips it.
+    # Every choice scores the same continuation, so pointwise mutual information (PMI) can't tell
+    # them apart, and OLMES skips it.
     unconditional_context=None,
 )

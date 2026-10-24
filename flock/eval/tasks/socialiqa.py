@@ -29,6 +29,7 @@ SOCIALIQA = MultipleChoiceTask(
         row_index=True,
     ),
     to_doc=socialiqa_doc,
+    # OLMES's `socialiqa:rc::olmes` scores accuracy per character (`oe_eval/configs/tasks.py`).
     primary_metric="acc_per_char",
     # The first 5 of OLMES's curated `FEWSHOT_SOURCES["OLMES:social_i_qa"]`, found among the train
     # rows by content.

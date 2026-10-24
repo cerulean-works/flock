@@ -86,6 +86,8 @@ MMLU_TASKS = tuple(
             row_index=True,
         ),
         to_doc=mmlu_doc,
+        # OLMES's `mmlu_<subject>:rc::olmes` scores accuracy per character
+        # (`oe_eval/configs/tasks.py`).
         primary_metric="acc_per_char",
         fewshot=Fewshot(split="dev", ids=("0", "1", "2", "3", "4")),
         description=(

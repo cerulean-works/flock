@@ -15,6 +15,7 @@ CSQA = MultipleChoiceTask(
     # CommonsenseQA rows have ARC's fields, and OLMES renders both as cloze questions
     # (`oe_eval/tasks/oe_eval_tasks/csqa.py`).
     to_doc=arc_doc,
+    # OLMES's `csqa:rc::olmes` scores PMI (`oe_eval/configs/tasks.py`).
     primary_metric="acc_uncond",
     # The first 5 of OLMES's curated `FEWSHOT_SOURCES["OLMES:commonsense_qa"]`, all train rows.
     fewshot=Fewshot(
