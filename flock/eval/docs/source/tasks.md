@@ -32,6 +32,7 @@ A task is a [`~eval.tasks.MultipleChoiceTask`] registered by name in `TASKS`, an
 | `humaneval` | [HumanEval](https://huggingface.co/datasets/openai/openai_humaneval) | `test` | 164 | 3, from `test`, never the doc itself | `bpb` of the solution |
 | `mbpp` | [MBPP](https://huggingface.co/datasets/google-research-datasets/mbpp) | `test` | 500 | 3, from `prompt` | `bpb` of the code |
 | `mt_mbpp_<language>` | [Multilingual MBPP](https://huggingface.co/datasets/allenai/multilingual_mbpp), one of 17 languages | `test` | 500 each | 3, from `prompt` | `bpb` of the code |
+| `tmmluplus_<subject>` (66) | [TMMLU+](https://huggingface.co/datasets/ikala/tmmluplus) v1.1, in Traditional Chinese | `test` | 19646 in all, 85 to 989 per subject | the subject's dev rows in file order: 5, or 3 or 4 for twelve subjects | `acc_per_char` |
 
 Every QA task's requests are identical, string for string, to OLMES's for the same OLMo 3 Base Easy task (`<task>:rc::olmes:full`, and `mmlu_<subject>:rc::olmes`). Every task scores its whole split, as the `:full` variants do; OLMES's plain `::olmes` configs for HellaSwag, PIQA and SocialIQA sample 1000 docs. WinoGrande, SocialIQA, PIQA and MMLU have no id column, so a doc's id is its row's position in its split, as in OLMES. HellaSwag's rows are numbered the same way, where OLMES keeps its `ind` column, because `ind` repeats within a split (9609 values over 10042 validation rows). SocialIQA and PIQA read the Hub's parquet conversion of their loading scripts, which `datasets` no longer runs. A few HellaSwag choices start with two spaces: removing a leading `[step]` tag leaves a space before the continuation's own, in OLMES too, so we keep it for parity.
 
@@ -62,8 +63,15 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `mt_mbpp` | the 17 `mt_mbpp_<language>` tasks | `bpb` | `mt_mbpp_v2fix` |
 | `base_easy:code_bpb` | `humaneval`, `mbpp`, `mt_mbpp` | `bpb` | `olmo3:base_easy:code_bpb` |
 | `base_easy` | `base_easy:qa_rc`, `base_easy:qa_bpb`, `base_easy:math_bpb`, `base_easy:code_bpb` | unscored | none |
+| `tmmluplus:stem`, `tmmluplus:social_sciences`, `tmmluplus:humanities`, `tmmluplus:other` | that category's subject tasks | `acc_per_char` | none |
+| `tmmluplus` | the four category suites | each category's mean | none |
+| `tmmluplus:taiwan` | `tmmluplus_geography_of_taiwan`, `tmmluplus_ttqav2`, `tmmluplus_taiwanese_hokkien` | `acc_per_char` | none |
+| each of the above with `:bpb` | the same members, read by `bpb` | `bpb` | none |
+| `tmmluplus:all` | `tmmluplus`, `tmmluplus:bpb`, `tmmluplus:taiwan`, `tmmluplus:taiwan:bpb` | unscored | none |
 
 The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. OLMES groups ARC-Easy and ARC-Challenge into one suite with no metric of its own; here they are two members of `base_easy:qa_rc`. `basic_skills`, and so `base_easy:qa_rc`, averages our `acc_per_token`, which divides by the real token count. OLMES's equals its `acc_raw`, so these two scores differ from OLMES's by that member. See [Suites in results](results#suites) for when two suite scores compare.
+
+The `tmmluplus` score is the mean of the four category means, as the dataset card computes its total, so each category counts once however many subjects it has. `tmmluplus:taiwan` holds the three subjects behind the Taiwan columns of the Gemma-3-TAIDE model cards.
 
 ## Classes
 
