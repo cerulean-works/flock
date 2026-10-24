@@ -354,6 +354,19 @@ def test_description_and_per_choice_contexts():
     ]
 
 
+def test_example_replaces_the_gold_choice_in_the_shots():
+    shot = MCDoc("s", (Choice("Q1", " a"),), 0, example="Q1  a")
+    doc = MCDoc("d", (Choice("Q2", " b"),), 0)
+    task = dataclasses.replace(TASK, unconditional_context=None)
+
+    # The doc's own `example` doesn't change how it is scored, only how it reads as a shot.
+    built = task.requests([doc, shot], [shot])
+    assert [(r.context, r.continuation) for r in built.requests] == [
+        ("Q1  a\n\nQ2", " b"),
+        ("Q1  a\n\nQ1", " a"),
+    ]
+
+
 def test_requests_are_immutable():
     built = TASK.requests(*TASK.load())
     assert isinstance(built.docs, tuple) and isinstance(built.requests, tuple)
