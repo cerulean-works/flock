@@ -120,11 +120,24 @@ class Choice:
     continuation: str
 
 
+# The Traditional Chinese cloze format, `問題：<question>\n答案：<answer>` with no space before the
+# answer, which every Chinese task shares. The prefixes are the TMMLU+ paper's (Tam et al. 2024,
+# figs. 8 and 9), as C-Eval's and AGIEval's Chinese templates.
+CHINESE_QUESTION_PREFIX = "問題："
+CHINESE_ANSWER_PREFIX = "答案："
+
+
 def cloze(
-    question: str, answers: Sequence[str], question_prefix: str = "Question: "
+    question: str,
+    answers: Sequence[str],
+    question_prefix: str = "Question: ",
+    answer_prefix: str = "Answer:",
+    separator: str = " ",
 ) -> tuple[Choice, ...]:
     """
-    Returns OLMES's cloze choices: each answer is the continuation `" <answer>"` of `"<question_prefix><question>\\nAnswer:"` (OLMES, sec. 3.1).
+    Returns cloze choices: each answer is the continuation `"<separator><answer>"` of `"<question_prefix><question>\\n<answer_prefix>"`. The defaults are OLMES's format, `"Question: <question>\\nAnswer:"` and `" <answer>"` (OLMES, sec. 3.1).
+
+    Chinese tasks pass [`CHINESE_QUESTION_PREFIX`], [`CHINESE_ANSWER_PREFIX`] and `separator=""`. Chinese text has no spaces between words, and a space before the answer often merges into the tokens of its first character and would count in `acc_per_char`.
 
     Raises:
         `TypeError`: if `answers` is one string. A doc with one answer passes `(answer,)`.
@@ -132,9 +145,9 @@ def cloze(
     # A string is a sequence of its characters, which would render one choice per character.
     if isinstance(answers, str):
         raise TypeError("answers must be a sequence of strings; pass (answer,) for one answer")
-    context = f"{question_prefix}{question}\nAnswer:"
+    context = f"{question_prefix}{question}\n{answer_prefix}"
 
-    return tuple(Choice(context, f" {answer}") for answer in answers)
+    return tuple(Choice(context, f"{separator}{answer}") for answer in answers)
 
 
 @dataclass(frozen=True, slots=True)
