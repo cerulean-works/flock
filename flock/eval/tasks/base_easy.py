@@ -2,6 +2,7 @@
 
 from flock.eval.tasks.arc import ARC_EASY
 from flock.eval.tasks.basic_skills import BASIC_SKILLS, BASIC_SKILLS_BPB
+from flock.eval.tasks.gen2mc import COQA, DROP, JEOPARDY, NATURALQS, SQUAD
 from flock.eval.tasks.lab_bench import LAB_BENCH_DBQA, LAB_BENCH_PROTOCOLQA
 from flock.eval.tasks.lambada import LAMBADA
 from flock.eval.tasks.medical import MEDMCQA, MEDQA_EN
@@ -14,6 +15,11 @@ from flock.eval.tasks.yesno import QASPER_YESNO, SCIRIFF_YESNO
 # Basic skills is one member, through a suite of each kind.
 _QA_TASKS = (
     ARC_EASY,
+    COQA,
+    DROP,
+    JEOPARDY,
+    NATURALQS,
+    SQUAD,
     SCIQ,
     QASPER_YESNO,
     SCIRIFF_YESNO,
