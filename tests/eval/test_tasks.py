@@ -1,5 +1,6 @@
 import dataclasses
 
+import datasets
 import pytest
 import torch
 
@@ -9,6 +10,9 @@ from flock.eval.tasks import TASKS, Choice, Dataset, Fewshot, MCDoc, Truncation,
 from flock.eval.tasks.arc import ARC_EASY, arc_doc
 
 from .toy import ROWS, TASK
+
+# The real `Dataset.load`, read before the `offline_rows` fixture replaces it in each test.
+LOAD = Dataset.load
 
 
 @pytest.mark.parametrize(
@@ -42,6 +46,27 @@ def test_load_keeps_fewshot_order_and_limit():
 def test_load_rejects_limit_below_one(limit):
     with pytest.raises(ValueError, match="at least 1"):
         TASK.load(limit=limit)
+
+
+def test_row_index_numbers_rows_per_split(monkeypatch):
+    splits = {"dev": [{"q": "a"}, {"q": "b"}], "test": [{"q": "c"}]}
+    monkeypatch.setattr(
+        datasets,
+        "load_dataset",
+        lambda *args, split, **kwargs: datasets.Dataset.from_list(splits[split]),
+    )
+    dataset = Dataset("cerulean/toy", "0" * 40, None, "test", row_index=True)
+
+    assert LOAD(dataset, "dev") == [{"q": "a", "index": 0}, {"q": "b", "index": 1}]
+    assert LOAD(dataset) == [{"q": "c", "index": 0}]
+    assert LOAD(dataclasses.replace(dataset, row_index=False)) == [{"q": "c"}]
+
+
+def test_row_index_rejects_an_index_column(monkeypatch):
+    rows = datasets.Dataset.from_list([{"index": 7}])
+    monkeypatch.setattr(datasets, "load_dataset", lambda *args, **kwargs: rows)
+    with pytest.raises(ValueError, match="already has an index column"):
+        LOAD(Dataset("cerulean/toy", "0" * 40, None, "test", row_index=True))
 
 
 def test_load_rejects_unknown_fewshot_id():

@@ -11,11 +11,11 @@ This is the whole task, `flock/eval/tasks/arc.py`:
 ## Steps
 
 1. **Pin the dataset** to a commit hash. Find it on the dataset's **Files and versions** tab, or with `huggingface_hub.HfApi().dataset_info(repo).sha`.
-2. **Write a function** that turns one dataset row into an [`~eval.tasks.MCDoc`]. It renders each choice as the model sees it: [`~eval.tasks.cloze`] gives OLMES's `Question: ... Answer:` format, as `arc_doc` uses. [The prompt format](#the-prompt-format) covers other formats.
+2. **Write a function** that turns one dataset row into an [`~eval.tasks.MCDoc`]. It renders each choice as the model sees it: [`~eval.tasks.cloze`] gives OLMES's `Question: ... Answer:` format, as `arc_doc` uses. [The prompt format](#the-prompt-format) covers other formats. A dataset with no unique id column sets `Dataset(row_index=True)`, and the function reads the id as `str(row["index"])`, the row's position in its split, as MMLU does.
 3. **Choose the few-shot examples** by id. Use the curated OLMES examples when the task has them, so results compare with published numbers. Examples that aren't rows of the dataset go in `Fewshot.rows`, in the dataset's row format.
 4. **Choose the primary metric.** Follow OLMES or OLMo 3 for the task. [Metrics](metrics) lists the options.
 5. **Register the task.** Add it to its suite, such as `_QA_TASKS` in `flock/eval/tasks/base_easy.py` for a Base Easy QA task (see [Suites](tasks#suites)): every task in a suite is registered. A task in no suite goes in the tuple that builds `TASKS` in `flock/eval/tasks/registry.py`. `flock-eval run --task` accepts it from then on.
-6. **Test the row function.** Add a test in `tests/eval/test_tasks.py` that maps a hand-written row to the expected [`~eval.tasks.MCDoc`], as `test_arc_doc_maps_letter_and_digit_keys` does. Tests never download: `tests/eval/conftest.py` makes every task read the toy rows in `tests/eval/toy.py`.
+6. **Test the row function.** Add a test in `tests/eval/` that maps a hand-written row to the expected [`~eval.tasks.MCDoc`], as `test_arc_doc_maps_letter_and_digit_keys` does. Tests never download: `tests/eval/conftest.py` makes every task read the toy rows in `tests/eval/toy.py`.
 7. **List the task** in the table of [Tasks](tasks#available-tasks).
 
 To check a new task, print the first doc's prompt:
@@ -59,6 +59,7 @@ A task with another format writes its own choices in `to_doc`:
 - **A context per choice:** give each `Choice` its own `context` and the same `continuation`, as WinoGrande does.
 - **A gold text only**, such as a math solution: one `Choice` with `gold=0`, and `metrics=("bpb",)` on the task, since an accuracy over one choice is always 1.
 - **Text before the examples**, such as a subject header: the task's `description`.
+- **Many tasks of one kind**, such as MMLU's 57 subjects: build them in a loop over a list of names, and group them in a suite, as `flock/eval/tasks/mmlu.py` does.
 - **Examples from the scored split:** set `Fewshot.num_shots` and list one id more than it. Each doc is shown the first `num_shots` examples that aren't the doc itself. The ids must come from the split the task scores, since an id identifies a doc within one split; the task rejects any other.
 
 A changed prompt is a different task, and its numbers don't compare with the old ones, so give it a new name.

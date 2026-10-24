@@ -41,3 +41,28 @@ ARC_EASY = MultipleChoiceTask(
         ),
     ),
 )
+
+ARC_CHALLENGE = MultipleChoiceTask(
+    name="arc_challenge",
+    dataset=Dataset(
+        repo="allenai/ai2_arc",
+        revision="210d026faf9955653af8916fad021475a3f00453",
+        subset="ARC-Challenge",
+        # The full test split, as for ARC-Easy.
+        split="test",
+    ),
+    to_doc=arc_doc,
+    # OLMES's `arc_challenge:rc::olmes` scores PMI (`oe_eval/configs/tasks.py`).
+    primary_metric="acc_uncond",
+    # The first 5 of OLMES's curated `FEWSHOT_SOURCES["OLMES:ARC-Challenge"]`, all train rows.
+    fewshot=Fewshot(
+        split="train",
+        ids=(
+            "Mercury_SC_415702",
+            "MCAS_2009_5_6516",
+            "Mercury_7233695",
+            "Mercury_7041615",
+            "MCAS_1998_4_3",
+        ),
+    ),
+)
