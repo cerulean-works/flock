@@ -3,6 +3,7 @@
 import dataclasses
 import hashlib
 import json
+from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -47,17 +48,79 @@ class Dataset:
 @dataclass(frozen=True, slots=True)
 class Fewshot:
     """
-    Fixed few-shot examples, shown in the order of `ids`.
+    Fixed few-shot examples: dataset rows picked by id, or rows written out in the task's module. Either way they are shown in the order given.
 
     Args:
-        split (`str`):
-            The dataset split the examples come from.
-        ids (`tuple[str, ...]`):
+        split (`str`, *optional*):
+            The dataset split `ids` come from. Required with `ids`, and not taken with `rows`.
+        ids (`tuple[str, ...]`, *optional*):
             The examples' [`MCDoc`] ids, as `to_doc` returns them.
+        rows (`tuple[dict, ...]`, *optional*):
+            Examples that aren't rows of the dataset, in its row format. They go through the same `to_doc`.
+        num_shots (`int`, *optional*):
+            Show each doc only the first `num_shots` examples that aren't the doc itself. Only for `ids` from the scored split, which [`MultipleChoiceTask`] checks, since an id identifies a doc within one split. All examples are shown if not set.
+
+    Raises:
+        `ValueError`: if both or neither of `ids` and `rows` are given, `split` is missing with `ids` or given with `rows`, an id repeats, or `num_shots` is set with `rows` or isn't below the number of examples.
     """
 
-    split: str
-    ids: tuple[str, ...]
+    split: str | None = None
+    ids: tuple[str, ...] = ()
+    rows: tuple[dict[str, Any], ...] = ()
+    num_shots: int | None = None
+
+    def __post_init__(self) -> None:
+        if bool(self.ids) == bool(self.rows):
+            raise ValueError("Fewshot takes either ids or rows")
+        if self.ids and self.split is None:
+            raise ValueError("Fewshot ids need a split")
+        if self.rows and self.split is not None:
+            raise ValueError("Fewshot rows take no split")
+
+        repeated = sorted(shot_id for shot_id, count in Counter(self.ids).items() if count > 1)
+        if repeated:
+            raise ValueError(f"few-shot ids repeat: {repeated}")
+
+        if self.num_shots is None:
+            return
+        if self.rows:
+            raise ValueError("num_shots drops a doc's own example by id, so it needs ids")
+        # One example more than shown, so a doc that is itself an example still gets `num_shots`.
+        if not 1 <= self.num_shots < len(self.ids):
+            raise ValueError(f"num_shots must be at least 1 and below the {len(self.ids)} examples")
+
+
+@dataclass(frozen=True, slots=True)
+class Choice:
+    """
+    One answer choice as the model scores it: the log-probability of `continuation` after the few-shot examples and `context`.
+
+    Args:
+        context (`str`):
+            The doc's prompt for this choice. Most tasks give every choice the same one.
+        continuation (`str`):
+            Exactly the scored text, leading space included.
+    """
+
+    context: str
+    continuation: str
+
+
+def cloze(
+    question: str, answers: Sequence[str], question_prefix: str = "Question: "
+) -> tuple[Choice, ...]:
+    """
+    Returns OLMES's cloze choices: each answer is the continuation `" <answer>"` of `"<question_prefix><question>\\nAnswer:"` (OLMES, sec. 3.1).
+
+    Raises:
+        `TypeError`: if `answers` is one string. A doc with one answer passes `(answer,)`.
+    """
+    # A string is a sequence of its characters, which would render one choice per character.
+    if isinstance(answers, str):
+        raise TypeError("answers must be a sequence of strings; pass (answer,) for one answer")
+    context = f"{question_prefix}{question}\nAnswer:"
+
+    return tuple(Choice(context, f" {answer}") for answer in answers)
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,18 +131,26 @@ class MCDoc:
     Args:
         id (`str`):
             The question's id in its dataset, unique within a split. [`Fewshot`] picks examples by it, and the predictions file records it.
-        question (`str`):
-            The question text.
-        choices (`tuple[str, ...]`):
-            The answer choices as plain text, without a leading space: the task adds one when it scores them.
+        choices (`tuple[Choice, ...]`):
+            The answer choices, rendered as the model sees them. A task scored only on its gold text, such as a math solution, has one.
         gold (`int`):
             The index of the correct choice in `choices`.
+
+    Raises:
+        `ValueError`: naming the doc, if `choices` is empty or `gold` isn't an index into it.
     """
 
     id: str
-    question: str
-    choices: tuple[str, ...]
+    choices: tuple[Choice, ...]
     gold: int
+
+    def __post_init__(self) -> None:
+        if not self.choices:
+            raise ValueError(f"doc {self.id}: no choices")
+        if not 0 <= self.gold < len(self.choices):
+            raise ValueError(
+                f"doc {self.id}: gold {self.gold} is not one of {len(self.choices)} choices"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,9 +178,9 @@ class MCRequests:
     A multiple-choice task's requests for a list of docs, and how their scores map back.
 
     Args:
-        docs (`list[MCDoc]`):
+        docs (`tuple[MCDoc, ...]`):
             The scored docs, in order.
-        requests (`list[Request]`):
+        requests (`tuple[Request, ...]`):
             Each doc's choices in doc order, followed by the same choices after the unconditional context when `has_uncond` is set.
         hash (`str`):
             sha256 of exactly what is scored, as [Results files](results#the-task-hash) defines it.
@@ -117,8 +188,8 @@ class MCRequests:
             Whether the unconditional requests for pointwise mutual information (PMI) follow the conditional ones.
     """
 
-    docs: list[MCDoc]
-    requests: list[Request]
+    docs: tuple[MCDoc, ...]
+    requests: tuple[Request, ...]
     hash: str
     has_uncond: bool
 
@@ -233,9 +304,9 @@ class MCRequests:
 @dataclass(frozen=True, slots=True)
 class MultipleChoiceTask:
     """
-    A multiple-choice task scored as OLMES's cloze formulation (OLMo 3's "rank choice").
+    A multiple-choice task scored as OLMES scores it: each choice's continuation after the few-shot examples and the choice's context.
 
-    Each choice is a continuation `" <choice>"` of the prompt `"Question: <question>\\nAnswer:"`, after the few-shot examples, each answered with its gold choice and separated by blank lines (OLMES, sec. 3.1 and 3.2).
+    The context of a request is `description`, then each few-shot example's gold choice (its context and continuation) followed by a blank line, then the scored choice's context. This is OLMES's few-shot format (OLMES, sec. 3.1 and 3.2; `fewshot_context` in `oe_eval/tasks/base_task.py`).
 
     Args:
         name (`str`):
@@ -243,20 +314,20 @@ class MultipleChoiceTask:
         dataset (`Dataset`):
             Where the scored rows come from.
         to_doc (`Callable[[dict], MCDoc]`):
-            Turns one dataset row into an [`~eval.tasks.MCDoc`].
+            Turns one dataset row into an [`~eval.tasks.MCDoc`], rendering its choices. [`~eval.tasks.cloze`] renders OLMES's cloze format.
         primary_metric (`str`):
-            The metric reported first, one of [`~eval.metrics.multiple_choice`]'s names.
+            The metric reported first, one of `metrics`.
         fewshot (`Fewshot`, *optional*):
-            The few-shot examples, from the same dataset. Zero-shot if not set.
-        question_prefix (`str`, *optional*, defaults to `"Question: "`):
-            Written before each question.
-        answer_prefix (`str`, *optional*, defaults to `"Answer:"`):
-            Written on the line after each question.
+            The few-shot examples, from the same dataset or written out. Zero-shot if not set.
+        description (`str`, *optional*, defaults to `""`):
+            Text before the first few-shot example, such as a subject header.
         unconditional_context (`str`, *optional*, defaults to `"Answer:"`):
             The context for the unconditional scores of pointwise mutual information (PMI). PMI is skipped if `None`. On by default, as in OLMES, whose multiple-choice tasks score every choice after `"Answer:"` too unless a task overrides `unconditioned_prompt` with `None` (`oe_eval/tasks/base_task.py`). That doubles the requests, but the unconditional contexts are short.
+        metrics (`tuple[str, ...]`, *optional*):
+            The metrics the task reports, from [`~eval.metrics.multiple_choice`]'s names. Every metric the task computes if not set, which leaves out `acc_uncond` when PMI is skipped. A task scored only on its gold text reports `("bpb",)`, since an accuracy over one choice is always 1.
 
     Raises:
-        `ValueError`: if `primary_metric` isn't a metric the task reports.
+        `ValueError`: if `metrics` is empty or names a metric the task doesn't compute, `primary_metric` isn't reported, or `fewshot.num_shots` is set on examples from a split other than the scored one.
     """
 
     name: str
@@ -264,17 +335,56 @@ class MultipleChoiceTask:
     to_doc: Callable[[dict[str, Any]], MCDoc]
     primary_metric: str
     fewshot: Fewshot | None = None
-    question_prefix: str = "Question: "
-    answer_prefix: str = "Answer:"
+    description: str = ""
     unconditional_context: str | None = "Answer:"
+    metrics: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
-        reported = MULTIPLE_CHOICE_METRICS
-        if self.unconditional_context is None:
-            reported = tuple(name for name in reported if name != "acc_uncond")
+        self._check_metrics()
+        self._check_fewshot()
 
-        if self.primary_metric not in reported:
-            raise ValueError(f"{self.name}: primary_metric must be one of {reported}")
+    def _check_metrics(self) -> None:
+        """Raises `ValueError` if `metrics` or `primary_metric` names something the task won't report."""
+        if self.metrics is not None:
+            if not self.metrics:
+                raise ValueError(
+                    f"{self.name}: metrics is empty; leave it unset to report every computed metric"
+                )
+            unknown = [name for name in self.metrics if name not in self._computed_metrics]
+            if unknown:
+                raise ValueError(
+                    f"{self.name}: metrics must be among {self._computed_metrics}, got {unknown}"
+                )
+        if self.primary_metric not in self.reported_metrics:
+            raise ValueError(f"{self.name}: primary_metric must be one of {self.reported_metrics}")
+
+    def _check_fewshot(self) -> None:
+        """Raises `ValueError` if `num_shots` would drop a doc's own example by an id from another split."""
+        if self.fewshot is None or self.fewshot.num_shots is None:
+            return
+        # Ids are unique within a split only. Across splits, a doc that shares an id with an
+        # example would lose that example, and a doc that is itself an example would keep it.
+        if self.fewshot.split != self.dataset.split:
+            raise ValueError(
+                f"{self.name}: num_shots needs examples from the scored split "
+                f"{self.dataset.split!r}, not {self.fewshot.split!r}"
+            )
+
+    @property
+    def reported_metrics(self) -> tuple[str, ...]:
+        """The metrics the task reports, in [`~eval.metrics.multiple_choice`]'s order."""
+        if self.metrics is None:
+            return self._computed_metrics
+
+        return tuple(name for name in self._computed_metrics if name in self.metrics)
+
+    @property
+    def _computed_metrics(self) -> tuple[str, ...]:
+        """Every metric `multiple_choice` returns for this task: `acc_uncond` needs PMI."""
+        if self.unconditional_context is None:
+            return tuple(name for name in MULTIPLE_CHOICE_METRICS if name != "acc_uncond")
+
+        return MULTIPLE_CHOICE_METRICS
 
     def load(self, limit: int | None = None) -> tuple[list[MCDoc], list[MCDoc]]:
         """
@@ -303,6 +413,8 @@ class MultipleChoiceTask:
         """
         if self.fewshot is None:
             return []
+        if self.fewshot.rows:
+            return [self.to_doc(row) for row in self.fewshot.rows]
 
         rows = self.dataset.load(self.fewshot.split)
         pool = {doc.id: doc for doc in map(self.to_doc, rows)}
@@ -313,27 +425,13 @@ class MultipleChoiceTask:
 
         return [pool[shot_id] for shot_id in self.fewshot.ids]
 
-    def prompt(self, doc: MCDoc) -> str:
-        """Renders the question as the model sees it, ending right before the answer."""
-        return f"{self.question_prefix}{doc.question}\n{self.answer_prefix}"
-
-    def context(self, doc: MCDoc, shots: Sequence[MCDoc]) -> str:
-        """
-        Renders the few-shot examples followed by `doc`'s prompt.
-
-        Each example is its prompt and gold choice, and examples are separated by a blank line, as in OLMES's cloze format (OLMES, sec. 3.1 and 3.2).
-        """
-        examples = "".join(f"{self.prompt(shot)} {shot.choices[shot.gold]}\n\n" for shot in shots)
-
-        return examples + self.prompt(doc)
-
-    def requests(self, docs: list[MCDoc], shots: Sequence[MCDoc]) -> MCRequests:
+    def requests(self, docs: Sequence[MCDoc], shots: Sequence[MCDoc]) -> MCRequests:
         """Builds every request needed to score `docs`, with a hash of exactly what is scored."""
         conditional = []
         for doc in docs:
-            context = self.context(doc, shots)
+            head = self._head(self._shots_for(doc, shots))
             for choice in doc.choices:
-                conditional.append(Request(context, f" {choice}"))
+                conditional.append(Request(head + choice.context, choice.continuation))
 
         unconditional = []
         if self.unconditional_context is not None:
@@ -342,16 +440,32 @@ class MultipleChoiceTask:
 
         # `MCRequests.choice_scores` relies on this order: all conditional requests, then the
         # unconditional ones in the same order.
-        requests = conditional + unconditional
+        requests = tuple(conditional + unconditional)
 
         return MCRequests(
-            docs=docs,
+            docs=tuple(docs),
             requests=requests,
             hash=self._hash(docs, requests),
             has_uncond=self.unconditional_context is not None,
         )
 
-    def _hash(self, docs: list[MCDoc], requests: list[Request]) -> str:
+    def _head(self, shots: Sequence[MCDoc]) -> str:
+        """Renders `description`, then each example's gold choice followed by a blank line."""
+        head = self.description
+        for shot in shots:
+            gold = shot.choices[shot.gold]
+            head += f"{gold.context}{gold.continuation}\n\n"
+
+        return head
+
+    def _shots_for(self, doc: MCDoc, shots: Sequence[MCDoc]) -> Sequence[MCDoc]:
+        """Returns the examples `doc` is shown: all of them, or with `num_shots` the first that aren't `doc` (OLMES samples one extra and drops the scored doc, `fewshot_context` in `oe_eval/tasks/base_task.py`)."""
+        if self.fewshot is None or self.fewshot.num_shots is None:
+            return shots
+
+        return [shot for shot in shots if shot.id != doc.id][: self.fewshot.num_shots]
+
+    def _hash(self, docs: Sequence[MCDoc], requests: Sequence[Request]) -> str:
         """Returns the sha256 of the definition's data fields, every request and every gold index."""
         # `to_doc` is a function and can't be serialized. What it produces is still covered: every
         # request and gold index below comes from its docs.

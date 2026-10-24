@@ -34,7 +34,7 @@ The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.resu
 
 ### The task hash
 
-`task_hash` is the sha256 of the task's definition (every field but `to_doc`, so its name and primary metric too), every scored context and continuation, and every gold index. Changing the dataset revision, the few-shot examples, the prompt, the task's name or primary metric, or the question, choices or gold index that `to_doc` returns changes it. Doc ids aren't hashed. Two results with the same hash scored the same requests under the same task definition.
+`task_hash` is the sha256 of the task's definition (every field but `to_doc`, so its name and primary metric too), every scored context and continuation, and every gold index. Changing the dataset revision, the few-shot examples, the task's name, description, metrics or primary metric, or a choice's context or continuation or the gold index that `to_doc` returns changes it. Doc ids aren't hashed. Two results with the same hash scored the same requests under the same task definition.
 
 ### Truncation
 

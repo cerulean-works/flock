@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import sys
 
@@ -10,7 +11,7 @@ from flock.eval.metrics import MULTIPLE_CHOICE_METRICS, ChoiceScores
 from flock.eval.model import ScoringModel
 from flock.eval.results import prediction_rows
 from flock.eval.run import EvalConfig, evaluate, score_task
-from flock.eval.tasks import MCDoc
+from flock.eval.tasks import MCDoc, cloze
 
 from .toy import TASK
 
@@ -51,8 +52,8 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
 
 def test_prediction_rows_drop_padded_choices():
     docs = [
-        MCDoc(id="a", question="?", choices=("x", "y"), gold=1),
-        MCDoc(id="b", question="?", choices=("x", "y", "z"), gold=0),
+        MCDoc(id="a", choices=cloze("?", ("x", "y")), gold=1),
+        MCDoc(id="b", choices=cloze("?", ("x", "y", "z")), gold=0),
     ]
     counts = torch.tensor([[1, 2, 0], [3, 4, 5]])
     scores = ChoiceScores(
@@ -76,6 +77,12 @@ def test_score_task_does_not_depend_on_batching(scorer):
     one_batch = score_task(scorer, TASK)
     scorer.batch_tokens = 1
     assert score_task(scorer, TASK).metrics == pytest.approx(one_batch.metrics, abs=1e-5)
+
+
+def test_score_task_reports_only_the_tasks_metrics(scorer):
+    gold_only = dataclasses.replace(TASK, metrics=("bpb",), primary_metric="bpb")
+    assert list(score_task(scorer, gold_only).metrics) == ["bpb"]
+    assert list(score_task(scorer, TASK).metrics) == list(MULTIPLE_CHOICE_METRICS)
 
 
 def test_score_task_records_truncation(lm, tokenizer):
