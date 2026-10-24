@@ -31,6 +31,11 @@ class Dataset:
             The split a task is scored on.
         row_index (`bool`, *optional*, defaults to `False`):
             Whether each row gets its position in its split as `"index"`, for datasets with no id column. A `to_doc` then reads the doc's id as `str(row["index"])`, as OLMES does for MMLU (`oe_eval/tasks/oe_eval_tasks/mmlu.py`).
+        data_file (`str`, *optional*):
+            A JSON file in the repo holding the scored split, read in place of the repo's configurations. For repos with a loading script, which `datasets` no longer runs, such as `allenai/basic-skills`. Takes no `subset`.
+
+    Raises:
+        `ValueError`: if `data_file` is given with a `subset`.
     """
 
     repo: str
@@ -38,6 +43,11 @@ class Dataset:
     subset: str | None
     split: str
     row_index: bool = False
+    data_file: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.data_file is not None and self.subset is not None:
+            raise ValueError(f"{self.repo}: data_file takes no subset")
 
     def load(self, split: str | None = None) -> list[dict[str, Any]]:
         """
@@ -46,9 +56,17 @@ class Dataset:
         Raises:
             `ValueError`: if `row_index` is set and the rows already have an `"index"` column.
         """
-        rows = datasets.load_dataset(
-            self.repo, self.subset, revision=self.revision, split=split or self.split
-        )
+        if self.data_file is None:
+            rows = datasets.load_dataset(
+                self.repo, self.subset, revision=self.revision, split=split or self.split
+            )
+        else:
+            # The file is read at the pinned revision, and holds only the scored split, so asking
+            # for another one raises in `datasets`.
+            path = f"hf://datasets/{self.repo}@{self.revision}/{self.data_file}"
+            rows = datasets.load_dataset(
+                "json", data_files={self.split: path}, split=split or self.split
+            )
         if not self.row_index:
             return list(rows)
 
