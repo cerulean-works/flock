@@ -1,7 +1,10 @@
+import dataclasses
+
 import datasets
+import huggingface_hub
 import pytest
 
-from flock.eval.tasks import SUITES, TASKS, Choice, Dataset, MCDoc, cloze
+from flock.eval.tasks import SUITES, TASKS, Choice, Dataset, Fewshot, MCDoc, cloze
 from flock.eval.tasks.basic_skills import SHOT_IDS, basic_skills_doc
 from flock.eval.tasks.lab_bench import lab_bench_doc
 from flock.eval.tasks.lambada import LAMBADA, lambada_doc
@@ -92,26 +95,35 @@ def test_lambada_scores_the_last_word_after_single_spaces():
     assert LAMBADA.reported_metrics == ("bpb",)
 
 
-def test_data_file_reads_one_json_file_at_the_revision(monkeypatch):
+def test_data_file_reads_one_cached_json_file_at_the_revision(monkeypatch):
     calls = []
+
+    def download(*args, **kwargs):
+        calls.append((args, kwargs))
+        return "/cache/skill/validation.json"
 
     def load_dataset(*args, **kwargs):
         calls.append((args, kwargs))
         return datasets.Dataset.from_list([{"id": "0"}])
 
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", download)
     monkeypatch.setattr(datasets, "load_dataset", load_dataset)
     dataset = Dataset("org/repo", "abc", None, "validation", data_file="skill/validation.json")
 
     assert LOAD(dataset) == [{"id": "0"}]
     assert calls == [
+        (("org/repo", "skill/validation.json"), {"repo_type": "dataset", "revision": "abc"}),
         (
             ("json",),
-            {
-                "data_files": {"validation": "hf://datasets/org/repo@abc/skill/validation.json"},
-                "split": "validation",
-            },
-        )
+            {"data_files": {"validation": "/cache/skill/validation.json"}, "split": "validation"},
+        ),
     ]
+
+
+def test_data_file_task_rejects_shots_from_another_split():
+    task = TASKS["basic_skills_arithmetic"]
+    with pytest.raises(ValueError, match="holds only the 'validation' split"):
+        dataclasses.replace(task, fewshot=Fewshot("train", ("1", "2")))
 
 
 def test_data_file_takes_no_subset():
@@ -119,19 +131,25 @@ def test_data_file_takes_no_subset():
         Dataset("org/repo", "abc", "skill", "validation", data_file="skill/validation.json")
 
 
-def test_registry_has_the_other_qa_tasks_in_both_suites():
-    qa_rc = SUITES["base_easy:qa_rc"]
-    qa_bpb = SUITES["base_easy:qa_bpb"]
-    names = ["sciq", "qasper_yesno", "sciriff_yesno", "lab_bench_dbqa", "lab_bench_protocolqa"]
+def test_registry_suites_list_exactly_their_members():
+    qa = [
+        "arc_easy",
+        "sciq",
+        "qasper_yesno",
+        "sciriff_yesno",
+        "lab_bench_dbqa",
+        "lab_bench_protocolqa",
+        "medmcqa",
+        "medqa_en",
+    ]
 
-    for name in (*names, "medmcqa", "medqa_en"):
-        assert TASKS[name] in qa_rc.members
-        assert TASKS[name] in qa_bpb.members
-    assert SUITES["basic_skills"] in qa_rc.members
-    assert SUITES["basic_skills:bpb"] in qa_bpb.members
+    assert [m.name for m in SUITES["base_easy:qa_rc"].members] == [*qa, "basic_skills"]
     # LAMBADA joins `qa_rc` with greedy match (stage file 003, D20).
-    assert LAMBADA in qa_bpb.members
-    assert LAMBADA not in qa_rc.tasks
+    assert [m.name for m in SUITES["base_easy:qa_bpb"].members] == [
+        *qa,
+        "basic_skills:bpb",
+        "lambada",
+    ]
     assert [task.name for task in SUITES["basic_skills"].members] == [
         f"basic_skills_{skill}"
         for skill in (
@@ -143,3 +161,4 @@ def test_registry_has_the_other_qa_tasks_in_both_suites():
             "pattern",
         )
     ]
+    assert SUITES["basic_skills:bpb"].members == SUITES["basic_skills"].members

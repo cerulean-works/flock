@@ -37,7 +37,7 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `base_easy:qa_bpb` | the same tasks, `basic_skills:bpb` and `lambada` | `bpb` | `olmo3:base_easy:qa_bpb` |
 | `base_easy` | `base_easy:qa_rc`, `base_easy:qa_bpb` | unscored | none |
 
-The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. See [Suites in results](results#suites) for when two suite scores compare.
+The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. `basic_skills`, and so `base_easy:qa_rc`, averages our `acc_per_token`, which divides by the real token count. OLMES's equals its `acc_raw`, so these two scores differ from OLMES's by that member. See [Suites in results](results#suites) for when two suite scores compare.
 
 ## Classes
 

@@ -5,7 +5,7 @@ from typing import Any
 from flock.eval.tasks.base import Choice, Dataset, Fewshot, MCDoc, MultipleChoiceTask
 
 
-def yesno_doc(row: dict[str, Any], evidence: str) -> MCDoc:
+def _yesno_doc(row: dict[str, Any], evidence: str) -> MCDoc:
     """A yes/no row as a doc: the evidence, then the question, with the whole prompt stripped, as OLMES's `QASPER_YESNO.doc_to_text` and `SCIRIFF_YESNO.doc_to_text` render it."""
     context = f"{evidence}\nQuestion: {row['question']}\nAnswer:".strip()
 
@@ -18,12 +18,12 @@ def yesno_doc(row: dict[str, Any], evidence: str) -> MCDoc:
 
 def qasper_doc(row: dict[str, Any]) -> MCDoc:
     """A Qasper row, its evidence paragraphs joined by spaces (`oe_eval/tasks/oe_eval_tasks/qasper_yesno.py`)."""
-    return yesno_doc(row, " ".join(row["evidence"]))
+    return _yesno_doc(row, " ".join(row["evidence"]))
 
 
 def sciriff_doc(row: dict[str, Any]) -> MCDoc:
     """A SciRIFF row, its context as the evidence (`oe_eval/tasks/oe_eval_tasks/sciriff_yesno.py`)."""
-    return yesno_doc(row, row["context"])
+    return _yesno_doc(row, row["context"])
 
 
 # Both are OLMES's `<task>:rc::olmes`, scored on the train split by accuracy over the raw
