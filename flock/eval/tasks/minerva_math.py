@@ -79,17 +79,12 @@ def minerva_doc(row: dict[str, Any]) -> MCDoc:
     context = f"Problem:\n{row['problem']}\n\nSolution:"
     solution = row["solution"]
     # OLMES scores the solution with a leading space unless it starts with one or a newline
-    # (`construct_basic_generation_requests` in `oe_eval/tasks/base_task.py`).
+    # (`construct_basic_generation_requests` in `oe_eval/tasks/base_task.py`). Its examples always
+    # get one (`doc_to_target`), which is the same text: the 4 below start with a letter.
     if not solution.startswith((" ", "\n")):
         solution = " " + solution
 
-    return MCDoc(
-        id=str(row["index"]),
-        choices=(Choice(context, solution),),
-        gold=0,
-        # As an example, OLMES's `doc_to_target` adds the space always.
-        example=context + " " + row["solution"],
-    )
+    return MCDoc(id=str(row["index"]), choices=(Choice(context, solution),), gold=0)
 
 
 # One task per subject, as OLMES's `minerva_math_<subject>:bpb::olmes`, whose primary metric is

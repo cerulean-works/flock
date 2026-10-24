@@ -96,4 +96,4 @@ MT_MBPP_TASKS = tuple(
 
 # OLMES's `mt_mbpp_v2fix` (`oe_eval/configs/task_suites.py`): one member of `code_bpb`, its
 # languages averaged first.
-MT_MBPP = Suite("mt_mbpp", MT_MBPP_TASKS)
+MT_MBPP = Suite("mt_mbpp", MT_MBPP_TASKS, metric="bpb")

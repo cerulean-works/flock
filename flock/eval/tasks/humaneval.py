@@ -7,16 +7,12 @@ from flock.eval.tasks.base import Choice, Dataset, Fewshot, MCDoc, MultipleChoic
 
 def humaneval_doc(row: dict[str, Any]) -> MCDoc:
     """A HumanEval row as a gold-only doc: the prompt, then the canonical solution (`oe_eval/tasks/oe_eval_tasks/codex_humaneval.py`)."""
-    solution = row["canonical_solution"]
     # OLMES adds a leading space unless the text starts with one or a newline
-    # (`construct_basic_generation_requests` in `oe_eval/tasks/base_task.py`). Every solution
-    # is indented, so none gets one.
-    if not solution.startswith((" ", "\n")):
-        solution = " " + solution
-
+    # (`construct_basic_generation_requests` in `oe_eval/tasks/base_task.py`). Every solution at
+    # the pinned revision is indented or starts with a newline, so none gets one.
     return MCDoc(
         id=row["task_id"],
-        choices=(Choice(row["prompt"], solution),),
+        choices=(Choice(row["prompt"], row["canonical_solution"]),),
         gold=0,
         # As an example, OLMES's `doc_to_target` puts a space before the already indented code.
         example=row["prompt"] + " " + row["canonical_solution"],

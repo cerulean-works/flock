@@ -13,9 +13,10 @@ _QA_TASKS = (ARC_EASY,)
 QA_RC = Suite("base_easy:qa_rc", _QA_TASKS)
 QA_BPB = Suite("base_easy:qa_bpb", _QA_TASKS, metric="bpb")
 
-# OLMES's `olmo3:base_easy:math_bpb` and `olmo3:base_easy:code_bpb`. Their tasks report only
-# `bpb`, as their primary metric, so the suites read each member's primary metric.
-MATH_BPB = Suite("base_easy:math_bpb", MINERVA_MATH_TASKS)
+# OLMES's `olmo3:base_easy:math_bpb` and `olmo3:base_easy:code_bpb`. Every task in them reports
+# only `bpb`. `code_bpb` reads its members' primary metric, since a suite with a `metric` holds
+# only tasks and `mt_mbpp` is a suite.
+MATH_BPB = Suite("base_easy:math_bpb", MINERVA_MATH_TASKS, metric="bpb")
 CODE_BPB = Suite("base_easy:code_bpb", (HUMANEVAL, MBPP, MT_MBPP))
 
 # OLMES has no score over all of Base Easy: an accuracy and a `bpb` don't average.

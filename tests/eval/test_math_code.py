@@ -10,14 +10,11 @@ from flock.eval.tasks.minerva_math import MINERVA_MATH_TASKS, SUBJECTS, minerva_
 def test_minerva_scores_the_solution_after_one_space():
     doc = minerva_doc({"index": 4, "problem": "What is $1+1$?", "solution": "It is $\\boxed{2}$."})
     context = "Problem:\nWhat is $1+1$?\n\nSolution:"
-    assert doc.choices == (Choice(context, " It is $\\boxed{2}$."),)
-    assert doc.example == context + " It is $\\boxed{2}$."
+    assert doc == MCDoc("4", (Choice(context, " It is $\\boxed{2}$."),), 0)
 
-    # A solution that already starts with a newline is scored without a space, but OLMES's
-    # examples add one anyway.
+    # A solution that already starts with a space or a newline gets none added.
     doc = minerva_doc({"index": 5, "problem": "p", "solution": "\n2"})
     assert doc.choices[0].continuation == "\n2"
-    assert doc.example == "Problem:\np\n\nSolution: \n2"
 
 
 def test_minerva_shots_are_olmes_literal_problems():
@@ -86,6 +83,7 @@ def test_math_and_code_suites_hold_every_subject_and_language():
     assert len(SUBJECTS) == len(MINERVA_MATH_TASKS) == 7
     assert len(LANGUAGES) == len(MT_MBPP_TASKS) == 17
     assert SUITES["base_easy:math_bpb"].members == MINERVA_MATH_TASKS
+    assert SUITES["base_easy:math_bpb"].metric == SUITES["mt_mbpp"].metric == "bpb"
     assert [m.name for m in SUITES["base_easy:code_bpb"].members] == [
         "humaneval",
         "mbpp",
