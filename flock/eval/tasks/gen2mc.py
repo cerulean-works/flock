@@ -1,11 +1,14 @@
-"""OLMES's multiple-choice versions of five generative QA datasets, each answer choice written by a model ("gen2mc", OLMo 3, 2512.13961, sec. 3.3.2): CoQA (Reddy et al. 2019, 1808.07042), DROP (Dua et al. 2019, 1903.00161), Jeopardy, Natural Questions (Kwiatkowski et al. 2019) and SQuAD (Rajpurkar et al. 2016, 1606.05250)."""
+"""Gen2MC, OLMo 3's "multiple-choice version of 5 short-form generative tasks" (OLMo 3, 2512.13961, sec. 3.3.4): CoQA (Reddy et al. 2019, 1808.07042), DROP (Dua et al. 2019, 1903.00161), Jeopardy, Natural Questions (Kwiatkowski et al. 2019) and SQuAD (Rajpurkar et al. 2016, 1606.05250)."""
 
+import re
+from collections.abc import Callable
 from typing import Any
 
 from flock.eval.tasks.base import Choice, Dataset, Fewshot, MCDoc, MultipleChoiceTask, cloze
 
-# Every gen2mc row names its gold choice by letter.
-_LETTERS = "ABCDE"
+# Every gen2mc row names its gold choice by letter. A tuple, so a key that isn't one letter raises,
+# as OLMES's list does.
+_LETTERS = ("A", "B", "C", "D", "E")
 
 
 def coqa_doc(row: dict[str, Any]) -> MCDoc:
@@ -34,9 +37,8 @@ def drop_doc(row: dict[str, Any]) -> MCDoc:
 
 def jeopardy_doc(row: dict[str, Any]) -> MCDoc:
     """A Jeopardy row as a cloze doc after a `Category: ` line (`oe_eval/tasks/oe_eval_tasks/jeopardy_mc.py`)."""
-    # OLMES splits `CATEGORY: clue` with the regex `(.*?):\s*(.*)`: the category is the text before
-    # the first colon, the clue the rest without its leading spaces. No clue holds a newline.
-    category, _, clue = row["context_original"].partition(":")
+    # OLMES's split of `CATEGORY: clue`, so a row without a colon raises as it does there.
+    category, clue = re.findall(r"(.*?):\s*(.*)", row["context_original"])[0]
 
     return MCDoc(
         id=row["id"],
@@ -405,71 +407,71 @@ _SQUAD_SHOTS = (
     },
 )
 
-# Each task is OLMES's `<task>:rc::gen2mc:xlarge`, scored by accuracy per character, on the one
-# split each dataset has (`oe_eval/configs/tasks.py`). The few-shot rows are the first 5 of
-# OLMES's `FEWSHOT_SOURCES["OLMES:<task>_mc"]` (`oe_eval/tasks/fewshot_sources.py`), written by
-# OLMES and in no split of the dataset, with only the fields `to_doc` reads.
-COQA = MultipleChoiceTask(
-    name="coqa",
-    dataset=Dataset(
-        repo="allenai/coqa-gen2mc",
-        revision="5e0394a08cc63398a22b745541e5cedf9c171bf3",
-        subset=None,
-        split="validation",
-    ),
-    to_doc=coqa_doc,
-    primary_metric="acc_per_char",
-    # Zero-shot in OLMES: each prompt already holds a long story.
-)
 
-DROP = MultipleChoiceTask(
-    name="drop",
-    dataset=Dataset(
-        repo="allenai/drop-gen2mc",
-        revision="33191ccb7014f77bc6dc3f59792acd43f658eb06",
-        subset=None,
-        split="validation",
-    ),
-    to_doc=drop_doc,
-    primary_metric="acc_per_char",
-    fewshot=Fewshot(rows=_DROP_SHOTS),
-)
+def _gen2mc_task(
+    name: str,
+    repo: str,
+    split: str,
+    revision: str,
+    to_doc: Callable[[dict[str, Any]], MCDoc],
+    shots: tuple[dict[str, Any], ...],
+) -> MultipleChoiceTask:
+    """OLMES's `<name>:rc::gen2mc:xlarge`, scored by accuracy per character on the one split its dataset has (`oe_eval/configs/tasks.py`)."""
+    return MultipleChoiceTask(
+        name=name,
+        dataset=Dataset(
+            repo=repo,
+            revision=revision,
+            subset=None,
+            split=split,
+        ),
+        to_doc=to_doc,
+        primary_metric="acc_per_char",
+        # Zero-shot when there are no rows: CoQA's prompts already hold a long story.
+        fewshot=Fewshot(rows=shots) if shots else None,
+    )
 
-JEOPARDY = MultipleChoiceTask(
-    name="jeopardy",
-    dataset=Dataset(
-        repo="allenai/jeopardy-gen2mc",
-        revision="0bbd389863e56b304b22b66106caf72566144aa8",
-        subset=None,
-        split="test",
-    ),
-    to_doc=jeopardy_doc,
-    primary_metric="acc_per_char",
-    fewshot=Fewshot(rows=_JEOPARDY_SHOTS),
-)
 
-NATURALQS = MultipleChoiceTask(
-    name="naturalqs",
-    dataset=Dataset(
-        repo="allenai/nq-gen2mc",
-        revision="a7e553744f28cb673bf25b734513c41e3f413840",
-        subset=None,
-        split="validation",
-    ),
-    to_doc=naturalqs_doc,
-    primary_metric="acc_per_char",
-    fewshot=Fewshot(rows=_NATURALQS_SHOTS),
+# The few-shot rows are the first 5 of OLMES's `FEWSHOT_SOURCES["OLMES:<task>_mc"]`
+# (`oe_eval/tasks/fewshot_sources.py`), written by OLMES and in no split of the dataset, with only
+# the fields `to_doc` reads.
+COQA = _gen2mc_task(
+    "coqa",
+    "allenai/coqa-gen2mc",
+    "validation",
+    "5e0394a08cc63398a22b745541e5cedf9c171bf3",
+    coqa_doc,
+    (),
 )
-
-SQUAD = MultipleChoiceTask(
-    name="squad",
-    dataset=Dataset(
-        repo="allenai/squad-gen2mc",
-        revision="e80f601243d8ed28732c5073cea1092aa4b8bc09",
-        subset=None,
-        split="validation",
-    ),
-    to_doc=squad_doc,
-    primary_metric="acc_per_char",
-    fewshot=Fewshot(rows=_SQUAD_SHOTS),
+DROP = _gen2mc_task(
+    "drop",
+    "allenai/drop-gen2mc",
+    "validation",
+    "33191ccb7014f77bc6dc3f59792acd43f658eb06",
+    drop_doc,
+    _DROP_SHOTS,
+)
+JEOPARDY = _gen2mc_task(
+    "jeopardy",
+    "allenai/jeopardy-gen2mc",
+    "test",
+    "0bbd389863e56b304b22b66106caf72566144aa8",
+    jeopardy_doc,
+    _JEOPARDY_SHOTS,
+)
+NATURALQS = _gen2mc_task(
+    "naturalqs",
+    "allenai/nq-gen2mc",
+    "validation",
+    "a7e553744f28cb673bf25b734513c41e3f413840",
+    naturalqs_doc,
+    _NATURALQS_SHOTS,
+)
+SQUAD = _gen2mc_task(
+    "squad",
+    "allenai/squad-gen2mc",
+    "validation",
+    "e80f601243d8ed28732c5073cea1092aa4b8bc09",
+    squad_doc,
+    _SQUAD_SHOTS,
 )

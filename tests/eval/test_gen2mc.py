@@ -1,4 +1,8 @@
-from flock.eval.tasks import SUITES, TASKS, Choice, MCDoc, cloze
+import hashlib
+
+import pytest
+
+from flock.eval.tasks import TASKS, Choice, MCDoc, cloze
 from flock.eval.tasks.gen2mc import coqa_doc, drop_doc, jeopardy_doc, naturalqs_doc, squad_doc
 
 # Each expected doc below is what OLMES's `_process_doc` and `doc_to_text` give for the same row
@@ -55,14 +59,25 @@ def test_naturalqs_asks_the_rewritten_question():
     )
 
 
-def test_gen2mc_tasks_are_in_both_suites_with_olmes_shots():
-    for name in ("coqa", "drop", "jeopardy", "naturalqs", "squad"):
-        assert TASKS[name] in SUITES["base_easy:qa_rc"].members
-        assert TASKS[name] in SUITES["base_easy:qa_bpb"].members
-    # CoQA is zero-shot; the others show 5 rows written in OLMES's code, which `to_doc` renders.
+# sha256 of each task's rendered few-shot head, equal to the head of OLMES's first request for the
+# task at 5a51f50, so an edit to a written-out row fails here.
+HEADS = {
+    "drop": "1128c0d07330c793",
+    "jeopardy": "cc1152970a7b5f94",
+    "naturalqs": "c2544b9ae11415f9",
+    "squad": "38ba3156ac5e1e0a",
+}
+
+
+def test_gen2mc_shots_render_olmes_heads():
     assert TASKS["coqa"].fewshot is None
-    for name in ("drop", "jeopardy", "naturalqs", "squad"):
+    for name, digest in HEADS.items():
         task = TASKS[name]
         assert task.fewshot is not None
         shots = [task.to_doc(row) for row in task.fewshot.rows]
-        assert len(shots) == 5
+        assert hashlib.sha256(task._head(shots).encode()).hexdigest()[:16] == digest
+
+
+def test_gen2mc_rejects_a_key_that_is_not_one_letter():
+    with pytest.raises(ValueError):
+        naturalqs_doc({"id": "n", "question": "q", "choices": CHOICES, "answerKey": ""})
