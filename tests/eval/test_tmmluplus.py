@@ -197,10 +197,12 @@ def test_tmmluplus_all_runs_every_subject_once():
 
 
 def test_a_test_row_repeating_a_dev_row_skips_that_shot(tmmluplus_rows):
-    # As `trade`'s test row 90 repeats its dev row 2 in v1.1.
+    # As `official_document_management`'s test row 129 repeats its dev row 0 in v1.1, with the
+    # choices in another order.
     task = TASKS["tmmluplus_organic_chemistry"]
     _, shots = task.load()
-    repeat = tmmluplus_doc({**ROWS["train"][2], "index": 90})
+    row = {**ROWS["train"][2], "A": "蘋果", "D": "石頭", "answer": "A", "index": 129}
+    repeat = tmmluplus_doc(row)
 
     context = task.requests([repeat], shots).requests[0].context
     assert context.count("問題：") == 3

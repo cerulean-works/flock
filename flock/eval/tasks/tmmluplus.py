@@ -26,7 +26,7 @@ class Subject:
         chinese_name (`str`):
             The subject in the task's header, from lm-evaluation-harness's `lm_eval/tasks/tmmluplus/subject.tsv` (v0.4.3).
         dev_rows (`int`, *optional*, defaults to `5`):
-            The subject's dev rows, all of which every doc is shown as few-shot examples. Twelve subjects have fewer than 5 after v1.1's corrections, and they show what they have, as lm-evaluation-harness's `first_n` sampler would.
+            The subject's dev rows, all of which every doc is shown as few-shot examples, except a dev row that repeats the doc's question and answer. Twelve subjects have fewer than 5 after v1.1's corrections, and they show what they have, as lm-evaluation-harness's `first_n` sampler would.
     """
 
     name: str

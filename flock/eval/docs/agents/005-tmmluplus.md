@@ -99,7 +99,7 @@ TMMLU+ rows have no id column, and `Fewshot` and the predictions file need one. 
 
 ### 005.D4. Few-shot examples: each subject's dev rows, in file order
 
-Each subject shows its `train` split (the `*_dev.csv` file) in file order, as MMLU's first 5 `dev` rows in OLMES and lm-evaluation-harness's `first_n` sampler: `Fewshot(split="train", ids=("0", ..., str(k - 1)))`. Normally `k` is 5. The twelve subjects with fewer dev rows show all of them (3 or 4), and the subject table records `k` for each, so the shortfall is visible in the definition and frozen with it. We don't top up from `validation`: no prior work does, and it would make the shots differ from the reference in [005.D6](#005d6-parity-against-lm-evaluation-harness-rendering-our-format). The dev rows are a different split from the scored one, but two test rows repeat a dev row, which [005.D7](#005d7-a-few-shot-example-equal-to-the-doc-isnt-shown-to-it) handles.
+Each subject shows its `train` split (the `*_dev.csv` file) in file order, as MMLU's first 5 `dev` rows in OLMES and lm-evaluation-harness's `first_n` sampler: `Fewshot(split="train", ids=("0", ..., str(k - 1)))`. Normally `k` is 5. The twelve subjects with fewer dev rows show all of them (3 or 4), and the subject table records `k` for each, so the shortfall is visible in the definition and frozen with it. We don't top up from `validation`: no prior work does, and it would make the shots differ from the reference in [005.D6](#005d6-parity-against-lm-evaluation-harness-rendering-our-format). The dev rows are a different split from the scored one, but fourteen test docs repeat a dev row's question and answer, which [005.D7](#005d7-a-doc-never-sees-its-own-question-and-answer-as-an-example) handles.
 
 ### 005.D5. Pin and scope
 
@@ -118,11 +118,17 @@ Each subject shows its `train` split (the `*_dev.csv` file) in file order, as MM
 
 Accuracy means `acc_raw` (its `acc`) and `acc_per_char` (its `acc_norm`). Checks 2 and 3 are taken on `tmmluplus`, its four categories and `tmmluplus:taiwan`; single subjects (85 to 989 docs) are reported only, as D22 does for MMLU. `acc_uncond` isn't compared, since lm-evaluation-harness has no PMI. The model is `Qwen/Qwen2.5-0.5B` at `060db6499f32faf8b98477b0a26969ef7d8b9987`, which reads Chinese and has no BOS token, in float32 and bfloat16, with lm-evaluation-harness at its default batch size 1 so the bfloat16 gap measures only our batching. For rankings (D23), both sides also score `allenai/OLMo-2-0425-1B` at `a1847dff35000b4271fa70afc5db10fd29fedbdf` in bfloat16, and the sign of every judged difference between the two models must agree whenever the reference's difference exceeds the tolerance.
 
-### 005.D7. A few-shot example equal to the doc isn't shown to it
+### 005.D7. A doc never sees its own question and answer as an example
 
-Two v1.1 test rows repeat a dev row word for word: `general_principles_of_law` test row 49 is its dev row 3, and `trade` test row 90 is its dev row 2. Shown all their dev rows, those two docs would see their own question with its answer. So a doc is never shown an example with its own choices and gold, whatever the example's id or split, and those two docs see 4 examples. This follows lm-evaluation-harness, which drops an example whose dataset row equals the doc's (`selected_docs = [x for x in fewshotex if x != doc]`, `lm_eval/api/samplers.py`, v0.4.3). We compare the rendered doc instead, after stripping, which drops the same two examples on v1.1. OLMES drops only the scored doc itself, by comparing the whole doc, id included, and only when it draws examples from the scored split (`fewshot_context` in `oe_eval/tasks/base_task.py`). Ids alone can't decide it here: row-index ids repeat across splits, so the dev row `"2"` isn't test row `"2"`.
+Fourteen v1.1 test docs repeat a dev row's question and gold answer: `official_document_management` 74, 129, 152, 166, 168 and 198, `general_principles_of_law` 41, 49 and 66, `trade` 90 and 280, `anti_money_laundering` 43, `financial_analysis` 108 and `macroeconomics` 302. Two of them (`general_principles_of_law` 49 and `trade` 90) repeat the dev row word for word, and the other twelve list the same choices in another order or with others. Shown all their dev rows, these docs would see `問題：<their question>\n答案：<their answer>` just before being asked it. So an example from a split other than the scored one isn't shown to a doc whose gold choice, as rendered, equals the example's: those docs see one example fewer (4, or 3 for `trade`, which has 4 dev rows).
 
-**Code.** `MultipleChoiceTask._shots_for` leaves out an example whose `choices` and `gold` equal the doc's, then, with `Fewshot.num_shots`, one with the doc's id, as before. On every task defined so far, including those of 003's later PRs, these two docs are the only ones an example is dropped for that `num_shots` didn't already drop, so no other request changes.
+An example shows only its gold choice, so that is what we compare. lm-evaluation-harness drops an example only when its whole row equals the doc's (`selected_docs = [x for x in fewshotex if x != doc]`, `lm_eval/api/samplers.py`, v0.4.3), which catches the two word-for-word repeats and misses the twelve reordered ones. OLMES drops only the scored doc itself, by comparing the whole doc, id included, and only when it samples examples from the scored split (`fewshot_context` in `oe_eval/tasks/base_task.py`). Ids can't decide it here: row-index ids repeat across splits, so dev row `"2"` isn't test row `"2"`.
+
+Examples from the scored split are left as they were. OLMES shows a curated example from the scored split to every doc, its own included, unless the task samples one extra and drops it, which `Fewshot.num_shots` reproduces by id. Four tasks of 003's later PRs score `train` with examples from `train` and no `num_shots`, as OLMES does, and comparing content there would change their requests.
+
+**Code.** `MultipleChoiceTask._shots_for` leaves out an example from another split whose gold choice equals the doc's, and with `Fewshot.num_shots`, as before, one with the doc's id. On every task defined so far, including those of 003's later PRs, the fourteen docs above are the only ones whose requests change.
+
+**Parity.** For the twelve reordered repeats our requests differ from lm-evaluation-harness's by this choice, which no config of it can express. Check 1 of [005.D6](#005d6-parity-against-lm-evaluation-harness-rendering-our-format) is reported on all docs, with these twelve named, and checks 2 and 3 are taken on the 19,634 docs whose requests are identical.
 
 ---
 
@@ -130,7 +136,7 @@ Two v1.1 test rows repeat a dev row word for word: `general_principles_of_law` t
 
 One PR, stacked on 003's suites PR and rebased when it merges:
 
-1. **Core:** `cloze`'s `answer_prefix` and `separator` ([005.D1](#005d1-chinese-prefixes-and-no-space-before-the-answer)) and `Dataset.row_index` ([005.D3](#005d3-docs-are-identified-by-their-row-index)), unless 003's MMLU PR has added it first, and the few-shot rule of [005.D7](#005d7-a-few-shot-example-equal-to-the-doc-isnt-shown-to-it).
+1. **Core:** `cloze`'s `answer_prefix` and `separator` ([005.D1](#005d1-chinese-prefixes-and-no-space-before-the-answer)) and `Dataset.row_index` ([005.D3](#005d3-docs-are-identified-by-their-row-index)), unless 003's MMLU PR has added it first, and the few-shot rule of [005.D7](#005d7-a-doc-never-sees-its-own-question-and-answer-as-an-example).
 2. **Task:** `flock/eval/tasks/tmmluplus.py` with the subject table, the generated tasks, the suites ([005.D2](#005d2-66-subject-tasks-and-the-categories-and-total-as-suites)), and their registration; a docs page entry.
 3. **Smoke** on `allenai/OLMo-2-0425-1B` and `Qwen/Qwen2.5-0.5B` (pins above) on one H200: 19,646 docs, and Qwen above chance (25%).
 4. **Parity** ([005.D6](#005d6-parity-against-lm-evaluation-harness-rendering-our-format)): six H200 jobs (Qwen in both dtypes and OLMo 2 in bfloat16, each on both sides), and the PR reports the table.
@@ -144,7 +150,7 @@ On CPU with tiny random models, as every eval test:
 - **Chinese lengths:** `acc_per_char` divides by characters and `bpb` by UTF-8 bytes (3 per CJK character) on a multi-byte answer; an English `cloze` call renders as before.
 - **Row ids:** `row_index` numbers rows from 0 per split, and raises on a dataset that already has `index`.
 - **Short dev splits:** a subject with 3 dev rows shows 3 examples.
-- **Repeated rows:** an example equal to the doc isn't shown to it, and an example from another split that only shares the doc's id is.
+- **Repeated rows:** an example from another split that shows the doc's own question and answer isn't shown to it, in either choice order; one that only shares the doc's id is; and examples from the scored split are shown to their own doc unless `num_shots` is set.
 - **Suites:** the total is the mean of the four category means, not of the 66 subjects, on hand values; the table has 66 distinct subjects in 4 categories.
 
 ---

@@ -62,7 +62,7 @@ class Dataset:
 @dataclass(frozen=True, slots=True)
 class Fewshot:
     """
-    Fixed few-shot examples: dataset rows picked by id, or rows written out in the task's module. Either way they are shown in the order given, except to a doc that is itself one of them: an example with the doc's choices and gold isn't shown to that doc.
+    Fixed few-shot examples: dataset rows picked by id, or rows written out in the task's module. Either way they are shown in the order given, except that a doc is never shown a row of another split that renders its own question and answer, that is, whose gold choice equals the doc's.
 
     Args:
         split (`str`, *optional*):
@@ -72,7 +72,7 @@ class Fewshot:
         rows (`tuple[dict, ...]`, *optional*):
             Examples that aren't rows of the dataset, in its row format. They go through the same `to_doc`.
         num_shots (`int`, *optional*):
-            Show each doc only the first `num_shots` examples that aren't the doc itself. A doc that is also repeated among the examples under another id loses that one too, so it sees one fewer. Only for `ids` from the scored split, which [`MultipleChoiceTask`] checks, since an id identifies a doc within one split. All examples are shown if not set.
+            Show each doc only the first `num_shots` examples that aren't the doc itself. Only for `ids` from the scored split, which [`MultipleChoiceTask`] checks, since an id identifies a doc within one split. All examples are shown if not set.
 
     Raises:
         `ValueError`: if both or neither of `ids` and `rows` are given, `split` is missing with `ids` or given with `rows`, an id repeats, or `num_shots` is set with `rows` or isn't below the number of examples.
@@ -122,7 +122,7 @@ class Choice:
 
 # The Traditional Chinese cloze format, `問題：<question>\n答案：<answer>` with no space before the
 # answer, which every Chinese task shares. The prefixes are the TMMLU+ paper's (Tam et al. 2024,
-# figs. 8 and 9), as C-Eval's and AGIEval's Chinese templates.
+# figs. 8 and 9) and C-Eval's, and AGIEval's Chinese template in Simplified characters.
 CHINESE_QUESTION_PREFIX = "問題："
 CHINESE_ANSWER_PREFIX = "答案："
 
@@ -400,7 +400,7 @@ class MultipleChoiceTask:
         if self.fewshot.num_shots is None:
             return
         # Ids are unique within a split only. Across splits, a doc that shares an id with an
-        # example would lose that example, and a doc that is itself an example would keep it.
+        # example would lose that example.
         if self.fewshot.split != self.dataset.split:
             raise ValueError(
                 f"{self.name}: num_shots needs examples from the scored split "
@@ -502,7 +502,7 @@ class MultipleChoiceTask:
         """
         Returns the examples `doc` is shown: those that aren't `doc` itself, and with `num_shots` only the first that many.
 
-        An example is `doc` itself if it renders the doc's choices and gold, or, with `num_shots`, if it has the doc's id. lm-evaluation-harness drops an example whose dataset row equals the doc's (`lm_eval/api/samplers.py`, v0.4.3), and OLMES samples one example extra and drops the scored doc (`fewshot_context` in `oe_eval/tasks/base_task.py`).
+        An example from another split is `doc` itself if its gold choice, the only one it shows, equals the doc's gold choice. An example from the scored split is `doc` itself only with `num_shots`, if it has the doc's id. lm-evaluation-harness drops an example only if its whole dataset row equals the doc's (`lm_eval/api/samplers.py`, v0.4.3), which misses a repeat with its choices reordered. OLMES samples one example extra and drops the scored doc (`fewshot_context` in `oe_eval/tasks/base_task.py`).
         """
         if self.fewshot is None:
             return shots
@@ -510,12 +510,14 @@ class MultipleChoiceTask:
         # Ids are compared only with `num_shots`, whose examples come from the scored split: an
         # example from another split may share an id with a different doc.
         match_id = self.fewshot.num_shots is not None
+        # A dataset may repeat a doc's question and answer in another split, possibly with the
+        # choices reordered, which would show the doc its own answer. Examples from the scored
+        # split are left to `num_shots`: OLMES shows a curated example even to its own doc.
+        match_content = self.fewshot.split is not None and self.fewshot.split != self.dataset.split
         others = []
         for shot in shots:
             same_id = match_id and shot.id == doc.id
-            # A dataset may repeat a doc in its few-shot split, which would show the doc its own
-            # answer.
-            same_content = shot.choices == doc.choices and shot.gold == doc.gold
+            same_content = match_content and shot.choices[shot.gold] == doc.choices[doc.gold]
             if not (same_id or same_content):
                 others.append(shot)
 

@@ -342,19 +342,29 @@ def test_num_shots_skips_the_scored_doc():
     )
 
 
-def test_a_shot_equal_to_the_doc_is_not_shown_to_it():
+@pytest.mark.parametrize("reorder", [False, True])
+def test_a_shot_showing_the_docs_answer_is_not_shown_to_it(reorder):
     docs, shots = TASK.load()
-    # Doc q-2 repeated under the few-shot id shot-9, as a dataset may repeat a question.
+    # Doc q-2 repeated under the few-shot id shot-9, as a dataset may repeat a question, perhaps
+    # with its choices in another order. Either way the example would show q-2's answer.
     repeat = dataclasses.replace(docs[1], id="shot-9")
+    if reorder:
+        repeat = dataclasses.replace(repeat, choices=repeat.choices[::-1], gold=2)
+    assert repeat.choices[repeat.gold] == docs[1].choices[docs[1].gold]
 
     built = TASK.requests(docs, [*shots, repeat])
-    head = "".join(
-        f"{shot.choices[shot.gold].context}{shot.choices[shot.gold].continuation}\n\n"
-        for shot in shots
-    )
-    assert built.requests[0].context.startswith(head + "Question:")
+    # Doc q-1 sees all three examples, and q-2 all but its repeat.
     assert built.requests[0].context.count("Question:") == 4
     assert built.requests[3].context.count("Question:") == 3
+
+
+def test_shots_from_the_scored_split_are_shown_to_their_own_doc():
+    # OLMES shows a curated example from the scored split to every doc, its own included.
+    task = dataclasses.replace(TASK, fewshot=Fewshot("test", ("q-1",)))
+    docs, shots = task.load()
+
+    built = task.requests(docs, shots)
+    assert built.requests[0].context.count("Question:") == 2
 
 
 def test_shots_from_another_split_may_share_an_id_with_the_doc():

@@ -41,7 +41,7 @@ uv run flock-eval run \
 
 ## The prompt format
 
-Each [`~eval.tasks.Choice`] of a doc is one request: its `continuation` is scored after the task's `description`, the few-shot examples and its `context`. Each example is its gold choice's context and continuation (or the doc's `example`, below), followed by a blank line. An example with the same choices and gold as the scored doc is left out for that doc, so a dataset that repeats a question in its few-shot split never shows a doc its own answer. With [`~eval.tasks.cloze`], every choice shares the context `Question: <question>\nAnswer:` and its continuation is `" <choice>"`:
+Each [`~eval.tasks.Choice`] of a doc is one request: its `continuation` is scored after the task's `description`, the few-shot examples and its `context`. Each example is its gold choice's context and continuation (or the doc's `example`, below), followed by a blank line. An example from another split whose gold choice equals the scored doc's is left out for that doc, so a dataset that repeats a question and its answer in its few-shot split, in any choice order, never shows a doc its own answer. Examples from the scored split are shown to every doc, their own included, unless `Fewshot.num_shots` is set, as OLMES shows its curated examples. With [`~eval.tasks.cloze`], every choice shares the context `Question: <question>\nAnswer:` and its continuation is `" <choice>"`:
 
 ```text
 Question: <few-shot question 1>
