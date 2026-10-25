@@ -36,16 +36,18 @@ class Subject:
 
 def tmmluplus_doc(row: dict[str, Any]) -> MCDoc:
     """A TMMLU+ row as a Chinese cloze doc, identified by its row index as MMLU is in OLMES. The question and choices are stripped, since 74 test choices carry outer whitespace."""
+    letters = ("A", "B", "C", "D")
     return MCDoc(
         id=str(row["index"]),
         choices=cloze(
             row["question"].strip(),
-            [row[letter].strip() for letter in "ABCD"],
+            [row[letter].strip() for letter in letters],
             question_prefix=CHINESE_QUESTION_PREFIX,
             answer_prefix=CHINESE_ANSWER_PREFIX,
             separator="",
         ),
-        gold=("A", "B", "C", "D").index(row["answer"]),
+        # A tuple, not "ABCD": `str.index` would also find an empty or two-letter answer.
+        gold=letters.index(row["answer"]),
     )
 
 

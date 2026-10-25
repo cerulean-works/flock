@@ -72,7 +72,7 @@ class Fewshot:
         rows (`tuple[dict, ...]`, *optional*):
             Examples that aren't rows of the dataset, in its row format. They go through the same `to_doc`.
         num_shots (`int`, *optional*):
-            Show each doc only the first `num_shots` examples that aren't the doc itself. Only for `ids` from the scored split, which [`MultipleChoiceTask`] checks, since an id identifies a doc within one split. All examples are shown if not set.
+            Show each doc only the first `num_shots` examples that aren't the doc itself. A doc that is also repeated among the examples under another id loses that one too, so it sees one fewer. Only for `ids` from the scored split, which [`MultipleChoiceTask`] checks, since an id identifies a doc within one split. All examples are shown if not set.
 
     Raises:
         `ValueError`: if both or neither of `ids` and `rows` are given, `split` is missing with `ids` or given with `rows`, an id repeats, or `num_shots` is set with `rows` or isn't below the number of examples.
@@ -502,16 +502,17 @@ class MultipleChoiceTask:
         """
         Returns the examples `doc` is shown: those that aren't `doc` itself, and with `num_shots` only the first that many.
 
-        An example is `doc` itself if it has the doc's choices and gold, as lm-evaluation-harness drops an example equal to the doc (`lm_eval/api/samplers.py`, v0.4.3), or, with `num_shots`, the doc's id. OLMES samples one example extra and drops the scored doc (`fewshot_context` in `oe_eval/tasks/base_task.py`).
+        An example is `doc` itself if it renders the doc's choices and gold, or, with `num_shots`, if it has the doc's id. lm-evaluation-harness drops an example whose dataset row equals the doc's (`lm_eval/api/samplers.py`, v0.4.3), and OLMES samples one example extra and drops the scored doc (`fewshot_context` in `oe_eval/tasks/base_task.py`).
         """
         if self.fewshot is None:
             return shots
 
+        # Ids are compared only with `num_shots`, whose examples come from the scored split: an
+        # example from another split may share an id with a different doc.
+        match_id = self.fewshot.num_shots is not None
         others = []
         for shot in shots:
-            # Ids are compared only with `num_shots`, whose examples come from the scored split: an
-            # example from another split may share an id with a different doc.
-            same_id = self.fewshot.num_shots is not None and shot.id == doc.id
+            same_id = match_id and shot.id == doc.id
             # A dataset may repeat a doc in its few-shot split, which would show the doc its own
             # answer.
             same_content = shot.choices == doc.choices and shot.gold == doc.gold
