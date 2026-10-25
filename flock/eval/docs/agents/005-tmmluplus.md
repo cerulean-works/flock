@@ -88,10 +88,10 @@ Each subject is a `MultipleChoiceTask` named `tmmluplus_<subject>` (lm-evaluatio
 | `tmmluplus:stem`, `:social_sciences`, `:humanities`, `:other` | that category's subject tasks | mean `acc_per_char` |
 | `tmmluplus` | the four category suites | mean of the category means, as the card |
 | `tmmluplus:taiwan` | the three Taiwan subject tasks | mean `acc_per_char`; each subject's own score is in `tasks` |
-| the same five with a `:bpb` suffix | the same tasks, `metric="bpb"` | mean `bpb` |
+| the same six with a `:bpb` suffix | the same tasks, `metric="bpb"` | mean `bpb` |
 | `tmmluplus:all` (unscored) | `tmmluplus`, `tmmluplus:bpb`, `tmmluplus:taiwan`, `tmmluplus:taiwan:bpb` | none: groups the runs, as `base_easy` |
 
-`tmmluplus:taiwan` is the `tmmluplus_taiwan` task named earlier, spelled as 003's suites are. Every task is scored once however many suites read it, and below about 300M parameters `bpb` is the metric to decide on, since accuracy sits near chance there (OLMo 3, sec. 3.3.2).
+Every task is scored once however many suites read it, and below about 300M parameters `bpb` is the metric to decide on, since accuracy sits near chance there (OLMo 3, sec. 3.3.2).
 
 ### 005.D3. Docs are identified by their row index
 

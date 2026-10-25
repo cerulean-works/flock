@@ -25,13 +25,13 @@ class Subject:
             The dataset config, which names the task `tmmluplus_<name>` as lm-evaluation-harness does.
         chinese_name (`str`):
             The subject in the task's header, from lm-evaluation-harness's `lm_eval/tasks/tmmluplus/subject.tsv` (v0.4.3).
-        num_shots (`int`, *optional*, defaults to `5`):
-            The subject's dev rows, all of which every doc is shown. Twelve subjects have fewer than 5 after v1.1's corrections, and they show what they have, as lm-evaluation-harness's `first_n` sampler would.
+        dev_rows (`int`, *optional*, defaults to `5`):
+            The subject's dev rows, all of which every doc is shown as few-shot examples. Twelve subjects have fewer than 5 after v1.1's corrections, and they show what they have, as lm-evaluation-harness's `first_n` sampler would.
     """
 
     name: str
     chinese_name: str
-    num_shots: int = 5
+    dev_rows: int = 5
 
 
 def tmmluplus_doc(row: dict[str, Any]) -> MCDoc:
@@ -45,7 +45,7 @@ def tmmluplus_doc(row: dict[str, Any]) -> MCDoc:
             answer_prefix=CHINESE_ANSWER_PREFIX,
             separator="",
         ),
-        gold="ABCD".index(row["answer"]),
+        gold=("A", "B", "C", "D").index(row["answer"]),
     )
 
 
@@ -66,7 +66,7 @@ def subject_task(subject: Subject) -> MultipleChoiceTask:
         primary_metric="acc_per_char",
         # The whole `train` split (the `*_dev.csv` file) in file order, as OLMES shows MMLU's first
         # 5 dev rows.
-        fewshot=Fewshot(split="train", ids=tuple(str(row) for row in range(subject.num_shots))),
+        fewshot=Fewshot(split="train", ids=tuple(str(row) for row in range(subject.dev_rows))),
         description=f"以下是關於{subject.chinese_name}考試單選題，請選出正確的答案。\n\n",
         unconditional_context=CHINESE_ANSWER_PREFIX,
     )
@@ -153,9 +153,9 @@ CATEGORIES: dict[str, tuple[Subject, ...]] = {
     ),
 }
 
-_category_tasks: dict[str, tuple[MultipleChoiceTask, ...]] = {}
-for category, subjects in CATEGORIES.items():
-    _category_tasks[category] = tuple(subject_task(subject) for subject in subjects)
+_category_tasks = {
+    category: tuple(map(subject_task, subjects)) for category, subjects in CATEGORIES.items()
+}
 
 # The card's total is the mean of the four category means, "matching the ievals methodology",
 # so a category counts once however many subjects it has.

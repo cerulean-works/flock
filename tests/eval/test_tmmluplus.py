@@ -1,17 +1,20 @@
 import math
 
+import datasets
 import pytest
+import torch
 
+from flock.eval.requests import Scores
 from flock.eval.run import score_task
 from flock.eval.tasks import SUITES, TASKS, Choice, Dataset, Fewshot, MCDoc, cloze
 from flock.eval.tasks.tmmluplus import CATEGORIES, TAIWAN_TASKS, TMMLUPLUS, tmmluplus_doc
 
-from .test_tasks import uniform_scores
+# The real `Dataset.load`, read before the `offline_rows` fixture replaces it in each test.
+LOAD = Dataset.load
 
 ROWS = {
     "train": [
         {
-            "index": 0,
             "question": "臺灣最高的山是哪一座？",
             "A": "雪山",
             "B": "玉山",
@@ -20,7 +23,6 @@ ROWS = {
             "answer": "B",
         },
         {
-            "index": 1,
             "question": "一年有幾個月？",
             "A": "10",
             "B": "11",
@@ -29,7 +31,6 @@ ROWS = {
             "answer": "C",
         },
         {
-            "index": 2,
             "question": "哪一個是水果？",
             "A": "石頭",
             "B": "椅子",
@@ -40,7 +41,6 @@ ROWS = {
     ],
     "test": [
         {
-            "index": 0,
             "question": " 水在攝氏幾度結冰？ ",
             "A": " 0 度",
             "B": "50 度",
@@ -49,7 +49,6 @@ ROWS = {
             "answer": "A",
         },
         {
-            "index": 1,
             "question": "哪一種動物會飛？",
             "A": "魚",
             "B": "老鷹",
@@ -63,12 +62,17 @@ ROWS = {
 
 @pytest.fixture
 def tmmluplus_rows(monkeypatch):
-    """Every task reads `ROWS` by split, in TMMLU+'s row format with the index `load` adds."""
-    monkeypatch.setattr(Dataset, "load", lambda self, split=None: ROWS[split or self.split])
+    """Every task loads `ROWS` by split through the real `Dataset.load`, which numbers the rows."""
+    monkeypatch.setattr(Dataset, "load", LOAD)
+    monkeypatch.setattr(
+        datasets,
+        "load_dataset",
+        lambda *args, split, **kwargs: datasets.Dataset.from_list(ROWS[split]),
+    )
 
 
 def test_doc_strips_text_and_scores_answers_with_no_leading_space():
-    doc = tmmluplus_doc(ROWS["test"][0])
+    doc = tmmluplus_doc({**ROWS["test"][0], "index": 0})
 
     assert doc == MCDoc(
         "0",
@@ -111,7 +115,11 @@ def test_short_dev_split_shows_every_dev_row(tmmluplus_rows):
 def test_chinese_choices_count_characters_and_utf8_bytes(tmmluplus_rows):
     task = TASKS["tmmluplus_organic_chemistry"]
     built = task.requests(*task.load())
-    layout = built.choice_scores(uniform_scores(len(built.requests)))
+    n = len(built.requests)
+    scores = Scores(
+        torch.zeros(n), torch.ones(n, dtype=torch.int64), torch.zeros(n, dtype=torch.int64)
+    )
+    layout = built.choice_scores(scores)
 
     # "老鷹": two characters of 3 bytes each, and no leading space.
     assert layout.num_chars[1, 1].item() == 2
