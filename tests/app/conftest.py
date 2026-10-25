@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import dataclasses
 import gzip
 import http.client
 import itertools
@@ -28,7 +29,9 @@ import uvloop
 from app.api.app import create_app
 from app.api.src.core.store import Store
 from app.api.src.db.migrate import Migrations
+from app.api.src.hub_proxy.app import create_app as create_proxy_app
 from app.api.src.settings import Settings
+from tests.conftest import S3Bucket, S3Server
 
 
 class Response:
@@ -391,6 +394,14 @@ class Postgres:
         self._admin(*(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)" for name in self.created))
 
 
+def _listen() -> socket.socket:
+    """A socket bound to an ephemeral local port, for a uvicorn server to serve on."""
+    sock = socket.socket()
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("127.0.0.1", 0))
+    return sock
+
+
 class FlockServer:
     """A flock served by uvicorn on an ephemeral port in a background thread."""
 
@@ -410,9 +421,7 @@ class FlockServer:
         self.api_key = api_key
         settings.setdefault("gravatar", False)  # tests needing it use a fake Gravatar
         self.store = Store(Settings(database_url=database_url, files_dir=files_dir, **settings))
-        sock = socket.socket()
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("127.0.0.1", 0))
+        sock = _listen()
         self.port = sock.getsockname()[1]
         self.url = f"http://127.0.0.1:{self.port}"
         config = uvicorn.Config(
@@ -486,6 +495,81 @@ class FlockServer:
         self._thread.join(timeout=60)
 
 
+class ProxyServer:
+    """The hub's S3 proxy served by uvicorn on ``sock`` in a background thread."""
+
+    def __init__(self, settings: Settings, sock: socket.socket | None = None) -> None:
+        sock = sock or _listen()
+        self.port = sock.getsockname()[1]
+        self.url = f"http://127.0.0.1:{self.port}"
+        self.app = create_proxy_app(settings)
+        config = uvicorn.Config(
+            self.app, log_level="warning", access_log=False, http="httptools", lifespan="on"
+        )
+        self._server = uvicorn.Server(config)
+        self.loop = uvloop.new_event_loop()
+        self._thread = threading.Thread(
+            target=lambda: self.loop.run_until_complete(self._server.serve(sockets=[sock])),
+            daemon=True,
+        )
+        self._thread.start()
+        deadline = time.monotonic() + 30
+        while not self._server.started:
+            if time.monotonic() > deadline or not self._thread.is_alive():
+                raise RuntimeError("hub proxy failed to start")
+            time.sleep(0.01)
+
+    def stop(self) -> None:
+        self._server.should_exit = True
+        self._thread.join(timeout=30)
+
+
+class HubFlock(FlockServer):
+    """A flock with the hub on: the S3 proxy in front of ``bucket``, on the flock's database,
+    with ``hub_proxy_url`` and ``hub_proxy_public_url`` pointing at it."""
+
+    def __init__(
+        self, database_url: str, files_dir: Path, bucket: S3Bucket, **settings: Any
+    ) -> None:
+        self.bucket = bucket
+        sock = _listen()
+        proxy_url = f"http://127.0.0.1:{sock.getsockname()[1]}"
+        hub: dict[str, Any] = {
+            "hub_s3_endpoint": bucket.endpoint,
+            "hub_s3_region": bucket.region,
+            "hub_s3_access_key_id": bucket.access_key_id,
+            "hub_s3_secret_access_key": bucket.secret_access_key,
+            "hub_bucket": bucket.bucket,
+            "hub_proxy_url": proxy_url,
+            "hub_proxy_public_url": proxy_url,
+        }
+        super().__init__(database_url, files_dir, **{**hub, **settings})
+        # The flock has applied the migrations the proxy reads.
+        self.proxy = ProxyServer(dataclasses.replace(self.store.settings, pool_size=8), sock)
+
+    def credentials(self, client: Client | None = None, read_only: bool = False) -> dict:
+        """Temporary S3 credentials of ``client``'s user (the super admin by default)."""
+        got = (client or self.client()).post("/api/v1/hub/credentials", {"read_only": read_only})
+        assert got.status == 200, got.body
+        return got.json()
+
+    def storage_options(self, client: Client | None = None, read_only: bool = False) -> dict:
+        """Lance ``storage_options`` reaching datasets through the proxy as ``client``'s user."""
+        creds = self.credentials(client, read_only)
+        return {
+            "aws_endpoint": self.proxy.url,
+            "aws_access_key_id": creds["access_key_id"],
+            "aws_secret_access_key": creds["secret_access_key"],
+            "aws_session_token": creds["session_token"],
+            "aws_region": creds["region"],
+            "allow_http": "true",
+        }
+
+    def stop(self) -> None:
+        self.proxy.stop()
+        super().stop()
+
+
 @dataclass
 class User:
     """An account created through the API, with a client using its API key."""
@@ -520,6 +604,17 @@ class Flocks:
             files_dir = self.base / f"flock-files-{len(self.servers)}"
             url = database_url or self.postgres.create()
             server = FlockServer(url, files_dir, **settings)
+        self.servers.append(server)
+        return server
+
+    def hub(self, bucket: S3Bucket, reuse: HubFlock | None = None, **settings: Any) -> HubFlock:
+        """A flock with the hub on over ``bucket`` (see ``HubFlock``), fresh or like ``reuse``."""
+        if reuse is not None:
+            settings.setdefault("api_key", reuse.api_key)
+            server = HubFlock(reuse.database_url, reuse.files_dir, bucket, **settings)
+        else:
+            files_dir = self.base / f"flock-files-{len(self.servers)}"
+            server = HubFlock(self.postgres.create(), files_dir, bucket, **settings)
         self.servers.append(server)
         return server
 
@@ -660,6 +755,24 @@ def make_module_flock(
 @pytest.fixture
 def flock(make_flock: Flocks) -> FlockServer:
     return make_flock()
+
+
+@pytest.fixture
+def make_hub(make_flock: Flocks, s3_server: S3Server):
+    """Factory of flocks with the hub on, each over a fresh bucket of the test S3 server (or,
+    restarted with ``reuse``, over its bucket)."""
+
+    def make(reuse: HubFlock | None = None, **settings: Any) -> HubFlock:
+        bucket = reuse.bucket if reuse is not None else s3_server.bucket()
+        return make_flock.hub(bucket, reuse=reuse, **settings)
+
+    return make
+
+
+@pytest.fixture
+def hub(make_hub) -> HubFlock:
+    """A flock with the hub on: its S3 proxy in front of a fresh test bucket."""
+    return make_hub()
 
 
 @pytest.fixture

@@ -1,10 +1,8 @@
 import asyncio
 import hashlib
-import socket
 import threading
 import time
 import uuid
-from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
@@ -13,8 +11,6 @@ import asyncpg
 import boto3
 import httpx
 import pytest
-import uvicorn
-import uvloop
 from botocore.auth import S3SigV4Auth
 from botocore.awsrequest import AWSRequest
 from botocore.config import Config
@@ -22,44 +18,13 @@ from botocore.credentials import Credentials
 from botocore.exceptions import ClientError
 
 from app.api.src import hub_credentials
-from app.api.src.hub_proxy.app import create_app, manifest_version
-from app.api.src.hub_proxy.config import ProxyConfig
-from tests.app.conftest import Flocks, FlockServer
+from app.api.src.hub_proxy.app import manifest_version
+from tests.app.conftest import Flocks, HubFlock, ProxyServer
+from tests.app.test_hub_chunked import crc32, frame
 from tests.conftest import S3Bucket
 
 lance = pytest.importorskip("lance")
 pa = pytest.importorskip("pyarrow")
-
-
-class ProxyServer:
-    """The S3 proxy served by uvicorn on an ephemeral port in a background thread."""
-
-    def __init__(self, config: ProxyConfig) -> None:
-        sock = socket.socket()
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("127.0.0.1", 0))
-        self.port = sock.getsockname()[1]
-        self.url = f"http://127.0.0.1:{self.port}"
-        self.app = create_app(config)
-        uv_config = uvicorn.Config(
-            self.app, log_level="warning", access_log=False, http="httptools", lifespan="on"
-        )
-        self._server = uvicorn.Server(uv_config)
-        self.loop = uvloop.new_event_loop()
-        self._thread = threading.Thread(
-            target=lambda: self.loop.run_until_complete(self._server.serve(sockets=[sock])),
-            daemon=True,
-        )
-        self._thread.start()
-        deadline = time.monotonic() + 30
-        while not self._server.started:
-            if time.monotonic() > deadline or not self._thread.is_alive():
-                raise RuntimeError("hub proxy failed to start")
-            time.sleep(0.01)
-
-    def stop(self) -> None:
-        self._server.should_exit = True
-        self._thread.join(timeout=30)
 
 
 class PayloadAuth(S3SigV4Auth):
@@ -85,7 +50,7 @@ class Hub:
     """A flock, its database, the proxy in front of a test bucket, and helpers to set up
     datasets and credentials directly in Postgres (the datasets API is built separately)."""
 
-    flock: FlockServer
+    flock: HubFlock
     proxy: ProxyServer
     bucket: S3Bucket
     database_url: str
@@ -160,10 +125,6 @@ class Hub:
             config=Config(
                 s3={"addressing_style": "path"},
                 signature_version="s3v4",  # presigned URLs default to SigV2 otherwise
-                # Newer botocore sends aws-chunked bodies with trailing checksums by default,
-                # which the proxy doesn't support (D47).
-                request_checksum_calculation="when_required",
-                response_checksum_validation="when_required",
                 retries={"max_attempts": 1},
             ),
         )
@@ -212,11 +173,10 @@ class Hub:
 
 
 @pytest.fixture(scope="module")
-def hub(make_module_flock: Flocks, s3_server) -> Iterator[Hub]:
-    flock = make_module_flock()
+def hub(make_module_flock: Flocks, s3_server) -> Hub:
+    flock = make_module_flock.hub(s3_server.bucket())
     admin = flock.client()
     assert admin.post("/api/v1/orgs", {"name": "lab"}).status == 201
-    assert admin.post("/api/v1/orgs", {"name": "hf"}).status == 201
     for email, role, org in [
         ("alice@flock.test", "member", "flock"),
         ("bob@flock.test", "member", "flock"),
@@ -224,25 +184,13 @@ def hub(make_module_flock: Flocks, s3_server) -> Iterator[Hub]:
         ("olga@flock.test", "member", "lab"),
     ]:
         flock.add_user(email, role, org)
-    bucket = s3_server.bucket()
-    proxy = ProxyServer(
-        ProxyConfig(
-            database_url=flock.database_url,
-            s3_endpoint=bucket.endpoint,
-            s3_access_key_id=bucket.access_key_id,
-            s3_secret_access_key=bucket.secret_access_key,
-            bucket=bucket.bucket,
-            pool_size=8,
-        )
-    )
-    hub = Hub(flock, proxy, bucket, flock.database_url, "", {}, {})
+    hub = Hub(flock, flock.proxy, flock.bucket, flock.database_url, "", {}, {})
     hub.server_secret = hub.sql("SELECT value FROM meta WHERE key = 'hub_key_secret'")[0]["value"]
     for row in hub.sql("SELECT pk, email FROM users"):
         hub.users[row["email"].partition("@")[0]] = row["pk"]
     for row in hub.sql("SELECT pk, name FROM orgs"):
         hub.orgs[row["name"]] = row["pk"]
-    yield hub
-    proxy.stop()
+    return hub
 
 
 def rows_table(start: int, n: int, writer: str = "") -> Any:
@@ -637,6 +585,47 @@ def test_renamed_dataset_moves_with_its_objects(hub):
 
 
 # ---------------------------------------------------------------------- S3 operations
+
+
+def test_aws_chunked_uploads_are_decoded(hub):
+    """Recent AWS SDKs send uploads aws-chunked with a checksum trailer by default."""
+    name, ds_uuid = hub.dataset()
+    alice = hub.key("alice")
+    data = bytes(range(256)) * 300
+    headers = {
+        "Content-Encoding": "aws-chunked",
+        "X-Amz-Decoded-Content-Length": str(len(data)),
+        "X-Amz-Trailer": "x-amz-checksum-crc32",
+        "X-Amz-Sdk-Checksum-Algorithm": "CRC32",
+    }
+    path = f"/datasets/flock/{name}/chunked.bin"
+    put = hub.raw(
+        alice,
+        "PUT",
+        path,
+        frame(data, trailer=crc32(data)),
+        headers,
+        "STREAMING-UNSIGNED-PAYLOAD-TRAILER",
+    )
+    assert put.status_code == 200, put.text
+    assert hub.s3(alice).get_object(Bucket="datasets", Key=path[10:])["Body"].read() == data
+    assert "chunked.bin" in hub.upstream_keys(ds_uuid)
+
+    # A body that fails its checksum is refused and never stored.
+    bad = hub.raw(
+        alice,
+        "PUT",
+        path + ".bad",
+        frame(data, trailer=crc32(b"other")),
+        headers,
+        "STREAMING-UNSIGNED-PAYLOAD-TRAILER",
+    )
+    assert bad.status_code == 400
+    assert "chunked.bin.bad" not in hub.upstream_keys(ds_uuid)
+
+    # Signed chunks would need each chunk's signature checked.
+    signed = hub.raw(alice, "PUT", path, frame(data), headers, "STREAMING-AWS4-HMAC-SHA256-PAYLOAD")
+    assert signed.status_code == 501
 
 
 def test_multipart_upload_round_trip(hub):

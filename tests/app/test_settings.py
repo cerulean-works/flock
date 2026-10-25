@@ -28,6 +28,20 @@ def test_settings_read_canonical_urls_and_explicit_overrides():
     assert settings.cors_origins == ["https://one.example.com", "https://two.example.com"]
 
 
+# The Settings fields the hub's S3 proxy uses.
+PROXY_SETTINGS = {
+    "database_url",
+    "hub_s3_endpoint",
+    "hub_s3_region",
+    "hub_s3_access_key_id",
+    "hub_s3_secret_access_key",
+    "hub_bucket",
+    "hub_mirror_org",
+    "pool_size",
+    "log_level",
+}
+
+
 @pytest.mark.parametrize("compose", ["app/compose.yaml", "app/api/compose.dev.yaml"])
 @pytest.mark.parametrize("configured", [False, True])
 def test_compose_configuration(compose, configured):
@@ -57,6 +71,8 @@ def test_compose_configuration(compose, configured):
             os.devnull,
             "-f",
             str(root / compose),
+            "--profile",
+            "hub",
             "config",
             "--format",
             "json",
@@ -77,6 +93,11 @@ def test_compose_configuration(compose, configured):
         if field.name != "files_dir"
     }
     assert settings.pool_size == (8 if configured else Settings.pool_size)
+    # The hub's S3 proxy reads the same Settings: the database, the upstream S3 server and the
+    # mirror org, set as for the API.
+    proxy_env = services["hub-s3"]["environment"]
+    assert set(proxy_env) == {f"FLOCK_{name.upper()}" for name in PROXY_SETTINGS}
+    assert {k: v for k, v in api_env.items() if k in proxy_env} == proxy_env
     assert settings.gravatar is (not configured)
     password = "test-database-password" if configured else "flock"
     assert services["postgres"]["environment"]["POSTGRES_PASSWORD"] == password

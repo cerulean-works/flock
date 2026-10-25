@@ -15,6 +15,8 @@ from urllib.parse import quote, unquote
 
 ALGORITHM = "AWS4-HMAC-SHA256"
 UNSIGNED_PAYLOAD = "UNSIGNED-PAYLOAD"
+# An aws-chunked body with trailing headers and no chunk signatures (see `chunked`).
+STREAMING_UNSIGNED_TRAILER = "STREAMING-UNSIGNED-PAYLOAD-TRAILER"
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 # How far a request's own timestamp may be from ours, as S3 allows.
 MAX_SKEW = 15 * 60.0
@@ -240,9 +242,11 @@ def parse_request(
     else:
         raise SigV4Error("AccessDenied", "the request is not signed")
 
-    if payload_hash.startswith("STREAMING-"):
-        raise SigV4Error("NotImplemented", "aws-chunked uploads are not supported", 501)
-    if payload_hash != UNSIGNED_PAYLOAD and (
+    # Unsigned aws-chunked bodies (recent SDKs' default) are decoded by the proxy; signed chunks
+    # would need every chunk's signature checked.
+    if payload_hash.startswith("STREAMING-") and payload_hash != STREAMING_UNSIGNED_TRAILER:
+        raise SigV4Error("NotImplemented", "signed aws-chunked uploads are not supported", 501)
+    if payload_hash not in (UNSIGNED_PAYLOAD, STREAMING_UNSIGNED_TRAILER) and (
         len(payload_hash) != 64 or any(c not in "0123456789abcdef" for c in payload_hash)
     ):
         raise SigV4Error("InvalidArgument", "x-amz-content-sha256 is not valid", 400)

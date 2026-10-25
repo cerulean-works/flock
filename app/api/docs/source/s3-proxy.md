@@ -7,20 +7,22 @@ The hub keeps datasets in an S3-compatible store (Ceph RGW in production) that h
 - **One bucket.** Clients see a single bucket, `datasets`, addressed path-style: a dataset's Lance URI is `s3://datasets/<org>/<dataset>`. In the store, the same objects live under `datasets/<uuid>/` in `FLOCK_HUB_BUCKET`, so renaming a dataset moves nothing.
 - **Credentials.** It accepts S3 keys from the account page (`FLKH…`) and the temporary credentials `flock.hub` gets with an API key (`FLKT…` plus a session token). Signatures are AWS SigV4, in the `Authorization` header or a presigned URL, for any region.
 - **Permissions.** Org members read and write their org's datasets, and anyone signed in reads `internal` ones. Read-only keys only read, and org-scoped keys only reach that org. Only org admins can delete objects. Nobody can overwrite a dataset's existing versions (`_versions/`) or the transaction files (`_transactions/`) they refer to. A dataset you can't read answers `AccessDenied`, whether it exists or not.
-- **Atomic commits.** Lance commits a version by writing its manifest with `If-None-Match: *`. Some stores, including the Ceph RGW Flock is tested against, accept that header without enforcing it, so concurrent writers would silently overwrite each other's versions. The proxy enforces it itself, under a PostgreSQL lock per dataset, and records who wrote each version. Every write must therefore go through the proxy.
-- **Operations.** GetObject (with ranges), HeadObject, ListObjectsV2, PutObject, multipart uploads, CopyObject within a dataset, DeleteObject and DeleteObjects. Anything else, including aws-chunked uploads, answers `501 NotImplemented`.
+- **Atomic commits.** Lance commits a version by writing its manifest with `If-None-Match: *`. Some stores, such as Ceph's standalone "dbstore" backend, accept that header without enforcing it, so concurrent writers would silently overwrite each other's versions. The proxy enforces it itself, under a PostgreSQL lock per dataset, and records who wrote each version. Every write must therefore go through the proxy, Flock's own included: the API writes cards, tags, restores, compactions, prunes and Hugging Face mirrors through it, with temporary credentials of the user who asked.
+- **Operations.** GetObject (with ranges), HeadObject, ListObjectsV2, PutObject, multipart uploads, CopyObject within a dataset, DeleteObject and DeleteObjects. Uploads that recent AWS SDKs and the aws CLI send aws-chunked with a checksum trailer are decoded and their CRC32, SHA-1 or SHA-256 checksum checked. Anything else, including uploads with signed chunks, answers `501 NotImplemented`.
 
 ## Running it
 
-It runs from the API's image with a different command, and needs the database URL and the store's settings:
+It runs from the API's image with a different command:
 
 ```bash
 uvicorn app.api.src.hub_proxy.app:app --host 0.0.0.0 --port 9000
 ```
 
+It reads the same [settings](configuration) as the API, and uses these, which must have the API's values:
+
 | Variable | Default | |
 | --- | --- | --- |
-| `FLOCK_DATABASE_URL` | | the API's database |
+| `FLOCK_DATABASE_URL` | `postgresql://flock:flock@127.0.0.1:5432/flock` | the API's database |
 | `FLOCK_HUB_S3_ENDPOINT` | required | the store's URL |
 | `FLOCK_HUB_S3_REGION` | `us-east-1` | the store's region |
 | `FLOCK_HUB_S3_ACCESS_KEY_ID`, `FLOCK_HUB_S3_SECRET_ACCESS_KEY` | required | the global key |
@@ -28,13 +30,20 @@ uvicorn app.api.src.hub_proxy.app:app --host 0.0.0.0 --port 9000
 | `FLOCK_HUB_MIRROR_ORG` | `hf` | the org Hugging Face mirrors are written to |
 | `FLOCK_POOL_SIZE` | `16` | maximum database connections |
 
-In Docker Compose it is the `hub-s3` service, in the `hub` profile so it only starts once the store is configured:
+In Docker Compose it is the `hub-s3` service, in the `hub` profile so it only starts once the store is configured. Point the API at it, and tell clients where to find it:
+
+```bash
+FLOCK_HUB_PROXY_URL=http://hub-s3:9000
+FLOCK_HUB_PROXY_PUBLIC_URL=https://s3.flock.example.com
+```
+
+Then start the stack with the profile:
 
 ```bash
 docker compose --profile hub up -d
 ```
 
-Route your S3 domain (the one `flock.hub` and S3 tools are given) to `hub-s3:9000`. `GET /healthz` answers `ok` without authentication, for health checks.
+Route your S3 domain (`FLOCK_HUB_PROXY_PUBLIC_URL`, the one `flock.hub` and S3 tools are given) to `hub-s3:9000`. `GET /healthz` answers `ok` without authentication, for health checks.
 
 The proxy keeps no state of its own, so you can run several replicas. It caches keys, roles and datasets for 10 seconds, and drops the cache whenever the API announces a change (`NOTIFY hub_invalidate`), so revoking a key or a membership takes effect at once. It needs the API's migrations applied, so start it after the API.
 

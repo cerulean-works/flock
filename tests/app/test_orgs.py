@@ -373,11 +373,8 @@ def test_user_administration(flock):
     assert bob.api.get("/api/v1/me").status == 401
 
 
-def test_mirror_org_is_marked(make_flock, s3_bucket):
+def test_mirror_org_is_marked(hub):
     """The hub's mirror org is told apart, so the dashboard's setup doesn't take it for the first
     workspace."""
-    from tests.app.test_datasets import hub_settings
-
-    hub = make_flock(**hub_settings(s3_bucket))
     orgs = {o["name"]: o["mirror"] for o in hub.client().get(ORGS).json()["orgs"]}
     assert orgs == {"flock": False, "hf": True}

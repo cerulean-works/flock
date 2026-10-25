@@ -26,10 +26,10 @@ from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 from starlette.routing import Route
 
-from app.api.src.hub_proxy import s3xml, sigv4
+from app.api.src.hub_proxy import chunked, s3xml, sigv4
 from app.api.src.hub_proxy.auth import Access, Caller, Dataset, Directory
-from app.api.src.hub_proxy.config import ProxyConfig
 from app.api.src.hub_proxy.sigv4 import SigV4Error
+from app.api.src.settings import Settings
 
 log = logging.getLogger(__name__)
 
@@ -161,9 +161,17 @@ class Target:
 
 
 class Proxy:
-    def __init__(self, config: ProxyConfig) -> None:
-        self.config = config
-        self.endpoint = config.s3_endpoint.rstrip("/")
+    def __init__(self, settings: Settings) -> None:
+        missing = [
+            f"FLOCK_{name.upper()}"
+            for name in ("hub_s3_endpoint", "hub_s3_access_key_id", "hub_s3_secret_access_key")
+            if not getattr(settings, name)
+        ]
+        if missing:
+            raise RuntimeError(f"{', '.join(missing)} must be set to run the hub's S3 proxy")
+        assert settings.hub_s3_endpoint is not None
+        self.settings = settings
+        self.endpoint = settings.hub_s3_endpoint.rstrip("/")
         self.host = httpx.URL(self.endpoint).netloc.decode()
         self._pool: asyncpg.Pool | None = None
         self._directory: Directory | None = None
@@ -186,9 +194,11 @@ class Proxy:
 
     async def start(self) -> None:
         self._pool = await asyncpg.create_pool(
-            self.config.database_url, min_size=1, max_size=self.config.pool_size
+            self.settings.database_url, min_size=1, max_size=self.settings.pool_size
         )
-        self._directory = Directory(self._pool, self.config.database_url, self.config.mirror_org)
+        self._directory = Directory(
+            self._pool, self.settings.database_url, self.settings.hub_mirror_org
+        )
         await self._directory.start()
         # Lance reads with many concurrent ranged GETs, so allow plenty of connections.
         self._client = httpx.AsyncClient(
@@ -241,6 +251,8 @@ class Proxy:
             return await (self._bucket(call) if not key else self._object(call))
         except SigV4Error as e:
             return s3xml.error(e.code, e.message, e.status, path, head)
+        except chunked.ChunkedError as e:
+            return s3xml.error("IncompleteBody", str(e), 400, path, head)
         except httpx.HTTPError as e:
             log.warning("upstream request failed: %r", e)
             return s3xml.error("ServiceUnavailable", "the storage backend failed", 503, path, head)
@@ -267,7 +279,33 @@ class Proxy:
         for name, value in call.headers.items():
             if name in FORWARD_HEADERS or name.startswith(FORWARD_PREFIXES):
                 out[name] = value
+        if self._chunked(call):
+            # The upstream gets the decoded body (see `_body`), without the framing or the
+            # checksum that only the trailer carried.
+            out["content-length"] = str(self._length(call))
+            encoding = [
+                e for e in out.pop("content-encoding", "").split(",") if e.strip() != "aws-chunked"
+            ]
+            if any(e.strip() for e in encoding):
+                out["content-encoding"] = ",".join(encoding)
+            out.pop("x-amz-sdk-checksum-algorithm", None)
         return out
+
+    @staticmethod
+    def _chunked(call: Call) -> bool:
+        return call.payload_hash == chunked.STREAMING_UNSIGNED_TRAILER
+
+    def _body(self, call: Call) -> AsyncIterable[bytes]:
+        """The request body as the upstream should get it: aws-chunked bodies decoded."""
+        if self._chunked(call):
+            return chunked.decode(
+                call.request.stream(), self._length(call), call.headers.get("x-amz-trailer")
+            )
+        return call.request.stream()
+
+    def _upstream_hash(self, call: Call) -> str:
+        """The payload hash to sign upstream requests with that forward the client's body."""
+        return sigv4.UNSIGNED_PAYLOAD if self._chunked(call) else call.payload_hash
 
     async def _send(
         self,
@@ -280,7 +318,7 @@ class Proxy:
         stream: bool = False,
     ) -> httpx.Response:
         """A request to the upstream bucket (``key`` None for the bucket), signed globally."""
-        path = f"/{sigv4.uri_encode(self.config.bucket)}"
+        path = f"/{sigv4.uri_encode(self.settings.hub_bucket)}"
         if key is not None:
             path += "/" + sigv4.uri_encode(key)
         items = list((params or {}).items())
@@ -295,9 +333,9 @@ class Proxy:
             items,
             {**(headers or {}), "accept-encoding": "identity"},
             payload_hash,
-            self.config.s3_access_key_id,
-            self.config.s3_secret_access_key,
-            self.config.s3_region,
+            self.settings.hub_s3_access_key_id or "",
+            self.settings.hub_s3_secret_access_key or "",
+            self.settings.hub_s3_region,
             time.time(),
         )
         url = self.endpoint + path + (f"?{query}" if query else "")
@@ -363,10 +401,9 @@ class Proxy:
         root, _ = s3xml.rewrite(body, key, BUCKET, **kwargs)
         return s3xml.xml_response(root)
 
-    @staticmethod
-    async def _read(request: Request, limit: int) -> bytes:
+    async def _read(self, call: Call, limit: int) -> bytes:
         chunks, size = [], 0
-        async for chunk in request.stream():
+        async for chunk in self._body(call):
             size += len(chunk)
             if size > limit:
                 raise S3Error("EntityTooLarge", "the body is too large", 400)
@@ -376,7 +413,7 @@ class Proxy:
     @staticmethod
     def _check_hash(call: Call, body: bytes) -> None:
         """Bodies the proxy buffers are checked here, since the upstream won't see them as sent."""
-        unsigned = call.payload_hash == sigv4.UNSIGNED_PAYLOAD
+        unsigned = call.payload_hash in (sigv4.UNSIGNED_PAYLOAD, chunked.STREAMING_UNSIGNED_TRAILER)
         if not unsigned and hashlib.sha256(body).hexdigest() != call.payload_hash:
             raise S3Error(
                 "XAmzContentSHA256Mismatch", "the body does not match x-amz-content-sha256", 400
@@ -384,8 +421,14 @@ class Proxy:
 
     @staticmethod
     def _length(call: Call) -> int:
+        """The body's length, after decoding for aws-chunked bodies."""
+        header = (
+            "x-amz-decoded-content-length"
+            if call.payload_hash == chunked.STREAMING_UNSIGNED_TRAILER
+            else "content-length"
+        )
         try:
-            return int(call.headers["content-length"])
+            return int(call.headers[header])
         except KeyError, ValueError:
             raise S3Error("MissingContentLength", "Content-Length is required", 411) from None
 
@@ -439,7 +482,7 @@ class Proxy:
         )
 
     async def _delete_objects(self, call: Call) -> Response:
-        body = await self._read(call.request, MAX_DELETE_BODY)
+        body = await self._read(call, MAX_DELETE_BODY)
         self._check_hash(call, body)
         try:
             root = ET.fromstring(body)
@@ -599,8 +642,8 @@ class Proxy:
             target.upstream,
             None,
             self._forwarded(call),
-            call.request.stream() if length else b"",
-            call.payload_hash,
+            self._body(call) if length else b"",
+            self._upstream_hash(call),
             stream=True,
         )
         return await self._relay(call, response)
@@ -615,7 +658,7 @@ class Proxy:
             raise S3Error("InvalidArgument", "not a Lance manifest name", 400)
         if self._length(call) > MAX_MANIFEST:
             raise S3Error("EntityTooLarge", "manifests are limited to 64 MiB", 400)
-        body = await self._read(call.request, MAX_MANIFEST)
+        body = await self._read(call, MAX_MANIFEST)
         self._check_hash(call, body)
         # Raising inside the transaction rolls the commit row back.
         async with self.pool.acquire() as conn, conn.transaction():
@@ -643,7 +686,12 @@ class Proxy:
                 call.caller.user,
             )
             response = await self._send(
-                "PUT", target.upstream, None, self._forwarded(call), body, call.payload_hash
+                "PUT",
+                target.upstream,
+                None,
+                self._forwarded(call),
+                body,
+                hashlib.sha256(body).hexdigest(),
             )
             if response.status_code != 200:
                 code, message = s3xml.parse_error(response.content) or (
@@ -665,7 +713,9 @@ class Proxy:
         source_upstream = f"datasets/{target.dataset.uuid}/{source_key[len(target.root) :]}"
         await self._guard(call, target, call.headers.get("if-none-match", "").strip() == "*")
         headers = self._forwarded(call)
-        headers["x-amz-copy-source"] = sigv4.uri_encode(f"/{self.config.bucket}/{source_upstream}")
+        headers["x-amz-copy-source"] = sigv4.uri_encode(
+            f"/{self.settings.hub_bucket}/{source_upstream}"
+        )
         response = await self._send("PUT", target.upstream, None, headers)
         return await self._rewritten(call, response, target)
 
@@ -686,8 +736,8 @@ class Proxy:
             target.upstream,
             call.params,
             self._forwarded(call),
-            call.request.stream() if length else b"",
-            call.payload_hash,
+            self._body(call) if length else b"",
+            self._upstream_hash(call),
             stream=True,
         )
         return await self._relay(call, response)
@@ -700,8 +750,8 @@ class Proxy:
             target.upstream,
             call.params,
             self._forwarded(call),
-            call.request.stream(),
-            call.payload_hash,
+            self._body(call),
+            self._upstream_hash(call),
         )
         return await self._rewritten(call, response, target)
 
@@ -712,12 +762,12 @@ class Proxy:
         return await self._rewritten(call, response, target)
 
 
-def create_app(config: ProxyConfig | None = None) -> Starlette:
-    """The proxy as an ASGI app; ``config`` defaults to the environment's, read at startup."""
+def create_app(settings: Settings | None = None) -> Starlette:
+    """The proxy as an ASGI app; ``settings`` default to the environment's, read at startup."""
 
     @contextlib.asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncGenerator[None]:
-        proxy = Proxy(config or ProxyConfig.load())
+        proxy = Proxy(settings or Settings.load())
         await proxy.start()
         app.state.proxy = proxy
         try:

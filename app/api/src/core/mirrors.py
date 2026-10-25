@@ -2,17 +2,21 @@
 
 A mirror is one ``hub_mirrors`` row per (repo, config, sha). Importing runs ``python -m
 flock.hub.importer`` as a subprocess, so a crash or a leak in ``datasets`` can't take the API
-down, with mirror-writer credentials (D46) for the mirror dataset. Concurrent requests for the
-same commit share one import; a restart marks running imports failed, and asking again starts
-over.
+down. It writes through the S3 proxy with mirror-writer credentials (D46) of the requesting
+user, so the proxy records that user as the author of the mirror's versions. Concurrent
+requests for the same commit share one import; a restart marks running imports failed, and
+asking again starts over.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
 import shlex
+import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -192,7 +196,7 @@ class Mirrors:
                 command = ["flock-hub", "import", "--repo", repo]
                 if config:
                     command += ["--config", config]
-                command += ["--revision", plan.sha, "--target", f"{self.org_name}/{name}"]
+                command += ["--revision", plan.sha, "--target", self._target(user, name)]
                 command += ["--workdir", name]
                 raise TooLarge(
                     f"{repo} has {plan.total_bytes} bytes of data files, more than the "
@@ -221,6 +225,23 @@ class Mirrors:
             task.add_done_callback(self._tasks.discard)
         return mirror
 
+    def _target(self, user: User, name: str) -> str:
+        """Where ``user`` can import a dataset too large for the server: their default org,
+        else another of theirs, else a placeholder. Only the server and the mirror org's members
+        (usually just its admins) can write to the mirror org, so it isn't suggested."""
+        accounts = self.store.accounts
+        org = accounts.default_org(user)
+        if org is None or org.name == self.org_name:
+            org = next(
+                (
+                    o
+                    for o in sorted(self.store.orgs.values(), key=lambda o: o.pk)
+                    if o.name != self.org_name and o.pk in user.roles
+                ),
+                None,
+            )
+        return f"{org.name if org is not None else '<your-org>'}/{name}"
+
     async def _dataset(self, name: str, repo: str, user: User) -> Dataset:
         """The mirror dataset, created (internal) on the first import of the repo."""
         datasets = self.store.datasets
@@ -237,7 +258,12 @@ class Mirrors:
         )
 
     async def _import(self, mirror: Mirror, dataset: Dataset, user: User) -> None:
-        process = None
+        process: subprocess.Popen[bytes] | None = None
+
+        def started(p: subprocess.Popen[bytes]) -> None:
+            nonlocal process
+            process = p
+
         try:
             uri, options = self.store.datasets.write_target(dataset, user, mirror_writer=True)
             job = {
@@ -250,41 +276,14 @@ class Mirrors:
             env = dict(os.environ)
             if self.store.settings.hub_hf_token:
                 env["HF_TOKEN"] = self.store.settings.hub_hf_token
-            # The job goes through stdin: it holds credentials, which argv would show to `ps`.
-            process = await asyncio.create_subprocess_exec(
-                sys.executable,
-                "-m",
-                "flock.hub.importer",
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
+            result, code, errors = await asyncio.to_thread(
+                self._run_importer, mirror, job, env, started
             )
-            assert process.stdin and process.stdout and process.stderr
-            process.stdin.write(json.dumps(job).encode())
-            await process.stdin.drain()
-            process.stdin.close()
-            stderr = asyncio.create_task(process.stderr.read())
-            result = None
-            async for line in process.stdout:
-                try:
-                    message = json.loads(line)
-                except ValueError:
-                    continue  # not ours (a library printing to stdout)
-                if isinstance(message, dict) and "versions" in message:
-                    result = message
-                elif isinstance(message, dict) and "stage" in message:
-                    mirror.progress = message
-            code = await process.wait()
-            errors = (await stderr).decode(errors="replace")
             if code != 0 or result is None:
                 # The importer's own message is its last line; libraries log above it.
                 lines = [line for line in errors.splitlines() if line.strip()]
                 raise RuntimeError(lines[-1] if lines else f"the importer exited with {code}")
             versions = [int(v) for v in result["versions"]]
-            # Through the proxy, it records the author; written around it, nobody does.
-            for version in versions:
-                await self.store.datasets._record(dataset, version, user, None)
             await self._finish(mirror, "finished", versions[-1], None)
             dataset.mirror = {
                 "repo": mirror.repo,
@@ -292,7 +291,7 @@ class Mirrors:
                 "sha": mirror.sha,
             }
         except asyncio.CancelledError:
-            if process is not None and process.returncode is None:
+            if process is not None and process.poll() is None:
                 process.kill()
             raise
         except Exception as e:
@@ -300,6 +299,46 @@ class Mirrors:
             await self._finish(mirror, "failed", None, str(e)[-self.ERROR_CHARS :])
         finally:
             self._running.pop(mirror.pk, None)
+
+    @staticmethod
+    def _run_importer(
+        mirror: Mirror, job: dict[str, Any], env: dict[str, str], started: Any
+    ) -> tuple[dict[str, Any] | None, int, str]:
+        """Run the importer and wait for it, in a worker thread: its final message, its exit
+        code and its stderr. Progress lines update ``mirror.progress`` as they come.
+
+        ``subprocess.Popen`` rather than asyncio's subprocesses: under uvloop, those run the
+        interpreter's fork handlers (Lance's warns that it isn't fork-safe), while ``Popen``
+        without ``preexec_fn`` runs none, and uses ``posix_spawn`` where it can.
+        """
+        process = subprocess.Popen(
+            [sys.executable, "-m", "flock.hub.importer"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+        )
+        started(process)
+        assert process.stdin and process.stdout and process.stderr
+        errors, stderr = process.stderr, []
+        drain = threading.Thread(target=lambda: stderr.append(errors.read()), daemon=True)
+        drain.start()
+        # The job goes through stdin: it holds credentials, which argv would show to `ps`.
+        with contextlib.suppress(BrokenPipeError), process.stdin:
+            process.stdin.write(json.dumps(job).encode())
+        result = None
+        for line in process.stdout:
+            try:
+                message = json.loads(line)
+            except ValueError:
+                continue  # not ours (a library printing to stdout)
+            if isinstance(message, dict) and "versions" in message:
+                result = message
+            elif isinstance(message, dict) and "stage" in message:
+                mirror.progress = message
+        code = process.wait()
+        drain.join()
+        return result, code, b"".join(stderr).decode(errors="replace")
 
     async def _finish(
         self, mirror: Mirror, state: str, version: int | None, error: str | None

@@ -1,57 +1,47 @@
 import datetime as dt
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import asyncpg
 import lance
 import pyarrow as pa
-import pytest
+
+from tests.app.conftest import Client, HubFlock
 
 DATASETS = "/api/v1/datasets"
 
 
-def hub_settings(bucket) -> dict:
-    """Settings pointing the hub at a test bucket. There is no S3 proxy yet, so the API's
-    writes go straight to the upstream (D49)."""
-    return {
-        "hub_s3_endpoint": bucket.endpoint,
-        "hub_s3_access_key_id": bucket.access_key_id,
-        "hub_s3_secret_access_key": bucket.secret_access_key,
-        "hub_bucket": bucket.bucket,
-        "hub_proxy_url": bucket.endpoint,
-    }
-
-
-@pytest.fixture
-def hub(make_flock, s3_bucket):
-    server = make_flock(**hub_settings(s3_bucket))
-    server.bucket = s3_bucket
-    return server
-
-
-def upstream(server, info: dict) -> str:
+def upstream(server: HubFlock, info: dict) -> str:
     return f"s3://{server.bucket.bucket}/datasets/{info['id']}"
 
 
 def write(
-    server, info: dict, table: pa.Table, mode: str = "append", **kwargs
+    server: HubFlock,
+    info: dict,
+    table: pa.Table,
+    mode: str = "append",
+    as_user: Client | None = None,
+    **kwargs,
 ) -> lance.LanceDataset:
-    """A Lance write made directly upstream, as a client would through the proxy."""
+    """A Lance write through the S3 proxy as ``as_user`` (the super admin by default), as
+    clients make them."""
     return lance.write_dataset(
         table,
-        upstream(server, info),
+        info["uri"],
         mode=mode,
-        storage_options=server.bucket.storage_options(),
+        storage_options=server.storage_options(as_user),
         data_storage_version="2.2",
         enable_stable_row_ids=True,
         **kwargs,
     )
 
 
-def open_upstream(server, info: dict) -> lance.LanceDataset:
+def open_upstream(server: HubFlock, info: dict) -> lance.LanceDataset:
     return lance.dataset(upstream(server, info), storage_options=server.bucket.storage_options())
 
 
-def objects(server, info: dict) -> list[str]:
+def objects(server: HubFlock, info: dict) -> list[str]:
     listed = server.bucket.client().list_objects_v2(
         Bucket=server.bucket.bucket, Prefix=f"datasets/{info['id']}/"
     )
@@ -74,8 +64,10 @@ def test_hub_is_off_without_s3(api):
     assert api.post("/api/v1/hub/credentials", {}).status == 503
 
 
-def test_mirror_org_is_created_at_startup(hub):
+def test_mirror_org_is_created_at_startup(hub: HubFlock):
     assert set(hub.store.orgs) == {"flock", "hf"}
+    # Its datasets are internal, whoever creates them.
+    assert create(hub.client(), "cais--mmlu", org="hf")["visibility"] == "internal"
 
 
 # ---------------------------------------------------------------------- catalog
@@ -128,7 +120,7 @@ def test_dataset_crud(hub):
     assert api.patch(path, {"name": "other"}).status == 409
 
     # Written data shows in the info.
-    write(hub, created, pa.table({"x": [1, 2, 3]}), mode="create")
+    write(hub, api.get(path).json(), pa.table({"x": [1, 2, 3]}), mode="create")
     info = api.get(path).json()
     assert (info["latest_version"], info["rows"]) == (1, 3)
     assert info["bytes"] > 0
@@ -164,15 +156,14 @@ def test_deleting_an_org_purges_its_datasets(hub):
     assert objects(hub, info) == []
 
 
-def test_deleted_datasets_are_purged_after_a_restart(make_flock, hub):
+def test_deleted_datasets_are_purged_after_a_restart(make_hub, hub):
     api = hub.client()
     info = create(api)
     write(hub, info, pa.table({"x": [1]}), mode="create")
     # Mark it deleted behind the API's back, as if the server stopped before purging.
     hub.call(hub.store.db.execute("UPDATE datasets SET deleted_at = now()"))
     hub.stop()
-    restarted = make_flock(reuse=hub, **hub_settings(hub.bucket))
-    restarted.bucket = hub.bucket
+    restarted = make_hub(reuse=hub)
     restarted.call(restarted.store.datasets.flush())
     assert objects(restarted, info) == []
     assert restarted.client().get(f"{DATASETS}/flock/ds").status == 404
@@ -244,9 +235,10 @@ def test_versions_history(hub):
         hub,
         info,
         pa.table({"x": [4, 5]}),
+        as_user=member.api,
         transaction_properties={"__lance_commit_message": "more"},
     )
-    open_upstream(hub, info).delete("x = 1")
+    open_upstream(hub, info).delete("x = 1")  # around the proxy, with the global key
 
     listed = api.get(f"{path}/versions")
     assert listed.status == 200, listed.body
@@ -258,13 +250,13 @@ def test_versions_history(hub):
     assert [v["message"] for v in versions] == [None, "more", "first"]
     assert [v["rows"] for v in versions] == [4, 5, 3]
     assert [v["fragments"] for v in versions] == [2, 2, 1]
-    assert all(v["author"] is None and not v["pruned"] and v["bytes"] > 0 for v in versions)
+    assert [v["author"]["email"] if v["author"] else None for v in versions] == [
+        None,  # written around the proxy: recorded without an author
+        "member@lab.test",
+        hub.ADMIN_EMAIL,
+    ]
+    assert all(not v["pruned"] and v["bytes"] > 0 for v in versions)
     assert abs(versions[0]["created_at"] - time.time()) < 300
-    # Written around the proxy: recorded without an author.
-    recorded = hub.call(
-        hub.store.db.fetch("SELECT version, user_pk FROM dataset_commits ORDER BY version")
-    )
-    assert [tuple(r) for r in recorded] == [(1, None), (2, None), (3, None)]
 
     page = api.get(f"{path}/versions", offset=1, limit=1).json()
     assert ([v["version"] for v in page["versions"]], page["total"]) == ([2], 3)
@@ -380,10 +372,10 @@ def test_readme(hub):
         ("UpdateConfig", "card"),
         ("Overwrite", None),
     ]
-    assert [v["author"]["email"] if v["author"] else None for v in versions] == [
+    assert [v["author"]["email"] for v in versions] == [
         "member@lab.test",
         "member@lab.test",
-        None,
+        hub.ADMIN_EMAIL,
     ]
     # The author of a version can give it a message.
     assert member.api.patch(f"{DATASETS}/flock/ds/versions/3", {"message": "bye"}).status == 200
@@ -391,6 +383,7 @@ def test_readme(hub):
 
 def test_tags_restore_optimize_prune(hub):
     api = hub.client()
+    member = hub.add_user("member@lab.test")
     info = create(api)
     path = f"{DATASETS}/flock/ds"
     assert api.request("PUT", f"{path}/tags/v1", body={"version": 1}).status == 409  # empty
@@ -414,24 +407,30 @@ def test_tags_restore_optimize_prune(hub):
     versions = api.get(f"{path}/versions").json()["versions"]
     assert [v["tags"] for v in versions] == [[], ["v1.0"], []]  # tags make no versions
 
-    restored = api.post(f"{path}/restore", {"version": 1, "message": "back to one"})
+    restored = member.api.post(f"{path}/restore", {"version": 1, "message": "back to one"})
     assert restored.status == 200, restored.body
     assert restored.json() == {"version": 4}
     assert api.post(f"{path}/restore", {"version": 9}).status == 404
     assert open_upstream(hub, info).to_table().to_pydict() == {"x": [0]}
     latest = api.get(f"{path}/versions").json()["versions"][0]
     assert (latest["op"], latest["message"], latest["rows"]) == ("Restore", "back to one", 1)
-    assert latest["author"]["email"] == hub.ADMIN_EMAIL
+    # The proxy recorded the acting user, as for any client's commit.
+    assert latest["author"]["email"] == "member@lab.test"
 
     for i in range(3):
         write(hub, info, pa.table({"x": [i]}))
-    optimized = api.post(f"{path}/optimize", {})
+    optimized = member.api.post(f"{path}/optimize", {})
     assert optimized.status == 200, optimized.body
     # With stable row ids, compaction first reserves fragment ids: an op pylance doesn't name.
     assert optimized.json() == {"version": 9}
     assert len(open_upstream(hub, info).get_fragments()) == 1
-    ops = [v["op"] for v in api.get(f"{path}/versions").json()["versions"][:3]]
-    assert ops == ["Rewrite", None, "Append"]
+    newest = api.get(f"{path}/versions").json()["versions"][:3]
+    assert [v["op"] for v in newest] == ["Rewrite", None, "Append"]
+    assert [v["author"]["email"] for v in newest] == [
+        "member@lab.test",
+        "member@lab.test",
+        hub.ADMIN_EMAIL,
+    ]
     # Nothing left to compact: no new version.
     assert api.post(f"{path}/optimize", {}).json() == {"version": 9}
 
@@ -455,12 +454,36 @@ def test_tags_restore_optimize_prune(hub):
     assert api.get(f"{path}/rows", version=2).json()["total"] == 2
 
 
-def test_writes_need_the_proxy_url(make_flock, s3_bucket):
-    server = make_flock(**{**hub_settings(s3_bucket), "hub_proxy_url": None})
+def test_writes_need_the_proxy_url(make_hub):
+    server = make_hub(hub_proxy_url=None)
     api = server.client()
     create(api)
     assert api.get(f"{DATASETS}/flock/ds").status == 200
     assert api.post(f"{DATASETS}/flock/ds/optimize", {}).status == 503
+
+
+def test_concurrent_first_reads(hub):
+    """Many reads of datasets nobody has opened yet, at once (as the web's dataset page makes
+    them), share the cached Lance handles without tripping over each other."""
+    api = hub.client()
+    clients = [hub.client() for _ in range(20)]
+    for round_ in range(3):
+        info = create(api, f"fresh-{round_}")
+        write(hub, info, pa.table({"x": [1, 2, 3]}), mode="create")
+        write(hub, info, pa.table({"x": [4]}))
+        path = f"{DATASETS}/flock/{info['name']}"
+        paths = [path, f"{path}/versions", f"{path}/rows", f"{path}/readme", f"{path}/versions/1"]
+        barrier = threading.Barrier(len(clients))
+
+        def get(i: int, barrier: threading.Barrier = barrier, paths: list[str] = paths) -> int:
+            barrier.wait()
+            return clients[i].get(paths[i % len(paths)]).status
+
+        with ThreadPoolExecutor(len(clients)) as pool:
+            statuses = list(pool.map(get, range(len(clients))))
+        assert statuses == [200] * len(clients)
+    for client in clients:
+        client.close()
 
 
 # ---------------------------------------------------------------------- invalidation

@@ -70,6 +70,8 @@ The SDK needs the API's wandb routes, including `/graphql`, `/files/...` and `/s
 
 All other API settings in [Settings](configuration#flock-settings) pass through both Compose files, except the database URL and files directory, which are fixed to the Compose database and mounted volume. This includes Google credentials, token lifetimes, Gravatar, cache limits, crash detection, CORS and logging. Optional entries are empty in Compose so their defaults are defined once in the API's `Settings`. With plain Docker or Python, set `FLOCK_DATABASE_URL` and `FLOCK_FILES_DIR` yourself.
 
+The dataset hub is off until `FLOCK_HUB_S3_ENDPOINT` is set. It also needs its S3 proxy, the `hub-s3` service in the `hub` profile, with `FLOCK_HUB_PROXY_URL=http://hub-s3:9000` and `FLOCK_HUB_PROXY_PUBLIC_URL` set to the S3 domain you route to it. [Running the hub's S3 proxy](s3-proxy) covers both.
+
 `FLOCK_GOOGLE_CLIENT_ID` and `FLOCK_GOOGLE_CLIENT_SECRET` enable Google sign-in together. The callback defaults to `<FLOCK_WEB_URL>/api/v1/auth/google/callback`; use `FLOCK_GOOGLE_REDIRECT_URL` only when the registered callback differs. `FLOCK_JWT_SECRET` can remain unset: the API generates and persists a signing key in PostgreSQL.
 
 ### Migrating existing environment files

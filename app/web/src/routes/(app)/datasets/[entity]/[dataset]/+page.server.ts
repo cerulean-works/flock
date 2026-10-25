@@ -32,10 +32,8 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	const path = datasetPath(params.entity, params.dataset);
 	const asked = versionOf(url.searchParams.get('v'));
 	try {
-		// The dataset first: reading it brings Flock's version history up to date from Lance,
-		// which two concurrent requests would both do (and Flock fails some of those).
-		const dataset = (await (await flock(path)).json()) as DatasetInfo;
-		const [history, readme, s3] = await Promise.all([
+		const [dataset, history, readme, s3] = await Promise.all([
+			flock(path).then((r) => r.json() as Promise<DatasetInfo>),
 			flock(`${path}/versions?limit=${VERSIONS}`).then(
 				(r) => r.json() as Promise<{ versions: DatasetVersion[]; total: number }>
 			),

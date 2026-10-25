@@ -8,7 +8,6 @@ import lance
 import pytest
 
 from flock.hub.importer import FAKE_ROOT_ENV, LocalSource
-from tests.app.test_datasets import hub_settings
 from tests.hub.hf_repos import DOLMA, MMLU, make_dolma, make_mmlu
 
 MIRRORS = "/api/v1/hub/mirrors"
@@ -25,10 +24,8 @@ def repos(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
-def hub(make_flock, s3_bucket, repos):
-    server = make_flock(**hub_settings(s3_bucket))
-    server.bucket = s3_bucket
-    return server
+def hub(make_hub, repos):
+    return make_hub()
 
 
 def wait(api, mirror: dict, timeout: float = 120) -> dict:
@@ -42,13 +39,15 @@ def wait(api, mirror: dict, timeout: float = 120) -> dict:
     return mirror
 
 
-def test_mirror_lifecycle(make_flock, hub, repos):
+def test_mirror_lifecycle(make_hub, hub, repos):
     api = hub.client()
+    # Not a member of the mirror org: the server imports with mirror-writer credentials.
+    member = hub.add_user("member@lab.test")
     sha = LocalSource(repos).sha(MMLU, None)
     listed = api.get(MIRRORS, repo=MMLU, config="anatomy").json()
     assert listed == {"dataset": "hf/cais-test--mmlu--anatomy", "mirrors": []}
 
-    started = api.post(MIRRORS, {"repo": MMLU, "config": "anatomy"})
+    started = member.api.post(MIRRORS, {"repo": MMLU, "config": "anatomy"})
     assert started.status == 202, started.body
     mirror = started.json()
     assert mirror | {"id": 0, "started_at": 0, "progress": None} == {
@@ -69,7 +68,8 @@ def test_mirror_lifecycle(make_flock, hub, repos):
     assert [m["id"] for m in listed["mirrors"]] == [mirror["id"]]
 
     # The mirror dataset: internal, its info names the mirrored repo, versions authored by the
-    # requester, the data tagged and carded.
+    # requester (the proxy records the user of the mirror-writer credentials), the data tagged
+    # and carded.
     path = "/api/v1/datasets/hf/cais-test--mmlu--anatomy"
     info = api.get(path).json()
     assert info["visibility"] == "internal"
@@ -77,7 +77,7 @@ def test_mirror_lifecycle(make_flock, hub, repos):
     assert (info["latest_version"], info["rows"]) == (2, 7)
     versions = api.get(f"{path}/versions").json()["versions"]
     assert [(v["version"], v["op"]) for v in versions] == [(2, "UpdateConfig"), (1, "Overwrite")]
-    assert {v["author"]["email"] for v in versions} == {hub.ADMIN_EMAIL}
+    assert {v["author"]["email"] for v in versions} == {"member@lab.test"}
     assert versions[0]["tags"] == [f"hf-{sha[:8]}"]
     assert versions[1]["message"].startswith(f"Import {MMLU} (anatomy)")
     readme = api.get(f"{path}/readme").json()["content"]
@@ -91,7 +91,6 @@ def test_mirror_lifecycle(make_flock, hub, repos):
     assert (transaction.transaction_properties or {})["flock.source"] == f"hf:{MMLU}@{sha}"
 
     # Anyone signed in can read it, members of the mirror org or not.
-    member = hub.add_user("member@lab.test")
     assert member.api.get(path).status == 200
     rows = member.api.get(f"{path}/rows", limit=10).json()
     assert rows["total"] == 7
@@ -99,7 +98,7 @@ def test_mirror_lifecycle(make_flock, hub, repos):
 
     # A restart keeps finished mirrors and their datasets' mirror info.
     hub.stop()
-    restarted = make_flock(reuse=hub, **hub_settings(hub.bucket))
+    restarted = make_hub(reuse=hub)
     assert restarted.client().get(path).json()["mirror"]["sha"] == sha
 
 
@@ -124,18 +123,23 @@ def test_concurrent_requests_share_one_import(hub):
     assert count == 1
 
 
-def test_too_large(make_flock, s3_bucket, repos):
-    server = make_flock(**hub_settings(s3_bucket), hub_auto_import_max_bytes=100)
+def test_too_large(make_hub, repos):
+    server = make_hub(hub_auto_import_max_bytes=100)
     api = server.client()
     sha = LocalSource(repos).sha(DOLMA, None)
     refused = api.post(MIRRORS, {"repo": DOLMA})
     assert refused.status == 422, refused.body
     body = refused.json()
     assert "more than the 100" in body["error"]
+    # Into the requester's own org: only the mirror org's admins may write to it directly.
     assert body["command"] == (
         f"flock-hub import --repo {DOLMA} --revision {sha} "
-        "--target hf/allenai-test--dolma --workdir allenai-test--dolma"
+        "--target flock/allenai-test--dolma --workdir allenai-test--dolma"
     )
+    assert server.client().post("/api/v1/orgs", {"name": "lab"}).status == 201
+    member = server.add_user("member@lab.test", org="lab")
+    command = member.api.post(MIRRORS, {"repo": DOLMA}).json()["command"]
+    assert "--target lab/allenai-test--dolma" in command
     assert api.get(MIRRORS, repo=DOLMA).json()["mirrors"] == []
     assert server.call(server.store.db.fetchval("SELECT count(*) FROM hub_mirrors")) == 0
 
@@ -175,7 +179,7 @@ def test_failure_is_recorded_and_retried(hub, repos):
     assert wait(api, retried.json())["state"] == "failed"
 
 
-def test_restart_marks_running_mirrors_failed(make_flock, hub):
+def test_restart_marks_running_mirrors_failed(make_hub, hub):
     hub.call(
         hub.store.db.execute(
             "INSERT INTO hub_mirrors (repo, config, sha, state, started_at) "
@@ -184,7 +188,7 @@ def test_restart_marks_running_mirrors_failed(make_flock, hub):
         )
     )
     hub.stop()
-    restarted = make_flock(reuse=hub, **hub_settings(hub.bucket))
+    restarted = make_hub(reuse=hub)
     mirror = restarted.client().get(MIRRORS, repo="o/r").json()["mirrors"][0]
     assert mirror["state"] == "failed"
     assert "restarted" in mirror["error"]

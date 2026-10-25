@@ -2,11 +2,11 @@
 
 | | |
 | --- | --- |
-| Status | in progress (step 2 import) |
+| Status | applied |
 | Date | 2026-10-25 |
 | Builds on | the app's [007](../../../../app/api/docs/agents/007-hub-datasets.md) (REST API, S3 proxy, credentials) |
 | Keeps | n/a |
-| Result | step 1: 242 tests in `tests/hub/` pass in about 30 s (5 on S3); step 2: 264 (22 import tests, about 7 s); see [section 6](#6-how-it-was-actually-built) |
+| Result | step 1: 242 tests in `tests/hub/` pass in about 30 s (5 on S3); step 2: 264 (22 import tests, about 7 s); step 3: 265 in `tests/hub/` and 7 end-to-end tests in `tests/app/test_hub_e2e.py` (about 18 s on moto); see [section 6](#6-how-it-was-actually-built) |
 
 ## 1. Goal
 
@@ -320,3 +320,28 @@ matching. Fixtures are local `file://` Lance datasets unless a test needs S3, wh
   too, so the tests make no network calls.
 - **Dependencies.** `flock-hub` gained `click`, `pyyaml` and `zstandard` (HF's `.zst`
   extraction needs it), and the `flock-hub` script in both `pyproject.toml` files.
+
+### Step 3 (`feat/hub-e2e`)
+
+- **Server mode, checked end to end.** `tests/app/test_hub_e2e.py` runs `flock.hub` with an API
+  URL and API key against a real flock, its S3 proxy and the S3 test server (see the app's 007,
+  section 6). The client takes its endpoint from `POST /hub/credentials` (the proxy's public
+  URL), each dataset's `uri` from the API, and replaces credentials near expiry; nothing needed
+  changing for that.
+- **`push` creates a missing dataset** on the server, as HF's `push_to_hub` does: private unless
+  `private=False` or `visibility="internal"` (giving both, disagreeing, is a `ValueError`; neither
+  changes an existing dataset). A 409 from a concurrent creator is ignored. Direct mode only
+  checks the arguments. `create_dataset`'s `visibility` no longer offers `"public"`, which the
+  API refuses.
+- **Card sidecars through the proxy.** pyarrow's `S3FileSystem` wrote folder marker objects from
+  `create_dir` and uploaded aws-chunked bodies with a checksum trailer; the proxy refuses both.
+  `write.py` skips `create_dir` on S3. The aws-chunked bodies were first avoided with an
+  environment variable; when step 3 was merged, the proxy learned to decode unsigned aws-chunked
+  bodies instead (app 007, section 6), since recent AWS SDKs and the aws CLI send them by default.
+- **Fallback to a hand-made mirror.** With no finished mirror record and no `hf_revision`, the
+  server fallback now loads `<mirror org>/<owner>--<name>[--<config>]` if it exists with a
+  version, so an admin's `flock-hub import --target hf/...` serves `load_dataset` like a server
+  mirror. Before, it asked for a mirror and got the 422 again.
+- **Docs.** The quickstart's setup is the real one: an API key (`flock-...`) from the account
+  page, `FLOCK_API_URL` and `FLOCK_API_KEY`, and `push` without `create_dataset`. Writing and
+  importing describe `push`'s visibility and the 422's target.

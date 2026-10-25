@@ -211,6 +211,15 @@ def _fall_back_server(
     finished = [m for m in known["mirrors"] if m["state"] == "finished"]
     if finished and (hf_revision is None or version is not None):
         return dataset, version
+    if not finished and hf_revision is None:
+        # Imported by an admin with `flock-hub import --target <mirror>` rather than by the
+        # server, so with no mirror record: use it as it is.
+        try:
+            info = client.get_dataset(*parse_repo_id(dataset))
+        except DatasetNotFound:
+            info = None
+        if info is not None and info["latest_version"] is not None:
+            return dataset, version
     if hf_revision is not None and len(hf_revision) >= 7:
         for mirror in finished:
             if mirror["sha"].startswith(hf_revision.lower()):

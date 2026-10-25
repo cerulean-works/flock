@@ -26,7 +26,7 @@ from lance.commit import CommitConflictError
 from lance.dataset import LanceDataset, Transaction
 from lance.fragment import FragmentMetadata
 
-from flock.hub.client import DatasetNotFound
+from flock.hub.client import DatasetNotFound, HubError
 from flock.hub.config import HubConfig, get_default, parse_repo_id
 from flock.hub.dataset import CARD_KEY, Dataset, Pin
 
@@ -321,10 +321,12 @@ def push(
     message: str | None = None,
     *,
     properties: dict[str, str] | None = None,
+    private: bool | None = None,
+    visibility: Literal["private", "internal"] | None = None,
     hub_config: HubConfig | None = None,
 ) -> Dataset:
     """
-    Writes in-memory data to a hub dataset as one new version.
+    Writes in-memory data to a hub dataset as one new version, creating the dataset first if it doesn't exist, as `push_to_hub` does on Hugging Face.
 
     For uploads that may be interrupted, use a [`DatasetWriter`] with a staging directory you keep.
 
@@ -339,13 +341,33 @@ def push(
             The version's message.
         properties (`dict[str, str]`, *optional*):
             More transaction properties.
+        private (`bool`, *optional*):
+            For a new dataset: `False` makes it `"internal"` (readable by anyone signed in). New datasets are private unless told otherwise.
+        visibility (`str`, *optional*):
+            For a new dataset: `"private"` (its org's members) or `"internal"`. Give this or `private`, not both. Neither changes an existing dataset.
         hub_config (`HubConfig`, *optional*):
             Where the hub is.
 
     Returns:
         [`Dataset`]: the dataset at the new version (streaming).
+
+    Raises:
+        `ValueError`: if `private` and `visibility` disagree.
     """
+    if private is not None and visibility is not None and private != (visibility == "private"):
+        raise ValueError(f"private={private} and visibility={visibility!r} disagree")
     hub = hub_config or get_default()
+    if not hub.direct:  # in direct mode the first commit creates the dataset
+        org, name = parse_repo_id(repo_id)
+        try:
+            hub.client.get_dataset(org, name)
+        except DatasetNotFound:
+            chosen = visibility or ("internal" if private is False else "private")
+            try:
+                create_dataset(repo_id, visibility=chosen, hub_config=hub)
+            except HubError as e:
+                if e.status != 409:  # created meanwhile by another writer
+                    raise
     with tempfile.TemporaryDirectory(prefix="flock-hub-push-") as staging_dir:
         writer = DatasetWriter(repo_id, mode, staging_dir, hub_config=hub)
         writer.write_shard("0", data)
@@ -356,7 +378,7 @@ def push(
 def create_dataset(
     repo_id: str,
     description: str = "",
-    visibility: Literal["private", "internal", "public"] = "private",
+    visibility: Literal["private", "internal"] = "private",
     *,
     hub_config: HubConfig | None = None,
 ) -> dict[str, Any]:
@@ -418,7 +440,10 @@ def set_card(dataset: Dataset, text: str, message: str | None) -> Dataset:
     sha = hashlib.sha256(data).hexdigest()
     # Content-addressed, so writing it again (a rerun, the same card twice) is harmless.
     fs, path = _filesystem(_card_uri(pin.uri, sha), pin.hub.lance_storage_options())
-    fs.create_dir(path.rpartition("/")[0], recursive=True)
+    if not isinstance(fs, pafs.S3FileSystem):
+        # S3 has no folders; pyarrow would write empty "folder/" objects, which the hub's proxy
+        # refuses above a dataset.
+        fs.create_dir(path.rpartition("/")[0], recursive=True)
     with fs.open_output_stream(path) as f:
         f.write(data)
     latest = pin.open_latest()

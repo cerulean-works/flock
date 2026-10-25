@@ -3,19 +3,14 @@ import time
 import pytest
 
 from app.api.src.hub_credentials import read_session_token, secret_for
-from tests.app.test_datasets import hub_settings
 
 KEYS = "/api/v1/me/hub-keys"
 CREDENTIALS = "/api/v1/hub/credentials"
 
 
 @pytest.fixture
-def hub(make_flock, s3_bucket):
-    return make_flock(
-        **hub_settings(s3_bucket),
-        hub_proxy_public_url="https://s3.flock.example",
-        hub_credentials_ttl=3600.0,
-    )
+def hub(make_hub):
+    return make_hub(hub_proxy_public_url="https://s3.flock.example", hub_credentials_ttl=3600.0)
 
 
 def server_secret(server) -> str:
@@ -103,6 +98,6 @@ def test_temporary_credentials(hub):
     assert hub.anonymous().post(CREDENTIALS, {}).status == 401
 
 
-def test_endpoint_defaults_to_the_proxy_url(make_flock, s3_bucket):
-    server = make_flock(**hub_settings(s3_bucket))
-    assert server.client().post(CREDENTIALS, {}).json()["endpoint"] == s3_bucket.endpoint
+def test_endpoint_defaults_to_the_proxy_url(make_hub):
+    server = make_hub(hub_proxy_public_url=None)
+    assert server.client().post(CREDENTIALS, {}).json()["endpoint"] == server.proxy.url

@@ -89,7 +89,8 @@ class Datasets:
     CELL_CHARS: ClassVar[int] = 2000
     CARD_KEY: ClassVar[str] = "flock.card"
     MESSAGE_KEY: ClassVar[str] = "__lance_commit_message"
-    # boto3 otherwise sends checksums as aws-chunked trailers, which the proxy doesn't take.
+    # This client talks to the upstream directly. Plain bodies with checksums only when required
+    # keep it working on S3 clones that don't take aws-chunked uploads.
     S3_CONFIG: ClassVar[botocore.config.Config] = botocore.config.Config(
         s3={"addressing_style": "path"},
         request_checksum_calculation="when_required",
@@ -108,6 +109,10 @@ class Datasets:
         # version. Used from worker threads, hence the threading lock.
         self._open: OrderedDict[tuple[str, int | None], lance.LanceDataset] = OrderedDict()
         self._open_lock = threading.Lock()
+        # Held (by uuid) while a worker thread uses a dataset's cached handles: pylance's
+        # handles can't be used from two threads at once (some calls borrow them mutably and
+        # the other fails with "Already borrowed"), and one handle can sit under several keys.
+        self._handle_locks: dict[str, threading.RLock] = {}
         self._purges: set[asyncio.Task] = set()
 
     @property
@@ -210,6 +215,10 @@ class Datasets:
     async def create(
         self, org: Org, name: str, user: User, description: str = "", visibility: str = "private"
     ) -> Dataset:
+        """A new dataset. Those of the mirror org are always ``internal``, like the server's
+        own mirrors, so a mirror an admin imports with ``flock-hub import`` is readable too."""
+        if org.name == self.store.settings.hub_mirror_org:
+            visibility = "internal"
         async with self._catalog:
             if org.deleted:
                 raise NotFound(f"organization {org.name} not found")
@@ -308,6 +317,7 @@ class Datasets:
         with self._open_lock:
             for key in [key for key in self._open if key[0] == uuid]:
                 del self._open[key]
+            self._handle_locks.pop(uuid, None)
         settings = self.store.settings
         client = self._s3(self.upstream_options())
         pages = client.get_paginator("list_objects_v2").paginate(
@@ -343,17 +353,13 @@ class Datasets:
         self, dataset: Dataset, user: User, mirror_writer: bool = False
     ) -> tuple[str, dict[str, str]]:
         """The Lance URI and ``storage_options`` the API writes ``dataset`` through as ``user``
-        (D49): the proxy, with temporary credentials. ``mirror_writer`` credentials may write
-        to the mirror org, for the server's Hugging Face imports (D50).
-
-        Until the proxy exists, ``FLOCK_HUB_PROXY_URL`` may name the upstream itself; writes
-        then use the global key and the upstream layout. (Delete this branch with step 3.)
+        (D49): the proxy, with temporary credentials, so the proxy records ``user`` as the
+        author of every version it makes. ``mirror_writer`` credentials may write to the mirror
+        org, for the server's Hugging Face imports (D50).
         """
         settings = self.store.settings
         if not settings.hub_proxy_url:
             raise Conflict("dataset writes need FLOCK_HUB_PROXY_URL, which is not set")
-        if settings.hub_proxy_url == settings.hub_s3_endpoint:
-            return self.upstream_uri(dataset), self.upstream_options()
         credentials = self.store.hub_keys.temporary(user, mirror_writer=mirror_writer)
         options = {
             "aws_endpoint": settings.hub_proxy_url,
@@ -427,6 +433,14 @@ class Datasets:
         self._keep(key, found)
         return found
 
+    @contextlib.contextmanager
+    def _reading(self, dataset: Dataset):
+        """Hold ``dataset``'s handle lock, in the worker thread that reads it."""
+        with self._open_lock:
+            lock = self._handle_locks.setdefault(dataset.uuid, threading.RLock())
+        with lock:
+            yield
+
     def _keep(self, key: tuple[str, int | None], handle: lance.LanceDataset) -> None:
         with self._open_lock:
             self._open[key] = handle
@@ -458,6 +472,12 @@ class Datasets:
         self, dataset: Dataset, known: dict[int, Commit]
     ) -> tuple[list[int], list[tuple], dict[int, list[str]]]:
         """Lance's versions, summaries of those without one in ``known``, and tags."""
+        with self._reading(dataset):
+            return self._scan_locked(dataset, known)
+
+    def _scan_locked(
+        self, dataset: Dataset, known: dict[int, Commit]
+    ) -> tuple[list[int], list[tuple], dict[int, list[str]]]:
         latest = self._latest(dataset)
         if latest is None:
             return [], [], {}
@@ -581,13 +601,15 @@ class Datasets:
         def read() -> dict[str, Any]:
             from datasets import Features  # slow to import, and only needed here
 
-            schema = self._pinned(dataset, version).schema
+            with self._reading(dataset):
+                handle = self._pinned(dataset, version)
+                schema, metadata = handle.schema, handle.metadata
             return {
                 "schema": [
                     {"name": f.name, "type": str(f.type), "nullable": f.nullable} for f in schema
                 ],
                 "features": Features.from_arrow_schema(schema).to_dict(),
-                "metadata": self._pinned(dataset, version).metadata,
+                "metadata": metadata,
             }
 
         try:
@@ -608,6 +630,10 @@ class Datasets:
         """A page of rows, as JSON cells (see ``_cell``). ValueError for unknown columns."""
 
         def read() -> dict[str, Any]:
+            with self._reading(dataset):
+                return read_locked()
+
+        def read_locked() -> dict[str, Any]:
             handle = self._version(dataset, version)
             schema = handle.schema
             if columns:
@@ -672,10 +698,13 @@ class Datasets:
         points to (D7 of flock.hub)."""
 
         def read() -> dict[str, Any]:
-            handle = self._latest(dataset) if version is None else self._pinned(dataset, version)
-            if handle is None:
-                return {"version": None, "sha": None, "content": None}
-            sha = handle.metadata.get(self.CARD_KEY)
+            with self._reading(dataset):
+                handle = (
+                    self._latest(dataset) if version is None else self._pinned(dataset, version)
+                )
+                if handle is None:
+                    return {"version": None, "sha": None, "content": None}
+                sha, at = handle.metadata.get(self.CARD_KEY), handle.version
             content = None
             if sha:
                 client = self._s3(self.upstream_options())
@@ -683,7 +712,7 @@ class Datasets:
                 with contextlib.suppress(client.exceptions.NoSuchKey):
                     body = client.get_object(Bucket=bucket, Key=self._card_key(dataset, sha))
                     content = body["Body"].read().decode()
-            return {"version": handle.version, "sha": sha or None, "content": content}
+            return {"version": at, "sha": sha or None, "content": content}
 
         return await asyncio.to_thread(read)
 
@@ -710,20 +739,17 @@ class Datasets:
                 f"dataset {dataset.org.name}/{dataset.name} has no version {version}"
             ) from None
 
-    async def _record(
-        self, dataset: Dataset, version: int, user: User, message: str | None
-    ) -> None:
-        """Note who made a version the API wrote, and its message (Lance can't carry one on
-        these operations). The proxy has usually inserted the row already."""
+    async def _set_message(self, dataset: Dataset, version: int, message: str | None) -> None:
+        """Give a version the API wrote its message, which Lance can't carry on these
+        operations. Its row, with the author, is the proxy's, written with the commit (D45)."""
+        if not message:
+            return
         await self.store.db.execute(
-            "INSERT INTO dataset_commits (dataset_pk, version, user_pk, created_at, message) "
-            "VALUES ($1, $2, $3, now(), $4) ON CONFLICT (dataset_pk, version) DO UPDATE SET "
-            "user_pk = coalesce(dataset_commits.user_pk, EXCLUDED.user_pk), "
-            "message = coalesce(dataset_commits.message, EXCLUDED.message)",
+            "UPDATE dataset_commits SET message = coalesce(message, $3) "
+            "WHERE dataset_pk = $1 AND version = $2",
             dataset.pk,
             version,
-            user.pk,
-            message or None,
+            message,
         )
 
     async def set_readme(
@@ -744,15 +770,16 @@ class Datasets:
 
         async with self._writing(dataset):
             version = await asyncio.to_thread(write)
-            await self._record(dataset, version, user, message)
+            await self._set_message(dataset, version, message)
         return version
 
     async def tags(self, dataset: Dataset) -> dict[str, int]:
         def read() -> dict[str, int]:
-            latest = self._latest(dataset)
-            if latest is None:
-                return {}
-            return {tag: ref["version"] for tag, ref in sorted(latest.tags.list().items())}
+            with self._reading(dataset):
+                latest = self._latest(dataset)
+                if latest is None:
+                    return {}
+                return {tag: ref["version"] for tag, ref in sorted(latest.tags.list().items())}
 
         return await asyncio.to_thread(read)
 
@@ -793,7 +820,7 @@ class Datasets:
 
         async with self._writing(dataset):
             new = await asyncio.to_thread(write)
-            await self._record(dataset, new, user, message)
+            await self._set_message(dataset, new, message)
         return new
 
     async def optimize(self, dataset: Dataset, user: User) -> int:
@@ -806,10 +833,7 @@ class Datasets:
             return handle.version
 
         async with self._writing(dataset):
-            before = await self.latest_one(dataset)
             version = await asyncio.to_thread(write)
-            if before is None or version != before.version:
-                await self._record(dataset, version, user, None)
         return version
 
     async def prune(

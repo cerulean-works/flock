@@ -23,7 +23,7 @@ A dataset is returned as:
 | Endpoint | Who | Meaning |
 |---|---|---|
 | `GET /datasets/{org}` | readers | `{"datasets": [...]}`, sorted by name. Members get every dataset, others the internal ones. |
-| `POST /datasets/{org}` | members | Creates an empty dataset from `{"name", "description"?, "visibility"?}`. Answers 201, or 409 if the name is taken. |
+| `POST /datasets/{org}` | members | Creates an empty dataset from `{"name", "description"?, "visibility"?}`. Answers 201, or 409 if the name is taken. Datasets of the mirror organization (`FLOCK_HUB_MIRROR_ORG`) are always `internal`. |
 | `GET /datasets/{org}/{name}` | readers | One dataset. |
 | `PATCH /datasets/{org}/{name}` | members, org admins | Changes `description` (members), or `name` and `visibility` (org admins). Returns the dataset. A taken name answers 409. |
 | `DELETE /datasets/{org}/{name}` | org admins | Deletes it with every version. Answers 204. The name is free at once, and the data is deleted in the background. |
@@ -136,7 +136,7 @@ A mirror is returned as:
 
 | Endpoint | Who | Meaning |
 |---|---|---|
-| `POST /hub/mirrors` | anyone | Mirrors `{"repo", "config"?, "revision"?}` (`revision` defaults to `main`). 200 with a finished mirror of that commit, 202 with a running one (new or shared). 422 with `command`, a `flock-hub import` command line, when the data files exceed `FLOCK_HUB_AUTO_IMPORT_MAX_BYTES`. 404 for an unknown repo or revision, 400 for an unknown config (or none when the repo has several), 502 when Hugging Face can't be reached. |
+| `POST /hub/mirrors` | anyone | Mirrors `{"repo", "config"?, "revision"?}` (`revision` defaults to `main`). 200 with a finished mirror of that commit, 202 with a running one (new or shared). 422 with `command`, a `flock-hub import` command line into your default organization, when the data files exceed `FLOCK_HUB_AUTO_IMPORT_MAX_BYTES`. 404 for an unknown repo or revision, 400 for an unknown config (or none when the repo has several), 502 when Hugging Face can't be reached. |
 | `GET /hub/mirrors/{id}` | anyone | The mirror. |
 | `GET /hub/mirrors?repo=&config=` | anyone | `{"dataset", "mirrors": [...]}`: the mirror dataset's name for that repo and config, and its imports, newest first. |
 

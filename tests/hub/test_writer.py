@@ -358,6 +358,15 @@ def test_push_modes(hub: HubConfig) -> None:
         push(42, "flock/pushed", hub_config=hub)
 
 
+def test_push_visibility(hub: HubConfig) -> None:
+    # Direct mode has no visibility: the first commit creates the dataset, and the arguments
+    # are only checked. (Server mode: tests/app/test_hub_e2e.py.)
+    assert push({"x": [1]}, "flock/new", private=False, hub_config=hub).version == 1
+    assert push({"x": [2]}, "flock/new", visibility="private", hub_config=hub).version == 2
+    with pytest.raises(ValueError, match="disagree"):
+        push({"x": [3]}, "flock/new", private=True, visibility="internal", hub_config=hub)
+
+
 def test_create_dataset_in_direct_mode(hub: HubConfig) -> None:
     info = create_dataset("flock/new", hub_config=hub)
     assert info == {"org": "flock", "name": "new", "uri": uri(hub, "flock/new")}

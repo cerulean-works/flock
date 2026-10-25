@@ -65,7 +65,9 @@ training runs and compare results under a consistent setup. Its docs start at
 S3 and loads them through Hugging Face `datasets`, so training code iterates, maps
 and streams them as it would any HF dataset. Each load pins a version, so a run
 never sees data committed after it started, and uploads resume after a crash and
-commit exactly once. Its docs start at
+commit exactly once. Datasets that aren't on the hub yet are mirrored from Hugging
+Face by the server on first load. Every write goes through Flock's S3 proxy, which
+checks permissions and records who made each version. Its docs start at
 [`flock/hub/docs/source/index.md`](flock/hub/docs/source/index.md).
 
 ### CLI

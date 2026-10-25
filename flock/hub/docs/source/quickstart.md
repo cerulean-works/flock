@@ -4,29 +4,27 @@ This page pushes a small dataset to the hub, loads it back at a pinned version a
 
 ## Connect to the hub
 
-`flock.hub` talks to the Flock API with a Flock API key. With a key, set:
+`flock.hub` talks to the Flock API with a Flock API key, the same kind of key `wandb login` takes. Create one on your account page in the Flock dashboard, then set the API's public URL (the one you give `wandb login --host`) and the key:
 
 ```bash
 export FLOCK_API_URL=https://flock.cerulean.works
-export FLOCK_API_KEY=flk_...
+export FLOCK_API_KEY=flock-...
 ```
 
 You can also save both in `~/.config/flock/hub.json`:
 
 ```json
-{"api_url": "https://flock.cerulean.works", "api_key": "flk_..."}
+{"api_url": "https://flock.cerulean.works", "api_key": "flock-..."}
 ```
 
-The library exchanges the key for temporary S3 credentials and renews them before they expire, so a long training run keeps reading.
+The library exchanges the key for temporary S3 credentials with `POST /api/v1/hub/credentials`. Their answer names the hub's S3 endpoint (Flock's S3 proxy), so there is nothing else to configure. It renews them a few minutes before they expire, so a long training run keeps reading. Each dataset's Lance URI, such as `s3://datasets/flock/arc-sample`, comes from the API too.
 
 ## Push a dataset
 
-Create the dataset once, then push rows to it. `push` takes an HF dataset, an Arrow table, a pandas `DataFrame`, a list of rows or a dict of columns:
+`push` writes rows as a new version, and creates the dataset first if it doesn't exist yet. It takes an HF dataset, an Arrow table, a pandas `DataFrame`, a list of rows or a dict of columns:
 
 ```python
-from flock.hub import create_dataset, push
-
-create_dataset("flock/arc-sample", description="ARC questions for smoke tests")
+from flock.hub import push
 
 ds = push(
     {"question": ["Which gas do plants absorb?", "What melts ice?"], "label": [2, 0]},
@@ -36,7 +34,7 @@ ds = push(
 print(ds.version)  # 1
 ```
 
-Each `push` makes one new version. By default it appends; pass `mode="overwrite"` to replace every row.
+Each `push` makes one new version. By default it appends; pass `mode="overwrite"` to replace every row. A dataset `push` creates is private to its organization's members; pass `private=False` to let anyone signed in read it.
 
 ## Load it back
 

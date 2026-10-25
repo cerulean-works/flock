@@ -13,12 +13,12 @@ The hub needs an S3-compatible server, such as Ceph RGW, with one bucket and one
 | `FLOCK_HUB_S3_ENDPOINT` | The S3 server's URL. |
 | `FLOCK_HUB_S3_ACCESS_KEY_ID`, `FLOCK_HUB_S3_SECRET_ACCESS_KEY` | The global key. |
 | `FLOCK_HUB_BUCKET` | The bucket, `flock-hub` by default. |
-| `FLOCK_HUB_PROXY_URL` | Where Flock reaches the hub's S3 proxy. |
+| `FLOCK_HUB_PROXY_URL` | Where Flock reaches the hub's S3 proxy, such as `http://hub-s3:9000`. |
 | `FLOCK_HUB_PROXY_PUBLIC_URL` | The proxy's URL as users reach it, if it differs. |
 
-Until `FLOCK_HUB_S3_ENDPOINT` is set, the hub's endpoints answer 503. All the settings are in [Settings](configuration).
+Then start the S3 proxy, as [Running the hub's S3 proxy](s3-proxy) describes. Until `FLOCK_HUB_S3_ENDPOINT` is set, the hub's endpoints answer 503. All the settings are in [Settings](configuration).
 
-Users never get the global key. They reach the bucket through the S3 proxy, which checks each request against their roles, with S3 keys of their own (see [S3 keys](#s3-keys)).
+Users never get the global key. They reach the bucket through the S3 proxy, which checks each request against their roles, with S3 keys of their own (see [S3 keys](#s3-keys)). Flock's own writes (cards, tags, restore, optimize, prune and mirror imports) go through the proxy too, with temporary credentials of the user who asked, so the proxy records every version's author the same way.
 
 ## Creating a dataset
 
@@ -91,7 +91,7 @@ Flock pins the revision (`main` unless you pass `revision`) to a commit, and the
 
 - if it already mirrored that commit, answers 200 with the mirror;
 - if it is mirroring it, answers 202 with the same mirror, so concurrent requests share one import;
-- if the dataset's data files are larger than `FLOCK_HUB_AUTO_IMPORT_MAX_BYTES`, answers 422 with a `command`, the `flock-hub import` command line that imports it in stages instead;
+- if the dataset's data files are larger than `FLOCK_HUB_AUTO_IMPORT_MAX_BYTES`, answers 422 with a `command`, the `flock-hub import` command line that imports it in stages instead (see [Too large to mirror](#too-large-to-mirror));
 - otherwise starts the import and answers 202.
 
 Poll `GET /api/v1/hub/mirrors/{id}` until `state` is `finished` or `failed`. While it runs, `progress` holds the importer's current stage.
@@ -103,6 +103,12 @@ The import runs in a separate process, `python -m flock.hub.importer`, which loa
 The size counts the files the README's `configs` YAML gives the config, or else every data file of the repo (Parquet, Arrow, JSON Lines, CSV and text, compressed or not).
 
 A failed import keeps its `error`. Asking again starts it over. A restart stops running imports and marks them failed, for the same reason.
+
+### Too large to mirror
+
+Only Flock's own imports and the mirror organization's members can write to the mirror organization, and its members are usually just its admins. So the `command` of a 422 imports into your default organization instead, for example `--target flock/allenai--dolma`, or `<your-org>` when you belong to none. Run it on a machine with room for the raw files, with `FLOCK_API_URL` and `FLOCK_API_KEY` set.
+
+If you are an admin of the mirror organization, change `--target` to `hf/<owner>--<name>` to import it as the mirror itself. It is `internal`, like every dataset of the mirror organization, and `load_dataset` falls back to it when called without `hf_revision`.
 
 ## S3 keys
 

@@ -2,11 +2,11 @@
 
 | | |
 | --- | --- |
-| Status | in progress (step 2 done) |
+| Status | applied |
 | Date | 2026-10-25 |
 | Builds on | [003](003-organizations-and-auth.md) |
 | Keeps | D2 (one API server per database, small state in memory), D18 (orgs are entities) |
-| Result | n/a |
+| Result | 645 Python tests pass (295 in `tests/app/`, 7 of them end to end; 265 in `tests/hub/`), and 366 web tests; see [section 6](#step-3-feathub-e2e) |
 
 ## 1. Goal
 
@@ -154,7 +154,10 @@ same image as the API, as the compose service `hub-s3` (port 9000). It doesn't t
 - **SigV4.** It verifies `AWS4-HMAC-SHA256` in the `Authorization` header and in presigned
   query strings, accepting any region in the credential scope. `x-amz-content-sha256` may be
   `UNSIGNED-PAYLOAD` or a hex digest, which is forwarded so the upstream checks the body as it
-  streams. `STREAMING-AWS4-HMAC-SHA256-PAYLOAD` gets 501 `NotImplemented`. Upstream requests are
+  streams. `STREAMING-UNSIGNED-PAYLOAD-TRAILER` (aws-chunked with a checksum trailer, what recent
+  AWS SDKs and the aws CLI send by default) is decoded by the proxy, which checks CRC32, SHA-1
+  and SHA-256 trailers and forwards a plain body; signed chunks
+  (`STREAMING-AWS4-HMAC-SHA256-PAYLOAD`) get 501 `NotImplemented`. Upstream requests are
   re-signed with the global key by a small signer in the same package (no botocore).
 - **Operations:** GetObject (with Range), HeadObject, ListObjectsV2 (keys in lexical order,
   upstream `LastModified` kept, since Lance's cleanup judges age by it), PutObject,
@@ -432,3 +435,75 @@ Datasets item in the sidebar. Choices where the contract was silent:
   `GET .../versions` both syncing history) can fail with pylance's `RuntimeError: Already
   borrowed` from the shared handle in `_scan`; the page now reads the dataset first. The fix
   belongs in `core/datasets.py`.
+
+### Step 3: `feat/hub-e2e`
+
+- **The proxy reads `Settings`.** `hub_proxy/config.py` is gone. `Proxy` takes `Settings`
+  (`create_app(settings=None)` loads them from the environment at startup) and refuses to start
+  without `FLOCK_HUB_S3_ENDPOINT` and the global key. `tests/app/test_settings.py` now renders the
+  compose files with `--profile hub` and checks that `hub-s3`'s environment is exactly the fields
+  the proxy reads (`database_url`, `hub_s3_*`, `hub_bucket`, `hub_mirror_org`, `pool_size`,
+  `log_level`), with the API's values. The compose services already had them.
+- **Every API write goes through the proxy (D49).** The passthrough branch of `write_target` is
+  gone. `_record` became `_set_message`: the author is the proxy's row, written with the commit,
+  and the API only adds the message Lance couldn't carry (card, restore). Optimize records
+  nothing of its own. Tags make no version, so they have no author. Mirror imports write with
+  mirror-writer credentials of the requesting user, so the proxy records **the requester** as
+  the author of the data and card versions, the same user as `hub_mirrors.requested_by` (chosen
+  over a dedicated mirror identity, which would need a user row and say less). `test_datasets`
+  checks the authors of pushes, card edits, restore and both versions of optimize by a member;
+  one write around the proxy (global key) checks that history sync still records a version with
+  no author.
+- **Test fixtures.** `tests/app/conftest.py` has `ProxyServer` and `HubFlock`, a `FlockServer`
+  that binds the proxy's port first, sets `hub_proxy_url` and `hub_proxy_public_url` to it, and
+  starts the proxy (in-process uvicorn thread, same database, the test bucket) once the flock
+  has migrated. `Flocks.hub(bucket, reuse=)` makes one, and the fixtures `make_hub` and `hub`
+  give one per test over a fresh bucket. `HubFlock.credentials()` and `storage_options()` give a
+  user's temporary credentials. `test_datasets.py`, `test_hub_keys.py`, `test_hub_mirrors.py`,
+  `test_hub_proxy.py` (whose `Hub` helper now wraps a `HubFlock`) and `test_orgs.py` use them.
+- **Concurrent reads.** Some pylance calls borrow the Rust dataset mutably, so two threads using
+  one cached handle fail with `Already borrowed`. Every worker-thread read of cached handles
+  (`_scan`, version details, rows, readme, tags) now holds a `threading.RLock` per dataset uuid
+  (`Datasets._reading`). Per dataset rather than per handle, because the handle that finds the
+  latest version is cached under two keys. Reads of one dataset are serialized; different
+  datasets still read in parallel. `test_concurrent_first_reads` (20 concurrent reads of five
+  endpoints on fresh datasets, three rounds) failed on every run without the lock. The web
+  dataset page loads its four reads in parallel again.
+- **Found: `flock.hub` card writes didn't pass the proxy.** Step 2's mirrors only worked because
+  they wrote around it. The card sidecar goes through pyarrow's `S3FileSystem`, which (a) wrote
+  folder marker objects (`hf/`, ...) from `create_dir`, refused above a dataset, and (b) uploads
+  aws-chunked bodies with a CRC64 trailer (`STREAMING-UNSIGNED-PAYLOAD-TRAILER`, the AWS SDK's
+  default in pyarrow 26), which gets 501. `flock.hub.write` now skips `create_dir` on S3 and sets
+  `AWS_REQUEST_CHECKSUM_CALCULATION=when_required` only while it creates the filesystem (the SDK
+  reads it then; under a lock, restored afterwards).
+- **The 422's command** targets `<default org>/<name>`: the user's default org, else the first
+  other org they belong to (the first account's default is the mirror org, created first), else
+  `<your-org>`. The docs say members of the mirror org (usually its admins) can target `hf`.
+- **Deviation: the mirror org's datasets are always `internal`** (`Datasets.create` forces it),
+  so a mirror an admin imports with `flock-hub import --target hf/...` (created private by the
+  importer) is readable like the server's. With that, `flock.hub`'s fallback also uses such a
+  dataset when it has no mirror record and no `hf_revision` is asked; before, it asked for a
+  mirror and got the 422 again.
+- **The fork warning.** Under uvloop, asyncio subprocesses go through libuv, and uvloop runs the
+  interpreter's `os.register_at_fork` hooks, one of which is Lance's warning. The importer now
+  starts with `subprocess.Popen` in a worker thread (stdout lines streamed into `progress`,
+  stderr drained by a second thread; cancelling kills it). Without `preexec_fn`, CPython runs no
+  fork hooks and uses `posix_spawn` where it can (glibc 2.34+ with `close_fds`, as in the image;
+  macOS falls back to fork and exec, still without hooks). The warning is gone from the tests.
+- **Web.** Members see Optimize; Prune stays with admins (`VersionsTimeline.svelte.spec.ts`).
+- **End to end.** `tests/app/test_hub_e2e.py` (7 tests, about 18 s on moto): `push` creates and
+  writes, a second user appends, loads at a version and a tag, delete with a message, card, tag,
+  restore, an API card edit, the history's ops, messages, rows and authors; resumable streaming
+  over four shards; temporary credentials replaced near expiry
+  (`hub_credentials_ttl = REFRESH_MARGIN + 3`); read-only credentials refused; outsiders get
+  `DatasetNotFound` and `AccessDenied` on private data, read internal data and can't write it; a
+  mirror import through the whole stack with the fake-root seam, then `load_dataset(MMLU,
+  config=...)` falling back to it for the requester, another member (with a filter) and an
+  outsider; an admin's import into `hf` found by the fallback. With `FLOCK_TEST_S3_ENDPOINT` the
+  same tests use the real server: they create no bucket, their objects live under fresh dataset
+  uuids, dataset names carry a per-run prefix, and the module deletes every dataset (and waits
+  for the purges) at the end.
+- **Docs.** The `app/api` docs build needed `--version main` too (`flock` has no
+  `__version__`).
+- **Left open.** The e2e suite hasn't been run against a real S3 server. The proxy ignores
+  `FLOCK_LOG_LEVEL` (uvicorn's own flags set its logging), though compose passes it.

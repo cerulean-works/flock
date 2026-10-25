@@ -128,7 +128,8 @@
 		!v.message && !v.pruned && (admin || (member && v.author?.id === me));
 </script>
 
-{#if admin}
+<!-- Members may optimize (a new version, nothing lost); only admins prune. -->
+{#if member}
 	<div class="flex h-12 items-center gap-2 border-b border-divider px-5">
 		<p class="text-[13px] text-muted-foreground max-sm:hidden">
 			{count(total, 'version')}
@@ -137,9 +138,11 @@
 			<Button variant="outline" size="sm" onclick={() => ask(optimizeDialog)}>
 				<ShrinkIcon /> Optimize
 			</Button>
-			<Button variant="outline" size="sm" onclick={() => ask(pruneDialog)}>
-				<ScissorsIcon /> Prune…
-			</Button>
+			{#if admin}
+				<Button variant="outline" size="sm" onclick={() => ask(pruneDialog)}>
+					<ScissorsIcon /> Prune…
+				</Button>
+			{/if}
 		</div>
 	</div>
 {/if}

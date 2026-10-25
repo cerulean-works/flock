@@ -31,7 +31,7 @@ test = load_dataset("cais/mmlu", config="all", filter="split = 'test'")
 
 If there is no mirror yet, or none of that `hf_revision`, the server imports it first, and `load_dataset` logs the import's progress while it waits. The import runs on the server, so training nodes need no Hugging Face access or token. Mirrors are `internal`: anyone signed in can read them. [Mirroring Hugging Face datasets](https://docs.cerulean.works/flock/latest/guide/datasets/#hugging-face-mirrors) covers the server side.
 
-The server only mirrors datasets up to `FLOCK_HUB_AUTO_IMPORT_MAX_BYTES` of data files (5 GB unless configured). For a larger one, `load_dataset` raises [`~hub.load.ImportTooLarge`], whose message holds the `flock-hub import` command to run instead.
+The server only mirrors datasets up to `FLOCK_HUB_AUTO_IMPORT_MAX_BYTES` of data files (5 GB unless configured). For a larger one, `load_dataset` raises [`~hub.load.ImportTooLarge`], whose message holds the `flock-hub import` command to run instead. Its `--target` is in your default organization, since only the mirror organization's members (usually its admins) can write to `hf`. An admin of the mirror organization can set `--target hf/<owner>--<name>` instead: `load_dataset` without `hf_revision` then falls back to that import as to any mirror.
 
 Loading by commit sha (all 40 characters, or a prefix of 7 or more) finds an existing mirror without the server asking Hugging Face anything. A branch name such as `main` always does, to learn which commit it points to.
 
@@ -48,7 +48,7 @@ ds = import_hf_dataset("allenai/ai2_arc", config="ARC-Easy", target="flock/arc-e
 print(ds.version, ds.tags)
 ```
 
-`target` defaults to the mirror name, such as `hf/allenai--ai2_arc--ARC-Easy`. On the server, the target is created if it doesn't exist, and you need write access to it: to write a mirror yourself, you must be a member of the mirror org.
+`target` defaults to the mirror name, such as `hf/allenai--ai2_arc--ARC-Easy`. On the server, the target is created (private) if it doesn't exist, and you need write access to it: to write a mirror yourself, you must be a member of the mirror org. Datasets of the mirror org are always `internal`.
 
 ## Staged imports
 

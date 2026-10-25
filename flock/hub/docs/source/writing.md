@@ -7,10 +7,9 @@ Every write to a hub dataset makes one new version, and older versions stay read
 [`~hub.write.push`] writes data you have in memory as one version and returns the dataset at that version:
 
 ```python
-from flock.hub import create_dataset, push
+from flock.hub import push
 
-create_dataset("flock/arc-sample", visibility="internal")
-ds = push(hf_dataset, "flock/arc-sample", message="import from the ARC release")
+ds = push(hf_dataset, "flock/arc-sample", message="import from the ARC release", private=False)
 ```
 
 | Argument | Default | Meaning |
@@ -20,10 +19,12 @@ ds = push(hf_dataset, "flock/arc-sample", message="import from the ARC release")
 | `mode` | `"append"` | `"append"` adds rows; `"overwrite"` replaces every row and the schema |
 | `message` | `None` | The version's message |
 | `properties` | `None` | More transaction properties, such as `{"flock.source": "hf:allenai/ai2_arc@<sha>"}` |
+| `private` | `None` | For a new dataset, `False` makes it `internal` |
+| `visibility` | `None` | For a new dataset, `"private"` or `"internal"`, instead of `private` |
 
 When you append, columns whose types differ from the dataset's (for example pandas `large_string` columns appended to a `string` column) are cast to the dataset's types.
 
-On the server, the dataset must exist first: [`~hub.write.create_dataset`] creates it with a description and a visibility (`private`, `internal` or `public`). Its first version comes with the first push.
+On the server, `push` creates the dataset if it doesn't exist yet, as `push_to_hub` does on Hugging Face. A new dataset is `private` (its organization's members only) unless you pass `private=False` or `visibility="internal"` (anyone signed in can read it). Neither argument changes a dataset that exists. To give a new dataset a description, create it first with [`~hub.write.create_dataset`]. In direct mode the first commit creates the dataset, and there is no visibility.
 
 ## Resumable uploads
 
