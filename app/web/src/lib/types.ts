@@ -35,6 +35,11 @@ export interface OrgInfo {
 	avatar_url: string | null;
 	/** Super admins are admins of every organization, member or not. */
 	role: Role | null;
+	/**
+	 * The hub's mirror org (`FLOCK_HUB_MIRROR_ORG`), which Flock creates by itself when the hub
+	 * is configured. Older servers don't send it.
+	 */
+	mirror?: boolean;
 }
 
 /** Where an organization's W&B import is: `interrupted` means Flock restarted during it. */
@@ -398,4 +403,104 @@ export interface RunFile {
 	name: string;
 	size: number;
 	updated_at: number;
+}
+
+// ----------------------------------------------------------------------------------------------
+// The hub's datasets (`/api/v1/datasets/...`, app/api/docs/agents/007-hub-datasets.md)
+
+/** Who can read a dataset: its org's members, or every signed-in user. */
+export type DatasetVisibility = 'private' | 'internal';
+
+/** Where a mirrored dataset came from on Hugging Face. */
+export interface DatasetMirror {
+	repo: string;
+	config: string | null;
+	sha: string;
+}
+
+/** A dataset, as Flock describes it. Times are seconds since the epoch. */
+export interface DatasetInfo {
+	/** Its uuid: the prefix of its objects upstream. */
+	id: string;
+	org: string;
+	name: string;
+	description: string;
+	visibility: DatasetVisibility;
+	/** Its Lance URI through the hub's S3 proxy: `s3://datasets/<org>/<name>`. */
+	uri: string;
+	created_by: Person | null;
+	created_at: number;
+	updated_at: number;
+	/** Null until the first write, as are `rows` and `bytes`. */
+	latest_version: number | null;
+	rows: number | null;
+	bytes: number | null;
+	/** The caller's role in its org; null for outsiders reading an internal dataset. */
+	role: Role | null;
+	/** Null unless it mirrors a Hugging Face dataset. */
+	mirror: DatasetMirror | null;
+}
+
+/** One version of a dataset: one Lance commit. Listings are newest first. */
+export interface DatasetVersion {
+	version: number;
+	created_at: number;
+	/** Who committed it; null when Flock doesn't know. */
+	author: Person | null;
+	/** Lance's operation (`Append`, `Overwrite`, `Delete`, …); null for internal steps. */
+	op: string | null;
+	message: string | null;
+	/** Rows, bytes and fragments after the commit; null while Flock hasn't read them. */
+	rows: number | null;
+	bytes: number | null;
+	fragments: number | null;
+	tags: string[];
+	/** Pruned versions stay in the history but can't be read. */
+	pruned: boolean;
+}
+
+/** A column of a page of rows, with its Arrow type (`string`, `int64`, `list<item: …>`). */
+export interface DatasetColumn {
+	name: string;
+	type: string;
+}
+
+/**
+ * A page of rows (`GET .../rows`): `rows[r][c]` is row r's cell in column c. Cells are JSON: strings over 2000 characters are cut (their `[row, col]` is in
+ * `truncated`), binary values are `{"$binary": size}`, times ISO 8601 strings.
+ */
+export interface DatasetRows {
+	version: number;
+	offset: number;
+	total: number;
+	columns: DatasetColumn[];
+	rows: unknown[][];
+	truncated: [number, number][];
+}
+
+/** A dataset's card at one version: null `content` without one. */
+export interface DatasetReadme {
+	version: number | null;
+	sha: string | null;
+	content: string | null;
+}
+
+/** An S3 key for tools that speak S3. The secret is shown only when it is created. */
+export interface HubKey {
+	pk: number;
+	name: string;
+	access_key_id: string;
+	read_only: boolean;
+	/** The org it is limited to; null for every dataset the user can reach. */
+	org: string | null;
+	created_at: number;
+	last_used_at: number | null;
+}
+
+/** A key as `POST /me/hub-keys` answers: with its secret, once, and where to use it. */
+export interface CreatedHubKey extends HubKey {
+	secret_access_key: string;
+	/** The hub's S3 endpoint (its proxy); null if the server has none set. */
+	endpoint: string | null;
+	region: string;
 }

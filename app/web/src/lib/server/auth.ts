@@ -2,6 +2,7 @@ import { error, fail, isHttpError, redirect, type Cookies } from '@sveltejs/kit'
 import { FLOCK_API_URL } from '$app/env/private';
 import { getRequestEvent } from '$app/server';
 import type { OrgInfo, UserInfo } from '#lib/types.ts';
+import { hasWorkspace } from '#lib/utils.ts';
 import { change, refused, flock } from './flock.ts';
 import { setUser, startSession, type SessionUser, type SignedIn } from './session.ts';
 
@@ -45,15 +46,15 @@ export async function signIn(cookies: Cookies, path: string, body: unknown, next
 }
 
 /**
- * Whether the caller is a super admin on a server without any organization: Flock's setup is
- * then halfway, with the first workspace still to create.
+ * Whether the caller is a super admin on a server without any organization (but the hub's mirror
+ * org): Flock's setup is then halfway, with the first workspace still to create.
  */
 export async function needsWorkspace() {
 	const me = (await (await flock('/api/v1/me')).json()) as UserInfo;
 	if (!me.is_superadmin) return false;
 	// Every organization, for a super admin.
 	const { orgs } = (await (await flock('/api/v1/orgs')).json()) as { orgs: OrgInfo[] };
-	return orgs.length === 0;
+	return !hasWorkspace(orgs);
 }
 
 /** Re-read the signed-in user's profile once a change touched it (an org joined, created or

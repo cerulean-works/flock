@@ -1,6 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import { flock } from '#lib/server/flock.ts';
 import type { OrgEntry, OrgInfo, ProjectInfo, UserInfo } from '#lib/types.ts';
+import { hasWorkspace } from '#lib/utils.ts';
 import { NAME_W, readWidth, SIDEBAR_W } from '#lib/widths.ts';
 import { cookieView, VIEW_COOKIE } from '#lib/workspace/project-view.svelte.ts';
 import type { LayoutServerLoad } from './$types';
@@ -27,10 +28,14 @@ export const load: LayoutServerLoad = async ({ params, cookies }) => {
 			.then(({ orgs }) => new Map(orgs.map((o) => [o.name, o])))
 	]);
 	// A super admin sees every organization: with none, the server's setup is halfway (the
-	// account was made, its first workspace not yet), and resumes.
-	if (me.is_superadmin && listedOrgs.size === 0) redirect(303, '/setup');
-	const org = known ?? me.default_org;
-	const projects = listed ?? (org ? await listProjects(org) : []);
+	// account was made, its first workspace not yet), and resumes. The hub's mirror org, which
+	// Flock makes by itself, doesn't count.
+	if (me.is_superadmin && !hasWorkspace([...listedOrgs.values()])) redirect(303, '/setup');
+	// Another org's internal datasets (the hub's mirrors) are open to everyone: the sidebar
+	// stays on the user's own org meanwhile.
+	const inside = !!known && (me.is_superadmin || me.orgs.some((o) => o.name === known));
+	const org = inside ? known : me.default_org;
+	const projects = (inside && listed) || (org ? await listProjects(org) : []);
 
 	// A super admin can open an org they aren't in: it's listed too while they're in it.
 	const visiting = org && me.is_superadmin && !me.orgs.some((o) => o.name === org);

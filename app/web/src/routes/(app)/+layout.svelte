@@ -1,4 +1,5 @@
 <script lang="ts">
+	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import HouseIcon from '@lucide/svelte/icons/house';
 	import MenuIcon from '@lucide/svelte/icons/menu';
 	import PanelLeftOpenIcon from '@lucide/svelte/icons/panel-left-open';
@@ -12,6 +13,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Sheet from '#lib/components/ui/sheet/index.js';
 	import { SIDEBAR_W, saveWidth } from '#lib/widths.ts';
+	import { datasetsHref } from '#lib/workspace/url.ts';
 	import type { LayoutProps } from './$types';
 
 	let { data, children }: LayoutProps = $props();
@@ -31,7 +33,9 @@
 
 	// The rail's switcher keeps home and account pages in place, like the sidebar's.
 	const stay = $derived(
-		!page.route.id?.startsWith('/(app)/[entity]') && !page.route.id?.startsWith('/(app)/orgs/')
+		!page.route.id?.startsWith('/(app)/[entity]') &&
+			!page.route.id?.startsWith('/(app)/orgs/') &&
+			!page.route.id?.startsWith('/(app)/datasets/')
 	);
 </script>
 
@@ -82,6 +86,18 @@
 			>
 				<HouseIcon />
 			</Button>
+			{#if data.shell.org}
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					class="mt-1 text-muted-foreground"
+					href={datasetsHref(data.shell.org)}
+					aria-label="Datasets"
+					title="Datasets"
+				>
+					<DatabaseIcon />
+				</Button>
+			{/if}
 			<div class="mt-auto py-2">
 				<WorkspaceSwitcher org={data.shell.org} orgs={data.shell.orgs} {stay} compact />
 			</div>

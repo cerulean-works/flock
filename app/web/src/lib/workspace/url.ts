@@ -72,6 +72,22 @@ export const entityHref = (entity: string) => resolve('/(app)/[entity]', { entit
 export const orgHref = (org: string, section?: 'budget') =>
 	`${resolve('/(app)/orgs/[org]', { org })}${section ? `#${section}` : ''}` as ResolvedPathname;
 
+/** An organization's datasets on the hub. */
+export const datasetsHref = (entity: string) => resolve('/(app)/datasets/[entity]', { entity });
+
+/** A dataset's page; `params` picks a version (`v`) or a tab (`tab`). */
+export function datasetHref(
+	entity: string,
+	dataset: string,
+	params: Record<string, string | number | null | undefined> = {}
+): ResolvedPathname {
+	const search = new URLSearchParams();
+	for (const [k, v] of Object.entries(params)) if (v != null) search.set(k, String(v));
+	const qs = search.toString();
+	const path = resolve('/(app)/datasets/[entity]/[dataset]', { entity, dataset });
+	return `${path}${qs ? `?${qs}` : ''}` as ResolvedPathname;
+}
+
 /** The current page with one search param set, or removed when null: tabs and filters. */
 export function withParam(
 	url: { pathname: string; search: string },

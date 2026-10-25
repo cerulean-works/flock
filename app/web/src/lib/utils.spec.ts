@@ -9,6 +9,7 @@ import {
 	formatRuntime,
 	formatTick,
 	gpus,
+	hasWorkspace,
 	hours,
 	money,
 	monthName,
@@ -115,9 +116,19 @@ describe('orgIdError', () => {
 		expect(orgIdError('cerulean-research')).toBeNull();
 	});
 
-	it.each(['admin', 'Login', 'orgs', '_app', 'favicon.ico', 'a/b', ''])('rejects %j', (name) =>
-		expect(orgIdError(name)).toBeTypeOf('string')
+	it.each(['admin', 'Login', 'orgs', 'datasets', '_app', 'favicon.ico', 'a/b', ''])(
+		'rejects %j',
+		(name) => expect(orgIdError(name)).toBeTypeOf('string')
 	);
+});
+
+describe('hasWorkspace', () => {
+	it('ignores the hub’s mirror org', () => {
+		expect(hasWorkspace([])).toBe(false);
+		expect(hasWorkspace([{ mirror: true }])).toBe(false);
+		expect(hasWorkspace([{ mirror: true }, { mirror: false }])).toBe(true);
+		expect(hasWorkspace([{}])).toBe(true); // a server from before the hub
+	});
 });
 
 describe('orgDisplayNameError', () => {

@@ -1,8 +1,8 @@
 import { fail } from '@sveltejs/kit';
 import { refreshUser } from '#lib/server/auth.ts';
 import { removeAvatar, setAvatar, useGravatar } from '#lib/server/avatar.ts';
-import { change, refused, flock } from '#lib/server/flock.ts';
-import type { UserInfo } from '#lib/types.ts';
+import { change, refused, flock, hubOff } from '#lib/server/flock.ts';
+import type { CreatedHubKey, HubKey, UserInfo } from '#lib/types.ts';
 import { formText } from '#lib/utils.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -15,10 +15,22 @@ export interface ApiKey {
 }
 
 export const load: PageServerLoad = async () => {
-	const [me, keys] = await Promise.all([flock('/api/v1/me'), flock('/api/v1/me/api-keys')]);
+	const [me, keys, hubKeys] = await Promise.all([
+		flock('/api/v1/me'),
+		flock('/api/v1/me/api-keys'),
+		// S3 keys for the hub's datasets; null while the hub isn't configured.
+		flock('/api/v1/me/hub-keys')
+			.then((r) => r.json() as Promise<{ keys: HubKey[] }>)
+			.then(({ keys }) => keys)
+			.catch((e) => {
+				if (hubOff(e)) return null;
+				throw e;
+			})
+	]);
 	return {
 		profile: (await me.json()) as UserInfo,
 		keys: ((await keys.json()) as { keys: ApiKey[] }).keys,
+		hubKeys,
 		now: Date.now() / 1000
 	};
 };
@@ -75,6 +87,33 @@ export const actions: Actions = {
 		const res = await change<ApiKey & { key: string }>('POST', '/api/v1/me/api-keys', { name });
 		if (refused(res)) return res;
 		return { key: res.data.key, name: res.data.name };
+	},
+
+	/**
+	 * A new S3 key, read-only or not, for every org the user is in or one of them (`org`; `/` or
+	 * empty for every one). Flock shows its secret this once.
+	 */
+	createHubKey: async ({ request }) => {
+		const form = await request.formData();
+		const name = formText(form, 'name');
+		if (!name) return fail(400, { error: 'Name the key' });
+		if (name.length > 128) return fail(400, { error: 'Use at most 128 characters' });
+		const org = formText(form, 'org');
+		const res = await change<CreatedHubKey>('POST', '/api/v1/me/hub-keys', {
+			name,
+			read_only: form.get('read_only') === 'on',
+			...(org && org !== '/' && { org })
+		});
+		if (refused(res)) return res;
+		return { created: res.data };
+	},
+
+	deleteHubKey: async ({ request }) => {
+		const pk = Number((await request.formData()).get('pk'));
+		if (!Number.isInteger(pk)) return fail(400, { error: 'No such key' });
+		const res = await change('DELETE', `/api/v1/me/hub-keys/${pk}`);
+		if (refused(res)) return res;
+		return { deletedHubKey: pk };
 	},
 
 	deleteKey: async ({ request }) => {

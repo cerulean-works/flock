@@ -6,11 +6,14 @@ import httpx
 
 
 class HubError(Exception):
-    """A request to the Flock API failed. `status` is the HTTP status, or `None` without an answer."""
+    """A request to the Flock API failed. `status` is the HTTP status, or `None` without an answer; `body` is the JSON error body, if any."""
 
-    def __init__(self, message: str, status: int | None = None) -> None:
+    def __init__(
+        self, message: str, status: int | None = None, body: dict[str, Any] | None = None
+    ) -> None:
         super().__init__(message)
         self.status = status
+        self.body = body or {}
 
 
 class DatasetNotFound(HubError, LookupError):
@@ -74,6 +77,30 @@ class HubClient:
             "PATCH", f"/datasets/{org}/{name}/versions/{version}", json={"message": message}
         )
 
+    def mirrors(self, repo: str, config: str | None = None) -> dict[str, Any]:
+        """The mirror dataset of `repo` (and `config`) and its imports so far: `{"dataset", "mirrors": [...]}`."""
+        params = {"repo": repo, **({"config": config} if config else {})}
+        return self._request("GET", "/hub/mirrors", params=params)
+
+    def request_mirror(
+        self, repo: str, config: str | None = None, revision: str | None = None
+    ) -> dict[str, Any]:
+        """
+        Asks the server to mirror `repo` at `revision`, or finds the mirror it already has.
+
+        Returns:
+            `dict`: the mirror, `{id, state, repo, config, sha, dataset, version, error, progress}`.
+
+        Raises:
+            [`HubError`]: with status 422 and the `flock-hub import` command in `body["command"]` if the dataset is too large for the server to import.
+        """
+        body = {"repo": repo, "config": config, "revision": revision}
+        return self._request("POST", "/hub/mirrors", json=body)
+
+    def get_mirror(self, mirror_id: int) -> dict[str, Any]:
+        """A mirror's state, as [`request_mirror`] returns it."""
+        return self._request("GET", f"/hub/mirrors/{mirror_id}")
+
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         try:
             response = self._http.request(method, path, **kwargs)
@@ -82,9 +109,14 @@ class HubClient:
         if response.is_success:
             return response.json()
         try:
-            message = response.json().get("error") or response.text
-        except ValueError:
-            message = response.text
+            body = response.json()
+            message = body.get("error") or response.text
+        except ValueError, AttributeError:
+            body, message = None, response.text
         not_found = response.status_code == 404 and path.startswith("/datasets/")
         error = DatasetNotFound if not_found else HubError
-        raise error(f"{method} {path}: {response.status_code} {message}", response.status_code)
+        raise error(
+            f"{method} {path}: {response.status_code} {message}",
+            response.status_code,
+            body if isinstance(body, dict) else None,
+        )

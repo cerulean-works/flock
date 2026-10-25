@@ -1,4 +1,11 @@
-import { error, fail, isActionFailure, redirect, type ActionFailure } from '@sveltejs/kit';
+import {
+	error,
+	fail,
+	isActionFailure,
+	isHttpError,
+	redirect,
+	type ActionFailure
+} from '@sveltejs/kit';
 import { FLOCK_API_URL } from '$app/env/private';
 import { getRequestEvent } from '$app/server';
 import { endSession, loginHref } from './session.ts';
@@ -117,3 +124,12 @@ export const refused = <T>(
 
 export const projectPath = (entity: string, project: string) =>
 	`/api/v1/projects/${encodeURIComponent(entity)}/${encodeURIComponent(project)}`;
+
+export const datasetPath = (entity: string, dataset: string) =>
+	`/api/v1/datasets/${encodeURIComponent(entity)}/${encodeURIComponent(dataset)}`;
+
+/**
+ * Whether a read failed because the hub isn't configured on this server: its routes answer 503
+ * until `FLOCK_HUB_S3_ENDPOINT` is set. Pages say so calmly rather than showing an error.
+ */
+export const hubOff = (e: unknown) => isHttpError(e) && e.status === 503;

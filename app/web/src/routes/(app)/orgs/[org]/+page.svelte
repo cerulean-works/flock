@@ -27,7 +27,7 @@
 		orgDisplayNameError,
 		relativeTime
 	} from '#lib/utils.ts';
-	import { entityHref } from '#lib/workspace/url.ts';
+	import { datasetsHref, entityHref } from '#lib/workspace/url.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -77,6 +77,8 @@
 				<a class="hover:text-link" href={entityHref(data.org.name)}>
 					{count(data.org.project_count, 'project')}
 				</a>
+				·
+				<a class="hover:text-link" href={datasetsHref(data.org.name)}>datasets</a>
 				·
 				{#if data.members.some((m) => m.id === data.me.id)}
 					you’re {admin ? 'an admin' : 'a member'}

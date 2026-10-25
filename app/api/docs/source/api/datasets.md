@@ -116,3 +116,28 @@ Temporary credentials are returned as:
 ```
 
 They last `FLOCK_HUB_CREDENTIALS_TTL` seconds. Pass `session_token` as the S3 session token (`aws_session_token` in Lance's `storage_options`). Keys and credentials act with your roles at the time of each request, so removing you from an organization takes effect at once.
+
+## Hugging Face mirrors[[mirrors]]
+
+A mirror is returned as:
+
+```json
+{"id": 7, "state": "running", "repo": "cais/mmlu", "config": "all", "sha": "c30699e8356da336a370243923dbaf21066bb9fe", "dataset": "hf/cais--mmlu--all", "version": null, "error": null, "progress": {"stage": "write", "done": 2, "total": 4}, "started_at": 1792282194.3, "finished_at": null}
+```
+
+| Field | Meaning |
+|---|---|
+| `state` | `running`, `finished` or `failed`. |
+| `sha` | The commit the revision was pinned to. |
+| `dataset` | The mirror dataset, `org/name`. |
+| `version` | Once finished, the version the import made: the one with the card and the `hf-<sha8>` tag. |
+| `error` | Why it failed, or `null`. |
+| `progress` | While running, the importer's stage (`load`, `write` or `card`) and its count; otherwise `null`. |
+
+| Endpoint | Who | Meaning |
+|---|---|---|
+| `POST /hub/mirrors` | anyone | Mirrors `{"repo", "config"?, "revision"?}` (`revision` defaults to `main`). 200 with a finished mirror of that commit, 202 with a running one (new or shared). 422 with `command`, a `flock-hub import` command line, when the data files exceed `FLOCK_HUB_AUTO_IMPORT_MAX_BYTES`. 404 for an unknown repo or revision, 400 for an unknown config (or none when the repo has several), 502 when Hugging Face can't be reached. |
+| `GET /hub/mirrors/{id}` | anyone | The mirror. |
+| `GET /hub/mirrors?repo=&config=` | anyone | `{"dataset", "mirrors": [...]}`: the mirror dataset's name for that repo and config, and its imports, newest first. |
+
+`repo` is `owner/name` (letters, digits, `_`, `.` and `-`), and `config` uses the same characters. `POST` answers 503 while `FLOCK_HUB_PROXY_URL` is unset, since the import writes through the proxy. [Hugging Face mirrors](../datasets#hugging-face-mirrors) explains how imports run.

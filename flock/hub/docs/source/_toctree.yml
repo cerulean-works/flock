@@ -15,8 +15,12 @@ guide:
         title: Loading datasets
       - local: writing
         title: Writing datasets
+      - local: importing
+        title: Importing from Hugging Face
 reference:
   - title: Reference
     sections:
       - local: api
         title: Python API
+      - local: cli
+        title: Command line

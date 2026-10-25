@@ -1,6 +1,6 @@
 # Datasets
 
-Flock's hub keeps datasets next to your runs. A dataset is a [Lance](https://lance.org) dataset stored in Flock's S3 server, and every write to it makes a new version that stays readable. This page covers turning the hub on, creating a dataset, writing and reading it, and managing its versions.
+Flock's hub keeps datasets next to your runs. A dataset is a [Lance](https://lance.org) dataset stored in Flock's S3 server, and every write to it makes a new version that stays readable. This page covers turning the hub on, creating a dataset, writing and reading it, managing its versions, and mirroring Hugging Face datasets.
 
 The examples use `curl` with an access token in `$TOKEN` and Flock's URL in `$FLOCK`, as in the [Quickstart](quickstart). The endpoints are listed in [Datasets and S3 keys](api/datasets).
 
@@ -78,6 +78,31 @@ It keeps the latest version and every tagged version. Pruned versions can't be r
 > Pruning and deleting a dataset can't be undone.
 
 Deleting a dataset (org admins only) frees its name at once and deletes its data in the background. A new dataset with the same name starts empty.
+
+## Hugging Face mirrors
+
+Flock imports small Hugging Face datasets on request into its mirror organization, `hf`, so that training jobs read them from your S3 instead of from Hugging Face. `flock.hub`'s `load_dataset` asks for a mirror when it can't find a dataset of the name it was given (the `flock.hub` guide "Importing from Hugging Face" covers the client side), and you can ask for one yourself:
+
+```bash
+curl -s --json '{"repo": "cais/mmlu", "config": "all"}' -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/hub/mirrors
+```
+
+Flock pins the revision (`main` unless you pass `revision`) to a commit, and then:
+
+- if it already mirrored that commit, answers 200 with the mirror;
+- if it is mirroring it, answers 202 with the same mirror, so concurrent requests share one import;
+- if the dataset's data files are larger than `FLOCK_HUB_AUTO_IMPORT_MAX_BYTES`, answers 422 with a `command`, the `flock-hub import` command line that imports it in stages instead;
+- otherwise starts the import and answers 202.
+
+Poll `GET /api/v1/hub/mirrors/{id}` until `state` is `finished` or `failed`. While it runs, `progress` holds the importer's current stage.
+
+The import runs in a separate process, `python -m flock.hub.importer`, which loads every split with `datasets.load_dataset` and writes them as one version. The mirror dataset is named `<owner>--<name>`, plus `--<config>` with a config (`hf/cais--mmlu--all` above). It is `internal`, so anyone signed in can read it, and its info has a `mirror` field naming the repo, config and commit. Its versions are authored by the user who asked for the import, the data carries the transaction property `flock.source=hf:<repo>@<commit>`, and the version with the card is tagged `hf-` and the commit's first 8 characters. A new commit of the same repo overwrites the mirror's rows in a new version, and older imports stay readable through their tags.
+
+`FLOCK_HUB_MIRROR_ORG` names the mirror organization, `FLOCK_HUB_AUTO_IMPORT_MAX_BYTES` sets the size limit (5 GB by default), and `FLOCK_HUB_HF_TOKEN` is a Hugging Face token for gated and private datasets, which the importer gets as `HF_TOKEN` (see [Settings](configuration)).
+
+The size counts the files the README's `configs` YAML gives the config, or else every data file of the repo (Parquet, Arrow, JSON Lines, CSV and text, compressed or not).
+
+A failed import keeps its `error`. Asking again starts it over. A restart stops running imports and marks them failed, for the same reason.
 
 ## S3 keys
 

@@ -27,6 +27,7 @@ from app.api.src.core.hub_keys import HubKeys
 from app.api.src.core.imports import Imports
 from app.api.src.core.live import Hub
 from app.api.src.core.metric_defs import parse_metric_defs
+from app.api.src.core.mirrors import Mirrors
 from app.api.src.core.names import ADJECTIVES, NOUNS
 from app.api.src.core.table import ColumnTable
 from app.api.src.db.database import Database
@@ -325,6 +326,7 @@ class Store:
         self.imports = Imports(self)
         self.datasets = Datasets(self)
         self.hub_keys = HubKeys(self)
+        self.mirrors = Mirrors(self)
 
     @staticmethod
     def _config_columns(config: dict[str, Any]) -> dict[str, Any]:
@@ -376,6 +378,7 @@ class Store:
             await self.imports.load()
             await self.hub_keys.load()
             await self.datasets.load()
+            await self.mirrors.load()
             await self._detect_missing_gpus()
         except BaseException:
             await self.db.close()
@@ -383,6 +386,7 @@ class Store:
 
     async def close(self) -> None:
         await self.imports.close()
+        await self.mirrors.close()
         await self.datasets.close()
         await self.avatars.flush()
         await self.flush()

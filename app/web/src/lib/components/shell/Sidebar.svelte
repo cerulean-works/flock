@@ -1,4 +1,5 @@
 <script lang="ts">
+	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import HouseIcon from '@lucide/svelte/icons/house';
 	import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close';
@@ -12,7 +13,7 @@
 	import ProjectMenu from '#lib/components/ProjectMenu.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import type { OrgEntry, ProjectInfo } from '#lib/types.ts';
-	import { entityHref, projectHref } from '#lib/workspace/url.ts';
+	import { datasetsHref, entityHref, projectHref } from '#lib/workspace/url.ts';
 	import WorkspaceSwitcher from './WorkspaceSwitcher.svelte';
 
 	interface Props {
@@ -26,9 +27,14 @@
 
 	let { org, orgs, projects, oncollapse }: Props = $props();
 
-	/** Inside an org (its runs, a project, its members), where switching orgs leaves the page. */
+	/**
+	 * Inside an org (its runs, a project, its datasets, its members), where switching orgs leaves
+	 * the page.
+	 */
 	const inOrg = $derived(
-		!!page.route.id?.startsWith('/(app)/[entity]') || !!page.route.id?.startsWith('/(app)/orgs/')
+		!!page.route.id?.startsWith('/(app)/[entity]') ||
+			!!page.route.id?.startsWith('/(app)/orgs/') ||
+			!!page.route.id?.startsWith('/(app)/datasets/')
 	);
 	const route = $derived(page.route.id);
 
@@ -86,6 +92,13 @@
 				aria-current={route === '/(app)/[entity]' ? 'page' : undefined}
 			>
 				<ActivityIcon /> Runs
+			</a>
+			<a
+				class={ITEM}
+				href={datasetsHref(org)}
+				aria-current={route?.startsWith('/(app)/datasets/') ? 'page' : undefined}
+			>
+				<DatabaseIcon /> Datasets
 			</a>
 		{/if}
 

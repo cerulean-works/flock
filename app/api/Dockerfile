@@ -22,6 +22,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY app/api/app.py app/api/__init__.py /app/app/api/
 COPY app/api/src /app/app/api/src
 COPY app/api/scripts /app/app/api/scripts
+# flock.hub, which the API runs as `python -m flock.hub.importer` for Hugging Face mirrors. Its
+# third-party dependencies came with the export above; `--no-emit-workspace` leaves out its code.
+COPY flock/hub/*.py /app/flock/hub/
 RUN /opt/venv/bin/python -m compileall -q /app
 
 

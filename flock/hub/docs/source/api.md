@@ -1,6 +1,6 @@
 # Python API
 
-Everything below is importable from `flock.hub`, except the config defaults and the REST client, which live in `flock.hub.config` and `flock.hub.client`. [Loading datasets](loading) and [Writing datasets](writing) show them in use.
+Everything below is importable from `flock.hub`, except the config defaults, the REST client and the importer's helpers, which live in `flock.hub.config`, `flock.hub.client` and `flock.hub.importer`. [Loading datasets](loading), [Writing datasets](writing) and [Importing from Hugging Face](importing) show them in use.
 
 ## Loading
 
@@ -18,6 +18,16 @@ Everything below is importable from `flock.hub`, except the config defaults and 
 
 [[autodoc]] hub.write.create_dataset
 
+## Importing
+
+[[autodoc]] hub.importer.import_hf_dataset
+
+[[autodoc]] hub.importer.plan
+
+[[autodoc]] hub.importer.mirror_repo_id
+
+[[autodoc]] hub.importer.hf_tag
+
 ## Configuration
 
 [[autodoc]] hub.config.HubConfig
@@ -33,6 +43,10 @@ Everything below is importable from `flock.hub`, except the config defaults and 
 [[autodoc]] hub.load.VersionNotFound
 
 [[autodoc]] hub.write.CommitConflict
+
+[[autodoc]] hub.load.ImportTooLarge
+
+[[autodoc]] hub.importer.RepoNotFound
 
 [[autodoc]] hub.client.HubError
 

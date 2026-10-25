@@ -2,11 +2,11 @@
 
 | | |
 | --- | --- |
-| Status | in progress (step 1 client) |
+| Status | in progress (step 2 import) |
 | Date | 2026-10-25 |
 | Builds on | the app's [007](../../../../app/api/docs/agents/007-hub-datasets.md) (REST API, S3 proxy, credentials) |
 | Keeps | n/a |
-| Result | step 1: 242 tests in `tests/hub/` pass in about 30 s (5 on S3); see [section 6](#6-how-it-was-actually-built) |
+| Result | step 1: 242 tests in `tests/hub/` pass in about 30 s (5 on S3); step 2: 264 (22 import tests, about 7 s); see [section 6](#6-how-it-was-actually-built) |
 
 ## 1. Goal
 
@@ -174,7 +174,7 @@ command. The import itself runs on the server (app D50), so training nodes need 
 
 We copy HF's builder rather than call it, so the suite has to prove the copy matches and keeps
 matching. Fixtures are local `file://` Lance datasets unless a test needs S3, which uses the
-`s3_bucket` fixture (`tests/conftest.py`, a Ceph RGW in Docker).
+`s3_bucket` fixture (`tests/conftest.py`: moto in-process, or a real server).
 
 - **Parity with HF's builder.** For each fixture, `datasets.load_dataset("lance",
   data_files=..., streaming=s)` (latest version) against ours, `s` in {True, False}: the same
@@ -269,3 +269,54 @@ matching. Fixtures are local `file://` Lance datasets unless a test needs S3, wh
   drops it. Lance's `update` moves updated rows to the end of the iteration order.
 - **Docs.** `doc-builder` couldn't be installed in the agent's sandbox, so the build wasn't
   run; a script checked the toctree, relative links and every autodoc target instead.
+
+### Step 2: import (`feat/hub-import`)
+
+- **One seam for repos.** `importer.source()` returns `HfSource` (`HfApi.dataset_info(...,
+  files_metadata=True)`, `hf_hub_download`) or, when `FLOCK_HUB_IMPORT_FAKE_ROOT` is set (test
+  only), `LocalSource`: folders `<root>/<owner>/<name>/` whose sha is a hash of their files. Small
+  mode hands `datasets.load_dataset` the repo id and `revision=sha`, or the folder. The server
+  uses the same `plan()` for its size check, so the subprocess and the API agree on files.
+- **Which files a config has** (`plan`): the README YAML `configs` (`data_files` as a glob, a
+  list, or `{split, path}` items, fsspec-style globs; a glob naming a folder takes its files),
+  else every data-like file (`.parquet`, `.arrow`, `.json[l]`, `.ndjson`, `.csv`, `.tsv`, `.txt`,
+  optionally `.gz`/`.zst`/`.bz2`/`.xz`), restricted to `<config>/` when a config is given.
+  Several configs and none given or default raises, as HF does. Staged mode without YAML has one
+  split; a `split` column is added only with several.
+- **The card's header goes after the README's YAML front matter**, not above it, so tools that
+  read the front matter still find it. The data commit and the card are two versions; the tag
+  points to the card's. `_finish` is idempotent: a rerun finds the tag at or after the data
+  version and stops, so a crash between commit and card leaves one data version.
+- **Dolma processing.** `id`, `source`, `added` and `created` are read as `Json` too, not only
+  `metadata`/`attributes`: Arrow's JSON reader otherwise parses ISO dates as timestamps and they
+  come back reformatted. `_to_dolma` decodes them back to strings (a numeric `id` becomes its
+  JSON text). Files with other top-level fields fail with a `ValueError` naming the file.
+  Parquet files pass through unchanged in staged mode; other formats are refused.
+- **Staged layout.** `workdir/state.json` (repo, config, sha, target, mode, units), `raw/<id>-<name>`
+  + `raw/<id>.done`, `processed/<id>.parquet` + `processed/<id>.done`, `upload/` (the
+  `DatasetWriter`'s staging dir) and `upload/imported.json` after card and tag. Each unit's HF
+  cache (`hf_cache/<id>`) is deleted once its Parquet file is written. `num_proc=1` processes
+  inline (no pool), which is what lets the crash tests monkeypatch `process_file`.
+- **`--urls-file`** may be a local path or a path in the repo; the repo is still resolved to a
+  sha for provenance.
+- **Fallback (D10).** A `GET /api/v1/hub/mirrors?repo=&config=` was added to the server: it gives
+  the mirror dataset's name (so the client never hardcodes `hf`) and the imports so far, so
+  `hf_revision=None` or a known sha (full, or a prefix of at least 7) loads with no POST and no
+  HF call. A branch name always POSTs (the server resolves it, and answers 200 at once when
+  that commit is mirrored). A `version` passed with a fallback applies to the mirror. A repo
+  missing on HF too gives `DatasetNotFound` ("nor on Hugging Face"), so callers that only
+  expected a missing dataset still get that type; `test_versions.test_unknown_dataset` now
+  passes `auto_import=False` so it doesn't ask the Hub. Direct mode imports locally into
+  `<root>/hf/...`, resolving branch names client-side.
+- **Entry point.** `python -m flock.hub.importer` reads the job from argv or stdin (the server
+  uses stdin, since the job holds credentials). `card_uri` from the plan wasn't needed: the card
+  sidecar goes beside the URI it is given, with the same storage options. The final line is
+  `{"version": N, "versions": [data, card]}` so the server can record authorship of both.
+  `flock.hub` exports `import_hf_dataset` lazily (module `__getattr__`), because importing it
+  eagerly from the package makes `python -m flock.hub.importer` warn that the module was
+  already imported.
+- **Telemetry.** `datasets` HEADs an S3 URL to count downloads of packaged builders. With the
+  fake root set, the importer turns that off (`HF_UPDATE_DOWNLOAD_COUNTS`), in worker processes
+  too, so the tests make no network calls.
+- **Dependencies.** `flock-hub` gained `click`, `pyyaml` and `zstandard` (HF's `.zst`
+  extraction needs it), and the `flock-hub` script in both `pyproject.toml` files.

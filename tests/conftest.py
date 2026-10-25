@@ -1,16 +1,12 @@
 import itertools
 import os
-import shutil
-import subprocess
-import textwrap
-import time
-import urllib.error
-import urllib.request
+import socket
 from collections.abc import Iterator
 from dataclasses import dataclass
 
 import boto3
 import pytest
+from moto.server import ThreadedMotoServer
 
 
 @dataclass(frozen=True)
@@ -22,16 +18,20 @@ class S3Bucket:
     access_key_id: str
     secret_access_key: str
     region: str = "us-east-1"
+    # Prefix every key this test writes, so runs against a shared bucket don't collide.
+    prefix: str = ""
 
     def storage_options(self) -> dict[str, str]:
         """Lance ``storage_options`` that reach this bucket directly (bypassing any proxy)."""
-        return {
+        options = {
             "aws_endpoint": self.endpoint,
             "aws_access_key_id": self.access_key_id,
             "aws_secret_access_key": self.secret_access_key,
             "aws_region": self.region,
-            "allow_http": "true",
         }
+        if self.endpoint.startswith("http://"):
+            options["allow_http"] = "true"
+        return options
 
     def client(self):
         """A boto3 S3 client with the global credentials."""
@@ -46,95 +46,68 @@ class S3Bucket:
 
 class S3Server:
     """
-    A Ceph RGW for tests, handing out fresh buckets.
+    An S3 server for tests, handing out fresh buckets.
 
-    Production runs Ceph RGW, so tests do too: a single radosgw on its SQLite ("dbstore")
-    backend, which needs no monitors or OSDs. Note that this backend accepts
-    ``If-None-Match: *`` on PUT without enforcing it, so only the hub proxy keeps concurrent
-    Lance commits from overwriting each other here.
+    By default this is moto's S3 server, in this process: it agrees with production Ceph RGW on
+    everything the hub relies on (conditional PUTs, ranged reads, multipart uploads, copies,
+    listing order). Ceph's standalone "dbstore" backend, the other option that runs without a
+    cluster, gets all of those wrong.
+
+    Setting ``FLOCK_TEST_S3_ENDPOINT``, ``FLOCK_TEST_S3_ACCESS_KEY`` and ``FLOCK_TEST_S3_SECRET_KEY``
+    runs the same tests against a real server instead. There, every test shares the bucket
+    ``FLOCK_TEST_S3_BUCKET`` (default ``flock-hub-test``) under its own key prefix, and nothing is
+    created outside it.
     """
 
-    ACCESS_KEY_ID = "flock-test"
-    SECRET_ACCESS_KEY = "flock-test-secret"
-
-    def __init__(self, endpoint: str) -> None:
+    def __init__(self, endpoint: str, access_key_id: str, secret_access_key: str) -> None:
         self.endpoint = endpoint
+        self.access_key_id = access_key_id
+        self.secret_access_key = secret_access_key
+        self.shared_bucket = os.environ.get("FLOCK_TEST_S3_BUCKET", "flock-hub-test")
+        self.real = "FLOCK_TEST_S3_ENDPOINT" in os.environ
         self._counter = itertools.count()
-        self._client = S3Bucket(endpoint, "", self.ACCESS_KEY_ID, self.SECRET_ACCESS_KEY).client()
-
-    @classmethod
-    def start_container(cls, image: str = "quay.io/ceph/ceph:v20") -> tuple[str, str]:
-        """Start a throwaway radosgw container; returns (container name, endpoint URL)."""
-        image = os.environ.get("FLOCK_TEST_CEPH_IMAGE", image)
-        name = f"flock-test-rgw-{os.getpid()}"
-        script = textwrap.dedent(f"""\
-            mkdir -p /var/lib/ceph/radosgw /var/run/ceph
-            cat > /etc/ceph/ceph.conf <<EOF
-            [client.rgw.test]
-            rgw backend store = dbstore
-            rgw config store = dbstore
-            dbstore db dir = /var/lib/ceph/radosgw
-            rgw frontends = beast port=7480
-            EOF
-            radosgw-admin --no-mon-config -n client.rgw.test user create --uid=flock \\
-                --display-name=flock --access-key={cls.ACCESS_KEY_ID} \\
-                --secret-key={cls.SECRET_ACCESS_KEY} > /dev/null
-            exec radosgw -d --no-mon-config -n client.rgw.test
-            """)
-        started = subprocess.run(
-            [
-                "docker", "run", "-d", "--rm", "--name", name,
-                "-p", "127.0.0.1::7480", "--tmpfs", "/var/lib/ceph/radosgw",
-                "--entrypoint", "bash", image, "-c", script,
-            ],
-            check=False, capture_output=True, text=True,
-        )  # fmt: skip
-        if started.returncode != 0:
-            pytest.skip(f"could not start a Ceph RGW container: {started.stderr.strip()}")
-        port = (
-            subprocess.run(
-                ["docker", "port", name, "7480/tcp"], check=True, capture_output=True, text=True
-            )
-            .stdout.split()[0]
-            .rpartition(":")[2]
-        )
-        endpoint = f"http://127.0.0.1:{port}"
-
-        deadline = time.monotonic() + 60
-        while True:
-            try:
-                urllib.request.urlopen(endpoint, timeout=2).close()
-                break
-            except urllib.error.HTTPError:
-                break  # any S3 answer means it is serving
-            except OSError:
-                if time.monotonic() > deadline:
-                    subprocess.run(["docker", "rm", "-f", name], check=False, capture_output=True)
-                    pytest.fail("Ceph RGW container did not become ready")
-                time.sleep(0.25)
-        return name, endpoint
+        self._run = os.urandom(4).hex()
 
     def bucket(self) -> S3Bucket:
-        """A new empty bucket."""
-        name = f"flock-test-{os.getpid()}-{next(self._counter)}"
-        self._client.create_bucket(Bucket=name)
-        return S3Bucket(self.endpoint, name, self.ACCESS_KEY_ID, self.SECRET_ACCESS_KEY)
+        """A new empty bucket (or, on a real server, a new empty prefix of the shared one)."""
+        n = next(self._counter)
+        if self.real:
+            name, prefix = self.shared_bucket, f"tests/{self._run}-{n}/"
+        else:
+            name, prefix = f"flock-test-{n}", ""
+        bucket = S3Bucket(self.endpoint, name, self.access_key_id, self.secret_access_key)
+        bucket = S3Bucket(**{**bucket.__dict__, "prefix": prefix})
+        if not self.real:
+            bucket.client().create_bucket(Bucket=name)
+        return bucket
+
+
+def _free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
 
 
 @pytest.fixture(scope="session")
 def s3_server() -> Iterator[S3Server]:
-    """``FLOCK_TEST_S3_ENDPOINT`` (with the test credentials) if set, else a Ceph RGW container."""
-    container = None
+    """A real S3 server if ``FLOCK_TEST_S3_ENDPOINT`` is set, else moto's, in this process."""
     endpoint = os.environ.get("FLOCK_TEST_S3_ENDPOINT")
-    if not endpoint:
-        if shutil.which("docker") is None:
-            pytest.skip("set FLOCK_TEST_S3_ENDPOINT or install Docker to run S3 tests")
-        container, endpoint = S3Server.start_container()
+    if endpoint:
+        if "://" not in endpoint:
+            endpoint = f"https://{endpoint}"
+        yield S3Server(
+            endpoint,
+            os.environ["FLOCK_TEST_S3_ACCESS_KEY"],
+            os.environ["FLOCK_TEST_S3_SECRET_KEY"],
+        )
+        return
+    port = _free_port()
+    server = ThreadedMotoServer(ip_address="127.0.0.1", port=port, verbose=False)
+    server.start()
     try:
-        yield S3Server(endpoint)
+        yield S3Server(f"http://127.0.0.1:{port}", "flock-test", "flock-test-secret")
     finally:
-        if container is not None:
-            subprocess.run(["docker", "rm", "-f", container], check=False, capture_output=True)
+        server.stop()
 
 
 @pytest.fixture

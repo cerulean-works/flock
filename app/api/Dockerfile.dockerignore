@@ -11,6 +11,9 @@
 !app/api/src/**
 !app/api/scripts/
 !app/api/scripts/**
+!flock/
+!flock/hub/
+!flock/hub/*.py
 
 **/__pycache__
 **/*.pyc

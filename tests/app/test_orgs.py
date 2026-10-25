@@ -36,6 +36,7 @@ def test_org_crud(flock):
         "member_count": 1,  # its creator, as admin
         "role": "admin",
         "avatar_url": None,
+        "mirror": False,
     }
     assert admin.post(ORGS, {"name": "lab"}).status == 409
     assert admin.post(ORGS, {"name": "a/b"}).status == 422
@@ -370,3 +371,13 @@ def test_user_administration(flock):
     detail = alice.api.get("/api/v1/projects/alices/p/runs/b1").json()
     assert detail["owner"] is None  # runs stay, without an owner
     assert bob.api.get("/api/v1/me").status == 401
+
+
+def test_mirror_org_is_marked(make_flock, s3_bucket):
+    """The hub's mirror org is told apart, so the dashboard's setup doesn't take it for the first
+    workspace."""
+    from tests.app.test_datasets import hub_settings
+
+    hub = make_flock(**hub_settings(s3_bucket))
+    orgs = {o["name"]: o["mirror"] for o in hub.client().get(ORGS).json()["orgs"]}
+    assert orgs == {"flock": False, "hf": True}

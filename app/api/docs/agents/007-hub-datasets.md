@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | in progress (step 1 done) |
+| Status | in progress (step 2 done) |
 | Date | 2026-10-25 |
 | Builds on | [003](003-organizations-and-auth.md) |
 | Keeps | D2 (one API server per database, small state in memory), D18 (orgs are entities) |
@@ -99,10 +99,11 @@ can't read, whether it exists or not, so names don't leak.
 ### D45. Commits are made atomic by the proxy
 
 Lance commits on `s3://` with a conditional PUT (`If-None-Match: *`) of the next manifest, and
-treats 412 as "someone else committed; rebase and retry". **The Ceph RGW we test against
-(v19.2 and v20.2, dbstore backend) accepts that header and ignores it**: 8 concurrent appends
-left 2 versions and lost 6 silently. Production Ceph is untested. So the proxy enforces it
-whatever the upstream does:
+treats 412 as "someone else committed; rebase and retry". Production Ceph RGW (squid) enforces
+it: 8 concurrent appends straight to it all landed (checked 2026-10-26). Ceph's standalone
+"dbstore" backend, which we first tested with, accepts the header and ignores it (8 appends
+left 2 versions), and other S3 clones are known to do the same. So the proxy enforces it too,
+whatever the upstream does; on production that is a cheap second check:
 
 - A PUT whose key is under `_versions/` and ends in `.manifest` must carry
   `If-None-Match: *` (otherwise 403).
@@ -363,10 +364,71 @@ work without a notification), `s3xml.py` (errors and key rewriting) and `app.py`
   manifests. Only a whitelist of client headers is forwarded (no ACLs, storage classes or object
   lock). SigV2, ListObjects v1 and UploadPartCopy get 501. Tag deletion is an S3 DELETE, so only
   admins can delete Lance tags over S3 (D44's "tag" for members covers creating and moving
-  them).
+  them). Resolved when step 1 was merged: writers may delete `_refs/tags/*` (D43).
 - **The test RGW (dbstore) has more bugs than `If-None-Match`:** multipart objects read back as
-  their last part (and hang if that part is tiny), ranged GETs return bytes from the object's
-  start and more than `Content-Length` (corrupting the keep-alive connection), CopyObject answers
-  200 without copying, and `StartAfter` is inclusive. The proxy tests check that the proxy relays
-  what the store answers in those cases, and production Ceph (rados backend) should be checked
-  for all of them before step 3.
+  their last part, ranged GETs start at the object's start, CopyObject doesn't copy, and
+  `StartAfter` is inclusive. Production Ceph gets all of these right (checked 2026-10-26), so
+  the test fixture moved to moto, which does too, and these tests now check the data.
+  `FLOCK_TEST_S3_ENDPOINT` runs them against a real server (see `tests/conftest.py`).
+
+### Step 2: `feat/hub-import`
+
+`core/mirrors.py` holds `Mirrors` (`store.mirrors`), loaded after `Datasets`; routes are in
+`api/hub.py`.
+
+- **Request flow.** A 40-hex `revision` with a finished or running row answers without calling
+  HF. Otherwise `flock.hub.importer.plan` (in a thread, token `FLOCK_HUB_HF_TOKEN`) pins the sha
+  and lists the config's data files; then, under one `asyncio.Lock`, the row is looked up again
+  (finished → 200, running → 202 same id), the size checked (422 with `command`), the mirror
+  dataset created if needed and the row inserted (a failed row is reused: `ON CONFLICT` resets
+  it to running). Unknown repo or revision → 404, unknown or missing config → 400, HF unreachable
+  → 502. `POST` also needs `FLOCK_HUB_PROXY_URL` (503), as other writes.
+- **Added endpoint.** `GET /hub/mirrors?repo=&config=` returns `{"dataset", "mirrors"}`, so
+  `flock.hub` learns the mirror org's name and the known shas without asking HF. Mirror answers
+  also carry `progress` (the importer's last `{"stage", "done", "total"}`, in memory only),
+  `started_at` and `finished_at`.
+- **The import.** `asyncio.create_subprocess_exec(sys.executable, "-m",
+  "flock.hub.importer")` with the job on stdin (it holds credentials), `HF_TOKEN` in the env, and
+  the write target from `Datasets.write_target(..., mirror_writer=True)` (passthrough when the
+  proxy URL is the upstream). On success each version it reports (data, card) is `_record`ed for
+  the requesting user, the row is finished with the last version, and `Dataset.mirror` is set
+  (startup already filled it from finished rows). The error kept for a failure is the last line
+  of the importer's stderr, which is its own message. Under uvloop, Lance warns that it isn't
+  fork-safe when the server spawns the subprocess; the child execs at once, so nothing of Lance
+  runs in it.
+- **Mirror datasets** are created by the requesting user, `internal`, with the description
+  "Mirror of https://huggingface.co/datasets/<repo>". A new sha of the same repo and config
+  overwrites the rows in a new version; older imports stay reachable through their tags.
+- **Image.** `flock-hub` is a dependency of `flock-app-api`, so `uv export` brings its third-party
+  packages (`click`, `pyyaml`, `zstandard`, `huggingface-hub`); `--no-emit-workspace` leaves out
+  workspace code, so the Dockerfile copies `flock/hub/*.py` to `/app/flock/hub/` (a namespace
+  package under `PYTHONPATH=/app`) and the dockerignore lets them in. Built and checked that
+  `python -m flock.hub.importer` runs in the image.
+- **Test seam.** `FLOCK_HUB_IMPORT_FAKE_ROOT` (test only) points both the API's `plan` and the
+  importer subprocess (which inherits the env) at fake repos; `tests/app/test_hub_mirrors.py`
+  (7 tests) covers the lifecycle, dedupe of concurrent POSTs, the 422, failures and retries,
+  restart, and reads by non-members.
+
+### Step 2: web
+
+`app/web`: `/datasets/[entity]` (list, search, new dataset) and `/datasets/[entity]/[dataset]`
+with `?v=` and `?tab=` (card, viewer, versions, use, settings); S3 keys on the account page; a
+Datasets item in the sidebar. Choices where the contract was silent:
+
+- **The mirror org.** Signup makes the first account an admin of every org, the mirror org
+  included, and its default org falls back to it, so the web can't tell it apart by members.
+  Org info gained `mirror` (true for `FLOCK_HUB_MIRROR_ORG` while the hub is configured); the
+  setup check and the `(app)` layout ignore such orgs. Outsiders reading another org's internal
+  datasets keep their own org in the sidebar.
+- **Hub off.** Pages catch the 503 and show a calm "not set up" state; the account page hides S3
+  keys.
+- **Cards** are rendered in the browser only (`marked`, then DOMPurify, which needs a DOM), with
+  YAML front matter stripped; the server sends the Markdown as written.
+- **Endpoint for snippets.** `DatasetInfo` has none, so the dataset page asks
+  `POST /hub/credentials` (read only) and passes only `endpoint` and `region` to the page.
+- **Permissions in the UI** follow D44, except that Optimize sits with Prune as an admin action,
+  as the step's brief asked (the API lets members optimize).
+- **Found in the API:** concurrent first reads of a dataset (`GET .../{name}` and
+  `GET .../versions` both syncing history) can fail with pylance's `RuntimeError: Already
+  borrowed` from the shared handle in `_scan`; the page now reads the dataset first. The fix
+  belongs in `core/datasets.py`.

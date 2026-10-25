@@ -3,6 +3,7 @@
 	import { enhance } from '$app/forms';
 	import ApiKeyCreator from '#lib/components/ApiKeyCreator.svelte';
 	import AvatarField from '#lib/components/AvatarField.svelte';
+	import HubKeyCreator from '#lib/components/HubKeyCreator.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
@@ -16,6 +17,7 @@
 	let { data }: PageProps = $props();
 
 	const removal = new Mutation({ success: () => 'API key deleted', toastErrors: true });
+	const hubRemoval = new Mutation({ success: () => 'S3 key deleted', toastErrors: true });
 	const profile = new Mutation({ success: () => 'Name saved' });
 	let passwordForm = $state<HTMLFormElement>();
 	const password = new Mutation({
@@ -239,6 +241,65 @@
 					<ApiKeyCreator named />
 				</div>
 			</section>
+
+			{#if data.hubKeys}
+				<section class="mt-10 scroll-mt-6" id="s3-keys">
+					<h2 class="font-serif text-2xl tracking-[-0.01em]">S3 keys</h2>
+					<p class="mt-2 max-w-[62ch] text-muted-foreground">
+						For reading and writing datasets with S3 tools. A key acts with your role, and works
+						until deleted.
+					</p>
+					{#if data.hubKeys.length}
+						<ul class="mt-4 border-t border-divider">
+							{#each data.hubKeys as key (key.pk)}
+								<li class="flex min-h-14 items-center gap-4 border-b border-divider py-2">
+									<div class="min-w-0 flex-1">
+										<p class="truncate font-medium">{key.name}</p>
+										<p class="truncate text-[13px] text-muted-foreground">
+											{key.read_only ? 'Read only' : 'Read and write'} ·
+											{key.org
+												? (data.profile.orgs.find((o) => o.name === key.org)?.display_name ??
+													key.org)
+												: 'every organization'}
+											·
+											<span title={key.last_used_at ? dateTime(key.last_used_at) : undefined}>
+												{key.last_used_at
+													? `used ${relativeTime(key.last_used_at, data.now)}`
+													: 'never used'}
+											</span>
+										</p>
+									</div>
+									<span class="font-mono text-[12.5px] text-muted-foreground max-sm:hidden"
+										>{key.access_key_id}</span
+									>
+									<span
+										class="w-20 text-right text-muted-foreground max-sm:hidden"
+										title="Created {dateTime(key.created_at)}"
+									>
+										{relativeTime(key.created_at, data.now)}
+									</span>
+									<form method="POST" action="?/deleteHubKey" use:enhance={hubRemoval.enhance}>
+										<input type="hidden" name="pk" value={key.pk} />
+										<Button
+											type="submit"
+											variant="ghost"
+											size="icon-sm"
+											class="text-muted-foreground hover:text-destructive"
+											aria-label="Delete S3 key {key.name}"
+											title="Delete: tools using it stop working"
+										>
+											<Trash2Icon />
+										</Button>
+									</form>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+					<div class="mt-4">
+						<HubKeyCreator orgs={data.profile.orgs} />
+					</div>
+				</section>
+			{/if}
 
 			<section class="mt-10">
 				<form method="POST" action="/logout">

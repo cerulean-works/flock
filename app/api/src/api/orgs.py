@@ -85,6 +85,8 @@ def org_info(store: Store, org: Org, user: User) -> dict:
         "member_count": len(store.accounts.members(org)),
         "role": store.accounts.role(user, org),  # the caller's
         "avatar_url": store.avatars.url(org.avatar),
+        # The hub's mirror org (D50), which Flock creates itself: not a workspace people set up.
+        "mirror": store.datasets.enabled and org.name == store.settings.hub_mirror_org,
     }
 
 

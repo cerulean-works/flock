@@ -23,7 +23,28 @@ newer = latest.checkout()  # same columns, filter and mode, at the latest versio
 older = latest.checkout(2)
 ```
 
-An unknown version or tag raises [`~hub.load.VersionNotFound`], whose message gives the latest version and the tags. A missing dataset raises [`~hub.client.DatasetNotFound`].
+An unknown version or tag raises [`~hub.load.VersionNotFound`], whose message gives the latest version and the tags. A missing dataset raises [`~hub.client.DatasetNotFound`], unless it is on Hugging Face (see below).
+
+## Falling back to Hugging Face
+
+When there is no hub dataset of the name you give, `load_dataset` takes it as a Hugging Face dataset and loads its mirror, in this order:
+
+1. the hub dataset `repo_id`;
+2. its mirror, `hf/<owner>--<name>[--<config>]`: at the import of `hf_revision` if you give one, else at its latest version;
+3. if there is no mirror, or none of that revision, the server imports it first, and `load_dataset` waits, logging the import's progress.
+
+```python
+mmlu = load_dataset("cais/mmlu", config="all", filter="split = 'test'")
+print(mmlu.repo_id)  # hf/cais--mmlu--all
+```
+
+| Argument | Default | Meaning |
+|---|---|---|
+| `config` | `None` | The Hugging Face config, which becomes part of the mirror's name. |
+| `hf_revision` | `None` | A branch, tag or commit to import. `None` takes the mirror's latest import, or `main` when there is none. |
+| `auto_import` | `True` | `False` raises [`~hub.client.DatasetNotFound`] instead of falling back. |
+
+A `version` you pass applies to the mirror. A dataset too large for the server to import raises [`~hub.load.ImportTooLarge`], whose message holds the `flock-hub import` command to run instead. [Importing from Hugging Face](importing) covers mirrors and imports in full.
 
 ## Streaming or not
 

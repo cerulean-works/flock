@@ -1,4 +1,4 @@
-"""The same reads and writes on S3 (the Ceph RGW fixture), and credentials refreshed mid-stream."""
+"""The same reads and writes on S3 (the `s3_bucket` fixture), and credentials refreshed mid-stream."""
 
 import json
 from pathlib import Path
@@ -18,7 +18,8 @@ from tests.hub.utils import numbers, write
 def s3_hub(s3_bucket: S3Bucket) -> HubConfig:
     """Direct mode on a fresh bucket."""
     return HubConfig(
-        root=f"s3://{s3_bucket.bucket}/datasets", storage_options=s3_bucket.storage_options()
+        root=f"s3://{s3_bucket.bucket}/{s3_bucket.prefix}datasets",
+        storage_options=s3_bucket.storage_options(),
     )
 
 
@@ -125,7 +126,7 @@ class FakeAPI:
                     "id": f"uuid-{org}-{name}",
                     "org": org,
                     "name": name,
-                    "uri": f"s3://{self.bucket.bucket}/datasets/{org}/{name}",
+                    "uri": f"s3://{self.bucket.bucket}/{self.bucket.prefix}datasets/{org}/{name}",
                 },
             )
         if request.method == "PATCH":

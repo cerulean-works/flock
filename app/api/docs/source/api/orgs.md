@@ -7,7 +7,7 @@ Endpoints for organizations, their members and their invitations. Paths are rela
 An organization is returned as:
 
 ```json
-{"name": "flock", "display_name": "Flock Research", "created_at": 1792282194.3, "updated_at": 1792282194.3, "project_count": 2, "member_count": 2, "role": "admin", "avatar_url": null}
+{"name": "flock", "display_name": "Flock Research", "created_at": 1792282194.3, "updated_at": 1792282194.3, "project_count": 2, "member_count": 2, "role": "admin", "avatar_url": null, "mirror": false}
 ```
 
 | Field | Meaning |
@@ -16,6 +16,7 @@ An organization is returned as:
 | `display_name` | What people see it called. Org admins can change it. |
 | `role` | Your own role in it: `admin` or `member`. |
 | `avatar_url` | The path of its avatar image, or `null`. |
+| `mirror` | Whether it is the hub's mirror organization (`FLOCK_HUB_MIRROR_ORG`), which Flock creates by itself when the hub is configured. |
 
 | Endpoint | Who | Meaning |
 |---|---|---|

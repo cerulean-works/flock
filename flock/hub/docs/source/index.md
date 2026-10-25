@@ -9,6 +9,7 @@
 - **Reads any row directly.** `ds[i]`, slices and lists of indices read the rows from Lance, so random access doesn't need a local copy.
 - **Writes exactly once.** An upload keeps its progress in a staging directory. Rerun a crashed upload and it skips the shards already written and never commits twice.
 - **Versions its card.** Each version points to the README that describes it.
+- **Falls back to Hugging Face.** Load a Hugging Face dataset by its name and the server mirrors it into the hub first. Import large corpora yourself with `flock-hub import`, which resumes after a crash.
 
 ## Concepts
 
@@ -28,4 +29,5 @@ The hub has no splits. A dataset with several splits has a `split` column, and y
 - Load and write your first dataset: [Quickstart](quickstart).
 - Versions, streaming, filters and random access: [Loading datasets](loading).
 - Uploads, edits, tags and cards: [Writing datasets](writing).
-- Every class and argument: [Python API](api).
+- Mirrors and `flock-hub import`: [Importing from Hugging Face](importing).
+- Every class and argument: [Python API](api), and every flag: [Command line](cli).

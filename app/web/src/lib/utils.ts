@@ -1,4 +1,4 @@
-import type { MetricFormat } from './types.ts';
+import type { MetricFormat, OrgInfo } from './types.ts';
 
 export { cn } from 'cn';
 
@@ -50,6 +50,7 @@ const RESERVED = [
 	'admin',
 	'api',
 	'auth',
+	'datasets',
 	'favicon.ico',
 	'invite',
 	'login',
@@ -68,6 +69,14 @@ export function orgIdError(id: string): string | null {
 	if (RESERVED.includes(id.toLowerCase()) || id.startsWith('_')) return `“${id}” is reserved`;
 	return projectNameError(id);
 }
+
+/**
+ * Whether a server has an organization people work in. The hub's mirror org (`FLOCK_HUB_MIRROR_ORG`,
+ * `hf`), which Flock creates by itself when the hub is configured (and makes the first account an
+ * admin of), doesn't count: a fresh server with only that org still needs its first workspace.
+ */
+export const hasWorkspace = (orgs: readonly Pick<OrgInfo, 'mirror'>[]) =>
+	orgs.some((o) => !o.mirror);
 
 /** Why an organization's display name is invalid: any text, up to 128 characters. */
 export function orgDisplayNameError(name: string): string | null {

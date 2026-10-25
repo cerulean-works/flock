@@ -643,10 +643,8 @@ def test_multipart_upload_round_trip(hub):
     name, ds_uuid = hub.dataset()
     s3 = hub.s3(hub.key("alice"))
     key = f"flock/{name}/data/big.bin"
-    # The test RGW (dbstore) mishandles multipart objects: every part reads back as the last
-    # one, and a last part of a few bytes hangs reads. So this checks that the proxy relays
-    # exactly what the store has rather than that the store assembled the parts.
-    parts_data = [bytes([i]) * (5 * 1024 * 1024) for i in range(2)] + [b"tail" * 262144]
+    # A small last part on purpose: S3 only requires the other parts to be at least 5 MiB.
+    parts_data = [bytes([i]) * (5 * 1024 * 1024) for i in range(2)] + [b"tail"]
     upload = s3.create_multipart_upload(Bucket="datasets", Key=key)
     assert upload["Bucket"] == "datasets" and upload["Key"] == key
     parts = []
@@ -668,8 +666,7 @@ def test_multipart_upload_round_trip(hub):
         .read()
     )
     body = s3.get_object(Bucket="datasets", Key=key)["Body"].read()
-    assert len(body) == sum(len(p) for p in parts_data)
-    assert body == direct
+    assert body == direct == b"".join(parts_data)
     assert "data/big.bin" in hub.upstream_keys(ds_uuid)
 
     aborted = s3.create_multipart_upload(Bucket="datasets", Key=key + ".2")
@@ -682,11 +679,9 @@ def test_ranges_and_conditional_reads(hub):
     key = f"flock/{name}/data.bin"
     data = bytes(range(256)) * 64
     s3.put_object(Bucket="datasets", Key=key, Body=data)
-    # Ranges start at 0 here: the test RGW (dbstore) sends ranges from the object's start, and
-    # more bytes than it announced.
-    got = s3.get_object(Bucket="datasets", Key=key, Range="bytes=0-99")
-    assert got["Body"].read() == data[:100]
-    assert got["ContentRange"] == f"bytes 0-99/{len(data)}"
+    got = s3.get_object(Bucket="datasets", Key=key, Range="bytes=1000-1099")
+    assert got["Body"].read() == data[1000:1100]
+    assert got["ContentRange"] == f"bytes 1000-1099/{len(data)}"
     assert got["ResponseMetadata"]["HTTPStatusCode"] == 206
     assert got["ContentLength"] == 100
     assert got["AcceptRanges"] == "bytes"
@@ -742,17 +737,7 @@ def test_list_objects_pagination_keeps_order_and_times(hub):
     ]
     assert [o["Key"] for o in delimited["Contents"]] == [root + "b"]
     after = s3.list_objects_v2(Bucket="datasets", Prefix=root + "a/", StartAfter=root + "a/04")
-    # The test RGW (dbstore) wrongly includes the StartAfter key itself; the proxy passes on
-    # whatever the store answers.
-    direct = hub.bucket.client().list_objects_v2(
-        Bucket=hub.bucket.bucket,
-        Prefix=f"datasets/{ds_uuid}/a/",
-        StartAfter=f"datasets/{ds_uuid}/a/04",
-    )
-    assert [o["Key"] for o in after["Contents"]] == [
-        root + o["Key"].split("/", 2)[2] for o in direct["Contents"]
-    ]
-    assert [o["Key"] for o in after["Contents"]][-2:] == [root + "a/05", root + "a/06"]
+    assert [o["Key"] for o in after["Contents"]] == [root + "a/05", root + "a/06"]
 
 
 def test_copy_object_within_a_dataset(hub):
@@ -763,8 +748,8 @@ def test_copy_object_within_a_dataset(hub):
     copied = s3.copy_object(
         Bucket="datasets", Key=f"flock/{name}/b", CopySource=f"datasets/flock/{name}/a"
     )
-    # The test RGW (dbstore) answers copies without making them, so only the answer is checked.
     assert copied["CopyObjectResult"]["ETag"]
+    assert s3.get_object(Bucket="datasets", Key=f"flock/{name}/b")["Body"].read() == b"copy me"
     with pytest.raises(ClientError) as error:
         s3.copy_object(
             Bucket="datasets", Key=f"flock/{other}/b", CopySource=f"datasets/flock/{name}/a"
@@ -819,23 +804,6 @@ def test_concurrent_appends_through_the_proxy_all_land(hub):
         added = after.to_table(columns=["writer"])["writer"].to_pylist()[before:]
         assert set(added) == {who}, version
     assert sorted(w for _, w in recorded[1:]) == sorted(writers)
-
-
-@pytest.mark.xfail(
-    strict=False,
-    reason="why D45 exists: the test RGW ignores If-None-Match, so racing commits written "
-    "straight to it overwrite each other's manifests",
-)
-def test_concurrent_appends_straight_to_upstream_lose_data(hub):
-    uri = f"s3://{hub.bucket.bucket}/race-{uuid.uuid4().hex[:8]}"
-    options = hub.bucket.storage_options()
-    lance.write_dataset(rows_table(0, 10), uri, storage_options=options)
-    writers = [str(i) for i in range(N_WRITERS)]
-    concurrent_appends(uri, [options] * N_WRITERS, writers)
-    ds = lance.dataset(uri, storage_options=options)
-    # Expected to fail: some appends are silently lost.
-    assert ds.count_rows() == 10 * (N_WRITERS + 1)
-    assert ds.version == N_WRITERS + 1
 
 
 def test_racing_manifest_puts_commit_once(hub):

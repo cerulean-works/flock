@@ -339,9 +339,12 @@ class Datasets:
     def upstream_uri(self, dataset: Dataset) -> str:
         return f"s3://{self.store.settings.hub_bucket}/datasets/{dataset.uuid}"
 
-    def write_target(self, dataset: Dataset, user: User) -> tuple[str, dict[str, str]]:
+    def write_target(
+        self, dataset: Dataset, user: User, mirror_writer: bool = False
+    ) -> tuple[str, dict[str, str]]:
         """The Lance URI and ``storage_options`` the API writes ``dataset`` through as ``user``
-        (D49): the proxy, with temporary credentials.
+        (D49): the proxy, with temporary credentials. ``mirror_writer`` credentials may write
+        to the mirror org, for the server's Hugging Face imports (D50).
 
         Until the proxy exists, ``FLOCK_HUB_PROXY_URL`` may name the upstream itself; writes
         then use the global key and the upstream layout. (Delete this branch with step 3.)
@@ -351,7 +354,7 @@ class Datasets:
             raise Conflict("dataset writes need FLOCK_HUB_PROXY_URL, which is not set")
         if settings.hub_proxy_url == settings.hub_s3_endpoint:
             return self.upstream_uri(dataset), self.upstream_options()
-        credentials = self.store.hub_keys.temporary(user)
+        credentials = self.store.hub_keys.temporary(user, mirror_writer=mirror_writer)
         options = {
             "aws_endpoint": settings.hub_proxy_url,
             "aws_access_key_id": credentials["access_key_id"],

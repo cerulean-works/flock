@@ -105,7 +105,7 @@ def test_bad_version_types(hub: HubConfig, three_versions: str) -> None:
 
 def test_unknown_dataset(hub: HubConfig) -> None:
     with pytest.raises(DatasetNotFound, match="flock/missing not found"):
-        load_dataset("flock/missing", hub_config=hub)
+        load_dataset("flock/missing", hub_config=hub, auto_import=False)
     with pytest.raises(ValueError, match="org/name"):
         load_dataset("no-org", hub_config=hub)
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import ApiKeyCreator from '#lib/components/ApiKeyCreator.svelte';
@@ -13,7 +14,7 @@
 	import { page } from '$app/state';
 	import { pollFeed } from '#lib/data/feed.svelte.ts';
 	import { count } from '#lib/utils.ts';
-	import { orgHref, withParam } from '#lib/workspace/url.ts';
+	import { datasetsHref, orgHref, withParam } from '#lib/workspace/url.ts';
 	import type { PageProps } from './$types';
 
 	let { data, params }: PageProps = $props();
@@ -60,6 +61,9 @@
 		{/if}
 	{/snippet}
 	{#snippet actions()}
+		<Button variant="ghost" href={datasetsHref(params.entity)}>
+			<DatabaseIcon /> <span class="max-sm:sr-only">Datasets</span>
+		</Button>
 		<Button variant="ghost" href={orgHref(params.entity)}>
 			<SettingsIcon /> <span class="max-sm:sr-only">Settings</span>
 		</Button>
