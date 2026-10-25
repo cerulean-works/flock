@@ -35,8 +35,9 @@ class Subject:
 
 
 def tmmluplus_doc(row: dict[str, Any]) -> MCDoc:
-    """A TMMLU+ row as a Chinese cloze doc, identified by its row index as MMLU is in OLMES. The question and choices are stripped, since 74 test choices carry outer whitespace."""
+    """A TMMLU+ row as a Chinese cloze doc, identified by its row index as MMLU is in OLMES. The question and choices are stripped, since 74 test choices carry outer whitespace. lm-evaluation-harness's `tmmluplus` strips the question too (`doc_to_text`, v0.4.3), and leaves its choices alone because it scores letters."""
     letters = ("A", "B", "C", "D")
+
     return MCDoc(
         id=str(row["index"]),
         choices=cloze(
