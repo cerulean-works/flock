@@ -442,7 +442,8 @@ class FlockServer:
         accounts = self.store.accounts
         if accounts.signup_open:
             admin = await accounts.signup(self.ADMIN_EMAIL, "Admin")
-            if not self.store.orgs:
+            if not self.store.orgs.keys() - {self.store.settings.hub_mirror_org}:
+                # (The hub's mirror org exists from startup when the hub is configured.)
                 org = await self.store.create_org("flock")
                 await accounts.add_member(admin, org, "admin")
         else:

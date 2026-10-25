@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | planned |
+| Status | in progress (step 1 done) |
 | Date | 2026-10-25 |
 | Builds on | [003](003-organizations-and-auth.md) |
 | Keeps | D2 (one API server per database, small state in memory), D18 (orgs are entities) |
@@ -72,11 +72,13 @@ per version:
 
 ### D43. History can't be rewritten through S3
 
-- Members can read and write (PUT, multipart, tags). Only org admins can DELETE
+- Members can read and write (PUT, multipart, creating and deleting tags under `_refs/tags/`,
+  which are labels rather than history). Only org admins can DELETE other keys
   (`DeleteObject`, `DeleteObjects`), prune, rename, change visibility or delete a dataset.
-- Nobody, admins included, can overwrite an existing key under `_versions/` or
-  `_transactions/`: the proxy refuses such a PUT with 403 (`_transactions/` is checked with a
-  HEAD; manifests with D45).
+- Nobody, admins included, can overwrite a manifest under `_versions/` (D45) or a
+  transaction file under `_transactions/` that a committed manifest names. A transaction file
+  no manifest names yet may be overwritten or deleted by writers: Lance deletes and rewrites
+  its own when it loses a commit race (found in step 1; see section 6, "Step 1: proxy").
 - Lance 13 runs no automatic cleanup unless `auto_cleanup_options` is set at creation, and the
   hub never sets it. Pruning is the explicit admin action `POST .../prune`.
 
@@ -293,3 +295,78 @@ compose files (`tests/app/test_settings.py` checks) and in `docs/source/configur
 ## 6. How it was actually built
 
 Filled in as each step lands.
+
+### Step 1: `feat/hub-api`
+
+As planned, with these choices where the contract was silent:
+
+- **Writes and the missing proxy.** `Datasets.write_target` is the one switch: when
+  `FLOCK_HUB_PROXY_URL` equals `FLOCK_HUB_S3_ENDPOINT`, writes use the global key and the upstream
+  layout; otherwise temporary credentials for the user and `s3://datasets/<org>/<name>`. Write
+  endpoints answer 503 while `FLOCK_HUB_PROXY_URL` is unset. Card sidecars, reads of them and
+  purges use boto3 (now an API dependency, with checksums `when_required`, so no aws-chunked
+  bodies reach the proxy). `datasets` is an API dependency too, for `Features.to_dict()`.
+- **Authorship of the API's writes.** Card, restore and optimize upsert their version's row
+  with the acting user and message, keeping what the proxy already wrote (`coalesce`), since
+  `update_metadata` and `restore` can't carry transaction properties.
+- **History sync.** Listing reads `dataset_commits` first, then Lance: versions missing a row
+  get one with `user_pk` NULL, rows without `rows` get their summary, and recorded versions
+  Lance no longer lists are marked pruned. `GET /datasets/{org}/{name}` syncs; the org listing
+  only syncs datasets whose latest recorded version lacks a summary.
+- **Compaction makes two versions** with stable row ids: a fragment reservation (an operation
+  pylance exposes only as `BaseOperation`, reported with `op` null) and the `Rewrite`.
+  `optimize` returns the last one.
+- **Visibility for outsiders.** `GET /datasets/{org}` lists internal datasets to non-members,
+  and answers 404 when the org has none, so private orgs don't leak. Pruned versions answer
+  `GET .../versions/{v}` with `schema`, `features` and `metadata` null.
+- **`NOTIFY hub_invalidate`** is also sent on dataset creation (a proxy could have cached the
+  name as unknown), org deletion, sign-up, super admin changes and account deletion.
+- **Org deletion** cascades the dataset rows; their prefixes are purged in the background.
+  Purges cut short by a restart resume from rows with `deleted_at` set.
+- **The mirror org** is only created when the hub is configured. Its existence makes the web
+  setup's "no organization yet" check false on a fresh server (step 2 should ignore it); the
+  tests' bootstrap ignores it.
+- `POST /me/hub-keys` also returns `region`; `created_by` and `author` use the usual user
+  brief (`id`, `name`, `email`, `avatar_url`).
+
+Tests: `tests/app/test_datasets.py` and `test_hub_keys.py` (15 tests) against the Ceph RGW
+fixture; 244 tests in `tests/app/` pass.
+
+### Step 1: proxy
+
+`src/hub_proxy/` is a Starlette app with one catch-all route: `sigv4.py` (verifier and upstream
+signer, checked against S3's documented examples and against botocore), `auth.py` (keys, roles
+and datasets from Postgres, cached 10 s, cleared on `LISTEN hub_invalidate`; nothing is cached
+while the listening connection is down, and missing keys/datasets are never cached, so new ones
+work without a notification), `s3xml.py` (errors and key rewriting) and `app.py`.
+
+- **Command.** `uvicorn app.api.src.hub_proxy.app:app`, matching the image's `PYTHONPATH`
+  (D47's `src.hub_proxy.app:app` is the same module).
+- **Settings.** Read by `hub_proxy/config.py` (`ProxyConfig.load`) from the same `FLOCK_HUB_*`
+  names and defaults, plus `FLOCK_DATABASE_URL` and `FLOCK_POOL_SIZE` through `Settings`. Step 3
+  folds them into `Settings`. The compose service `hub-s3` is in the `hub` profile, so a stack
+  without hub settings doesn't crash-loop it; it answers `GET /healthz` unauthenticated for the
+  healthcheck (the image's own healthcheck targets the API's port).
+- **Commits (D45).** The `dataset_commits` row is inserted before the upstream PUT, in the
+  locked transaction, so a failed PUT leaves neither. If a row already exists for the version
+  (its manifest was deleted by an admin), it is replaced and its summary cleared. Manifest names
+  that aren't V1/V2 version names get 400. Manifests can't be created by copy or multipart.
+- **Deviation from D43: pending transaction files.** When Lance loses a commit race it DELETEs
+  its transaction file and then PUTs it again under the same name. Refusing either broke 5 of 8
+  concurrent appends. So a transaction file counts as history only once a committed manifest
+  refers to it (each manifest holds its transaction file's name; only manifests newer than the
+  file's `{read_version}-` prefix are read, at most 32, else it counts as committed). Writers may
+  overwrite or DELETE an unreferenced one; referenced ones are refused for everyone.
+- **Other choices.** Listing needs a prefix of at least `<org>/<dataset>/`. Continuation tokens are
+  the upstream's, base64url-wrapped. DeleteObjects keys may span datasets; each must be one the
+  caller administers. Any PUT with `If-None-Match: *` gets a HEAD check (412), not only
+  manifests. Only a whitelist of client headers is forwarded (no ACLs, storage classes or object
+  lock). SigV2, ListObjects v1 and UploadPartCopy get 501. Tag deletion is an S3 DELETE, so only
+  admins can delete Lance tags over S3 (D44's "tag" for members covers creating and moving
+  them).
+- **The test RGW (dbstore) has more bugs than `If-None-Match`:** multipart objects read back as
+  their last part (and hang if that part is tiny), ranged GETs return bytes from the object's
+  start and more than `Content-Length` (corrupting the keep-alive connection), CopyObject answers
+  200 without copying, and `StartAfter` is inclusive. The proxy tests check that the proxy relays
+  what the store answers in those cases, and production Ceph (rados backend) should be checked
+  for all of them before step 3.

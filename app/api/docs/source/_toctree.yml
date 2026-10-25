@@ -22,6 +22,8 @@ guide:
         title: GPU costs, budgets and the home feed
       - local: importing-from-wandb
         title: Importing from W&B
+      - local: datasets
+        title: Datasets
   - title: Accounts
     sections:
       - local: accounts
@@ -32,6 +34,8 @@ guide:
     sections:
       - local: deploying
         title: Deploying and operating
+      - local: s3-proxy
+        title: Running the hub's S3 proxy
       - local: how-it-works
         title: How it works
 reference:
@@ -55,6 +59,8 @@ reference:
         title: Snapshot and live stream
       - local: api/home
         title: Home feed and budgets
+      - local: api/datasets
+        title: Datasets and S3 keys
   - title: Behavior
     sections:
       - local: permissions

@@ -22,6 +22,17 @@ services:
       FLOCK_GRAVATAR: ${FLOCK_GRAVATAR:-}
       FLOCK_GRAVATAR_URL: ${FLOCK_GRAVATAR_URL:-}
       FLOCK_WANDB_BASE_URL: ${FLOCK_WANDB_BASE_URL:-}
+      FLOCK_HUB_S3_ENDPOINT: ${FLOCK_HUB_S3_ENDPOINT:-}
+      FLOCK_HUB_S3_REGION: ${FLOCK_HUB_S3_REGION:-}
+      FLOCK_HUB_S3_ACCESS_KEY_ID: ${FLOCK_HUB_S3_ACCESS_KEY_ID:-}
+      FLOCK_HUB_S3_SECRET_ACCESS_KEY: ${FLOCK_HUB_S3_SECRET_ACCESS_KEY:-}
+      FLOCK_HUB_BUCKET: ${FLOCK_HUB_BUCKET:-}
+      FLOCK_HUB_PROXY_URL: ${FLOCK_HUB_PROXY_URL:-}
+      FLOCK_HUB_PROXY_PUBLIC_URL: ${FLOCK_HUB_PROXY_PUBLIC_URL:-}
+      FLOCK_HUB_CREDENTIALS_TTL: ${FLOCK_HUB_CREDENTIALS_TTL:-}
+      FLOCK_HUB_MIRROR_ORG: ${FLOCK_HUB_MIRROR_ORG:-}
+      FLOCK_HUB_AUTO_IMPORT_MAX_BYTES: ${FLOCK_HUB_AUTO_IMPORT_MAX_BYTES:-}
+      FLOCK_HUB_HF_TOKEN: ${FLOCK_HUB_HF_TOKEN:-}
       FLOCK_HISTORY_CACHE_POINTS: ${FLOCK_HISTORY_CACHE_POINTS:-}
       FLOCK_CRASH_TIMEOUT: ${FLOCK_CRASH_TIMEOUT:-}
       FLOCK_POOL_SIZE: ${FLOCK_POOL_SIZE:-}
@@ -38,6 +49,33 @@ services:
     # lock, so a second instance would refuse to start.
     restart: unless-stopped
     stop_grace_period: 15s
+
+  # The hub's S3 proxy; start it with `--profile hub` once FLOCK_HUB_S3_* are set.
+  hub-s3:
+    image: flock-api:${FLOCK_VERSION:-latest}
+    command: ["uvicorn", "app.api.src.hub_proxy.app:app", "--host", "0.0.0.0", "--port", "9000"]
+    environment:
+      FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
+      FLOCK_HUB_S3_ENDPOINT: ${FLOCK_HUB_S3_ENDPOINT:-}
+      FLOCK_HUB_S3_REGION: ${FLOCK_HUB_S3_REGION:-}
+      FLOCK_HUB_S3_ACCESS_KEY_ID: ${FLOCK_HUB_S3_ACCESS_KEY_ID:-}
+      FLOCK_HUB_S3_SECRET_ACCESS_KEY: ${FLOCK_HUB_S3_SECRET_ACCESS_KEY:-}
+      FLOCK_HUB_BUCKET: ${FLOCK_HUB_BUCKET:-}
+      FLOCK_HUB_MIRROR_ORG: ${FLOCK_HUB_MIRROR_ORG:-}
+      FLOCK_POOL_SIZE: ${FLOCK_POOL_SIZE:-}
+      FLOCK_LOG_LEVEL: ${FLOCK_LOG_LEVEL:-}
+    ports:
+      - 9000:9000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      start_period: 30s
+    depends_on:
+      api:  # applies the migrations the proxy reads
+        condition: service_healthy
+    profiles: [hub]
+    restart: unless-stopped
 
   postgres:
     image: postgres:18.4

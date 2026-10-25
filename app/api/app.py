@@ -10,7 +10,18 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from app.api.src.api import auth, avatars, dashboard, home, orgs, projects, runs, wandb_protocol
+from app.api.src.api import (
+    auth,
+    avatars,
+    dashboard,
+    datasets,
+    home,
+    hub,
+    orgs,
+    projects,
+    runs,
+    wandb_protocol,
+)
 from app.api.src.api.deps import APIError, JSONResponse
 from app.api.src.core.errors import Conflict, Forbidden, NotFound
 from app.api.src.core.store import Store
@@ -116,7 +127,7 @@ def create_app(store: Store) -> FastAPI:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=store.settings.cors_origins,
-            allow_methods=["GET", "POST", "PATCH", "DELETE"],
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
             allow_headers=["*"],
         )
 
@@ -132,6 +143,8 @@ def create_app(store: Store) -> FastAPI:
     app.include_router(dashboard.router)
     app.include_router(home.router)
     app.include_router(avatars.router)
+    app.include_router(datasets.router)
+    app.include_router(hub.router)
     return app
 
 

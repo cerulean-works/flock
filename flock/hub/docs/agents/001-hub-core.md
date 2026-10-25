@@ -2,11 +2,11 @@
 
 | | |
 | --- | --- |
-| Status | planned |
+| Status | in progress (step 1 client) |
 | Date | 2026-10-25 |
 | Builds on | the app's [007](../../../../app/api/docs/agents/007-hub-datasets.md) (REST API, S3 proxy, credentials) |
 | Keeps | n/a |
-| Result | n/a |
+| Result | step 1: 242 tests in `tests/hub/` pass in about 30 s (5 on S3); see [section 6](#6-how-it-was-actually-built) |
 
 ## 1. Goal
 
@@ -224,4 +224,48 @@ matching. Fixtures are local `file://` Lance datasets unless a test needs S3, wh
 
 ## 6. How it was actually built
 
-Filled in as each step lands.
+### Step 1 (`feat/hub-client`)
+
+- **An Arrow builder, not `from_generator`.** Reading goes through `LanceVersionBuilder`, a
+  small `ArrowBasedBuilder` (as HF's Lance builder is) over one pinned version, in both modes:
+  `as_streaming_dataset` when streaming, `download_and_prepare` into HF's cache otherwise.
+  `Dataset.from_generator` turned every row into Python and back, and HF's writer then
+  overflowed on `uint64` values over 2^63 (the types test caught it). The builder keeps
+  everything D2 asks for: `gen_kwargs={"fragment_ids": [...]}` makes one shard per fragment,
+  batches come from `fragment.to_batches(..., blob_handling="all_binary")` and are cast with
+  `table_cast` as HF's `_cast_table` does, and `state_dict()` resumes as in HF. The cache key
+  (D3) is the builder's config id: a hash of the dataset (server uuid, or URI in direct mode),
+  version, columns, filter and the version's data file names, so a dataset recreated at the
+  same local path misses.
+- **Blob v2 columns.** HF's builder fails on them: `Features.from_arrow_schema` has no type for
+  `lance.blob.v2`. We infer them as `large_binary`, which is what `all_binary` returns. The
+  drift test checks that HF still fails, so we notice when it stops.
+- **Magic bytes.** HF's builder turns a binary column whose first row starts with PNG, JPEG,
+  WAV and similar magic bytes into `Image`, `Audio` or `Video`. We copy its table, and the drift
+  test compares it with HF's.
+- **Unknown `columns`** raise `ValueError`; HF's builder drops them silently.
+- **Empty results.** HF can't prepare a split with no rows (a version without fragments, or a
+  filter that matches nothing), so those give an empty in-memory `Dataset`, uncached.
+- **Random access with a filter** scans the filter once per `Dataset` for the matching row ids
+  and reads them with `_take_rows`/`take_blobs(ids=...)`. Unfiltered, it uses `take` and
+  `take_blobs(indices=...)`. With a filter, a streaming `num_rows` is counted at load.
+- **Credentials** are re-read at each fragment: the builder opens the pinned version per
+  fragment through a small cache keyed by (URI, dataset id, version, storage options), so new
+  credentials open it again. Lance's own refresh needs a `LanceNamespace`, which we don't use.
+  `session_token` is optional in the answer, since the test RGW knows no tokens.
+- **DataLoader.** Streaming `Dataset`s are also torch `IterableDataset`s (added at runtime, as
+  HF does for its own), so a `DataLoader` lets HF split shards between workers. HF's
+  `split_dataset_by_node` only takes HF objects, so `flock.hub.split_dataset_by_node` wraps it.
+- **Names.** `load_dataset` takes the config as `hub_config=` (`config=` is the HF config of
+  D10), and `flock.hub.config.set_default` sets one for the process. The pushed-down filter is
+  `Dataset.lance_filter`, since `Dataset.filter` is HF's.
+- **Conflicts.** Only append uploads raise `CommitConflict` for an `Overwrite` or `Restore`
+  after their base (checked before committing, and Lance's own `CommitConflictError` is mapped
+  too). An overwrite upload replaces whatever is there, as Lance allows. An upload that started
+  before the dataset existed raises if another writer created it first.
+- **Appends are cast** to the base version's column types (pandas makes `large_string`).
+- **Edit messages.** `update`, `add_columns`, `restore` and `set_card` can't carry transaction
+  properties either, so all edits set their message with `PATCH .../versions/{v}`. Direct mode
+  drops it. Lance's `update` moves updated rows to the end of the iteration order.
+- **Docs.** `doc-builder` couldn't be installed in the agent's sandbox, so the build wasn't
+  run; a script checked the toctree, relative links and every autodoc target instead.

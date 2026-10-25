@@ -391,6 +391,7 @@ class Accounts:
                 )
             user.roles = {org.pk: "admin" for org in orgs}
             self._add_user(user)
+        await self.store.datasets.invalidate()
         self.store.avatars.gravatar_later(user)
         return user
 
@@ -413,7 +414,10 @@ class Accounts:
             default,
             superadmin,
         )
+        changed = superadmin != user.is_superadmin
         user.name, user.default_org, user.is_superadmin = name, default, superadmin
+        if changed:  # super admins can reach every org's datasets
+            await self.store.datasets.invalidate()
 
     async def set_password(self, user: User, password: str, keep: Session | None = None) -> None:
         """Set a password and end the user's other sessions."""
@@ -438,6 +442,7 @@ class Accounts:
         for pk in [pk for pk, s in self.sessions.items() if s.user == user.pk]:
             del self.sessions[pk]
         self.store.forget_owner(user.pk)
+        await self.store.datasets.invalidate()  # its memberships and S3 keys are gone
         await self.store.avatars.release(user.avatar)
 
     async def google_user(
@@ -480,6 +485,7 @@ class Accounts:
             role,
         )
         user.roles[org.pk] = role
+        await self.store.datasets.invalidate()
 
     def _check_admin_remains(self, user: User, org: Org) -> None:
         admins = [u for u, role in self.members(org) if role == "admin"]
@@ -498,6 +504,7 @@ class Accounts:
             role,
         )
         user.roles[org.pk] = role
+        await self.store.datasets.invalidate()
 
     async def remove_member(self, user: User, org: Org) -> None:
         if org.pk not in user.roles:
@@ -507,6 +514,7 @@ class Accounts:
             "DELETE FROM memberships WHERE user_pk = $1 AND org_pk = $2", user.pk, org.pk
         )
         del user.roles[org.pk]
+        await self.store.datasets.invalidate()
 
     def forget_org(self, org: Org) -> None:
         """Drop a deleted org's memberships (the database cascades them)."""
@@ -587,6 +595,7 @@ class Accounts:
                     invite.role,
                 )
         user.roles.setdefault(org.pk, invite.role)
+        await self.store.datasets.invalidate()
 
     async def register(
         self,
@@ -611,6 +620,7 @@ class Accounts:
             )
         user.roles[org.pk] = invite.role
         self._add_user(user)
+        await self.store.datasets.invalidate()
         self.store.avatars.gravatar_later(user)
         return user
 

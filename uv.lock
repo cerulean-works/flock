@@ -760,6 +760,8 @@ source = { virtual = "app/api" }
 dependencies = [
     { name = "argon2-cffi" },
     { name = "asyncpg" },
+    { name = "boto3" },
+    { name = "datasets" },
     { name = "fastapi" },
     { name = "fastapi-cli" },
     { name = "flock" },
@@ -768,6 +770,7 @@ dependencies = [
     { name = "numpy" },
     { name = "orjson" },
     { name = "pyjwt" },
+    { name = "pylance" },
     { name = "uvicorn" },
     { name = "uvloop" },
 ]
@@ -776,6 +779,8 @@ dependencies = [
 requires-dist = [
     { name = "argon2-cffi", specifier = ">=25.1.0" },
     { name = "asyncpg", specifier = ">=0.32.0" },
+    { name = "boto3", specifier = ">=1.43.0" },
+    { name = "datasets", specifier = ">=5.1.0" },
     { name = "fastapi", specifier = ">=0.143.3" },
     { name = "fastapi-cli", specifier = ">=0.0.32" },
     { name = "flock", editable = "." },
@@ -784,6 +789,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.5.4" },
     { name = "orjson", specifier = ">=3.13.0" },
     { name = "pyjwt", specifier = ">=2.10.1" },
+    { name = "pylance", specifier = ">=13.0.0" },
     { name = "uvicorn", specifier = ">=0.54.0" },
     { name = "uvloop", specifier = ">=0.23.0" },
 ]

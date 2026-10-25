@@ -19,9 +19,11 @@ from app.api.src.core import gpus
 from app.api.src.core.accounts import Accounts
 from app.api.src.core.avatars import Avatars
 from app.api.src.core.budgets import Budgets, Usage
+from app.api.src.core.datasets import Datasets
 from app.api.src.core.errors import Conflict, Discarded, Forbidden, NotFound
 from app.api.src.core.feed import Feed
 from app.api.src.core.history import History, PointCounter, Series
+from app.api.src.core.hub_keys import HubKeys
 from app.api.src.core.imports import Imports
 from app.api.src.core.live import Hub
 from app.api.src.core.metric_defs import parse_metric_defs
@@ -321,6 +323,8 @@ class Store:
         self.avatars = Avatars(self)
         self.feed = Feed(self)
         self.imports = Imports(self)
+        self.datasets = Datasets(self)
+        self.hub_keys = HubKeys(self)
 
     @staticmethod
     def _config_columns(config: dict[str, Any]) -> dict[str, Any]:
@@ -370,6 +374,8 @@ class Store:
             await self.accounts.load()
             await self.budgets.load()
             await self.imports.load()
+            await self.hub_keys.load()
+            await self.datasets.load()
             await self._detect_missing_gpus()
         except BaseException:
             await self.db.close()
@@ -377,6 +383,7 @@ class Store:
 
     async def close(self) -> None:
         await self.imports.close()
+        await self.datasets.close()
         await self.avatars.flush()
         await self.flush()
         await self.db.close()
@@ -1540,6 +1547,8 @@ class Store:
             org.deleted = True
             self.accounts.forget_org(org)
             self.imports.forget(org)
+            self.datasets.forget_org(org)
+        await self.datasets.invalidate()
         await self.avatars.release(org.avatar)
         for project in projects:
             self.live.broadcast(project.pk, Hub.event("project", {"deleted": True}))

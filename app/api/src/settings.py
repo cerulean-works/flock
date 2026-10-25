@@ -55,6 +55,34 @@ class Settings:
         default="https://api.wandb.ai",
         doc="W&B API that organization imports read from, unless the import names another",
     )
+    hub_s3_endpoint: str | None = field(
+        default=None, doc="S3 server holding the hub's datasets; the hub is off while unset"
+    )
+    hub_s3_region: str = field(default="us-east-1", doc="that S3 server's region")
+    hub_s3_access_key_id: str | None = field(
+        default=None, doc="the hub's global S3 key, which only the API and S3 proxy use"
+    )
+    hub_s3_secret_access_key: str | None = field(default=None, doc="that key's secret")
+    hub_bucket: str = field(default="flock-hub", doc="bucket holding the hub's datasets")
+    hub_proxy_url: str | None = field(
+        default=None, doc="hub S3 proxy URL the API sends its own dataset writes to"
+    )
+    hub_proxy_public_url: str | None = field(
+        default=None, doc="hub S3 proxy URL given to clients (default: hub_proxy_url)"
+    )
+    hub_credentials_ttl: float = field(
+        default=12 * 3600.0, doc="seconds temporary hub S3 credentials are valid"
+    )
+    hub_mirror_org: str = field(
+        default="hf", doc="organization holding mirrors of Hugging Face datasets"
+    )
+    hub_auto_import_max_bytes: int = field(
+        default=5_000_000_000,
+        doc="largest Hugging Face dataset (data files, bytes) the server mirrors by itself",
+    )
+    hub_hf_token: str | None = field(
+        default=None, doc="Hugging Face token for mirroring gated or private datasets"
+    )
     history_cache_points: int = field(
         default=20_000_000,
         doc="history points cached in memory for finished runs (active runs are always kept)",

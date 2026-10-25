@@ -59,6 +59,15 @@ routine part of experimentation, so we can understand what changes between
 training runs and compare results under a consistent setup. Its docs start at
 [`flock/eval/docs/source/index.md`](flock/eval/docs/source/index.md).
 
+### Hub
+
+[`flock.hub`](flock/hub/) keeps our datasets as versioned Lance datasets in our own
+S3 and loads them through Hugging Face `datasets`, so training code iterates, maps
+and streams them as it would any HF dataset. Each load pins a version, so a run
+never sees data committed after it started, and uploads resume after a crash and
+commit exactly once. Its docs start at
+[`flock/hub/docs/source/index.md`](flock/hub/docs/source/index.md).
+
 ### CLI
 
 [`flock.cli`](flock/cli/) is where we're building command-line tools for our

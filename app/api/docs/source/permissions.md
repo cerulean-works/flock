@@ -21,10 +21,14 @@ Who can do what, by role. A user's role is per organization: they can be an admi
 | Read the home feed, GPU prices and the budget | yes | yes | yes |
 | Set GPU prices, the budget and the currency | no | yes | yes |
 | Correct a run's GPUs | own runs | any run | any run |
+| Read the organization's datasets, and its internal datasets for anyone signed in | yes | yes | yes |
+| Create a dataset, write versions, edit its card and description, tag, restore, optimize | yes | yes | yes |
+| Rename a dataset, change its visibility, prune or delete it, delete S3 objects | no | yes | yes |
+| Set the message of a dataset version that has none | own versions | any version | any version |
 | Create organizations | no | no | yes |
 | Create a password reset link | no | for members of their organizations, except super admins | for anyone |
 | List users, grant or revoke super admin, delete accounts | no | no | yes |
-| Manage their own profile, avatar, password and API keys | yes | yes | yes |
+| Manage their own profile, avatar, password, API keys and S3 keys | yes | yes | yes |
 | Set or remove the organization's avatar | no | yes | yes |
 
 "Own runs" are the runs whose `owner` is the user: the runs they logged. Runs without an owner, logged before accounts existed or by a deleted account, can only be changed by admins.
@@ -36,6 +40,7 @@ Who can do what, by role. A user's role is per organization: they can be an admi
 | No credentials, or invalid ones | 401 |
 | The organization is one you don't belong to | 404, as if it didn't exist. The same goes for its projects and runs. |
 | Your role doesn't allow the action | 403 |
+| A private dataset of an organization you don't belong to | 404. Internal datasets are readable, and other actions on them answer 403. |
 | Runs you don't own, through the API | 403, with their run ids in `ids`. Bulk operations change nothing. |
 | A run you don't own, through the SDK | The SDK fails with `run <path> belongs to another user` (or 403 for `file_stream`). |
 | An organization you don't belong to, through the SDK | The SDK fails with `organization <name> not found`. |

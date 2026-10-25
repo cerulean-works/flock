@@ -1,0 +1,22 @@
+# flock.hub's documentation. Preview it from the repository root with:
+#
+#   doc-builder preview flock flock/hub/docs/source
+#
+guide:
+  - title: Get started
+    sections:
+      - local: index
+        title: Introduction
+      - local: quickstart
+        title: Quickstart
+  - title: Using flock.hub
+    sections:
+      - local: loading
+        title: Loading datasets
+      - local: writing
+        title: Writing datasets
+reference:
+  - title: Reference
+    sections:
+      - local: api
+        title: Python API

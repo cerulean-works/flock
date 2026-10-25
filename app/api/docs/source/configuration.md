@@ -22,6 +22,17 @@ Flock reads its settings from environment variables when it starts. Each setting
 | `FLOCK_GRAVATAR` | `true` | Fetch each new account's avatar from Gravatar. The request sends Gravatar the SHA-256 hash of the account's email. See [Avatars](accounts#avatars). |
 | `FLOCK_GRAVATAR_URL` | `https://gravatar.com/avatar/` | Where avatars are fetched from: the URL that the email's hash is appended to. A Libravatar-compatible server works too. |
 | `FLOCK_WANDB_BASE_URL` | `https://api.wandb.ai` | The W&B server that [imports](importing-from-wandb) read from, when an import doesn't name one. Set it for W&B Dedicated Cloud or a self-managed W&B server. |
+| `FLOCK_HUB_S3_ENDPOINT` | none | The S3 server holding the hub's [datasets](datasets). The hub is off, and its endpoints answer 503, while it's unset. |
+| `FLOCK_HUB_S3_REGION` | `us-east-1` | That S3 server's region. |
+| `FLOCK_HUB_S3_ACCESS_KEY_ID` | none | The hub's global S3 key. Only Flock and its S3 proxy use it; users get their own keys. |
+| `FLOCK_HUB_S3_SECRET_ACCESS_KEY` | none | That key's secret. |
+| `FLOCK_HUB_BUCKET` | `flock-hub` | The bucket holding the datasets, each under `datasets/<uuid>/`. |
+| `FLOCK_HUB_PROXY_URL` | none | Where Flock reaches the hub's S3 proxy. Flock's own dataset writes (cards, tags, restore, optimize, prune) go through it, and answer 503 while it's unset. |
+| `FLOCK_HUB_PROXY_PUBLIC_URL` | `FLOCK_HUB_PROXY_URL` | The S3 endpoint given to users, with their S3 keys and credentials. |
+| `FLOCK_HUB_CREDENTIALS_TTL` | `43200` | Seconds that temporary S3 credentials are valid (12 hours). |
+| `FLOCK_HUB_MIRROR_ORG` | `hf` | The organization holding mirrors of Hugging Face datasets. Flock creates it at startup when the hub is on. |
+| `FLOCK_HUB_AUTO_IMPORT_MAX_BYTES` | `5000000000` | The largest Hugging Face dataset, in bytes of data files, that Flock mirrors by itself. |
+| `FLOCK_HUB_HF_TOKEN` | none | Hugging Face token used to mirror gated or private datasets. |
 | `FLOCK_HISTORY_CACHE_POINTS` | `20000000` | Curve points of finished runs kept in memory. Curves of active runs are always kept, in addition. See [Memory and startup time](deploying#memory-and-startup-time). |
 | `FLOCK_CRASH_TIMEOUT` | `600` | Seconds without a heartbeat before an active run is marked `crashed`. See [Crash detection](deploying#crash-detection). |
 | `FLOCK_POOL_SIZE` | `16` | Maximum number of database connections. |

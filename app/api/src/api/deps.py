@@ -66,6 +66,12 @@ def get_store(request: Request) -> Store:
 StoreDep = Annotated[Store, Depends(get_store)]
 
 
+def hub_enabled(store: StoreDep) -> None:
+    """The hub's routes answer 503 until its S3 server is configured."""
+    if not store.datasets.enabled:
+        raise APIError(503, "the hub is not configured on this server (FLOCK_HUB_S3_ENDPOINT)")
+
+
 def check_email(value: str) -> str:
     """Addresses are only checked for shape (nothing is sent to them) and kept lowercased."""
     value = value.strip().lower()

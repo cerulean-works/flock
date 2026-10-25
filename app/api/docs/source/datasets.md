@@ -1,0 +1,92 @@
+# Datasets
+
+Flock's hub keeps datasets next to your runs. A dataset is a [Lance](https://lance.org) dataset stored in Flock's S3 server, and every write to it makes a new version that stays readable. This page covers turning the hub on, creating a dataset, writing and reading it, and managing its versions.
+
+The examples use `curl` with an access token in `$TOKEN` and Flock's URL in `$FLOCK`, as in the [Quickstart](quickstart). The endpoints are listed in [Datasets and S3 keys](api/datasets).
+
+## Turning the hub on
+
+The hub needs an S3-compatible server, such as Ceph RGW, with one bucket and one key that only Flock uses. Set these and restart Flock:
+
+| Setting | Value |
+|---|---|
+| `FLOCK_HUB_S3_ENDPOINT` | The S3 server's URL. |
+| `FLOCK_HUB_S3_ACCESS_KEY_ID`, `FLOCK_HUB_S3_SECRET_ACCESS_KEY` | The global key. |
+| `FLOCK_HUB_BUCKET` | The bucket, `flock-hub` by default. |
+| `FLOCK_HUB_PROXY_URL` | Where Flock reaches the hub's S3 proxy. |
+| `FLOCK_HUB_PROXY_PUBLIC_URL` | The proxy's URL as users reach it, if it differs. |
+
+Until `FLOCK_HUB_S3_ENDPOINT` is set, the hub's endpoints answer 503. All the settings are in [Settings](configuration).
+
+Users never get the global key. They reach the bucket through the S3 proxy, which checks each request against their roles, with S3 keys of their own (see [S3 keys](#s3-keys)).
+
+## Creating a dataset
+
+A dataset belongs to an organization, and any member can create one:
+
+```bash
+curl -s --json '{"name": "fineweb-sample", "description": "10k documents from FineWeb"}' -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/datasets/flock
+```
+
+Flock answers 201 with the dataset. Its `uri`, `s3://datasets/flock/fineweb-sample`, is the Lance URI that clients write to through the proxy. It has no versions yet: `latest_version` is `null` until the first write.
+
+Names follow the rules of project names. A dataset is `private` by default, readable by the organization's members only. An `internal` dataset is readable by anyone signed in to Flock, and only members can change it.
+
+## Writing and reading
+
+Every Lance commit to the dataset is a version, numbered by Lance from 1. Write with `flock.hub`, or with any Lance client given an S3 key and the proxy as its endpoint.
+
+Flock records who wrote each version and keeps a summary of it: the Lance operation, the commit message, and the rows, bytes and fragments at that version. List the history, newest first:
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/datasets/flock/fineweb-sample/versions
+```
+
+To set a commit message, pass it as the transaction property `__lance_commit_message`. Some Lance edits, such as deletes, can't carry one: the version's author or an org admin can then set it once with `PATCH .../versions/{version}`.
+
+Read rows without a Lance client with `GET .../rows`. It returns a page of up to 500 rows, at the latest version or the one you ask for. Long strings are cut to 2000 characters and binary values show only their size, so a page stays small.
+
+## The card
+
+A dataset's card is a Markdown README. Replace it with:
+
+```bash
+curl -s -X PUT --json '{"content": "# FineWeb sample\n\n10k documents.", "message": "add a card"}' -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/datasets/flock/fineweb-sample/readme
+```
+
+Setting the card makes a new version, so each version has the card it was written with: `GET .../readme?version=3` returns the card as it was at version 3. The dataset needs a first version before it can have a card.
+
+## Tags, restore and optimize
+
+- **Tags** name a version, such as `v1.0`, and make no new version. `PUT .../tags/v1.0` with `{"version": 4}` creates the tag or moves it.
+- **Restore** makes an earlier version the latest again, as a new version. The versions in between stay in the history.
+- **Optimize** compacts small fragments into larger ones, which makes reads faster. It writes new versions with the same rows, and none when there is nothing to compact.
+
+Any member can do these.
+
+## Pruning old versions
+
+Versions keep the files they use, so a dataset rewritten often grows. Pruning deletes versions older than a number of days, and the files only they use:
+
+```bash
+curl -s --json '{"older_than_days": 30}' -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/datasets/flock/fineweb-sample/prune
+```
+
+It keeps the latest version and every tagged version. Pruned versions can't be read any more, but they stay in the history, marked `pruned`, with their author and summary. Only org admins can prune, and Flock never prunes on its own.
+
+> [!WARNING]
+> Pruning and deleting a dataset can't be undone.
+
+Deleting a dataset (org admins only) frees its name at once and deletes its data in the background. A new dataset with the same name starts empty.
+
+## S3 keys
+
+Tools that speak S3, such as boto3, DuckDB or Lance itself, need an S3 key. Create one on your account:
+
+```bash
+curl -s --json '{"name": "duckdb", "read_only": true}' -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/me/hub-keys
+```
+
+The answer holds `access_key_id`, `secret_access_key` and the `endpoint` to use. The secret is shown only this once. A key acts with your current roles, so it loses access when you leave an organization. Add `"org": "flock"` to limit it to one organization's datasets, and delete it to revoke it.
+
+`flock.hub` doesn't need a key: it trades your API key for temporary S3 credentials with `POST /hub/credentials`.
