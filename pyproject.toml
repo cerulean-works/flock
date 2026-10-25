@@ -15,19 +15,20 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-root = ""
-module-name = ["flock.cli", "flock.eval", "flock.training", "app.api"]
+module-name = ["flock.cli", "flock.eval", "flock.hub", "flock.training", "app.api"]
 wheel-exclude = ["pyproject.toml"]
 
 [tool.uv]
 default-groups = ["dev", "components"]
 
 [tool.uv.workspace]
-members = ["flock/cli", "flock/eval", "flock/training", "app/api", "tests"]
+members = ["flock/cli", "flock/eval", "flock/hub", "flock/training", "app/api", "tests"]
 
 [tool.uv.sources]
 flock = { workspace = true }
 flock-cli = { workspace = true }
 flock-eval = { workspace = true }
+flock-hub = { workspace = true }
 flock-training = { workspace = true }
 
 [tool.ruff]
@@ -54,6 +55,7 @@ addopts = ["--import-mode=importlib", "--strict-markers", "-m", "not latency"]
 components = [
     "flock-cli",
     "flock-eval",
+    "flock-hub",
     "flock-training",
 ]
 dev = [

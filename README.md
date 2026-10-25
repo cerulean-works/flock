@@ -17,7 +17,7 @@ without reinstalling.
 
 ```sh
 uv sync --all-packages --locked
-uv run --all-packages python -c "import flock.training; import flock.eval; import flock.cli; import app.api.app"
+uv run --all-packages python -c "import flock.training; import flock.eval; import flock.hub; import flock.cli; import app.api.app"
 ```
 
 ### Adding new dependencies
@@ -30,6 +30,7 @@ For shared development tools, use `uv add --group dev <dependency>`.
 ```sh
 uv add --package flock-training <dependency>
 uv add --package flock-eval <dependency>
+uv add --package flock-hub <dependency>
 uv add --package flock-cli <dependency>
 uv add --package flock-app-api <dependency>
 uv add --package flock-tests <dependency>
