@@ -62,7 +62,7 @@ class Dataset:
 @dataclass(frozen=True, slots=True)
 class Fewshot:
     """
-    Fixed few-shot examples: dataset rows picked by id, or rows written out in the task's module. Either way they are shown in the order given.
+    Fixed few-shot examples: dataset rows picked by id, or rows written out in the task's module. Either way they are shown in the order given, except to a doc that is itself one of them: an example with the doc's choices and gold isn't shown to that doc.
 
     Args:
         split (`str`, *optional*):
@@ -499,11 +499,26 @@ class MultipleChoiceTask:
         return head
 
     def _shots_for(self, doc: MCDoc, shots: Sequence[MCDoc]) -> Sequence[MCDoc]:
-        """Returns the examples `doc` is shown: all of them, or with `num_shots` the first that aren't `doc` (OLMES samples one extra and drops the scored doc, `fewshot_context` in `oe_eval/tasks/base_task.py`)."""
-        if self.fewshot is None or self.fewshot.num_shots is None:
+        """
+        Returns the examples `doc` is shown: those that aren't `doc` itself, and with `num_shots` only the first that many.
+
+        An example is `doc` itself if it has the doc's choices and gold, as lm-evaluation-harness drops an example equal to the doc (`lm_eval/api/samplers.py`, v0.4.3), or, with `num_shots`, the doc's id. OLMES samples one example extra and drops the scored doc (`fewshot_context` in `oe_eval/tasks/base_task.py`).
+        """
+        if self.fewshot is None:
             return shots
 
-        return [shot for shot in shots if shot.id != doc.id][: self.fewshot.num_shots]
+        others = []
+        for shot in shots:
+            # Ids are compared only with `num_shots`, whose examples come from the scored split: an
+            # example from another split may share an id with a different doc.
+            same_id = self.fewshot.num_shots is not None and shot.id == doc.id
+            # A dataset may repeat a doc in its few-shot split, which would show the doc its own
+            # answer.
+            same_content = shot.choices == doc.choices and shot.gold == doc.gold
+            if not (same_id or same_content):
+                others.append(shot)
+
+        return others[: self.fewshot.num_shots]
 
     def _hash(self, docs: Sequence[MCDoc], requests: Sequence[Request]) -> str:
         """Returns the sha256 of the definition's data fields, every request and every gold index."""

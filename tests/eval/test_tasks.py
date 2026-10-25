@@ -342,6 +342,29 @@ def test_num_shots_skips_the_scored_doc():
     )
 
 
+def test_a_shot_equal_to_the_doc_is_not_shown_to_it():
+    docs, shots = TASK.load()
+    # Doc q-2 repeated under the few-shot id shot-9, as a dataset may repeat a question.
+    repeat = dataclasses.replace(docs[1], id="shot-9")
+
+    built = TASK.requests(docs, [*shots, repeat])
+    head = "".join(
+        f"{shot.choices[shot.gold].context}{shot.choices[shot.gold].continuation}\n\n"
+        for shot in shots
+    )
+    assert built.requests[0].context.startswith(head + "Question:")
+    assert built.requests[0].context.count("Question:") == 4
+    assert built.requests[3].context.count("Question:") == 3
+
+
+def test_shots_from_another_split_may_share_an_id_with_the_doc():
+    docs, shots = TASK.load()
+    namesake = dataclasses.replace(shots[0], id=docs[0].id)
+
+    built = TASK.requests(docs[:1], [namesake])
+    assert built.requests[0].context.count("Question:") == 2
+
+
 def test_description_and_per_choice_contexts():
     # A WinoGrande-like doc: the choices differ in context and share one continuation.
     doc = MCDoc("w", (Choice("Tom gave it to", " him."), Choice("Ann gave it to", " him.")), 1)

@@ -194,3 +194,14 @@ def test_total_is_the_mean_of_the_category_means():
 def test_tmmluplus_all_runs_every_subject_once():
     assert SUITES["tmmluplus:all"].tasks == TMMLUPLUS.tasks
     assert SUITES["tmmluplus:taiwan:bpb"].tasks == TAIWAN_TASKS
+
+
+def test_a_test_row_repeating_a_dev_row_skips_that_shot(tmmluplus_rows):
+    # As `trade`'s test row 90 repeats its dev row 2 in v1.1.
+    task = TASKS["tmmluplus_organic_chemistry"]
+    _, shots = task.load()
+    repeat = tmmluplus_doc({**ROWS["train"][2], "index": 90})
+
+    context = task.requests([repeat], shots).requests[0].context
+    assert context.count("問題：") == 3
+    assert "答案：蘋果" not in context
