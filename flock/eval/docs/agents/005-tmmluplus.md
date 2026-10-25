@@ -2,11 +2,11 @@
 
 | | |
 | --- | --- |
-| Status | design, for review before any code |
-| Date | 2026-10-23 |
+| Status | built, at parity in float32 |
+| Date | 2026-10-23 (design), 2026-10-25 (built) |
 | Builds on | [001](001-eval-core.md) (scoring core); 003 (choices as pairs, `Suite`), stacked on its suites PR |
 | Keeps | 001's scoring, batching, metrics and results file; 003's `Choice`, `MCDoc`, `Fewshot` and `Suite` |
-| Result | not built yet |
+| Result | 66 subject tasks, 13 suites, 19,646 docs; requests identical to the reference except twelve docs by [005.D7](#005d7-a-doc-never-sees-its-own-question-and-answer-as-an-example), float32 scores equal to it |
 
 The file number and the decision numbers are provisional. The file takes the next free number when its PR is opened, and decisions `005.D1` to `005.D7` take the next free global numbers after every stage merged before it.
 
@@ -120,7 +120,7 @@ Accuracy means `acc_raw` (its `acc`) and `acc_per_char` (its `acc_norm`). Checks
 
 ### 005.D7. A doc never sees its own question and answer as an example
 
-Fourteen v1.1 test docs repeat a dev row's question and gold answer: `official_document_management` 74, 129, 152, 166, 168 and 198, `general_principles_of_law` 41, 49 and 66, `trade` 90 and 280, `anti_money_laundering` 43, `financial_analysis` 108 and `macroeconomics` 302. Two of them (`general_principles_of_law` 49 and `trade` 90) repeat the dev row word for word, and the other twelve list the same choices in another order or with others. Shown all their dev rows, these docs would see `問題：<their question>\n答案：<their answer>` just before being asked it. So an example from a split other than the scored one isn't shown to a doc whose gold choice, as rendered, equals the example's: those docs see one example fewer (4, or 3 for `trade`, which has 4 dev rows).
+Fourteen v1.1 test docs repeat a dev row's question and gold answer: `official_document_management` 74, 129, 152, 166, 168 and 198, `general_principles_of_law` 41, 49 and 66, `trade` 90 and 280, `anti_money_laundering` 43, `financial_analysis` 108 and `macroeconomics` 302. Two of them (`general_principles_of_law` 49 and `trade` 90) repeat the dev row word for word, and the other twelve list the same choices in another order or with others. Shown all their dev rows, these docs would see `問題：<their question>\n答案：<their answer>` just before being asked it. So an example from a split other than the scored one isn't shown to a doc whose gold choice, as rendered, equals the example's: those docs see one example fewer: 4, or 3 in `trade` and `official_document_management`, which have 4 dev rows.
 
 An example shows only its gold choice, so that is what we compare. lm-evaluation-harness drops an example only when its whole row equals the doc's (`selected_docs = [x for x in fewshotex if x != doc]`, `lm_eval/api/samplers.py`, v0.4.3), which catches the two word-for-word repeats and misses the twelve reordered ones. OLMES drops only the scored doc itself, by comparing the whole doc, id included, and only when it samples examples from the scored split (`fewshot_context` in `oe_eval/tasks/base_task.py`). Ids can't decide it here: row-index ids repeat across splits, so dev row `"2"` isn't test row `"2"`.
 
@@ -164,4 +164,12 @@ On CPU with tiny random models, as every eval test:
 
 ## 7. How it was actually built
 
-Not built yet.
+As planned, with one decision added during parity ([005.D7](#005d7-a-doc-never-sees-its-own-question-and-answer-as-an-example)).
+
+- **Core.** `cloze` gained `answer_prefix` and `separator`, and `CHINESE_QUESTION_PREFIX` and `CHINESE_ANSWER_PREFIX` live next to it in `tasks/base.py`, exported from `flock.eval.tasks`. `Dataset.row_index` is 003's MMLU commit, carried here unchanged. `MultipleChoiceTask._shots_for` gained 005.D7's rule. Every English request is unchanged: ARC-Easy's task hash is the same before and after this stage.
+- **Task.** `tasks/tmmluplus.py` holds a `Subject(name, chinese_name, dev_rows)` table grouped by category, `subject_task` building each task, and the suites. `dev_rows` defaults to 5, so only the twelve short subjects state a count. `tmmluplus_doc` strips the question and the choices: outer whitespace occurs in test questions, test choices and dev rows alike.
+- **Smoke.** Both models score all 66 subjects, 19,646 docs. In bfloat16, `Qwen/Qwen2.5-0.5B` scores `tmmluplus` 0.259 `acc_per_char` and `tmmluplus:taiwan` 0.321; `allenai/OLMo-2-0425-1B` scores 0.241 and 0.315. Qwen is above chance, but only by about one point on the total, so at this size `tmmluplus:bpb` (1.614 against OLMo 2's 2.259) separates the models better than accuracy, as 005.D2 expected.
+- **The reference config.** lm-evaluation-harness renders `description` through Jinja, whose default drops one trailing newline (`keep_trailing_newline` is off in `lm_eval/utils.py`), so the generated configs give it one extra `\n`. `doc_to_text` is `問題：{{question.strip()}}\n答案：` and `doc_to_choice` strips the four choices, matching `tmmluplus_doc`. Before any model ran, its requests were built without a model and compared with ours string for string.
+- **Parity (005.D6).** Check 1 holds: every one of the 78,584 conditional requests equals the reference's, except the 48 of the twelve 005.D7 docs. In float32, on the other 19,634 docs, both accuracies agree to 0.00 points, `bpb` to 1e-7 and the predicted choice on every doc, for the total, each category and `tmmluplus:taiwan`. One request of 78,536 is over the 1e-3-nat bound: `general_principles_of_law` doc 43, choice 3, a 342-nat continuation, at 1.007e-3. Scored alone (one request per forward pass, as the reference at batch size 1) it is 5.8e-4 from the reference, so the rest is our batching, as for TypeScript doc 113 in 003's later stages. Check 3 is reported and fails, as expected for bfloat16: choice agreement is 97.7% to 98.7%, and accuracy gaps reach 0.49 points (`tmmluplus:stem`, Qwen). Our own bfloat16 drift from the float32 answer, the noise floor, is up to 0.34 points of accuracy and 7.4e-4 of `bpb` per unit. D23's sign rule, applied here to Qwen minus OLMo 2 in bfloat16 rather than to two OLMo 2 checkpoints, holds for all 12 judged differences.
+- **Check 3 is reported, not decided on.** 003's D22 makes all three checks pass rules. This stage follows the correction 003's later stages make: the references sum bfloat16 log-probabilities in bfloat16, so only the float32 comparison decides parity.
+- **Restacking onto 003's few-shot `example` field.** Once `MCDoc.example` exists, an example can show text other than its gold choice, and 005.D7's comparison should then compare what `_head` renders.
