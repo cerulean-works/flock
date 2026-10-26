@@ -149,18 +149,23 @@ class MCDoc:
             The answer choices, rendered as the model sees them. A task scored only on its gold text, such as a math solution, has one.
         gold (`int`):
             The index of the correct choice in `choices`.
+        example (`str`, *optional*):
+            The doc's text when another doc shows it as a few-shot example. Its gold choice's context and continuation if not set. Only for tasks whose examples read differently from the scored text, such as HumanEval's.
 
     Raises:
-        `ValueError`: naming the doc, if `choices` is empty or `gold` isn't an index into it.
+        `ValueError`: naming the doc, if `choices` is empty, `gold` isn't an index into it, or `example` is an empty string.
     """
 
     id: str
     choices: tuple[Choice, ...]
     gold: int
+    example: str | None = None
 
     def __post_init__(self) -> None:
         if not self.choices:
             raise ValueError(f"doc {self.id}: no choices")
+        if self.example == "":
+            raise ValueError(f"doc {self.id}: an empty example would render as a blank shot")
         if not 0 <= self.gold < len(self.choices):
             raise ValueError(
                 f"doc {self.id}: gold {self.gold} is not one of {len(self.choices)} choices"
@@ -320,7 +325,7 @@ class MultipleChoiceTask:
     """
     A multiple-choice task scored as OLMES scores it: each choice's continuation after the few-shot examples and the choice's context.
 
-    The context of a request is `description`, then each few-shot example's gold choice (its context and continuation) followed by a blank line, then the scored choice's context. This is OLMES's few-shot format (OLMES, sec. 3.1 and 3.2; `fewshot_context` in `oe_eval/tasks/base_task.py`).
+    The context of a request is `description`, then each few-shot example (its gold choice's context and continuation, or its `example`) followed by a blank line, then the scored choice's context. This is OLMES's few-shot format (OLMES, sec. 3.1 and 3.2; `fewshot_context` in `oe_eval/tasks/base_task.py`).
 
     Args:
         name (`str`):
@@ -352,6 +357,29 @@ class MultipleChoiceTask:
     description: str = ""
     unconditional_context: str | None = "Answer:"
     metrics: tuple[str, ...] | None = None
+
+    @classmethod
+    def gold_only(
+        cls,
+        name: str,
+        dataset: Dataset,
+        to_doc: Callable[[dict[str, Any]], MCDoc],
+        fewshot: Fewshot | None = None,
+    ) -> MultipleChoiceTask:
+        """
+        A task scored on each doc's gold text alone, by `bpb`, such as a math solution or a program (OLMES's `:bpb` tasks).
+
+        Each doc has one choice, so an accuracy is always 1 and pointwise mutual information (PMI) has nothing to compare: the task reports `bpb` only and has no unconditional context.
+        """
+        return cls(
+            name=name,
+            dataset=dataset,
+            to_doc=to_doc,
+            primary_metric="bpb",
+            fewshot=fewshot,
+            unconditional_context=None,
+            metrics=("bpb",),
+        )
 
     def __post_init__(self) -> None:
         self._check_metrics()
@@ -469,11 +497,14 @@ class MultipleChoiceTask:
         )
 
     def _head(self, shots: Sequence[MCDoc]) -> str:
-        """Renders `description`, then each example's gold choice followed by a blank line."""
+        """Renders `description`, then each example followed by a blank line."""
         head = self.description
         for shot in shots:
-            gold = shot.choices[shot.gold]
-            head += f"{gold.context}{gold.continuation}\n\n"
+            example = shot.example
+            if example is None:
+                gold = shot.choices[shot.gold]
+                example = gold.context + gold.continuation
+            head += f"{example}\n\n"
 
         return head
 
