@@ -3,6 +3,7 @@
 from flock.eval.tasks.arc import ARC_CHALLENGE, ARC_EASY
 from flock.eval.tasks.basic_skills import BASIC_SKILLS, BASIC_SKILLS_BPB
 from flock.eval.tasks.csqa import CSQA
+from flock.eval.tasks.gen2mc import COQA, DROP, JEOPARDY, NATURALQS, SQUAD
 from flock.eval.tasks.hellaswag import HELLASWAG
 from flock.eval.tasks.lab_bench import LAB_BENCH_DBQA, LAB_BENCH_PROTOCOLQA
 from flock.eval.tasks.lambada import LAMBADA
@@ -35,6 +36,11 @@ _QA_TASKS = (
     LAB_BENCH_PROTOCOLQA,
     MEDMCQA,
     MEDQA_EN,
+    COQA,
+    DROP,
+    JEOPARDY,
+    NATURALQS,
+    SQUAD,
 )
 
 # LAMBADA's `qa_rc` member is greedy match, which isn't scored yet (stage file 003, D20), so it

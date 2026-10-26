@@ -127,6 +127,11 @@ def test_registry_suites_hold_registered_tasks():
         "lab_bench_protocolqa",
         "medmcqa",
         "medqa_en",
+        "coqa",
+        "drop",
+        "jeopardy",
+        "naturalqs",
+        "squad",
     )
     mmlu = tuple(task.name for task in SUITES["mmlu"].tasks)
     skills = tuple(task.name for task in SUITES["basic_skills"].tasks)
