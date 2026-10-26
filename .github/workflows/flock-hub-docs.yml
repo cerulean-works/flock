@@ -1,0 +1,43 @@
+name: Flock hub docs build
+
+# Builds flock.hub's docs (flock/hub/docs/source) with doc-builder, so a change that breaks them
+# fails here. Nothing is published: doc-builder names a site after the package it documents,
+# and the `flock` site is the app's docs (flock-docs.yml). This workflow's name is not the one
+# flock-docs-pr-publish.yml listens for, so its build never reaches a preview either.
+
+on:
+  pull_request:
+    paths:
+      - "flock/hub/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/flock-hub-docs.yml"
+  push:
+    branches: [main]
+    paths:
+      - "flock/hub/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/flock-hub-docs.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: flock-hub-docs-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: cerulean-works/doc-builder/.github/workflows/build_docs.yml@main
+    permissions:
+      contents: read
+    with:
+      # The package autodoc resolves `flock.hub.*` in; also the site name, unused here.
+      project: flock
+      # The build checks the repository out into a folder named after it.
+      path_to_docs: flock/flock/hub/docs/source
+      python_version: "3.14"
+      # The build installs only the root `flock` package, which has no dependencies; autodoc
+      # imports flock.hub, so install the hub's (`flock` itself is already installed).
+      pre_command: uv pip install -r flock/flock/hub/pyproject.toml
