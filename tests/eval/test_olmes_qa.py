@@ -118,5 +118,6 @@ def test_suite_scores_average_mmlu_first():
     for task in MMLU_TASKS:
         metrics[task.name]["acc_per_char"] = 1.0
 
-    # Seven tasks score 0 and MMLU, one member however many subjects, scores 1.
-    assert SUITES["base_easy:qa_rc"].score(metrics) == 1 / 8
+    # Every other member scores 0 and MMLU, one member however many subjects, scores 1.
+    members = len(SUITES["base_easy:qa_rc"].members)
+    assert SUITES["base_easy:qa_rc"].score(metrics) == 1 / members
