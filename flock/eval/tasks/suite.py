@@ -15,7 +15,9 @@ def by_name[T: (MultipleChoiceTask, Suite)](items: Iterable[T]) -> dict[str, T]:
     """
     named: dict[str, T] = {}
     for item in items:
-        if named.setdefault(item.name, item) != item:
+        if item.name not in named:
+            named[item.name] = item
+        elif named[item.name] != item:
             raise ValueError(f"two different definitions are named {item.name}")
 
     return named
@@ -54,50 +56,56 @@ class Suite:
         if len(set(names)) != len(names):
             raise ValueError(f"{self.name}: members repeat a name: {names}")
 
-        if self.scored:
-            self._check_scored_members()
-            self._check_one_scale()
-        elif self.metric is not None or any(
-            isinstance(member, MultipleChoiceTask) for member in self.members
-        ):
-            raise ValueError(f"{self.name}: an unscored suite groups only suites and has no metric")
+        if not self.scored:
+            # An unscored suite only groups suites whose scores don't average, so one name runs
+            # them all.
+            if self.metric is not None or any(not isinstance(m, Suite) for m in self.members):
+                raise ValueError(
+                    f"{self.name}: an unscored suite groups only suites and has no metric"
+                )
+        else:
+            # Every member must give a score under this suite, and all on one scale. OLMES doesn't
+            # check the scale: its suites keep `rc` and `bpb` apart by name only. A mean of an
+            # accuracy (higher is better) and a `bpb` (lower is better) has no meaning.
+            scales = set()
+            for member in self.members:
+                if isinstance(member, Suite):
+                    # A member suite is scored under its own metric, so this one's would misname
+                    # the score.
+                    if self.metric is not None:
+                        raise ValueError(
+                            f"{self.name}: metric reads member tasks only, not {member.name}"
+                        )
+                    if not member.scored:
+                        raise ValueError(f"{self.name}: member {member.name} has no score")
+                    scales.add(member._scale)
+                else:
+                    metric = self.metric or member.primary_metric
+                    if metric not in member.reported_metrics:
+                        raise ValueError(
+                            f"{self.name}: member {member.name} doesn't report {metric}"
+                        )
+                    scales.add("bpb" if metric == "bpb" else "accuracy")
+            if len(scales) > 1:
+                raise ValueError(
+                    f"{self.name}: members mix accuracies and bpb, which don't average"
+                )
 
+        # Results are keyed by name, so two definitions under one name would score as one.
         try:
             by_name(self._walk_tasks())
             by_name(self._walk_suites())
         except ValueError as error:
             raise ValueError(f"{self.name}: {error}") from None
 
-    def _check_scored_members(self) -> None:
-        """Raises `ValueError` if a member can't give a score under this suite."""
-        for member in self.members:
-            if isinstance(member, Suite):
-                # A member suite is scored under its own metric, so this one's would misname the
-                # score.
-                if self.metric is not None:
-                    raise ValueError(
-                        f"{self.name}: metric reads member tasks only, not {member.name}"
-                    )
-                if not member.scored:
-                    raise ValueError(f"{self.name}: member {member.name} has no score")
-            elif (metric := self.metric or member.primary_metric) not in member.reported_metrics:
-                raise ValueError(f"{self.name}: member {member.name} doesn't report {metric}")
+    @property
+    def _scale(self) -> str:
+        """What a scored suite's mean measures, `accuracy` or `bpb`. The members share one scale, so the first stands for all."""
+        first = self.members[0]
+        if isinstance(first, Suite):
+            return first._scale
 
-    def _check_one_scale(self) -> None:
-        """Raises `ValueError` if the members mix accuracies and `bpb`."""
-        # OLMES doesn't check this: its suites keep `rc` and `bpb` apart by name only. A mean of
-        # an accuracy (higher is better) and a `bpb` (lower is better) has no meaning.
-        if len({self._is_bpb(member) for member in self.members}) > 1:
-            raise ValueError(f"{self.name}: members mix accuracies and bpb, which don't average")
-
-    def _is_bpb(self, member: MultipleChoiceTask | Suite) -> bool:
-        """Whether the member's score under this suite is a `bpb`, rather than an accuracy."""
-        if isinstance(member, Suite):
-            # A suite's members share one scale, checked when it was built, so its first member
-            # stands for all of them.
-            return member._is_bpb(member.members[0])
-
-        return (self.metric or member.primary_metric) == "bpb"
+        return "bpb" if (self.metric or first.primary_metric) == "bpb" else "accuracy"
 
     @property
     def tasks(self) -> tuple[MultipleChoiceTask, ...]:

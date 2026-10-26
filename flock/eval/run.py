@@ -11,7 +11,7 @@ from flock.eval.metrics import multiple_choice
 from flock.eval.model import DEFAULT_BATCH_TOKENS, ScoringModel
 from flock.eval.provenance import Provenance
 from flock.eval.results import Results, SuiteResult, TaskResult, write_predictions
-from flock.eval.tasks import SUITES, TASKS, MultipleChoiceTask, Suite
+from flock.eval.tasks import SUITES, TASKS, MultipleChoiceTask
 from flock.eval.tasks.suite import by_name
 
 
@@ -78,9 +78,14 @@ def evaluate(config: EvalConfig) -> Results:
     """
     _check_names("tasks", config.tasks, TASKS)
     _check_names("suites", config.suites, SUITES)
-    suites = [SUITES[name] for name in config.suites]
-    tasks = _tasks_to_run(config.tasks, suites)
     _check_out(config.out)
+
+    # The named tasks run first, then each suite's tasks not yet listed, each task once.
+    suites = [SUITES[name] for name in config.suites]
+    tasks = [TASKS[name] for name in config.tasks]
+    for suite in suites:
+        tasks.extend(suite.tasks)
+    tasks = list(by_name(tasks).values())
 
     model = ScoringModel.from_pretrained(
         config.model, device=config.device, batch_tokens=config.batch_tokens
@@ -96,7 +101,19 @@ def evaluate(config: EvalConfig) -> Results:
         max_length=model.max_length,
         attention=model.attention,
     )
-    results = Results(provenance, task_results, _suite_results(suites, task_results))
+
+    # Suite scores are means of the per-task means already on the host. Each suite and the
+    # suites it holds is scored once, after its members.
+    metrics = {result.task: result.metrics for result in task_results}
+    held = []
+    for suite in suites:
+        held.extend(suite.suites)
+    suite_results = []
+    for suite in by_name(held).values():
+        score = suite.score(metrics) if suite.scored else None
+        members = [member.name for member in suite.members]
+        suite_results.append(SuiteResult(suite.name, members, suite.metric, score))
+    results = Results(provenance, task_results, suite_results)
 
     if config.out is not None:
         results.write(config.out)
@@ -117,31 +134,6 @@ def _check_names(kind: str, names: tuple[str, ...], registry: Mapping[str, objec
     unknown = [name for name in names if name not in registry]
     if unknown:
         raise KeyError(f"unknown {kind} {unknown}; known: {sorted(registry)}")
-
-
-def _tasks_to_run(names: tuple[str, ...], suites: list[Suite]) -> list[MultipleChoiceTask]:
-    """Returns the named tasks, then each suite's tasks not yet listed, each name once."""
-    tasks = [TASKS[name] for name in names]
-    for suite in suites:
-        tasks.extend(suite.tasks)
-
-    return list(by_name(tasks).values())
-
-
-def _suite_results(suites: list[Suite], task_results: list[TaskResult]) -> list[SuiteResult]:
-    """Scores each suite and the suites it holds, each after its members and each once."""
-    metrics = {result.task: result.metrics for result in task_results}
-    held = []
-    for suite in suites:
-        held.extend(suite.suites)
-
-    results = []
-    for suite in by_name(held).values():
-        score = suite.score(metrics) if suite.scored else None
-        members = [member.name for member in suite.members]
-        results.append(SuiteResult(suite.name, members, suite.metric, score))
-
-    return results
 
 
 def _check_out(out: Path | None) -> None:
