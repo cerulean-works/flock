@@ -24,14 +24,21 @@ A run with an output directory writes `results.json` and one predictions file pe
       "seconds": ...,
       "truncation": {"requests": 0, "docs": 0, "max_tokens_cut": 0},
       "docs_per_second": ...
-    }
+    },
+    ...
   ],
   "suites": [
     {"suite": "mmlu", "members": ["mmlu_abstract_algebra", ...], "metric": null, "score": ...},
     {"suite": "base_easy:qa_rc", "members": ["arc_easy", ..., "mmlu"], "metric": null, "score": ...},
     {"suite": "mmlu:bpb", "members": ["mmlu_abstract_algebra", ...], "metric": "bpb", "score": ...},
     {"suite": "base_easy:qa_bpb", "members": ["arc_easy", ..., "mmlu:bpb"], "metric": "bpb", "score": ...},
-    {"suite": "base_easy", "members": ["base_easy:qa_rc", "base_easy:qa_bpb"], "metric": null, "score": null}
+    ...,
+    {
+      "suite": "base_easy",
+      "members": ["base_easy:qa_rc", "base_easy:qa_bpb", "base_easy:math_bpb", "base_easy:code_bpb"],
+      "metric": null,
+      "score": null
+    }
   ],
   "schema_version": 4
 }
