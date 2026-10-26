@@ -32,6 +32,10 @@ def test_nested_suites_count_as_one_member_under_their_own_metric():
     bpb = Suite("bpb", (GOLD_ONLY, Suite("inner", (TASK, OTHER), metric="bpb")))
     assert bpb.score(METRICS) == pytest.approx((4.0 + 1.5) / 2)
 
+    # A suite reading `bpb` may hold a member suite that reads `bpb` too, as `qa_bpb` holds MMLU.
+    bpb = Suite("bpb", (GOLD_ONLY, Suite("inner", (TASK, OTHER), metric="bpb")), metric="bpb")
+    assert bpb.score(METRICS) == pytest.approx((4.0 + 1.5) / 2)
+
 
 def test_a_suite_may_share_a_name_with_a_task():
     # Tasks and suites are separate namespaces in the registries and in results.json.
@@ -76,7 +80,7 @@ def test_score_needs_every_member_tasks_metric():
         ),
         pytest.param(
             {"members": (Suite("rc", (TASK,)),), "metric": "bpb"},
-            "metric reads member tasks only",
+            "member rc isn't scored by bpb",
             id="metric-over-suite",
         ),
         pytest.param(
