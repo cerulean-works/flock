@@ -42,12 +42,12 @@ BASIC_SKILLS_TASKS = tuple(
     MultipleChoiceTask(
         name=f"basic_skills_{skill}",
         dataset=Dataset(
-            repo="allenai/basic-skills",
-            revision="faf63e9719e124d7741519a024719c8992622630",
-            subset=None,
+            # A parquet mirror of `allenai/basic-skills` at `faf63e9`, whose loading script
+            # `datasets` no longer runs (stage file 006).
+            repo="cerulean-works/basic-skills",
+            revision="849126c520dd18b3d07ada2b4716ebde7c3ef50e",
+            subset=skill,
             split="validation",
-            # The repo's loading script reads this one file per skill.
-            data_file=f"{skill}/validation.json",
         ),
         to_doc=basic_skills_doc,
         # OLMES's primary metric. Its own `acc_per_token` equals its `acc_raw`, since it counts

@@ -1,10 +1,4 @@
-import dataclasses
-
-import datasets
-import huggingface_hub
-import pytest
-
-from flock.eval.tasks import SUITES, TASKS, Choice, Dataset, Fewshot, MCDoc, cloze
+from flock.eval.tasks import SUITES, TASKS, Choice, MCDoc, cloze
 from flock.eval.tasks.basic_skills import SHOT_IDS, basic_skills_doc
 from flock.eval.tasks.lab_bench import lab_bench_doc
 from flock.eval.tasks.lambada import LAMBADA, lambada_doc
@@ -90,42 +84,6 @@ def test_lambada_scores_the_last_word_after_single_spaces():
 
     assert doc == MCDoc("9", (Choice("He said hello to", " Sacha"),), 0)
     assert LAMBADA.reported_metrics == ("bpb",)
-
-
-def test_data_file_reads_one_cached_json_file_at_the_revision(monkeypatch, real_load):
-    calls = []
-
-    def download(*args, **kwargs):
-        calls.append((args, kwargs))
-        return "/cache/skill/validation.json"
-
-    def load_dataset(*args, **kwargs):
-        calls.append((args, kwargs))
-        return datasets.Dataset.from_list([{"id": "0"}])
-
-    monkeypatch.setattr(huggingface_hub, "hf_hub_download", download)
-    monkeypatch.setattr(datasets, "load_dataset", load_dataset)
-    dataset = Dataset("org/repo", "abc", None, "validation", data_file="skill/validation.json")
-
-    assert real_load(dataset) == [{"id": "0"}]
-    assert calls == [
-        (("org/repo", "skill/validation.json"), {"repo_type": "dataset", "revision": "abc"}),
-        (
-            ("json",),
-            {"data_files": {"validation": "/cache/skill/validation.json"}, "split": "validation"},
-        ),
-    ]
-
-
-def test_data_file_task_rejects_shots_from_another_split():
-    task = TASKS["basic_skills_arithmetic"]
-    with pytest.raises(ValueError, match="holds only the 'validation' split"):
-        dataclasses.replace(task, fewshot=Fewshot("train", ("1", "2")))
-
-
-def test_data_file_takes_no_subset():
-    with pytest.raises(ValueError, match="data_file takes no subset"):
-        Dataset("org/repo", "abc", "skill", "validation", data_file="skill/validation.json")
 
 
 def test_basic_skills_suites_list_the_six_skills():

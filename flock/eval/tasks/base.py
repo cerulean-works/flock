@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import datasets
-import huggingface_hub
 import torch
 
 from flock.eval.metrics import MULTIPLE_CHOICE_METRICS, ChoiceScores
@@ -32,11 +31,6 @@ class Dataset:
             The split a task is scored on.
         row_index (`bool`, *optional*, defaults to `False`):
             Whether each row gets its position in its split as `"index"`, for datasets with no id column. A `to_doc` then reads the doc's id as `str(row["index"])`, as OLMES does for MMLU (`oe_eval/tasks/oe_eval_tasks/mmlu.py`). Written-out `Fewshot.rows` don't go through `load`, so they need an `"index"` of their own.
-        data_file (`str`, *optional*):
-            A JSON file in the repo holding the scored split, read in place of the repo's configurations. For repos with a loading script, which `datasets` no longer runs, such as `allenai/basic-skills`. Takes no `subset`.
-
-    Raises:
-        `ValueError`: if `data_file` is given with a `subset`.
     """
 
     repo: str
@@ -44,32 +38,17 @@ class Dataset:
     subset: str | None
     split: str
     row_index: bool = False
-    data_file: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.data_file is not None and self.subset is not None:
-            raise ValueError(f"{self.repo}: data_file takes no subset")
 
     def load(self, split: str | None = None) -> list[dict[str, Any]]:
         """
         Returns the rows of `split`, defaulting to the scored split.
 
         Raises:
-            `ValueError`: if `row_index` is set and the rows already have an `"index"` column, or, from `datasets`, if `data_file` is set and `split` isn't the scored split.
+            `ValueError`: if `row_index` is set and the rows already have an `"index"` column.
         """
-        if self.data_file is None:
-            rows = datasets.load_dataset(
-                self.repo, self.subset, revision=self.revision, split=split or self.split
-            )
-        else:
-            # Downloaded at the pinned revision into the hub cache, so a cached file loads offline.
-            # It holds only the scored split, so asking for another one raises in `datasets`.
-            path = huggingface_hub.hf_hub_download(
-                self.repo, self.data_file, repo_type="dataset", revision=self.revision
-            )
-            rows = datasets.load_dataset(
-                "json", data_files={self.split: path}, split=split or self.split
-            )
+        rows = datasets.load_dataset(
+            self.repo, self.subset, revision=self.revision, split=split or self.split
+        )
         if not self.row_index:
             return list(rows)
 
@@ -362,7 +341,7 @@ class MultipleChoiceTask:
             The metrics the task reports, from [`~eval.metrics.multiple_choice`]'s names. Every metric the task computes if not set, which leaves out `acc_uncond` when PMI is skipped. A task scored only on its gold text reports `("bpb",)`, since an accuracy over one choice is always 1.
 
     Raises:
-        `ValueError`: if `metrics` is empty or names a metric the task doesn't compute, `primary_metric` isn't reported, a written-out example lacks the `"index"` a `row_index` dataset reads, or `fewshot.num_shots` is set on examples from a split other than the scored one. Also if the dataset is a `data_file` and the examples come from another split.
+        `ValueError`: if `metrics` is empty or names a metric the task doesn't compute, `primary_metric` isn't reported, a written-out example lacks the `"index"` a `row_index` dataset reads, or `fewshot.num_shots` is set on examples from a split other than the scored one.
     """
 
     name: str
@@ -394,19 +373,12 @@ class MultipleChoiceTask:
             raise ValueError(f"{self.name}: primary_metric must be one of {self.reported_metrics}")
 
     def _check_fewshot(self) -> None:
-        """Raises `ValueError` if a written-out example lacks the index a numbered dataset reads, the examples' split can't be loaded, or `num_shots` would drop a doc's own example by an id from another split."""
+        """Raises `ValueError` if a written-out example lacks the index a numbered dataset reads, or `num_shots` would drop a doc's own example by an id from another split."""
         if self.fewshot is None:
             return
         # Written-out examples skip `load`, so they carry the index themselves.
         if self.dataset.row_index and any("index" not in row for row in self.fewshot.rows):
             raise ValueError(f"{self.name}: row_index needs an index in each written-out example")
-        # A data file holds only the scored split, so examples can come from no other.
-        other_split = self.fewshot.split not in (None, self.dataset.split)
-        if self.dataset.data_file is not None and other_split:
-            raise ValueError(
-                f"{self.name}: {self.dataset.data_file} holds only the {self.dataset.split!r} "
-                f"split, not few-shot split {self.fewshot.split!r}"
-            )
         if self.fewshot.num_shots is None:
             return
         # Ids are unique within a split only. Across splits, a doc that shares an id with an
