@@ -1,6 +1,7 @@
 """Run tasks against a model: the one entry point the CLI and job runners call."""
 
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,8 +10,9 @@ import torch
 from flock.eval.metrics import multiple_choice
 from flock.eval.model import DEFAULT_BATCH_TOKENS, ScoringModel
 from flock.eval.provenance import Provenance
-from flock.eval.results import Results, TaskResult, write_predictions
-from flock.eval.tasks import TASKS, MultipleChoiceTask
+from flock.eval.results import Results, SuiteResult, TaskResult, write_predictions
+from flock.eval.tasks import SUITES, TASKS, MultipleChoiceTask
+from flock.eval.tasks.suite import by_name
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,7 +23,7 @@ class EvalConfig:
     Args:
         model (`str`):
             The model as `repo@revision`.
-        tasks (`tuple[str, ...]`):
+        tasks (`tuple[str, ...]`, *optional*):
             Registry names of the tasks to run, in order.
         out (`Path`, *optional*):
             Where to write `results.json` and `predictions/<task>.jsonl`. Nothing is written if not set.
@@ -35,23 +37,30 @@ class EvalConfig:
             Also log the summary to this tracker project through the `wandb` SDK.
         command (`str`, *optional*, defaults to `"python"`):
             The command line recorded in the provenance. The default marks a run started from the Python API. The CLI passes its own command line.
+        suites (`tuple[str, ...]`, *optional*):
+            Registry names of the suites to run. Their tasks run after `tasks`, each task once, and each suite and the suites it holds are scored.
 
     Raises:
-        `ValueError`: if a task repeats, or `limit` or `batch_tokens` is less than 1, before any model loads.
+        `ValueError`: if no task or suite is given, a task or suite repeats, or `limit` or `batch_tokens` is less than 1, before any model loads.
     """
 
     model: str
-    tasks: tuple[str, ...]
+    tasks: tuple[str, ...] = ()
     out: Path | None = None
     limit: int | None = None
     batch_tokens: int = DEFAULT_BATCH_TOKENS
     device: str | None = None
     wandb_project: str | None = None
     command: str = "python"
+    suites: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        if not self.tasks and not self.suites:
+            raise ValueError("give at least one task or suite")
         if len(set(self.tasks)) != len(self.tasks):
             raise ValueError(f"tasks repeat: {self.tasks}")
+        if len(set(self.suites)) != len(self.suites):
+            raise ValueError(f"suites repeat: {self.suites}")
         if self.limit is not None and self.limit < 1:
             raise ValueError(f"limit must be at least 1, got {self.limit}")
         if self.batch_tokens < 1:
@@ -60,21 +69,37 @@ class EvalConfig:
 
 def evaluate(config: EvalConfig) -> Results:
     """
-    Loads the model, scores every task and writes the results, then logs them to the tracker if `wandb_project` is set.
+    Loads the model, scores every task and suite and writes the results, then logs them to the tracker if `wandb_project` is set.
 
     Raises:
-        `KeyError`: if a task name isn't in the registry.
+        `KeyError`: if a task or suite name isn't in its registry.
+        `ValueError`: if two different tasks, or two different suites, to run share a name, or a task is named `suites`.
         `FileExistsError`: if `config.out` exists and isn't an empty directory.
     """
-    _check_tasks(config.tasks)
+    _check_names("tasks", config.tasks, TASKS)
+    _check_names("suites", config.suites, SUITES)
     _check_out(config.out)
+
+    # The named tasks run first, then each suite's tasks not yet listed, each task once. Every
+    # suite reached is scored, each after its members. Both plans are checked before the model
+    # loads, so a name clash costs no GPU time.
+    suites = [SUITES[name] for name in config.suites]
+    tasks = [TASKS[name] for name in config.tasks]
+    for suite in suites:
+        tasks.extend(suite.tasks)
+    tasks = list(by_name(tasks).values())
+    held = []
+    for suite in suites:
+        held.extend(suite.suites)
+    held = list(by_name(held).values())
+    # The tracker logs suite scores as `suites/<suite>` beside `<task>/<metric>`.
+    if any(task.name == "suites" for task in tasks):
+        raise ValueError("a task can't be named suites: suite scores are logged under that name")
 
     model = ScoringModel.from_pretrained(
         config.model, device=config.device, batch_tokens=config.batch_tokens
     )
-    task_results = []
-    for name in config.tasks:
-        task_results.append(score_task(model, TASKS[name], config.limit, config.out))
+    task_results = [score_task(model, task, config.limit, config.out) for task in tasks]
 
     provenance = Provenance.collect(
         model=model.name,
@@ -85,7 +110,15 @@ def evaluate(config: EvalConfig) -> Results:
         max_length=model.max_length,
         attention=model.attention,
     )
-    results = Results(provenance, task_results)
+
+    # Suite scores are means of the per-task means already on the host.
+    metrics = {result.task: result.metrics for result in task_results}
+    suite_results = []
+    for suite in held:
+        score = suite.score(metrics) if suite.scored else None
+        members = [member.name for member in suite.members]
+        suite_results.append(SuiteResult(suite.name, members, suite.metric, score))
+    results = Results(provenance, task_results, suite_results)
 
     if config.out is not None:
         results.write(config.out)
@@ -99,13 +132,13 @@ def evaluate(config: EvalConfig) -> Results:
     return results
 
 
-def _check_tasks(names: tuple[str, ...]) -> None:
-    """Raises `KeyError` if a task isn't in the registry, before any model loads."""
+def _check_names(kind: str, names: tuple[str, ...], registry: Mapping[str, object]) -> None:
+    """Raises `KeyError` if a name isn't in its registry, before any model loads."""
     # Checked here, not in `EvalConfig`: a config is plain data that may be built where the
     # registry differs from the worker's.
-    unknown = [name for name in names if name not in TASKS]
+    unknown = [name for name in names if name not in registry]
     if unknown:
-        raise KeyError(f"unknown tasks {unknown}; known: {sorted(TASKS)}")
+        raise KeyError(f"unknown {kind} {unknown}; known: {sorted(registry)}")
 
 
 def _check_out(out: Path | None) -> None:
