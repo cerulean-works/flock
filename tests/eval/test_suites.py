@@ -114,7 +114,9 @@ def test_suite_rejects_bad_definitions(kwargs, match):
 def test_registry_suites_hold_registered_tasks():
     qa = ("arc_easy", "arc_challenge", "csqa", "hellaswag", "winogrande", "socialiqa", "piqa")
     mmlu = tuple(task.name for task in SUITES["mmlu"].tasks)
-    assert [task.name for task in SUITES["base_easy"].tasks] == [*qa, *mmlu]
+    math = tuple(task.name for task in SUITES["base_easy:math_bpb"].tasks)
+    code = tuple(task.name for task in SUITES["base_easy:code_bpb"].tasks)
+    assert [task.name for task in SUITES["base_easy"].tasks] == [*qa, *mmlu, *math, *code]
     # The two suites read one list of tasks, MMLU through a suite of each kind.
     rc, bpb = SUITES["base_easy:qa_rc"].members, SUITES["base_easy:qa_bpb"].members
     assert [member.name for member in rc] == [*qa, "mmlu"]
