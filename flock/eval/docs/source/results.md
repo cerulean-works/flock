@@ -26,15 +26,24 @@ A run with an output directory writes `results.json` and one predictions file pe
       "docs_per_second": ...
     }
   ],
-  "schema_version": 3
+  "suites": [
+    {"suite": "base_easy:qa_rc", "members": ["arc_easy"], "metric": null, "score": ...},
+    {"suite": "base_easy:qa_bpb", "members": ["arc_easy"], "metric": "bpb", "score": ...},
+    {"suite": "base_easy", "members": ["base_easy:qa_rc", "base_easy:qa_bpb"], "metric": null, "score": null}
+  ],
+  "schema_version": 4
 }
 ```
 
-The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.results.TaskResult`] plus its `docs_per_second`, and `provenance` is described below. The class docstrings at the end of this page define every field.
+The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.results.TaskResult`] plus its `docs_per_second`, each entry of `suites` is a [`~eval.results.SuiteResult`], and `provenance` is described below. The class docstrings at the end of this page define every field.
 
 ### The task hash
 
 `task_hash` is the sha256 of the task's definition (every field but `to_doc`, so its name and primary metric too), every scored context and continuation, and every gold index. Changing the dataset revision, the few-shot examples, the task's name, description, metrics or primary metric, or a choice's context or continuation or the gold index that `to_doc` returns changes it. Doc ids aren't hashed. Two results with the same hash scored the same requests under the same task definition.
+
+### Suites
+
+`suites` holds the suites the run was given and every suite they hold, each after its members, and is empty for a run of tasks only. Each entry lists its members by name, and every member has its own entry in `tasks` or `suites`, so you can recompute the score: the mean of each member task's `metric` (its `primary_metric` when `metric` is `null`) and each member suite's `score`. A suite that only groups others has a `null` score. A suite's members can grow between versions of `flock-eval`, so compare two suite scores only when their `members` match, every member task has the same `task_hash`, and neither run used a `limit`.
 
 ### Truncation
 
@@ -61,6 +70,8 @@ Each line of `predictions/<task>.jsonl` is one doc:
 [[autodoc]] eval.results.Results
 
 [[autodoc]] eval.results.TaskResult
+
+[[autodoc]] eval.results.SuiteResult
 
 [[autodoc]] eval.tasks.Truncation
 
