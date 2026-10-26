@@ -29,20 +29,34 @@ class Dataset:
             The configuration name, for example `ARC-Easy`.
         split (`str`):
             The split a task is scored on.
+        row_index (`bool`, *optional*, defaults to `False`):
+            Whether each row gets its position in its split as `"index"`, for datasets with no id column. A `to_doc` then reads the doc's id as `str(row["index"])`, as OLMES does for MMLU (`oe_eval/tasks/oe_eval_tasks/mmlu.py`). Written-out `Fewshot.rows` don't go through `load`, so they need an `"index"` of their own.
     """
 
     repo: str
     revision: str
     subset: str | None
     split: str
+    row_index: bool = False
 
     def load(self, split: str | None = None) -> list[dict[str, Any]]:
-        """Returns the rows of `split`, defaulting to the scored split."""
+        """
+        Returns the rows of `split`, defaulting to the scored split.
+
+        Raises:
+            `ValueError`: if `row_index` is set and the rows already have an `"index"` column.
+        """
         rows = datasets.load_dataset(
             self.repo, self.subset, revision=self.revision, split=split or self.split
         )
+        if not self.row_index:
+            return list(rows)
 
-        return list(rows)
+        if "index" in rows.column_names:
+            where = f"{self.repo} {self.subset or ''} {split or self.split}".replace("  ", " ")
+            raise ValueError(f"{where}: the rows already have an index column")
+
+        return [{**row, "index": position} for position, row in enumerate(rows)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -327,7 +341,7 @@ class MultipleChoiceTask:
             The metrics the task reports, from [`~eval.metrics.multiple_choice`]'s names. Every metric the task computes if not set, which leaves out `acc_uncond` when PMI is skipped. A task scored only on its gold text reports `("bpb",)`, since an accuracy over one choice is always 1.
 
     Raises:
-        `ValueError`: if `metrics` is empty or names a metric the task doesn't compute, `primary_metric` isn't reported, or `fewshot.num_shots` is set on examples from a split other than the scored one.
+        `ValueError`: if `metrics` is empty or names a metric the task doesn't compute, `primary_metric` isn't reported, a written-out example lacks the `"index"` a `row_index` dataset reads, or `fewshot.num_shots` is set on examples from a split other than the scored one.
     """
 
     name: str
@@ -359,8 +373,13 @@ class MultipleChoiceTask:
             raise ValueError(f"{self.name}: primary_metric must be one of {self.reported_metrics}")
 
     def _check_fewshot(self) -> None:
-        """Raises `ValueError` if `num_shots` would drop a doc's own example by an id from another split."""
-        if self.fewshot is None or self.fewshot.num_shots is None:
+        """Raises `ValueError` if a written-out example lacks the index a numbered dataset reads, or `num_shots` would drop a doc's own example by an id from another split."""
+        if self.fewshot is None:
+            return
+        # Written-out examples skip `load`, so they carry the index themselves.
+        if self.dataset.row_index and any("index" not in row for row in self.fewshot.rows):
+            raise ValueError(f"{self.name}: row_index needs an index in each written-out example")
+        if self.fewshot.num_shots is None:
             return
         # Ids are unique within a split only. Across splits, a doc that shares an id with an
         # example would lose that example, and a doc that is itself an example would keep it.
