@@ -27,8 +27,10 @@ A run with an output directory writes `results.json` and one predictions file pe
     }
   ],
   "suites": [
-    {"suite": "base_easy:qa_rc", "members": ["arc_easy"], "metric": null, "score": ...},
-    {"suite": "base_easy:qa_bpb", "members": ["arc_easy"], "metric": "bpb", "score": ...},
+    {"suite": "mmlu", "members": ["mmlu_abstract_algebra", ...], "metric": null, "score": ...},
+    {"suite": "base_easy:qa_rc", "members": ["arc_easy", ..., "mmlu"], "metric": null, "score": ...},
+    {"suite": "mmlu:bpb", "members": ["mmlu_abstract_algebra", ...], "metric": "bpb", "score": ...},
+    {"suite": "base_easy:qa_bpb", "members": ["arc_easy", ..., "mmlu:bpb"], "metric": "bpb", "score": ...},
     {"suite": "base_easy", "members": ["base_easy:qa_rc", "base_easy:qa_bpb"], "metric": null, "score": null}
   ],
   "schema_version": 4
@@ -43,7 +45,7 @@ The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.resu
 
 ### Suites
 
-`suites` holds the suites the run was given and every suite they hold, each after its members, and is empty for a run of tasks only. Each entry lists its members by name, and every member has its own entry in `tasks` or `suites`, so you can recompute the score: the mean of each member task's `metric` (its `primary_metric` when `metric` is `null`) and each member suite's `score`. A suite that only groups others has a `null` score. A suite's members can grow between versions of `flock-eval`, so compare two suite scores only when their `members` match, every member task has the same `task_hash`, and neither run used a `limit`.
+`suites` holds the suites the run was given and every suite they hold, each after its members, and is empty for a run of tasks only. Each entry lists its members by name, and every member has its own entry in `tasks` or `suites`, so you can recompute the score: the mean of each member task's `metric` (its `primary_metric` when `metric` is `null`) and each member suite's `score`. A suite that only groups others has a `null` score. A suite's members can grow between versions of `flock-eval`, so compare two suite scores only when the members of the suite and of every suite under it match, every task under it has the same `task_hash`, and neither run used a `limit`.
 
 ### Truncation
 
