@@ -44,6 +44,8 @@ The Base Easy suites hold only the tasks that exist so far, so their scores chan
 
 [[autodoc]] eval.tasks.MultipleChoiceTask
 
+[[autodoc]] eval.tasks.GoldOnlyTask
+
 [[autodoc]] eval.tasks.Dataset
 
 [[autodoc]] eval.tasks.Fewshot

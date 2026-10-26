@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from flock.eval.tasks.base import Choice, Dataset, Fewshot, MCDoc, MultipleChoiceTask
+from flock.eval.tasks.base import Choice, Dataset, Fewshot, GoldOnlyTask, MCDoc
 from flock.eval.tasks.suite import Suite
 
 LANGUAGES = (
@@ -57,7 +57,7 @@ def mt_mbpp_doc(row: dict[str, Any]) -> MCDoc:
 
 # OLMES's `mbpp:3shot:bpb::none`, whose primary metric is the gold code's `bits_per_byte_corr`.
 # Its `limit: 500` keeps the whole test split.
-MBPP = MultipleChoiceTask.gold_only(
+MBPP = GoldOnlyTask(
     name="mbpp",
     dataset=Dataset(
         repo="google-research-datasets/mbpp",
@@ -71,7 +71,7 @@ MBPP = MultipleChoiceTask.gold_only(
 
 # One task per language, as OLMES's `mt_mbpp_v2fix:<language>`.
 MT_MBPP_TASKS = tuple(
-    MultipleChoiceTask.gold_only(
+    GoldOnlyTask(
         name=f"mt_mbpp_{language}",
         dataset=Dataset(
             repo="allenai/multilingual_mbpp",

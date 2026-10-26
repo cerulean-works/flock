@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from flock.eval.tasks.base import Choice, Dataset, Fewshot, MCDoc, MultipleChoiceTask
+from flock.eval.tasks.base import Choice, Dataset, Fewshot, GoldOnlyTask, MCDoc
 from flock.eval.tasks.shots.minerva_math import MINERVA_MATH_SHOTS
 
 SUBJECTS = (
@@ -32,7 +32,7 @@ def minerva_doc(row: dict[str, Any]) -> MCDoc:
 # One task per subject, as OLMES's `minerva_math_<subject>:bpb::olmes`, whose primary metric is
 # the gold solution's `bits_per_byte_corr`.
 MINERVA_MATH_TASKS = tuple(
-    MultipleChoiceTask.gold_only(
+    GoldOnlyTask(
         name=f"minerva_math_{subject}",
         dataset=Dataset(
             repo="EleutherAI/hendrycks_math",

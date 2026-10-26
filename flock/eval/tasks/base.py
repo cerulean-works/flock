@@ -358,29 +358,6 @@ class MultipleChoiceTask:
     unconditional_context: str | None = "Answer:"
     metrics: tuple[str, ...] | None = None
 
-    @classmethod
-    def gold_only(
-        cls,
-        name: str,
-        dataset: Dataset,
-        to_doc: Callable[[dict[str, Any]], MCDoc],
-        fewshot: Fewshot | None = None,
-    ) -> MultipleChoiceTask:
-        """
-        A task scored on each doc's gold text alone, by `bpb`, such as a math solution or a program (OLMES's `:bpb` tasks).
-
-        Each doc has one choice, so an accuracy is always 1 and pointwise mutual information (PMI) has nothing to compare: the task reports `bpb` only and has no unconditional context.
-        """
-        return cls(
-            name=name,
-            dataset=dataset,
-            to_doc=to_doc,
-            primary_metric="bpb",
-            fewshot=fewshot,
-            unconditional_context=None,
-            metrics=("bpb",),
-        )
-
     def __post_init__(self) -> None:
         self._check_metrics()
         self._check_fewshot()
@@ -534,3 +511,16 @@ class MultipleChoiceTask:
         digest.update(json.dumps([doc.gold for doc in docs]).encode())
 
         return digest.hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class GoldOnlyTask(MultipleChoiceTask):
+    """
+    A task scored on each doc's gold text alone, by `bpb`, such as a math solution or a program (OLMES's `:bpb` tasks). It takes the same arguments as [`MultipleChoiceTask`] but `primary_metric`, `unconditional_context` and `metrics`, which it fixes.
+
+    Each doc has one choice, so an accuracy is always 1 and pointwise mutual information (PMI) has nothing to compare: the task reports `bpb` only and has no unconditional context.
+    """
+
+    primary_metric: str = dataclasses.field(default="bpb", init=False)
+    unconditional_context: str | None = dataclasses.field(default=None, init=False)
+    metrics: tuple[str, ...] | None = dataclasses.field(default=("bpb",), init=False)

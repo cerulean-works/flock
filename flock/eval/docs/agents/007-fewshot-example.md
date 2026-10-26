@@ -26,9 +26,11 @@ A few-shot example is rendered as its gold choice's context and continuation (D1
 
 The field sits on the doc rather than the task because the text is the doc's: a task-level hook would take the doc and rebuild the same string. It only changes how a doc reads as a shot, never how the doc itself is scored. The task hash covers it through the requests it produces, so tasks that don't set it keep their hash.
 
-### 007.D2. `MultipleChoiceTask.gold_only` builds a task scored on its gold text alone
+### 007.D2. `GoldOnlyTask` is a task scored on its gold text alone
 
-The 26 math and code tasks share one shape: a doc with one choice, scored by `bpb` only, with no unconditional context, since an accuracy over one choice is always 1 and pointwise mutual information (PMI) has nothing to compare. `MultipleChoiceTask.gold_only(name, dataset, to_doc, fewshot)` builds that shape, so the three task modules declare only what differs, and the reason for `metrics=("bpb",)` and `unconditional_context=None` is written once, on the constructor. It takes no `description`: none of these tasks has one, and a task that needs one uses the full constructor.
+The 26 math and code tasks share one shape: a doc with one choice, scored by `bpb` only, with no unconditional context, since an accuracy over one choice is always 1 and pointwise mutual information (PMI) has nothing to compare. `GoldOnlyTask`, a subclass of `MultipleChoiceTask`, fixes that shape: `primary_metric`, `metrics` and `unconditional_context` are set by the class and can't be passed, so the three task modules declare only what differs, and the reason is written once, on the class. Scoring is unchanged, since only those three defaults differ, so every task's requests and hash are the same as with the full constructor.
+
+The first version was a classmethod, `MultipleChoiceTask.gold_only`. Review asked for its own task type, since a gold-only task reads differently enough from a multiple-choice one that the name should say so.
 
 The suites follow OLMES's `olmo3:base_easy:math_bpb` and `code_bpb` (`oe_eval/configs/task_suites.py`), both reading `bpb`. `mt_mbpp`, the 17 languages, is one member of `code_bpb` beside HumanEval and MBPP, as OLMES's `mt_mbpp_v2fix` suite is, so each language has a 51st of the weight.
 
@@ -42,8 +44,8 @@ The suites follow OLMES's `olmo3:base_easy:math_bpb` and `code_bpb` (`oe_eval/co
 
 ## 4. Plan
 
-1. `tasks/base.py`: the `example` field and its docstring; `_head` renders `example` when it is set; `gold_only`.
-2. `tasks/minerva_math.py`, `tasks/humaneval.py`, `tasks/mbpp.py`: the 26 tasks, built with `gold_only`; `humaneval_doc` sets `example`; Minerva's written-out examples in `tasks/shots/minerva_math.py`; the two suites in `tasks/base_easy.py`.
+1. `tasks/base.py`: the `example` field and its docstring; `_head` renders `example` when it is set; `GoldOnlyTask`.
+2. `tasks/minerva_math.py`, `tasks/humaneval.py`, `tasks/mbpp.py`: the 26 tasks, built as `GoldOnlyTask`; `humaneval_doc` sets `example`; Minerva's written-out examples in `tasks/shots/minerva_math.py`; the two suites in `tasks/base_easy.py`.
 3. Tests: a shot with `example` renders it in place of its gold choice, and the scored doc is unchanged.
 4. Docs: `adding-a-task.md` and `tasks.md` describe the field and HumanEval's quirk.
 

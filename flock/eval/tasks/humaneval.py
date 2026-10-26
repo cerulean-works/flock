@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from flock.eval.tasks.base import Choice, Dataset, Fewshot, MCDoc, MultipleChoiceTask
+from flock.eval.tasks.base import Choice, Dataset, Fewshot, GoldOnlyTask, MCDoc
 
 
 def humaneval_doc(row: dict[str, Any]) -> MCDoc:
@@ -25,7 +25,7 @@ def humaneval_doc(row: dict[str, Any]) -> MCDoc:
 
 # OLMES's `codex_humaneval:3shot:bpb::none`, whose primary metric is the gold solution's
 # `bits_per_byte_corr`.
-HUMANEVAL = MultipleChoiceTask.gold_only(
+HUMANEVAL = GoldOnlyTask(
     name="humaneval",
     dataset=Dataset(
         repo="openai/openai_humaneval",
