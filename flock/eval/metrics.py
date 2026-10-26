@@ -21,6 +21,11 @@ MULTIPLE_CHOICE_METRICS = (
 )
 
 
+def scale(metric: str) -> str:
+    """Returns the scale a metric's scores average on: `accuracy` for every `acc_*` metric, otherwise the metric's own name, such as `bpb`. A mean over two scales, an accuracy (higher is better) and a `bpb` (lower is better), has no meaning."""
+    return "accuracy" if metric.startswith("acc_") else metric
+
+
 @dataclass(frozen=True, slots=True)
 class ChoiceScores:
     """
