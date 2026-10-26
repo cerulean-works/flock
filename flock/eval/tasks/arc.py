@@ -2,15 +2,14 @@
 
 from typing import Any
 
-from flock.eval.tasks.base import Dataset, Fewshot, MCDoc, MultipleChoiceTask
+from flock.eval.tasks.base import Dataset, Fewshot, MCDoc, MultipleChoiceTask, cloze
 
 
 def arc_doc(row: dict[str, Any]) -> MCDoc:
     """An ARC row as a doc. Answer keys are letters or digits, matching the choice labels."""
     return MCDoc(
         id=row["id"],
-        question=row["question"],
-        choices=tuple(row["choices"]["text"]),
+        choices=cloze(row["question"], row["choices"]["text"]),
         gold=row["choices"]["label"].index(row["answerKey"]),
     )
 

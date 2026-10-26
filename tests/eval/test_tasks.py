@@ -3,8 +3,9 @@ import dataclasses
 import pytest
 import torch
 
+from flock.eval.metrics import MULTIPLE_CHOICE_METRICS
 from flock.eval.requests import Scores
-from flock.eval.tasks import TASKS, Dataset, Fewshot, MCDoc, Truncation
+from flock.eval.tasks import TASKS, Choice, Dataset, Fewshot, MCDoc, Truncation, cloze
 from flock.eval.tasks.arc import ARC_EASY, arc_doc
 
 from .toy import ROWS, TASK
@@ -26,7 +27,7 @@ def test_task_rejects_unreported_primary_metric(primary_metric, unconditional_co
 
 def test_arc_doc_maps_letter_and_digit_keys():
     assert arc_doc(ROWS["train"][0]) == MCDoc(
-        "shot-1", "Which gas do plants take in?", ("oxygen", "carbon dioxide"), 1
+        "shot-1", cloze("Which gas do plants take in?", ("oxygen", "carbon dioxide")), 1
     )
     assert arc_doc(ROWS["train"][1]).gold == 0
 
@@ -50,8 +51,7 @@ def test_load_rejects_unknown_fewshot_id():
 
 
 def test_context_matches_olmes_format():
-    docs, shots = TASK.load()
-    assert TASK.context(docs[0], shots) == (
+    assert TASK.requests(*TASK.load()).requests[0].context == (
         "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\n"
         "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\n"
         "Question: What do bees make?\nAnswer:"
@@ -185,8 +185,10 @@ def test_hash_is_stable():
             id="gold",
         ),
         pytest.param(
-            lambda docs, shots: dataclasses.replace(TASK, answer_prefix="A:").requests(docs, shots),
-            id="prompt",
+            lambda docs, shots: dataclasses.replace(TASK, description="Science.\n\n").requests(
+                docs, shots
+            ),
+            id="description",
         ),
         pytest.param(
             lambda docs, shots: dataclasses.replace(TASK, unconditional_context=None).requests(
@@ -210,6 +212,12 @@ def test_hash_is_stable():
             ),
             id="primary-metric",
         ),
+        pytest.param(
+            lambda docs, shots: dataclasses.replace(TASK, metrics=("acc_per_char",)).requests(
+                docs, shots
+            ),
+            id="metrics",
+        ),
     ],
 )
 def test_hash_tracks_what_is_scored(change):
@@ -222,3 +230,135 @@ def test_registry_has_arc_easy_with_olmes_shots():
     assert ARC_EASY.fewshot is not None
     assert len(ARC_EASY.fewshot.ids) == 5
     assert ARC_EASY.dataset.split == "test"
+
+
+def test_cloze_renders_olmes_prompt_and_spaced_answers():
+    assert cloze("Why?", ("a", "b"), question_prefix="Goal: ") == (
+        Choice("Goal: Why?\nAnswer:", " a"),
+        Choice("Goal: Why?\nAnswer:", " b"),
+    )
+
+
+def test_cloze_rejects_one_string_as_answers():
+    # A string is a sequence too, and would silently become one choice per character.
+    with pytest.raises(TypeError, match=r"pass \(answer,\)"):
+        cloze("Why?", "yes")
+    assert cloze("Why?", ("yes",)) == (Choice("Question: Why?\nAnswer:", " yes"),)
+
+
+@pytest.mark.parametrize(
+    ("choices", "gold", "match"),
+    [
+        pytest.param((), 0, "doc d: no choices", id="no-choices"),
+        pytest.param(cloze("?", ("a", "b")), 2, "doc d: gold 2", id="gold-past-end"),
+        pytest.param(cloze("?", ("a", "b")), -1, "doc d: gold -1", id="gold-negative"),
+    ],
+)
+def test_doc_rejects_bad_choices_or_gold(choices, gold, match):
+    with pytest.raises(ValueError, match=match):
+        MCDoc("d", choices, gold)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        pytest.param({}, "either ids or rows", id="neither"),
+        pytest.param(
+            {"split": "train", "ids": ("a",), "rows": ({"id": "b"},)}, "either", id="both"
+        ),
+        pytest.param({"ids": ("a",)}, "need a split", id="ids-without-split"),
+        pytest.param(
+            {"split": "train", "rows": ({"id": "b"},)}, "take no split", id="rows-with-split"
+        ),
+        pytest.param({"split": "train", "ids": ("a", "b", "a")}, r"repeat: \['a'\]", id="repeat"),
+        pytest.param({"split": "train", "ids": ("a", "b"), "num_shots": 2}, "below", id="no-spare"),
+        pytest.param(
+            {"split": "train", "ids": ("a", "b"), "num_shots": 0}, "at least 1", id="zero"
+        ),
+        pytest.param(
+            {"rows": ({"id": "a"}, {"id": "b"}), "num_shots": 1}, "needs ids", id="rows-with-shots"
+        ),
+    ],
+)
+def test_fewshot_rejects_bad_definitions(kwargs, match):
+    with pytest.raises(ValueError, match=match):
+        Fewshot(**kwargs)
+
+
+def test_task_rejects_num_shots_from_another_split():
+    # Ids are unique within a split, so dropping the scored doc's own example by id only works
+    # when the examples come from the split the task scores.
+    fewshot = Fewshot("train", ("shot-1", "shot-2"), num_shots=1)
+    with pytest.raises(ValueError, match="scored split 'test', not 'train'"):
+        dataclasses.replace(TASK, fewshot=fewshot)
+
+
+def test_fewshot_rows_go_through_to_doc():
+    task = dataclasses.replace(TASK, fewshot=Fewshot(rows=(ROWS["test"][1],)))
+    _, shots = task.load()
+    assert shots == [arc_doc(ROWS["test"][1])]
+
+
+def test_num_shots_skips_the_scored_doc():
+    # Examples from the scored split: each doc is shown the first one that isn't itself.
+    task = dataclasses.replace(TASK, fewshot=Fewshot("test", ("q-1", "q-2"), num_shots=1))
+    built = task.requests(*task.load())
+    first, second = built.requests[0].context, built.requests[3].context
+    assert first.startswith(
+        "Question: 哪一個是水果？\nAnswer: 蘋果\n\nQuestion: What do bees make?"
+    )
+    assert second.startswith(
+        "Question: What do bees make?\nAnswer: honey\n\nQuestion: 哪一個是水果？"
+    )
+
+
+def test_description_and_per_choice_contexts():
+    # A WinoGrande-like doc: the choices differ in context and share one continuation.
+    doc = MCDoc("w", (Choice("Tom gave it to", " him."), Choice("Ann gave it to", " him.")), 1)
+    task = dataclasses.replace(TASK, description="Header\n\n", unconditional_context=None)
+    built = task.requests([doc], task.load()[1])
+
+    head = (
+        "Header\n\n"
+        "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\n"
+        "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\n"
+    )
+    assert [(r.context, r.continuation) for r in built.requests] == [
+        (head + "Tom gave it to", " him."),
+        (head + "Ann gave it to", " him."),
+    ]
+
+
+def test_requests_are_immutable():
+    built = TASK.requests(*TASK.load())
+    assert isinstance(built.docs, tuple) and isinstance(built.requests, tuple)
+
+
+def test_reported_metrics_follow_pmi_and_the_metrics_field():
+    assert TASK.reported_metrics == MULTIPLE_CHOICE_METRICS
+    no_pmi = dataclasses.replace(TASK, unconditional_context=None)
+    assert "acc_uncond" not in no_pmi.reported_metrics
+    gold_only = dataclasses.replace(TASK, metrics=("bpb",), primary_metric="bpb")
+    assert gold_only.reported_metrics == ("bpb",)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        pytest.param({"metrics": ("acc_nope",)}, "metrics must be among", id="unknown"),
+        pytest.param(
+            {
+                "metrics": ("acc_uncond",),
+                "primary_metric": "acc_uncond",
+                "unconditional_context": None,
+            },
+            "metrics must be among",
+            id="uncond-without-context",
+        ),
+        pytest.param({"metrics": ("bpb",)}, "primary_metric", id="primary-not-reported"),
+        pytest.param({"metrics": ()}, "metrics is empty", id="empty"),
+    ],
+)
+def test_task_rejects_metrics_it_does_not_compute(kwargs, match):
+    with pytest.raises(ValueError, match=match):
+        dataclasses.replace(TASK, **kwargs)
