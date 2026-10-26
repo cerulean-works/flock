@@ -6,11 +6,11 @@ from flock.eval.tasks.base import Choice, Dataset, Fewshot, MCDoc, MultipleChoic
 
 
 def humaneval_doc(row: dict[str, Any]) -> MCDoc:
-    """A HumanEval row as a gold-only doc: the prompt, then the canonical solution (`oe_eval/tasks/oe_eval_tasks/codex_humaneval.py`)."""
+    """A HumanEval row as a gold-only doc: the prompt, then the canonical solution."""
     solution = row["canonical_solution"]
     # OLMES scores the solution with a leading space unless it starts with one or a newline
-    # (`construct_basic_generation_requests` in `oe_eval/tasks/base_task.py`). Every solution at
-    # the pinned revision is indented or starts with a newline, so none gets one.
+    # (`construct_basic_generation_requests`). Every solution at the pinned revision is indented
+    # or starts with a newline, so none gets one.
     if not solution.startswith((" ", "\n")):
         solution = " " + solution
 
@@ -24,7 +24,7 @@ def humaneval_doc(row: dict[str, Any]) -> MCDoc:
 
 
 # OLMES's `codex_humaneval:3shot:bpb::none`, whose primary metric is the gold solution's
-# `bits_per_byte_corr` (`oe_eval/configs/tasks.py`).
+# `bits_per_byte_corr`.
 HUMANEVAL = MultipleChoiceTask.gold_only(
     name="humaneval",
     dataset=Dataset(
@@ -35,8 +35,7 @@ HUMANEVAL = MultipleChoiceTask.gold_only(
     ),
     to_doc=humaneval_doc,
     # HumanEval has only a test split, so OLMES draws `Random(1234).sample(test, 4)` for every
-    # doc and shows the first 3 that aren't the doc (`fewshot_examples` in
-    # `oe_eval/tasks/base_task.py`).
+    # doc and shows the first 3 that aren't the doc (`fewshot_examples`).
     fewshot=Fewshot(
         split="test",
         ids=("HumanEval/112", "HumanEval/29", "HumanEval/1", "HumanEval/23"),

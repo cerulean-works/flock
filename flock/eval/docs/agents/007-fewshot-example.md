@@ -43,7 +43,7 @@ The suites follow OLMES's `olmo3:base_easy:math_bpb` and `code_bpb` (`oe_eval/co
 ## 4. Plan
 
 1. `tasks/base.py`: the `example` field and its docstring; `_head` renders `example` when it is set; `gold_only`.
-2. `tasks/minerva_math.py`, `tasks/humaneval.py`, `tasks/mbpp.py`: the 26 tasks, built with `gold_only`; `humaneval_doc` sets `example`; the two suites in `tasks/base_easy.py`.
+2. `tasks/minerva_math.py`, `tasks/humaneval.py`, `tasks/mbpp.py`: the 26 tasks, built with `gold_only`; `humaneval_doc` sets `example`; Minerva's written-out examples in `tasks/shots/minerva_math.py`; the two suites in `tasks/base_easy.py`.
 3. Tests: a shot with `example` renders it in place of its gold choice, and the scored doc is unchanged.
 4. Docs: `adding-a-task.md` and `tasks.md` describe the field and HumanEval's quirk.
 

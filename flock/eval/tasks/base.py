@@ -325,7 +325,7 @@ class MultipleChoiceTask:
     """
     A multiple-choice task scored as OLMES scores it: each choice's continuation after the few-shot examples and the choice's context.
 
-    The context of a request is `description`, then each few-shot example (its gold choice's context and continuation, or its `example`) followed by a blank line, then the scored choice's context. This is OLMES's few-shot format (OLMES, sec. 3.1 and 3.2; `fewshot_context` in `oe_eval/tasks/base_task.py`).
+    The context of a request is `description`, then each few-shot example (its gold choice's context and continuation, or its `example`) followed by a blank line, then the scored choice's context. This is OLMES's few-shot format (OLMES, sec. 3.1 and 3.2; `fewshot_context`).
 
     Args:
         name (`str`):
