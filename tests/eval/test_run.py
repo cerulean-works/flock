@@ -11,7 +11,7 @@ from flock.eval.metrics import MULTIPLE_CHOICE_METRICS, ChoiceScores
 from flock.eval.model import ScoringModel
 from flock.eval.results import prediction_rows
 from flock.eval.run import EvalConfig, evaluate, score_task
-from flock.eval.tasks import MCDoc, cloze
+from flock.eval.tasks import MCDoc, Suite, cloze
 
 from .toy import TASK
 
@@ -27,7 +27,7 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
     results = evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path))
 
     data = json.loads((tmp_path / "results.json").read_text())
-    assert data["schema_version"] == 3
+    assert data["schema_version"] == 4
     assert data["provenance"]["model"] == "tiny@0"
     assert data["provenance"]["flock_commit"] == "abc123"
     assert data["provenance"]["dtype"] == "float32"
@@ -43,11 +43,66 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
     assert task["docs_per_second"] > 0
     assert task["truncation"] == {"requests": 0, "docs": 0, "max_tokens_cut": 0}
     assert results.tasks[0].metrics == task["metrics"]
+    assert data["suites"] == []
 
     lines = (tmp_path / "predictions" / "toy.jsonl").read_text().splitlines()
     first, second = map(json.loads, lines)
     assert (first["id"], first["gold"], len(first["logprob"])) == ("q-1", 0, 3)
     assert len(second["logprob_uncond"]) == 4
+
+
+OTHER = dataclasses.replace(TASK, name="other", primary_metric="acc_raw")
+RC = Suite("toy:rc", (TASK, OTHER))
+BPB = Suite("toy:bpb", (TASK, OTHER), metric="bpb")
+GROUP = Suite("toys", (RC, BPB), scored=False)
+
+
+@pytest.fixture
+def toy_suites(offline_model, monkeypatch):
+    for suite in GROUP.suites:
+        monkeypatch.setitem(run.SUITES, suite.name, suite)
+
+
+def test_evaluate_scores_suites_and_each_task_once(toy_suites, tmp_path):
+    results = evaluate(EvalConfig(model="tiny@0", tasks=("toy",), suites=("toys",), out=tmp_path))
+
+    assert [task.task for task in results.tasks] == ["toy", "other"]
+    toy, other = (task.metrics for task in results.tasks)
+    data = json.loads((tmp_path / "results.json").read_text())
+    assert data["suites"] == [
+        {
+            "suite": "toy:rc",
+            "members": ["toy", "other"],
+            "metric": None,
+            "score": pytest.approx((toy["acc_per_char"] + other["acc_raw"]) / 2),
+        },
+        {
+            "suite": "toy:bpb",
+            "members": ["toy", "other"],
+            "metric": "bpb",
+            "score": pytest.approx((toy["bpb"] + other["bpb"]) / 2),
+        },
+        {"suite": "toys", "members": ["toy:rc", "toy:bpb"], "metric": None, "score": None},
+    ]
+
+
+def test_evaluate_rejects_two_tasks_under_one_name(toy_suites, monkeypatch):
+    monkeypatch.setitem(run.TASKS, "other", dataclasses.replace(OTHER, description="x"))
+    with pytest.raises(ValueError, match="two different definitions are named other"):
+        evaluate(EvalConfig(model="tiny@0", tasks=("other",), suites=("toy:rc",)))
+
+
+def test_evaluate_rejects_a_task_named_suites(monkeypatch):
+    monkeypatch.setitem(run.TASKS, "suites", dataclasses.replace(TASK, name="suites"))
+    with pytest.raises(ValueError, match="named suites"):
+        evaluate(EvalConfig(model="tiny@0", tasks=("suites",)))
+
+
+def test_evaluate_rejects_two_suites_under_one_name(toy_suites, monkeypatch):
+    clash = Suite("toy:rc", (TASK,))
+    monkeypatch.setitem(run.SUITES, "other", Suite("other", (clash,)))
+    with pytest.raises(ValueError, match="two different definitions are named toy:rc"):
+        evaluate(EvalConfig(model="tiny@0", suites=("toys", "other")))
 
 
 def test_prediction_rows_drop_padded_choices():
@@ -101,14 +156,24 @@ def test_score_task_records_truncation(lm, tokenizer):
     assert truncation.max_tokens_cut == max(cuts)
 
 
-def test_evaluate_rejects_unknown_task():
-    with pytest.raises(KeyError, match="nope"):
+def test_evaluate_rejects_unknown_task_or_suite():
+    with pytest.raises(KeyError, match="unknown tasks"):
         evaluate(EvalConfig(model="tiny@0", tasks=("nope",)))
+    with pytest.raises(KeyError, match="unknown suites"):
+        evaluate(EvalConfig(model="tiny@0", suites=("nope",)))
 
 
-def test_eval_config_rejects_repeated_tasks():
-    with pytest.raises(ValueError, match="tasks repeat"):
-        EvalConfig(model="tiny@0", tasks=("toy", "toy"))
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        pytest.param({}, "at least one task or suite", id="nothing"),
+        pytest.param({"tasks": ("toy", "toy")}, "tasks repeat", id="tasks"),
+        pytest.param({"suites": ("toy", "toy")}, "suites repeat", id="suites"),
+    ],
+)
+def test_eval_config_rejects_empty_or_repeated_names(kwargs, match):
+    with pytest.raises(ValueError, match=match):
+        EvalConfig(model="tiny@0", **kwargs)
 
 
 def test_evaluate_refuses_a_non_empty_out(offline_model, tmp_path):
@@ -150,3 +215,24 @@ def test_cli_runs_and_prints_primary_metric_first(offline_model, tmp_path, monke
     assert out[2].split()[0] == "acc_per_char"
     data = json.loads((tmp_path / "results.json").read_text())
     assert data["provenance"]["command"] == "flock-eval " + " ".join(argv)
+
+
+def test_cli_needs_a_task_or_suite():
+    result = CliRunner().invoke(cli.main, ["run", "--model", "m@0", "--out", "o"])
+
+    assert result.exit_code == 2
+    assert "at least one task or suite" in result.output
+
+
+def test_cli_prints_suite_scores(toy_suites, tmp_path, monkeypatch):
+    # `--suite` only accepts names registered when the CLI was imported, so the toy group takes
+    # a registered name.
+    monkeypatch.setitem(run.SUITES, "base_easy", dataclasses.replace(GROUP, name="base_easy"))
+    argv = ["run", "--model", "tiny@0", "--suite", "base_easy", "--out", str(tmp_path)]
+    monkeypatch.setattr(sys, "argv", ["flock-eval", *argv])
+
+    result = CliRunner().invoke(cli.main, argv, catch_exceptions=False)
+
+    out = result.output.splitlines()
+    assert out[-3].startswith("toy:rc  0.")
+    assert out[-1] == "base_easy  unscored  (toy:rc, toy:bpb)"
