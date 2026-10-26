@@ -35,7 +35,7 @@ The other QA tasks' requests are identical to OLMES's too (`<task>:rc::gen2mc:xl
 
 A few behaviours follow OLMES for parity and are worth knowing:
 
-- **The five gen2mc tasks** are OLMo 3's multiple-choice versions of short-form generative QA datasets. CoQA is zero-shot. The other four's few-shot examples exist only in OLMES's code, so they are written out in `flock/eval/tasks/gen2mc.py` as rows.
+- **The five gen2mc tasks** are OLMo 3's multiple-choice versions of short-form generative QA datasets. CoQA is zero-shot. The other four's few-shot examples exist only in OLMES's code, so they are written out as rows in `flock.eval.tasks.shots`.
 - **Qasper, SciRIFF and LAB-Bench show some docs their own answer.** OLMES draws their examples from the split it scores and keeps the doc itself, so 3 to 5 docs per task are shown their own question and answer.
 - **Basic skills shuffles each doc's choices** with a generator seeded by the doc's id, as OLMES does, so the order is fixed per doc. Its primary metric is `acc_per_token`; OLMES's own `acc_per_token` equals its `acc_raw`, so compare with OLMES's numbers on `acc_raw`.
 - **LAMBADA reports only `bpb` for now.** Its Base Easy accuracy is greedy match of the last word, which the scorer doesn't compute yet, so it is only in `base_easy:qa_bpb`.
