@@ -1,4 +1,4 @@
-# 007: `flock login`, device sign-in for the command line
+# 008: `flock login`, device sign-in for the command line
 
 | | |
 | --- | --- |
@@ -44,9 +44,9 @@ nobody signs in on, such as CI.
 
 ## 2. Design decisions
 
-The numbering continues from 006.
+The numbering continues from 007.
 
-### D35. The device authorization grant
+### D46. The device authorization grant
 
 Four routes under `/api/v1/auth/device`. Field names and error codes follow RFC 8628, so
 the flow is the familiar one and any standard client could drive it.
@@ -54,7 +54,7 @@ the flow is the familiar one and any standard client could drive it.
 | Route | Who | Does |
 | --- | --- | --- |
 | `POST auth/device` `{client: {hostname, platform}}` | public | starts a sign-in. Returns `{device_code, user_code, verification_uri, verification_uri_complete, expires_in, interval}` |
-| `POST auth/device/token` `{device_code}` | public | the CLI polls this. Returns 400 `{error}` with `authorization_pending`, `slow_down`, `access_denied` or `expired_token`, until the user approves. Then it returns the CLI token (D36) and `{user}` once |
+| `POST auth/device/token` `{device_code}` | public | the CLI polls this. Returns 400 `{error}` with `authorization_pending`, `slow_down`, `access_denied` or `expired_token`, until the user approves. Then it returns the CLI token (D47) and `{user}` once |
 | `GET auth/device/{user_code}` | signed-in browser | what the approval page shows: the requesting machine's hostname, platform and IP address, and when it asked |
 | `POST auth/device/{user_code}` `{approve: bool}` | signed-in browser | approves the sign-in as the current user, or denies it |
 
@@ -78,7 +78,7 @@ the flow is the familiar one and any standard client could drive it.
   defends against this the way GitHub's does: it names the machine and its IP address, and
   says that approving gives that machine access to the account.
 
-### D36. What a sign-in gives the CLI: a CLI token, a kind of session
+### D47. What a sign-in gives the CLI: a CLI token, a kind of session
 
 An approved sign-in creates a **CLI session**: a row in `sessions` with `kind = 'cli'`. The CLI
 gets an opaque token, `flock_cli_` followed by 43 random URL-safe characters, and sends it as
@@ -112,7 +112,7 @@ gets an opaque token, `flock_cli_` followed by 43 random URL-safe characters, an
 - **Telling credentials apart** (D20's rule, extended): a Bearer value with two dots is a JWT;
   one starting with `flock_cli_` is a CLI token; anything else is an API key.
 
-### D37. Seeing and revoking CLI sign-ins
+### D48. Seeing and revoking CLI sign-ins
 
 - `GET me/cli-sessions` lists the user's CLI sessions: `{id, name, created_at, last_used_at,
   expires_at}`. `DELETE me/cli-sessions/{id}` ends one, and its token stops working on the
@@ -120,7 +120,7 @@ gets an opaque token, `flock_cli_` followed by 43 random URL-safe characters, an
 - The web app's account page gets a "Command line sign-ins" section under API keys, listing
   each machine with a revoke button.
 
-### D38. The approval page
+### D49. The approval page
 
 A new web route, `/device`, behind sign-in. When the user isn't signed in, it goes to
 `/login?next=/device?code=…`, using the existing `safeNext` redirect. It has three states:
@@ -128,13 +128,13 @@ A new web route, `/device`, behind sign-in. When the user isn't signed in, it go
 1. **Enter the code.** One field, prefilled from `?code=` when the user follows
    `verification_uri_complete`.
 2. **Confirm.** The machine (hostname, platform, IP address, how long ago it asked), the account
-   it will act as, and the warning from D35. Buttons: "Authorize" and "Cancel".
+   it will act as, and the warning from D46. Buttons: "Authorize" and "Cancel".
 3. **Done.** "You can close this tab and return to your terminal", or that the sign-in was
    denied. An expired or unknown code goes back to step 1 with an error.
 
 It follows `design.md`, and uses the setup and login pages' form layout.
 
-### D39. The `flock` command
+### D50. The `flock` command
 
 - **Package.** `flock/cli` becomes a real package. `flock/cli/main.py` holds a click group (click
   is what `flock-eval` uses). The root `pyproject.toml` gets `flock = "flock.cli.main:main"`
@@ -143,7 +143,7 @@ It follows `design.md`, and uses the setup and login pages' form layout.
   - **Precedence:** `--host`, then `FLOCK_HOST`, then the server of the current sign-in, then
     the default, `https://flock-api.cerulean.works`.
   - **The browser page.** The CLI doesn't need the web app's address: the server builds
-    `verification_uri` from its `FLOCK_WEB_URL` (D35).
+    `verification_uri` from its `FLOCK_WEB_URL` (D46).
 - **`flock login [--host URL] [--no-browser] [--wandb | --no-wandb]`**
   - **The flow.**
 
@@ -169,7 +169,7 @@ It follows `design.md`, and uses the setup and login pages' form layout.
     deletes the credentials file.
   - **Server unreachable.** If the server can't be reached, it still deletes the file. It
     warns that the session stays listed on the account page until it's revoked there or expires.
-  - **What it leaves alone.** It doesn't touch the wandb SDK's login or the API key D41
+  - **What it leaves alone.** It doesn't touch the wandb SDK's login or the API key D52
     created. It says so, and names the key, so the user can revoke the key from the account
     page.
   - **A token from the environment.** When the credential comes from `FLOCK_TOKEN` rather than
@@ -193,7 +193,7 @@ It follows `design.md`, and uses the setup and login pages' form layout.
     Checking the token is `whoami`'s job.
   - **Errors.** It exits 1, with the reason on stderr, when there's no credential.
 
-### D40. Where the sign-in is saved, and how clients pick it up
+### D51. Where the sign-in is saved, and how clients pick it up
 
 - **The file.** `<config dir>/credentials.json` holds `{"host", "token", "user", "created_at"}`, where
   `host` is the API URL.
@@ -216,7 +216,7 @@ It follows `design.md`, and uses the setup and login pages' form layout.
   and S3 credentials come from `POST /hub/credentials`. So after `flock login`, `load_dataset`
   works with nothing else set.
 
-### D41. Logging the wandb SDK in
+### D52. Logging the wandb SDK in
 
 Flock speaks wandb's protocol (001), so "log in to wandb" means pointing the wandb SDK at this
 Flock server. Then `wandb.init`, and `flock.eval`'s tracking, go to Flock.
@@ -243,7 +243,7 @@ This is one PR, `feat/cli-login`. Run `tests/app` and the new `tests/cli` after 
 
 ### Step 1. Migration 0010 and CLI sessions in `Accounts`
 
-`0010_cli_sessions.sql` per D36. In `accounts.py`:
+`0010_cli_sessions.sql` per D47. In `accounts.py`:
 - `Session` gains `kind`, `name` and `last_used_at`;
 - token digests go in an in-memory map;
 - new methods `start_cli_session`, `session_for_cli_token` (with the hourly write-back),
@@ -267,14 +267,14 @@ The device routes in `api/auth.py`. In `deps.py`, `current_user` accepts CLI tok
 
 ### Step 4. Web
 
-The `/device` route (D38), proxy routes under `routes/api/v1/auth/device`, the account page
-section (D37). Types go in `src/lib/types.ts`, with specs. Use `svelte-autofixer`, and run
+The `/device` route (D49), proxy routes under `routes/api/v1/auth/device`, the account page
+section (D48). Types go in `src/lib/types.ts`, with specs. Use `svelte-autofixer`, and run
 `pnpm check && pnpm test`.
 
 ### Step 5. `flock/cli`
 
 Write `main.py`, `login.py` (login and logout), `account.py` (whoami and token) and
-`credentials.py`, and the package wiring (D39 and D40). The
+`credentials.py`, and the package wiring (D50 and D51). The
 `docs/source` pages (with the `write-docs` skill): installation, a reference page per
 command, and how credentials are resolved. Add a docs build workflow for it, like the other packages'.
 
@@ -321,10 +321,10 @@ with a "how it was actually built" section.
 
 ## 4. Settled in review
 
-1. **"Log in to wandb"** means pointing the wandb SDK at Flock (D41).
-2. **The default server** is the API at `https://flock-api.cerulean.works` (D39).
-3. **CLI sessions** expire after 90 idle days, extended by use (D36).
-4. **`flock logout`, `flock whoami` and `flock token`** are in scope (D39).
+1. **"Log in to wandb"** means pointing the wandb SDK at Flock (D52).
+2. **The default server** is the API at `https://flock-api.cerulean.works` (D50).
+3. **CLI sessions** expire after 90 idle days, extended by use (D47).
+4. **`flock logout`, `flock whoami` and `flock token`** are in scope (D50).
 
 ---
 
@@ -335,7 +335,7 @@ The plan was followed in order, in four commits: the API (steps 1 to 3 and its t
 the code differs from the decisions above, or adds to them.
 
 - **No proxy routes in the web app.** Step 4 planned proxy routes under
-  `routes/api/v1/auth/device`. The CLI talks to the API's public address (D39), so it never
+  `routes/api/v1/auth/device`. The CLI talks to the API's public address (D50), so it never
   needs the dashboard, and the approval page talks to Flock from the server like every other
   signed-in page: its load reads `GET auth/device/{user_code}` and a form action posts the
   decision. Entering the code is a plain `GET /device?code=…` form. After a decision the page
@@ -368,9 +368,9 @@ the code differs from the decisions above, or adds to them.
   decides whether the saved sign-in applies: when it names another server, `resolve()` returns
   `None` rather than the file's token. Hosts are normalized (no trailing slash, `https://` added
   when no scheme is given). `auth_headers()` returns `{}` without a credential.
-- **The credentials file can name the wandb key.** When `flock login` creates the D41 key, it
+- **The credentials file can name the wandb key.** When `flock login` creates the D52 key, it
   adds `wandb_key: {name, prefix}` to the file, which is how `flock logout` names the key it
-  leaves. The file is otherwise as D40 says.
+  leaves. The file is otherwise as D51 says.
 - **Without a terminal** (stdin and stdout not both TTYs), `flock login` keeps a working
   sign-in instead of asking to replace it, and skips the wandb question unless `--wandb` is
   given. EOF at "Press Enter" aborts like Ctrl-C.

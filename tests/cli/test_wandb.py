@@ -1,4 +1,4 @@
-"""`flock login` pointing the wandb SDK at Flock (D41)."""
+"""`flock login` pointing the wandb SDK at Flock (D52)."""
 
 import socket
 import sys
