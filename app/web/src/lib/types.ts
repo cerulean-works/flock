@@ -160,8 +160,10 @@ export interface Budget {
 	/** Null without a budget; negative once it is overspent. */
 	remaining: number | null;
 	gpu_hours: number;
-	/** By cost; a null project collects deleted projects. */
+	/** By cost, runs with GPU hours only; a null project collects deleted projects. */
 	projects: { project: string | null; cost: number; gpu_hours: number; runs: number }[];
+	/** Spend of deleted projects an admin left out of the budget: not in `spent`. */
+	excluded: { projects: number; cost: number; gpu_hours: number };
 	top_runs: {
 		entity: string;
 		project: string;
@@ -178,6 +180,39 @@ export interface Budget {
 	unpriced: { gpu_type: string; gpu_hours: number }[];
 	/** Runs whose GPUs aren't known, and their wall-clock hours. */
 	unknown_gpu: { runs: number; hours: number };
+	/** What to warn about: only what amounts to a tenth of an hour or more. */
+	warnings: BudgetWarning[];
+}
+
+interface WarningBase {
+	/** `{kind}:{month}`. */
+	id: string;
+	/** Changes with what the warning is about; dismissing sends the one that was shown. */
+	fingerprint: string;
+	/** Dismissed by an admin for everyone, until it is about something new. */
+	dismissed: boolean;
+	dismissed_by: Person | null;
+	dismissed_at: number | null;
+}
+
+export type BudgetWarning =
+	| (WarningBase & { kind: 'unpriced'; gpu_types: { gpu_type: string; gpu_hours: number }[] })
+	| (WarningBase & { kind: 'unknown_gpu'; runs: number; hours: number });
+
+/** A deleted project whose runs used GPU hours (admins only). */
+export interface DeletedProject {
+	id: number;
+	/** Null for projects deleted before Flock kept their names. */
+	name: string | null;
+	deleted_at: number | null;
+	cost: number;
+	gpu_hours: number;
+	runs: number;
+	months: { month: string; cost: number; gpu_hours: number }[];
+	/** Its spend is left out of the budget. */
+	excluded: boolean;
+	excluded_at: number | null;
+	excluded_by: Person | null;
 }
 
 /** An org's prices and budget settings. */

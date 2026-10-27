@@ -40,7 +40,34 @@ export const load: PageServerLoad = async ({ parent, url, depends }) => {
 	return { org: shell.org, now, thisMonth, feed, budget, query, mine, kinds, project };
 };
 
+/** The API path of a budget warning's dismissal, from a form naming the org and the warning. */
+function dismissalPath(form: FormData): string | null {
+	const org = formText(form, 'org');
+	const warning = formText(form, 'warning');
+	if (!org || !warning) return null;
+	return `/api/v1/orgs/${encodeURIComponent(org)}/budget/warnings/${encodeURIComponent(warning)}/dismissal`;
+}
+
 export const actions: Actions = {
+	/** Dismiss a budget warning for everyone in the org (admins), as it was shown. */
+	dismissWarning: async ({ request }) => {
+		const form = await request.formData();
+		const path = dismissalPath(form);
+		if (!path) return fail(400, { error: 'No such warning' });
+		const res = await change('PUT', path, { fingerprint: formText(form, 'fingerprint') });
+		if (refused(res)) return res;
+		return { dismissed: true };
+	},
+
+	/** Show a dismissed budget warning again (admins). */
+	restoreWarning: async ({ request }) => {
+		const path = dismissalPath(await request.formData());
+		if (!path) return fail(400, { error: 'No such warning' });
+		const res = await change('DELETE', path);
+		if (refused(res)) return res;
+		return { restored: true };
+	},
+
 	/** The sidebar's switcher: make an org the default, then go back or to its runs. */
 	workspace: async ({ request }) => {
 		const form = await request.formData();

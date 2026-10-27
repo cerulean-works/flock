@@ -9,6 +9,7 @@
 	import CopyBlock from '#lib/components/CopyBlock.svelte';
 	import CopyButton from '#lib/components/CopyButton.svelte';
 	import DeleteOrgDialog from '#lib/components/DeleteOrgDialog.svelte';
+	import DeletedProjectsSpend from '#lib/components/DeletedProjectsSpend.svelte';
 	import FormError from '#lib/components/FormError.svelte';
 	import MemberMenu from '#lib/components/MemberMenu.svelte';
 	import OrgImport from '#lib/components/OrgImport.svelte';
@@ -236,6 +237,13 @@
 				<h2 class="font-serif text-2xl tracking-[-0.01em]">Budget</h2>
 				<BillingForm billing={data.billing} {admin} />
 			</section>
+
+			{#if admin && data.deletedProjects}
+				<section class="mt-10 scroll-mt-6" id="deleted-projects">
+					<h2 class="font-serif text-2xl tracking-[-0.01em]">Spend of deleted projects</h2>
+					<DeletedProjectsSpend projects={data.deletedProjects} currency={data.billing.currency} />
+				</section>
+			{/if}
 
 			{#if admin}
 				<section class="mt-10">

@@ -2,7 +2,16 @@ import { fail, isHttpError, redirect } from '@sveltejs/kit';
 import { refreshUser } from '#lib/server/auth.ts';
 import { removeAvatar, setAvatar } from '#lib/server/avatar.ts';
 import { change, refused, flock } from '#lib/server/flock.ts';
-import type { Billing, Invite, Member, OrgImport, OrgInfo, Role, UserInfo } from '#lib/types.ts';
+import type {
+	Billing,
+	DeletedProject,
+	Invite,
+	Member,
+	OrgImport,
+	OrgInfo,
+	Role,
+	UserInfo
+} from '#lib/types.ts';
 import { formText, orgDisplayNameError } from '#lib/utils.ts';
 import { IMPORT, wandbImport } from '#lib/wandb.ts';
 import { orgHref } from '#lib/workspace/url.ts';
@@ -13,7 +22,7 @@ const orgPath = (org: string) => `/api/v1/orgs/${encodeURIComponent(org)}`;
 export const load: PageServerLoad = async ({ depends, params }) => {
 	depends(IMPORT);
 	const path = orgPath(params.org);
-	const [org, members, me, billing, invites, wandb] = await Promise.all([
+	const [org, members, me, billing, invites, wandb, deleted] = await Promise.all([
 		flock(path).then((r) => r.json() as Promise<OrgInfo>),
 		flock(`${path}/members`).then((r) => r.json() as Promise<{ members: Member[] }>),
 		flock('/api/v1/me').then((r) => r.json() as Promise<UserInfo>),
@@ -31,6 +40,13 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 			.catch((e) => {
 				if (isHttpError(e) && (e.status === 403 || e.status === 404)) return null;
 				throw e;
+			}),
+		// The spend of deleted projects: admins manage it, members are refused.
+		flock(`${path}/budget/deleted-projects`)
+			.then((r) => r.json() as Promise<{ deleted_projects: DeletedProject[] }>)
+			.catch((e) => {
+				if (isHttpError(e) && e.status === 403) return null;
+				throw e;
 			})
 	]);
 	return {
@@ -39,6 +55,7 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 		invites: invites?.invites ?? null,
 		import: wandb,
 		billing,
+		deletedProjects: deleted?.deleted_projects ?? null,
 		me: { id: me.id, is_superadmin: me.is_superadmin },
 		now: Date.now() / 1000
 	};
@@ -96,6 +113,20 @@ export const actions: Actions = {
 		});
 		if (refused(res)) return res;
 		return { billing: res.data };
+	},
+
+	/** Leave a deleted project's spend out of the budget (`excluded=true`), or count it again. */
+	exclude: async ({ params, request }) => {
+		const form = await request.formData();
+		const id = Number(form.get('deleted'));
+		if (!Number.isInteger(id)) return fail(400, { error: 'No such deleted project' });
+		const res = await change<DeletedProject>(
+			'PATCH',
+			`${orgPath(params.org)}/budget/deleted-projects/${id}`,
+			{ excluded: form.get('excluded') === 'true' }
+		);
+		if (refused(res)) return res;
+		return { deleted: res.data };
 	},
 
 	/** An invitation link, shown this once: Flock keeps only a hash of it. */
