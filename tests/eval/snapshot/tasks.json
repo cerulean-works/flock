@@ -259,6 +259,234 @@
       ],
       "metric": "bpb",
       "scored": true
+    },
+    "tmmluplus": {
+      "members": [
+        "tmmluplus:stem",
+        "tmmluplus:social_sciences",
+        "tmmluplus:humanities",
+        "tmmluplus:other"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "tmmluplus:all": {
+      "members": [
+        "tmmluplus",
+        "tmmluplus:bpb",
+        "tmmluplus:taiwan",
+        "tmmluplus:taiwan:bpb"
+      ],
+      "metric": null,
+      "scored": false
+    },
+    "tmmluplus:bpb": {
+      "members": [
+        "tmmluplus:stem:bpb",
+        "tmmluplus:social_sciences:bpb",
+        "tmmluplus:humanities:bpb",
+        "tmmluplus:other:bpb"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "tmmluplus:humanities": {
+      "members": [
+        "tmmluplus_administrative_law",
+        "tmmluplus_anti_money_laundering",
+        "tmmluplus_general_principles_of_law",
+        "tmmluplus_introduction_to_law",
+        "tmmluplus_jce_humanities",
+        "tmmluplus_taxation",
+        "tmmluplus_trust_practice"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "tmmluplus:humanities:bpb": {
+      "members": [
+        "tmmluplus_administrative_law",
+        "tmmluplus_anti_money_laundering",
+        "tmmluplus_general_principles_of_law",
+        "tmmluplus_introduction_to_law",
+        "tmmluplus_jce_humanities",
+        "tmmluplus_taxation",
+        "tmmluplus_trust_practice"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "tmmluplus:other": {
+      "members": [
+        "tmmluplus_accounting",
+        "tmmluplus_agriculture",
+        "tmmluplus_auditing",
+        "tmmluplus_business_management",
+        "tmmluplus_culinary_skills",
+        "tmmluplus_dentistry",
+        "tmmluplus_finance_banking",
+        "tmmluplus_financial_analysis",
+        "tmmluplus_fire_science",
+        "tmmluplus_insurance_studies",
+        "tmmluplus_junior_social_studies",
+        "tmmluplus_logic_reasoning",
+        "tmmluplus_management_accounting",
+        "tmmluplus_marketing_management",
+        "tmmluplus_mechanical",
+        "tmmluplus_music",
+        "tmmluplus_nautical_science",
+        "tmmluplus_official_document_management",
+        "tmmluplus_optometry",
+        "tmmluplus_pharmacology",
+        "tmmluplus_real_estate",
+        "tmmluplus_technical",
+        "tmmluplus_trade",
+        "tmmluplus_traditional_chinese_medicine_clinical_medicine",
+        "tmmluplus_tve_design",
+        "tmmluplus_veterinary_pathology",
+        "tmmluplus_veterinary_pharmacology"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "tmmluplus:other:bpb": {
+      "members": [
+        "tmmluplus_accounting",
+        "tmmluplus_agriculture",
+        "tmmluplus_auditing",
+        "tmmluplus_business_management",
+        "tmmluplus_culinary_skills",
+        "tmmluplus_dentistry",
+        "tmmluplus_finance_banking",
+        "tmmluplus_financial_analysis",
+        "tmmluplus_fire_science",
+        "tmmluplus_insurance_studies",
+        "tmmluplus_junior_social_studies",
+        "tmmluplus_logic_reasoning",
+        "tmmluplus_management_accounting",
+        "tmmluplus_marketing_management",
+        "tmmluplus_mechanical",
+        "tmmluplus_music",
+        "tmmluplus_nautical_science",
+        "tmmluplus_official_document_management",
+        "tmmluplus_optometry",
+        "tmmluplus_pharmacology",
+        "tmmluplus_real_estate",
+        "tmmluplus_technical",
+        "tmmluplus_trade",
+        "tmmluplus_traditional_chinese_medicine_clinical_medicine",
+        "tmmluplus_tve_design",
+        "tmmluplus_veterinary_pathology",
+        "tmmluplus_veterinary_pharmacology"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "tmmluplus:social_sciences": {
+      "members": [
+        "tmmluplus_chinese_language_and_literature",
+        "tmmluplus_clinical_psychology",
+        "tmmluplus_economics",
+        "tmmluplus_education",
+        "tmmluplus_education_(profession_level)",
+        "tmmluplus_educational_psychology",
+        "tmmluplus_geography_of_taiwan",
+        "tmmluplus_human_behavior",
+        "tmmluplus_junior_chinese_exam",
+        "tmmluplus_macroeconomics",
+        "tmmluplus_national_protection",
+        "tmmluplus_occupational_therapy_for_psychological_disorders",
+        "tmmluplus_physical_education",
+        "tmmluplus_politic_science",
+        "tmmluplus_taiwanese_hokkien",
+        "tmmluplus_three_principles_of_people",
+        "tmmluplus_ttqav2",
+        "tmmluplus_tve_chinese_language"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "tmmluplus:social_sciences:bpb": {
+      "members": [
+        "tmmluplus_chinese_language_and_literature",
+        "tmmluplus_clinical_psychology",
+        "tmmluplus_economics",
+        "tmmluplus_education",
+        "tmmluplus_education_(profession_level)",
+        "tmmluplus_educational_psychology",
+        "tmmluplus_geography_of_taiwan",
+        "tmmluplus_human_behavior",
+        "tmmluplus_junior_chinese_exam",
+        "tmmluplus_macroeconomics",
+        "tmmluplus_national_protection",
+        "tmmluplus_occupational_therapy_for_psychological_disorders",
+        "tmmluplus_physical_education",
+        "tmmluplus_politic_science",
+        "tmmluplus_taiwanese_hokkien",
+        "tmmluplus_three_principles_of_people",
+        "tmmluplus_ttqav2",
+        "tmmluplus_tve_chinese_language"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "tmmluplus:stem": {
+      "members": [
+        "tmmluplus_advance_chemistry",
+        "tmmluplus_basic_medical_science",
+        "tmmluplus_computer_science",
+        "tmmluplus_engineering_math",
+        "tmmluplus_junior_chemistry",
+        "tmmluplus_junior_math_exam",
+        "tmmluplus_junior_science_exam",
+        "tmmluplus_organic_chemistry",
+        "tmmluplus_pharmacy",
+        "tmmluplus_physics",
+        "tmmluplus_secondary_physics",
+        "tmmluplus_statistics_and_machine_learning",
+        "tmmluplus_tve_mathematics",
+        "tmmluplus_tve_natural_sciences"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "tmmluplus:stem:bpb": {
+      "members": [
+        "tmmluplus_advance_chemistry",
+        "tmmluplus_basic_medical_science",
+        "tmmluplus_computer_science",
+        "tmmluplus_engineering_math",
+        "tmmluplus_junior_chemistry",
+        "tmmluplus_junior_math_exam",
+        "tmmluplus_junior_science_exam",
+        "tmmluplus_organic_chemistry",
+        "tmmluplus_pharmacy",
+        "tmmluplus_physics",
+        "tmmluplus_secondary_physics",
+        "tmmluplus_statistics_and_machine_learning",
+        "tmmluplus_tve_mathematics",
+        "tmmluplus_tve_natural_sciences"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "tmmluplus:taiwan": {
+      "members": [
+        "tmmluplus_geography_of_taiwan",
+        "tmmluplus_ttqav2",
+        "tmmluplus_taiwanese_hokkien"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "tmmluplus:taiwan:bpb": {
+      "members": [
+        "tmmluplus_geography_of_taiwan",
+        "tmmluplus_ttqav2",
+        "tmmluplus_taiwanese_hokkien"
+      ],
+      "metric": "bpb",
+      "scored": true
     }
   },
   "tasks": {
@@ -3141,6 +3369,1775 @@
       "to_doc": "flock.eval.tasks.gen2mc.squad_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
+    },
+    "tmmluplus_accounting": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "accounting"
+      },
+      "description": "以下是關於會計學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_administrative_law": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "administrative_law"
+      },
+      "description": "以下是關於行政法考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_advance_chemistry": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "advance_chemistry"
+      },
+      "description": "以下是關於化學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_agriculture": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "agriculture"
+      },
+      "description": "以下是關於農業考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_anti_money_laundering": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "anti_money_laundering"
+      },
+      "description": "以下是關於洗錢防制考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_auditing": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "auditing"
+      },
+      "description": "以下是關於審計學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_basic_medical_science": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "basic_medical_science"
+      },
+      "description": "以下是關於基礎醫學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_business_management": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "business_management"
+      },
+      "description": "以下是關於企業管理考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_chinese_language_and_literature": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "chinese_language_and_literature"
+      },
+      "description": "以下是關於國文考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_clinical_psychology": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "clinical_psychology"
+      },
+      "description": "以下是關於臨床心理學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_computer_science": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "computer_science"
+      },
+      "description": "以下是關於資訊工程考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_culinary_skills": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "culinary_skills"
+      },
+      "description": "以下是關於餐旅考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_dentistry": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "dentistry"
+      },
+      "description": "以下是關於牙醫學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_economics": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "economics"
+      },
+      "description": "以下是關於經濟學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_education": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "education"
+      },
+      "description": "以下是關於教育常識考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_education_(profession_level)": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "education_(profession_level)"
+      },
+      "description": "以下是關於教育專業考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_educational_psychology": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "educational_psychology"
+      },
+      "description": "以下是關於教育心理考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_engineering_math": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "engineering_math"
+      },
+      "description": "以下是關於工程數學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_finance_banking": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "finance_banking"
+      },
+      "description": "以下是關於金融與法規考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_financial_analysis": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "financial_analysis"
+      },
+      "description": "以下是關於財務分析考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_fire_science": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "fire_science"
+      },
+      "description": "以下是關於火災學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_general_principles_of_law": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "general_principles_of_law"
+      },
+      "description": "以下是關於法學大意考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_geography_of_taiwan": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "geography_of_taiwan"
+      },
+      "description": "以下是關於台灣地理考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_human_behavior": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "human_behavior"
+      },
+      "description": "以下是關於人類行為與社會考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_insurance_studies": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "insurance_studies"
+      },
+      "description": "以下是關於保險學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_introduction_to_law": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "introduction_to_law"
+      },
+      "description": "以下是關於法律概論考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_jce_humanities": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "jce_humanities"
+      },
+      "description": "以下是關於指考人文科目考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_junior_chemistry": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "junior_chemistry"
+      },
+      "description": "以下是關於國中理化考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_junior_chinese_exam": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "junior_chinese_exam"
+      },
+      "description": "以下是關於國中會考基測國文考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_junior_math_exam": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "junior_math_exam"
+      },
+      "description": "以下是關於國中會考基測數學科考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_junior_science_exam": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "junior_science_exam"
+      },
+      "description": "以下是關於國中會考基測自然科考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_junior_social_studies": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "junior_social_studies"
+      },
+      "description": "以下是關於國中會考基測社會科考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_logic_reasoning": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "logic_reasoning"
+      },
+      "description": "以下是關於邏輯思維考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_macroeconomics": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "macroeconomics"
+      },
+      "description": "以下是關於總經考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_management_accounting": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "management_accounting"
+      },
+      "description": "以下是關於管理會計考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_marketing_management": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "marketing_management"
+      },
+      "description": "以下是關於行銷管理考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_mechanical": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "mechanical"
+      },
+      "description": "以下是關於機械與機電概論考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_music": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "music"
+      },
+      "description": "以下是關於音樂科考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_national_protection": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "national_protection"
+      },
+      "description": "以下是關於軍事考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_nautical_science": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "nautical_science"
+      },
+      "description": "以下是關於航海考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_occupational_therapy_for_psychological_disorders": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "occupational_therapy_for_psychological_disorders"
+      },
+      "description": "以下是關於心理障礙職能治療學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_official_document_management": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "official_document_management"
+      },
+      "description": "以下是關於機關文書考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_optometry": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "optometry"
+      },
+      "description": "以下是關於視光學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_organic_chemistry": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "organic_chemistry"
+      },
+      "description": "以下是關於有機化學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_pharmacology": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "pharmacology"
+      },
+      "description": "以下是關於藥理學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_pharmacy": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "pharmacy"
+      },
+      "description": "以下是關於藥劑學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_physical_education": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "physical_education"
+      },
+      "description": "以下是關於體育考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_physics": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "physics"
+      },
+      "description": "以下是關於物理考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_politic_science": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "politic_science"
+      },
+      "description": "以下是關於政治考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_real_estate": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "real_estate"
+      },
+      "description": "以下是關於房地產考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_secondary_physics": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "secondary_physics"
+      },
+      "description": "以下是關於高中物理考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_statistics_and_machine_learning": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "statistics_and_machine_learning"
+      },
+      "description": "以下是關於統計與機器學習考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_taiwanese_hokkien": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "taiwanese_hokkien"
+      },
+      "description": "以下是關於閩南語考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_taxation": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "taxation"
+      },
+      "description": "以下是關於稅務考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_technical": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "technical"
+      },
+      "description": "以下是關於技術工相關考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_three_principles_of_people": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "three_principles_of_people"
+      },
+      "description": "以下是關於三民主義考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_trade": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "trade"
+      },
+      "description": "以下是關於貿易考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_traditional_chinese_medicine_clinical_medicine": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "traditional_chinese_medicine_clinical_medicine"
+      },
+      "description": "以下是關於中醫臨床醫學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_trust_practice": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "trust_practice"
+      },
+      "description": "以下是關於信託實務考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_ttqav2": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "ttqav2"
+      },
+      "description": "以下是關於台灣在地用語考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_tve_chinese_language": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "tve_chinese_language"
+      },
+      "description": "以下是關於統測國文考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_tve_design": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "tve_design"
+      },
+      "description": "以下是關於統測＿設計考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_tve_mathematics": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "tve_mathematics"
+      },
+      "description": "以下是關於統測數學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_tve_natural_sciences": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "tve_natural_sciences"
+      },
+      "description": "以下是關於統測自然科考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_veterinary_pathology": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "veterinary_pathology"
+      },
+      "description": "以下是關於獸醫病理學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tmmluplus_veterinary_pharmacology": {
+      "dataset": {
+        "repo": "ikala/tmmluplus",
+        "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
+        "row_index": true,
+        "split": "test",
+        "subset": "veterinary_pharmacology"
+      },
+      "description": "以下是關於獸醫藥理學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
     },
     "winogrande": {
       "dataset": {
