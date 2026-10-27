@@ -53,9 +53,16 @@
 
 	let { tip, compact }: Props = $props();
 
+	// Puts it back on cleanup: when the plot goes from hovered to following, the same element
+	// stays mounted and must return to the plot.
 	function toBody(el: HTMLElement) {
+		const parent = el.parentNode;
+		const next = el.nextSibling;
 		document.body.append(el);
-		return () => el.remove();
+		return () => {
+			if (parent?.isConnected) parent.insertBefore(el, next);
+			else el.remove();
+		};
 	}
 </script>
 
