@@ -28,7 +28,7 @@ def test_logging_in_without_a_terminal(server, alice, browser, flock_cli):
     assert f"Open {server.url}/device in a browser where you're signed in" in result.stdout
     assert "Press Enter" not in result.stdout
     assert f"✓ Logged in to {server.url} as alice@lab.test" in result.stdout
-    assert "wandb" not in result.stdout  # nobody to ask
+    assert "[Y/n]" not in result.stdout  # nobody to ask: the wandb default (yes) applies
 
     # The approval page showed this machine.
     assert browser.seen[0]["hostname"] == socket.gethostname()

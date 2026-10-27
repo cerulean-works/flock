@@ -42,7 +42,7 @@ def login_host(host: str | None) -> str:
     "--wandb/--no-wandb",
     "wandb_login",
     default=None,
-    help="Also log the wandb SDK in to this Flock server, or don't (default: ask).",
+    help="Also log the wandb SDK in to this Flock server, or don't (default: ask, yes).",
 )
 def login(host: str | None, no_browser: bool, wandb_login: bool | None) -> None:
     """Log in to Flock on this machine, approving the sign-in in a browser."""
@@ -145,8 +145,8 @@ def _key_works(host: str, key: str) -> bool:
 
 
 def _log_in_wandb(host: str, token: str, choice: bool | None) -> dict[str, str] | None:
-    """Points the wandb SDK at ``host`` with a new API key, if wanted (``choice``, else ask).
-    Returns the key's name and prefix when it made one."""
+    """Points the wandb SDK at ``host`` with a new API key, unless declined (``choice``, else
+    ask, defaulting to yes; without a terminal, yes). Returns the key's name and prefix when it made one."""
     if choice is False:
         return None
     try:
@@ -162,7 +162,7 @@ def _log_in_wandb(host: str, token: str, choice: bool | None) -> dict[str, str] 
         click.echo(f"The wandb SDK is already logged in to {host}.")
         return None
     question = "Also log the wandb SDK in to this Flock server, for experiment tracking?"
-    if choice is None and not (_terminal() and click.confirm(question, default=False)):
+    if choice is None and _terminal() and not click.confirm(question, default=True):
         return None
     name = f"wandb on {socket.gethostname()}"
     created = Api(host, token).post("me/api-keys", {"name": name})

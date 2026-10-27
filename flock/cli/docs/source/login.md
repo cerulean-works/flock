@@ -10,7 +10,7 @@ flock login [--host URL] [--no-browser] [--wandb | --no-wandb]
 |---|---|---|
 | `--host` | `FLOCK_HOST`, else the server you're signed in to, else `https://flock-api.cerulean.works` | The Flock API's URL, the same address the wandb SDK uses. The browser page's address comes from the server, so you don't need the web app's. |
 | `--no-browser` | off | Only print the page's address and the code. |
-| `--wandb` / `--no-wandb` | ask | Also log the wandb SDK in to this Flock server, or don't. See [The wandb SDK](#the-wandb-sdk). |
+| `--wandb` / `--no-wandb` | ask, yes | Also log the wandb SDK in to this Flock server, or don't. See [The wandb SDK](#the-wandb-sdk). |
 
 ## How it signs in
 
@@ -34,11 +34,11 @@ Flock speaks the wandb SDK's protocol, so the SDK can log to Flock instead of wa
 1. It creates an API key named `wandb on <hostname>`, listed on your account page like any other. The wandb SDK can only send API keys, not CLI tokens.
 2. It calls `wandb.login(key=..., host=<host>, relogin=True, verify=True)`. That saves the key to `~/.netrc` and points the SDK's `base_url` at Flock, as `wandb login --host <host> <key>` does.
 
-The question's default is no: saying yes sends every wandb project on the machine to Flock, including ones meant for wandb.ai.
+The question's default is yes. That sends every wandb project on the machine to Flock, including ones meant for wandb.ai, so answer no (or pass `--no-wandb`) on a machine that also logs to wandb.ai.
 
 - **Already logged in.** When the wandb SDK already points at this server with a key that works, `flock login` says so, doesn't ask, and creates no second key.
 - **Not installed.** The wandb SDK isn't a dependency of the `flock` command. Without it, `flock login` prints the `wandb login --host` command to run once you've created a key.
-- **No terminal.** Without `--wandb`, nothing is asked and the SDK is left alone.
+- **No terminal.** Nothing is asked and the default applies: the SDK is logged in unless `--no-wandb` is given.
 
 ## Exit codes
 

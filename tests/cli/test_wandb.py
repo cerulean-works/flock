@@ -8,7 +8,7 @@ import pytest
 from flock.cli import credentials
 from flock.cli import login as login_module
 
-QUESTION = "Also log the wandb SDK in to this Flock server, for experiment tracking? [y/N]"
+QUESTION = "Also log the wandb SDK in to this Flock server, for experiment tracking? [Y/n]"
 
 
 @pytest.fixture
@@ -24,12 +24,13 @@ def keys(user) -> list[str]:
     return [k["name"] for k in user.api.get("/api/v1/me/api-keys").json()["keys"]]
 
 
+@pytest.mark.parametrize("answer", ["y\n", "\n"])  # the default is yes
 def test_yes_creates_a_key_and_logs_wandb_in(
-    server, alice, browser, flock_cli, monkeypatch, wandb_logins
+    server, alice, browser, flock_cli, monkeypatch, wandb_logins, answer
 ):
     monkeypatch.setattr(login_module, "_terminal", lambda: True)
     approval = browser.answer()
-    result = flock_cli("login", "--host", server.url, "--no-browser", input="y\n")
+    result = flock_cli("login", "--host", server.url, "--no-browser", input=answer)
     approval.join()
     assert result.exit_code == 0, result.output
     assert QUESTION in result.stdout
@@ -43,9 +44,12 @@ def test_yes_creates_a_key_and_logs_wandb_in(
     assert saved is not None and saved["wandb_key"] == {"name": name, "prefix": call["key"][:12]}
 
 
-def test_the_wandb_flag_skips_the_question(server, alice, browser, flock_cli, wandb_logins):
+@pytest.mark.parametrize("flag", [["--wandb"], []])
+def test_the_flag_or_no_terminal_skips_the_question(
+    server, alice, browser, flock_cli, wandb_logins, flag
+):
     approval = browser.answer()
-    result = flock_cli("login", "--host", server.url, "--wandb")  # no terminal needed
+    result = flock_cli("login", "--host", server.url, *flag)  # no terminal: yes, unasked
     approval.join()
     assert result.exit_code == 0, result.output
     assert QUESTION not in result.stdout
@@ -60,7 +64,7 @@ def test_no(server, alice, browser, flock_cli, monkeypatch, wandb_logins, how):
     if how == "flag":
         result = flock_cli(*args, "--no-wandb")
     else:
-        result = flock_cli(*args, input="\n")  # the default is no
+        result = flock_cli(*args, input="n\n")
     approval.join()
     assert result.exit_code == 0, result.output
     assert (QUESTION in result.stdout) == (how == "answer")

@@ -152,7 +152,7 @@ It follows `design.md`, and uses the setup and login pages' form layout.
     ! Copy your one-time code: WDJB-MJHT
     Press Enter to open https://flock.cerulean.works/device in your browser...
     ✓ Logged in to https://flock-api.cerulean.works as ada@example.com
-    Also log the wandb SDK in to this Flock server, for experiment tracking? [y/N]
+    Also log the wandb SDK in to this Flock server, for experiment tracking? [Y/n]
     ```
 
   - **Opening the browser.** On Enter, the CLI opens `verification_uri_complete` (with
@@ -232,8 +232,9 @@ Flock server. Then `wandb.init`, and `flock.eval`'s tracking, go to Flock.
   says so and skips the question. It doesn't create a second key.
 - **If `wandb` isn't installed**, it isn't a dependency of `flock-cli`. The CLI then prints the
   `wandb login --host …` command and how to create a key, instead of asking.
-- **The question's default is no.** Saying yes points the wandb SDK at Flock for every project
-  on the machine, including ones meant for wandb.ai.
+- **The question's default is yes** (changed in review). Flock is where Cerulean tracks
+  experiments, so pointing the wandb SDK at it is the common case. Saying yes points it at Flock
+  for every project on the machine, including ones meant for wandb.ai, so `--no-wandb` opts out.
 
 ---
 
@@ -372,8 +373,8 @@ the code differs from the decisions above, or adds to them.
   adds `wandb_key: {name, prefix}` to the file, which is how `flock logout` names the key it
   leaves. The file is otherwise as D51 says.
 - **Without a terminal** (stdin and stdout not both TTYs), `flock login` keeps a working
-  sign-in instead of asking to replace it, and skips the wandb question unless `--wandb` is
-  given. EOF at "Press Enter" aborts like Ctrl-C.
+  sign-in instead of asking to replace it, and logs the wandb SDK in without asking (the
+  question's default) unless `--no-wandb` is given. EOF at "Press Enter" aborts like Ctrl-C.
 - **Detecting an existing wandb login** reads the SDK's own state: `base_url` from
   `wandb.sdk.wandb_setup.singleton().settings`, and the key from those settings
   (`WANDB_API_KEY`) or `wbauth.read_netrc_auth`. These are not public APIs, so any error reading
