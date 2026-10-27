@@ -63,10 +63,10 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `mt_mbpp` | the 17 `mt_mbpp_<language>` tasks | `bpb` | `mt_mbpp_v2fix` |
 | `base_easy:code_bpb` | `humaneval`, `mbpp`, `mt_mbpp` | `bpb` | `olmo3:base_easy:code_bpb` |
 | `base_easy` | `base_easy:qa_rc`, `base_easy:qa_bpb`, `base_easy:math_bpb`, `base_easy:code_bpb` | unscored | none |
-| `tmmluplus:stem`, `tmmluplus:social_sciences`, `tmmluplus:humanities`, `tmmluplus:other` | that category's subject tasks | `acc_per_char` | none |
-| `tmmluplus` | the four category suites | each category's mean | none |
-| `tmmluplus:taiwan` | `tmmluplus_geography_of_taiwan`, `tmmluplus_ttqav2`, `tmmluplus_taiwanese_hokkien` | `acc_per_char` | none |
-| each of the above with `:bpb` | the same members, read by `bpb` | `bpb` | none |
+| `tmmluplus:stem`, `tmmluplus:social_sciences`, `tmmluplus:humanities`, `tmmluplus:other` | that category's subject tasks | each task's primary metric (`acc_per_char`) | none |
+| `tmmluplus` | the four category suites | each category suite's score | none |
+| `tmmluplus:taiwan` | `tmmluplus_geography_of_taiwan`, `tmmluplus_ttqav2`, `tmmluplus_taiwanese_hokkien` | each task's primary metric (`acc_per_char`) | none |
+| each of the above with `:bpb` | the same tasks, or the `:bpb` category suites for `tmmluplus:bpb` | `bpb` | none |
 | `tmmluplus:all` | `tmmluplus`, `tmmluplus:bpb`, `tmmluplus:taiwan`, `tmmluplus:taiwan:bpb` | unscored | none |
 
 The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. OLMES groups ARC-Easy and ARC-Challenge into one suite with no metric of its own; here they are two members of `base_easy:qa_rc`. `basic_skills`, and so `base_easy:qa_rc`, averages our `acc_per_token`, which divides by the real token count. OLMES's equals its `acc_raw`, so these two scores differ from OLMES's by that member. See [Suites in results](results#suites) for when two suite scores compare.

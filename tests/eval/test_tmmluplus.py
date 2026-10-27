@@ -163,8 +163,8 @@ def test_cloze_takes_other_prefixes_and_separator():
         "為什麼？", ("因為",), question_prefix="問題：", answer_prefix="答案：", separator=""
     ) == (Choice("問題：為什麼？\n答案：", "因為"),)
     # With no separator, an empty answer would leave nothing to score.
-    with pytest.raises(ValueError, match="empty continuation"):
-        cloze("為什麼？", ("因為", ""), separator="")
+    with pytest.raises(ValueError, match="doc x: a choice has an empty continuation"):
+        MCDoc("x", cloze("為什麼？", ("因為", ""), separator=""), 0)
 
 
 def test_subjects_and_categories_match_the_card():

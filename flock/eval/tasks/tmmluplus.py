@@ -172,6 +172,7 @@ TMMLUPLUS_BPB = Suite(
         Suite(f"tmmluplus:{category}:bpb", tasks, metric="bpb")
         for category, tasks in _category_tasks.items()
     ),
+    metric="bpb",
 )
 
 # The subjects behind the Gemma-3-TAIDE cards' Taiwan columns (台灣地理, 台灣用語, 閩南語). The

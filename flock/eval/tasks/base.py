@@ -142,14 +142,10 @@ def cloze(
 
     Raises:
         `TypeError`: if `answers` is one string. A doc with one answer passes `(answer,)`.
-        `ValueError`: if an answer is empty and `separator` is too, which leaves nothing to score.
     """
     # A string is a sequence of its characters, which would render one choice per character.
     if isinstance(answers, str):
         raise TypeError("answers must be a sequence of strings; pass (answer,) for one answer")
-    # Caught here, with the question, rather than as an untokenizable request mid-run.
-    if not separator and "" in answers:
-        raise ValueError(f"an empty answer to {question!r} would be an empty continuation")
     context = f"{question_prefix}{question}\n{answer_prefix}"
 
     return tuple(Choice(context, f"{separator}{answer}") for answer in answers)
@@ -171,7 +167,7 @@ class MCDoc:
             The doc's text when another doc shows it as a few-shot example. Its gold choice's context and continuation if not set. Only for tasks whose examples read differently from the scored text, such as HumanEval's.
 
     Raises:
-        `ValueError`: naming the doc, if `choices` is empty, `gold` isn't an index into it, or `example` is an empty string.
+        `ValueError`: naming the doc, if `choices` is empty, a choice's continuation is empty, `gold` isn't an index into it, or `example` is an empty string.
     """
 
     id: str
@@ -184,6 +180,10 @@ class MCDoc:
             raise ValueError(f"doc {self.id}: no choices")
         if self.example == "":
             raise ValueError(f"doc {self.id}: an empty example would render as a blank shot")
+        # Caught when the doc is built rather than mid-run, where it can't be tokenized. Chinese
+        # choices have no leading space, so a blank answer stripped to "" would reach scoring.
+        if any(choice.continuation == "" for choice in self.choices):
+            raise ValueError(f"doc {self.id}: a choice has an empty continuation, nothing to score")
         if not 0 <= self.gold < len(self.choices):
             raise ValueError(
                 f"doc {self.id}: gold {self.gold} is not one of {len(self.choices)} choices"
@@ -364,7 +364,7 @@ class MultipleChoiceTask:
         primary_metric (`str`):
             The metric reported first, one of `metrics`.
         fewshot (`Fewshot`, *optional*):
-            The few-shot examples, from the same dataset or written out. Zero-shot if not set.
+            The few-shot examples, from the same dataset or written out. Zero-shot if not set. Each doc is shown all of them but any that is the doc itself (see [`Fewshot`]), so a few docs may see one fewer.
         description (`str`, *optional*, defaults to `""`):
             Text before the first few-shot example, such as a subject header.
         unconditional_context (`str`, *optional*, defaults to `"Answer:"`):

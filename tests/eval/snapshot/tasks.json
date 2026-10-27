@@ -287,7 +287,7 @@
         "tmmluplus:humanities:bpb",
         "tmmluplus:other:bpb"
       ],
-      "metric": null,
+      "metric": "bpb",
       "scored": true
     },
     "tmmluplus:humanities": {
