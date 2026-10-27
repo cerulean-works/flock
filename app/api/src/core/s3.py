@@ -1,4 +1,5 @@
-"""S3 access (D53-D57): org buckets, S3 keys and the key lifetimes orgs set.
+"""S3 access (D53-D57, D65, D69): org buckets, S3 keys, the key lifetimes orgs set, and the
+objects the dashboard's file browser lists, deletes and presigns URLs for.
 
 The S3 proxy (``app.api.src.s3_proxy``) serves the S3 API itself; this side keeps its tables.
 Buckets and keys are read from the database when asked for, never kept in memory: the proxy
@@ -8,17 +9,22 @@ reads the same rows. The org's two lifetimes live on ``Org``.
 import asyncio
 import contextlib
 import logging
+import math
 import re
 import time
+from collections.abc import Awaitable
 from dataclasses import dataclass
+from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any, ClassVar
+from urllib.parse import quote, urlsplit
 
 import httpx
 import orjson
 
 from app.api.src import s3_credentials
 from app.api.src.core.errors import BadGateway, Conflict, Invalid, NotFound
-from app.api.src.s3_proxy.upstream import Upstream, UpstreamError, configured
+from app.api.src.s3_proxy import sigv4
+from app.api.src.s3_proxy.upstream import DELETE_BATCH, Upstream, UpstreamError, configured
 
 if TYPE_CHECKING:
     import asyncpg
@@ -32,6 +38,12 @@ log = logging.getLogger(__name__)
 BUCKET_NAME = re.compile(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?")
 # Endings S3 reserves for its own kinds of buckets.
 RESERVED_SUFFIXES = ("-s3alias", "--ol-s3", ".mrap", "--x-s3", "--table-s3")
+MIB = 1024 * 1024
+# Types a preview may ask the proxy to answer with (``response-content-type``): never HTML, or
+# anything else a browser would run as a page.
+PREVIEW_TYPES = re.compile(
+    r"image/(png|jpeg|gif|webp|svg\+xml)|application/pdf|text/plain|(video|audio)/[\w.+-]+"
+)
 
 
 @dataclass(frozen=True)
@@ -69,6 +81,16 @@ class Key:
         return self.session is not None or self.api_key is not None
 
 
+class TooMany(Exception):
+    """A folder delete of more than ``S3.FOLDER_DELETE_LIMIT`` objects, refused (HTTP 409)."""
+
+    def __init__(self, message: str, limit: int, command: str) -> None:
+        super().__init__(message)
+        self.message = message
+        self.limit = limit
+        self.command = command
+
+
 class S3:
     """Buckets, keys and lifetimes. Without the ``FLOCK_S3_*`` settings, S3 is off: the routes
     answer 404, and nothing here touches an S3 server."""
@@ -80,6 +102,17 @@ class S3:
     SWEEP_INTERVAL: ClassVar[float] = 3600.0
     # A purge that failed (the S3 server was down, say) is tried again this much later.
     PURGE_RETRY: ClassVar[float] = 60.0
+    # The file browser (D65, D69).
+    OBJECT_PAGE: ClassVar[int] = 200
+    FOLDER_DELETE_LIMIT: ClassVar[int] = 10_000
+    BROWSER_KEY: ClassVar[str] = "browser"
+    # A browser key is reused while it has this long left (or the URL's lifetime, if longer).
+    BROWSER_KEY_MARGIN: ClassVar[int] = 900
+    URL_TTL: ClassVar[int] = 900  # uploads, downloads and previews
+    LINK_TTL: ClassVar[int] = 3600  # "Copy presigned link"
+    SINGLE_PUT_LIMIT: ClassVar[int] = 100 * MIB
+    PART_SIZE: ClassVar[int] = 16 * MIB
+    UPLOAD_LIMIT: ClassVar[int] = 50 * 1024 * MIB
     BUCKET_COLUMNS: ClassVar[str] = (
         "pk, org_pk, name, upstream_name, extract(epoch FROM created_at)::float8, created_by, "
         "extract(epoch FROM deleted_at)::float8, extract(epoch FROM purged_at)::float8"
@@ -303,10 +336,13 @@ class S3:
     def upstream_name(self, org: Org, name: str) -> str:
         return f"{self.settings.s3_bucket_prefix}{org.pk:0{self.PK_DIGITS}d}-{name}"
 
-    async def buckets(self, org: Org) -> list[Bucket]:
+    async def buckets(self, org: Org, deleting: bool = False) -> list[Bucket]:
+        """The org's buckets by name; with ``deleting``, also those deleted but not yet purged
+        (whose names can't be used again until they are)."""
+        gone = " OR (deleted_at IS NOT NULL AND purged_at IS NULL)" if deleting else ""
         records = await self.store.db.fetch(
             f"SELECT {self.BUCKET_COLUMNS} FROM s3_buckets "
-            "WHERE org_pk = $1 AND deleted_at IS NULL ORDER BY name",
+            f"WHERE org_pk = $1 AND (deleted_at IS NULL{gone}) ORDER BY name, pk",
             org.pk,
         )
         return [Bucket(*record) for record in records]
@@ -470,3 +506,259 @@ class S3:
                     await asyncio.wait_for(self._purge_wanted.wait(), self.PURGE_RETRY)
                 continue
             await self._purge_wanted.wait()
+
+    # ------------------------------------------------------------------ objects (D65, D67, D69)
+
+    @staticmethod
+    def check_key(key: str, folder: bool = False) -> None:
+        """Raises ``Invalid`` unless ``key`` is an object key S3 takes (``folder``: one ending
+        in ``/``)."""
+        if not key or len(key.encode()) > 1024:
+            raise Invalid("object keys are 1 to 1024 bytes")
+        if folder and (not key.endswith("/") or key.startswith("/")):
+            raise Invalid("folder names end with / and don't start with one")
+        if any(ord(c) < 32 or ord(c) == 127 for c in key):
+            raise Invalid("object keys can't hold control characters")
+
+    @staticmethod
+    async def _call[T](call: Awaitable[T]) -> T:
+        """An upstream call, its failures as ``BadGateway`` (and a missing bucket as 404)."""
+        try:
+            return await call
+        except UpstreamError as e:
+            if e.code == "NoSuchBucket":
+                raise NotFound("the bucket is missing on the S3 server") from None
+            raise BadGateway(f"the S3 server refused: {e}") from None
+        except httpx.HTTPError as e:
+            raise BadGateway(f"the S3 server couldn't be reached: {e}") from None
+
+    async def list_objects(
+        self, org: Org, name: str, prefix: str, cursor: str | None, limit: int
+    ) -> dict[str, Any]:
+        """One level of ``name`` under ``prefix``: its folders (common prefixes) and objects, and
+        the cursor of the next page. A folder's own marker (``prefix`` itself) isn't listed."""
+        upstream = self.require()
+        bucket = await self.bucket(org, name)
+        listing = await self._call(
+            upstream.list_objects(bucket.upstream_name, prefix, "/", cursor, limit)
+        )
+        return {
+            "prefix": prefix,
+            "folders": listing.prefixes,
+            "objects": [
+                {
+                    "key": o.key,
+                    "size": o.size,
+                    "last_modified": o.last_modified,
+                    "etag": o.etag.strip('"'),
+                }
+                for o in listing.objects
+                if o.key != prefix
+            ],
+            "cursor": listing.cursor,
+        }
+
+    async def head_object(self, org: Org, name: str, key: str) -> dict[str, Any]:
+        """An object's details (D67), from a HEAD."""
+        upstream = self.require()
+        self.check_key(key)
+        bucket = await self.bucket(org, name)
+        response = await self._call(upstream.head(bucket.upstream_name, key))
+        if response is None:
+            raise NotFound(f"object {key} not found")
+        headers = response.headers
+        modified = headers.get("last-modified")
+        return {
+            "key": key,
+            "size": int(headers.get("content-length", 0)),
+            "last_modified": parsedate_to_datetime(modified).timestamp() if modified else None,
+            "etag": headers.get("etag", "").strip('"'),
+            "content_type": headers.get("content-type"),
+            "metadata": {
+                header.removeprefix("x-amz-meta-"): value
+                for header, value in headers.items()
+                if header.startswith("x-amz-meta-")
+            },
+        }
+
+    async def create_folder(self, org: Org, name: str, prefix: str) -> None:
+        """The empty ``prefix`` object (ending in ``/``) that makes a folder show up."""
+        upstream = self.require()
+        self.check_key(prefix, folder=True)
+        bucket = await self.bucket(org, name)
+        await self._call(upstream.put_empty(bucket.upstream_name, prefix))
+
+    async def delete_objects(
+        self, org: Org, name: str, keys: list[str], prefixes: list[str]
+    ) -> int:
+        """Delete ``keys``, and every object under each of ``prefixes``; returns how many were
+        asked to go. More than ``FOLDER_DELETE_LIMIT`` in all is refused before any is deleted,
+        naming the CLI command that can do it."""
+        upstream = self.require()
+        for key in keys:
+            self.check_key(key)
+        for prefix in prefixes:
+            self.check_key(prefix, folder=True)
+        bucket = await self.bucket(org, name)
+        limit = self.FOLDER_DELETE_LIMIT
+        doomed = dict.fromkeys(keys)
+        for prefix in prefixes:
+            cursor = None
+            while True:
+                page = await self._call(
+                    upstream.list_objects(bucket.upstream_name, prefix, None, cursor)
+                )
+                doomed.update(dict.fromkeys(o.key for o in page.objects))
+                if len(doomed) > limit:
+                    command = f"aws s3 rm --recursive s3://{name}/{prefix} --profile flock"
+                    raise TooMany(
+                        f"This would delete more than {limit:,} objects. Delete them from the "
+                        f"command line instead with {command}",
+                        limit,
+                        command,
+                    )
+                cursor = page.cursor
+                if cursor is None:
+                    break
+        listed = list(doomed)
+        for start in range(0, len(listed), DELETE_BATCH):
+            batch = listed[start : start + DELETE_BATCH]
+            await self._call(upstream.delete_keys(bucket.upstream_name, batch))
+        return len(listed)
+
+    # ------------------------------------------------------------------ presigned URLs (D69)
+
+    async def browser_key(
+        self,
+        user: User,
+        org: Org,
+        lifetime: float,
+        session: int | None,
+        api_key: int | None,
+    ) -> tuple[Key, str, float | None]:
+        """The browser key of this session (or API key) and org: the newest one, if it has more
+        than ``BROWSER_KEY_MARGIN`` seconds (or ``lifetime``, if longer) still to live, else a new
+        one. Returns it, its secret and when the proxy stops taking it."""
+        now = time.time()
+        record = await self.store.db.fetchrow(
+            "SELECT pk, access_key_id, user_pk, org_pk, name, read_only, "
+            "extract(epoch FROM created_at)::float8, extract(epoch FROM expires_at)::float8, "
+            "session_pk, api_key_pk, extract(epoch FROM last_used_at)::float8 FROM s3_keys "
+            "WHERE user_pk = $1 AND org_pk = $2 AND session_pk IS NOT DISTINCT FROM $3 "
+            "AND api_key_pk IS NOT DISTINCT FROM $4 AND name = $5 AND NOT read_only "
+            "ORDER BY expires_at DESC NULLS FIRST LIMIT 1",
+            user.pk,
+            org.pk,
+            session,
+            api_key,
+            f"{self.BROWSER_KEY} (ephemeral)",
+        )
+        if record is not None:
+            key = Key(*record)
+            ends = self.expires_at(key)
+            if ends is None or ends - now > max(self.BROWSER_KEY_MARGIN, lifetime):
+                return key, s3_credentials.secret_for(self.secret, key.access_key_id), ends
+        key, secret = await self.issue_ephemeral(
+            user, org, self.BROWSER_KEY, session=session, api_key=api_key
+        )
+        return key, secret, self.expires_at(key)
+
+    def _presigned(
+        self,
+        key: Key,
+        secret: str,
+        method: str,
+        bucket: str,
+        object_key: str,
+        params: list[tuple[str, str]],
+        expires: int,
+    ) -> str:
+        """A URL to the proxy (``FLOCK_S3_PUBLIC_URL``) for one request on an object."""
+        public = urlsplit(self.settings.s3_public_url or "")
+        path = f"{public.path.rstrip('/')}/{sigv4.uri_encode(bucket, slash=False)}/"
+        path += sigv4.uri_encode(object_key)
+        query = sigv4.presign(
+            method, public.netloc, path, params, key.access_key_id, secret, self.region,
+            time.time(), expires,
+        )  # fmt: skip
+        return f"{public.scheme}://{public.netloc}{path}?{query}"
+
+    async def presign(
+        self,
+        user: User,
+        org: Org,
+        name: str,
+        body: dict[str, Any],
+        session: int | None,
+        api_key: int | None,
+    ) -> dict[str, Any]:
+        """Presigned URLs to the proxy for the browser (D69), signed with the browser key.
+
+        ``body["method"]`` is ``get`` (with ``disposition``, ``link`` and ``content_type``),
+        ``put`` (``size``), ``multipart`` (creates an upload of ``size`` bytes), ``parts``
+        (``upload_id`` and the ``parts`` to sign), ``complete`` or ``abort`` (``upload_id``).
+        """
+        upstream = self.require()
+        method, object_key = body["method"], body["key"]
+        self.check_key(object_key)
+        bucket = await self.bucket(org, name)
+        if method == "abort":
+            await self._call(
+                upstream.abort_upload(bucket.upstream_name, object_key, body["upload_id"])
+            )
+            return {}
+        if method == "multipart":
+            size = body.get("size")
+            if not size or size <= 0:
+                raise Invalid("a multipart upload needs the file's size")
+            if size > self.UPLOAD_LIMIT:
+                raise Invalid(
+                    f"files over {self.UPLOAD_LIMIT // (1024 * MIB)} GiB can't be uploaded "
+                    "here: use the command line (aws s3 cp)"
+                )
+            upload_id = await self._call(
+                upstream.create_upload(bucket.upstream_name, object_key, body.get("content_type"))
+            )
+            return {
+                "upload_id": upload_id,
+                "part_size": self.PART_SIZE,
+                "part_count": math.ceil(size / self.PART_SIZE),
+            }
+        if method == "put" and (body.get("size") or 0) > self.SINGLE_PUT_LIMIT:
+            raise Invalid(f"files over {self.SINGLE_PUT_LIMIT // MIB} MiB are uploaded in parts")
+
+        wanted = self.LINK_TTL if method == "get" and body.get("link") else self.URL_TTL
+        key, secret, ends = await self.browser_key(user, org, wanted, session, api_key)
+        now = time.time()
+        # A URL can't outlive its key: with an ephemeral lifetime this short, it lives less.
+        expires = int(min(wanted, ends - now)) if ends is not None else wanted
+        if expires < 60:
+            raise Invalid("the browser's S3 key has too little time left: try again")
+
+        def url(http: str, params: list[tuple[str, str]]) -> str:
+            return self._presigned(key, secret, http, name, object_key, params, expires)
+
+        out: dict[str, Any] = {"expires_at": now + expires}
+        if method == "get":
+            filename = quote(object_key.rpartition("/")[2] or "download", safe="")
+            disposition = "inline" if body.get("disposition") == "inline" else "attachment"
+            params = [
+                ("response-content-disposition", f"{disposition}; filename*=UTF-8''{filename}")
+            ]
+            content_type = body.get("content_type")
+            if content_type is not None:
+                if disposition != "inline" or not PREVIEW_TYPES.fullmatch(content_type):
+                    raise Invalid(f"objects can't be shown as {content_type}")
+                params.append(("response-content-type", content_type))
+            out["url"] = url("GET", params)
+        elif method == "put":
+            out["url"] = url("PUT", [])
+        elif method == "parts":
+            upload_id = body["upload_id"]
+            out["parts"] = {
+                str(n): url("PUT", [("partNumber", str(n)), ("uploadId", upload_id)])
+                for n in body["parts"]
+            }
+        elif method == "complete":
+            out["url"] = url("POST", [("uploadId", body["upload_id"])])
+        return out

@@ -13,7 +13,6 @@
 	import DeletedProjectsSpend from '#lib/components/DeletedProjectsSpend.svelte';
 	import FormError from '#lib/components/FormError.svelte';
 	import MemberMenu from '#lib/components/MemberMenu.svelte';
-	import OrgBuckets from '#lib/components/OrgBuckets.svelte';
 	import OrgImport from '#lib/components/OrgImport.svelte';
 	import S3Lifetimes from '#lib/components/S3Lifetimes.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
@@ -31,6 +30,7 @@
 		orgDisplayNameError,
 		relativeTime
 	} from '#lib/utils.ts';
+	import { storageHref } from '#lib/storage.ts';
 	import { entityHref } from '#lib/workspace/url.ts';
 	import type { PageProps } from './$types';
 
@@ -235,16 +235,12 @@
 			{/if}
 
 			{#if data.s3}
-				<section class="mt-10 scroll-mt-6" id="buckets">
-					<h2 class="text-2xl tracking-[-0.01em]">Buckets</h2>
-					<OrgBuckets
-						buckets={data.s3.buckets}
-						nameLimit={data.s3.nameLimit}
-						endpoint={data.s3.endpoint}
-						{admin}
-						now={data.now}
-					/>
-				</section>
+				<p class="mt-10 text-[13px] text-muted-foreground" id="buckets">
+					Buckets moved to <a
+						class="text-link underline-offset-3 hover:underline"
+						href={storageHref(data.org.name)}>Storage</a
+					>.
+				</p>
 			{/if}
 
 			<section class="mt-10 scroll-mt-6" id="budget">

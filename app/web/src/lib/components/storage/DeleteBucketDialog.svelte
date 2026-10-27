@@ -5,7 +5,7 @@
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
-	import FormError from './FormError.svelte';
+	import FormError from '../FormError.svelte';
 
 	let { open = $bindable(), bucket }: { open: boolean; bucket: string } = $props();
 

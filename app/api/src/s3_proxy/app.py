@@ -1,4 +1,4 @@
-"""Flock's S3 proxy (D53, D54, D61): ``uvicorn app.api.src.s3_proxy.app:app``.
+"""Flock's S3 proxy (D53, D54, D61, D69): ``uvicorn app.api.src.s3_proxy.app:app``.
 
 Clients sign requests with an S3 key from Flock and address their org's buckets by name,
 path-style. Each request's signature is checked against the key's derived secret, the key's
@@ -14,7 +14,7 @@ import logging
 import time
 from collections.abc import AsyncGenerator, AsyncIterable
 from dataclasses import dataclass
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 
 import asyncpg
 import httpx
@@ -103,6 +103,13 @@ LIST_V2_PARAMS = frozenset(
 )
 LIST_V1_PARAMS = frozenset({"prefix", "delimiter", "max-keys", "marker", "encoding-type"})
 UPLOAD_PART_PARAMS = frozenset({"uploadId", "partNumber"})
+# Request headers a browser may send cross-origin (beyond x-amz-*), and response headers its
+# scripts may read: ETag is what completing a multipart upload needs.
+CORS_HEADERS = FORWARD_HEADERS | {"authorization"}
+CORS_EXPOSE = (
+    "ETag, Content-Length, Content-Range, Content-Type, Content-Disposition, Accept-Ranges, "
+    "Last-Modified"
+)
 
 
 class S3Error(SigV4Error):
@@ -134,6 +141,8 @@ class Proxy:
         self.upstream = Upstream(settings, max_connections=512)
         self._pool: asyncpg.Pool | None = None
         self._directory: Directory | None = None
+        web = urlsplit(settings.web_url or "")
+        self.web_origin = f"{web.scheme}://{web.netloc}" if web.scheme and web.netloc else None
 
     @property
     def directory(self) -> Directory:
@@ -157,12 +166,29 @@ class Proxy:
     # ------------------------------------------------------------------ entry point
 
     async def handle(self, request: Request) -> Response:
+        # CORS (D69): only the dashboard's pages may call the proxy from a browser.
+        origin = request.headers.get("origin")
+        allowed = origin is not None and origin == self.web_origin
+        if request.method == "OPTIONS":
+            if not allowed:
+                return s3xml.error(
+                    "AccessForbidden", "CORSResponse: This CORS request is not allowed.", 403
+                )
+            return Response(status_code=204, headers=preflight(request, origin or ""))
         response = await self._handle(request)
         # A request refused before its body was read: the body must go before the connection
         # can carry another request. Small ones are read; otherwise the connection closes.
         refused = response.status_code >= 400 and request.method in ("PUT", "POST")
         if refused and not await discard(request):
             response.headers["connection"] = "close"
+        if allowed:
+            response.headers.update(
+                {
+                    "access-control-allow-origin": origin or "",
+                    "access-control-expose-headers": CORS_EXPOSE,
+                    "vary": "Origin",
+                }
+            )
         return response
 
     async def _handle(self, request: Request) -> Response:
@@ -473,6 +499,24 @@ class Proxy:
         headers["x-amz-copy-source"] = sigv4.uri_encode(f"/{found.upstream_name}/{source_key}")
         response = await self._send(call, "PUT", call.key, call.params, headers)
         return await self._renamed(call, response)
+
+
+def preflight(request: Request, origin: str) -> dict[str, str]:
+    """The answer to a CORS preflight from ``origin``: the methods S3 clients use, and the
+    headers asked for that are S3's."""
+    asked = request.headers.get("access-control-request-headers", "")
+    headers = [
+        name
+        for name in (h.strip().lower() for h in asked.split(","))
+        if name in CORS_HEADERS or name.startswith("x-amz-")
+    ]
+    return {
+        "access-control-allow-origin": origin,
+        "access-control-allow-methods": "GET, HEAD, PUT, POST, DELETE",
+        **({"access-control-allow-headers": ", ".join(headers)} if headers else {}),
+        "access-control-max-age": "3600",
+        "vary": "Origin",
+    }
 
 
 async def discard(request: Request, limit: int = MAX_XML_BODY) -> bool:

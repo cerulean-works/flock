@@ -1,5 +1,6 @@
 <script lang="ts">
 	import FolderIcon from '@lucide/svelte/icons/folder';
+	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
 	import HouseIcon from '@lucide/svelte/icons/house';
 	import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close';
 	import PlusIcon from '@lucide/svelte/icons/plus';
@@ -11,6 +12,7 @@
 	import ProjectDialog from '#lib/components/ProjectDialog.svelte';
 	import ProjectMenu from '#lib/components/ProjectMenu.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import { storageHref } from '#lib/storage.ts';
 	import type { OrgEntry, ProjectInfo } from '#lib/types.ts';
 	import { entityHref, projectHref } from '#lib/workspace/url.ts';
 	import WorkspaceSwitcher from './WorkspaceSwitcher.svelte';
@@ -20,15 +22,20 @@
 		org: string | null;
 		orgs: OrgEntry[];
 		projects: ProjectInfo[];
+		/** Whether the server has S3 storage: the Storage item shows only then. */
+		s3?: boolean;
 		/** Hide the sidebar (wide windows only: the drawer closes by itself). */
 		oncollapse?: () => void;
 	}
 
-	let { org, orgs, projects, oncollapse }: Props = $props();
+	let { org, orgs, projects, s3 = false, oncollapse }: Props = $props();
 
-	/** Inside an org (its runs, a project, its members), where switching orgs leaves the page. */
+	/** Inside an org (its runs, a project, its members, its storage), where switching orgs leaves
+	 * the page. */
 	const inOrg = $derived(
-		!!page.route.id?.startsWith('/(app)/[entity]') || !!page.route.id?.startsWith('/(app)/orgs/')
+		!!page.route.id?.startsWith('/(app)/[entity]') ||
+			!!page.route.id?.startsWith('/(app)/orgs/') ||
+			!!page.route.id?.startsWith('/(app)/storage/')
 	);
 	const route = $derived(page.route.id);
 
@@ -85,6 +92,15 @@
 			>
 				<ActivityIcon /> Runs
 			</a>
+			{#if s3}
+				<a
+					class={ITEM}
+					href={storageHref(org)}
+					aria-current={route?.startsWith('/(app)/storage/') ? 'page' : undefined}
+				>
+					<HardDriveIcon /> Storage
+				</a>
+			{/if}
 		{/if}
 
 		{#if org}
