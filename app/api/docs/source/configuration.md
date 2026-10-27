@@ -30,6 +30,19 @@ Flock reads its settings from environment variables when it starts. Each setting
 | `FLOCK_CORS_ORIGINS` | none | Origins allowed to call the API from browsers, comma-separated, such as `https://flock.example.com`. |
 | `FLOCK_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warning` or `error`. |
 
+## S3 settings
+
+These turn on [S3 storage](s3). Set them for the API and for the S3 proxy alike: both Compose files pass them to the `api` and `s3` services.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOCK_S3_UPSTREAM_ENDPOINT` | none | The S3 server the proxy fronts, such as Ceph RGW. Without it, S3 is off. `https://` is assumed when no scheme is given. |
+| `FLOCK_S3_UPSTREAM_REGION` | `us-east-1` | That server's region, used to sign requests to it. |
+| `FLOCK_S3_UPSTREAM_ACCESS_KEY_ID` | none | The S3 server's global access key id. Required with the endpoint. |
+| `FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY` | none | That key's secret. Required with the endpoint. |
+| `FLOCK_S3_BUCKET_PREFIX` | empty | Put in front of every bucket name on the S3 server. It shortens the names organizations can use, from 57 characters, by its length. Tests set it so they never touch other buckets. |
+| `FLOCK_S3_PUBLIC_URL` | none | The proxy's address as clients reach it, such as `https://s3.flock.example.com`. Required when S3 is on: Flock hands it out with keys. |
+
 Values are read like this:
 - **Empty means unset.** A variable set to an empty string takes its default, as Compose does for optional variables.
 - **Booleans** accept `true`, `false`, `1`, `0`, `yes`, `no`, `on` and `off`, in any case. Any other value stops Flock at startup.

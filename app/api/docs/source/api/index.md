@@ -71,5 +71,8 @@ All paths are relative to `/api/v1`. In paths, `{entity}` is an organization's I
 | `GET /feed` | Recent activity across your projects. | [Home](home#feed) |
 | `GET /orgs/{org}/billing`, `PATCH /orgs/{org}/billing` | GPU prices and monthly budgets. | [Home](home#billing) |
 | `GET /orgs/{org}/budget` | A month's spend against the budget. | [Home](home#budget) |
+| `POST /s3/credentials` | Exchange your credential for an ephemeral S3 key. | [S3](s3#credentials) |
+| `GET /me/s3-keys`, `POST /me/s3-keys`, `DELETE /me/s3-keys/{id}` | Your S3 keys. | [S3](s3#keys) |
+| `GET /orgs/{org}/buckets`, `POST ...`, `GET /orgs/{org}/buckets/{name}`, `DELETE ...` | The organization's S3 buckets. | [S3](s3#buckets) |
 
 `.../` stands for `/projects/{entity}/{project}/`. `GET /healthz`, outside `/api/v1`, answers `{"ok":true}` without credentials.

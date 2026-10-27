@@ -22,6 +22,8 @@ guide:
         title: GPU costs, budgets and the home feed
       - local: importing-from-wandb
         title: Importing from W&B
+      - local: s3
+        title: S3 storage
   - title: Accounts
     sections:
       - local: accounts
@@ -55,6 +57,8 @@ reference:
         title: Snapshot and live stream
       - local: api/home
         title: Home feed and budgets
+      - local: api/s3
+        title: S3 keys and buckets
   - title: Behavior
     sections:
       - local: permissions

@@ -24,7 +24,11 @@ reference:
         title: flock whoami
       - local: token
         title: flock token
+      - local: s3
+        title: flock s3
   - title: Python
     sections:
       - local: api
         title: flock.cli.credentials
+      - local: s3-api
+        title: flock.cli.s3

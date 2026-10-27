@@ -2,11 +2,12 @@
 
 | | |
 | --- | --- |
-| Status | proposed |
+| Status | applied |
 | Date | 2026-10-27 |
 | Builds on | [003](003-organizations-and-auth.md), [008](008-cli-login.md) |
 | Amends | D18 (orgs own buckets, and org pks stay below 100000), D24 (new `s3`, `orgs/{org}/buckets` and `me/s3-keys` routes), D51 (`flock.cli` gains S3 credentials) |
 | Keeps | D2, D19 (roles), D20 (API keys), D47 (CLI tokens) |
+| Result | 366 tests in `tests/app`, `tests/cli` and `tests/s3` pass on moto (11 new in `tests/app/test_s3_keys.py`, 10 in `tests/cli/test_s3.py`, 64 in `tests/s3`), and those 85 S3-backed tests also pass against the real Ceph; 327 in `app/web`; see [section 5](#5-how-it-was-actually-built) |
 
 ## 1. Goal
 
@@ -207,12 +208,12 @@ A new module next to `flock.cli.credentials`. It uses httpx, which `flock-cli` a
 ```python
 from flock.cli import s3
 
-creds = s3.credentials(org="acme")       # S3Credentials, renewed in the background
-creds.boto3_client()                     # boto3 S3 client, path-style (boto3 imported lazily)
-creds.storage_options()                  # Lance / object_store options, refreshing
-creds.fsspec_options()                   # s3fs.S3FileSystem(**…)
-creds.env()                              # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL, …
-creds.uri("checkpoints", "run-1")        # "s3://checkpoints/run-1", resolved in acme
+creds = s3.credentials(org="acme")  # S3Credentials, renewed in the background
+creds.boto3_client()  # boto3 S3 client, path-style (boto3 imported lazily)
+creds.storage_options()  # Lance / object_store options, refreshing
+creds.fsspec_options()  # s3fs.S3FileSystem(**…)
+creds.env()  # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL, …
+creds.uri("checkpoints", "run-1")  # "s3://checkpoints/run-1", resolved in acme
 s3.create_bucket("checkpoints", org="acme")  # POST orgs/{org}/buckets
 ```
 
@@ -428,3 +429,81 @@ The account page's S3 keys section, and the org page's buckets section and lifet
   service's `/healthz`.
 - **Upstream buckets are reachable with the global key**, outside the proxy. The proxy
   authenticates Flock's users; it can't stop someone who holds the global key.
+
+---
+
+## 5. How it was actually built
+
+The plan was followed, in five commits: the API, the proxy and their tests (steps 1 to 3 and
+6), the CLI (step 4), the web app (step 5), a test fix found on Ceph, and the docs (step 7).
+These are the places where the code differs from the decisions above, or adds to them.
+
+- **Bucket rows outlive their org.** D53 has `s3_buckets.org_pk → orgs CASCADE`, but deleting
+  an org must leave its buckets for the resumable purge (and their history), so the column is
+  nullable with `ON DELETE SET NULL`; `delete_org` soft-deletes the buckets in the same
+  transaction as the org (a `CHECK` refuses a live bucket without an org). Rows are never
+  deleted: a `purged_at` column marks a bucket removed upstream, and `upstream_name` is unique
+  only `WHERE purged_at IS NULL` (D53's plain `UNIQUE` would forbid reusing a name after its
+  purge). A bucket is "still being deleted" while it has `deleted_at` and no `purged_at`.
+- **`NOTIFY` comes from triggers.** Migration 0011 adds statement triggers that send
+  `s3_invalidate` on deleting `s3_keys`, on any change to `s3_buckets` and `memberships`, on the
+  two lifetime columns of `orgs` and on deleting an org, and on `users.is_superadmin` or deleting
+  a user. They run in the changing transaction as D61 asks, and also catch the cascades (a
+  logout deleting a session's keys) that API code would miss. New keys and `last_used_at`
+  writes send nothing. The proxy drops its whole cache on any notification.
+- **One upstream client for both sides.** `s3_proxy/upstream.py` signs and sends requests with
+  the global key; the proxy forwards through it and the API creates and purges buckets with
+  it. The proxy runs as `uvicorn app.api.src.s3_proxy.app:app` (the image's module path).
+  `s3_credentials.py` holds the key ids and the secret derivation; secrets are unpadded
+  URL-safe base64 (43 characters).
+- **Creating a bucket** holds a transaction (and an advisory lock on the upstream name) across
+  the upstream call, so a refusal rolls back the row and its event together. It first checks
+  the name with `HEAD`: moto and AWS in us-east-1 answer 200 to creating a bucket that exists,
+  which would have adopted a bucket made outside Flock. An existing upstream bucket is 409, any
+  other refusal 502 (`BadGateway`, new in `core/errors.py` with `Invalid` for 422).
+- **Routes beyond the plan.** `GET orgs/{org}/buckets/{name}` returns a bucket with its events
+  (the org page reads it per bucket), and the listing carries `name_limit`. Events record `via`
+  (`ui`, `cli` with the machine, `api` with the key name, `org` for an org's deletion, `purge`
+  with the object count). `POST s3/credentials` from a browser session names its key
+  `browser (ephemeral)` and ties it to that session. `current_user` now keeps the API key in
+  `request.state.api_key`, which the exchange needs.
+- **Lifetimes** are at least 600 seconds. `GET me/s3-keys` returns `expires_at` as the proxy
+  sees it (lowered by a lowered maximum) and leaves out keys that no longer work. The hourly
+  sweep deletes only keys past their own expiry: keys cut off by a lowered maximum stay, and
+  work again if the maximum is raised.
+- **Proxy details.** It answers HeadBucket, GetBucketLocation and ListBuckets itself. It
+  buffers DeleteObjects (to send the `Content-MD5` S3 requires, which aws-chunked bodies lose)
+  and CompleteMultipartUpload bodies, both capped at 4 MiB. `Location` in a completed upload
+  points at the proxy. Upstream error messages have the upstream name replaced. A request
+  refused before its body was read has the body drained (up to 4 MiB, else the connection
+  closes), or the next request on a keep-alive connection fails to parse; the read-only tests
+  found this.
+- **`flock.cli.s3`.** Renewal happens once fewer than 5 minutes, or half the key's lifetime,
+  are left. `boto3_client()` uses botocore's `RefreshableCredentials` with its refresh windows
+  shrunk to fit short keys. pylance 14 has no `storage_options_provider`, so
+  `storage_options()` only returns the current key (documented). Beside D58's functions there
+  are `endpoint()`, `list_buckets()` and `delete_bucket()`, which the commands use. The click
+  commands live in `flock/cli/s3_commands.py`.
+- **`flock s3`.** `configure` reads the endpoint from `auth/config` and the default org from
+  `me`, so it mints no key, and takes `--read-only`. `buckets list --json` and
+  `buckets delete --yes` (it asks otherwise) were added.
+- **`credential_process` and short keys.** botocore asks for new credentials once fewer than
+  15 minutes are left and refuses ones with less than 10, so a `--ttl` under 15 minutes makes
+  every request run the process. The rotation test uses 11-minute keys; the CLI docs say so.
+- **Tests.** The S3 fixture is in `tests/conftest.py`; `S3Flock` and `ProxyServer` in
+  `tests/app/conftest.py`. Every test database numbers orgs from 1, so each flock gets its own
+  prefix inside the run's, `flock-test-<run>-<n>-`, and the session teardown removes every
+  bucket under `flock-test-<run>-`. Against Ceph two expectations were loosened: Ceph answers
+  `NoSuchKey` to ListParts on an aborted upload, and URL-encodes `/` in listings. s3fs isn't a
+  test dependency (with boto3 pinned it resolves only to 0.4.2), so `fsspec_options()` is
+  checked for shape only. boto3, moto, pylance and the AWS CLI drive the proxy tests.
+- **Docs.** The CLI docs workflow mocks httpx, which `flock.cli.s3` imports. ruff reformatted
+  this file's Python example.
+
+Checked by hand against moto with a local Postgres, API and proxy: `flock login --no-browser`
+approved through the API, `flock s3 buckets create checkpoints`,
+`eval "$(flock s3 credentials --format env)"`, `aws s3 cp` (a small file and a 12 MB multipart
+one, read back identical), `aws s3 ls`, `aws s3 mb` refused with `NotImplemented`, and
+`flock s3 configure` followed by `aws s3 ls --profile flock`. The account page's S3 keys
+(create, folded ephemeral keys, revoke) and the org page's buckets (history, create, name
+check, type-the-name delete) and lifetimes were tried in a browser.

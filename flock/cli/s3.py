@@ -8,7 +8,7 @@ client = creds.boto3_client()
 client.upload_file("model.pt", "checkpoints", "run-1/model.pt")
 ```
 
-The Flock credential comes from [`credentials.resolve`], so `flock login` or `FLOCK_TOKEN` is
+The Flock credential comes from [`~cli.credentials.resolve`], so `flock login` or `FLOCK_TOKEN` is
 all a job needs. This module only needs httpx: boto3 and the rest are imported when asked for.
 """
 
@@ -87,7 +87,7 @@ class S3Credentials:
         org (`str`, *optional*):
             The org whose buckets the keys cover. Defaults to your default org.
         host (`str`, *optional*):
-            The Flock API. Defaults as [`credentials.resolve`] does.
+            The Flock API. Defaults as [`~cli.credentials.resolve`] does.
         token (`str`, *optional*):
             A Flock CLI token or API key to exchange. Defaults to your sign-in.
         ttl (`float`, *optional*):
@@ -301,7 +301,7 @@ def credentials(
         org (`str`, *optional*):
             The org whose buckets the keys cover. Defaults to your default org.
         host (`str`, *optional*):
-            The Flock API. Defaults as [`credentials.resolve`] does.
+            The Flock API. Defaults as [`~cli.credentials.resolve`] does.
         token (`str`, *optional*):
             A Flock CLI token or API key to exchange. Defaults to your sign-in.
         ttl (`float`, *optional*):

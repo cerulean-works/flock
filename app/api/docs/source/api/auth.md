@@ -49,10 +49,10 @@ Signing up, signing in, refreshing, accepting an invitation as a new account, re
 Public. What a sign-in page should offer:
 
 ```json
-{"signup_open": false, "google": true}
+{"signup_open": false, "google": true, "s3": {"endpoint": "https://s3.flock.example.com", "region": "us-east-1"}}
 ```
 
-`signup_open` is `true` only while Flock has no accounts. `google` is `true` when Sign in with Google is configured.
+`signup_open` is `true` only while Flock has no accounts. `google` is `true` when Sign in with Google is configured. `s3` is where the [S3 proxy](../s3) is, or `null` when the server has no S3.
 
 ### `POST /auth/signup`[[signup]]
 
