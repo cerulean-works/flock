@@ -2,12 +2,13 @@
 
 | | |
 | --- | --- |
-| Status | proposed |
+| Status | applied |
 | Date | 2026-10-28 |
 | Builds on | [001](001-wandb-compatible-flock.md), [002](002-projects-and-crud.md), [003](003-organizations-and-auth.md), [004](004-home-and-budgets.md), [006](006-wandb-import.md), [008](008-cli-login.md), [009](009-s3-proxy.md) |
 | Replaces | D2 (one process's memory, one server per database), D4 (numpy run table), D5 (hot series in memory, LRU of cold ones), D13 (in-memory model) |
 | Amends | D3 (the write path also writes series and run values), D7/D17 (live events cross replicas), D9 (deployment), D15 (deleted-while-live runs are a table), D37 (imports survive a replica dying) |
 | Keeps | D1, D6, D8–D12, D14, D16, D18–D75 except where amended above |
+| Result | 598 tests in `tests/app`, `tests/cli` and `tests/s3` pass on moto (7 new in `tests/app/test_replicas.py`, 2 in `tests/s3/test_files_backend.py`, the PostgreSQL oracle and regex tests in `test_table.py`, chunk and long-value tests in `test_query_api.py`); `app/web` unchanged. 11 of 13 latency tests pass; several-metric curves (12.3 ms p50) and moves (3.1 s) miss; see [section 6](#6-how-it-was-actually-built) |
 
 ## 1. Goal
 
@@ -414,15 +415,16 @@ the check that D77 and D78 hold the same data as memory.
 
 ## 4. Known gaps after this stage
 
-- **`$regex` is POSIX, not Python.** Patterns PostgreSQL doesn't support are refused with a 400
-  instead of matching as before. Lookarounds and backreferences are the likely ones.
+- **`$regex` is PostgreSQL's, not Python's.** Patterns PostgreSQL reads differently are refused
+  with a 400 instead of matching as before. `\b` is the likely one.
 - **Every query goes to the primary.** Sending dashboard reads to a read replica needs the SSE
   replay to tolerate replica lag. Later, if the primary is the bottleneck.
 - **`NOTIFY` on every write** (D79). Fine at hundreds of active runs. Thousands may need the
   per-project interest table.
 - **`run_values` is large** for projects with thousands of columns (D77). Partitioning by
   `project_pk`, or dropping `summary.*` keys nobody filters on, are the levers if it matters.
-- **Moves take seconds** for hundreds of wide runs (D77).
+- **Moves take seconds** for hundreds of wide runs (D77): about 3 s for 500 runs of 1.5k
+  columns, over the 2 s accepted in review.
 - **No Helm chart.** D83 describes what one needs.
 
 ## 5. To settle in review
@@ -433,3 +435,137 @@ the check that D77 and D78 hold the same data as memory.
 4. **The files backend.** CephFS behind `local`, or the S3 backend, for the Kubernetes deploy?
 5. **The D77 fallback cache.** Build it only if Step 4 misses the budget (as written), or not at
    all, and relax the budget instead?
+
+Settled in review: the 001 budgets stay the bar (the D76 Budget column); moves at 1 to 2 seconds,
+keeping `project_pk` in `run_values`; `$regex` refuses what PostgreSQL can't run; both files
+backends, `local` the default; the fallback cache only if the filter rows miss.
+
+---
+
+## 6. How it was actually built
+
+The plan was followed in twelve commits: one per step, except that step 3 has two (auth, then
+the budget and feed queries) and steps 5 and 6 share one (curves and the relay both read
+`series_chunks`, and neither worked without the other), then the latency work and the docs. These are the places where the code differs from the
+decisions above, or adds to them.
+
+### The run table (D77)
+
+- **Column counts go through a change log.** Writers upserting `project_keys` directly serialized
+  every write of a project on its hot rows. Writers append to `project_key_changes` instead, and
+  background work folds the log into `project_keys` (`values.fold`, claimed with `SKIP LOCKED`).
+  Readers add the two (`values.COLUMNS`), so counts are exact at once.
+- **No GIN index.** The planner never chose it over `(project_pk, key)`, whose estimate is a
+  handful of rows. Lists are found through `run_values_lists`, a btree on `(project_pk, key,
+  run_pk)` that includes the list itself, so `tags contains baseline` reads no table rows (6 ms
+  to 1 ms over 10k runs).
+- **Long values.** An index entry holds about 2.7 kB, and a summary string of 8 kB failed the
+  write. Strings and lists are indexed with their value only when short
+  (`run_values_short_text`, `run_values_short_list`, in 0013). The long ones have their own
+  index without the value, and every string or list clause reads both. A test covers values of
+  11 kB and lists of 200 elements. Keys still have to fit an index entry (about 2.6 kB).
+- **Kind pruning.** A page query first reads which kinds of values each filtered and sorted
+  column holds (`KEY_KINDS`, from the counts). Clauses on kinds a column doesn't hold are left
+  out, and columns of only numbers or only strings sort with fewer terms. The counts are read
+  apart from the page, so a value of another kind written in between is left out of that one
+  answer.
+- **Two-phase pages.** The order is found from run pks alone, then the page's rows are joined, so
+  sorting thousands of runs doesn't carry their rows. Sort joins include `project_pk` so they can
+  read the key's index.
+- **The `mixed` kind.** A column with several kinds of objects (lists and booleans, say) reports
+  `mixed`, as one with numbers and strings does. `ColumnTable` reported the first kind it met.
+- **Operands are checked even on columns no run has** (`$gt` with a list is a 400 either way).
+- **Regexes** match with `COLLATE "default"`, so character classes follow the database's locale
+  as Python's follow Unicode. `check_regex` refuses what PostgreSQL reads differently or not at
+  all: `\b` and `\B` (word boundaries to Python, a backspace and an escape to PostgreSQL), a few
+  other escapes (`\N`, `\G`, `\z`, ...), named and atomic groups, conditionals, possessive
+  quantifiers, and inline flags other than a leading `(?i)`. Lookarounds and backreferences run.
+- **NaN sorts with missing values**, last in both directions, as numpy did. It never matches a
+  comparison.
+- **`int_only`** is sticky: a column that held a float shows floats until no run has a value
+  (its count reaches 0), when it starts afresh.
+- **The fallback cache wasn't built.** After the work above, every filter row is inside its
+  budget (see the latency table below). The `$or` row has little headroom.
+
+### Curves and live events (D78, D79)
+
+- **A query per key set.** `Store.histories` reads only the asked keys' chunks (`CHUNKS`) when
+  keys are given, and the run's metric names through `run_metrics` only when they aren't.
+- **Compaction** is two statements (delete, then insert), since one CTE hit the unique key.
+
+### Locks, deletes and background work (D80, D81)
+
+- **Small deletes are purged inline.** Deletes of up to 100 runs purge in the request, after the
+  commit. Larger ones are marked and left to background work (`PURGE_BATCH` runs per round).
+- **Run files** of purged runs are removed by the purge, and files of runs that no longer exist
+  are swept hourly by background work, instead of at startup.
+- **Avatars** are rendered under one advisory lock, not one per org.
+- **Imports** are claimed through `org_imports` with a heartbeat (`HEARTBEAT`, `STALE_AFTER`). A
+  cancel on another replica sets `cancel_requested` and the state at once; the importing replica
+  stops at its next heartbeat.
+- **The S3 bucket purge** holds its claim's transaction open while it purges the bucket upstream.
+- **Bulk loads.** After a round folds 100,000 count changes or more, background work runs `VACUUM
+  (ANALYZE)` on the run table, the counts, `runs` and `gpu_usage`. Without fresh statistics and
+  visibility maps, filters and the budget panel read every run row by row for minutes, until
+  autovacuum came by.
+
+### Auth, budgets and the feed (D76, D84)
+
+- **Budgets and the home feed** moved to SQL in steps 3 and 4, with auth, since the in-memory
+  usage counters were written by the same code. The budget panel reads its four queries at once.
+- **Device sign-ins** live in `device_grants`, so they survive restarts, which they didn't.
+- **CLI session use** is kept per replica and written at most every `CLI_WRITE_INTERVAL`, as
+  before. A replica lists the uses it saw, and the others' once written.
+- **Revoking a session** is refused on other replicas as soon as they hear the notification, a
+  few milliseconds. A request already past its check finishes.
+
+### Migration, deployment and tests (D83)
+
+- **The backfill** runs at startup when the server applies 0013 itself, as well as from
+  `scripts/backfill.py`. It folds the counts after each batch.
+- **The test harness** starts replicas with `make_flock.replicas(2)`, which returns them with a
+  client that sends each request to the next one. `FlockServer.kill` stops a replica without
+  draining it.
+- **Tests that changed**, each for a behavior this design changes:
+  - the history cache and eviction tests became chunk and compaction tests
+    (`test_finished_runs_are_compacted_into_one_chunk_per_metric`,
+    `test_active_runs_compact_once_they_have_many_chunks`), and compacted-state assertions in
+    `test_system_metrics.py`, `test_migrations.py`, `test_demo_seeding.py` and
+    `test_wandb_import.py` check chunks;
+  - `test_only_one_server_per_database` became `test_servers_share_a_database`;
+  - `test_delete_while_reading_leaves_nothing_cached` became `test_delete_while_reading`;
+  - tests of deleted rows and files call `flush` first (two-phase deletes);
+  - the slow-subscriber test waits for events, which now arrive through notifications;
+  - store lookups are awaited (`get_run`, `orgs`, `project_info`, ...);
+  - in the latency suite, the cold test no longer evicts a cache, and the move budget is 2 s.
+- **Tests added**: `tests/app/test_replicas.py` (7), `tests/s3/test_files_backend.py` (2), the
+  PostgreSQL-against-`ColumnTable` oracle and regex tests in `test_table.py`, the long-values
+  test in `test_query_api.py`, and the compaction tests above.
+
+### Latency
+
+Measured on an Apple Silicon laptop with PostgreSQL 18 in Docker on tmpfs, end to end over HTTP,
+as in 001. `run_values` holds 15.1M rows, 3.8 GB with its indexes, for the 10k × 1.5k sweep.
+
+| Scenario | Before (memory) | p50 | p95 | Budget |
+| --- | --- | --- | --- | --- |
+| `loss` of the newest 50 runs, 500 points each | ~2 ms | 4.8 ms | 5.7 ms | 10 to 20 ms |
+| The same, every read from PostgreSQL | ~4 ms | 5.0 ms | 5.6 ms | 10 to 20 ms |
+| `loss`, `val_loss` and `lr` of the newest 50 runs | ~4.5 ms | **12.3 ms** | 14.9 ms | 10 to 20 ms |
+| Curves of active runs while they stream | ~1 ms | 5.1 ms | 8.0 ms | 10 to 20 ms |
+| One-metric filter, 10k runs × 1.5k columns | ~0.5 ms | 4.2 ms | 4.8 ms | 20 to 50 ms |
+| 6-clause filter and sort | ~2.5 ms | 13.0 ms | 15.2 ms | 20 to 50 ms |
+| `$or`, a regex and a string `$in`, sorted by a string | ~3 ms | 19.0 ms | 21.0 ms | 20 to 50 ms |
+| All matching ids (7k runs) | | 13.2 ms | 16.3 ms | 20 to 50 ms |
+| 100 columns of 100 runs, sorted | | 15.6 ms | 18.3 ms | 20 to 50 ms |
+| Column search | | 3.5 ms | 3.8 ms | 20 to 50 ms |
+| Home feed, first page and a filtered later page | ~0.6 ms | 11.2 ms, 5.0 ms | 12.3 ms | 20 to 50 ms |
+| Budget panel, 10k ledger entries | ~3 ms | 12.5 ms | 14.2 ms | 20 to 50 ms |
+| Deleting about 950 runs | ~90 ms | 19 ms | | 200 ms |
+| Moving 500 runs | ~50 ms | **3.1 s** | | 1 to 2 s (review) |
+
+Two rows miss. Several metrics of the newest 50 runs is 1.5 MB of JSON: building and decoding it
+takes about 4.5 ms, as before, and selecting the runs and reading their ~500 chunks (the 8
+running ones aren't compacted yet) adds about 3 ms. Moving 500 runs of 1.5k
+columns rewrites 750k rows of `run_values` with their index entries, about 3 s on this laptop
+against the 1 to 2 s accepted in review.

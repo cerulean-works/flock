@@ -7,7 +7,10 @@ Flock reads its settings from environment variables when it starts. Each setting
 | Variable | Default | Meaning |
 |---|---|---|
 | `FLOCK_DATABASE_URL` | `postgresql://flock:flock@127.0.0.1:5432/flock` | PostgreSQL connection URL. |
-| `FLOCK_FILES_DIR` | `flock-files` | Directory for uploaded run files, relative to the working directory. The Docker image sets `/data/files`. |
+| `FLOCK_LISTEN_DATABASE_URL` | `FLOCK_DATABASE_URL` | PostgreSQL URL of the one connection each replica listens for notifications on. Set it when `FLOCK_DATABASE_URL` goes through a pooler in transaction mode, such as PgBouncer, which drops `LISTEN`. See [Memory and database load](deploying#memory-and-database-load). |
+| `FLOCK_FILES_BACKEND` | `local` | Where run files go: `local` (`FLOCK_FILES_DIR`) or `s3` (`FLOCK_FILES_BUCKET`). See [Run files](deploying#run-files). |
+| `FLOCK_FILES_DIR` | `flock-files` | Directory for uploaded run files with the `local` backend, relative to the working directory. With `s3`, files not moved to the bucket yet are still read from it. The Docker image sets `/data/files`. |
+| `FLOCK_FILES_BUCKET` | none | Bucket for run files with the `s3` backend, on the S3 server of the [S3 settings](#s3-settings). Required with `s3`. |
 | `FLOCK_MIGRATE_ON_STARTUP` | `true` | Apply pending migrations on startup. With `false`, Flock refuses to start while migrations are pending. See [Migrations and upgrades](deploying#migrations-and-upgrades). |
 | `FLOCK_API_PUBLIC_URL` | the address of each request | Public API base URL reached by training machines, such as `https://api.flock.example.com`. Used in signed file upload URLs. The dashboard uses the same variable in SDK instructions. |
 | `FLOCK_WEB_URL` | `FLOCK_API_PUBLIC_URL`, else the address of each request | Public dashboard origin. Setup, invitation, reset and Google sign-in links point there. The S3 proxy answers CORS for this origin only, for the Storage tab. Also the web image build argument for redirects and form origin checks. |
@@ -24,7 +27,6 @@ Flock reads its settings from environment variables when it starts. Each setting
 | `FLOCK_GRAVATAR` | `true` | Fetch each new account's avatar from Gravatar. The request sends Gravatar the SHA-256 hash of the account's email. See [Avatars](accounts#avatars). |
 | `FLOCK_GRAVATAR_URL` | `https://gravatar.com/avatar/` | Where avatars are fetched from: the URL that the email's hash is appended to. A Libravatar-compatible server works too. |
 | `FLOCK_WANDB_BASE_URL` | `https://api.wandb.ai` | The W&B server that [imports](importing-from-wandb) read from, when an import doesn't name one. Set it for W&B Dedicated Cloud or a self-managed W&B server. |
-| `FLOCK_HISTORY_CACHE_POINTS` | `20000000` | Curve points of finished runs kept in memory. Curves of active runs are always kept, in addition. See [Memory and startup time](deploying#memory-and-startup-time). |
 | `FLOCK_CRASH_TIMEOUT` | `600` | Seconds without a heartbeat before an active run is marked `crashed`. See [Crash detection](deploying#crash-detection). |
 | `FLOCK_POOL_SIZE` | `16` | Maximum number of database connections. |
 | `FLOCK_CORS_ORIGINS` | none | Origins allowed to call the API from browsers, comma-separated, such as `https://flock.example.com`. |
@@ -32,7 +34,7 @@ Flock reads its settings from environment variables when it starts. Each setting
 
 ## S3 settings
 
-These turn on [S3 storage](s3). Set them for the API and for the S3 proxy alike: both Compose files pass them to the `api` and `s3` services.
+These turn on [S3 storage](s3), and give the `s3` files backend its server. Set them for the API and for the S3 proxy alike: both Compose files pass them to the `api` and `s3` services.
 
 | Variable | Default | Meaning |
 |---|---|---|

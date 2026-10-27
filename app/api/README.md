@@ -25,8 +25,8 @@ directory. It publishes the API on port 8080 and defaults the dashboard URL to `
 for `pnpm dev`. Data lives in two named volumes: `postgres-data` for the database and `files`
 for uploaded run files.
 
-Run exactly one Flock server per database. The server keeps its working set in memory and holds a
-database lock, so a second instance refuses to start.
+PostgreSQL is the only state: any number of Flock replicas can serve one database, given run
+files on a volume they all mount or in an S3 bucket (`FLOCK_FILES_BACKEND=s3`).
 
 The image installs this directory's `pyproject.toml` dependencies at the versions locked in the
 workspace's `uv.lock`. Build with the repository root as the context so Docker can read both
@@ -414,32 +414,31 @@ limit; it reconnects with its latest line counts.
   data-modifying CTEs to upsert history, event and console lines and update the run. A
   request is acknowledged only after it commits, and re-sent chunks are idempotent because
   lines are keyed by `(run, line number)`.
-- **Run table**: each project keeps every run's attributes, config and summary in memory as
-  columns. Each column has a float64 array, an object array for non-numeric values and a
-  presence mask, so a filter compiles to vectorized numpy operations over all runs at once
-  and never touches the database.
-- **History**: a run has two series streams, its logged history and its system metrics. Both
-  are handled the same way. Running runs and recently read runs are kept in memory as
-  columnar `(row, value)` arrays per metric, in an LRU bounded by the history cache size. When
-  a run finishes, each stream is compacted into one `bytea` blob per metric. These blobs are stored
-  uncompressed and out of line, so reads skip decompression. Curves of cold runs load in a
-  single batched query per request (`run_pk = ANY(...) AND key = ANY(...)`), whatever the
-  number of runs.
-- **Changes**: deleting or moving runs rebuilds the affected projects' run tables, keeping rows
-  in creation order (tens of ms for 10k runs × 1.5k columns). Mutations take a lock per
-  project and per run, always in the same order, and writes from a run's client hold its
-  lock, so a run is never deleted halfway through a write.
-- **Auth**: users, memberships, wandb key digests and sessions are loaded into memory, so
-  authenticating a request costs a sha256 (wandb key, CLI token) or an HMAC (JWT) and a dict
-  lookup, never a database round trip. Roles aren't put in tokens: they're looked up per request, so changes
-  apply at once. Passwords are hashed with argon2id in a worker thread.
-- **Spend**: the usage ledger (`gpu_usage`), prices and budgets are in memory too. Accruing
-  is one more CTE in the `file_stream` statement; the budget panel reads only the month's
-  ledger entries of one org, and the feed takes the latest rows of each project's run table
-  with `argpartition`.
-- **Startup** loads every run's metadata, config and summary into memory. A 10k-run ×
-  1.5k-column project takes a few seconds. Objects loaded at startup are frozen out of the
-  cyclic GC so its collections don't pause requests.
+- **Run table**: one row per run and column in `run_values` (numbers, strings and other
+  values apart, each indexed by project, column and value), and per-column counts in
+  `project_keys`. A filter compiles to `INTERSECT`/`UNION`/`EXCEPT` over run pks, one index
+  range scan per clause; `$regex` is PostgreSQL's, and refuses Python constructs it reads
+  differently. Writers append count changes to `project_key_changes`, folded in the
+  background, so new runs don't queue on shared rows.
+- **History**: a run has two series streams, its logged history and its system metrics. Each
+  `file_stream` request appends one chunk per metric (`series_chunks`, `(row, value)` arrays
+  in `bytea`, uncompressed and out of line) in its transaction. Chunks are merged into one
+  per metric when the run finishes, and every 64 requests while it runs. Curves load in a
+  single batched query per request, whatever the number of runs. There's no cache in Flock.
+- **Changes**: deletes mark rows deleted and return; a background purge removes them. Writes
+  lock rows in PostgreSQL, always org, then projects, then runs in pk order, and a run's
+  writes lock its row, so a run is never deleted halfway through a write.
+- **Live**: writers `NOTIFY` when they commit; every replica listens on one connection and
+  feeds its own dashboards' event streams.
+- **Auth**: lookups (key or token digest, session, roles) are cached 30 s per replica and
+  dropped on every replica when accounts change (`NOTIFY flock_auth`). Roles aren't put in
+  tokens, so changes apply at once. Passwords are hashed with argon2id in a worker thread.
+- **Spend**: the usage ledger (`gpu_usage`), prices and budgets are SQL aggregates. Accruing
+  is one more CTE in the `file_stream` statement.
+- **Background work** (compaction, the purge, crash detection, expired rows, S3 purges and
+  imports) runs on every replica, each piece either idempotent or claimed with
+  `FOR UPDATE SKIP LOCKED`.
+- **Startup** connects, checks the schema and listens: under a second, whatever the data.
 - Responses are encoded with orjson, which serializes numpy arrays directly.
 
 ## Performance
@@ -450,16 +449,18 @@ Apple Silicon laptop, with PostgreSQL running in Docker:
 
 | Scenario | p50 | Budget |
 | --- | --- | --- |
-| `loss` curves, newest 50 runs × 500 points (5k steps, logged every 10) | ~2 ms | 10–20 ms |
-| same, cold (all loaded from PostgreSQL) | ~4 ms | 10–20 ms |
-| `loss,val_loss,lr` for the newest 50 runs | ~4.5 ms | 10–20 ms |
-| ongoing runs' curves while those runs stream history | ~1 ms | 10–20 ms |
-| 6-clause filter + sort over 10k runs × 1.5k columns | ~2.5 ms | 20–50 ms |
-| `$or` + regex + string `$in` over 10k runs × 1.5k columns | ~3 ms | 20–50 ms |
-| deleting ~950 runs from 10k runs × 1.5k columns | ~90 ms | 200 ms |
-| moving 500 of those runs to another project | ~50 ms | 200 ms |
-| home feed, first page and a filtered later page, over 10k runs | ~0.6 ms | 20–50 ms |
-| budget panel over 10k runs' ledger entries | ~3 ms | 20–50 ms |
+| `loss` curves, newest 50 runs × 500 points (5k steps, logged every 10) | ~5 ms | 10–20 ms |
+| same, every read from PostgreSQL | ~5 ms | 10–20 ms |
+| `loss,val_loss,lr` for the newest 50 runs | ~12 ms | 10–20 ms |
+| ongoing runs' curves while those runs stream history | ~5 ms | 10–20 ms |
+| 6-clause filter + sort over 10k runs × 1.5k columns | ~13 ms | 20–50 ms |
+| `$or` + regex + string `$in` over 10k runs × 1.5k columns | ~19 ms | 20–50 ms |
+| deleting ~950 runs from 10k runs × 1.5k columns | ~20 ms | 200 ms |
+| moving 500 of those runs to another project | ~3 s | 1–2 s |
+| home feed, first page and a filtered later page, over 10k runs | ~5–11 ms | 20–50 ms |
+| budget panel over 10k runs' ledger entries | ~12 ms | 20–50 ms |
+
+The sweep's `run_values` table is 15.1M rows, 3.8 GB with its indexes.
 
 ## Simulating a month
 
@@ -472,8 +473,8 @@ something realistic to show:
 - avatars and pending invites.
 
 It writes straight to PostgreSQL in about 25 s (about 1.5 GB), because writing through the API
-would stamp everything "now". Stop Flock, or don't use it, while the script runs, and
-restart it afterwards so it loads the data. Every simulated user's password is
+would stamp everything "now". It then backfills the run table and curves, as a migration
+would, so a running Flock serves the data as soon as the script ends. Every simulated user's password is
 `flock-demo-password`. The script prints a super admin wandb key.
 
 ```sh
