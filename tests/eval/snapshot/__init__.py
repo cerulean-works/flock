@@ -9,7 +9,7 @@ from types import FunctionType
 from typing import Any
 from unittest import mock
 
-from flock.eval.tasks import Dataset, MultipleChoiceTask, Suite
+from flock.eval.tasks import Dataset, MultipleChoiceTask, Suite, Task
 
 from .. import toy
 
@@ -18,9 +18,7 @@ TOY_REQUESTS_FILE = Path(__file__).parent / "toy_requests.json"
 REGENERATE = "If the change is intended, run `uv run python -m tests.eval.snapshot` and commit it."
 
 
-def definitions(
-    tasks: Mapping[str, MultipleChoiceTask], suites: Mapping[str, Suite]
-) -> dict[str, Any]:
+def definitions(tasks: Mapping[str, Task], suites: Mapping[str, Suite]) -> dict[str, Any]:
     """Returns every task's definition fields and every suite's members, by name."""
     pinned_tasks = {}
     for name, task in tasks.items():
@@ -28,20 +26,23 @@ def definitions(
         definition = dataclasses.asdict(task)
         del definition["name"]
         definition["type"] = f"{type(task).__module__}.{type(task).__qualname__}"
-        # A module-level function is pinned by where it is defined. A lambda, a closure or a
-        # `partial` has no name that changes with what it does, so it fails here until this code
-        # says how to pin it.
-        to_doc = task.to_doc
-        if not isinstance(to_doc, FunctionType) or "<" in to_doc.__qualname__:
-            raise TypeError(f"{name}: to_doc must be a module-level function, got {to_doc!r}")
-        definition["to_doc"] = f"{to_doc.__module__}.{to_doc.__qualname__}"
-        # Rows written out in a task's module are long and reviewed where they are written.
-        if task.fewshot is not None and task.fewshot.rows:
-            rows = json.dumps(task.fewshot.rows, sort_keys=True).encode()
-            definition["fewshot"]["rows"] = {
-                "count": len(task.fewshot.rows),
-                "sha256": hashlib.sha256(rows).hexdigest(),
-            }
+        # A perplexity task is plain data. A multiple-choice task also has a row function and may
+        # write out its examples.
+        if isinstance(task, MultipleChoiceTask):
+            # A module-level function is pinned by where it is defined. A lambda, a closure or a
+            # `partial` has no name that changes with what it does, so it fails here until this
+            # code says how to pin it.
+            to_doc = task.to_doc
+            if not isinstance(to_doc, FunctionType) or "<" in to_doc.__qualname__:
+                raise TypeError(f"{name}: to_doc must be a module-level function, got {to_doc!r}")
+            definition["to_doc"] = f"{to_doc.__module__}.{to_doc.__qualname__}"
+            # Rows written out in a task's module are long and reviewed where they are written.
+            if task.fewshot is not None and task.fewshot.rows:
+                rows = json.dumps(task.fewshot.rows, sort_keys=True).encode()
+                definition["fewshot"]["rows"] = {
+                    "count": len(task.fewshot.rows),
+                    "sha256": hashlib.sha256(rows).hexdigest(),
+                }
         # As the file reads back: JSON turns tuples into lists. A field JSON can't hold fails here,
         # naming the task, until this code says how to pin it.
         try:
@@ -62,11 +63,17 @@ def definitions(
     return {"tasks": pinned_tasks, "suites": pinned_suites}
 
 
-def toy_requests(tasks: Iterable[MultipleChoiceTask]) -> dict[str, Any]:
-    """Returns every request each task renders from the toy rows, and its hash, by task name."""
+def toy_requests(tasks: Iterable[Task]) -> dict[str, Any]:
+    """Returns every request each task renders from the toy rows, and its hash, by task name. A perplexity task renders no requests, so it gives the texts it scores whole: their windows depend on the tokenizer, and the test against lm-evaluation-harness's windows pins those."""
     rendered = {}
     with mock.patch.object(Dataset, "load", toy.load):
         for task in tasks:
+            if not isinstance(task, MultipleChoiceTask):
+                texts = task.load()
+                docs = [{"doc": doc.id, "text": doc.text} for doc in texts]
+                rendered[task.name] = {"hash": task.task_hash(texts), "docs": docs}
+                continue
+
             docs, shots = task.load()
             scored = task.requests(docs, shots)
 

@@ -1,4 +1,4 @@
-from flock.eval.tasks import SUITES, TASKS, Choice, MCDoc, cloze
+from flock.eval.tasks import SUITES, TASKS, Choice, MCDoc, MultipleChoiceTask, cloze
 from flock.eval.tasks.basic_skills import SHOT_IDS, basic_skills_doc
 from flock.eval.tasks.lab_bench import lab_bench_doc
 from flock.eval.tasks.lambada import LAMBADA, lambada_doc
@@ -75,7 +75,9 @@ def test_basic_skills_shots_skip_the_scored_doc():
     scored = basic_skills_doc({**row, "id": ids[0]})
 
     # The scored doc is the first of the 6 examples, so it sees the other 5.
-    built = TASKS["basic_skills_arithmetic"].requests([scored], shots)
+    task = TASKS["basic_skills_arithmetic"]
+    assert isinstance(task, MultipleChoiceTask)
+    built = task.requests([scored], shots)
     assert built.requests[0].context == "q a\n\n" * 5 + "q"
 
 

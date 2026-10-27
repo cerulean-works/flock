@@ -5,9 +5,13 @@ from dataclasses import dataclass
 
 from flock.eval.metrics import scale
 from flock.eval.tasks.base import MultipleChoiceTask
+from flock.eval.tasks.perplexity import PerplexityTask
+
+# Every kind of task a suite can hold and a run can score.
+type Task = MultipleChoiceTask | PerplexityTask
 
 
-def by_name[T: (MultipleChoiceTask, Suite)](items: Iterable[T]) -> dict[str, T]:
+def by_name[T: Task | Suite](items: Iterable[T]) -> dict[str, T]:
     """
     Returns `items` by name, in order, each once.
 
@@ -34,7 +38,7 @@ class Suite:
     Args:
         name (`str`):
             The suite's registry name.
-        members (`tuple[MultipleChoiceTask | Suite, ...]`):
+        members (`tuple[MultipleChoiceTask | PerplexityTask | Suite, ...]`):
             The tasks and suites it groups, each name once.
         metric (`str`, *optional*):
             The metric read from every member task. Each task's primary metric if not set. Member suites keep their own, so a suite with a `metric` holds only tasks and suites with the same `metric`, such as MMLU's `bpb` group inside `base_easy:qa_bpb`.
@@ -46,7 +50,7 @@ class Suite:
     """
 
     name: str
-    members: tuple[MultipleChoiceTask | Suite, ...]
+    members: tuple[Task | Suite, ...]
     metric: str | None = None
     scored: bool = True
 
@@ -108,7 +112,7 @@ class Suite:
         return scale(self.metric or first.primary_metric)
 
     @property
-    def tasks(self) -> tuple[MultipleChoiceTask, ...]:
+    def tasks(self) -> tuple[Task, ...]:
         """Every task under the suite, depth first, each once."""
         tasks = []
         for member in self.members:

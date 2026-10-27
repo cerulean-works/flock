@@ -1,4 +1,4 @@
-from flock.eval.tasks import SUITES, TASKS, Choice, MCDoc
+from flock.eval.tasks import SUITES, TASKS, Choice, MCDoc, MultipleChoiceTask
 from flock.eval.tasks.humaneval import HUMANEVAL, humaneval_doc
 from flock.eval.tasks.mbpp import LANGUAGES, MT_MBPP_TASKS, mbpp_doc, mt_mbpp_doc
 from flock.eval.tasks.minerva_math import MINERVA_MATH_TASKS, SUBJECTS, minerva_doc
@@ -19,6 +19,7 @@ def test_minerva_scores_the_solution_after_one_space():
 
 def test_minerva_shots_are_olmes_literal_problems():
     task = TASKS["minerva_math_algebra"]
+    assert isinstance(task, MultipleChoiceTask)
     doc = minerva_doc({"index": 0, "problem": "Find $x$.", "solution": "$x=1$."})
     assert task.fewshot is not None
     shots = [minerva_doc(row) for row in task.fewshot.rows]
@@ -90,6 +91,7 @@ def test_math_and_code_suites_hold_every_subject_and_language():
         "mt_mbpp",
     ]
     for task in (*MINERVA_MATH_TASKS, *SUITES["base_easy:code_bpb"].tasks):
+        assert isinstance(task, MultipleChoiceTask)
         assert task.reported_metrics == ("bpb",)
         assert task.unconditional_context is None
 

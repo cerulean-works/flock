@@ -259,6 +259,20 @@
       ],
       "metric": "bpb",
       "scored": true
+    },
+    "paloma": {
+      "members": [
+        "paloma:wikitext_103"
+      ],
+      "metric": null,
+      "scored": false
+    },
+    "paloma:wikitext_103": {
+      "members": [
+        "paloma_wikitext_103"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
     }
   },
   "tasks": {
@@ -2982,6 +2996,18 @@
       "to_doc": "flock.eval.tasks.gen2mc.naturalqs_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
+    },
+    "paloma_wikitext_103": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "wikitext_103"
+      },
+      "domain": null,
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
     },
     "piqa": {
       "dataset": {

@@ -312,5 +312,35 @@
         "gold": false
       }
     ]
+  },
+  "toy_text": {
+    "docs": [
+      {
+        "doc": "t-1",
+        "text": "The quick brown fox jumps over the lazy dog."
+      },
+      {
+        "doc": "t-2",
+        "text": "臺灣最高的山是哪一座？答案：玉山 🏔"
+      },
+      {
+        "doc": "t-3",
+        "text": "繁體中文的評估。 The lazy dog sleeps."
+      }
+    ],
+    "hash": "f8888a8c76eea01e2a763365eed48dd727b917902e1cde25604c2fa7bef832b7"
+  },
+  "toy_text__news": {
+    "docs": [
+      {
+        "doc": "t-1",
+        "text": "The quick brown fox jumps over the lazy dog."
+      },
+      {
+        "doc": "t-3",
+        "text": "繁體中文的評估。 The lazy dog sleeps."
+      }
+    ],
+    "hash": "5e747a6e4e574734da6f18aefa0e3a0f0820662ea395a1e578939975e708aa50"
   }
 }

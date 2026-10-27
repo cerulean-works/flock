@@ -1,10 +1,23 @@
-"""Toy dataset rows and toy tasks in ARC's row format, read by every eval test instead of a download."""
+"""Toy dataset rows and toy tasks in ARC's and Paloma's row formats, read by every eval test instead of a download."""
 
 import dataclasses
 from typing import Any
 
-from flock.eval.tasks import Dataset, Fewshot, MultipleChoiceTask
+from flock.eval.tasks import Dataset, Fewshot, MultipleChoiceTask, PerplexityTask
 from flock.eval.tasks.arc import arc_doc
+
+# Paloma's row format, as the split "text" of a source with one domain and the split "domains"
+# of a source with two. Longer than one window of `TEXT_TASK`, with multi-byte UTF-8.
+TEXT_ROWS = [
+    {"id": "t-1", "text": "The quick brown fox jumps over the lazy dog."},
+    {"id": "t-2", "text": "臺灣最高的山是哪一座？答案：玉山 🏔"},
+    {"id": "t-3", "text": "繁體中文的評估。 The lazy dog sleeps."},
+]
+DOMAIN_ROWS = [
+    {**TEXT_ROWS[0], "subdomain": "news"},
+    {**TEXT_ROWS[1], "subdomain": "exam"},
+    {**TEXT_ROWS[2], "subdomain": "news"},
+]
 
 ROWS = {
     "train": [
@@ -41,6 +54,8 @@ ROWS = {
             "answerKey": "2",
         },
     ],
+    "text": TEXT_ROWS,
+    "domains": DOMAIN_ROWS,
 }
 
 TASK = MultipleChoiceTask(
@@ -51,6 +66,9 @@ TASK = MultipleChoiceTask(
     fewshot=Fewshot("train", ("shot-2", "shot-1")),
 )
 
+TEXT_TASK = PerplexityTask(
+    name="toy_text", dataset=Dataset("cerulean/toy", "0" * 40, None, "text"), window=8
+)
 
 # One toy task per prompt path the core renders. `snapshot/toy_requests.json` pins what each
 # renders, so a new prompt path adds its toy task here.
@@ -67,6 +85,14 @@ PROMPT_PATHS = (
     ),
     dataclasses.replace(TASK, name="toy:rows", fewshot=Fewshot(rows=tuple(ROWS["train"]))),
     dataclasses.replace(TASK, name="toy:zero_shot", fewshot=None, unconditional_context=None),
+    TEXT_TASK,
+    # One domain of a source with two, as each Paloma source with domains is scored.
+    dataclasses.replace(
+        TEXT_TASK,
+        name="toy_text__news",
+        dataset=dataclasses.replace(TEXT_TASK.dataset, split="domains"),
+        domain="news",
+    ),
 )
 
 
