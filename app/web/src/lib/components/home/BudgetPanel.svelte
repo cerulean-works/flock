@@ -1,13 +1,9 @@
 <script lang="ts">
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
-	import XIcon from '@lucide/svelte/icons/x';
-	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { splitWarnings, warningText } from '#lib/budget.ts';
-	import { Mutation } from '#lib/data/mutation.svelte.ts';
 	import type { Budget } from '#lib/types.ts';
 	import { count, gpus, hours, money, monthName, shiftMonth } from '#lib/utils.ts';
 	import { orgHref, projectHref, withParam } from '#lib/workspace/url.ts';
@@ -16,7 +12,7 @@
 		budget: Budget;
 		/** The current UTC month: there's nothing to show after it. */
 		thisMonth: string;
-		/** Admins set the budget and prices, dismiss warnings and manage deleted projects. */
+		/** Admins set the budget and prices, and manage deleted projects. */
 		admin: boolean;
 	}
 
@@ -33,12 +29,6 @@
 	const maxCost = $derived(Math.max(...budget.projects.map((p) => p.cost), 0));
 	const current = $derived(budget.month === thisMonth);
 	let expanded = $state(false);
-
-	// Warnings an admin dismissed stay out of sight for everyone, until they change.
-	const warnings = $derived(splitWarnings(budget.warnings));
-	let showDismissed = $state(false);
-	const dismissing = new Mutation({ toastErrors: true, success: () => 'Warning dismissed' });
-	const restoring = new Mutation({ toastErrors: true });
 
 	const monthHref = (month: string) =>
 		withParam(page.url, 'month', month === thisMonth ? null : month);
@@ -131,83 +121,6 @@
 					>Manage</a
 				>{/if}
 		</p>
-	{/if}
-
-	{#if warnings.shown.length || (admin && warnings.dismissed.length)}
-		<div class="grid gap-1.5 text-[13px]">
-			{#if warnings.shown.length}
-				<ul class="grid gap-1.5 bg-card px-3 py-2.5">
-					{#each warnings.shown as w (w.id)}
-						<li class="flex items-start gap-1">
-							<p class={['flex-1', w.kind === 'unknown_gpu' && 'text-muted-foreground']}>
-								{warningText(w)}
-								{#if admin && w.kind === 'unpriced'}<a
-										class="text-link hover:underline"
-										href={orgHref(budget.org, 'budget')}>Set prices</a
-									>{/if}
-							</p>
-							{#if admin}
-								<form method="POST" action="?/dismissWarning" use:enhance={dismissing.enhance}>
-									<input type="hidden" name="org" value={budget.org} />
-									<input type="hidden" name="warning" value={w.id} />
-									<input type="hidden" name="fingerprint" value={w.fingerprint} />
-									<Button
-										type="submit"
-										variant="ghost"
-										size="icon-sm"
-										class="-my-1 size-6 text-muted-foreground"
-										aria-label="Dismiss for everyone"
-										title="Dismiss for everyone"
-										disabled={dismissing.pending}
-									>
-										<XIcon />
-									</Button>
-								</form>
-							{/if}
-						</li>
-					{/each}
-				</ul>
-			{/if}
-			{#if admin && warnings.dismissed.length}
-				<Button
-					variant="ghost"
-					size="sm"
-					class="h-auto justify-self-start px-0 py-0 text-xs text-muted-foreground hover:bg-transparent"
-					aria-expanded={showDismissed}
-					onclick={() => (showDismissed = !showDismissed)}
-				>
-					{showDismissed ? 'Hide' : 'Show'}
-					{count(warnings.dismissed.length, 'dismissed warning')}
-				</Button>
-				{#if showDismissed}
-					<ul class="grid gap-1.5 px-3 text-muted-foreground">
-						{#each warnings.dismissed as w (w.id)}
-							<li class="flex items-start gap-2">
-								<p class="flex-1">
-									{warningText(w)}
-									{#if w.dismissed_by}<span class="text-xs">
-											Dismissed by {w.dismissed_by.name}.</span
-										>{/if}
-								</p>
-								<form method="POST" action="?/restoreWarning" use:enhance={restoring.enhance}>
-									<input type="hidden" name="org" value={budget.org} />
-									<input type="hidden" name="warning" value={w.id} />
-									<Button
-										type="submit"
-										variant="ghost"
-										size="sm"
-										class="-my-1 h-6 px-1.5 text-xs"
-										disabled={restoring.pending}
-									>
-										Show again
-									</Button>
-								</form>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			{/if}
-		</div>
 	{/if}
 
 	<!-- Narrow windows show the totals first, and the breakdown on request. -->

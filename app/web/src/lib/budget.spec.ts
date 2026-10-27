@@ -3,12 +3,18 @@ import {
 	deletedProjectName,
 	deletedTotals,
 	monthSpan,
-	splitWarnings,
+	dismissedBy,
 	warningText
 } from './budget.ts';
 import type { BudgetWarning, DeletedProject } from './types.ts';
 
-const base = { fingerprint: 'f', dismissed: false, dismissed_by: null, dismissed_at: null };
+const base = {
+	month: '2026-10',
+	fingerprint: 'f',
+	dismissed: false,
+	dismissed_by: null,
+	dismissed_at: null
+};
 
 const unpriced: BudgetWarning = {
 	...base,
@@ -53,12 +59,14 @@ describe('budget warnings', () => {
 		expect(warningText({ ...unknown, runs: 1 })).toBe('1 run (3.5 h) with unknown GPUs.');
 	});
 
-	it('are split into shown and dismissed', () => {
-		expect(splitWarnings([unpriced, unknown])).toEqual({
-			shown: [unpriced],
-			dismissed: [unknown]
-		});
-		expect(splitWarnings([])).toEqual({ shown: [], dismissed: [] });
+	it('say who dismissed them and when', () => {
+		const when = (ts: number) => `at ${ts}`;
+		const by = { id: 1, name: 'Ana', email: 'ana@example.com', avatar_url: null };
+		expect(dismissedBy({ ...unknown, dismissed_by: by, dismissed_at: 5 }, when)).toBe(
+			'Dismissed by Ana, at 5'
+		);
+		expect(dismissedBy({ ...unknown, dismissed_at: 5 }, when)).toBe('Dismissed, at 5');
+		expect(dismissedBy(unknown, when)).toBe('Dismissed');
 	});
 });
 

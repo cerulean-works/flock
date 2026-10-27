@@ -10,12 +10,12 @@ export function warningText(w: BudgetWarning): string {
 	return `${count(w.runs, 'run')} (${hours(w.hours)} h) with unknown GPUs.`;
 }
 
-/** The warnings to show, and those an admin dismissed. */
-export function splitWarnings(warnings: BudgetWarning[]) {
-	return {
-		shown: warnings.filter((w) => !w.dismissed),
-		dismissed: warnings.filter((w) => w.dismissed)
-	};
+/** Who dismissed a warning and when, if known: `Dismissed by Ana, Oct 27, 14:02`. */
+export function dismissedBy(w: BudgetWarning, when: (ts: number) => string): string {
+	const parts = ['Dismissed'];
+	if (w.dismissed_by) parts.push(`by ${w.dismissed_by.name}`);
+	const text = parts.join(' ');
+	return w.dismissed_at != null ? `${text}, ${when(w.dismissed_at)}` : text;
 }
 
 /** A deleted project's name, or what stands for the ones deleted before names were kept. */

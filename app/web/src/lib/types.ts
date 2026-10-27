@@ -176,17 +176,17 @@ export interface Budget {
 		gpu_hours: number;
 		cost: number;
 	}[];
-	/** GPU types with no price: they cost nothing until one is set. */
-	unpriced: { gpu_type: string; gpu_hours: number }[];
-	/** Runs whose GPUs aren't known, and their wall-clock hours. */
-	unknown_gpu: { runs: number; hours: number };
-	/** What to warn about: only what amounts to a tenth of an hour or more. */
-	warnings: BudgetWarning[];
+	/** Admins only: GPU types with no price, which cost nothing until one is set. */
+	unpriced?: { gpu_type: string; gpu_hours: number }[];
+	/** Admins only: runs whose GPUs aren't known, and their wall-clock hours. */
+	unknown_gpu?: { runs: number; hours: number };
 }
 
 interface WarningBase {
 	/** `{kind}:{month}`. */
 	id: string;
+	/** `YYYY-MM`. */
+	month: string;
 	/** Changes with what the warning is about; dismissing sends the one that was shown. */
 	fingerprint: string;
 	/** Dismissed by an admin for everyone, until it is about something new. */
@@ -198,6 +198,15 @@ interface WarningBase {
 export type BudgetWarning =
 	| (WarningBase & { kind: 'unpriced'; gpu_types: { gpu_type: string; gpu_hours: number }[] })
 	| (WarningBase & { kind: 'unknown_gpu'; runs: number; hours: number });
+
+/** An org's budget warnings (admins only): only what amounts to a tenth of an hour or more. */
+export interface BudgetWarnings {
+	month: string;
+	/** The month's warnings nobody dismissed. */
+	warnings: BudgetWarning[];
+	/** Dismissed warnings of every month that are still about nothing new, newest first. */
+	dismissed: BudgetWarning[];
+}
 
 /** A deleted project whose runs used GPU hours (admins only). */
 export interface DeletedProject {
