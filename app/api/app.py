@@ -1,11 +1,11 @@
 import asyncio
 import contextlib
-import gc
 import logging
 import signal
 import threading
 from collections.abc import AsyncGenerator
 
+import asyncpg
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -41,10 +41,6 @@ def create_app(store: Store) -> FastAPI:
                 "no accounts yet: %s to create the first one, which becomes the super admin",
                 f"open {setup.rstrip('/')}/setup" if setup else "open the dashboard",
             )
-        # Move everything loaded at startup out of the cyclic GC's view so full collections
-        # don't stall requests scanning millions of long-lived run-table objects.
-        gc.collect()
-        gc.freeze()
 
         async def watch_crashed_runs(interval: float) -> None:
             while True:
@@ -70,7 +66,7 @@ def create_app(store: Store) -> FastAPI:
                 if callable(previous):
 
                     def on_signal(signum, frame, previous=previous):
-                        loop.call_soon_threadsafe(store.live.close)
+                        loop.call_soon_threadsafe(store.drain)
                         previous(signum, frame)
 
                     chained[sig] = previous
@@ -141,7 +137,20 @@ def create_app(store: Store) -> FastAPI:
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> Response:
+        """Liveness: touches nothing (D83)."""
         return JSONResponse({"ok": True})
+
+    @app.get("/readyz", include_in_schema=False)
+    async def readyz() -> Response:
+        """Readiness (D83): the pool answers and the listening connection is up, so this
+        replica sees every replica's writes; not while shutting down."""
+        ready = store.ready
+        if ready:
+            try:
+                await asyncio.wait_for(store.db.fetchval("SELECT 1"), 2.0)
+            except OSError, TimeoutError, asyncpg.PostgresError, asyncpg.InterfaceError:
+                ready = False
+        return JSONResponse({"ok": ready}, status_code=200 if ready else 503)
 
     app.include_router(wandb_protocol.router)
     app.include_router(wandb_protocol.public)

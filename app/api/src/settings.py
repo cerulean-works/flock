@@ -19,7 +19,19 @@ class Settings:
         doc="PostgreSQL URL of the connection that listens for notifications, which must "
         "bypass a pooler such as PgBouncer (default: database_url)",
     )
-    files_dir: Path = field(default=Path("flock-files"), doc="where uploaded run files go")
+    files_dir: Path = field(
+        default=Path("flock-files"),
+        doc="where uploaded run files go with the local backend (and are read from until "
+        "migrated, with the s3 backend)",
+    )
+    files_backend: str = field(
+        default="local",
+        doc="where run files are kept: local (files_dir, which every replica must mount) or "
+        "s3 (files_bucket on the S3 upstream)",
+    )
+    files_bucket: str | None = field(
+        default=None, doc="the bucket on the S3 upstream that the s3 files backend uses"
+    )
     migrate_on_startup: bool = field(
         default=True,
         doc="apply pending migrations on startup; when off, refuse to start on an old schema",

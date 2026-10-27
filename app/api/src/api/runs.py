@@ -1,8 +1,10 @@
+import mimetypes
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import orjson
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.src.api.deps import (
@@ -488,8 +490,12 @@ async def list_run_files(run: RunDep, store: StoreDep) -> Response:
 
 
 @router.get("/projects/{entity}/{project}/runs/{run}/files/{name:path}")
-async def get_run_file(run: RunDep, name: str, store: StoreDep) -> FileResponse:
-    path = store.file_path(run, name)
-    if path is None or not path.is_file():
+async def get_run_file(run: RunDep, name: str, store: StoreDep) -> Response:
+    found = await store.files.get(run.pk, name) if store.file_parts(name) else None
+    if found is None:
         raise APIError(404, "file not found")
-    return FileResponse(path)
+    if isinstance(found, Path):
+        return FileResponse(found)
+    chunks, size = found  # from the s3 backend (D82), served as FileResponse would
+    media_type = mimetypes.guess_type(name)[0] or "text/plain"
+    return StreamingResponse(chunks, media_type=media_type, headers={"content-length": str(size)})

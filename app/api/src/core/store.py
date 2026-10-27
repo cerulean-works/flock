@@ -2,7 +2,6 @@ import asyncio
 import contextlib
 import logging
 import secrets
-import shutil
 import string
 import time
 from collections.abc import Iterable, Sequence
@@ -20,6 +19,7 @@ from app.api.src.core.budgets import Budgets
 from app.api.src.core.bus import Bus
 from app.api.src.core.errors import Conflict, Discarded, Forbidden, NotFound
 from app.api.src.core.feed import Feed
+from app.api.src.core.files import file_store
 from app.api.src.core.history import History, Series, write_chunks
 from app.api.src.core.imports import Imports
 from app.api.src.core.live import Hub
@@ -341,12 +341,14 @@ class Store:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.files_dir = settings.files_dir
+        self.files = file_store(settings)  # D82
         self.db = Database(settings.database_url, max_size=settings.pool_size)
         self._tasks: set[asyncio.Task] = set()
         # Wakes this replica's background work early: a run finished, or runs were deleted.
         self._work_wanted = asyncio.Event()
         self._worker: asyncio.Task | None = None
         self._files_swept = -float("inf")  # when orphaned run files were last looked for
+        self.draining = False
         self.live = Hub()
         self.relay = live.Relay(self.live, None)
         self.secret = b""
@@ -383,7 +385,7 @@ class Store:
     async def open(self) -> None:
         """Connect, check the schema is migrated and start listening (D83: nothing is loaded,
         so this takes the same time whatever the data)."""
-        self.files_dir.mkdir(parents=True, exist_ok=True)
+        await self.files.open()
         await self.db.open(migrate=self.settings.migrate_on_startup)
         try:
             secret = await self.db.fetchval("SELECT value FROM meta WHERE key = 'upload_secret'")
@@ -399,6 +401,7 @@ class Store:
             await self.bus.close()
             await self.relay.close()
             await self.db.close()
+            await self.files.close()
             raise
 
     async def close(self) -> None:
@@ -415,6 +418,19 @@ class Store:
         await self.bus.close()
         await self.relay.close()
         await self.db.close()
+        await self.files.close()
+
+    @property
+    def ready(self) -> bool:
+        """Whether this replica should get traffic (D83): it hears every replica's writes,
+        and isn't shutting down."""
+        return self.bus.listening and not self.draining
+
+    def drain(self) -> None:
+        """Start shutting down (on SIGTERM): fail readiness, and end dashboard streams, which
+        never finish on their own (clients reconnect to another replica and replay)."""
+        self.draining = True
+        self.live.close()
 
     def _background(self, coro: Any) -> None:
         task = asyncio.get_running_loop().create_task(coro)
@@ -629,8 +645,21 @@ class Store:
         return parts
 
     def file_path(self, run: Run, name: str) -> Path | None:
+        """Where a run's file is with the local backend; None for invalid names."""
         parts = self.file_parts(name)
         return None if parts is None else self.files_dir / str(run.pk) / Path(*parts)
+
+    async def read_file(self, run: Run, name: str) -> bytes | None:
+        """A run file's bytes (for small files the server reads itself)."""
+        if self.file_parts(name) is None:
+            return None
+        found = await self.files.get(run.pk, name)
+        if found is None:
+            return None
+        if isinstance(found, Path):
+            return await asyncio.to_thread(found.read_bytes)
+        chunks, _ = found
+        return b"".join([chunk async for chunk in chunks])
 
     # ------------------------------------------------------------------ locks (D80)
 
@@ -1066,22 +1095,14 @@ class Store:
             self._work_wanted.set()  # compact its chunks
 
     async def save_file(self, run: Run, name: str, data: bytes) -> None:
-        path = self.file_path(run, name)
-        if path is None:
+        if self.file_parts(name) is None:
             raise ValueError(f"invalid file name {name!r}")
-
-        def write() -> None:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = path.with_name(path.name + ".tmp")
-            tmp.write_bytes(data)
-            tmp.replace(path)
-
         async with self.db.pool.acquire() as conn, conn.transaction():
             locked = await conn.fetchrow(self.LOCK_RUN, run.pk)
             if locked is None:
                 raise NotFound(f"run {run.path} not found")
             # Written under the run's lock: a purge removes the files after the row.
-            await asyncio.to_thread(write)
+            await self.files.put(run.pk, name, data)
             await conn.execute(
                 "INSERT INTO run_files (run_pk, name, size, updated_at) "
                 "VALUES ($1, $2, $3, to_timestamp($4)) "
@@ -1183,18 +1204,15 @@ class Store:
             if not runs:
                 return
 
-            def read() -> list[tuple[str | None, int]]:
-                found = []
-                for run in runs:
-                    path = self.file_path(run, self.METADATA_FILE)
-                    try:
-                        data = path.read_bytes() if path is not None else b""
-                    except OSError:
-                        data = b""
-                    found.append(self._read_gpus(data))
-                return found
+            found = []
+            for run in runs:
+                try:
+                    data = await self.read_file(run, self.METADATA_FILE) or b""
+                except OSError:
+                    data = b""
+                found.append(self._read_gpus(data))
 
-            for run, (gpu_type, count) in zip(runs, await asyncio.to_thread(read), strict=True):
+            for run, (gpu_type, count) in zip(runs, found, strict=True):
                 async with self.db.pool.acquire() as conn, conn.transaction():
                     locked = await conn.fetchrow(self.LOCK_RUN, run.pk)
                     if locked is not None:
@@ -1444,12 +1462,9 @@ class Store:
         """
         if data.state in Run.ACTIVE_STATES:
             raise ValueError(f"cannot import a {data.state} run")
-        paths: dict[str, tuple[str, ...]] = {}
         for name in data.files:
-            parts = self.file_parts(name)
-            if parts is None:
+            if self.file_parts(name) is None:
                 raise ValueError(f"invalid file name {name!r}")
-            paths[name] = parts
         gpu_type, gpu_count = None, None
         if self.METADATA_FILE in data.files:
             gpu_type, gpu_count = self._read_gpus(data.files[self.METADATA_FILE])
@@ -1563,15 +1578,8 @@ class Store:
             if data.files:
                 # Written before the commit: if the commit fails, the purge removes the files
                 # of a run that doesn't exist.
-                root = self.files_dir / str(pk)
-
-                def write() -> None:
-                    for name, content in data.files.items():
-                        path = root.joinpath(*paths[name])
-                        path.parent.mkdir(parents=True, exist_ok=True)
-                        path.write_bytes(content)
-
-                await asyncio.to_thread(write)
+                for name, content in data.files.items():
+                    await self.files.put(pk, name, content)
                 await conn.executemany(
                     "INSERT INTO run_files (run_pk, name, size, updated_at) "
                     "VALUES ($1, $2, $3, to_timestamp($4))",
@@ -1941,11 +1949,7 @@ class Store:
         return len(purged)
 
     async def _remove_files(self, pks: Iterable[int]) -> None:
-        def remove() -> None:
-            for pk in pks:
-                shutil.rmtree(self.files_dir / str(pk), ignore_errors=True)
-
-        await asyncio.to_thread(remove)
+        await self.files.delete_runs(pks)
 
     # How often each replica looks for run files without a run (a crash between a purge's
     # commit and its file removal): listing every run's directory isn't free.
@@ -1953,9 +1957,7 @@ class Store:
 
     async def _sweep_files(self) -> int:
         """Remove the files of runs that don't exist; returns of how many."""
-        dirs = await asyncio.to_thread(
-            lambda: [int(p.name) for p in self.files_dir.iterdir() if p.name.isdigit()]
-        )
+        dirs = await self.files.runs()
         if not dirs:
             return 0
         existing = {

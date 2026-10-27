@@ -202,6 +202,23 @@ class Upstream:
             raise UpstreamError("InternalError", f"HEAD answered {response.status_code}", 502)
         return response
 
+    async def put_object(self, bucket: str, key: str, data: bytes) -> None:
+        headers = {"content-length": str(len(data))}
+        payload_hash = hashlib.sha256(data).hexdigest()
+        self._raise(await self.send("PUT", bucket, key, None, headers, data, payload_hash))
+
+    async def get_object(self, bucket: str, key: str) -> httpx.Response | None:
+        """An object's GET answer, streamed (close it), or None if there's no such object."""
+        response = await self.send("GET", bucket, key, stream=True)
+        if response.status_code == 404:
+            await response.aclose()
+            return None
+        if response.status_code != 200:
+            await response.aread()
+            await response.aclose()
+            self._raise(response)
+        return response
+
     async def put_empty(self, bucket: str, key: str) -> None:
         self._raise(await self.send("PUT", bucket, key, headers={"content-length": "0"}))
 

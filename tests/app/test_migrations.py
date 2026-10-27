@@ -62,10 +62,18 @@ def test_boolean_settings_parse_words(raw, expected):
     assert Settings.load(environ=environ).migrate_on_startup is expected
 
 
-def test_only_one_server_per_database(flock, tmp_path):
-    second = Store(Settings(database_url=flock.database_url, files_dir=tmp_path))
-    with pytest.raises(SchemaError, match="already using this database"):
-        asyncio.run(second.open())
+def test_servers_share_a_database(flock, tmp_path):
+    """Any number of servers use one database (D83): there is no server lock any more."""
+
+    async def second() -> list[str]:
+        store = Store(Settings(database_url=flock.database_url, files_dir=tmp_path))
+        await store.open()
+        try:
+            return [org.name for org in await store.orgs()]
+        finally:
+            await store.close()
+
+    assert asyncio.run(second()) == ["flock"]
 
 
 def test_0002_upgrades_existing_data(postgres, make_flock, tmp_path):
