@@ -11,6 +11,7 @@
 	import { page } from '$app/state';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
+	import { storageHref } from '#lib/storage.ts';
 	import type { OrgEntry } from '#lib/types.ts';
 	import { orgHref } from '#lib/workspace/url.ts';
 	import OrgMark from './OrgMark.svelte';
@@ -41,6 +42,7 @@
 	let form = $state<HTMLFormElement>();
 	let signOut = $state<HTMLFormElement>();
 	let target = $state('');
+	const storage = $derived(!!page.route.id?.startsWith('/(app)/storage/'));
 
 	async function choose(name: string) {
 		if (name === org) return;
@@ -152,6 +154,15 @@
 
 <form method="POST" action="{resolve('/(app)')}?/workspace" bind:this={form} use:enhance hidden>
 	<input type="hidden" name="org" value={target} />
-	<input type="hidden" name="next" value={stay ? page.url.pathname + page.url.search : ''} />
+	<!-- Storage goes to the other org's buckets; other org pages to its runs. -->
+	<input
+		type="hidden"
+		name="next"
+		value={storage && target
+			? storageHref(target)
+			: stay
+				? page.url.pathname + page.url.search
+				: ''}
+	/>
 </form>
 <form method="POST" action="/logout" bind:this={signOut} hidden></form>

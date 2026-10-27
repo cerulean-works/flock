@@ -1,4 +1,5 @@
 <script lang="ts">
+	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
 	import HouseIcon from '@lucide/svelte/icons/house';
 	import MenuIcon from '@lucide/svelte/icons/menu';
 	import PanelLeftOpenIcon from '@lucide/svelte/icons/panel-left-open';
@@ -11,6 +12,7 @@
 	import WorkspaceSwitcher from '#lib/components/shell/WorkspaceSwitcher.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Sheet from '#lib/components/ui/sheet/index.js';
+	import { storageHref } from '#lib/storage.ts';
 	import { SIDEBAR_W, saveWidth } from '#lib/widths.ts';
 	import type { LayoutProps } from './$types';
 
@@ -31,7 +33,9 @@
 
 	// The rail's switcher keeps home and account pages in place, like the sidebar's.
 	const stay = $derived(
-		!page.route.id?.startsWith('/(app)/[entity]') && !page.route.id?.startsWith('/(app)/orgs/')
+		!page.route.id?.startsWith('/(app)/[entity]') &&
+			!page.route.id?.startsWith('/(app)/orgs/') &&
+			!page.route.id?.startsWith('/(app)/storage/')
 	);
 </script>
 
@@ -45,6 +49,7 @@
 				org={data.shell.org}
 				orgs={data.shell.orgs}
 				projects={data.shell.projects}
+				s3={data.shell.s3}
 				oncollapse={() => setCollapsed(true)}
 			/>
 			<ResizeHandle
@@ -82,6 +87,21 @@
 			>
 				<HouseIcon />
 			</Button>
+			{#if data.shell.s3 && data.shell.org}
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					class={[
+						'mt-1 text-muted-foreground',
+						page.route.id?.startsWith('/(app)/storage/') && 'bg-muted text-foreground'
+					]}
+					href={storageHref(data.shell.org)}
+					aria-label="Storage"
+					title="Storage"
+				>
+					<HardDriveIcon />
+				</Button>
+			{/if}
 			<div class="mt-auto py-2">
 				<WorkspaceSwitcher org={data.shell.org} orgs={data.shell.orgs} {stay} compact />
 			</div>
@@ -114,6 +134,11 @@
 <Sheet.Root bind:open={drawer}>
 	<Sheet.Content side="left" class="w-72 gap-0 p-0" showCloseButton={false}>
 		<Sheet.Title class="sr-only">Navigation</Sheet.Title>
-		<Sidebar org={data.shell.org} orgs={data.shell.orgs} projects={data.shell.projects} />
+		<Sidebar
+			org={data.shell.org}
+			orgs={data.shell.orgs}
+			projects={data.shell.projects}
+			s3={data.shell.s3}
+		/>
 	</Sheet.Content>
 </Sheet.Root>

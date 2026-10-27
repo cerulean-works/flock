@@ -80,6 +80,60 @@ export interface Bucket {
 	upstream_name: string;
 	created_at: number;
 	created_by: Person | null;
+	/** Set while a deleted bucket is still being emptied (listed with `deleting`). */
+	deleted_at?: number;
+}
+
+/** An object in a folder's listing (`GET …/buckets/{bucket}/objects`). */
+export interface StorageObject {
+	key: string;
+	size: number;
+	last_modified: number;
+	etag: string;
+}
+
+/** One page of one level of a bucket: subfolders (ending in `/`), then objects. */
+export interface Listing {
+	prefix: string;
+	folders: string[];
+	objects: StorageObject[];
+	/** The next page's, null on the last. */
+	cursor: string | null;
+}
+
+/** An object's details, from a HEAD (`GET …/buckets/{bucket}/object?key=`). */
+export interface ObjectDetails {
+	key: string;
+	size: number;
+	last_modified: number | null;
+	etag: string;
+	content_type: string | null;
+	/** Its `x-amz-meta-*` headers, without the prefix. */
+	metadata: Record<string, string>;
+}
+
+/** What the dashboard asks `POST …/presign` for (D69). */
+export type PresignRequest =
+	| {
+			method: 'get';
+			key: string;
+			disposition?: 'inline' | 'attachment';
+			link?: boolean;
+			content_type?: string;
+	  }
+	| { method: 'put'; key: string; size: number }
+	| { method: 'multipart'; key: string; size: number; content_type?: string }
+	| { method: 'parts'; key: string; upload_id: string; parts: number[] }
+	| { method: 'complete' | 'abort'; key: string; upload_id: string };
+
+/** Its answer: a presigned `url`, an upload started, or URLs of parts by number. */
+export interface Presigned {
+	url?: string;
+	expires_at?: number;
+	upload_id?: string;
+	part_size?: number;
+	part_count?: number;
+	parts?: Record<string, string>;
 }
 
 /** Something that happened to a bucket, and how it was asked for (`detail.via`). */

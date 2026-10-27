@@ -56,7 +56,8 @@ const RESERVED = [
 	'logout',
 	'orgs',
 	'reset',
-	'setup'
+	'setup',
+	'storage'
 ];
 
 /**
