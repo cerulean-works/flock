@@ -233,7 +233,7 @@ def test_run_loads_the_weights_in_the_dtype_asked_for(offline_model, scorer, mon
 
     assert loaded == [torch.bfloat16, torch.float32]  # bfloat16 unless asked
     with pytest.raises(ValueError, match="dtype must be bfloat16 or float32"):
-        EvalConfig(model="tiny@0", tasks=("arc_easy",), dtype="float16")
+        EvalConfig(model="tiny@0", tasks=("arc_easy",), dtype="float16")  # ty: ignore[invalid-argument-type]
 
 
 def test_cli_needs_a_task_or_suite():

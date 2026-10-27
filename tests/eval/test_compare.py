@@ -146,16 +146,49 @@ def test_cli_exits_0_on_equal_scores_1_on_a_breach_and_2_on_a_refusal(write):
     result = CliRunner().invoke(cli.main, ["compare", str(bank), str(bank)])
     assert (result.exit_code, result.output) == (
         0,
-        "2 tasks and 1 suites compared, 0 values differ\n",
+        "compared: tasks 2, suites 1, breaches 0\n",
     )
 
     result = CliRunner().invoke(cli.main, ["compare", str(bank), str(breach)])
     assert result.exit_code == 1
     assert result.output.splitlines() == [
         "piqa  metrics.acc_raw  0.6  ->  0.625  (+0.025)",
-        "2 tasks and 1 suites compared, 1 values differ",
+        "compared: tasks 2, suites 1, breaches 1",
     ]
 
     result = CliRunner().invoke(cli.main, ["compare", str(bank), str(refused)])
     assert result.exit_code == 2
     assert "refused: different instrument: provenance.dtype is 'float32'" in result.output
+
+
+def test_a_suite_averaging_another_metric_is_refused(write):
+    rerun = dataclasses.replace(BANK, suites=[dataclasses.replace(SUITE, metric="acc_raw")])
+
+    with pytest.raises(ValueError, match="different instrument: toy:rc has metric"):
+        compare(write("bank", BANK), write("new", rerun))
+
+
+def test_a_repeated_nan_is_no_breach_but_a_new_one_is(write):
+    nan = dataclasses.replace(PIQA, metrics={"acc_raw": float("nan")})
+    bank = write("bank", dataclasses.replace(BANK, tasks=[ARC, nan]))
+
+    assert compare(bank, bank).breaches == []
+    [breach] = compare(write("new", BANK), bank).breaches
+    assert breach[:3] == ("piqa", "metrics.acc_raw", 0.6)
+
+
+def test_a_file_that_is_not_json_is_refused_by_name(write, tmp_path):
+    broken = tmp_path / "broken.json"
+    broken.write_text('{"provenance": ')  # a job killed while writing
+
+    with pytest.raises(ValueError, match="broken.json is not a results file"):
+        compare(write("bank", BANK), broken)
+
+
+def test_a_suite_dropped_beside_a_task_of_its_name_is_listed(write):
+    # Names are paired within tasks and within suites, never across them.
+    bank = Results(PROVENANCE, [ARC], [dataclasses.replace(SUITE, suite="arc_easy")])
+
+    comparison = compare(write("bank", bank), write("new", Results(PROVENANCE, [ARC], [])))
+
+    assert comparison.only_banked == ["arc_easy"]

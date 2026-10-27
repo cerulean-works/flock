@@ -49,7 +49,7 @@ The output lists, in order:
 ```text
 flock_commit  0695663f...  ->  4c1e2b7a...
 piqa  metrics.acc_raw  0.6  ->  0.625  (+0.025)
-109 tasks and 10 suites compared, 1 values differ
+compared: tasks 109, suites 10, breaches 1
 ```
 
 ## Refusals
@@ -57,7 +57,8 @@ piqa  metrics.acc_raw  0.6  ->  0.625  (+0.025)
 A difference in score only means something if both runs scored the same requests with the same settings. `compare` refuses, before it reads any score, when:
 - the provenance's `model`, `dtype`, `batch_tokens`, `max_length` or `attention` differ
 - a task in both files has a different `task_hash` (see [The task hash](results#the-task-hash)) or `limit`
-- no task is in both files, or a field it reads is missing
+- a suite in both files has a different `metric`, so its score averages another metric
+- no task is in both files, a file isn't JSON, or a field it reads is missing
 
 The message names the field and both values. A refused pair needs a new bank, not a looser check.
 

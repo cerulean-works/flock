@@ -3,13 +3,14 @@
 import shlex
 import sys
 from pathlib import Path
+from typing import get_args
 
 import click
 
 from flock.eval.compare import Comparison, compare
 from flock.eval.model import DEFAULT_BATCH_TOKENS
 from flock.eval.results import Results
-from flock.eval.run import EvalConfig, evaluate
+from flock.eval.run import Dtype, EvalConfig, evaluate
 from flock.eval.tasks import SUITES, TASKS
 
 
@@ -54,7 +55,7 @@ def main() -> None:
 )
 @click.option(
     "--dtype",
-    type=click.Choice(["bfloat16", "float32"]),
+    type=click.Choice(get_args(Dtype)),
     default="bfloat16",
     show_default=True,
     help="The weights' dtype.",
@@ -68,7 +69,7 @@ def run(
     out: Path,
     limit: int | None,
     batch_tokens: int,
-    dtype: str,
+    dtype: Dtype,
     device: str | None,
     wandb_project: str | None,
 ) -> None:
@@ -124,8 +125,8 @@ def format_comparison(comparison: Comparison) -> str:
         lines.append(f"{line}  ({breach.new - breach.banked:+.3g})" if numbers else line)
 
     lines.append(
-        f"{len(comparison.tasks)} tasks and {len(comparison.suites)} suites compared, "
-        f"{len(comparison.breaches)} values differ"
+        f"compared: tasks {len(comparison.tasks)}, suites {len(comparison.suites)}, "
+        f"breaches {len(comparison.breaches)}"
     )
     return "\n".join(lines)
 

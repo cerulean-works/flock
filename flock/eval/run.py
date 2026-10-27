@@ -4,6 +4,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal, get_args
 
 import torch
 
@@ -13,6 +14,9 @@ from flock.eval.provenance import Provenance
 from flock.eval.results import Results, SuiteResult, TaskResult, write_predictions
 from flock.eval.tasks import SUITES, TASKS, MultipleChoiceTask
 from flock.eval.tasks.suite import by_name
+
+# The weights' dtypes `run` loads. Log-softmax always runs in float32.
+Dtype = Literal["bfloat16", "float32"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,7 +35,7 @@ class EvalConfig:
             Score only each task's first `limit` docs, for quick checks.
         batch_tokens (`int`, *optional*):
             Passed to [`~eval.model.ScoringModel`].
-        dtype (`str`, *optional*, defaults to `"bfloat16"`):
+        dtype (`Dtype`, *optional*, defaults to `"bfloat16"`):
             The weights' dtype, `"bfloat16"` or `"float32"`. Log-softmax always runs in float32.
         device (`str`, *optional*):
             Where to run. Defaults to CUDA when available.
@@ -51,7 +55,7 @@ class EvalConfig:
     out: Path | None = None
     limit: int | None = None
     batch_tokens: int = DEFAULT_BATCH_TOKENS
-    dtype: str = "bfloat16"
+    dtype: Dtype = "bfloat16"
     device: str | None = None
     wandb_project: str | None = None
     command: str = "python"
@@ -68,7 +72,7 @@ class EvalConfig:
             raise ValueError(f"limit must be at least 1, got {self.limit}")
         if self.batch_tokens < 1:
             raise ValueError(f"batch_tokens must be at least 1, got {self.batch_tokens}")
-        if self.dtype not in ("bfloat16", "float32"):
+        if self.dtype not in get_args(Dtype):
             raise ValueError(f"dtype must be bfloat16 or float32, got {self.dtype}")
 
 
