@@ -9,6 +9,7 @@ import webbrowser
 from typing import Any
 
 import click
+import httpx
 
 from flock.cli import credentials
 from flock.cli.api import Api, error_of
@@ -120,7 +121,7 @@ def _device_sign_in(host: str, no_browser: bool) -> tuple[str, dict[str, Any]]:
 
 
 def _wandb_key(host: str) -> str | None:
-    """The API key the wandb SDK would send, if it's pointed at ``host``. An SDK whose
+    """The wandb key the wandb SDK would send, if it's pointed at ``host``. An SDK whose
     internals moved reads as not logged in."""
     try:
         from wandb.errors import Error as WandbError
@@ -138,14 +139,18 @@ def _wandb_key(host: str) -> str | None:
 
 
 def _key_works(host: str, key: str) -> bool:
+    """Whether ``host`` takes ``key`` from the wandb SDK. It asks the wandb protocol, as the SDK
+    does: wandb keys can't call the REST API."""
     try:
-        return Api(host, key).get("me").status_code == 200
-    except click.ClickException:
+        query = {"query": "query Viewer { viewer { id } }"}
+        response = Api(host, key).client.post("/graphql", json=query)
+        return response.status_code == 200 and "errors" not in response.json()
+    except httpx.HTTPError, ValueError:
         return False
 
 
 def _log_in_wandb(host: str, token: str, choice: bool | None) -> dict[str, str] | None:
-    """Points the wandb SDK at ``host`` with a new API key, unless declined (``choice``, else
+    """Points the wandb SDK at ``host`` with a new wandb key, unless declined (``choice``, else
     ask, defaulting to yes; without a terminal, yes). Returns the key's name and prefix when it made one."""
     if choice is False:
         return None
@@ -153,8 +158,8 @@ def _log_in_wandb(host: str, token: str, choice: bool | None) -> dict[str, str] 
         import wandb
     except ImportError:
         click.echo(
-            "The wandb SDK isn't installed. To log it in to this Flock server later, create an "
-            f"API key on your account page and run: wandb login --host {host} <key>"
+            "The wandb SDK isn't installed. To log it in to this Flock server later, create a "
+            f"wandb key on your account page and run: wandb login --host {host} <key>"
         )
         return None
     key = _wandb_key(host)
@@ -165,18 +170,18 @@ def _log_in_wandb(host: str, token: str, choice: bool | None) -> dict[str, str] 
     if choice is None and _terminal() and not click.confirm(question, default=True):
         return None
     name = f"wandb on {socket.gethostname()}"
-    created = Api(host, token).post("me/api-keys", {"name": name})
+    created = Api(host, token).post("me/wandb-keys", {"name": name})
     if created.status_code != 201:
-        raise click.ClickException(f"Couldn't create an API key for wandb: {error_of(created)}")
-    api_key = created.json()
+        raise click.ClickException(f"Couldn't create a wandb key: {error_of(created)}")
+    wandb_key = created.json()
     try:
-        wandb.login(key=api_key["key"], host=host, relogin=True, verify=True)
+        wandb.login(key=wandb_key["key"], host=host, relogin=True, verify=True)
     except (wandb.Error, OSError, ValueError) as error:
         raise click.ClickException(
-            f"wandb couldn't log in ({error}). Revoke the API key {name} on your account page."
+            f"wandb couldn't log in ({error}). Revoke the wandb key {name} on your account page."
         ) from None
-    click.echo(f"✓ Logged the wandb SDK in to {host} with a new API key, {name}")
-    return {"name": name, "prefix": api_key["prefix"]}
+    click.echo(f"✓ Logged the wandb SDK in to {host} with a new wandb key, {name}")
+    return {"name": name, "prefix": wandb_key["prefix"]}
 
 
 @click.command()
@@ -208,6 +213,6 @@ def logout(host: str | None) -> None:
     click.echo(f"Logged out of {found.host}.")
     if key := saved.get("wandb_key"):
         click.echo(
-            f"The wandb SDK stays logged in with the API key {key['name']} ({key['prefix']}…). "
+            f"The wandb SDK stays logged in with the wandb key {key['name']} ({key['prefix']}…). "
             "Revoke it on your account page to end that too."
         )
