@@ -17,6 +17,8 @@ guide:
         title: Scoring during training
       - local: how-scoring-works
         title: How scoring works
+      - local: regression
+        title: Checking scores against the bank
 reference:
   - title: Reference
     sections:
