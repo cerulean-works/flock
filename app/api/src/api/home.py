@@ -132,11 +132,36 @@ def parse_month(month: str | None) -> dt.date:
 async def get_budget(
     org: OrgDep,
     store: StoreDep,
+    user: UserDep,
     month: Annotated[str | None, Query(description="YYYY-MM, default this month (UTC)")] = None,
 ) -> Response:
-    """Spend in a month against the budget: by project, the top runs, GPU hours that have no
-    price yet, and the warnings to show."""
-    return JSONResponse(store.budgets.budget(org, parse_month(month)))
+    """Spend in a month against the budget: by project and the top runs. Admins also get the
+    GPU hours that have no price yet and the runs with unknown GPUs; the warnings about them
+    are served by ``GET .../budget/warnings``."""
+    budget = store.budgets.budget(org, parse_month(month))
+    del budget["warnings"]
+    if store.accounts.role(user, org) != "admin":
+        del budget["unpriced"], budget["unknown_gpu"]
+    return JSONResponse(budget)
+
+
+@router.get("/orgs/{org}/budget/warnings")
+async def list_warnings(
+    org: AdminOrgDep,
+    store: StoreDep,
+    month: Annotated[str | None, Query(description="YYYY-MM, default this month (UTC)")] = None,
+) -> Response:
+    """The month's warnings nobody dismissed, and every dismissed warning of any month, newest
+    month first (admins)."""
+    when = parse_month(month)
+    active = [w for w in store.budgets.budget(org, when)["warnings"] if not w["dismissed"]]
+    return JSONResponse(
+        {
+            "month": gpus.format_month(when),
+            "warnings": [{"month": gpus.format_month(when), **w} for w in active],
+            "dismissed": store.budgets.dismissed_warnings(org),
+        }
+    )
 
 
 def parse_warning(warning: str) -> tuple[dt.date, str]:

@@ -439,6 +439,16 @@ class Budgets:
             **details,
         }
 
+    def dismissed_warnings(self, org: Org) -> list[dict[str, Any]]:
+        """Every warning that is dismissed now, with its month, newest month first. Dismissals
+        of warnings that are about something new, or no longer raised, aren't listed."""
+        found = []
+        for month in sorted({month for month, _ in org.dismissals}, reverse=True):
+            for warning in self.budget(org, month)["warnings"]:
+                if warning["dismissed"]:
+                    found.append({"month": gpus.format_month(month), **warning})
+        return found
+
     def warning_items(self, org: Org, month: dt.date, kind: str) -> set[str] | None:
         """What the month's warning of ``kind`` is about now; None if it isn't raised."""
         return self._report(org, month)[1].get(kind)
