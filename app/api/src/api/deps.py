@@ -82,7 +82,8 @@ Password = Annotated[str, Field(min_length=8, max_length=256)]
 def current_user(request: Request, store: StoreDep) -> User:
     """The user behind the request's access token (``Bearer <jwt>``), CLI token (``Bearer
     flock_cli_…``) or API key (``Bearer``, ``x-api-key``, or the wandb SDK's basic auth). The
-    session of an access token or CLI token is kept in ``request.state.session``."""
+    session of an access token or CLI token is kept in ``request.state.session``, an API key in
+    ``request.state.api_key``."""
     accounts = store.accounts
     key = request.headers.get("x-api-key")
     scheme, _, credentials = request.headers.get("authorization", "").partition(" ")
@@ -105,9 +106,11 @@ def current_user(request: Request, store: StoreDep) -> User:
             request.state.session = session
             return accounts.users[session.user]
         key = credentials
-    user = accounts.user_for_key(key) if key else None
+    api_key = accounts.api_key(key) if key else None
+    user = accounts.users.get(api_key.user) if api_key is not None else None
     if user is None:
         raise APIError(401, "invalid or missing API key or access token")
+    request.state.api_key = api_key
     return user
 
 

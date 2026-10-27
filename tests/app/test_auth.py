@@ -12,7 +12,8 @@ def login(server, email: str, password: str):
 def test_the_first_signup_becomes_the_super_admin(make_flock):
     server = make_flock(bootstrap=False)
     anon = server.anonymous()
-    assert anon.get("/api/v1/auth/config").json() == {"signup_open": True, "google": False}
+    config = anon.get("/api/v1/auth/config").json()
+    assert config == {"signup_open": True, "google": False, "s3": None}
     assert anon.get("/api/v1/projects").status == 401
     signup = "/api/v1/auth/signup"
     assert anon.post(signup, {"email": "a@x.io", "name": "A", "password": "short"}).status == 422

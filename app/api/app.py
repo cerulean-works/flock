@@ -10,9 +10,16 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from app.api.src.api import auth, avatars, dashboard, home, orgs, projects, runs, wandb_protocol
+from app.api.src.api import auth, avatars, dashboard, home, orgs, projects, runs, s3, wandb_protocol
 from app.api.src.api.deps import APIError, JSONResponse
-from app.api.src.core.errors import Conflict, Forbidden, NotFound, TooManyAttempts
+from app.api.src.core.errors import (
+    BadGateway,
+    Conflict,
+    Forbidden,
+    Invalid,
+    NotFound,
+    TooManyAttempts,
+)
 from app.api.src.core.store import Store
 from app.api.src.core.table import FilterError
 from app.api.src.settings import Settings
@@ -112,6 +119,14 @@ def create_app(store: Store) -> FastAPI:
     async def too_many_attempts(request: Request, exc: TooManyAttempts) -> Response:
         return JSONResponse({"error": str(exc)}, status_code=429)
 
+    @app.exception_handler(Invalid)
+    async def invalid(request: Request, exc: Invalid) -> Response:
+        return JSONResponse({"error": str(exc)}, status_code=422)
+
+    @app.exception_handler(BadGateway)
+    async def bad_gateway(request: Request, exc: BadGateway) -> Response:
+        return JSONResponse({"error": str(exc)}, status_code=502)
+
     @app.exception_handler(FilterError)
     async def filter_error(request: Request, exc: FilterError) -> Response:
         return JSONResponse({"error": str(exc)}, status_code=400)
@@ -136,6 +151,7 @@ def create_app(store: Store) -> FastAPI:
     app.include_router(dashboard.router)
     app.include_router(home.router)
     app.include_router(avatars.router)
+    app.include_router(s3.router)
     return app
 
 

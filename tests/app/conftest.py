@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import dataclasses
 import gzip
 import http.client
 import itertools
@@ -28,7 +29,9 @@ import uvloop
 from app.api.app import create_app
 from app.api.src.core.store import Store
 from app.api.src.db.migrate import Migrations
+from app.api.src.s3_proxy.app import create_app as create_proxy_app
 from app.api.src.settings import Settings
+from tests.conftest import S3Server
 
 
 class Response:
@@ -485,6 +488,84 @@ class FlockServer:
         self._thread.join(timeout=60)
 
 
+def _listen() -> socket.socket:
+    sock = socket.socket()
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("127.0.0.1", 0))
+    return sock
+
+
+class ProxyServer:
+    """The S3 proxy served by uvicorn on ``sock`` in a background thread."""
+
+    def __init__(self, settings: Settings, sock: socket.socket | None = None) -> None:
+        sock = sock or _listen()
+        self.port = sock.getsockname()[1]
+        self.url = f"http://127.0.0.1:{self.port}"
+        config = uvicorn.Config(
+            create_proxy_app(settings),
+            log_level="warning",
+            access_log=False,
+            http="httptools",
+            lifespan="on",
+        )
+        self._server = uvicorn.Server(config)
+        self.loop = uvloop.new_event_loop()
+        self._thread = threading.Thread(
+            target=lambda: self.loop.run_until_complete(self._server.serve(sockets=[sock])),
+            daemon=True,
+        )
+        self._thread.start()
+        deadline = time.monotonic() + 30
+        while not self._server.started:
+            if time.monotonic() > deadline or not self._thread.is_alive():
+                raise RuntimeError("S3 proxy failed to start")
+            time.sleep(0.01)
+
+    def stop(self) -> None:
+        self._server.should_exit = True
+        self._thread.join(timeout=30)
+
+
+class S3Flock(FlockServer):
+    """A flock with S3 on: the proxy in front of ``s3`` (the test S3 server), on the flock's
+    database, its buckets named with a prefix of their own (see ``S3Server.bucket_prefix``)."""
+
+    def __init__(
+        self,
+        database_url: str,
+        files_dir: Path,
+        s3: S3Server,
+        bucket_prefix: str | None = None,
+        **settings: Any,
+    ) -> None:
+        self.s3 = s3
+        sock = _listen()
+        proxy_url = f"http://127.0.0.1:{sock.getsockname()[1]}"
+        self.bucket_prefix = bucket_prefix if bucket_prefix is not None else s3.bucket_prefix()
+        configured: dict[str, Any] = {
+            "s3_upstream_endpoint": s3.endpoint,
+            "s3_upstream_region": s3.region,
+            "s3_upstream_access_key_id": s3.access_key_id,
+            "s3_upstream_secret_access_key": s3.secret_access_key,
+            "s3_bucket_prefix": self.bucket_prefix,
+            "s3_public_url": proxy_url,
+        }
+        super().__init__(database_url, files_dir, **{**configured, **settings})
+        # The flock has applied the migrations the proxy reads.
+        self.proxy = ProxyServer(dataclasses.replace(self.store.settings, pool_size=8), sock)
+
+    def credentials(self, client: Client | None = None, **body: Any) -> dict:
+        """An ephemeral S3 key of ``client``'s user (the super admin by default)."""
+        got = (client or self.client()).post("/api/v1/s3/credentials", body)
+        assert got.status == 200, got.body
+        return got.json()
+
+    def stop(self) -> None:
+        self.proxy.stop()
+        super().stop()
+
+
 @dataclass
 class User:
     """An account created through the API, with a client using its API key."""
@@ -519,6 +600,19 @@ class Flocks:
             files_dir = self.base / f"flock-files-{len(self.servers)}"
             url = database_url or self.postgres.create()
             server = FlockServer(url, files_dir, **settings)
+        self.servers.append(server)
+        return server
+
+    def s3(self, s3: S3Server, reuse: S3Flock | None = None, **settings: Any) -> S3Flock:
+        """A flock with S3 on over ``s3`` (see ``S3Flock``), fresh or restarted like ``reuse``
+        (with its bucket prefix)."""
+        if reuse is not None:
+            settings.setdefault("api_key", reuse.api_key)
+            settings.setdefault("bucket_prefix", reuse.bucket_prefix)
+            server = S3Flock(reuse.database_url, reuse.files_dir, s3, **settings)
+        else:
+            files_dir = self.base / f"flock-files-{len(self.servers)}"
+            server = S3Flock(self.postgres.create(), files_dir, s3, **settings)
         self.servers.append(server)
         return server
 

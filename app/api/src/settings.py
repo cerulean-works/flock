@@ -68,6 +68,22 @@ class Settings:
     crash_timeout: float = field(
         default=600.0, doc="seconds without heartbeats before a running run is marked crashed"
     )
+    s3_upstream_endpoint: str | None = field(
+        default=None,
+        doc="the S3 server (e.g. Ceph RGW) the S3 proxy fronts; S3 features are off when unset",
+    )
+    s3_upstream_region: str = field(default="us-east-1", doc="that S3 server's region")
+    s3_upstream_access_key_id: str | None = field(
+        default=None, doc="the S3 server's access key id, which the proxy signs requests with"
+    )
+    s3_upstream_secret_access_key: str | None = field(default=None, doc="that key's secret")
+    s3_bucket_prefix: str = field(
+        default="",
+        doc="put in front of every bucket name on the S3 server (shortening the names allowed)",
+    )
+    s3_public_url: str | None = field(
+        default=None, doc="the S3 proxy's URL as clients reach it, handed out with S3 keys"
+    )
     pool_size: int = field(default=16, doc="maximum number of database connections")
     cors_origins: list[str] = field(
         default_factory=list, doc="origins allowed to call the API from browsers, comma separated"

@@ -242,8 +242,11 @@ class Accounts:
     # ------------------------------------------------------------------ credentials
 
     def user_for_key(self, key: str) -> User | None:
-        found = self.keys.get(self.digest(key))
+        found = self.api_key(key)
         return self.users.get(found.user) if found is not None else None
+
+    def api_key(self, key: str) -> ApiKey | None:
+        return self.keys.get(self.digest(key))
 
     def session_for_token(self, token: str) -> Session | None:
         """The live session an access token belongs to, or None for invalid or ended ones."""
