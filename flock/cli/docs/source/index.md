@@ -17,6 +17,7 @@ The `flock` command signs a machine in to Flock, the way `gh auth login` signs i
 | [`flock logout`](logout) | Ends this machine's sign-in on the server and deletes the saved credential |
 | [`flock whoami`](whoami) | Shows who you're signed in as, on which server |
 | [`flock token`](token) | Prints the credential, for another tool |
+| [`flock s3`](s3) | S3 keys for your organizations' buckets, and the buckets themselves |
 
 ## Where to go next
 

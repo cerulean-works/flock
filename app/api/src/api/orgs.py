@@ -60,6 +60,9 @@ class OrgUpdate(BaseModel):
 
     display_name: OrgDisplayName | None = None
     name: str | None = None
+    # S3 key lifetimes in seconds (D56); a null maximum means keys may never expire.
+    s3_ephemeral_ttl: int | None = None
+    s3_key_max_ttl: int | None = None
 
 
 class RoleBody(BaseModel):
@@ -85,6 +88,8 @@ def org_info(store: Store, org: Org, user: User) -> dict:
         "member_count": len(store.accounts.members(org)),
         "role": store.accounts.role(user, org),  # the caller's
         "avatar_url": store.avatars.url(org.avatar),
+        "s3_ephemeral_ttl": org.s3_ephemeral_ttl,
+        "s3_key_max_ttl": org.s3_key_max_ttl,
     }
 
 
@@ -165,13 +170,23 @@ async def get_org(org: OrgDep, user: UserDep, store: StoreDep) -> Response:
 
 @router.patch("/orgs/{org}")
 async def update_org(org: AdminOrgDep, body: OrgUpdate, user: UserDep, store: StoreDep) -> Response:
-    """Change an organization's display name.
+    """Change an organization's display name, or its S3 key lifetimes.
 
     Its ID (``name``) is fixed: projects, runs, URLs and wandb clients address the organization
     by it. A different ``name`` answers 400.
+
+    ``s3_ephemeral_ttl`` is how long keys exchanged for a CLI token or API key live, and
+    ``s3_key_max_ttl`` the longest any key may live (null: no limit), both in seconds. The
+    ephemeral lifetime can't exceed the maximum (422); lowering only the maximum below it
+    lowers it too. A lower maximum applies to existing keys at once.
     """
     if body.name is not None and body.name != org.name:
         raise APIError(400, "an organization's ID (name) can't be changed")
+    ttls = body.model_dump(include={"s3_ephemeral_ttl", "s3_key_max_ttl"} & body.model_fields_set)
+    if ttls.get("s3_ephemeral_ttl", 0) is None:
+        raise APIError(422, "s3_ephemeral_ttl can't be null")
+    if ttls:
+        await store.s3.set_ttls(org, ttls)
     if body.display_name is not None:
         await store.set_org_display_name(org, body.display_name)
     return JSONResponse(org_info(store, org, user))

@@ -38,5 +38,7 @@ jobs:
       # The build checks the repository out into a folder named after it.
       path_to_docs: flock/flock/cli/docs/source
       python_version: "3.14"
-      # Autodoc only imports flock.cli.credentials, which needs nothing beyond the standard
-      # library, so the root `flock` package the build installs is enough.
+      # Autodoc imports flock.cli.credentials, which needs nothing beyond the standard library,
+      # and flock.cli.s3, which needs httpx: the build installs only the root `flock` package,
+      # so httpx is mocked.
+      mock_deps: httpx

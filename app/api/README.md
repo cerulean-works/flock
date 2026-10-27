@@ -198,6 +198,13 @@ dashboard on another origin forwards `/api/v1/avatars/*` to Flock (as flock-ui d
 `/api/v1/auth/google/*`), or prefixes Flock's address. See
 [`docs/agents/005-avatars.md`](docs/agents/005-avatars.md).
 
+**S3.** With the `FLOCK_S3_*` settings, an S3 proxy (`uvicorn app.api.src.s3_proxy.app:app`, the
+Compose service `s3` under the profile `s3`) fronts our Ceph: orgs create buckets in Flock
+(`/api/v1/orgs/{org}/buckets`, stored upstream as `{org pk:05}-{name}`), and people reach them
+with per-user S3 keys scoped to one org (`POST /api/v1/s3/credentials` for ephemeral ones,
+`/api/v1/me/s3-keys` for long-lived ones). See [`docs/source/s3.md`](docs/source/s3.md) and
+[`docs/agents/009-s3-proxy.md`](docs/agents/009-s3-proxy.md).
+
 ## Read API
 
 Interactive docs are served at `/docs`. Every path below is relative to

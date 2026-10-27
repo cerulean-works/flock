@@ -105,3 +105,36 @@ def test_compose_configuration(compose, configured):
         assert all("ports" not in service for service in services.values())
     else:
         assert services["api"]["ports"][0]["published"] == "8080"
+
+
+@pytest.mark.parametrize("compose", ["app/compose.yaml", "app/api/compose.dev.yaml"])
+def test_compose_s3_proxy_service(compose):
+    """The S3 proxy is a service of its own under the ``s3`` profile, reading the S3 settings
+    and the API's database."""
+    if not shutil.which("docker"):
+        pytest.skip("Docker Compose is needed to validate deployment configuration")
+    root = Path(__file__).resolve().parents[2]
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("FLOCK_", "POSTGRES_"))}
+    env["FLOCK_S3_UPSTREAM_ENDPOINT"] = "https://ceph.example.com"
+    command = ["docker", "compose", "--env-file", os.devnull, "-f", str(root / compose)]
+
+    def services(*args: str) -> dict:
+        config = [*command, *args, "config", "--format", "json"]
+        done = subprocess.run(
+            config, env=env, capture_output=True, text=True, check=True, timeout=30
+        )
+        return json.loads(done.stdout)["services"]
+
+    assert "s3" not in services()
+    profiled = services("--profile", "s3")
+    proxy = profiled["s3"]
+    assert proxy["command"][:2] == ["uvicorn", "app.api.src.s3_proxy.app:app"]
+    s3_settings = {
+        f"FLOCK_{field.name.upper()}"
+        for field in dataclasses.fields(Settings)
+        if field.name.startswith("s3_")
+    }
+    assert s3_settings <= set(proxy["environment"])
+    settings = Settings.load(environ=proxy["environment"])
+    assert settings.s3_upstream_endpoint == "https://ceph.example.com"
+    assert settings.database_url == profiled["api"]["environment"]["FLOCK_DATABASE_URL"]

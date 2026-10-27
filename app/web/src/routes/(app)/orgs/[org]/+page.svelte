@@ -13,7 +13,9 @@
 	import DeletedProjectsSpend from '#lib/components/DeletedProjectsSpend.svelte';
 	import FormError from '#lib/components/FormError.svelte';
 	import MemberMenu from '#lib/components/MemberMenu.svelte';
+	import OrgBuckets from '#lib/components/OrgBuckets.svelte';
 	import OrgImport from '#lib/components/OrgImport.svelte';
+	import S3Lifetimes from '#lib/components/S3Lifetimes.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
@@ -232,6 +234,19 @@
 				</section>
 			{/if}
 
+			{#if data.s3}
+				<section class="mt-10 scroll-mt-6" id="buckets">
+					<h2 class="text-2xl tracking-[-0.01em]">Buckets</h2>
+					<OrgBuckets
+						buckets={data.s3.buckets}
+						nameLimit={data.s3.nameLimit}
+						endpoint={data.s3.endpoint}
+						{admin}
+						now={data.now}
+					/>
+				</section>
+			{/if}
+
 			<section class="mt-10 scroll-mt-6" id="budget">
 				<h2 class="text-2xl tracking-[-0.01em]">Budget</h2>
 				<BillingForm billing={data.billing} {admin} />
@@ -248,6 +263,13 @@
 				<section class="mt-10 scroll-mt-6" id="deleted-projects">
 					<h2 class="text-2xl tracking-[-0.01em]">Spend of deleted projects</h2>
 					<DeletedProjectsSpend projects={data.deletedProjects} currency={data.billing.currency} />
+				</section>
+			{/if}
+
+			{#if admin && data.s3}
+				<section class="mt-10 scroll-mt-6" id="s3-keys">
+					<h2 class="text-2xl tracking-[-0.01em]">S3 key lifetimes</h2>
+					<S3Lifetimes org={data.org} />
 				</section>
 			{/if}
 

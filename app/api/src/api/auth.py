@@ -130,9 +130,14 @@ async def signed_in(store: Store, user: User, status_code: int = 200) -> Respons
 
 @router.get("/auth/config")
 async def auth_config(store: StoreDep) -> Response:
-    """What a sign-in page should offer."""
+    """What a sign-in page should offer, and whether S3 is on (``s3``: the proxy's endpoint and
+    region, or null)."""
     return JSONResponse(
-        {"signup_open": store.accounts.signup_open, "google": Google.configured(store.settings)}
+        {
+            "signup_open": store.accounts.signup_open,
+            "google": Google.configured(store.settings),
+            "s3": store.s3.config(),
+        }
     )
 
 

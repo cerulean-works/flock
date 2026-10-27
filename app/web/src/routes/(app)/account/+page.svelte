@@ -8,14 +8,23 @@
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import FormError from '#lib/components/FormError.svelte';
+	import S3KeyCreator from '#lib/components/S3KeyCreator.svelte';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
-	import { dateTime, relativeTime } from '#lib/utils.ts';
+	import { groupKeys } from '#lib/s3.ts';
+	import { count, dateTime, duration, relativeTime } from '#lib/utils.ts';
 	import { entityHref } from '#lib/workspace/url.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 
 	const removal = new Mutation({ success: () => 'API key deleted', toastErrors: true });
+	const s3Revocation = new Mutation<{ revokedS3: number }>({
+		success: ({ revokedS3 }) =>
+			revokedS3 === 1 ? 'S3 key revoked' : `${revokedS3} S3 keys revoked`,
+		toastErrors: true
+	});
+	const orgName = (name: string | null) =>
+		data.s3?.orgs.find((o) => o.name === name)?.display_name ?? name ?? 'a deleted organization';
 	const revocation = new Mutation({ success: () => 'Machine signed out', toastErrors: true });
 	const profile = new Mutation({ success: () => 'Name saved' });
 	let passwordForm = $state<HTMLFormElement>();
@@ -35,6 +44,22 @@
 <svelte:head>
 	<title>Account · Flock</title>
 </svelte:head>
+
+{#snippet revoke(ids: number[], label: string)}
+	<form method="POST" action="?/deleteS3Keys" use:enhance={s3Revocation.enhance}>
+		{#each ids as id (id)}<input type="hidden" name="id" value={id} />{/each}
+		<Button
+			type="submit"
+			variant="ghost"
+			size="icon-sm"
+			class="text-muted-foreground hover:text-destructive"
+			aria-label={label}
+			title="Revoke: the proxy refuses it from its next request"
+		>
+			<Trash2Icon />
+		</Button>
+	</form>
+{/snippet}
 
 <div class="flex min-h-0 flex-1 flex-col">
 	<main class="relative min-h-0 flex-1 overflow-y-auto px-5 pb-16">
@@ -240,6 +265,78 @@
 					<ApiKeyCreator named />
 				</div>
 			</section>
+
+			{#if data.s3}
+				{@const groups = groupKeys(data.s3.keys)}
+				<section class="mt-10" id="s3-keys">
+					<h2 class="text-2xl tracking-[-0.01em]">S3 keys</h2>
+					<p class="mt-2 max-w-[62ch] text-muted-foreground">
+						For your organizations’ buckets, at
+						<span class="font-mono text-[0.9em]">{data.s3.endpoint}</span>. Scripts and jobs should
+						run
+						<code class="font-mono text-[0.9em]">flock s3 credentials</code>, whose keys renew
+						themselves; make a key here for tools that can’t.
+					</p>
+					{#if data.s3.keys.length}
+						<ul class="mt-4 border-t border-divider">
+							{#each groups.longLived as key (key.id)}
+								<li class="flex min-h-12 items-center gap-4 border-b border-divider py-2">
+									<div class="min-w-0 flex-1">
+										<p class="truncate font-medium">{key.name}</p>
+										<p class="truncate text-[13px] text-muted-foreground">
+											<span class="font-mono text-[12.5px]">{key.access_key_id}</span>
+											· {orgName(key.org)}{key.read_only ? ' · read-only' : ''}
+										</p>
+									</div>
+									<span class="hidden w-36 text-[13px] text-muted-foreground sm:block">
+										{key.expires_at === null
+											? 'Never expires'
+											: `${duration(key.expires_at - data.now)} left`}
+										<br />
+										{key.last_used_at === null
+											? 'Not used yet'
+											: `Used ${relativeTime(key.last_used_at, data.now)}`}
+									</span>
+									{@render revoke([key.id], `Revoke S3 key ${key.name}`)}
+								</li>
+							{/each}
+							{#each groups.ephemeral as group (group.id)}
+								{@const used = Math.max(...group.keys.map((k) => k.last_used_at ?? -Infinity))}
+								<li class="flex min-h-12 items-center gap-4 border-b border-divider py-2">
+									<div class="min-w-0 flex-1">
+										<p class="truncate">
+											{count(group.keys.length, 'ephemeral key')} from
+											<span class="font-medium">{group.source}</span>
+										</p>
+										<p class="truncate text-[13px] text-muted-foreground">
+											{group.kind === 'machine'
+												? 'Issued to a command line sign-in'
+												: 'Issued to an API key'} ·
+											{[...new Set(group.keys.map((k) => orgName(k.org)))].join(', ')}
+										</p>
+									</div>
+									<span class="hidden w-36 text-[13px] text-muted-foreground sm:block">
+										{Number.isFinite(used)
+											? `Used ${relativeTime(used, data.now)}`
+											: 'Not used yet'}
+									</span>
+									{@render revoke(
+										group.keys.map((k) => k.id),
+										`Revoke the ephemeral keys from ${group.source}`
+									)}
+								</li>
+							{/each}
+						</ul>
+					{/if}
+					<div class="mt-4">
+						{#if data.s3.orgs.length}
+							<S3KeyCreator orgs={data.s3.orgs} initialOrg={data.profile.default_org} />
+						{:else}
+							<p class="text-muted-foreground">Join an organization to use its buckets.</p>
+						{/if}
+					</div>
+				</section>
+			{/if}
 
 			<section class="mt-10">
 				<h2 class="text-2xl tracking-[-0.01em]">Command line sign-ins</h2>

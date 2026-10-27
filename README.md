@@ -63,7 +63,8 @@ training runs and compare results under a consistent setup. Its docs start at
 [`flock.cli`](flock/cli/) is the `flock` command. `flock login` signs a machine in to
 our Flock server by approving a code in the browser, and can point the `wandb` SDK at
 it too. `flock whoami`, `flock token` and `flock logout` manage that sign-in, and
-`flock.cli.credentials` lets any Flock client find it. We'll add commands for our
+`flock.cli.credentials` lets any Flock client find it. `flock s3` and `flock.cli.s3` hand out
+S3 keys for an organization's buckets, renewed before they expire. We'll add commands for our
 training and evaluation workflows here. Its docs start at
 [`flock/cli/docs/source/index.md`](flock/cli/docs/source/index.md).
 
@@ -75,7 +76,9 @@ Training code keeps logging through the regular `wandb` SDK, pointed at our serv
 `wandb login --host`, while dashboards read loss curves and filtered run tables from a
 low-latency JSON API. It stores runs in PostgreSQL and keeps the data it serves in memory, so
 curves for dozens of runs load in a few milliseconds and filters over 10k-run projects return
-in single-digit milliseconds. See [Flock docs](app/api/README.md) for setup,
+in single-digit milliseconds. It can also front our Ceph object storage with an S3 proxy
+(`app/api/src/s3_proxy`): organizations create buckets in Flock, and each person reaches them
+with S3 keys of their own instead of the global key. See [Flock docs](app/api/README.md) for setup,
 configuration, the API and the design.
 
 ```sh

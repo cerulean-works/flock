@@ -35,6 +35,68 @@ export interface OrgInfo {
 	avatar_url: string | null;
 	/** Super admins are admins of every organization, member or not. */
 	role: Role | null;
+	/** Seconds S3 keys from `flock s3 credentials` and Python live. */
+	s3_ephemeral_ttl: number;
+	/** The longest any of its S3 keys may live, in seconds; null when keys may never expire. */
+	s3_key_max_ttl: number | null;
+}
+
+/** The S3 proxy, from `auth/config`; null when the server has no S3. */
+export interface S3Config {
+	endpoint: string;
+	region: string;
+}
+
+/** One of the user's S3 keys. Ephemeral ones were issued for a CLI sign-in or an API key. */
+export interface S3Key {
+	id: number;
+	name: string;
+	access_key_id: string;
+	org: string | null;
+	read_only: boolean;
+	ephemeral: boolean;
+	/** The CLI sign-in or API key an ephemeral key went to. */
+	session_id: number | null;
+	api_key_id: number | null;
+	/** That sign-in's machine, or that API key's name. */
+	source: string | null;
+	created_at: number;
+	/** When the proxy stops taking it (sooner if the org lowered its maximum); null: never. */
+	expires_at: number | null;
+	last_used_at: number | null;
+}
+
+/** A key just created: its secret is shown this once. */
+export interface S3KeyCreated extends S3Key {
+	secret_access_key: string;
+	endpoint: string;
+	region: string;
+}
+
+/** An organization's S3 bucket. */
+export interface Bucket {
+	name: string;
+	/** Its name on the S3 server: `{org pk, 5 digits}-{name}`. */
+	upstream_name: string;
+	created_at: number;
+	created_by: Person | null;
+}
+
+/** Something that happened to a bucket, and how it was asked for (`detail.via`). */
+export interface BucketEvent {
+	kind: 'created' | 'deleted' | 'purged';
+	user: Person | null;
+	at: number;
+	detail: {
+		via?: 'ui' | 'cli' | 'api' | 'purge' | 'org';
+		machine?: string;
+		key_name?: string;
+		objects?: number;
+	};
+}
+
+export interface BucketDetail extends Bucket {
+	events: BucketEvent[];
 }
 
 /** Where an organization's W&B import is: `interrupted` means Flock restarted during it. */

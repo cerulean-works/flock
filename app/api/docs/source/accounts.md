@@ -154,6 +154,8 @@ curl -s --json '{"name": "laptop"}' -H "Authorization: Bearer $TOKEN" $FLOCK/api
 
 The [API overview](api/index#credentials) lists the ways to send a key.
 
+When the server has [S3 storage](s3), the account page also lists your **S3 keys**, and makes long-lived ones for tools that can't renew a key themselves.
+
 ## Avatars
 
 Users and organizations can have an avatar image, which Flock stores and serves. Responses that show a user or an organization include its `avatar_url`.

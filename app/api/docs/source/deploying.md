@@ -35,6 +35,7 @@ docker compose up -d --build
 
 - **Routing:** this Compose file publishes no host ports. In Dokploy or your reverse proxy, route the dashboard domain to `ui:3000` and the SDK/API domain to `api:8080`. Both public URLs must be reachable by their clients. For local API development, `app/api/compose.dev.yaml` publishes port 8080; run `docker compose -f app/api/compose.dev.yaml up -d --build` from the repository root and `pnpm dev` from `app/web`. Its dashboard URL defaults to `http://localhost:5173`.
 - **Data:** two named volumes hold the data. `postgres-data` is the database, and `files` is the files directory, mounted at `/data/files`.
+- **S3 proxy:** the optional `s3` service, under the Compose profile `s3`, runs the [S3 proxy](s3) on port 8090 from the same image. Start it with `docker compose --profile s3 up -d` once the [S3 settings](configuration#s3-settings) are set. It keeps no state, so it can run as several replicas.
 - **Settings:** use the variables below. API tuning settings pass through to the API; empty values use the defaults in [Settings](configuration).
 
 The image installs Flock's dependencies at the versions locked in the repository's `uv.lock`. The build context is the repository root, so Docker can read the lockfile and API source together. Compose sets this for you. With plain Docker, run from the repository root:

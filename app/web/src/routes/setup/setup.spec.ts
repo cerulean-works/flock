@@ -32,23 +32,23 @@ beforeEach(() => vi.resetAllMocks());
 
 describe('server setup', () => {
 	it('starts with the super admin account on an empty server', async () => {
-		vi.mocked(authConfig).mockResolvedValue({ signup_open: true, google: true });
+		vi.mocked(authConfig).mockResolvedValue({ signup_open: true, google: true, s3: null });
 		await expect(load(event())).resolves.toEqual({ step: 'account', google: true });
 	});
 	it('resumes at organization creation for a signed-in super admin without an org', async () => {
-		vi.mocked(authConfig).mockResolvedValue({ signup_open: false, google: true });
+		vi.mocked(authConfig).mockResolvedValue({ signup_open: false, google: true, s3: null });
 		vi.mocked(needsWorkspace).mockResolvedValue(true);
 		await expect(load(event('token'))).resolves.toEqual({ step: 'workspace', google: false });
 	});
 	it('requires sign-in to resume setup', async () => {
-		vi.mocked(authConfig).mockResolvedValue({ signup_open: false, google: false });
+		vi.mocked(authConfig).mockResolvedValue({ signup_open: false, google: false, s3: null });
 		await expect(load(event())).rejects.toMatchObject({
 			status: 303,
 			location: '/login?next=%2Fsetup'
 		});
 	});
 	it('leaves setup once no organization step is needed', async () => {
-		vi.mocked(authConfig).mockResolvedValue({ signup_open: false, google: false });
+		vi.mocked(authConfig).mockResolvedValue({ signup_open: false, google: false, s3: null });
 		vi.mocked(needsWorkspace).mockResolvedValue(false);
 		await expect(load(event('token'))).rejects.toMatchObject({ status: 303, location: '/' });
 	});

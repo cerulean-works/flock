@@ -26,6 +26,7 @@ from app.api.src.core.imports import Imports
 from app.api.src.core.live import Hub
 from app.api.src.core.metric_defs import parse_metric_defs
 from app.api.src.core.names import ADJECTIVES, NOUNS
+from app.api.src.core.s3 import S3
 from app.api.src.core.table import ColumnTable
 from app.api.src.db.database import Database
 from app.api.src.settings import Settings
@@ -207,6 +208,8 @@ class Org:
         currency: str = "USD",
         avatar: bytes | None = None,
         display_name: str | None = None,
+        s3_ephemeral_ttl: int = 8 * 3600,
+        s3_key_max_ttl: int | None = 30 * 86400,
     ):
         self.pk = pk
         self.name = name
@@ -215,6 +218,10 @@ class Org:
         self.updated_at = updated_at
         self.currency = currency
         self.avatar = avatar  # the digest of its avatar image (see Avatars)
+        # S3 key lifetimes in seconds (D56): of keys exchanged for a CLI token or API key, and
+        # the longest any key may live (None: no limit).
+        self.s3_ephemeral_ttl = s3_ephemeral_ttl
+        self.s3_key_max_ttl = s3_key_max_ttl
         # GPU prices: lowercased type -> (type as set, hourly cost of one GPU).
         self.rates: dict[str, tuple[str, float]] = {}
         # Monthly budgets, by the month they apply from (None: no budget), in month order.
@@ -296,6 +303,8 @@ class Store:
     LINE_TABLES: ClassVar[frozenset[str]] = frozenset({"history", "events", "logs"})
     # Plottable series streams -> the table holding their raw lines.
     STREAMS: ClassVar[dict[str, str]] = {"history": "history", "system": "events"}
+    # Org pks stay below 100000 so S3 bucket names have room for them (D53).
+    MAX_ORG_PK: ClassVar[int] = 99999
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -325,6 +334,7 @@ class Store:
         self.avatars = Avatars(self)
         self.feed = Feed(self)
         self.imports = Imports(self)
+        self.s3 = S3(self)
 
     @staticmethod
     def _config_columns(config: dict[str, Any]) -> dict[str, Any]:
@@ -374,12 +384,14 @@ class Store:
             await self.accounts.load()
             await self.budgets.load()
             await self.imports.load()
+            await self.s3.load()
             await self._detect_missing_gpus()
         except BaseException:
             await self.db.close()
             raise
 
     async def close(self) -> None:
+        await self.s3.close()
         await self.imports.close()
         await self.avatars.flush()
         await self.flush()
@@ -389,11 +401,20 @@ class Store:
         started = time.perf_counter()
         for record in await self.db.fetch(
             "SELECT pk, name, extract(epoch FROM created_at)::float8, "
-            "extract(epoch FROM updated_at)::float8, currency, avatar, display_name FROM orgs"
+            "extract(epoch FROM updated_at)::float8, currency, avatar, display_name, "
+            "s3_ephemeral_ttl, s3_key_max_ttl FROM orgs"
         ):
-            *fields, avatar, display_name = record
+            *fields, avatar, display_name, ephemeral_ttl, max_ttl = record
             avatar = bytes(avatar) if avatar else None
-            self._add_org(Org(*fields, avatar=avatar, display_name=display_name))
+            self._add_org(
+                Org(
+                    *fields,
+                    avatar=avatar,
+                    display_name=display_name,
+                    s3_ephemeral_ttl=ephemeral_ttl,
+                    s3_key_max_ttl=max_ttl,
+                )
+            )
         for pk, org_pk, *rest in await self.db.fetch(
             "SELECT pk, org_pk, name, description, extract(epoch FROM created_at)::float8, "
             "extract(epoch FROM updated_at)::float8 FROM projects"
@@ -1502,9 +1523,11 @@ class Store:
         ``display_name`` (``name`` if not given)."""
         display_name = display_name if display_name is not None else name
         async with self._catalog:
-            record = None
-            if name not in self.orgs:
-                record = await self.db.fetchrow(
+            if name in self.orgs:
+                raise Conflict(f"organization {name} already exists")
+            # Raising inside the transaction rolls the insert back.
+            async with self.db.pool.acquire() as conn, conn.transaction():
+                record = await conn.fetchrow(
                     "INSERT INTO orgs (name, display_name, created_at, updated_at) "
                     "VALUES ($1, $2, now(), now()) ON CONFLICT (name) DO NOTHING RETURNING pk, "
                     "name, extract(epoch FROM created_at)::float8, "
@@ -1512,8 +1535,11 @@ class Store:
                     name,
                     display_name,
                 )
-            if record is None:
-                raise Conflict(f"organization {name} already exists")
+                if record is None:
+                    raise Conflict(f"organization {name} already exists")
+                # S3 bucket names start with the org's pk in five digits (D53).
+                if record[0] > self.MAX_ORG_PK:
+                    raise Conflict("this server can't hold more organizations")
             return self._add_org(Org(*record, display_name=display_name))
 
     @contextlib.asynccontextmanager
@@ -1557,13 +1583,17 @@ class Store:
                 raise Conflict("organization has active runs (pass force=true)", active)
             # It waits on the locks held here, so it stops before writing anything more.
             await self.imports.cancel(org)
-            await self.db.execute("DELETE FROM orgs WHERE pk = $1", org.pk)
+            async with self.db.pool.acquire() as conn, conn.transaction():
+                # Its S3 buckets outlive it until the background purge removes them upstream.
+                await self.s3.delete_org_buckets(conn, org)
+                await conn.execute("DELETE FROM orgs WHERE pk = $1", org.pk)
             pks = [pk for project in projects for pk in self._drop_project(project)]
             del self.orgs[org.name]
             del self.orgs_by_pk[org.pk]
             org.deleted = True
             self.accounts.forget_org(org)
             self.imports.forget(org)
+        self.s3.purge_later()
         await self.avatars.release(org.avatar)
         for project in projects:
             self.live.broadcast(project.pk, Hub.event("project", {"deleted": True}))
