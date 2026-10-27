@@ -22,7 +22,7 @@
 	<title>Home · Flock</title>
 </svelte:head>
 
-<main class="min-h-0 flex-1 overflow-y-auto px-5 pb-16">
+<main class="relative min-h-0 flex-1 overflow-y-auto px-5 pb-16">
 	{#if data.org && data.feed && data.budget}
 		<div class="mx-auto grid max-w-280 gap-x-12 gap-y-10 pt-8 xl:grid-cols-[minmax(0,1fr)_320px]">
 			<section aria-labelledby="feed-title" class="min-w-0">

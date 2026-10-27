@@ -36,7 +36,7 @@
 </svelte:head>
 
 <div class="flex min-h-0 flex-1 flex-col">
-	<main class="min-h-0 flex-1 overflow-y-auto px-5 pb-16">
+	<main class="relative min-h-0 flex-1 overflow-y-auto px-5 pb-16">
 		<div class="mx-auto max-w-180">
 			<h1 class="pt-8 text-[34px] leading-[1.15] tracking-[-0.025em]">
 				{data.profile.name}
