@@ -5,11 +5,13 @@ import {
 	formatX,
 	formatXTick,
 	formatXValue,
+	mapAt,
 	remap,
 	remapped,
 	resolveAxis,
 	sharedStepMetric,
-	stepMetricOf
+	stepMetricOf,
+	unmapAt
 } from './axes.ts';
 import { Series } from './series.ts';
 
@@ -55,6 +57,29 @@ describe('remap', () => {
 		const b = remapped(s, 'x', map);
 		expect(b).not.toBe(a);
 		expect(Array.from(b.x)).toEqual([0, 10, 30]);
+	});
+});
+
+describe('mapAt and unmapAt', () => {
+	// An eval at the same global step (rows 3 and 4), then a stride change.
+	const map = new AxisCurve([0, 3, 4, 6], [16, 64, 64, 128]);
+
+	it('read a mapping and its inverse, interpolated', () => {
+		expect(mapAt(map, 1.5)).toBe(40);
+		expect(mapAt(map, 5)).toBe(96);
+		expect(mapAt(map, 0, -16)).toBe(0);
+		expect(unmapAt(map, 40)).toBe(1.5);
+		expect(unmapAt(map, 96)).toBe(5);
+		expect(unmapAt(map, 0, -16)).toBe(0);
+		// A value logged on several rows reads at the first.
+		expect(unmapAt(map, 64)).toBe(3);
+	});
+
+	it('read nothing past a mapping, but invert to its nearest end', () => {
+		expect(mapAt(map, 7)).toBeNaN();
+		expect(mapAt(new AxisCurve(), 0)).toBeNaN();
+		expect(unmapAt(map, 500)).toBe(6);
+		expect(unmapAt(new AxisCurve(), 1)).toBeNaN();
 	});
 });
 

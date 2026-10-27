@@ -108,3 +108,44 @@ describe('panels of a page whose runs define different step metrics', () => {
 		expect(plotted(mixed, 'loss')).toEqual({ axis: '_step', rows: [0, 1] });
 	});
 });
+
+describe('a cursor followed across x axes', () => {
+	// `train/matrix_lr` on its step metric, `train/loss` on `_step`, as in a run's own panels.
+	const defs: MetricDefinition[] = [
+		{ key: 'train/global_step' },
+		{ key: 'train/matrix_lr', step: 'train/global_step' }
+	];
+	const logged = ['train/global_step', 'train/loss', 'train/matrix_lr'];
+	const ws = workspace([
+		{ defs, logged, axes: { 'train/global_step': 10 } },
+		{ defs, logged, axes: { 'train/global_step': 10 } }
+	]);
+	// The second run took twice the global steps per logged row: 0, 32, ..., 288.
+	ws.page.axes[1].history.set('train/global_step', new AxisCurve([0, 9], [0, 288]));
+	const axisOf = (key: string) => ws.axisOf(ws.panels.find((p) => p.id === key)!);
+	const lr = axisOf('train/matrix_lr');
+	const loss = axisOf('train/loss');
+
+	it('goes through the history row each run logged there, at its own x on the other axis', () => {
+		expect([lr.id, loss.id]).toEqual(['train/global_step', '_step']);
+		// Hovering the step-metric panel at global step 80: row 4 of the first run, 2.5 of the
+		// second; the `_step` panel reads them there.
+		const rows = [0, 1].map((row) => ws.historyStepAt(row, lr, 80));
+		expect(rows).toEqual([4, 2.5]);
+		expect(rows.map((s, row) => ws.xAtHistoryStep(row, loss, s))).toEqual([4, 2.5]);
+	});
+
+	it('works the other way: a `_step` panel lights up the step-metric panels', () => {
+		const rows = [0, 1].map((row) => ws.historyStepAt(row, loss, 4));
+		expect(rows).toEqual([4, 4]);
+		expect(rows.map((s, row) => ws.xAtHistoryStep(row, lr, s))).toEqual([80, 128]);
+	});
+
+	it('reads nothing for a run without the mapping, or past its ends', () => {
+		// A panel set to `train/global_step` by hand, over a run that never logged it.
+		const bare = workspace([{ defs, logged: ['train/loss', 'train/matrix_lr'] }]);
+		expect(bare.historyStepAt(0, lr, 80)).toBeNaN();
+		expect(bare.xAtHistoryStep(0, lr, 4)).toBeNaN();
+		expect(ws.xAtHistoryStep(0, lr, 12)).toBeNaN();
+	});
+});

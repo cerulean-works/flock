@@ -36,6 +36,13 @@ describe('Readout', () => {
 		expect(new Readout().read([sparse], 900, 5).count).toBe(0);
 	});
 
+	it('reads each line at its own x, skipping lines without one', () => {
+		const r = new Readout().read([a, b, sparse], (j) => [20, 0, NaN][j], 1);
+		expect(r.count).toBe(2);
+		expect(Array.from(r.step.subarray(0, 2))).toEqual([20, 0]);
+		expect(Array.from(r.value.subarray(0, 2))).toEqual([3, 2]);
+	});
+
 	it('marks focused lines', () => {
 		const r = new Readout().read([a, b], 10, 1, [b]);
 		expect(Array.from(r.focused.subarray(0, 2))).toEqual([0, 1]);

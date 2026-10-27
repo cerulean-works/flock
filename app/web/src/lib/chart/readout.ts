@@ -29,12 +29,23 @@ export class Readout {
 	/** Reading indices by value, high to low (ties keep line order). */
 	order: number[] = [];
 
-	read(lines: readonly ReadLine[], at: number, tol: number, focus: readonly ReadLine[] = []): this {
+	/**
+	 * Read every line at `at`: one x for all, or per line (by index) where each run sits at its
+	 * own x, as when the cursor is in a panel on another axis. NaN reads nothing.
+	 */
+	read(
+		lines: readonly ReadLine[],
+		at: number | ((line: number) => number),
+		tol: number,
+		focus: readonly ReadLine[] = []
+	): this {
 		this.grow(lines.length);
 		let k = 0;
 		for (let j = 0; j < lines.length; j++) {
 			const l = lines[j];
-			const i = pointAt(l.series, at, tol);
+			const x = typeof at === 'number' ? at : at(j);
+			if (Number.isNaN(x)) continue;
+			const i = pointAt(l.series, x, tol);
 			if (i < 0 || i >= l.values.length) continue;
 			const v = l.values[i];
 			if (!Number.isFinite(v)) continue;
