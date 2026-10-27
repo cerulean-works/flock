@@ -6,6 +6,7 @@ from pathlib import Path
 
 import click
 
+from flock.eval.compare import Comparison, compare
 from flock.eval.model import DEFAULT_BATCH_TOKENS
 from flock.eval.results import Results
 from flock.eval.run import EvalConfig, evaluate
@@ -89,6 +90,44 @@ def run(
         raise click.UsageError(str(error)) from None
 
     click.echo(format_results(evaluate(config)))
+
+
+@main.command(name="compare")
+@click.argument("banked", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument("new", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+def compare_command(banked: Path, new: Path) -> None:
+    """Compare a new results.json with a banked one. Exits 1 if any score differs, 2 if the runs are different instruments."""
+    try:
+        comparison = compare(banked, new)
+    except ValueError as error:
+        click.echo(f"refused: {error}", err=True)
+        sys.exit(2)
+
+    click.echo(format_comparison(comparison))
+    sys.exit(1 if comparison.breaches else 0)
+
+
+def format_comparison(comparison: Comparison) -> str:
+    """Formats the provenance fields that differ, the one-sided tasks and suites, one line per breach, then a count."""
+    lines = []
+    for key, (banked, new) in comparison.provenance.items():
+        lines.append(f"{key}  {banked}  ->  {new}")
+    if comparison.only_banked:
+        lines.append(f"only in the bank: {', '.join(comparison.only_banked)}")
+    if comparison.only_new:
+        lines.append(f"only in the new run: {', '.join(comparison.only_new)}")
+
+    for breach in comparison.breaches:
+        line = f"{breach.name}  {breach.field}  {breach.banked}  ->  {breach.new}"
+        # A difference is printed for two numbers only: a missing value is None, members a list.
+        numbers = all(type(value) in (int, float) for value in (breach.banked, breach.new))
+        lines.append(f"{line}  ({breach.new - breach.banked:+.3g})" if numbers else line)
+
+    lines.append(
+        f"{len(comparison.tasks)} tasks and {len(comparison.suites)} suites compared, "
+        f"{len(comparison.breaches)} values differ"
+    )
+    return "\n".join(lines)
 
 
 def format_results(results: Results) -> str:
