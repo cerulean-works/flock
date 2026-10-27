@@ -138,7 +138,7 @@ def cloze(
     """
     Returns cloze choices: each answer is the continuation `"<separator><answer>"` of `"<question_prefix><question>\\n<answer_prefix>"`. The defaults are OLMES's format, `"Question: <question>\\nAnswer:"` and `" <answer>"` (OLMES, sec. 3.1).
 
-    Chinese tasks pass [`CHINESE_QUESTION_PREFIX`], [`CHINESE_ANSWER_PREFIX`] and `separator=""`. Chinese text has no spaces between words, and a space before the answer often merges into the tokens of its first character and would count in `acc_per_char`.
+    Chinese tasks pass `CHINESE_QUESTION_PREFIX`, `CHINESE_ANSWER_PREFIX` and `separator=""`. Chinese text has no spaces between words, and a space before the answer often merges into the tokens of its first character and would count in `acc_per_char`.
 
     Raises:
         `TypeError`: if `answers` is one string. A doc with one answer passes `(answer,)`.
@@ -364,7 +364,7 @@ class MultipleChoiceTask:
         primary_metric (`str`):
             The metric reported first, one of `metrics`.
         fewshot (`Fewshot`, *optional*):
-            The few-shot examples, from the same dataset or written out. Zero-shot if not set. Each doc is shown all of them but any that is the doc itself (see [`Fewshot`]), so a few docs may see one fewer.
+            The few-shot examples, from the same dataset or written out. Zero-shot if not set. A doc isn't shown an example from another split that shows its own text, and with `num_shots` not one with its id, so some docs may see fewer examples than others (see [`Fewshot`]).
         description (`str`, *optional*, defaults to `""`):
             Text before the first few-shot example, such as a subject header.
         unconditional_context (`str`, *optional*, defaults to `"Answer:"`):
