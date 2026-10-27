@@ -3,8 +3,8 @@
 The dashboard for [Flock](../api): a home feed of each
 organization's activity beside its GPU budget, and a W&B-style workspace per project where the runs table and the charts share a single run list,
 with running runs updating live. It follows
-the "Paper" prototype in `mockup/`, restyled with the Cerulean Daylight tokens from `design.md`
-(Newsreader + DM Sans, warm paper, square surfaces).
+the "Paper" prototype in `mockup/`, restyled to match cerulean.works as described in `design.md`
+(Host Grotesk throughout, a pure white canvas, flat cool panels).
 
 ```sh
 # from this directory: start the API and PostgreSQL
@@ -84,12 +84,12 @@ runtime versions still need verification on the deployment host.
 
 Components come from [shadcn-svelte](https://shadcn-svelte.com) (`src/lib/components/ui`), set
 up with the "nova" preset (`components.json`), whose padding and rounding are kept as generated
-(`--radius: 0.625rem`). Every color is Cerulean's instead: `src/routes/layout.css` maps the
-Daylight palette from `design.md` onto shadcn's semantic tokens (`background` = Paper,
-`foreground` = Ink, `muted-foreground` = Slate, `border` = Quiet rule, `ring` = Focus blue,
+(`--radius: 0.5rem`; cards are flat and square). Every color is Cerulean's instead:
+`src/routes/layout.css` maps the palette from `design.md` onto shadcn's semantic tokens
+(`background` = white, `card` = Panel, `foreground` = Ink, `muted-foreground` = Slate, `border` = Quiet rule, `ring` = Focus blue,
 `primary` = Reading blue for small functional emphasis) and adds the roles shadcn has no slot for
-(`faint`, `divider`, `selection`, `link`, `state-*`). Type is Newsreader (`font-serif`) and DM
-Sans (`font-sans`). All styling is Tailwind utilities; there are no component `<style>` blocks.
+(`faint`, `divider`, `selection`, `link`, `state-*`). Type is Host Grotesk (`font-sans`, linked from
+Google Fonts in `app.html`) everywhere; there is no serif. All styling is Tailwind utilities; there are no component `<style>` blocks.
 
 ```sh
 pnpm dlx shadcn-svelte@latest add <component>   # aliases already point at #lib
@@ -186,7 +186,7 @@ Everything a page shows arrives in the server-rendered HTML, and no request ever
 | Step            | What happens                                                                                                                                                                                                                                                               |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Document        | `+page.ts` makes one request: Flock's workspace snapshot for the page (`GET /api/v1/projects/:entity/:project/workspace`), which carries the column schema, the runs and every metric's curves together. SvelteKit inlines the response into the HTML.                     |
-| `<head>`        | Every JS chunk, both stylesheets and both self-hosted fonts are preloaded from the document, including SvelteKit's root error node, which its client start awaits but does not preload by default (`hooks.server.ts`).                                                     |
+| `<head>`        | Every JS chunk and both stylesheets are preloaded from the document (Host Grotesk comes from Google Fonts behind a preconnect), including SvelteKit's root error node, which its client start awaits but does not preload by default (`hooks.server.ts`).                  |
 | Hydration       | The load re-runs against the inlined response, so no data is fetched. The snapshot travels as base64 text for this one request and is decoded natively (`Uint8Array.fromBase64`); SvelteKit's generic binary path is a per-byte JS loop that cost ~300 ms with a cold JIT. |
 | After hydration | The live stream opens for the runs on the page; idle-time prefetch of the previous and next page; hover-intent prefetch on sort headers; SvelteKit hover preload on pager links.                                                                                           |
 | Navigation      | Paging and sorting fetch exactly one binary snapshot. View switches and full-screen panels only change URL params no load reads, so they fetch nothing.                                                                                                                    |

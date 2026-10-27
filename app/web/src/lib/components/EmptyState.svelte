@@ -5,13 +5,13 @@
 	interface Props {
 		/**
 		 * `onboarding`: what to do on a page with nothing to show yet (no runs, none matching), a
-		 * reading column under a serif title. `compact`: a line where a tab or pane has nothing
+		 * reading column under a large title. `compact`: a line where a tab or pane has nothing
 		 * to show, on the page's gutters, in body type.
 		 */
 		variant?: 'onboarding' | 'compact';
 		/** The onboarding title. */
 		title?: string;
-		/** Under an onboarding title, in its serif voice. */
+		/** Under an onboarding title, at reading size. */
 		lead?: Snippet;
 		/** A compact one is muted, or says something went wrong. */
 		tone?: 'muted' | 'error';
@@ -32,9 +32,9 @@
 {#if variant === 'onboarding'}
 	<div class={['px-5 pt-[10vh] pb-16', className]}>
 		<div class="mx-auto max-w-160">
-			<h2 class="font-serif text-[28px] leading-tight tracking-[-0.01em]">{title}</h2>
+			<h2 class="text-[28px] leading-tight tracking-[-0.02em]">{title}</h2>
 			{#if lead}
-				<div class="mt-3 font-serif text-[19px] leading-normal">{@render lead()}</div>
+				<div class="mt-3 text-[17px] leading-[1.45]">{@render lead()}</div>
 			{/if}
 			{@render children?.()}
 		</div>

@@ -32,9 +32,7 @@
 
 <AuthShell>
 	{#if !data.invite}
-		<h1 class="font-serif text-[34px] leading-[1.15] tracking-[-0.02em]">
-			This invitation can’t be used
-		</h1>
+		<h1 class="text-[34px] leading-[1.15] tracking-[-0.025em]">This invitation can’t be used</h1>
 		<p class="mt-3 leading-relaxed text-muted-foreground">
 			It was used, has expired, or was withdrawn.
 		</p>
@@ -47,7 +45,7 @@
 			class="mb-5 size-12 text-[24px]"
 		/>
 		<p class="text-[13px] text-muted-foreground">You’re invited to</p>
-		<h1 class="mt-1 font-serif text-[34px] leading-[1.15] tracking-[-0.02em]">
+		<h1 class="mt-1 text-[34px] leading-[1.15] tracking-[-0.025em]">
 			Join {invite.org_display_name}
 		</h1>
 		<p class="mt-3 leading-relaxed text-muted-foreground">
