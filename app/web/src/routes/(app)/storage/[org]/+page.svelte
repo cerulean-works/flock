@@ -1,4 +1,5 @@
 <script lang="ts">
+	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
 	import HistoryIcon from '@lucide/svelte/icons/history';
@@ -7,7 +8,9 @@
 	import ConnectPanel from '#lib/components/storage/ConnectPanel.svelte';
 	import CreateBucket from '#lib/components/storage/CreateBucket.svelte';
 	import DeleteBucketDialog from '#lib/components/storage/DeleteBucketDialog.svelte';
+	import { Badge } from '#lib/components/ui/badge/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
+	import { datasetsHref } from '#lib/datasets.ts';
 	import { objectHref } from '#lib/storage.ts';
 	import { count, dateTime, relativeTime } from '#lib/utils.ts';
 	import type { PageProps } from './$types';
@@ -78,6 +81,15 @@
 											>
 												<HardDriveIcon class="size-4 flex-none text-muted-foreground" />
 												<span class="truncate font-mono text-[13px]">{bucket.name}</span>
+												{#if bucket.managed}
+													<Badge
+														variant="secondary"
+														class="text-muted-foreground"
+														title="Flock created this bucket for the Datasets tab"
+													>
+														Managed by Flock
+													</Badge>
+												{/if}
 											</a>
 										{/if}
 									</td>
@@ -100,10 +112,19 @@
 													<EllipsisIcon class="size-4" />
 												</DropdownMenu.Trigger>
 												<DropdownMenu.Content align="end" class="w-44">
+													{#if bucket.managed === 'datasets'}
+														<DropdownMenu.Item>
+															{#snippet child({ props })}
+																<a {...props} href={datasetsHref(params.org)}>
+																	<DatabaseIcon /> Open in Datasets
+																</a>
+															{/snippet}
+														</DropdownMenu.Item>
+													{/if}
 													<DropdownMenu.Item onSelect={() => (history = bucket.name)}>
 														<HistoryIcon /> History
 													</DropdownMenu.Item>
-													{#if admin}
+													{#if admin && !bucket.managed}
 														<DropdownMenu.Separator />
 														<DropdownMenu.Item
 															variant="destructive"
@@ -136,7 +157,7 @@
 						org={params.org}
 						endpoint={data.s3.endpoint}
 						region={data.s3.region}
-						bucket={live[0]?.name ?? 'my-bucket'}
+						bucket={live.find((b) => !b.managed)?.name ?? live[0]?.name ?? 'my-bucket'}
 					/>
 				</div>
 			</section>

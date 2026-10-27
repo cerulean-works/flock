@@ -11,6 +11,7 @@ import type {
 	OrgImport,
 	OrgInfo,
 	Role,
+	TrashEntry,
 	UserInfo
 } from '#lib/types.ts';
 import { formText, orgDisplayNameError } from '#lib/utils.ts';
@@ -33,30 +34,38 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 				if (isHttpError(e) && e.status === 403) return null;
 				throw e;
 			});
-	const [org, members, me, billing, invites, wandb, deleted, warnings, s3] = await Promise.all([
-		flock(path).then((r) => r.json() as Promise<OrgInfo>),
-		flock(`${path}/members`).then((r) => r.json() as Promise<{ members: Member[] }>),
-		flock('/api/v1/me').then((r) => r.json() as Promise<UserInfo>),
-		flock(`${path}/billing`).then((r) => r.json() as Promise<Billing>),
-		// Only admins see invitations; members are refused, and the page doesn't list them.
-		flock(`${path}/invites`)
-			.then((r) => r.json() as Promise<{ invites: Invite[] }>)
-			.catch((e) => {
-				if (isHttpError(e) && e.status === 403) return null;
-				throw e;
-			}),
-		// Its W&B import: none ever (404), or not for members to see (403).
-		flock(`${path}/import`)
-			.then((r) => r.json() as Promise<OrgImport>)
-			.catch((e) => {
-				if (isHttpError(e) && (e.status === 403 || e.status === 404)) return null;
-				throw e;
-			}),
-		adminOnly<{ deleted_projects: DeletedProject[] }>(flock(`${path}/budget/deleted-projects`)),
-		adminOnly<BudgetWarnings>(flock(`${path}/budget/warnings`)),
-		// The S3 proxy, when the server has one: its key lifetimes are set here (D68).
-		authConfig().then((c) => c.s3)
-	]);
+	const [org, members, me, billing, invites, wandb, deleted, warnings, s3, trash] =
+		await Promise.all([
+			flock(path).then((r) => r.json() as Promise<OrgInfo>),
+			flock(`${path}/members`).then((r) => r.json() as Promise<{ members: Member[] }>),
+			flock('/api/v1/me').then((r) => r.json() as Promise<UserInfo>),
+			flock(`${path}/billing`).then((r) => r.json() as Promise<Billing>),
+			// Only admins see invitations; members are refused, and the page doesn't list them.
+			flock(`${path}/invites`)
+				.then((r) => r.json() as Promise<{ invites: Invite[] }>)
+				.catch((e) => {
+					if (isHttpError(e) && e.status === 403) return null;
+					throw e;
+				}),
+			// Its W&B import: none ever (404), or not for members to see (403).
+			flock(`${path}/import`)
+				.then((r) => r.json() as Promise<OrgImport>)
+				.catch((e) => {
+					if (isHttpError(e) && (e.status === 403 || e.status === 404)) return null;
+					throw e;
+				}),
+			adminOnly<{ deleted_projects: DeletedProject[] }>(flock(`${path}/budget/deleted-projects`)),
+			adminOnly<BudgetWarnings>(flock(`${path}/budget/warnings`)),
+			// The S3 proxy, when the server has one: its key lifetimes are set here (D68).
+			authConfig().then((c) => c.s3),
+			// Deleted datasets, for admins (D93): refused to members, missing without S3.
+			flock(`${path}/datasets/trash`)
+				.then((r) => r.json() as Promise<{ entries: TrashEntry[] }>)
+				.catch((e) => {
+					if (isHttpError(e) && (e.status === 403 || e.status === 404)) return null;
+					throw e;
+				})
+		]);
 	return {
 		org,
 		members: members.members,
@@ -64,6 +73,7 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 		import: wandb,
 		billing,
 		deletedProjects: deleted?.deleted_projects ?? null,
+		deletedDatasets: trash?.entries ?? null,
 		warnings,
 		s3,
 		me: { id: me.id, is_superadmin: me.is_superadmin },

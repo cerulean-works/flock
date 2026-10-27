@@ -10,6 +10,7 @@
 	import CopyButton from '#lib/components/CopyButton.svelte';
 	import DeleteOrgDialog from '#lib/components/DeleteOrgDialog.svelte';
 	import BudgetWarnings from '#lib/components/BudgetWarnings.svelte';
+	import DeletedDatasets from '#lib/components/datasets/DeletedDatasets.svelte';
 	import DeletedProjectsSpend from '#lib/components/DeletedProjectsSpend.svelte';
 	import FormError from '#lib/components/FormError.svelte';
 	import MemberMenu from '#lib/components/MemberMenu.svelte';
@@ -266,6 +267,13 @@
 				<section class="mt-10 scroll-mt-6" id="s3-keys">
 					<h2 class="text-2xl tracking-[-0.01em]">S3 key lifetimes</h2>
 					<S3Lifetimes org={data.org} />
+				</section>
+			{/if}
+
+			{#if admin && data.deletedDatasets}
+				<section class="mt-10 scroll-mt-6" id="deleted-datasets">
+					<h2 class="text-2xl tracking-[-0.01em]">Deleted datasets</h2>
+					<DeletedDatasets org={data.org.name} entries={data.deletedDatasets} now={data.now} />
 				</section>
 			{/if}
 

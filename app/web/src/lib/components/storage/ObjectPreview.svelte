@@ -1,10 +1,9 @@
 <script lang="ts">
-	import DOMPurify from 'dompurify';
-	import { marked } from 'marked';
 	import { PREVIEW_BYTES, bucketCall, nameOf, prettyJson, previewOf } from '#lib/storage.ts';
 	import type { ObjectDetails, Presigned } from '#lib/types.ts';
 	import { unreachable } from '#lib/uploads.svelte.ts';
 	import { bytes } from '#lib/utils.ts';
+	import Markdown from '../Markdown.svelte';
 
 	interface Props {
 		org: string;
@@ -66,11 +65,7 @@
 			const pretty = prettyJson(text);
 			if (pretty !== null) return { kind: 'code' as const, body: pretty };
 		}
-		if (preview.kind === 'markdown') {
-			// Markdown becomes HTML, with anything that could run (scripts, handlers) taken out.
-			const html = DOMPurify.sanitize(marked.parse(text, { async: false }));
-			return { kind: 'html' as const, body: html };
-		}
+		if (preview.kind === 'markdown') return { kind: 'markdown' as const, body: text };
 		return { kind: 'code' as const, body: text };
 	});
 </script>
@@ -94,11 +89,8 @@
 		<audio src={url} controls class="w-full"></audio>
 	{:else if url && preview.kind === 'pdf'}
 		<iframe src={url} title={nameOf(object.key)} class="h-[75vh] w-full border-0 bg-card"></iframe>
-	{:else if shown?.kind === 'html'}
-		<div class="markdown bg-card px-5 py-4 text-[14px] leading-[1.45]">
-			<!-- eslint-disable-next-line svelte/no-at-html-tags -- sanitized by DOMPurify -->
-			{@html shown.body}
-		</div>
+	{:else if shown?.kind === 'markdown'}
+		<Markdown text={shown.body} class="bg-card px-5 py-4" />
 	{:else if shown}
 		<pre
 			class="max-h-[70vh] overflow-auto bg-card px-4 py-3 font-mono text-[12.5px] leading-relaxed whitespace-pre"><code
@@ -116,44 +108,3 @@
 		</p>
 	{/if}
 </div>
-
-<style>
-	.markdown :global(:is(h1, h2, h3, h4)) {
-		margin: 1em 0 0.4em;
-		font-weight: 400;
-		letter-spacing: -0.01em;
-	}
-	.markdown :global(h1) {
-		font-size: 24px;
-	}
-	.markdown :global(h2) {
-		font-size: 20px;
-	}
-	.markdown :global(:is(p, ul, ol, pre, blockquote, table)) {
-		margin: 0.6em 0;
-	}
-	.markdown :global(:is(ul, ol)) {
-		padding-left: 1.4em;
-		list-style: revert;
-	}
-	.markdown :global(a) {
-		color: var(--link);
-	}
-	.markdown :global(code) {
-		font-family: var(--font-mono);
-		font-size: 0.9em;
-	}
-	.markdown :global(pre) {
-		overflow-x: auto;
-		background: var(--muted);
-		padding: 0.6em 0.8em;
-		border-radius: 0.5rem;
-	}
-	.markdown :global(blockquote) {
-		color: var(--muted-foreground);
-		padding-left: 0.8em;
-	}
-	.markdown :global(img) {
-		max-width: 100%;
-	}
-</style>
