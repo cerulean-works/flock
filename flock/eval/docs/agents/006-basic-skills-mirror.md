@@ -31,7 +31,7 @@ The first version added `Dataset.data_file`, one JSON file of the repo read in p
 ## 3. Plan
 
 1. Mirror the six files: each read with the `json` builder, as the loading script did, and pushed as its own configuration.
-2. `tasks/basic_skills.py`: six tasks reading the mirror at a pinned revision.
+2. `tasks/basic_skills.py`: six tasks reading the mirror at revision `849126c520dd18b3d07ada2b4716ebde7c3ef50e` (public, ODC-BY), built from `allenai/basic-skills@faf63e97`.
 3. Check the mirror's rows equal the source files', row for row.
 
 ---
