@@ -1,0 +1,54 @@
+{
+  "suites": {
+    "base_easy": {
+      "members": [
+        "base_easy:qa_rc",
+        "base_easy:qa_bpb"
+      ],
+      "metric": null,
+      "scored": false
+    },
+    "base_easy:qa_bpb": {
+      "members": [
+        "arc_easy"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "base_easy:qa_rc": {
+      "members": [
+        "arc_easy"
+      ],
+      "metric": null,
+      "scored": true
+    }
+  },
+  "tasks": {
+    "arc_easy": {
+      "dataset": {
+        "repo": "allenai/ai2_arc",
+        "revision": "210d026faf9955653af8916fad021475a3f00453",
+        "split": "test",
+        "subset": "ARC-Easy"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "MCAS_2007_8_5189",
+          "Mercury_SC_401169",
+          "MCAS_2004_8_27",
+          "NYSEDREGENTS_2006_8_10",
+          "Mercury_7013388"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.arc.arc_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    }
+  }
+}
