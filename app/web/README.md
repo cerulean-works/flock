@@ -29,10 +29,10 @@ no email, so you pass the link on. More organizations are created on the **Super
 
 The SvelteKit server talks to Flock; the browser only talks to SvelteKit. Configure it with:
 
-| Variable             | Default                 | Purpose                                                                                                     |
-| -------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Variable               | Default                 | Purpose                                                                                               |
+| ---------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------- |
 | `FLOCK_API_URL`        | `http://127.0.0.1:8080` | Flock, as this server reaches it                                                                      |
-| `FLOCK_API_PUBLIC_URL` | `FLOCK_API_URL`           | Flock as the wandb SDK on your machines reaches it, for the `wandb login --host` line the setup shows |
+| `FLOCK_API_PUBLIC_URL` | `FLOCK_API_URL`         | Flock as the wandb SDK on your machines reaches it, for the `wandb login --host` line the setup shows |
 
 Set the API's `FLOCK_WEB_URL` to this dashboard's public origin for invitation, password reset
 and Google sign-in links. The development Compose file defaults it to `http://localhost:5173`.
@@ -185,7 +185,7 @@ Everything a page shows arrives in the server-rendered HTML, and no request ever
 
 | Step            | What happens                                                                                                                                                                                                                                                               |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Document        | `+page.ts` makes one request: Flock's workspace snapshot for the page (`GET /api/v1/projects/:entity/:project/workspace`), which carries the column schema, the runs and every metric's curves together. SvelteKit inlines the response into the HTML.               |
+| Document        | `+page.ts` makes one request: Flock's workspace snapshot for the page (`GET /api/v1/projects/:entity/:project/workspace`), which carries the column schema, the runs and every metric's curves together. SvelteKit inlines the response into the HTML.                     |
 | `<head>`        | Every JS chunk, both stylesheets and both self-hosted fonts are preloaded from the document, including SvelteKit's root error node, which its client start awaits but does not preload by default (`hooks.server.ts`).                                                     |
 | Hydration       | The load re-runs against the inlined response, so no data is fetched. The snapshot travels as base64 text for this one request and is decoded natively (`Uint8Array.fromBase64`); SvelteKit's generic binary path is a per-byte JS loop that cost ~300 ms with a cold JIT. |
 | After hydration | The live stream opens for the runs on the page; idle-time prefetch of the previous and next page; hover-intent prefetch on sort headers; SvelteKit hover preload on pager links.                                                                                           |
