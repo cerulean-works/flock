@@ -2,11 +2,12 @@
 
 | | |
 | --- | --- |
-| Status | proposed |
+| Status | applied |
 | Date | 2026-10-27 |
 | Builds on | [009](009-s3-proxy.md) |
 | Amends | D53 (bucket management moves out of org settings), D60 (where the buckets UI lives), D61 (presigned browser requests and CORS) |
 | Keeps | D53–D59, D62 |
+| Result | 382 tests in `tests/app`, `tests/cli` and `tests/s3` pass on moto (10 new in `tests/app/test_s3_objects.py`, 5 in `tests/s3/test_browser.py`, 1 in `tests/app/test_migrations.py`), and the 100 S3-backed ones also pass against the real Ceph; 359 in `app/web` (32 new); see [section 6](#6-how-it-was-actually-built) |
 
 ## 1. Goal
 
@@ -256,3 +257,75 @@ nothing else.
 2. **Object bytes go straight between the browser and the S3 proxy** by presigned URL, with CORS
    on the proxy (D69).
 3. **Org settings**, including the S3 key lifetimes, stay on the org settings page (D68).
+
+## 6. How it was actually built
+
+The plan was followed, in five commits: the proxy's CORS and presigning (step 2), the API, the
+migration and their tests (steps 1, 4 and 5), the web app (step 3), the compose files, and the
+docs (step 6). These are the places where the code differs from the decisions above, or adds to
+them.
+
+- **Presigning in batches.** D69 has `multipart` return the URLs of every part and of the
+  completion. URLs live 15 minutes and a 50 GiB upload takes longer, so `multipart` only starts
+  the upload and returns `upload_id`, `part_size` (16 MiB) and `part_count`. The browser then
+  asks `parts` for the URLs of the next four parts as it goes (up to 100 a call), and `complete`
+  for the completion's URL at the end. `abort` aborts the upload from the API with the global key.
+  `put` refuses a declared `size` over 100 MiB.
+- **The browser key.** It is reused while it has more than 15 minutes, or the URL's lifetime if
+  longer, still to live, so "Copy presigned link" (an hour) gets a key that outlives it. A URL never
+  outlives its key: with an ephemeral lifetime under an hour, URLs last less than asked. The key is
+  tied to whatever credential called (a browser session, a CLI token or an API key), so `presign`
+  works for all three, and it ends with that credential as other ephemeral keys do. It shares the
+  name `browser (ephemeral)` with the key `POST s3/credentials` gives a browser session, and can
+  reuse one that isn't read-only. `sigv4.presign` signs the URLs (host only, unsigned payload).
+- **The 10,000 cap** counts every key asked for, objects and folders together, and is checked
+  before anything is deleted. Counting a huge folder exactly would mean listing all of it, so the
+  refusal (409, with `limit` and `command`) says "more than 10,000" instead of the count. The
+  command named is `aws s3 rm --recursive s3://{bucket}/{prefix} --profile flock`.
+- **Buckets being deleted.** `GET orgs/{org}/buckets?deleting=true` lists them too, with their
+  `deleted_at`; without it the listing is unchanged, so `flock s3 buckets list` still shows only
+  live buckets.
+- **Preview types.** A `get` presign may ask for `content_type`, sent as `response-content-type`,
+  but only for `inline` and only images, PDF, `text/plain`, video and audio: a PDF or image stored
+  as `binary/octet-stream` (as some tools upload) still previews, and nothing can be served as
+  HTML. HTML files are previewed as text.
+- **Listings** hide a folder's own marker. `Upstream` gained `list_objects`, `head`, `put_empty`,
+  `delete_keys`, `create_upload` and `abort_upload`, which the API uses; the purge now uses the
+  first and fourth too.
+- **CORS.** Preflights from `FLOCK_WEB_URL`'s origin get the five methods, the requested headers
+  that are S3's (`x-amz-*`, the forwarded ones and `authorization`), and a one-hour max age;
+  other origins get 403 `AccessForbidden` with no CORS headers. Answers to that origin, errors
+  included, expose `ETag`, `Content-Length`, `Content-Range`, `Content-Type`,
+  `Content-Disposition`, `Accept-Ranges` and `Last-Modified`. The compose files now give the proxy
+  `FLOCK_WEB_URL`.
+- **The migration** refuses an org whose name is `storage` in any case, as the dashboard's
+  `RESERVED` check does. Only the dashboard reserves the name: the API still creates an org
+  called `storage` if asked directly, as it does for the dashboard's other page names.
+- **Web routes.** The bucket, folder and object pages are one route,
+  `storage/[org]/[bucket]/[...path]`, with `trailingSlash = 'ignore'` so a folder's URL keeps its
+  `/`: the key is a folder when the URL ends in `/`. Key parts are encoded one by one. The browser
+  never reaches Flock itself (its address and the user's token stay on the server), so listing
+  more pages, filtering, presigning, deleting, creating folders and the history sheet go through
+  the dashboard's own endpoints under `/api/storage/{org}/{bucket}/`, which pass the calls on.
+- **Selection** covers folders too, not only objects: a selected folder is deleted as a prefix.
+  Download shows for exactly one object. The upload queue runs three files at once, and a
+  dropped folder's files keep their paths. Downloads open the presigned `attachment` URL.
+- **The sidebar** knows whether S3 is on from `auth/config`, read in the `(app)` layout. The org
+  settings page shows "Buckets moved to Storage" only when S3 is on. `OrgBuckets.svelte` is gone;
+  its form became `storage/CreateBucket.svelte`, and `DeleteBucketDialog.svelte` moved to
+  `components/storage/`.
+- **Docs.** There is no separate page for the dashboard, so the S3 guide gained a "Storage tab"
+  section; the API reference has the object routes and `presign`.
+
+Checked by hand in a browser against moto with a local Postgres, API, proxy and web dev server:
+the sidebar item and the collapsed rail's, `storage` refused as an org ID, creating a bucket
+(with the name checked as typed), the history sheet, a bucket shown "being deleted", deleting a
+bucket, uploading six small files and a 120 MiB file (8 parts, read back identical), dropping
+files into a folder, creating a folder, paging 450 objects, the name filter, previews of a PNG,
+text, JSON, Markdown (with its `onerror` stripped), a PDF and a malicious SVG (shown as an image,
+its script not run), downloading, deleting a shift-click range of objects and a folder, switching
+orgs from a storage page, and the org settings page keeping the key lifetimes without a Buckets
+section. The same was repeated against Ceph with a `flock-test-…` prefix (create, uploads
+including the 120 MiB multipart one, previews, deleting a folder through the dashboard's endpoint,
+and deleting the bucket); afterwards the
+account held only the bucket it had before.
