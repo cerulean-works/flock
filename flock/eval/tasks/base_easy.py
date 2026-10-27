@@ -5,9 +5,12 @@ from flock.eval.tasks.basic_skills import BASIC_SKILLS, BASIC_SKILLS_BPB
 from flock.eval.tasks.csqa import CSQA
 from flock.eval.tasks.gen2mc import COQA, DROP, JEOPARDY, NATURALQS, SQUAD
 from flock.eval.tasks.hellaswag import HELLASWAG
+from flock.eval.tasks.humaneval import HUMANEVAL
 from flock.eval.tasks.lab_bench import LAB_BENCH_DBQA, LAB_BENCH_PROTOCOLQA
 from flock.eval.tasks.lambada import LAMBADA
+from flock.eval.tasks.mbpp import MBPP, MT_MBPP
 from flock.eval.tasks.medical import MEDMCQA, MEDQA_EN
+from flock.eval.tasks.minerva_math import MINERVA_MATH_TASKS
 from flock.eval.tasks.mmlu import MMLU, MMLU_BPB
 from flock.eval.tasks.piqa import PIQA
 from flock.eval.tasks.sciq import SCIQ
@@ -48,5 +51,10 @@ _QA_TASKS = (
 QA_RC = Suite("base_easy:qa_rc", (*_QA_TASKS, MMLU, BASIC_SKILLS))
 QA_BPB = Suite("base_easy:qa_bpb", (*_QA_TASKS, MMLU_BPB, BASIC_SKILLS_BPB, LAMBADA), metric="bpb")
 
+# OLMES's `olmo3:base_easy:math_bpb` and `olmo3:base_easy:code_bpb`. Every task in them reports
+# only `bpb`, and `mt_mbpp`, a suite of 17 languages, is one member of `code_bpb`.
+MATH_BPB = Suite("base_easy:math_bpb", MINERVA_MATH_TASKS, metric="bpb")
+CODE_BPB = Suite("base_easy:code_bpb", (HUMANEVAL, MBPP, MT_MBPP), metric="bpb")
+
 # OLMES has no score over all of Base Easy: an accuracy and a `bpb` don't average.
-BASE_EASY = Suite("base_easy", (QA_RC, QA_BPB), scored=False)
+BASE_EASY = Suite("base_easy", (QA_RC, QA_BPB, MATH_BPB, CODE_BPB), scored=False)
