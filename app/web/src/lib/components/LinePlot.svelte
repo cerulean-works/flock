@@ -9,7 +9,7 @@
 		type PlotSeries
 	} from '#lib/chart/engine.ts';
 	import { formatX, formatXTick, formatXValue } from '#lib/chart/axes.ts';
-	import { placeTip, Readout, type TipBox } from '#lib/chart/readout.ts';
+	import { placeTip, Readout, tipSide, type TipBox } from '#lib/chart/readout.ts';
 	import { cancel, schedule } from '#lib/chart/scheduler.ts';
 	import { pointAt, SNAP_PX, smoothed, snapStep } from '#lib/chart/series.ts';
 	import { formatMetric, formatTick, sameItems } from '#lib/utils.ts';
@@ -280,13 +280,14 @@
 	 * The tooltip for the readings just taken: rows sorted high to low, windowed around the
 	 * focused line, beside the crosshair, as many rows as fit in the plot. The hovered plot's
 	 * (`float`) floats over the page, so its card doesn't clip it and it can sit beside the
-	 * cursor outside the plot, rather than over the lines being hovered. The other plots following the cursor keep theirs inside the plot, so none spills
-	 * over the plot the pointer is in.
+	 * cursor outside the plot, rather than over the lines being hovered. The other plots following
+	 * the cursor keep theirs inside the plot, so none spills over the plot the pointer is in.
 	 */
 	function layoutTip(
 		lines: readonly Line[],
 		step: number,
 		fy: number,
+		fx: number,
 		d: typeof domain,
 		[cw, ch]: [number, number],
 		float: boolean
@@ -303,10 +304,14 @@
 				at = r;
 				break;
 			}
-		// The box, and the crosshair's point, in its coordinates: the window's, or the plot's.
+		// In the grid, every plot's tooltip sits alike: on the side the hovered pointer decides,
+		// top-aligned with the plot area. Full screen, it follows the pointer.
+		const side = surface === 'grid' ? tipSide(fx) : null;
+		// The box, and the crosshair's point (or the plot area's top), in its coordinates: the
+		// window's, or the plot's.
 		const plot = {
 			x: gutter + x,
-			y: PLOT_TOP + fy * ch,
+			y: PLOT_TOP + (side ? 0 : fy * ch),
 			w: gutter + cw + 6,
 			h: PLOT_TOP + ch + below
 		};
@@ -315,12 +320,15 @@
 			const rect = area.getBoundingClientRect();
 			box = {
 				x: rect.left + x,
-				y: rect.top + fy * ch,
+				y: rect.top + (side ? 0 : fy * ch),
 				w: window.innerWidth,
 				h: window.innerHeight
 			};
 		}
-		const { fit, width, ...pos } = placeTip(n, at, plot, TIP_METRICS[size], TIP_WIDTH[size], box);
+		const { fit, width, ...pos } = placeTip(n, at, plot, TIP_METRICS[size], TIP_WIDTH[size], {
+			float: box,
+			side
+		});
 		const fmt = view.format;
 		const raw = smoothing > 0;
 		const byMetric = ws.byMetric(view);
@@ -392,7 +400,7 @@
 				else readout.clear();
 				const surf = prepare(canvas, size[0], size[1], cdpr);
 				if (surf) drawOverlay(surf, d, opts);
-				tip = withTip && c ? layoutTip(lines, c.step, c.fy, d, size, float) : null;
+				tip = withTip && c ? layoutTip(lines, c.step, c.fy, c.fx, d, size, float) : null;
 			},
 			'urgent'
 		);
@@ -456,6 +464,7 @@
 			view,
 			surface,
 			fy: Math.max(0, Math.min(1, y / h)),
+			fx: Math.max(0, Math.min(1, x / w)),
 			nearest,
 			line: line?.metric ?? null
 		};

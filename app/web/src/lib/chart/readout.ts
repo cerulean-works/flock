@@ -143,11 +143,26 @@ export interface TipBox {
 	h: number;
 }
 
+/** Which side of its crosshair a tooltip goes. */
+export type TipSide = 'left' | 'right';
+
+/**
+ * The side every tooltip in the grid takes, decided once from where the pointer is across the
+ * hovered plot (`fx`, 0 at its left edge, 1 at its right): away from the pointer's half, where
+ * the lines still to come are.
+ */
+export const tipSide = (fx: number): TipSide => (fx > 0.5 ? 'left' : 'right');
+
 /**
  * Where a tooltip of `total` readings goes and which of them it lists: sized for the `plot` it
- * reads out (as many rows as fit in it, at most `maxWidth` wide), and placed beside the
- * crosshair in the plot, or in `float` (the window) when it floats over the page. Floating
- * moves it, never grows it: a page of runs would otherwise make a column as tall as the window.
+ * reads out (as many rows as fit in it, at most `maxWidth` wide), placed in the plot, or in
+ * `float` (the window) when it floats over the page. Floating moves it, never grows it: a page
+ * of runs would otherwise make a column as tall as the window.
+ *
+ * `x` of each box is the crosshair. With `side` (the grid, where every plot following the
+ * cursor shows one), every tooltip sits the same way: on that side of its crosshair, its top at
+ * the box's `y` (the plot area's top), so they line up across panels. Without it (a full-screen
+ * plot), it follows the pointer: beside the crosshair where there is room, near `y`.
  */
 export function placeTip(
 	total: number,
@@ -155,12 +170,18 @@ export function placeTip(
 	plot: TipBox,
 	m: TooltipMetrics,
 	maxWidth: number,
-	float: TipBox | null = null
+	{ float = null, side = null }: { float?: TipBox | null; side?: TipSide | null } = {}
 ) {
 	const fit = tooltipRows(total, at, plot.h - 4, m);
 	const width = Math.min(maxWidth, plot.w - 4);
-	const pos = float
-		? tooltipPosition(float.x, float.y, width, fit.height, float.w, float.h, 16, 8)
-		: tooltipPosition(plot.x, plot.y, width, fit.height, plot.w, plot.h);
-	return { fit, width, ...pos };
+	const box = float ?? plot;
+	const [gap, pad] = float ? [16, 8] : [12, 2];
+	if (!side) {
+		const pos = tooltipPosition(box.x, box.y, width, fit.height, box.w, box.h, gap, pad);
+		return { fit, width, ...pos };
+	}
+	const want = side === 'right' ? box.x + gap : box.x - gap - width;
+	const left = Math.max(pad, Math.min(want, box.w - pad - width));
+	const top = Math.max(pad, Math.min(box.y, box.h - pad - fit.height));
+	return { fit, width, left, top };
 }

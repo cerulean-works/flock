@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { placeTip, Readout, tooltipPosition, tooltipRows, type ReadLine } from './readout.ts';
+import {
+	placeTip,
+	Readout,
+	tipSide,
+	tooltipPosition,
+	tooltipRows,
+	type ReadLine
+} from './readout.ts';
 import { Series } from './series.ts';
 
 function line(steps: number[], values: number[], color = '#000'): ReadLine {
@@ -131,7 +138,7 @@ describe('placeTip', () => {
 
 	it('lists as many rows when floating as inside the plot, only placed in the window', () => {
 		const inPlot = placeTip(64, 10, plot, m, 248);
-		const floating = placeTip(64, 10, plot, m, 248, window);
+		const floating = placeTip(64, 10, plot, m, 248, { float: window });
 		expect(floating.fit).toEqual(inPlot.fit);
 		expect(floating.width).toBe(inPlot.width);
 		expect(floating.fit.rows).toBeLessThan(64);
@@ -142,7 +149,34 @@ describe('placeTip', () => {
 	});
 
 	it("flips a floating tooltip to the cursor's left at the window's right edge", () => {
-		const t = placeTip(5, -1, plot, m, 248, { ...window, x: 1400 });
+		const t = placeTip(5, -1, plot, m, 248, { float: { ...window, x: 1400 } });
 		expect(t.left).toBe(1400 - 16 - 248);
+	});
+
+	it('puts every grid tooltip on the side the hovered pointer decides, top-aligned', () => {
+		expect(tipSide(0.8)).toBe('left');
+		expect(tipSide(0.2)).toBe('right');
+		// Panels following the cursor have their crosshairs at different x; y is the plot top.
+		const crosshairs = [60, 170, 300];
+		const left = crosshairs.map((x) =>
+			placeTip(3, -1, { ...plot, x, y: 6 }, m, 120, { side: 'left' })
+		);
+		const right = crosshairs.map((x) =>
+			placeTip(3, -1, { ...plot, x, y: 6 }, m, 120, { side: 'right' })
+		);
+		expect(left.map((t) => t.top)).toEqual([6, 6, 6]);
+		expect(right.map((t) => t.top)).toEqual([6, 6, 6]);
+		// Beside the crosshair where it fits; against the plot's edge, still on that side, where not.
+		expect(left.map((t) => t.left)).toEqual([2, 170 - 12 - 120, 300 - 12 - 120]);
+		expect(right.map((t) => t.left)).toEqual([60 + 12, 170 + 12, 340 - 2 - 120]);
+	});
+
+	it('anchors the hovered, floating tooltip at its plot top, growing down past the plot', () => {
+		const t = placeTip(64, 10, plot, m, 248, { float: { ...window, y: 300 }, side: 'right' });
+		expect([t.left, t.top]).toEqual([800 + 16, 300]);
+		// Near the window's bottom it moves up to stay in view.
+		const low = placeTip(64, 10, plot, m, 248, { float: { ...window, y: 880 }, side: 'left' });
+		expect(low.top + low.fit.height).toBe(900 - 8);
+		expect(low.left).toBe(800 - 16 - 248);
 	});
 });

@@ -101,6 +101,11 @@ export interface Cursor {
 	surface: Surface;
 	/** Pointer height in that panel's plot, as a share of it from the top: tooltips follow it. */
 	fy: number;
+	/**
+	 * Pointer position across that panel's plot, as a share of it from the left: which side of
+	 * their crosshairs the grid's tooltips go (`tipSide`).
+	 */
+	fx: number;
 	/** Page row of the run nearest the pointer, if any. */
 	nearest: number | null;
 	/** Metric of the line nearest the pointer, if any. */
