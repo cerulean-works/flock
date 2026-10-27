@@ -17,7 +17,7 @@ ME = "/api/v1/me"
 WANDB_KEYS = "/api/v1/me/wandb-keys"
 CREDENTIALS = "/api/v1/s3/credentials"
 VIEWER = "query Viewer { viewer { id username } }"
-REFUSED = "wandb keys only work with the wandb SDK: use `flock login` or a browser session"
+REFUSED = "wandb keys only work with the wandb SDK. Use flock login or a browser session instead."
 UNKNOWN = "invalid or missing access token, CLI token or wandb key"
 
 

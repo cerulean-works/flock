@@ -21,7 +21,7 @@
 {#if key}
 	<div class="grid gap-2">
 		<SecretField label="wandb key" value={key} copy />
-		<p class="text-[13px] text-muted-foreground">Copy it now: it isn’t shown again.</p>
+		<p class="text-[13px] text-muted-foreground">Copy it now. It won’t be shown again.</p>
 	</div>
 {:else}
 	<form

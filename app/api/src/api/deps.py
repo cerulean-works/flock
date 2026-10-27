@@ -80,7 +80,7 @@ Password = Annotated[str, Field(min_length=8, max_length=256)]
 
 
 WANDB_KEY_REFUSED = (
-    "wandb keys only work with the wandb SDK: use `flock login` or a browser session"
+    "wandb keys only work with the wandb SDK. Use flock login or a browser session instead."
 )
 
 

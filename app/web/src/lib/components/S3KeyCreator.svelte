@@ -49,16 +49,15 @@
 {#if created}
 	<div class="grid gap-3 rounded-lg border border-divider p-4">
 		<p>
-			S3 key <span class="font-medium">{created.name}</span> for {orgLabel(
-				created.org ?? ''
-			)}{created.read_only ? ', read-only' : ''}, {created.expires_at === null
-				? 'never expires'
-				: `expires ${dateTime(created.expires_at)}`}.
+			Created <span class="font-medium">{created.name}</span> for {orgLabel(created.org ?? '')}.
+			{created.read_only ? 'It’s read-only and ' : 'It '}{created.expires_at === null
+				? 'never expires.'
+				: `expires ${dateTime(created.expires_at)}.`}
 		</p>
 		<SecretField label="Access key ID" value={created.access_key_id} copy />
 		<SecretField label="Secret access key" value={created.secret_access_key} copy />
 		<SecretField label="Endpoint" value={created.endpoint} />
-		<p class="text-[13px] text-muted-foreground">Copy the secret now: it isn’t shown again.</p>
+		<p class="text-[13px] text-muted-foreground">Copy the secret now. It won’t be shown again.</p>
 		<div>
 			<Button variant="outline" onclick={() => (created = null)}>
 				<KeyRoundIcon /> Create another
@@ -121,7 +120,8 @@
 		</div>
 		{#if choices.some((c) => c.disabled)}
 			<p class="text-[13px] text-muted-foreground">
-				{choices.find((c) => c.disabled)?.disabled}: an admin sets this on the organization’s page.
+				{choices.find((c) => c.disabled)?.disabled}. An admin can change this on the organization’s
+				page.
 			</p>
 		{/if}
 		<div class="flex items-center gap-2.5">

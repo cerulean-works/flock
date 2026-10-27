@@ -48,7 +48,7 @@ describe('the keys tabs', () => {
 		await expect.element(page.getByRole('heading', { name: 'Keys' })).toBeVisible();
 		await expect.element(tab('wandb')).toHaveAttribute('aria-selected', 'true');
 		await expect.element(tab('S3')).toHaveAttribute('aria-selected', 'false');
-		await expect.element(page.getByText(/^For the wandb SDK\. Use it as/)).toBeVisible();
+		await expect.element(page.getByText(/^Use these keys with the wandb SDK/)).toBeVisible();
 		await expect.element(page.getByText('cluster')).toBeVisible();
 		await expect.element(page.getByText('laptop')).toBeVisible();
 		await expect.element(page.getByRole('button', { name: 'Delete key laptop' })).toBeVisible();

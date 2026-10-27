@@ -17,7 +17,7 @@ Every endpoint needs credentials, except the public ones marked in the index bel
 
 Send an access token or a CLI token as `Authorization: Bearer <token>`. A Bearer value with two dots is read as an access token, and one starting with `flock_cli_` as a CLI token.
 
-This API refuses wandb keys, however they're sent, with 401 and the error "wandb keys only work with the wandb SDK: use `flock login` or a browser session". A leaked wandb key then gives access to experiment tracking and nothing else: not storage, and not account settings. Missing, unknown, expired or revoked credentials answer 401 too. [Accounts, organizations and roles](../accounts#sessions) explains how to get each kind.
+This API refuses wandb keys, however they're sent, with 401 and the error "wandb keys only work with the wandb SDK. Use flock login or a browser session instead.". A leaked wandb key then gives access to experiment tracking and nothing else: not storage, and not account settings. Missing, unknown, expired or revoked credentials answer 401 too. [Accounts, organizations and roles](../accounts#sessions) explains how to get each kind.
 
 For CI and other machines nobody signs in on, use a person's CLI token, from `flock token`, as `FLOCK_TOKEN`.
 

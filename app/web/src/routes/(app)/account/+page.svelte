@@ -87,8 +87,8 @@
 			<section class="mt-10">
 				<h2 class="text-2xl tracking-[-0.01em]">Command line sign-ins</h2>
 				<p class="mt-2 max-w-[62ch] text-muted-foreground">
-					Machines signed in with <code class="font-mono text-[0.9em]">flock login</code>. Each
-					lasts until 90 days without use; revoking one signs that machine out.
+					Machines signed in with <code class="font-mono text-[0.9em]">flock login</code>. A sign-in
+					expires after 90 days without use. Revoking one signs that machine out.
 				</p>
 				{#if data.cliSessions.length}
 					<ul class="mt-4 border-t border-divider">
@@ -112,7 +112,7 @@
 										size="icon-sm"
 										class="text-muted-foreground hover:text-destructive"
 										aria-label="Revoke the sign-in of {name}"
-										title="Revoke: this machine is signed out"
+										title="Sign this machine out"
 									>
 										<Trash2Icon />
 									</Button>

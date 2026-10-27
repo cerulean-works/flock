@@ -70,7 +70,7 @@
 			size="icon-sm"
 			class="text-muted-foreground hover:text-destructive"
 			aria-label={label}
-			title="Revoke: the proxy refuses it from its next request"
+			title="Revoke this key"
 		>
 			<Trash2Icon />
 		</Button>
@@ -79,8 +79,9 @@
 
 {#snippet wandbKeys()}
 	<p class="max-w-[62ch] text-muted-foreground">
-		For the wandb SDK. Use it as <code class="font-mono text-[0.9em]">WANDB_API_KEY</code>, or paste
-		it into <code class="font-mono text-[0.9em]">wandb login</code>.
+		Use these keys with the wandb SDK. Set one as
+		<code class="font-mono text-[0.9em]">WANDB_API_KEY</code> or paste it into
+		<code class="font-mono text-[0.9em]">wandb login</code>.
 	</p>
 	{#if keys.length}
 		<ul class="mt-4 border-t border-divider">
@@ -99,7 +100,7 @@
 							size="icon-sm"
 							class="text-muted-foreground hover:text-destructive"
 							aria-label="Delete key {key.name}"
-							title="Delete: scripts using it stop working"
+							title="Delete this key"
 						>
 							<Trash2Icon />
 						</Button>
@@ -128,10 +129,10 @@
 			</Tabs.Content>
 			<Tabs.Content value="s3">
 				<p class="max-w-[62ch] text-muted-foreground">
-					For your organizations’ buckets, at
-					<span class="font-mono text-[0.9em]">{s3.endpoint}</span>. Scripts and jobs should run
+					For your organizations’ buckets at
+					<span class="font-mono text-[0.9em]">{s3.endpoint}</span>. Scripts and jobs should use
 					<code class="font-mono text-[0.9em]">flock s3 credentials</code>, whose keys renew
-					themselves; make a key here for tools that can’t.
+					themselves. Create a key here for tools that can’t run it.
 				</p>
 				{#if s3.keys.length}
 					<ul class="mt-4 border-t border-divider">

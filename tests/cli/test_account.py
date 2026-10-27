@@ -38,7 +38,7 @@ def test_whoami_with_flock_token(server, alice, flock_cli, monkeypatch):
     monkeypatch.setenv("FLOCK_TOKEN", alice.api_key)  # a wandb key doesn't work (D72)
     refused = flock_cli("whoami")
     assert refused.exit_code == 1
-    assert "refused the credential from FLOCK_TOKEN: wandb keys only work" in refused.stderr
+    assert "refused the credential from FLOCK_TOKEN. wandb keys only work" in refused.stderr
 
 
 def test_whoami_signed_out_or_revoked(server, alice, signed_in, flock_cli):

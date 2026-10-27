@@ -32,9 +32,9 @@ describe('the empty Runs page', () => {
 		// @ts-expect-error -- a page's props: only what the empty state reads
 		render(Page, { data, params: { entity: 'acme' } });
 		await expect.element(page.getByRole('heading', { name: 'Log your first run' })).toBeVisible();
-		await expect.element(page.getByText('Install the SDK:')).toBeVisible();
+		await expect.element(page.getByText('Install the SDK')).toBeVisible();
 		const step = page.getByRole('listitem').filter({ hasText: 'with this key' });
-		await expect.element(step.getByText(`Log in to ${HOST} with this key:`)).toBeVisible();
+		await expect.element(step.getByText(`Log in to ${HOST} with this key`)).toBeVisible();
 
 		await step.getByRole('button', { name: 'Create wandb key' }).click();
 		await expect.element(step.getByLabelText('wandb key', { exact: true })).toHaveValue(KEY);
@@ -46,6 +46,6 @@ describe('the empty Runs page', () => {
 		expect(text.split(HOST).length).toBe(2);
 		expect(text).not.toContain('wandb login');
 		expect(text).not.toContain('WANDB_BASE_URL');
-		await expect.element(page.getByText('Log a run to Acme:')).toBeVisible();
+		await expect.element(page.getByText('Log a run to Acme')).toBeVisible();
 	});
 });

@@ -30,7 +30,7 @@ describe('a new wandb key', () => {
 
 			await expect.element(page.getByLabelText('wandb key', { exact: true })).toHaveValue(key);
 			await expect.element(page.getByRole('button', { name: 'Copy wandb key' })).toBeVisible();
-			await expect.element(page.getByText('Copy it now: it isn’t shown again.')).toBeVisible();
+			await expect.element(page.getByText('Copy it now. It won’t be shown again.')).toBeVisible();
 			expect(app.sent.map((s) => [s.action, s.form.get('name')])).toEqual([
 				['/account?/createKey', 'cluster']
 			]);
@@ -97,7 +97,7 @@ describe('a new S3 key', () => {
 		// Only those two: the endpoint is a plain field.
 		expect(page.getByRole('button', { name: /^Copy/ }).all()).toHaveLength(2);
 		await expect
-			.element(page.getByText('Copy the secret now: it isn’t shown again.'))
+			.element(page.getByText('Copy the secret now. It won’t be shown again.'))
 			.toBeVisible();
 
 		const text = shown();
