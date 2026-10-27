@@ -85,7 +85,7 @@ export class UploadQueue {
 			const upload = new Upload(key, file);
 			if (file.size > UPLOAD_LIMIT) {
 				upload.state = 'failed';
-				upload.error = `Over ${bytes(UPLOAD_LIMIT)}: upload it from the command line (aws s3 cp)`;
+				upload.error = `Files over ${bytes(UPLOAD_LIMIT)} have to be uploaded with aws s3 cp.`;
 			}
 			this.uploads.push(upload);
 		}
@@ -222,7 +222,7 @@ export function s3ErrorMessage(body: string): string | null {
 
 /** Why a request to the proxy at `url` failed without an answer. */
 export const unreachable = (url: string) =>
-	`Couldn’t reach the S3 proxy at ${/^[a-z]+:\/\/[^/?#]+/i.exec(url)?.[0] ?? url}: this browser must be able to reach it`;
+	`Couldn’t reach the S3 proxy at ${/^[a-z]+:\/\/[^/?#]+/i.exec(url)?.[0] ?? url}.`;
 
 /** A file to upload, with its path under the folder it goes in. */
 export interface Picked {

@@ -45,8 +45,5 @@
 		</Button>
 	</div>
 	<FormError error={invalid ?? creating.error} />
-	<p class="text-[13px] text-muted-foreground">
-		Lowercase letters, digits, hyphens and dots, up to {nameLimit} characters. Names can’t be changed
-		later.
-	</p>
+	<p class="text-[13px] text-muted-foreground">Bucket names can’t be changed later.</p>
 </form>

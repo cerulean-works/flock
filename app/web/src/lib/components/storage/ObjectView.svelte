@@ -35,7 +35,7 @@
 		try {
 			const { url } = await presign(true);
 			await navigator.clipboard.writeText(url!);
-			toast.success('Copied a link that works for an hour, for anyone who has it');
+			toast.success('Copied a link that expires in one hour.');
 		} catch (e) {
 			toast.error((e as Error).message);
 		}

@@ -130,7 +130,10 @@ describe('DeleteObjectsDialog', () => {
 		serve({
 			'/api/storage/acme/data/delete': () =>
 				Response.json(
-					{ message: 'more than 10,000 objects would be deleted: use aws s3 rm --recursive' },
+					{
+						message:
+							'This would delete more than 10,000 objects. Use aws s3 rm --recursive instead.'
+					},
 					{ status: 409 }
 				)
 		});
@@ -145,7 +148,7 @@ describe('DeleteObjectsDialog', () => {
 		});
 		await expect.element(page.getByText('Delete huge/?')).toBeVisible();
 		await page.getByRole('button', { name: 'Delete' }).click();
-		await expect.element(page.getByRole('alert')).toHaveTextContent(/More than 10,000 objects/);
+		await expect.element(page.getByRole('alert')).toHaveTextContent(/more than 10,000 objects/i);
 		expect(ondeleted).not.toHaveBeenCalled();
 	});
 });
@@ -275,7 +278,7 @@ describe('ObjectPreview', () => {
 			object: details('data.parquet', null),
 			ondownload: () => {}
 		});
-		await expect.element(page.getByText(/No preview for this kind of file/)).toBeVisible();
+		await expect.element(page.getByText(/This file type can’t be previewed/)).toBeVisible();
 		expect(calls).toEqual([]);
 	});
 });

@@ -112,7 +112,7 @@ describe('the listing', () => {
 	});
 	it('checks folder names', () => {
 		expect(folderNameError('')).toBe('Enter a name');
-		expect(folderNameError('a/b')).toMatch(/without \//);
+		expect(folderNameError('a/b')).toMatch(/can’t contain \//);
 		expect(folderNameError('checkpoints')).toBeNull();
 	});
 });

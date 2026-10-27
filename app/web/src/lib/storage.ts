@@ -209,7 +209,7 @@ export function clickSelect(
 /** Why a folder name can't be used, or null. */
 export function folderNameError(name: string): string | null {
 	if (!name.trim()) return 'Enter a name';
-	if (name.includes('/')) return 'Use a name without /: create one folder at a time';
+	if (name.includes('/')) return 'Folder names can’t contain /. Create one folder at a time.';
 	// eslint-disable-next-line no-control-regex
 	if (/[\u0000-\u001f\u007f]/.test(name)) return 'Remove the control characters';
 	if (new TextEncoder().encode(name).length > 512) return 'Use a shorter name';

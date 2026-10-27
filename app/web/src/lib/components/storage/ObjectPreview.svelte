@@ -78,7 +78,7 @@
 <div class="min-w-0">
 	{#if !preview.kind}
 		<p class="bg-card px-4 py-6 text-center text-[13px] text-muted-foreground">
-			No preview for this kind of file: download it to open it.
+			This file type can’t be previewed.
 		</p>
 	{:else if error}
 		<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">{error}</p>

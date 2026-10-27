@@ -55,10 +55,11 @@
 		{/each}
 	</div>
 	<p class="mt-3 text-[13px] text-muted-foreground">
-		Tools that can’t run <code class="font-mono text-[0.9em]">flock</code> need a long-lived key:
+		Tools that can’t run <code class="font-mono text-[0.9em]">flock</code> need a long-lived key.
+		You can create one on your
 		<a
 			class="text-link underline-offset-3 hover:underline"
-			href="{resolve('/(app)/account')}#s3-keys">create one on your account page</a
+			href="{resolve('/(app)/account')}#s3-keys">account page</a
 		>.
 	</p>
 </div>

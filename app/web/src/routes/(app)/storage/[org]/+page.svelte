@@ -4,12 +4,11 @@
 	import HistoryIcon from '@lucide/svelte/icons/history';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import BucketHistory from '#lib/components/storage/BucketHistory.svelte';
-	import Breadcrumbs from '#lib/components/storage/Breadcrumbs.svelte';
 	import ConnectPanel from '#lib/components/storage/ConnectPanel.svelte';
 	import CreateBucket from '#lib/components/storage/CreateBucket.svelte';
 	import DeleteBucketDialog from '#lib/components/storage/DeleteBucketDialog.svelte';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
-	import { crumbs, objectHref } from '#lib/storage.ts';
+	import { objectHref } from '#lib/storage.ts';
 	import { count, dateTime, relativeTime } from '#lib/utils.ts';
 	import type { PageProps } from './$types';
 
@@ -29,13 +28,9 @@
 <div class="flex min-h-0 flex-1 flex-col">
 	<main class="min-h-0 flex-1 overflow-y-auto px-5 pb-16">
 		<div class="mx-auto max-w-240">
-			<div class="pt-5">
-				<Breadcrumbs crumbs={crumbs(params.org, data.shell.orgName ?? params.org)} />
-			</div>
-			<h1 class="pt-3 text-[34px] leading-[1.15] tracking-[-0.025em]">Storage</h1>
+			<h1 class="pt-8 text-[34px] leading-[1.15] tracking-[-0.025em]">Storage</h1>
 			<p class="mt-1 max-w-[62ch] text-muted-foreground">
-				S3 buckets shared by everyone in {data.shell.orgName}. Members read, write and delete
-				objects; only admins delete buckets.
+				S3 buckets shared by everyone in {data.shell.orgName}.
 			</p>
 
 			<section class="mt-8" aria-labelledby="buckets-title">
@@ -70,7 +65,7 @@
 										{#if gone}
 											<span
 												class="flex items-center gap-2"
-												title="Being emptied and removed: its name can be used again once that’s done"
+												title="This bucket is being emptied and removed. Its name can be used again once that’s done."
 											>
 												<HardDriveIcon class="size-4 flex-none" />
 												<span class="truncate font-mono text-[13px]">{bucket.name}</span>
@@ -93,7 +88,7 @@
 										{relativeTime(bucket.created_at, data.now)}
 									</td>
 									<td class="hidden truncate px-2 text-muted-foreground md:table-cell">
-										{bucket.created_by?.name ?? 'Someone since removed'}
+										{bucket.created_by?.name ?? 'A removed user'}
 									</td>
 									<td class="text-right">
 										{#if !gone}
@@ -126,15 +121,15 @@
 						</tbody>
 					</table>
 				{:else}
-					<p class="mt-5 text-muted-foreground">No buckets yet: create the first one above.</p>
+					<p class="mt-5 text-muted-foreground">No buckets yet. Create the first one above.</p>
 				{/if}
 			</section>
 
 			<section class="mt-10" aria-labelledby="connect-title">
 				<h2 id="connect-title" class="text-2xl tracking-[-0.01em]">Connect</h2>
-				<p class="mt-1 max-w-[62ch] text-muted-foreground">
-					Any S3 client works, path-style, at this endpoint. These use your Flock sign-in for keys
-					that renew themselves.
+				<p class="mt-1 text-muted-foreground">
+					Any S3 client can connect to this endpoint with path-style addressing. The commands below
+					sign in with your Flock account and renew their keys automatically.
 				</p>
 				<div class="mt-3">
 					<ConnectPanel

@@ -107,7 +107,7 @@ describe('the upload queue', () => {
 		const huge = { size: 51 * 1024 ** 3, type: '', slice: () => new Blob() } as unknown as Blob;
 		queue.add([{ key: 'huge.bin', file: huge }]);
 		expect(queue.uploads[0].state).toBe('failed');
-		expect(queue.uploads[0].error).toMatch(/command line/);
+		expect(queue.uploads[0].error).toMatch(/aws s3 cp/);
 		expect(asked).toEqual([]);
 	});
 

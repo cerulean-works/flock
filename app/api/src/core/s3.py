@@ -612,8 +612,8 @@ class S3:
                 if len(doomed) > limit:
                     command = f"aws s3 rm --recursive s3://{name}/{prefix} --profile flock"
                     raise TooMany(
-                        f"more than {limit:,} objects would be deleted: delete them from the "
-                        f"command line instead, with {command}",
+                        f"This would delete more than {limit:,} objects. Delete them from the "
+                        f"command line instead with {command}",
                         limit,
                         command,
                     )
