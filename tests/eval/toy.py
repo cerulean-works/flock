@@ -1,4 +1,7 @@
-"""Toy dataset rows and a toy task in ARC's row format, read by every eval test instead of a download."""
+"""Toy dataset rows and toy tasks in ARC's row format, read by every eval test instead of a download."""
+
+import dataclasses
+from typing import Any
 
 from flock.eval.tasks import Dataset, Fewshot, MultipleChoiceTask
 from flock.eval.tasks.arc import arc_doc
@@ -41,3 +44,23 @@ TASK = MultipleChoiceTask(
     primary_metric="acc_per_char",
     fewshot=Fewshot("train", ("shot-2", "shot-1")),
 )
+
+
+# One toy task per prompt path the core renders. `snapshot/toy_requests.json` pins what each
+# renders, so a new prompt path adds its toy task here.
+PROMPT_PATHS = (
+    TASK,
+    dataclasses.replace(
+        TASK,
+        name="toy:num_shots",
+        fewshot=Fewshot("test", ("q-2", "q-1"), num_shots=1),
+        description="Science and geography.\n\n",
+    ),
+    dataclasses.replace(TASK, name="toy:rows", fewshot=Fewshot(rows=tuple(ROWS["train"]))),
+    dataclasses.replace(TASK, name="toy:zero_shot", fewshot=None, unconditional_context=None),
+)
+
+
+def load(dataset: Dataset, split: str | None = None) -> list[dict[str, Any]]:
+    """Stands in for `Dataset.load`, returning the toy rows of `split` whatever the dataset."""
+    return ROWS[split or dataset.split]
