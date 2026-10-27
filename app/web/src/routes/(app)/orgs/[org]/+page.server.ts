@@ -1,9 +1,11 @@
 import { fail, isHttpError, redirect } from '@sveltejs/kit';
-import { refreshUser } from '#lib/server/auth.ts';
+import { authConfig, refreshUser } from '#lib/server/auth.ts';
 import { removeAvatar, setAvatar } from '#lib/server/avatar.ts';
 import { change, refused, flock } from '#lib/server/flock.ts';
+import { bucketNameError } from '#lib/s3.ts';
 import type {
 	Billing,
+	BucketDetail,
 	BudgetWarnings,
 	DeletedProject,
 	Invite,
@@ -33,7 +35,24 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 				if (isHttpError(e) && e.status === 403) return null;
 				throw e;
 			});
-	const [org, members, me, billing, invites, wandb, deleted, warnings] = await Promise.all([
+	// Its S3 buckets, each with its history, when the server has S3.
+	const buckets = async () => {
+		const { s3 } = await authConfig();
+		if (!s3) return null;
+		const listed = (await flock(`${path}/buckets`).then((r) => r.json())) as {
+			buckets: { name: string }[];
+			name_limit: number;
+		};
+		const details = await Promise.all(
+			listed.buckets.map((b) =>
+				flock(`${path}/buckets/${encodeURIComponent(b.name)}`).then(
+					(r) => r.json() as Promise<BucketDetail>
+				)
+			)
+		);
+		return { ...s3, buckets: details, nameLimit: listed.name_limit };
+	};
+	const [org, members, me, billing, invites, wandb, deleted, warnings, s3] = await Promise.all([
 		flock(path).then((r) => r.json() as Promise<OrgInfo>),
 		flock(`${path}/members`).then((r) => r.json() as Promise<{ members: Member[] }>),
 		flock('/api/v1/me').then((r) => r.json() as Promise<UserInfo>),
@@ -53,7 +72,8 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 				throw e;
 			}),
 		adminOnly<{ deleted_projects: DeletedProject[] }>(flock(`${path}/budget/deleted-projects`)),
-		adminOnly<BudgetWarnings>(flock(`${path}/budget/warnings`))
+		adminOnly<BudgetWarnings>(flock(`${path}/budget/warnings`)),
+		buckets()
 	]);
 	return {
 		org,
@@ -63,6 +83,7 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 		billing,
 		deletedProjects: deleted?.deleted_projects ?? null,
 		warnings,
+		s3,
 		me: { id: me.id, is_superadmin: me.is_superadmin },
 		now: Date.now() / 1000
 	};
@@ -239,6 +260,47 @@ export const actions: Actions = {
 		if (invalid) return fail(400, { error: invalid });
 		const res = await change<OrgInfo>('PATCH', orgPath(params.org), {
 			display_name: displayName
+		});
+		if (refused(res)) return res;
+		return { org: res.data };
+	},
+
+	/** A new S3 bucket: any member can make one. */
+	createBucket: async ({ params, request }) => {
+		const form = await request.formData();
+		const name = formText(form, 'name');
+		const invalid = bucketNameError(name, Number(form.get('limit')) || 57);
+		if (invalid) return fail(400, { error: invalid });
+		const res = await change('POST', `${orgPath(params.org)}/buckets`, { name });
+		if (refused(res)) return res;
+		return { bucket: name };
+	},
+
+	/** Delete a bucket and everything in it (admins). Flock empties it in the background. */
+	deleteBucket: async ({ params, request }) => {
+		const name = formText(await request.formData(), 'bucket');
+		if (!name) return fail(400, { error: 'No such bucket' });
+		const res = await change(
+			'DELETE',
+			`${orgPath(params.org)}/buckets/${encodeURIComponent(name)}`
+		);
+		if (refused(res)) return res;
+		return { deletedBucket: name };
+	},
+
+	/** How long S3 keys live: `max` is seconds or `never`; `ephemeral` is seconds. */
+	s3Lifetimes: async ({ params, request }) => {
+		const form = await request.formData();
+		const max = formText(form, 'max');
+		const ephemeral = Number(formText(form, 'ephemeral'));
+		const maximum = max === 'never' ? null : Number(max);
+		if ((maximum !== null && !(maximum > 0)) || !(ephemeral > 0))
+			return fail(400, { error: 'Choose both lifetimes' });
+		if (maximum !== null && ephemeral > maximum)
+			return fail(400, { error: 'Ephemeral keys can’t outlive the maximum' });
+		const res = await change<OrgInfo>('PATCH', orgPath(params.org), {
+			s3_key_max_ttl: maximum,
+			s3_ephemeral_ttl: ephemeral
 		});
 		if (refused(res)) return res;
 		return { org: res.data };
