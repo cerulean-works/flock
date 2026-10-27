@@ -43,7 +43,7 @@ The response shows the values in effect (`gpu_type` and `gpu_count`) and what wa
 A run is billed for the time it was alive: the time between the heartbeats its client sends while it logs. The SDK sends one every few seconds.
 - **Gaps aren't billed.** If a run is silent for longer than [`FLOCK_CRASH_TIMEOUT`](configuration) (10 minutes by default), the gap doesn't count. A run preempted on Friday and resumed on Monday pays for neither the weekend nor the time it was marked crashed.
 - **Time is counted per UTC month.** A run that crosses midnight at the end of a month is split between the two months.
-- **Deleting doesn't refund.** Spend stays in the organization's budget after its run or project is deleted, so deleting runs never frees budget.
+- **Deleting doesn't refund.** Spend stays in the organization's budget after its run or project is deleted, so deleting runs never frees budget. An admin can [leave a deleted project's spend out](#leaving-out-deleted-projects) instead.
 
 GPU hours are the run time multiplied by the GPU count. The run detail's `runtime` is in seconds, and `gpu_hours` is in hours.
 
@@ -90,11 +90,55 @@ curl -s -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/orgs/flock/budget
 The response has:
 - **what was spent and what's left:** `spent`, `budget`, and `remaining`, which goes negative when the budget is exceeded;
 - **the cost of each project**, most expensive first. Spend of deleted projects is grouped under `"project": null`;
+- **spend left out of the budget:** `excluded`, from the deleted projects an admin left out;
 - **the five most expensive runs** of the month;
 - **GPU hours with no price:** `unpriced`, by GPU type, which cost nothing until an admin sets a price;
-- **runs with no GPU information:** `unknown_gpu`, for example runs logged without the SDK's metadata.
+- **runs with no GPU information:** `unknown_gpu`, for example runs logged without the SDK's metadata. Only runs that still exist count, because a deleted run's GPUs can't be corrected;
+- **the warnings to show:** `warnings`, described in [Dismissing warnings](#dismissing-warnings).
+
+Runs with no GPU hours count towards none of the totals. A run that used no GPU, or whose GPUs aren't known, isn't counted in a project's runs or in a GPU type's runs, and doesn't appear in the breakdown.
 
 Add `?month=2026-09` for an earlier month. The full response is in [`GET /orgs/{org}/budget`](api/home#budget).
+
+## Dismissing warnings
+
+The budget raises two kinds of warning:
+
+| Kind | Raised when |
+|---|---|
+| `unpriced` | A GPU type without a price has a tenth of an hour or more of GPU time in the month. |
+| `unknown_gpu` | Runs with no GPU information were alive for a tenth of an hour or more in the month, together. |
+
+Less than that would show as `0 h` on the dashboard, so it isn't raised. The numbers are still in `unpriced` and `unknown_gpu`.
+
+Org admins can dismiss a warning for everyone in the organization. Send the warning's `fingerprint` as you read it:
+
+```bash
+curl -s -X PUT --json '{"fingerprint": "9b1c4e0f2a7d3c55"}' -H "Authorization: Bearer $TOKEN" "$FLOCK/api/v1/orgs/flock/budget/warnings/unknown_gpu:2026-10/dismissal"
+```
+
+A dismissed warning keeps `"dismissed": true` while it's about the same GPU types or runs, or fewer of them. Once another GPU type goes unpriced, or another run has unknown GPUs, it shows again: what was dismissed is no longer the whole story. If the warning changed after you read it, the request answers 409, so nobody dismisses something they haven't seen.
+
+Only admins dismiss, because a dismissal hides the warning from every member. `DELETE` on the same path shows it again. On the dashboard, admins dismiss a warning with the **×** beside it, and bring it back from **Show dismissed warnings**.
+
+## Leaving out deleted projects
+
+Deleting a project keeps its spend in the budget. If that spend shouldn't count, for example because the project ran by mistake and was paid for elsewhere, an org admin can leave it out. List the deleted projects that used GPU time:
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/orgs/flock/budget/deleted-projects
+```
+
+Each one has an `id`, its `name`, when it was deleted, and its cost, GPU hours and runs, in total and by month. Leave one out by its `id`:
+
+```bash
+curl -s -X PATCH --json '{"excluded": true}' -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/orgs/flock/budget/deleted-projects/12
+```
+
+Its spend leaves `spent`, `remaining` and the breakdown of every month it ran in, and is reported under `excluded` instead. Send `{"excluded": false}` to count it again. Nothing is deleted either way. On the dashboard, admins do this under **Spend of deleted projects** in the organization's settings.
+
+> [!NOTE]
+> Projects deleted before Flock kept their names are listed as one entry per organization, with `"name": null` and no deletion time.
 
 ## The home feed
 
