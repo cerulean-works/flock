@@ -287,7 +287,7 @@ def test_create_org_imports_wandb_projects_and_runs(flock, api, wandb, wait_for)
 
     # Imported series are stored as one chunk per metric, so there is nothing to compact.
     store = flock.store
-    r1 = store.get_run("lab", "vision", "r1")
+    r1 = flock.call(store.get_run("lab", "vision", "r1"))
     chunks = flock.call(
         store.db.fetch(
             "SELECT stream, max(first_line), sum(n) FROM series_chunks WHERE run_pk = $1 "
@@ -360,7 +360,7 @@ def test_running_imports_can_be_cancelled_or_stopped_by_deleting_the_org(
     wait_for(lambda: wandb.queries.count("FlockHistory") >= 2)
     assert api.delete("/api/v1/orgs/lab").status == 204
     assert api.get("/api/v1/orgs/lab").status == 404
-    assert flock.store.imports.jobs == {}
+    wait_for(lambda: flock.store.imports.jobs == {})
 
 
 def test_imports_cut_short_by_a_restart_are_interrupted(make_flock, wandb, wait_for):

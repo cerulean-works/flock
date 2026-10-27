@@ -88,8 +88,9 @@ def test_delete_runs(make_flock, events):
             events=system_samples(2, {"system.cpu": float}),
             complete=None if i == 4 else 0,  # r4 is still running
         )
-    pk0 = store.get_run("flock", "p", "r0").pk
-    server.call(store.save_file(store.get_run("flock", "p", "r0"), "config.yaml", b"x"))
+    r0 = server.call(store.get_run("flock", "p", "r0"))
+    pk0 = r0.pk
+    server.call(store.save_file(r0, "config.yaml", b"x"))
     server.call(store.flush())
     assert api.workspace()["metrics"] == ["loss", "only0"]
     live = events("p", "r1", client=api)
@@ -121,7 +122,9 @@ def test_delete_runs(make_flock, events):
         assert (project["run_count"], project["active_run_count"]) == (2, 0)
 
     check(api)
-    assert set(store.runs_by_pk) == {r.pk for r in store.project("flock", "p").runs}
+    server.call(store.flush())  # the purge
+    alive = server.call(store.db.fetch("SELECT name FROM runs ORDER BY name"))
+    assert [name for (name,) in alive] == ["r1", "r2"]
     server.stop()
     check(make_flock(reuse=server).client())
 
@@ -134,10 +137,11 @@ def test_delete_while_reading(make_flock):
         api.create_run("p", f"r{i}")
         api.stream("p", f"r{i}", history_rows(50, loss=float), complete=0)
     server.call(store.flush())
-    project = store.project("flock", "p")
 
     async def race() -> None:
-        runs = list(project.runs)
+        project = await store.project("flock", "p")
+        assert project is not None
+        runs = (await RunSelection(sort="created_at").select(store, project))[0]
         reads = [
             asyncio.ensure_future(store.histories(runs, ["loss"])),
             asyncio.ensure_future(
@@ -149,8 +153,6 @@ def test_delete_while_reading(make_flock):
         await asyncio.gather(*reads)
 
     server.call(race())
-    alive = {run.pk for run in project.runs}
-    assert len(alive) == 5
     assert [r["id"] for r in api.workspace()["runs"]] == ["r9", "r7", "r5", "r3", "r1"]
 
 
@@ -162,7 +164,8 @@ def test_files_of_deleted_runs_are_swept_on_startup(make_flock):
     orphan.mkdir()
     (orphan / "output.log").write_text("x")
     server.stop()
-    make_flock(reuse=server)
+    restarted = make_flock(reuse=server)
+    restarted.call(restarted.store.flush())  # part of the background purge (D81)
     assert not orphan.exists()
 
 
@@ -181,7 +184,9 @@ def test_move_runs(make_flock, events):
     api.stream("src", "b", history_rows(3, loss=float), events=system_samples(2, {"cpu": float}))
     api.stream("src", "b", complete=0)
     api.create_run("src", "live")  # still running
-    server.call(store.save_file(store.get_run("flock", "src", "a"), "config.yaml", b"k: 1\n"))
+    server.call(
+        store.save_file(server.call(store.get_run("flock", "src", "a")), "config.yaml", b"k: 1\n")
+    )
     server.call(store.flush())
     source_events = events("src", "a", client=api)
     target_events = events("dst", "x", client=api)

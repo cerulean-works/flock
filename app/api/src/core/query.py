@@ -327,10 +327,11 @@ class Selection:
         project_pk: int,
         offset: int = 0,
         limit: int | None = None,
+        columns: str = "r.pk, r.name",
     ) -> tuple[list[asyncpg.Record], int]:
-        """The selected runs' ``(pk, name)``, from ``offset`` and at most ``limit``, and how
-        many match in all."""
-        sql, args = self.sql(project_pk, "r.pk, r.name, count(*) OVER ()")
+        """The selected runs' ``columns`` (of ``runs r``), from ``offset`` and at most
+        ``limit``, and how many match in all (each record's last column)."""
+        sql, args = self.sql(project_pk, f"{columns}, count(*) OVER ()")
         sql += f" OFFSET {int(offset)}"
         if limit is not None:
             sql += f" LIMIT {int(limit)}"
@@ -339,7 +340,7 @@ class Selection:
         except asyncpg.InvalidRegularExpressionError as exc:
             raise FilterError(f"invalid regex: {exc}") from exc
         if records:
-            return records, records[0][2]
+            return records, records[0][-1]
         if offset == 0:
             return [], 0
         # The page is past the end: count the matches by themselves.

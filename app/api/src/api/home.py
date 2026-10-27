@@ -71,8 +71,8 @@ async def feed(
     """What happened across the user's projects, newest first: runs started, finished,
     failed or crashed, and projects created."""
     if org is not None:
-        found = visible_org(org, store, user)
-        projects = store._org_projects(found)
+        found = await visible_org(org, store, user)
+        projects = await store.projects([found])
         if project is not None:
             projects = [p for p in projects if p.name == project]
             if not projects:
@@ -80,7 +80,7 @@ async def feed(
     elif project is not None:
         raise APIError(400, "project needs org")
     else:
-        projects = [p for p in store.projects.values() if store.accounts.role(user, p.org)]
+        projects = [p for p in await store.projects() if store.accounts.role(user, p.org)]
     wanted = set(KINDS)
     if kinds is not None:
         wanted = {kind.strip() for kind in kinds.split(",") if kind.strip()}

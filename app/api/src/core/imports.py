@@ -1,8 +1,9 @@
 """Copying a W&B entity's projects and runs into an organization, in the background.
 
-One import per org at a time. Its progress is kept in memory and saved to ``org_imports``;
-the W&B API key is not saved, so an import cut short by a restart is resumed by starting it
-again, which skips the runs already copied.
+One import per org at a time, run by the replica that started it (D81): it claims the org's
+``org_imports`` row, saves its progress there and heartbeats it, and any replica marks an
+import whose heartbeat stopped interrupted. The W&B API key is not saved, so an interrupted
+import is resumed by starting it again, which skips the runs already copied.
 """
 
 import asyncio
@@ -91,75 +92,79 @@ class Imports:
     CONCURRENCY = 4
     # Seconds between progress saves while an import runs.
     SAVE_INTERVAL = 1.0
+    # Seconds between heartbeats of a running import, and after which one without any is
+    # taken for dead (its replica stopped) and marked interrupted.
+    HEARTBEAT = 10.0
+    STALE_AFTER = 60.0
 
     def __init__(self, store: Store) -> None:
         self.store = store
-        self.jobs: dict[int, ImportJob] = {}  # by org pk
+        self.jobs: dict[int, ImportJob] = {}  # this replica's running imports, by org pk
 
     async def load(self) -> None:
-        store = self.store
-        # Nothing runs before startup: imports still marked running were cut short.
-        await store.db.execute(
+        await self.sweep()
+
+    async def sweep(self) -> None:
+        """Mark imports whose replica stopped heartbeating interrupted (D81)."""
+        await self.store.db.execute(
             "UPDATE org_imports SET state = 'interrupted', finished_at = now() "
-            "WHERE state = 'running'"
+            "WHERE state = 'running' AND (heartbeat_at IS NULL "
+            "OR heartbeat_at < now() - make_interval(secs => $1))",
+            self.STALE_AFTER,
         )
-        for record in await store.db.fetch(
-            "SELECT org_pk, entity, base_url, state, started_by, "
-            "extract(epoch FROM started_at)::float8, extract(epoch FROM finished_at)::float8, "
-            "projects_total, projects_done, runs_total, runs_done, runs_skipped, runs_failed, "
-            "current_project, error FROM org_imports"
-        ):
-            org_pk, entity, base_url, state, started_by, started_at, finished_at, *rest = record
-            job = ImportJob(
-                store.orgs_by_pk[org_pk], entity, base_url, state, started_by, started_at,
-                finished_at, *rest,
-            )  # fmt: skip
-            self.jobs[org_pk] = job
 
     async def close(self) -> None:
-        """Stop running imports (on shutdown); they are left interrupted."""
+        """Stop this replica's running imports (on shutdown); they are left interrupted."""
         for job in list(self.jobs.values()):
             await self._stop(job, "interrupted")
 
-    def get(self, org: Org) -> ImportJob | None:
-        return self.jobs.get(org.pk)
+    async def get(self, org: Org) -> ImportJob | None:
+        """The org's import, as this replica runs it or as its row says."""
+        job = self.jobs.get(org.pk)
+        if job is not None:
+            return job
+        record = await self.store.db.fetchrow(
+            "SELECT entity, base_url, state, started_by, extract(epoch FROM started_at)::float8, "
+            "extract(epoch FROM finished_at)::float8, projects_total, projects_done, "
+            "runs_total, runs_done, runs_skipped, runs_failed, current_project, error "
+            "FROM org_imports WHERE org_pk = $1",
+            org.pk,
+        )
+        return ImportJob(org, *record) if record is not None else None
 
     async def start(
         self, org: Org, source: WandbSource, entity: str, user: User, members: dict[str, str]
     ) -> ImportJob:
         """Start copying ``entity`` into ``org`` (``members``: emails by W&B username, see
         ``WandbSource.check``). Takes ownership of ``source``, which it closes when done."""
-        current = self.jobs.get(org.pk)
-        if org.deleted or (current is not None and current.state == "running"):
-            await source.close()
-            if org.deleted:
-                raise NotFound(f"organization {org.name} not found")
-            raise Conflict(f"an import into {org.name} is already running")
         job = ImportJob(org, entity, source.base_url, "running", user.pk, time.time())
-        self.jobs[org.pk] = job  # before awaiting, so a second start is refused
         try:
-            await self._insert(job)
+            if await self.store.org_by_pk(org.pk) is None:
+                raise NotFound(f"organization {org.name} not found")
+            if not await self._claim(job):
+                raise Conflict(f"an import into {org.name} is already running")
         except BaseException:
             await source.close()
-            if current is None:
-                del self.jobs[org.pk]
-            else:
-                self.jobs[org.pk] = current
             raise
+        self.jobs[org.pk] = job
         job.task = asyncio.get_running_loop().create_task(self._run(job, source, user, members))
         return job
 
-    async def _insert(self, job: ImportJob) -> None:
-        await self.store.db.execute(
+    async def _claim(self, job: ImportJob) -> bool:
+        """Make the org's row this import's, unless an import is running (on any replica)."""
+        claimed = await self.store.db.fetchval(
             """
-            INSERT INTO org_imports (org_pk, entity, base_url, state, started_by, started_at)
-            VALUES ($1, $2, $3, 'running', $4, to_timestamp($5))
+            INSERT INTO org_imports (org_pk, entity, base_url, state, started_by, started_at,
+                                     heartbeat_at)
+            VALUES ($1, $2, $3, 'running', $4, to_timestamp($5), now())
             ON CONFLICT (org_pk) DO UPDATE SET
                 entity = excluded.entity, base_url = excluded.base_url, state = 'running',
                 started_by = excluded.started_by, started_at = excluded.started_at,
                 finished_at = NULL, projects_total = 0, projects_done = 0, runs_total = 0,
                 runs_done = 0, runs_skipped = 0, runs_failed = 0, current_project = NULL,
-                error = NULL
+                error = NULL, heartbeat_at = now(), cancel_requested = false
+            WHERE org_imports.state <> 'running'
+            RETURNING true
             """,
             job.org.pk,
             job.entity,
@@ -167,17 +172,21 @@ class Imports:
             job.started_by,
             job.started_at,
         )
+        return bool(claimed)
 
     async def cancel(self, org: Org) -> ImportJob | None:
-        """Stop the org's import if it is running; returns it (None if there never was one)."""
+        """Stop the org's import if it is running; returns it (None if there never was one).
+        An import another replica runs stops before its next run (``cancel_requested``)."""
         job = self.jobs.get(org.pk)
         if job is not None:
             await self._stop(job, "cancelled")
-        return job
-
-    def forget(self, org: Org) -> None:
-        """Drop a deleted org's import (its row went with the org)."""
-        self.jobs.pop(org.pk, None)
+            return job
+        await self.store.db.execute(
+            "UPDATE org_imports SET cancel_requested = true, state = 'cancelled', "
+            "finished_at = now() WHERE org_pk = $1 AND state = 'running'",
+            org.pk,
+        )
+        return await self.get(org)
 
     async def _stop(self, job: ImportJob, state: str) -> None:
         task = job.task
@@ -195,12 +204,15 @@ class Imports:
         if not force and now - job.saved_at < self.SAVE_INTERVAL:
             return
         job.saved_at = now
-        await self.store.db.execute(
+        # A cancel from another replica wins: its state stays, and this import stops.
+        cancelled = await self.store.db.fetchval(
             """
-            UPDATE org_imports SET state = $2, projects_total = $3, projects_done = $4,
-                runs_total = $5, runs_done = $6, runs_skipped = $7, runs_failed = $8,
-                current_project = $9, error = $10, finished_at = to_timestamp($11)
+            UPDATE org_imports SET state = CASE WHEN cancel_requested THEN state ELSE $2 END,
+                projects_total = $3, projects_done = $4, runs_total = $5, runs_done = $6,
+                runs_skipped = $7, runs_failed = $8, current_project = $9, error = $10,
+                finished_at = coalesce(finished_at, to_timestamp($11)), heartbeat_at = now()
             WHERE org_pk = $1
+            RETURNING cancel_requested
             """,
             job.org.pk,
             job.state,
@@ -214,6 +226,22 @@ class Imports:
             job.error,
             job.finished_at,
         )
+        if cancelled and job.state == "running":
+            job.state = "cancelled"
+            raise asyncio.CancelledError
+
+    async def _heartbeat(self, job: ImportJob) -> None:
+        """Keep the row claimed while W&B is slow to answer (D81)."""
+        while True:
+            await asyncio.sleep(self.HEARTBEAT)
+            try:
+                await self._save(job, force=True)
+            except asyncio.CancelledError:
+                if job.state == "cancelled" and job.task is not None:
+                    job.task.cancel()  # cancelled from another replica
+                raise
+            except Exception:
+                log.exception("could not save the state of the import into %s", job.org.name)
 
     async def _run(
         self, job: ImportJob, source: WandbSource, user: User, members: dict[str, str]
@@ -221,6 +249,7 @@ class Imports:
         # W&B usernames -> Flock users, matched by email; other runs belong to the importer.
         by_email = {u.email: u.pk for u in await self.store.accounts.users()}
         owners = {name: by_email[email] for name, email in members.items() if email in by_email}
+        heartbeat = asyncio.get_running_loop().create_task(self._heartbeat(job))
         try:
             projects = await source.projects(job.entity)
             job.projects_total = len(projects)
@@ -244,13 +273,18 @@ class Imports:
             job.state = "failed"
             job.error = str(exc)
         finally:
+            heartbeat.cancel()
+            await asyncio.gather(heartbeat, return_exceptions=True)
             job.finished_at = time.time()
             await source.close()
-            if not job.org.deleted:
-                try:
-                    await self._save(job, force=True)
-                except Exception:
-                    log.exception("could not save the state of the import into %s", job.org.name)
+            try:
+                await self._save(job, force=True)
+            except asyncio.CancelledError:
+                pass  # cancelled from another replica, which saved its state
+            except Exception:
+                log.exception("could not save the state of the import into %s", job.org.name)
+            if self.jobs.get(job.org.pk) is job:
+                del self.jobs[job.org.pk]
             log.info(
                 "import of %s into %s %s: %d runs copied, %d skipped, %d failed",
                 job.entity, job.org.name, job.state, job.runs_done, job.runs_skipped,
@@ -265,17 +299,13 @@ class Imports:
         owners: dict[str, int],
         importer: int,
     ) -> None:
-        if job.org.deleted:
-            raise NotFound(f"organization {job.org.name} not found")
         project = await self.store.import_project(job.org, found.name, None, found.created_at)
         limit = asyncio.Semaphore(self.CONCURRENCY)
         seen = 0
 
         async def copy(node: dict[str, Any]) -> None:
             async with limit:
-                if project.deleted:
-                    raise NotFound(f"project {project.name} not found")
-                if node["name"] in project.by_name:
+                if await self.store.project_run(project, node["name"]) is not None:
                     job.runs_skipped += 1
                     return
                 try:

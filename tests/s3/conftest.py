@@ -93,7 +93,7 @@ class S3Env:
         return name
 
     def upstream_name(self, name: str, org: str = "flock") -> str:
-        pk = self.flock.store.orgs[org].pk
+        pk = self.flock.call(self.flock.store.org(org)).pk
         return f"{self.flock.bucket_prefix}{pk:05d}-{name}"
 
     def s3(self, creds: Creds) -> Any:

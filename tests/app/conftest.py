@@ -5,7 +5,6 @@ import gzip
 import http.client
 import itertools
 import json
-import math
 import os
 import shutil
 import socket
@@ -28,9 +27,7 @@ import uvicorn
 import uvloop
 
 from app.api.app import create_app
-from app.api.src.core.history import Series
 from app.api.src.core.store import Store
-from app.api.src.core.values import encode as encode_value
 from app.api.src.db.migrate import Migrations
 from app.api.src.s3_proxy.app import create_app as create_proxy_app
 from app.api.src.settings import Settings
@@ -458,7 +455,7 @@ class FlockServer:
         accounts = self.store.accounts
         if await accounts.signup_open():
             admin = await accounts.signup(self.ADMIN_EMAIL, "Admin")
-            if not self.store.orgs:
+            if not await self.store.orgs():
                 org = await self.store.create_org("flock")
                 await accounts.add_member(admin, org, "admin")
         else:
@@ -505,77 +502,10 @@ class FlockServer:
         return User(body["user"]["id"], email, password, key, api, body, token)
 
     def stop(self) -> None:
-        if self._thread.is_alive() and self._server.started:
-            self.call(check_postgres_copy(self.store))
         # As on SIGTERM in production: end dashboard streams, which never finish on their own.
         self.loop.call_soon_threadsafe(self.store.live.close)
         self._server.should_exit = True
         self._thread.join(timeout=60)
-
-
-def _same(a: Any, b: Any, close: bool = False) -> bool:
-    """Values equal as the run table compares them (NaN equal to NaN; times to a microsecond,
-    as PostgreSQL keeps them)."""
-    if isinstance(a, float) and isinstance(b, float):
-        if math.isnan(a) or math.isnan(b):
-            return math.isnan(a) and math.isnan(b)
-        return abs(a - b) <= 1e-5 if close else a == b
-    return a == b
-
-
-async def check_postgres_copy(store: Store) -> None:
-    """012's step 2 check: the run table and series PostgreSQL holds (``run_values``,
-    ``project_keys``, ``series_chunks``) are what the server holds in memory."""
-    times = {"created_at", "updated_at", "heartbeat_at"}
-    await store.flush()
-    for project in list(store.projects.values()):
-        table = project.table
-        rows = await store.db.fetch(
-            "SELECT run_pk, key, num, txt, obj::text FROM run_values WHERE project_pk = $1",
-            project.pk,
-        )
-        stored = {(pk, key): (num, txt, obj) for pk, key, num, txt, obj in rows}
-        expected = {}
-        for run in project.runs:
-            for name, column in table.columns.items():
-                value = column.get(run.row)
-                if value is not None:
-                    expected[(run.pk, name)] = encode_value(value)
-        assert stored.keys() == expected.keys(), (project.name, stored.keys() ^ expected.keys())
-        for cell, (num, txt, obj) in expected.items():
-            found = stored[cell]
-            assert _same(found[0], num, cell[1] in times) and found[1] == txt, (cell, found, num)
-            if obj is not None:
-                assert orjson.loads(found[2]) == orjson.loads(obj), (cell, found, obj)
-        counts = {
-            key: tuple(rest)
-            for key, *rest in await store.db.fetch(
-                "SELECT key, runs, nums, int_only FROM project_keys "
-                "WHERE project_pk = $1 AND runs > 0",
-                project.pk,
-            )
-        }
-        columns = {
-            name: (column.n_num + column.n_obj, column.n_num)
-            for name, column in table.columns.items()
-        }
-        assert {k: v[:2] for k, v in counts.items()} == columns, project.name
-        for stream in Store.STREAMS:
-            histories = await store.histories(project.runs, None, stream)
-            for run, hist in zip(project.runs, histories, strict=True):
-                chunks: dict[str, list] = {}
-                for key, first, n, data in await store.db.fetch(
-                    "SELECT key, first_line, n, data FROM series_chunks "
-                    "WHERE run_pk = $1 AND stream = $2 ORDER BY key, first_line",
-                    run.pk,
-                    stream,
-                ):
-                    chunks.setdefault(key, []).append(Series.decode(data, n, first))
-                assert sorted(chunks) == sorted(hist.series), (run.name, stream)
-                for key, parts in chunks.items():
-                    series, memory = Series.concat(parts), hist.series[key]
-                    assert series.rows.tolist() == memory.rows.tolist(), (run.name, key)
-                    np.testing.assert_array_equal(series.vals, memory.vals)
 
 
 def _listen() -> socket.socket:

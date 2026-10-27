@@ -453,7 +453,7 @@ async def update_me(body: MeUpdate, user: UserDep, store: StoreDep) -> Response:
     if fields.get("name") is None:
         fields.pop("name", None)
     if fields.get("default_org") is not None:
-        fields["default_org"] = visible_org(fields["default_org"], store, user)
+        fields["default_org"] = await visible_org(fields["default_org"], store, user)
     await store.accounts.update_user(user, fields)
     return JSONResponse(await store.accounts.info(user))
 
@@ -604,7 +604,7 @@ async def get_invite(token: str, store: StoreDep) -> Response:
     """What an invitation link is for (no sign-in needed: the token is the secret)."""
     accounts = store.accounts
     invite = await accounts.find_invite(token)
-    org = store.orgs_by_pk.get(invite.org) if invite is not None else None
+    org = await store.org_by_pk(invite.org) if invite is not None else None
     if invite is None or org is None:
         raise APIError(404, "this invitation is invalid, expired or already used")
     return JSONResponse(

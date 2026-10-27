@@ -72,8 +72,10 @@ class Snapshot:
         # The metrics the page's runs logged: they are all a dashboard can plot. The project's
         # other runs (other pages, or filtered out) may log metrics none of these do, which
         # would otherwise make empty charts.
-        keys = sorted(set().union(*(run.keys["history"] for run in runs)))
-        system_keys = sorted(set().union(*(run.keys["system"] for run in runs))) if system else []
+        keys = sorted(set().union(*await store.run_keys(runs)))
+        system_keys = sorted(set().union(*await store.run_keys(runs, "system"))) if system else []
+        ordinals = await store.ordinals(project, runs)
+        runs_total, active = await store.run_counts(project)
         n_runs, n_keys = len(runs), len(keys) + len(system_keys)
 
         # ---- table cells: numeric columns as one f64 block, the rest as JSON
@@ -192,20 +194,20 @@ class Snapshot:
                 "project": project.name,
                 "now": time.time(),
                 "total": total,
-                "runs_total": len(project.runs),
-                "active": len(project.active),
+                "runs_total": runs_total,
+                "active": active,
                 "offset": offset,
                 "runs": [
                     {
                         "id": run.name,
                         "name": run.display_name or run.name,
                         "state": run.state,
-                        "ordinal": run.row,
+                        "ordinal": ordinal,
                         "lines": run.history_line_count,
                         "system_lines": run.events_line_count,
                         "metric_defs": run.metric_defs,
                     }
-                    for run in runs
+                    for run, ordinal in zip(runs, ordinals, strict=True)
                 ],
                 "columns": [{"key": n, "kind": k} for n, k in zip(columns, kinds, strict=True)],
                 "metrics": keys,
@@ -314,12 +316,14 @@ async def stream(
 
     async def events():
         try:
-            watched = [project.by_name[n] for n in cursors if n in project.by_name]
+            found = await store.project_runs(project, cursors)
+            watched = [found[n] for n in cursors if n in found]
+            total, active = await store.run_counts(project)
             yield Hub.event(
                 "hello",
                 {
-                    "active": len(project.active),
-                    "total": len(project.runs),
+                    "active": active,
+                    "total": total,
                     "runs": {
                         run.name: {
                             "state": run.state,

@@ -50,8 +50,8 @@ def create_app(store: Store) -> FastAPI:
             while True:
                 await asyncio.sleep(interval)
                 try:
-                    for run in await store.mark_crashed_runs():
-                        log.info("marked run %s as crashed", run.path)
+                    for path in await store.mark_crashed_runs():
+                        log.info("marked run %s as crashed", path)
                 except Exception:
                     log.exception("crash detection failed")
 

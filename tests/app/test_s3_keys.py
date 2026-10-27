@@ -119,7 +119,10 @@ def test_keys_a_wandb_key_got_go_with_it(flock):
     ci = alice.api.post("/api/v1/me/wandb-keys", {"name": "ci"}).json()
     refused = flock.client(api_key=ci["key"]).post(CREDENTIALS, {})
     assert refused.status == 401
-    user, org = flock.call(flock.store.accounts.user(alice.id)), flock.store.orgs["flock"]
+    user, org = (
+        flock.call(flock.store.accounts.user(alice.id)),
+        flock.call(flock.store.org("flock")),
+    )
     key, _ = flock.call(flock.store.s3.issue_ephemeral(user, org, "ci", api_key=ci["id"]))
     (listed,) = alice.api.get(KEYS).json()["keys"]
     assert listed["access_key_id"] == key.access_key_id

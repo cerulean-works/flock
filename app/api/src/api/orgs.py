@@ -85,7 +85,9 @@ async def org_info(store: Store, org: Org, user: User) -> dict:
         "display_name": org.display_name,
         "created_at": org.created_at,
         "updated_at": org.updated_at,
-        "project_count": sum(1 for p in store.projects_by_pk.values() if p.org is org),
+        "project_count": await store.db.fetchval(
+            "SELECT count(*) FROM projects WHERE org_pk = $1 AND deleted_at IS NULL", org.pk
+        ),
         "member_count": len(await store.accounts.members(org)),
         "role": store.accounts.role(user, org),  # the caller's
         "avatar_url": store.avatars.url(org.avatar),
@@ -118,7 +120,7 @@ async def find_member(store: Store, org: Org, user_id: int) -> User:
 @router.get("/orgs")
 async def list_orgs(user: UserDep, store: StoreDep) -> Response:
     """The user's organizations (every organization, for super admins)."""
-    orgs = [org for org in store.orgs.values() if store.accounts.role(user, org)]
+    orgs = [org for org in await store.orgs() if store.accounts.role(user, org)]
     orgs.sort(key=lambda org: (org.display_name.casefold(), org.name))
     return JSONResponse({"orgs": [await org_info(store, org, user) for org in orgs]})
 
@@ -210,7 +212,7 @@ async def delete_org(
 @router.get("/orgs/{org}/import")
 async def get_import(org: AdminOrgDep, store: StoreDep) -> Response:
     """The progress of the organization's latest W&B import (404 if it never had one)."""
-    job = store.imports.get(org)
+    job = await store.imports.get(org)
     if job is None:
         raise APIError(404, f"{org.name} has no import")
     return JSONResponse(job.info())
@@ -225,7 +227,7 @@ async def start_import(
     Runs it already has (by project and run id) are skipped, so this also resumes an import
     that was interrupted, failed or cancelled. 409 while an import is running.
     """
-    current = store.imports.get(org)
+    current = await store.imports.get(org)
     if current is not None and current.state == "running":
         raise APIError(409, f"an import into {org.name} is already running")
     source, members = await wandb_source(store, body)

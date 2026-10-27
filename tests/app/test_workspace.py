@@ -288,24 +288,26 @@ def test_crashed_runs_are_announced(make_flock, events):
     api.close()
 
 
-def test_slow_subscribers_are_disconnected(api, flock, monkeypatch):
+def test_slow_subscribers_are_disconnected(api, flock, monkeypatch, wait_for):
     monkeypatch.setattr(Subscriber, "QUEUE_SIZE", 2)
     api.create_run("p", "r1")
 
     async def subscribe():
-        return flock.store.live.subscribe(flock.store.project("flock", "p").pk, ["r1"])
+        project = await flock.store.project("flock", "p")
+        return flock.store.live.subscribe(project.pk, ["r1"])
 
     sub = flock.call(subscribe())
     for i in range(5):
         api.stream("p", "r1", history_rows(1, start=i, loss=float), offset=i)
-    assert sub.closed
+    wait_for(lambda: sub.closed)  # events reach the hub through notifications (D79)
     items = []
     while not sub.queue.empty():
         items.append(sub.queue.get_nowait())
     assert items[-1] is None  # end-of-stream marker made it into the full queue
 
     async def unsubscribe():
-        flock.store.live.unsubscribe(flock.store.project("flock", "p").pk, sub)
+        project = await flock.store.project("flock", "p")
+        flock.store.live.unsubscribe(project.pk, sub)
 
     flock.call(unsubscribe())
 

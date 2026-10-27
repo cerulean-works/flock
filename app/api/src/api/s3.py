@@ -55,11 +55,11 @@ class BucketCreate(BaseModel):
     name: str = Field(max_length=63)
 
 
-def key_org(store: Store, user: User, name: str | None) -> Org:
+async def key_org(store: Store, user: User, name: str | None) -> Org:
     """The org ``name`` (the user's default org when None), which the user must belong to."""
     if name is not None:
-        return visible_org(name, store, user)
-    org = store.accounts.default_org(user)
+        return await visible_org(name, store, user)
+    org = await store.accounts.default_org(user)
     if org is None:
         raise APIError(404, "you don't belong to any organization")
     return org
@@ -75,8 +75,8 @@ def via(request: Request) -> dict[str, Any]:
     return {"via": "ui", "session": session.pk}
 
 
-def key_info(store: Store, key: Key) -> dict[str, Any]:
-    org = store.orgs_by_pk.get(key.org)
+async def key_info(store: Store, key: Key) -> dict[str, Any]:
+    org = await store.org_by_pk(key.org)
     return {
         "id": key.pk,
         "name": key.name,
@@ -90,15 +90,15 @@ def key_info(store: Store, key: Key) -> dict[str, Any]:
         "api_key_id": key.api_key,
         "source": key.source,
         "created_at": key.created_at,
-        "expires_at": store.s3.expires_at(key),
+        "expires_at": await store.s3.expires_at(key),
         "last_used_at": key.last_used_at,
     }
 
 
-def with_secret(store: Store, key: Key, secret: str) -> dict[str, Any]:
+async def with_secret(store: Store, key: Key, secret: str) -> dict[str, Any]:
     config = store.s3.config() or {}
     return {
-        **key_info(store, key),
+        **(await key_info(store, key)),
         "secret_access_key": secret,
         "endpoint": config.get("endpoint"),
         "region": config.get("region"),
@@ -133,7 +133,7 @@ async def s3_credentials(
     key. 404 when this server has no S3.
     """
     store.s3.require()
-    org = key_org(store, user, body.org)
+    org = await key_org(store, user, body.org)
     session = request.state.session
     # The key is named after the machine of a CLI sign-in.
     name = (session.name if session.kind == "cli" else None) or "browser"
@@ -160,7 +160,7 @@ async def list_s3_keys(user: UserDep, store: StoreDep) -> Response:
     sign-ins (and, before D72, your wandb keys) were issued."""
     store.s3.require()
     keys = await store.s3.keys(user)
-    return JSONResponse({"keys": [key_info(store, key) for key in keys]})
+    return JSONResponse({"keys": [await key_info(store, key) for key in keys]})
 
 
 @router.post("/me/s3-keys", status_code=201)
@@ -169,9 +169,9 @@ async def create_s3_key(body: KeyCreate, user: SessionUserDep, store: StoreDep) 
     maximum key lifetime. Its secret is shown only now. Only a signed-in browser can create one,
     so a leaked CLI token can't mint keys that outlive the ephemeral lifetime."""
     store.s3.require()
-    org = key_org(store, user, body.org)
+    org = await key_org(store, user, body.org)
     key, secret = await store.s3.create_key(user, org, body.name, body.read_only, body.ttl)
-    return JSONResponse(with_secret(store, key, secret), status_code=201)
+    return JSONResponse(await with_secret(store, key, secret), status_code=201)
 
 
 @router.delete("/me/s3-keys/{key_id}", status_code=204)

@@ -246,11 +246,12 @@ class Accounts:
         """``"admin"``, ``"member"``, or None for users outside the org."""
         return "admin" if user.is_superadmin else user.roles.get(org.pk)
 
-    def default_org(self, user: User) -> Org | None:
-        orgs = self.store.orgs_by_pk
-        org = orgs.get(user.default_org) if user.default_org is not None else None
+    async def default_org(self, user: User) -> Org | None:
+        store = self.store
+        org = await store.org_by_pk(user.default_org) if user.default_org is not None else None
         if org is None or self.role(user, org) is None:
-            org = orgs.get(min(user.roles)) if user.roles else None  # the first org joined
+            # The first org joined.
+            org = await store.org_by_pk(min(user.roles)) if user.roles else None
         return org
 
     async def members(self, org: Org) -> list[tuple[User, str]]:
@@ -264,7 +265,7 @@ class Accounts:
             "SELECT pk, name, display_name FROM orgs WHERE pk = ANY($1) AND deleted_at IS NULL",
             list(user.roles),
         )
-        default = self.default_org(user)
+        default = await self.default_org(user)
         return {
             "id": user.pk,
             "email": user.email,
@@ -792,7 +793,6 @@ class Accounts:
                 user.pk,
             )
             await conn.execute("DELETE FROM users WHERE pk = $1", user.pk)
-        self.store.forget_owner(user.pk)
         await self.store.avatars.release(user.avatar)
 
     async def google_user(

@@ -1,24 +1,22 @@
 import asyncio
 import contextlib
-import datetime as dt
 import logging
 import secrets
 import shutil
 import string
 import time
-from collections.abc import AsyncGenerator, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Self
 
 import asyncpg
-import numpy as np
 import orjson
 
 from app.api.src.core import gpus, live, values
 from app.api.src.core.accounts import Accounts
 from app.api.src.core.avatars import Avatars
-from app.api.src.core.budgets import Budgets, Usage
+from app.api.src.core.budgets import Budgets
 from app.api.src.core.bus import Bus
 from app.api.src.core.errors import Conflict, Discarded, Forbidden, NotFound
 from app.api.src.core.feed import Feed
@@ -28,48 +26,51 @@ from app.api.src.core.live import Hub
 from app.api.src.core.metric_defs import parse_metric_defs
 from app.api.src.core.names import ADJECTIVES, NOUNS
 from app.api.src.core.s3 import S3
-from app.api.src.core.table import ColumnTable
 from app.api.src.db.database import Database
 from app.api.src.settings import Settings
-from app.api.src.utils import encode_id, flatten, loads_lenient, parse_rows
+from app.api.src.utils import encode_id, loads_lenient, parse_rows
 
 log = logging.getLogger(__name__)
 
 DEFAULT_PROJECT = "uncategorized"
 
+# States in which a client is still logging to a run.
+ACTIVE_STATES = ("running", "preempting")
+
+# The columns ``Org.load`` reads, of ``orgs`` aliased ``o``.
+ORG_COLUMNS = """
+    o.pk, o.name, extract(epoch FROM o.created_at)::float8,
+    extract(epoch FROM o.updated_at)::float8, o.currency, o.avatar, o.display_name,
+    o.s3_ephemeral_ttl, o.s3_key_max_ttl
+"""
+# The columns ``Project.load`` reads, of ``projects`` aliased ``p`` (and its org's).
+PROJECT_COLUMNS = f"""
+    p.pk, p.name, p.description, extract(epoch FROM p.created_at)::float8,
+    extract(epoch FROM p.updated_at)::float8, {ORG_COLUMNS}
+"""
+# The columns ``Run.load`` reads, of ``runs`` aliased ``r``.
+RUN_COLUMNS = """
+    r.pk, r.project_pk, r.name, r.display_name, r.state,
+    extract(epoch FROM r.created_at)::float8, extract(epoch FROM r.updated_at)::float8,
+    extract(epoch FROM r.heartbeat_at)::float8, r.tags, r.notes, r.group_name, r.job_type,
+    r.host, r.program, r.commit_hash, r.description, r.sweep, r.exitcode, r.owner_pk,
+    r.gpu_type, r.gpu_count, r.gpu_type_override, r.gpu_count_override,
+    r.history_line_count, r.events_line_count, r.log_line_count, r.metric_defs::text,
+    (SELECT coalesce(sum(u.seconds), 0) FROM gpu_usage u WHERE u.run_pk = r.pk)
+"""
+
 
 @dataclass(eq=False)
 class Run:
-    # States in which a client is still logging to the run.
-    ACTIVE_STATES: ClassVar[frozenset[str]] = frozenset({"running", "preempting"})
+    """A run as read from the database by one request (D76): nothing keeps it up to date."""
+
+    ACTIVE_STATES: ClassVar[frozenset[str]] = frozenset(ACTIVE_STATES)
     # Attributes stored in the run table alongside config.* and summary.* columns.
-    ATTRIBUTES: ClassVar[tuple[str, ...]] = (
-        "name",
-        "display_name",
-        "state",
-        "created_at",
-        "updated_at",
-        "heartbeat_at",
-        "tags",
-        "group",
-        "job_type",
-        "notes",
-        "description",
-        "host",
-        "program",
-        "commit",
-        "sweep",
-        "exitcode",
-        "owner",
-        "gpu_type",
-        "gpu_count",
-        "gpu_hours",
-    )
+    ATTRIBUTES: ClassVar[tuple[str, ...]] = values.ATTRIBUTES
 
     pk: int
     project: Project
     name: str
-    row: int
     display_name: str | None
     state: str
     created_at: float
@@ -93,28 +94,52 @@ class Run:
     gpu_count_detected: int | None = None
     gpu_type_override: str | None = None
     gpu_count_override: int | None = None
-    # Seconds alive per UTC month: the run's entries in its org's usage ledger.
-    usage: dict[dt.date, Usage] = field(default_factory=dict)
     history_line_count: int = 0
     events_line_count: int = 0
     log_line_count: int = 0
-    # Flattened summary of an active run, kept to diff successive summary updates.
-    summary_flat: dict[str, Any] | None = None
     # What ``wandb.define_metric`` set for plotting: step metrics and hidden metrics.
     metric_defs: list[dict[str, Any]] = field(default_factory=list)
-    # Plottable metrics this run logged, per stream (dashboards chart those of a page's runs).
-    keys: dict[str, set[str]] = field(default_factory=lambda: {"history": set(), "system": set()})
-    # Set once the run's delete commits: code still holding the run must not write to it.
-    deleted: bool = False
+    # Seconds the run was alive (sending heartbeats), over all its resumes: its ledger entries.
+    runtime: float = 0.0
+
+    @classmethod
+    def load(cls, record: Any, project: Project, offset: int = 0) -> Self:
+        """A run from ``RUN_COLUMNS`` at ``offset`` in ``record``."""
+        r = record[offset : offset + 28]
+        return cls(
+            pk=r[0],
+            project=project,
+            name=r[2],
+            display_name=r[3],
+            state=r[4],
+            created_at=r[5],
+            updated_at=r[6],
+            heartbeat_at=r[7],
+            tags=list(r[8]),
+            notes=r[9],
+            group=r[10],
+            job_type=r[11],
+            host=r[12],
+            program=r[13],
+            commit=r[14],
+            description=r[15],
+            sweep=r[16],
+            exitcode=r[17],
+            owner=r[18],
+            gpu_type_detected=r[19],
+            gpu_count_detected=r[20],
+            gpu_type_override=r[21],
+            gpu_count_override=r[22],
+            history_line_count=r[23],
+            events_line_count=r[24],
+            log_line_count=r[25],
+            metric_defs=orjson.loads(r[26]) if r[26] else [],
+            runtime=r[27],
+        )
 
     @property
     def active(self) -> bool:
         return self.state in self.ACTIVE_STATES
-
-    def note_metrics(self, keys: Iterable[str], stream: str = "history") -> None:
-        """Record metrics the run logged to a series stream."""
-        # Skip wandb bookkeeping (_step, _runtime, _wandb, ...), which every row carries.
-        self.keys[stream].update(key for key in keys if not key.startswith("_"))
 
     @property
     def entity(self) -> str:
@@ -131,14 +156,8 @@ class Run:
         return override if override is not None else self.gpu_count_detected
 
     @property
-    def runtime(self) -> float:
-        """Seconds the run was alive (sending heartbeats), over all its resumes."""
-        return sum(usage.seconds for usage in self.usage.values())
-
-    @property
     def gpu_hours(self) -> float | None:
-        count = self.gpu_count
-        return round(self.runtime * count / 3600, 6) if count is not None else None
+        return values.gpu_hours(self.runtime, self.gpu_count)
 
     @property
     def path(self) -> str:
@@ -188,7 +207,8 @@ class ImportedRun:
 
 
 class Org:
-    """An organization: the wandb entity its projects and runs are logged under.
+    """An organization: the wandb entity its projects and runs are logged under, as read by
+    one request.
 
     ``name`` is its ID: the entity in URLs, API paths and the wandb SDK, fixed at creation.
     ``display_name`` is what people see, and changes freely.
@@ -217,10 +237,29 @@ class Org:
         # any key may live (None: no limit).
         self.s3_ephemeral_ttl = s3_ephemeral_ttl
         self.s3_key_max_ttl = s3_key_max_ttl
-        self.deleted = False
+
+    @classmethod
+    def load(cls, record: Any, offset: int = 0) -> Self:
+        """An org from ``ORG_COLUMNS`` at ``offset`` in ``record``."""
+        pk, name, created_at, updated_at, currency, avatar, display_name, ephemeral, max_ttl = (
+            record[offset : offset + 9]
+        )
+        return cls(
+            pk,
+            name,
+            created_at,
+            updated_at,
+            currency,
+            bytes(avatar) if avatar else None,
+            display_name,
+            ephemeral,
+            max_ttl,
+        )
 
 
 class Project:
+    """A project as read by one request."""
+
     def __init__(
         self,
         pk: int,
@@ -236,14 +275,12 @@ class Project:
         self.description = description
         self.created_at = created_at
         self.updated_at = updated_at
-        # Indexed by table row: runs are kept in (created_at, pk) order.
-        self.runs: list[Run] = []
-        self.by_name: dict[str, Run] = {}
-        self.table = ColumnTable()
-        self.active: dict[str, Run] = {}
-        # Held to create runs, move runs in or out, delete runs, and rename or delete the project.
-        self.lock = asyncio.Lock()
-        self.deleted = False
+
+    @classmethod
+    def load(cls, record: Any, offset: int = 0) -> Self:
+        """A project from ``PROJECT_COLUMNS`` at ``offset`` in ``record``."""
+        pk, name, description, created_at, updated_at = record[offset : offset + 5]
+        return cls(pk, Org.load(record, offset + 5), name, description, created_at, updated_at)
 
     @property
     def entity(self) -> str:
@@ -252,22 +289,6 @@ class Project:
     @property
     def key(self) -> tuple[str, str]:
         return (self.entity, self.name)
-
-    def add(self, run: Run) -> None:
-        self.runs.append(run)
-        self.by_name[run.name] = run
-
-    def info(self) -> dict[str, Any]:
-        return {
-            "entity": self.entity,
-            "name": self.name,
-            "description": self.description,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-            "run_count": len(self.runs),
-            "active_run_count": len(self.active),
-            "column_count": len(self.table.columns),
-        }
 
 
 class Store:
@@ -285,14 +306,30 @@ class Store:
         "state": "state",
     }
     # A run's row, locked by a write to it (D80), with what resends, summary diffs and the
-    # usage ledger need.
+    # usage ledger need. Live runs only: a run deleted while the writer waited isn't found.
     LOCK_RUN: ClassVar[str] = """
         SELECT state, exitcode, extract(epoch FROM updated_at)::float8,
                extract(epoch FROM heartbeat_at)::float8, history_line_count, events_line_count,
                log_line_count, coalesce(gpu_type_override, gpu_type),
                coalesce(gpu_count_override, gpu_count),
-               (SELECT coalesce(sum(seconds), 0) FROM gpu_usage u WHERE u.run_pk = r.pk)
-        FROM runs r WHERE pk = $1 FOR UPDATE
+               (SELECT coalesce(sum(seconds), 0) FROM gpu_usage u WHERE u.run_pk = r.pk),
+               owner_pk, gpu_type, gpu_count
+        FROM runs r WHERE pk = $1 AND deleted_at IS NULL FOR UPDATE
+    """
+    # The same for the run a wandb client names (entity, project, run).
+    LOCK_NAMED_RUN: ClassVar[str] = """
+        SELECT r.state, r.exitcode, extract(epoch FROM r.updated_at)::float8,
+               extract(epoch FROM r.heartbeat_at)::float8, r.history_line_count,
+               r.events_line_count, r.log_line_count,
+               coalesce(r.gpu_type_override, r.gpu_type),
+               coalesce(r.gpu_count_override, r.gpu_count),
+               (SELECT coalesce(sum(seconds), 0) FROM gpu_usage u WHERE u.run_pk = r.pk),
+               r.owner_pk, r.pk, r.project_pk, p.org_pk
+        FROM runs r
+        JOIN projects p ON p.pk = r.project_pk AND p.deleted_at IS NULL
+        JOIN orgs o ON o.pk = p.org_pk AND o.deleted_at IS NULL
+        WHERE o.name = $1 AND p.name = $2 AND r.name = $3 AND r.deleted_at IS NULL
+        FOR UPDATE OF r
     """
     # Tables holding one row per line of a wandb file.
     LINE_TABLES: ClassVar[frozenset[str]] = frozenset({"history", "events", "logs"})
@@ -305,22 +342,11 @@ class Store:
         self.settings = settings
         self.files_dir = settings.files_dir
         self.db = Database(settings.database_url, max_size=settings.pool_size)
-        self.orgs: dict[str, Org] = {}
-        self.orgs_by_pk: dict[int, Org] = {}
-        self.projects: dict[tuple[str, str], Project] = {}
-        self.projects_by_pk: dict[int, Project] = {}
-        self.runs_by_pk: dict[int, Run] = {}
-        self.active: dict[int, Run] = {}
-        self._locks: dict[int, asyncio.Lock] = {}  # per run, by pk
-        # Serializes changes to which name maps to which org, and (entity, name) to which project.
-        self._catalog = asyncio.Lock()
-        # Runs deleted while a client was still logging to them: (entity, project, run) -> when
-        # that client was last heard from (see ``discarding``).
-        self._deleted_live: dict[tuple[str, str, str], float] = {}
         self._tasks: set[asyncio.Task] = set()
-        # Wakes the compaction loop early, when a run of this replica finishes (D78).
-        self._compact_wanted = asyncio.Event()
-        self._compactor: asyncio.Task | None = None
+        # Wakes this replica's background work early: a run finished, or runs were deleted.
+        self._work_wanted = asyncio.Event()
+        self._worker: asyncio.Task | None = None
+        self._files_swept = -float("inf")  # when orphaned run files were last looked for
         self.live = Hub()
         self.relay = live.Relay(self.live, None)
         self.secret = b""
@@ -334,24 +360,6 @@ class Store:
         self.feed = Feed(self)
         self.imports = Imports(self)
         self.s3 = S3(self)
-
-    @staticmethod
-    def _config_columns(config: dict[str, Any]) -> dict[str, Any]:
-        """Flatten a wandb config (``{"lr": {"value": 0.1}}``) into ``config.*`` columns."""
-        out: dict[str, Any] = {}
-        for key, item in config.items():
-            if key == "_wandb":
-                continue
-            value = item["value"] if isinstance(item, dict) and "value" in item else item
-            if isinstance(value, dict) and "_type" not in value and value:
-                flatten(value, f"config.{key}.", out)
-            else:
-                out[f"config.{key}"] = value
-        return out
-
-    @staticmethod
-    def _summary_columns(summary: dict[str, Any]) -> dict[str, Any]:
-        return flatten({k: v for k, v in summary.items() if k != "_wandb"}, "summary.")
 
     @staticmethod
     async def _prefixed(conn: asyncpg.Connection, pk: int, prefix: str) -> dict[str, Any]:
@@ -370,12 +378,11 @@ class Store:
     @staticmethod
     def _pg_text(lines: list[str]) -> list[str]:
         """Postgres text cannot hold NUL bytes, which raw console output occasionally contains."""
-        return [line.replace("\x00", "") if "\x00" in line else line for line in lines]
-
-    # ------------------------------------------------------------------ lifecycle
+        return [line.replace("\x00", "") for line in lines]
 
     async def open(self) -> None:
-        """Connect, check the schema is migrated and load every run into memory."""
+        """Connect, check the schema is migrated and start listening (D83: nothing is loaded,
+        so this takes the same time whatever the data)."""
         self.files_dir.mkdir(parents=True, exist_ok=True)
         await self.db.open(migrate=self.settings.migrate_on_startup)
         try:
@@ -383,13 +390,11 @@ class Store:
             self.secret = bytes.fromhex(secret)
             self.relay.start(self.db.pool)
             await self.bus.start()
-            await self._load()
             await self.accounts.load()
-            await self.budgets.load()
             await self.imports.load()
             await self.s3.load()
-            await self._detect_missing_gpus()
-            self._compactor = asyncio.get_running_loop().create_task(self._compact_loop())
+            self._background(self._detect_missing_gpus())
+            self._worker = asyncio.get_running_loop().create_task(self._work_loop())
         except BaseException:
             await self.bus.close()
             await self.relay.close()
@@ -399,237 +404,183 @@ class Store:
     async def close(self) -> None:
         await self.s3.close()
         await self.imports.close()
-        if self._compactor is not None:
-            self._compactor.cancel()
+        if self._worker is not None:
+            self._worker.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await self._compactor
+                await self._worker
         await self.avatars.flush()
         await self.accounts.flush()
-        await self.flush()
+        while self._tasks:
+            await asyncio.gather(*list(self._tasks), return_exceptions=True)
         await self.bus.close()
         await self.relay.close()
         await self.db.close()
 
-    async def _load(self) -> None:
-        started = time.perf_counter()
-        for record in await self.db.fetch(
-            "SELECT pk, name, extract(epoch FROM created_at)::float8, "
-            "extract(epoch FROM updated_at)::float8, currency, avatar, display_name, "
-            "s3_ephemeral_ttl, s3_key_max_ttl FROM orgs"
-        ):
-            *fields, avatar, display_name, ephemeral_ttl, max_ttl = record
-            avatar = bytes(avatar) if avatar else None
-            self._add_org(
-                Org(
-                    *fields,
-                    avatar=avatar,
-                    display_name=display_name,
-                    s3_ephemeral_ttl=ephemeral_ttl,
-                    s3_key_max_ttl=max_ttl,
-                )
-            )
-        for pk, org_pk, *rest in await self.db.fetch(
-            "SELECT pk, org_pk, name, description, extract(epoch FROM created_at)::float8, "
-            "extract(epoch FROM updated_at)::float8 FROM projects"
-        ):
-            self._add_project(Project(pk, self.orgs_by_pk[org_pk], *rest))
-        pending: dict[int, dict[str, tuple[list[int], list[Any]]]] = {}
-        query = """
-            SELECT pk, project_pk, name, display_name, state,
-                   extract(epoch FROM created_at)::float8, extract(epoch FROM updated_at)::float8,
-                   extract(epoch FROM heartbeat_at)::float8, tags, notes, group_name, job_type,
-                   host, program, commit_hash, description, sweep, exitcode, history_line_count,
-                   events_line_count, log_line_count, config, summary, owner_pk, gpu_type,
-                   gpu_count, gpu_type_override, gpu_count_override
-            FROM runs
-            ORDER BY created_at, pk
-        """
-        async with self.db.pool.acquire() as conn, conn.transaction():
-            async for record in conn.cursor(query, prefetch=1000):
-                project = self.projects_by_pk[record[1]]
-                run = Run(
-                    pk=record[0],
-                    project=project,
-                    name=record[2],
-                    row=project.table.add_row(),
-                    display_name=record[3],
-                    state=record[4],
-                    created_at=record[5],
-                    updated_at=record[6],
-                    heartbeat_at=record[7],
-                    tags=list(record[8]),
-                    notes=record[9],
-                    group=record[10],
-                    job_type=record[11],
-                    host=record[12],
-                    program=record[13],
-                    commit=record[14],
-                    description=record[15],
-                    sweep=record[16],
-                    exitcode=record[17],
-                    history_line_count=record[18],
-                    events_line_count=record[19],
-                    log_line_count=record[20],
-                    owner=record[23],
-                    gpu_type_detected=record[24],
-                    gpu_count_detected=record[25],
-                    gpu_type_override=record[26],
-                    gpu_count_override=record[27],
-                )
-                project.add(run)
-                self.runs_by_pk[run.pk] = run
-                values = run.attributes()
-                config_raw, summary_raw = record[21], record[22]
-                if config_raw:
-                    config = loads_lenient(config_raw)
-                    values.update(self._config_columns(config))
-                    run.metric_defs = parse_metric_defs(config)
-                if summary_raw:
-                    values.update(self._summary_columns(loads_lenient(summary_raw)))
-                columns = pending.setdefault(project.pk, {})
-                for name, value in values.items():
-                    if value is None:
-                        continue
-                    bucket = columns.get(name)
-                    if bucket is None:
-                        bucket = columns[name] = ([], [])
-                    bucket[0].append(run.row)
-                    bucket[1].append(value)
-                if run.active:
-                    self._mark_active(run, project)
-        for project_pk, columns in pending.items():
-            table = self.projects_by_pk[project_pk].table
-            for name, (rows, vals) in columns.items():
-                table.bulk_set(name, rows, vals)
-        for pk, stream, keys in await self.db.fetch(
-            "SELECT run_pk, stream, array_agg(key) FROM run_metrics GROUP BY run_pk, stream"
-        ):
-            self.runs_by_pk[pk].note_metrics(keys, stream)
+    def _background(self, coro: Any) -> None:
+        task = asyncio.get_running_loop().create_task(coro)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
-        # Files of runs whose delete committed but whose files were not removed (a crash).
-        def sweep() -> int:
-            orphans = [
-                path
-                for path in self.files_dir.iterdir()
-                if path.is_dir() and path.name.isdigit() and int(path.name) not in self.runs_by_pk
-            ]
-            for path in orphans:
-                shutil.rmtree(path, ignore_errors=True)
-            return len(orphans)
+    # ------------------------------------------------------------------ lookups (D76)
 
-        if removed := await asyncio.to_thread(sweep):
-            log.info("removed files of %d deleted runs", removed)
-        log.info(
-            "loaded %d runs in %d projects in %.2fs",
-            len(self.runs_by_pk),
-            len(self.projects),
-            time.perf_counter() - started,
-        )
-
-    # ------------------------------------------------------------------ lookups
-
-    def project(self, entity: str, name: str) -> Project | None:
-        return self.projects.get((entity, name))
-
-    def get_run(self, entity: str, project: str, name: str) -> Run | None:
-        proj = self.projects.get((entity, project))
-        return proj.by_name.get(name) if proj is not None else None
-
-    def _add_org(self, org: Org) -> Org:
-        self.orgs[org.name] = org
-        self.orgs_by_pk[org.pk] = org
-        return org
-
-    def _org_projects(self, org: Org) -> list[Project]:
-        return [project for project in self.projects_by_pk.values() if project.org is org]
-
-    def _add_project(self, project: Project) -> Project:
-        self.projects[project.key] = project
-        self.projects_by_pk[project.pk] = project
-        return project
-
-    def _run_lock(self, run: Run) -> asyncio.Lock:
-        lock = self._locks.get(run.pk)
-        if lock is None:
-            lock = self._locks[run.pk] = asyncio.Lock()
-        return lock
-
-    @contextlib.asynccontextmanager
-    async def _locked(
-        self, projects: Iterable[Project], runs: Iterable[Run] = (), all_runs: bool = False
-    ) -> AsyncGenerator[None]:
-        """Hold the projects' locks, then the runs' locks, each in pk order, so that lockers
-        never deadlock. ``all_runs`` locks every run of the projects, listed once they are
-        locked (no run can be created or moved in meanwhile)."""
-        projects = sorted(set(projects), key=lambda p: p.pk)
-        async with contextlib.AsyncExitStack() as stack:
-            for project in projects:
-                await stack.enter_async_context(project.lock)
-            if all_runs:
-                runs = [run for project in projects for run in project.runs]
-            for run in sorted(set(runs), key=lambda r: r.pk):
-                await stack.enter_async_context(self._run_lock(run))
-            yield
-
-    def org(self, name: str) -> Org:
-        org = self.orgs.get(name)
+    async def org(self, name: str) -> Org:
+        org = await self.find_org(name)
         if org is None:
             raise NotFound(f"organization {name} not found")
         return org
 
-    async def _insert_project(
-        self, org: Org, name: str, description: str | None = None, created_at: float | None = None
-    ) -> Project | None:
-        """Insert a project row (call with ``_catalog`` held); None if the name is taken.
-
-        ``created_at`` is for projects copied from elsewhere, which keep their creation time."""
-        # Stamped with this process's clock, like runs: the database's can run ahead of it, which
-        # would date a project created by a run's upload after that run started.
+    async def find_org(self, name: str) -> Org | None:
         record = await self.db.fetchrow(
-            "INSERT INTO projects (org_pk, name, description, created_at, updated_at) "
-            "VALUES ($1, $2, $3, to_timestamp($4), to_timestamp($4)) "
-            "ON CONFLICT (org_pk, name) WHERE deleted_at IS NULL DO NOTHING "
-            "RETURNING pk, name, description, "
-            "extract(epoch FROM created_at)::float8, extract(epoch FROM updated_at)::float8",
-            org.pk,
-            name,
-            description,
-            time.time() if created_at is None else created_at,
+            f"SELECT {ORG_COLUMNS} FROM orgs o WHERE o.name = $1 AND o.deleted_at IS NULL", name
         )
-        if record is None:
-            return None
-        pk, *rest = record
-        return self._add_project(Project(pk, org, *rest))
+        return Org.load(record) if record is not None else None
 
-    async def ensure_project(self, entity: str, name: str) -> Project:
-        """The project ``entity/name``, created if it doesn't exist (as ``wandb.init`` does).
+    async def orgs(self, pks: Iterable[int] | None = None) -> list[Org]:
+        """Every org (or those of ``pks``), in pk order."""
+        records = await self.db.fetch(
+            f"SELECT {ORG_COLUMNS} FROM orgs o WHERE o.deleted_at IS NULL "
+            "AND ($1::bigint[] IS NULL OR o.pk = ANY($1)) ORDER BY o.pk",
+            None if pks is None else list(pks),
+        )
+        return [Org.load(record) for record in records]
 
-        Organizations are never created implicitly: an unknown ``entity`` is ``NotFound``.
-        """
-        project = self.projects.get((entity, name))
-        if project is not None:
-            return project
-        async with self._catalog:
-            project = self.projects.get((entity, name))
-            if project is None:
-                project = await self._insert_project(self.org(entity), name)
-                assert project is not None  # only created under _catalog, and it was missing
-            return project
+    async def org_by_pk(self, pk: int) -> Org | None:
+        found = await self.orgs([pk])
+        return found[0] if found else None
 
-    @contextlib.asynccontextmanager
-    async def _writable_project(self, entity: str, name: str) -> AsyncGenerator[Project]:
-        """The project ``entity/name`` (created if missing), with its lock held."""
-        while True:
-            project = await self.ensure_project(entity, name)
-            async with project.lock:
-                if project.deleted or project.key != (entity, name):
-                    continue  # deleted or renamed while we waited: resolve the name again
-                yield project
-                return
+    async def project(self, entity: str, name: str) -> Project | None:
+        record = await self.db.fetchrow(
+            f"SELECT {PROJECT_COLUMNS} FROM projects p JOIN orgs o ON o.pk = p.org_pk "
+            "WHERE o.name = $1 AND p.name = $2 AND o.deleted_at IS NULL "
+            "AND p.deleted_at IS NULL",
+            entity,
+            name,
+        )
+        return Project.load(record) if record is not None else None
 
-    def _mark_active(self, run: Run, project: Project) -> None:
-        self.active[run.pk] = run
-        project.active[run.name] = run
+    async def projects(self, orgs: Iterable[Org] | None = None) -> list[Project]:
+        """Every project (or those of ``orgs``), by org then creation."""
+        records = await self.db.fetch(
+            f"SELECT {PROJECT_COLUMNS} FROM projects p JOIN orgs o ON o.pk = p.org_pk "
+            "WHERE o.deleted_at IS NULL AND p.deleted_at IS NULL "
+            "AND ($1::bigint[] IS NULL OR o.pk = ANY($1)) ORDER BY o.pk, p.pk",
+            None if orgs is None else [org.pk for org in orgs],
+        )
+        return [Project.load(record) for record in records]
+
+    async def project_infos(self, projects: Sequence[Project]) -> list[dict[str, Any]]:
+        """What the API shows of each project, with its run and column counts."""
+        counts = {
+            pk: (runs, active)
+            for pk, runs, active in await self.db.fetch(
+                "SELECT project_pk, count(*)::int, (count(*) FILTER (WHERE state = ANY($2)))::int "
+                "FROM runs WHERE project_pk = ANY($1) AND deleted_at IS NULL GROUP BY project_pk",
+                [project.pk for project in projects],
+                list(ACTIVE_STATES),
+            )
+        }
+        columns: dict[int, int] = {
+            pk: count
+            for pk, count in await self.db.fetch(
+                """
+                SELECT c.project_pk, count(*)::int FROM (
+                    SELECT project_pk, key FROM (
+                        SELECT project_pk, key, runs FROM project_keys
+                        WHERE project_pk = ANY($1)
+                        UNION ALL
+                        SELECT project_pk, key, runs FROM project_key_changes
+                        WHERE project_pk = ANY($1)
+                    ) k GROUP BY project_pk, key HAVING sum(runs) > 0
+                ) c GROUP BY c.project_pk
+                """,
+                [project.pk for project in projects],
+            )
+        }
+        out = []
+        for project in projects:
+            runs, active = counts.get(project.pk, (0, 0))
+            out.append(
+                {
+                    "entity": project.entity,
+                    "name": project.name,
+                    "description": project.description,
+                    "created_at": project.created_at,
+                    "updated_at": project.updated_at,
+                    "run_count": runs,
+                    "active_run_count": active,
+                    "column_count": columns.get(project.pk, 0),
+                }
+            )
+        return out
+
+    async def project_info(self, project: Project) -> dict[str, Any]:
+        return (await self.project_infos([project]))[0]
+
+    async def get_run(self, entity: str, project: str, name: str) -> Run | None:
+        found = await self.project(entity, project)
+        return await self.project_run(found, name) if found is not None else None
+
+    async def project_run(self, project: Project, name: str) -> Run | None:
+        return (await self.project_runs(project, [name])).get(name)
+
+    async def project_runs(self, project: Project, names: Iterable[str]) -> dict[str, Run]:
+        """The live runs of ``project`` named ``names``, by name."""
+        records = await self.db.fetch(
+            f"SELECT {RUN_COLUMNS} FROM runs r WHERE r.project_pk = $1 AND r.name = ANY($2) "
+            "AND r.deleted_at IS NULL",
+            project.pk,
+            list(names),
+        )
+        return {record[2]: Run.load(record, project) for record in records}
+
+    async def run_keys(self, runs: Sequence[Run], stream: str = "history") -> list[set[str]]:
+        """The plottable metrics each run logged to a series stream, without wandb's
+        bookkeeping (``_step``, ``_runtime``, ...), which every row carries."""
+        found: dict[int, set[str]] = {run.pk: set() for run in runs}
+        for run_pk, key in await self.db.fetch(
+            "SELECT run_pk, key FROM run_metrics WHERE run_pk = ANY($1) AND stream = $2 "
+            "AND key NOT LIKE '\\_%'",
+            list(found),
+            stream,
+        ):
+            found[run_pk].add(key)
+        return [found[run.pk] for run in runs]
+
+    async def run_counts(self, project: Project) -> tuple[int, int]:
+        """How many runs ``project`` has, and how many of them are active."""
+        record = await self.db.fetchrow(
+            "SELECT count(*)::int, (count(*) FILTER (WHERE state = ANY($2)))::int FROM runs "
+            "WHERE project_pk = $1 AND deleted_at IS NULL",
+            project.pk,
+            list(ACTIVE_STATES),
+        )
+        assert record is not None
+        return record[0], record[1]
+
+    async def ordinals(self, project: Project, runs: Sequence[Run]) -> list[int]:
+        """Each run's position among ``project``'s runs in creation order (from 0)."""
+        found: dict[int, int] = {
+            pk: ordinal
+            for pk, ordinal in await self.db.fetch(
+                "SELECT pk, ordinal FROM (SELECT pk, (row_number() OVER (ORDER BY created_at, pk)"
+                " - 1)::int AS ordinal FROM runs WHERE project_pk = $1 AND deleted_at IS NULL) o "
+                "WHERE pk = ANY($2)",
+                project.pk,
+                [run.pk for run in runs],
+            )
+        }
+        return [found.get(run.pk, 0) for run in runs]
+
+    async def active_runs(self, project: Project) -> list[str]:
+        return [
+            name
+            for (name,) in await self.db.fetch(
+                "SELECT name FROM runs WHERE project_pk = $1 AND deleted_at IS NULL "
+                "AND state = ANY($2) ORDER BY created_at, pk",
+                project.pk,
+                list(ACTIVE_STATES),
+            )
+        ]
 
     async def read_config(self, run: Run) -> dict[str, Any]:
         raw = await self.db.fetchval("SELECT config FROM runs WHERE pk = $1", run.pk)
@@ -681,6 +632,36 @@ class Store:
         parts = self.file_parts(name)
         return None if parts is None else self.files_dir / str(run.pk) / Path(*parts)
 
+    # ------------------------------------------------------------------ locks (D80)
+
+    @staticmethod
+    async def _lock_org(conn: asyncpg.Connection, org: Org, update: bool = False) -> None:
+        """Lock ``org``'s row (shared: no one deletes it meanwhile; ``update``: no one else
+        changes its projects meanwhile); NotFound if it was deleted."""
+        mode = "UPDATE" if update else "SHARE"
+        if not await conn.fetchval(
+            f"SELECT true FROM orgs WHERE pk = $1 AND deleted_at IS NULL FOR {mode}", org.pk
+        ):
+            raise NotFound(f"organization {org.name} not found")
+
+    @staticmethod
+    async def _lock_projects(
+        conn: asyncpg.Connection, projects: Sequence[Project], update: bool = False
+    ) -> None:
+        """Lock projects' rows in pk order, after their org's (catalog changes lock orgs, then
+        projects, then runs, so they never deadlock); NotFound if one was deleted."""
+        mode = "UPDATE" if update else "SHARE"
+        pks = sorted({project.pk for project in projects})
+        found = await conn.fetch(
+            f"SELECT pk FROM projects WHERE pk = ANY($1) AND deleted_at IS NULL "
+            f"ORDER BY pk FOR {mode}",
+            pks,
+        )
+        if len(found) < len(pks):
+            alive = {pk for (pk,) in found}
+            gone = next(p for p in projects if p.pk not in alive)
+            raise NotFound(f"project {gone.entity}/{gone.name} not found")
+
     # ------------------------------------------------------------------ mutations
 
     async def upsert_run(
@@ -702,31 +683,54 @@ class Store:
         # Clients that don't name the run get a random 8 character id, as wandb does.
         alphabet = string.ascii_lowercase + string.digits
         name = name or "".join(secrets.choice(alphabet) for _ in range(8))
-        if self.discarding(entity, project_name, name):
+        if await self.discarding(entity, project_name, name):
             raise Discarded(project_name, name)
-        async with self._writable_project(entity, project_name) as project:
-            run = project.by_name.get(name)
-            if run is None:
-                return await self._create_run(project, name, fields, owner), True
-            self._check_owner(run, owner, admin)
-            async with self._run_lock(run):
-                await self._update_run(run, fields)
-            return run, False
+        while True:
+            project = await self.ensure_project(entity, project_name)
+            try:
+                async with self.db.pool.acquire() as conn, conn.transaction():
+                    # Shared: deleting, renaming or moving runs out of it waits for this.
+                    await self._lock_projects(conn, [project])
+                    pk = await self._create_run(conn, project, name, fields, owner)
+                    created = pk is not None
+                    if pk is None:
+                        pk = await conn.fetchval(
+                            "SELECT pk FROM runs WHERE project_pk = $1 AND name = $2 "
+                            "AND deleted_at IS NULL",
+                            project.pk,
+                            name,
+                        )
+                        await self._update_run(conn, project, pk, name, fields, owner, admin)
+            except NotFound:
+                continue  # deleted or renamed meanwhile: resolve the name again
+            run = await self.project_run(project, name)
+            if run is None:  # deleted right after
+                raise NotFound(f"run {entity}/{project_name}/{name} not found")
+            return run, created
 
     @staticmethod
-    def _check_owner(run: Run, owner: int | None, admin: bool) -> None:
-        if not admin and run.owner != owner:
-            raise Forbidden(f"run {run.path} belongs to another user", [run.name])
+    def _check_owner(path: str, run_owner: int | None, owner: int | None, admin: bool) -> None:
+        if not admin and run_owner != owner:
+            raise Forbidden(f"run {path} belongs to another user", [path.rsplit("/", 1)[-1]])
 
     async def _create_run(
-        self, project: Project, name: str, fields: dict[str, Any], owner: int | None = None
-    ) -> Run:
+        self,
+        conn: asyncpg.Connection,
+        project: Project,
+        name: str,
+        fields: dict[str, Any],
+        owner: int | None = None,
+    ) -> int | None:
+        """Insert the run ``name``; None if the project has one (it is left alone)."""
         now = time.time()
-        # wandb-style "adjective-noun-N" unless the client named the run.
-        display_name = (
-            fields.get("display_name")
-            or f"{secrets.choice(ADJECTIVES)}-{secrets.choice(NOUNS)}-{len(project.runs) + 1}"
-        )
+        display_name = fields.get("display_name")
+        if not display_name:
+            # wandb-style "adjective-noun-N" unless the client named the run.
+            count = await conn.fetchval(
+                "SELECT count(*) FROM runs WHERE project_pk = $1 AND deleted_at IS NULL",
+                project.pk,
+            )
+            display_name = f"{secrets.choice(ADJECTIVES)}-{secrets.choice(NOUNS)}-{count + 1}"
         cols = {col: fields.get(key) for key, col in self.FIELD_COLUMNS.items()}
         cols["display_name"] = display_name
         cols["state"] = fields.get("state") or "running"
@@ -734,6 +738,38 @@ class Store:
         config = fields.get("config")
         summary = fields.get("summary")
         metric_defs = parse_metric_defs(config) if config else []
+        pk = await conn.fetchval(
+            """
+            INSERT INTO runs (project_pk, name, display_name, state, created_at, updated_at,
+                              heartbeat_at, config, summary, tags, notes, group_name,
+                              job_type, host, program, commit_hash, description, sweep,
+                              owner_pk, metric_defs)
+            VALUES ($1, $2, $3, $4, to_timestamp($5), to_timestamp($5), to_timestamp($5),
+                    $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb)
+            ON CONFLICT (project_pk, name) WHERE deleted_at IS NULL DO NOTHING
+            RETURNING pk
+            """,
+            project.pk,
+            name,
+            display_name,
+            cols["state"],
+            now,
+            orjson.dumps(config).decode() if config is not None else None,
+            orjson.dumps(summary).decode() if summary is not None else None,
+            tags,
+            cols["notes"],
+            cols["group_name"],
+            cols["job_type"],
+            cols["host"],
+            cols["program"],
+            cols["commit_hash"],
+            cols["description"],
+            cols["sweep"],
+            owner,
+            orjson.dumps(metric_defs).decode(),
+        )
+        if pk is None:
+            return None
         columns = {
             "name": name,
             "display_name": display_name,
@@ -754,76 +790,21 @@ class Store:
             **(values.config_columns(config) if config else {}),
             **(values.summary_columns(summary) if summary else {}),
         }
-        async with self.db.pool.acquire() as conn, conn.transaction():
-            pk = await conn.fetchval(
-                """
-                INSERT INTO runs (project_pk, name, display_name, state, created_at, updated_at,
-                                  heartbeat_at, config, summary, tags, notes, group_name,
-                                  job_type, host, program, commit_hash, description, sweep,
-                                  owner_pk, metric_defs)
-                VALUES ($1, $2, $3, $4, to_timestamp($5), to_timestamp($5), to_timestamp($5),
-                        $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb)
-                RETURNING pk
-                """,
-                project.pk,
-                name,
-                display_name,
-                cols["state"],
-                now,
-                orjson.dumps(config).decode() if config is not None else None,
-                orjson.dumps(summary).decode() if summary is not None else None,
-                tags,
-                cols["notes"],
-                cols["group_name"],
-                cols["job_type"],
-                cols["host"],
-                cols["program"],
-                cols["commit_hash"],
-                cols["description"],
-                cols["sweep"],
-                owner,
-                orjson.dumps(metric_defs).decode(),
-            )
-            await values.write(conn, project.pk, [(pk, values.diff({}, columns))])
-            created = {"run": name, "display_name": display_name, "state": cols["state"]}
-            await live.publish(conn, [live.event_message(project.pk, None, "created", created)])
-        run = Run(
-            pk=pk,
-            project=project,
-            name=name,
-            row=project.table.add_row(),
-            display_name=display_name,
-            state=cols["state"],
-            created_at=now,
-            updated_at=now,
-            heartbeat_at=now,
-            tags=tags,
-            notes=cols["notes"],
-            group=cols["group_name"],
-            job_type=cols["job_type"],
-            host=cols["host"],
-            program=cols["program"],
-            commit=cols["commit_hash"],
-            description=cols["description"],
-            sweep=cols["sweep"],
-            owner=owner,
-        )
-        project.add(run)
-        self.runs_by_pk[pk] = run
-        if run.active:
-            self._mark_active(run, project)
-        table_values = run.attributes()
-        if config:
-            table_values.update(self._config_columns(config))
-            run.metric_defs = parse_metric_defs(config)
-        if summary:
-            table_values.update(self._summary_columns(summary))
-            if run.active:
-                run.summary_flat = self._summary_columns(summary)
-        project.table.set_many(run.row, table_values)
-        return run
+        await values.write(conn, project.pk, [(pk, values.diff({}, columns))])
+        created = {"run": name, "display_name": display_name, "state": cols["state"]}
+        await live.publish(conn, [live.event_message(project.pk, None, "created", created)])
+        return pk
 
-    async def _update_run(self, run: Run, fields: dict[str, Any]) -> None:
+    async def _update_run(
+        self,
+        conn: asyncpg.Connection,
+        project: Project,
+        pk: int,
+        name: str,
+        fields: dict[str, Any],
+        owner: int | None,
+        admin: bool,
+    ) -> None:
         now = time.time()
         sets: dict[str, Any] = {}
         for key, col in self.FIELD_COLUMNS.items():
@@ -849,103 +830,43 @@ class Store:
                 attributes[key] = fields[key]
         if tags is not None:
             attributes["tags"] = tags
-        async with self.db.pool.acquire() as conn, conn.transaction():
-            old = await conn.fetchrow(
-                "SELECT display_name, notes, description, group_name, job_type, host, program, "
-                "commit_hash, sweep, state, tags, extract(epoch FROM updated_at)::float8, "
-                "history_line_count, metric_defs::text FROM runs WHERE pk = $1 FOR UPDATE",
-                run.pk,
-            )
-            assert old is not None
-            await conn.execute(
-                f"UPDATE runs SET updated_at = to_timestamp($2){', ' if sets else ''}"
-                f"{assignments} WHERE pk = $1",
-                run.pk,
-                now,
-                *sets.values(),
-            )
-            before = dict(zip((*self.FIELD_COLUMNS, "tags", "updated_at"), old, strict=False))
-            before["tags"] = list(before["tags"])
-            changes = values.diff(before, attributes, keys=attributes)
-            if config is not None:
-                previous = await self._prefixed(conn, run.pk, "config.")
-                values.diff(previous, values.config_columns(config), into=changes)
-            if summary is not None:
-                previous = await self._prefixed(conn, run.pk, "summary.")
-                values.diff(previous, values.summary_columns(summary), into=changes)
-            await values.write(conn, run.project.pk, [(run.pk, changes)])
-            state = attributes.get("state", old[9])
-            data: dict[str, Any] = {
-                "run": run.name,
-                "state": state,
-                "lines": old[12],
-                "updated_at": now,
-            }
-            summary_changed = {
-                key: value for key, value in changes.values.items() if key.startswith("summary.")
-            }
-            if summary_changed:
-                data["summary"] = summary_changed
-            if defs is not None and defs != orjson.loads(old[13] or "[]"):
-                data["metric_defs"] = defs
-            message = live.event_message(run.project.pk, run.name, "run", data)
-            await live.publish(conn, [message])
-        project = run.project
-        run.updated_at = now
-        for key in self.FIELD_COLUMNS:
-            if fields.get(key) is not None:
-                setattr(run, key, fields[key])
-        if tags is not None:
-            run.tags = tags
-        self._sync_state(run, project)
-        table = project.table
-        table.set_many(run.row, run.attributes())
+        old = await conn.fetchrow(
+            "SELECT display_name, notes, description, group_name, job_type, host, program, "
+            "commit_hash, sweep, state, tags, extract(epoch FROM updated_at)::float8, "
+            "history_line_count, metric_defs::text, owner_pk FROM runs WHERE pk = $1 FOR UPDATE",
+            pk,
+        )
+        assert old is not None
+        self._check_owner(f"{project.entity}/{project.name}/{name}", old[14], owner, admin)
+        await conn.execute(
+            f"UPDATE runs SET updated_at = to_timestamp($2){', ' if sets else ''}"
+            f"{assignments} WHERE pk = $1",
+            pk,
+            now,
+            *sets.values(),
+        )
+        before = dict(zip((*self.FIELD_COLUMNS, "tags", "updated_at"), old, strict=False))
+        before["tags"] = list(before["tags"])
+        changes = values.diff(before, attributes, keys=attributes)
         if config is not None:
-            self._replace_columns(table, run.row, "config.", self._config_columns(config))
-        if defs is not None:
-            if defs == run.metric_defs:
-                defs = None
-            else:
-                run.metric_defs = defs
+            previous = await self._prefixed(conn, pk, "config.")
+            values.diff(previous, values.config_columns(config), into=changes)
         if summary is not None:
-            self._apply_summary(run, table, summary)
-
-    @staticmethod
-    def _replace_columns(table: ColumnTable, row: int, prefix: str, values: dict[str, Any]):
-        for name in table.row_column_names(row, prefix):
-            if name not in values:
-                table.clear(row, name)
-        table.set_many(row, values)
-
-    def _apply_summary(
-        self, run: Run, table: ColumnTable, summary: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Write a run's new summary into the table; returns the columns that changed."""
-        flat = self._summary_columns(summary)
-        previous = run.summary_flat
-        if previous is None:
-            self._replace_columns(table, run.row, "summary.", flat)
-            changed = flat
-        else:
-            changed = {k: v for k, v in flat.items() if k not in previous or previous[k] != v}
-            for name in previous:
-                if name not in flat:
-                    table.clear(run.row, name)
-                    changed[name] = None
-            table.set_many(run.row, changed)
-        if run.active:
-            run.summary_flat = flat
-        return changed
-
-    def _sync_state(self, run: Run, project: Project) -> None:
-        if run.active:
-            if run.pk not in self.active:
-                self._mark_active(run, project)
-        elif run.pk in self.active:
-            self.active.pop(run.pk, None)
-            project.active.pop(run.name, None)
-            run.summary_flat = None
-            self._compact_wanted.set()
+            previous = await self._prefixed(conn, pk, "summary.")
+            values.diff(previous, values.summary_columns(summary), into=changes)
+        await values.write(conn, project.pk, [(pk, changes)])
+        state = attributes.get("state", old[9])
+        data: dict[str, Any] = {"run": name, "state": state, "lines": old[12], "updated_at": now}
+        summary_changed = {
+            key: value for key, value in changes.values.items() if key.startswith("summary.")
+        }
+        if summary_changed:
+            data["summary"] = summary_changed
+        if defs is not None and defs != orjson.loads(old[13] or "[]"):
+            data["metric_defs"] = defs
+        await live.publish(conn, [live.event_message(project.pk, name, "run", data)])
+        if old[9] in ACTIVE_STATES and state not in ACTIVE_STATES:
+            self._work_wanted.set()  # compact its chunks
 
     async def file_stream(
         self,
@@ -971,199 +892,178 @@ class Store:
             exitcode = None
             state = "preempting" if payload.get("preempting") else "running"
 
-        # Only UpsertBucket creates runs: a client still logging to a deleted run must not
-        # bring back a partial copy of it.
-        run = self.get_run(entity, project_name, name)
-        if run is None:
-            if self.discarding(entity, project_name, name):
-                return
-            raise NotFound(f"run {entity}/{project_name}/{name} not found")
-        async with self._run_lock(run):
-            if run.deleted or run.project.key != (entity, project_name):
-                if self.discarding(entity, project_name, name):
+        # Each wandb file arrives as {"offset": first line number, "content": [lines]}.
+        chunks = []
+        for item in (history, events, output):
+            content = (item or {}).get("content") or []
+            chunks.append((int((item or {}).get("offset") or 0), [str(c) for c in content]))
+        (h_off, h_lines), (e_off, e_lines), (o_off, o_lines) = chunks
+        summary_raw = None
+        summary_data = None
+        if summary and summary.get("content"):
+            summary_raw = summary["content"][-1]
+            try:
+                if isinstance(summary_raw, (str, bytes)):
+                    summary_data = loads_lenient(summary_raw)
+                else:
+                    summary_data = summary_raw
+                    summary_raw = orjson.dumps(summary_raw).decode()
+            except ValueError:
+                summary_data = None
+            if not isinstance(summary_data, dict):
+                log.warning(
+                    "run %s/%s/%s: dropping unparseable summary", entity, project_name, name
+                )
+                summary_raw = summary_data = None
+            elif isinstance(summary_raw, bytes):
+                summary_raw = summary_raw.decode()
+        now = time.time()
+
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            # Only UpsertBucket creates runs: a client still logging to a deleted run must not
+            # bring back a partial copy of it.
+            locked = await conn.fetchrow(self.LOCK_NAMED_RUN, entity, project_name, name)
+            if locked is None:
+                if await self.discarding(entity, project_name, name):
                     return
                 raise NotFound(f"run {entity}/{project_name}/{name} not found")
-            self._check_owner(run, owner, admin)
-            project = run.project
-            pk = run.pk
-            now = time.time()
-
-            # Each wandb file arrives as {"offset": first line number, "content": [lines]}.
-            chunks = []
-            for item in (history, events, output):
-                content = (item or {}).get("content") or []
-                chunks.append((int((item or {}).get("offset") or 0), [str(c) for c in content]))
-            (h_off, h_lines), (e_off, e_lines), (o_off, o_lines) = chunks
-            summary_raw = None
-            summary_data = None
-            if summary and summary.get("content"):
-                summary_raw = summary["content"][-1]
-                try:
-                    if isinstance(summary_raw, (str, bytes)):
-                        summary_data = loads_lenient(summary_raw)
-                    else:
-                        summary_data = summary_raw
-                        summary_raw = orjson.dumps(summary_raw).decode()
-                except ValueError:
-                    summary_data = None
-                if not isinstance(summary_data, dict):
-                    log.warning("run %s: dropping unparseable summary", run.path)
-                    summary_raw = summary_data = None
-                elif isinstance(summary_raw, bytes):
-                    summary_raw = summary_raw.decode()
-            history_count = max(run.history_line_count, h_off + len(h_lines))
-            events_count = max(run.events_line_count, e_off + len(e_lines))
-            log_count = max(run.log_line_count, o_off + len(o_lines))
-            # Retries can resend lines we already have: only unseen ones become points. Each
-            # metric's new points are one chunk per stream (D78).
-            fresh: dict[str, tuple[int, History]] = {}
-            for stream, offset, lines in (("history", h_off, h_lines), ("system", e_off, e_lines)):
-                new_from = max(offset, run.lines(stream))
+            old_state, old_exitcode, old_updated, old_heartbeat, *counts = locked[:7]
+            gpu_type, gpu_count, runtime, run_owner, pk, project_pk, org_pk = locked[7:]
+            self._check_owner(f"{entity}/{project_name}/{name}", run_owner, owner, admin)
+            old_history, old_events, old_logs = counts
+            history_count = max(old_history, h_off + len(h_lines))
+            events_count = max(old_events, e_off + len(e_lines))
+            log_count = max(old_logs, o_off + len(o_lines))
+            # Clients resend lines they couldn't confirm: only lines past those stored become
+            # points, so chunks never overlap (D78). Each metric's are one chunk per stream.
+            fresh: dict[str, int] = {}
+            chunk_rows = []
+            for stream, offset, lines, stored in (
+                ("history", h_off, h_lines, old_history),
+                ("system", e_off, e_lines, old_events),
+            ):
+                new_from = max(offset, stored)
                 if new_from < offset + len(lines):
                     hist = History()
                     hist.append_rows(new_from, parse_rows(lines[new_from - offset :]))
                     if hist.series:
-                        fresh[stream] = (new_from, hist)
-            chunk_rows = [
-                (stream, key, start, series.n, series.encode(start))
-                for stream, (start, hist) in fresh.items()
-                for key, series in hist.series.items()
-            ]
-
-            async with self.db.pool.acquire() as conn, conn.transaction():
-                locked = await conn.fetchrow(self.LOCK_RUN, pk)
-                assert locked is not None
-                old_state, old_exitcode, old_updated, old_heartbeat, *_, gpu_count, runtime = locked
-                accrued = self.budgets.accrual(old_heartbeat, now)
-                previous = (
-                    await self._prefixed(conn, pk, "summary.") if summary_data is not None else {}
+                        fresh[stream] = new_from
+                        for key, series in hist.series.items():
+                            chunk_rows.append(
+                                (stream, key, new_from, series.n, series.encode(new_from))
+                            )
+            accrued = self.budgets.accrual(old_heartbeat, now)
+            previous = (
+                await self._prefixed(conn, pk, "summary.") if summary_data is not None else {}
+            )
+            # The request's lines, ledger and chunks in one statement, so one round trip.
+            # Lines are upserted because clients resend chunks they could not confirm.
+            await conn.execute(
+                """
+                WITH history_lines AS (
+                    INSERT INTO history (run_pk, line, data)
+                    SELECT $1, line, data FROM unnest($2::int[], $3::text[]) AS t(line, data)
+                    ON CONFLICT (run_pk, line) DO UPDATE SET data = excluded.data
+                ), event_lines AS (
+                    INSERT INTO events (run_pk, line, data)
+                    SELECT $1, line, data FROM unnest($4::int[], $5::text[]) AS t(line, data)
+                    ON CONFLICT (run_pk, line) DO UPDATE SET data = excluded.data
+                ), log_lines AS (
+                    INSERT INTO logs (run_pk, line, data)
+                    SELECT $1, line, data FROM unnest($6::int[], $7::text[]) AS t(line, data)
+                    ON CONFLICT (run_pk, line) DO UPDATE SET data = excluded.data
+                ), usage AS (
+                    INSERT INTO gpu_usage (org_pk, project_pk, run_pk, run_name, month,
+                                           seconds, gpu_type, gpu_count)
+                    SELECT $15::bigint, $16::bigint, $1, $17::text, month, seconds,
+                           $18::text, $19::int
+                    FROM unnest($20::date[], $21::float8[]) AS t(month, seconds)
+                    ON CONFLICT (run_pk, month)
+                    DO UPDATE SET seconds = gpu_usage.seconds + excluded.seconds
+                ), chunks AS (
+                    INSERT INTO series_chunks (run_pk, stream, key, first_line, n, data)
+                    SELECT $1, stream, key, first_line, n, data
+                    FROM unnest($22::text[], $23::text[], $24::int[], $25::int[],
+                                $26::bytea[]) AS t(stream, key, first_line, n, data)
+                ), metrics AS (
+                    INSERT INTO run_metrics (run_pk, stream, key)
+                    SELECT $1, stream, key FROM unnest($22::text[], $23::text[]) AS t(stream, key)
+                    ON CONFLICT DO NOTHING
                 )
-                # The request's lines, ledger and chunks in one statement, so one round trip.
-                # Lines are upserted because clients resend chunks they could not confirm.
-                await conn.execute(
-                    """
-                    WITH history_lines AS (
-                        INSERT INTO history (run_pk, line, data)
-                        SELECT $1, line, data FROM unnest($2::int[], $3::text[]) AS t(line, data)
-                        ON CONFLICT (run_pk, line) DO UPDATE SET data = excluded.data
-                    ), event_lines AS (
-                        INSERT INTO events (run_pk, line, data)
-                        SELECT $1, line, data FROM unnest($4::int[], $5::text[]) AS t(line, data)
-                        ON CONFLICT (run_pk, line) DO UPDATE SET data = excluded.data
-                    ), log_lines AS (
-                        INSERT INTO logs (run_pk, line, data)
-                        SELECT $1, line, data FROM unnest($6::int[], $7::text[]) AS t(line, data)
-                        ON CONFLICT (run_pk, line) DO UPDATE SET data = excluded.data
-                    ), usage AS (
-                        INSERT INTO gpu_usage (org_pk, project_pk, run_pk, run_name, month,
-                                               seconds, gpu_type, gpu_count)
-                        SELECT $15::bigint, $16::bigint, $1, $17::text, month, seconds,
-                               $18::text, $19::int
-                        FROM unnest($20::date[], $21::float8[]) AS t(month, seconds)
-                        ON CONFLICT (run_pk, month)
-                        DO UPDATE SET seconds = gpu_usage.seconds + excluded.seconds
-                    ), chunks AS (
-                        INSERT INTO series_chunks (run_pk, stream, key, first_line, n, data)
-                        SELECT $1, stream, key, first_line, n, data
-                        FROM unnest($22::text[], $23::text[], $24::int[], $25::int[],
-                                    $26::bytea[]) AS t(stream, key, first_line, n, data)
-                    ), metrics AS (
-                        INSERT INTO run_metrics (run_pk, stream, key)
-                        SELECT $1, stream, key FROM unnest($22::text[], $23::text[]) AS t(stream, key)
-                        ON CONFLICT DO NOTHING
-                    )
-                    UPDATE runs
-                    SET state = $8, exitcode = $9, updated_at = to_timestamp($10),
-                        heartbeat_at = to_timestamp($10), summary = COALESCE($11, summary),
-                        history_line_count = $12, events_line_count = $13,
-                        log_line_count = $14, uncompacted = uncompacted + $27
-                    WHERE pk = $1
-                    """,
-                    pk,
-                    list(range(h_off, h_off + len(h_lines))),
-                    self._pg_text(h_lines),
-                    list(range(e_off, e_off + len(e_lines))),
-                    self._pg_text(e_lines),
-                    list(range(o_off, o_off + len(o_lines))),
-                    self._pg_text(o_lines),
-                    state,
-                    exitcode,
-                    now,
-                    summary_raw.replace("\x00", "") if summary_raw else None,
-                    history_count,
-                    events_count,
-                    log_count,
-                    project.org.pk,
-                    project.pk,
-                    run.name,
-                    run.gpu_type,
-                    run.gpu_count,
-                    [month for month, _ in accrued],
-                    [seconds for _, seconds in accrued],
-                    *([row[i] for row in chunk_rows] for i in range(5)),
-                    1 if chunk_rows else 0,
-                )
-                accrued_seconds = sum(seconds for _, seconds in accrued)
-                changes = values.diff(
-                    {
-                        "state": old_state,
-                        "exitcode": old_exitcode,
-                        "updated_at": old_updated,
-                        "heartbeat_at": old_heartbeat,
-                        "gpu_hours": values.gpu_hours(runtime, gpu_count),
-                    },
-                    {
-                        "state": state,
-                        "exitcode": exitcode,
-                        "updated_at": now,
-                        "heartbeat_at": now,
-                        "gpu_hours": values.gpu_hours(runtime + accrued_seconds, gpu_count),
-                    },
-                )
-                if summary_data is not None:
-                    values.diff(previous, values.summary_columns(summary_data), into=changes)
-                await values.write(conn, project.pk, [(pk, changes)])
-                ends = {"history": history_count, "system": events_count}
-                messages = [
-                    live.points_message(project.pk, pk, name, stream, start, ends[stream])
-                    for stream, (start, _) in fresh.items()
-                ]
-                summary_changed = {
-                    key: value
-                    for key, value in changes.values.items()
-                    if key.startswith("summary.")
-                }
-                if summary_changed or state != old_state:
-                    data: dict[str, Any] = {
-                        "run": name,
-                        "state": state,
-                        "lines": history_count,
-                        "updated_at": now,
-                    }
-                    if summary_changed:
-                        data["summary"] = summary_changed
-                    messages.append(live.event_message(project.pk, name, "run", data))
-                await live.publish(conn, messages)
-
-            for stream, (_, hist) in fresh.items():
-                run.note_metrics(hist.series, stream)
-            run.history_line_count = history_count
-            run.events_line_count = events_count
-            run.log_line_count = log_count
-            run.state = state
-            run.exitcode = exitcode
-            run.updated_at = run.heartbeat_at = now
-            self.budgets.accrue(run, accrued)
-            table = project.table
+                UPDATE runs
+                SET state = $8, exitcode = $9, updated_at = to_timestamp($10),
+                    heartbeat_at = to_timestamp($10), summary = COALESCE($11, summary),
+                    history_line_count = $12, events_line_count = $13,
+                    log_line_count = $14, uncompacted = uncompacted + $27
+                WHERE pk = $1
+                """,
+                pk,
+                list(range(h_off, h_off + len(h_lines))),
+                self._pg_text(h_lines),
+                list(range(e_off, e_off + len(e_lines))),
+                self._pg_text(e_lines),
+                list(range(o_off, o_off + len(o_lines))),
+                self._pg_text(o_lines),
+                state,
+                exitcode,
+                now,
+                summary_raw.replace("\x00", "") if summary_raw else None,
+                history_count,
+                events_count,
+                log_count,
+                org_pk,
+                project_pk,
+                name,
+                gpu_type,
+                gpu_count,
+                [month for month, _ in accrued],
+                [seconds for _, seconds in accrued],
+                *([row[i] for row in chunk_rows] for i in range(5)),
+                1 if chunk_rows else 0,
+            )
+            accrued_seconds = sum(seconds for _, seconds in accrued)
+            changes = values.diff(
+                {
+                    "state": old_state,
+                    "exitcode": old_exitcode,
+                    "updated_at": old_updated,
+                    "heartbeat_at": old_heartbeat,
+                    "gpu_hours": values.gpu_hours(runtime, gpu_count),
+                },
+                {
+                    "state": state,
+                    "exitcode": exitcode,
+                    "updated_at": now,
+                    "heartbeat_at": now,
+                    "gpu_hours": values.gpu_hours(runtime + accrued_seconds, gpu_count),
+                },
+            )
             if summary_data is not None:
-                self._apply_summary(run, table, summary_data)
-            table.set(run.row, "state", state)
-            table.set(run.row, "exitcode", exitcode)
-            table.set(run.row, "updated_at", now)
-            table.set(run.row, "heartbeat_at", now)
-            if accrued:
-                table.set(run.row, "gpu_hours", run.gpu_hours)
-            self._sync_state(run, project)
+                values.diff(previous, values.summary_columns(summary_data), into=changes)
+            await values.write(conn, project_pk, [(pk, changes)])
+            # Every replica's dashboards hear of it (D79): new points as line ranges, which
+            # replicas with watchers read back, and the run's new state and summary.
+            ends = {"history": history_count, "system": events_count}
+            messages = [
+                live.points_message(project_pk, pk, name, stream, start, ends[stream])
+                for stream, start in fresh.items()
+            ]
+            summary_changed = {
+                key: value for key, value in changes.values.items() if key.startswith("summary.")
+            }
+            if summary_changed or state != old_state:
+                data: dict[str, Any] = {
+                    "run": name,
+                    "state": state,
+                    "lines": history_count,
+                    "updated_at": now,
+                }
+                if summary_changed:
+                    data["summary"] = summary_changed
+                messages.append(live.event_message(project_pk, name, "run", data))
+            await live.publish(conn, messages)
+        if state not in ACTIVE_STATES and old_state in ACTIVE_STATES:
+            self._work_wanted.set()  # compact its chunks
 
     async def save_file(self, run: Run, name: str, data: bytes) -> None:
         path = self.file_path(run, name)
@@ -1176,11 +1076,13 @@ class Store:
             tmp.write_bytes(data)
             tmp.replace(path)
 
-        async with self._run_lock(run):
-            if run.deleted:
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            locked = await conn.fetchrow(self.LOCK_RUN, run.pk)
+            if locked is None:
                 raise NotFound(f"run {run.path} not found")
+            # Written under the run's lock: a purge removes the files after the row.
             await asyncio.to_thread(write)
-            await self.db.execute(
+            await conn.execute(
                 "INSERT INTO run_files (run_pk, name, size, updated_at) "
                 "VALUES ($1, $2, $3, to_timestamp($4)) "
                 "ON CONFLICT (run_pk, name) DO UPDATE "
@@ -1191,7 +1093,7 @@ class Store:
                 time.time(),
             )
             if name == self.METADATA_FILE:
-                await self._set_detected_gpus(run, *self._read_gpus(data))
+                await self._set_detected_gpus(conn, run, locked, *self._read_gpus(data))
 
     # The file the wandb SDK describes the machine in, GPUs included.
     METADATA_FILE: ClassVar[str] = "wandb-metadata.json"
@@ -1206,30 +1108,38 @@ class Store:
         except ValueError:
             return None, 0
 
-    async def _set_detected_gpus(self, run: Run, gpu_type: str | None, count: int) -> None:
-        """Record the GPUs found in a run's metadata (call with the run's lock held)."""
-        if (run.gpu_type_detected, run.gpu_count_detected) == (gpu_type, count):
+    async def _set_detected_gpus(
+        self,
+        conn: asyncpg.Connection,
+        run: Run,
+        locked: Any,
+        gpu_type: str | None,
+        count: int,
+    ) -> None:
+        """Record the GPUs found in a run's metadata (``locked``: its ``LOCK_RUN`` row)."""
+        state, _, updated_at, _, lines, *_ = locked
+        old_type, old_count, runtime, _, detected_type, detected_count = locked[7:]
+        if (detected_type, detected_count) == (gpu_type, count):
             return
-        before = (run.gpu_type, run.gpu_count)
-        run.gpu_type_detected, run.gpu_count_detected = gpu_type, count
-        effective = (run.gpu_type, run.gpu_count)
-        async with self.db.pool.acquire() as conn, conn.transaction():
-            locked = await conn.fetchrow(self.LOCK_RUN, run.pk)
-            assert locked is not None
-            state, _, updated_at, _, lines, *_, old_type, old_count, runtime = locked
-            await conn.execute(
-                "WITH usage AS (UPDATE gpu_usage SET gpu_type = $4, gpu_count = $5 "
-                "WHERE run_pk = $1) UPDATE runs SET gpu_type = $2, gpu_count = $3 WHERE pk = $1",
-                run.pk,
-                gpu_type,
-                count,
-                *effective,
-            )
-            await self._gpus_written(
-                conn, run, (old_type, old_count), effective, runtime, (state, lines, updated_at)
-            )
-        if effective != before:
-            self._gpus_changed(run)
+        overrides = await conn.fetchrow(
+            "SELECT gpu_type_override, gpu_count_override FROM runs WHERE pk = $1", run.pk
+        )
+        assert overrides is not None
+        effective = (
+            overrides[0] if overrides[0] is not None else gpu_type,
+            overrides[1] if overrides[1] is not None else count,
+        )
+        await conn.execute(
+            "WITH usage AS (UPDATE gpu_usage SET gpu_type = $4, gpu_count = $5 "
+            "WHERE run_pk = $1) UPDATE runs SET gpu_type = $2, gpu_count = $3 WHERE pk = $1",
+            run.pk,
+            gpu_type,
+            count,
+            *effective,
+        )
+        await self._gpus_written(
+            conn, run, (old_type, old_count), effective, runtime, (state, lines, updated_at)
+        )
 
     async def _gpus_written(
         self,
@@ -1258,70 +1168,76 @@ class Store:
         }
         await live.publish(conn, [live.event_message(run.project.pk, run.name, "run", data)])
 
-    def _gpus_changed(self, run: Run) -> None:
-        """Show a run's new effective GPUs in its ledger entries, table row and dashboards."""
-        changed: dict[str, Any] = {
-            "gpu_type": run.gpu_type,
-            "gpu_count": run.gpu_count,
-            "gpu_hours": run.gpu_hours,
-        }
-        run.project.table.set_many(run.row, changed)
-
     async def _detect_missing_gpus(self) -> None:
-        """Read the GPUs of runs whose metadata was uploaded before GPUs were tracked."""
-        pks = await self.db.fetch(
-            "SELECT r.pk FROM runs r JOIN run_files f ON f.run_pk = r.pk AND f.name = $1 "
-            "WHERE r.gpu_count IS NULL",
-            self.METADATA_FILE,
-        )
-        runs = [self.runs_by_pk[pk] for (pk,) in pks if pk in self.runs_by_pk]
-        if not runs:
-            return
-
-        def read() -> list[tuple[str | None, int]]:
-            found = []
-            for run in runs:
-                path = self.file_path(run, self.METADATA_FILE)
-                try:
-                    data = path.read_bytes() if path is not None else b""
-                except OSError:
-                    data = b""
-                found.append(self._read_gpus(data))
-            return found
-
-        for run, (gpu_type, count) in zip(runs, await asyncio.to_thread(read), strict=True):
-            async with self._run_lock(run):
-                if not run.deleted:
-                    await self._set_detected_gpus(run, gpu_type, count)
-        log.info("read the GPUs of %d runs from their metadata", len(runs))
-
-    async def set_state(self, run: Run, state: str) -> None:
-        async with self._run_lock(run):
-            if run.deleted:
+        """Read the GPUs of runs whose metadata was uploaded before GPUs were tracked (in the
+        background: every replica may, and the second finds nothing left)."""
+        try:
+            records = await self.db.fetch(
+                f"SELECT {RUN_COLUMNS}, {PROJECT_COLUMNS} FROM runs r "
+                "JOIN projects p ON p.pk = r.project_pk JOIN orgs o ON o.pk = p.org_pk "
+                "JOIN run_files f ON f.run_pk = r.pk AND f.name = $1 "
+                "WHERE r.gpu_count IS NULL AND r.deleted_at IS NULL",
+                self.METADATA_FILE,
+            )
+            runs = [Run.load(record, Project.load(record, 28)) for record in records]
+            if not runs:
                 return
-            async with self.db.pool.acquire() as conn, conn.transaction():
-                locked = await conn.fetchrow(self.LOCK_RUN, run.pk)
-                assert locked is not None
-                old, _, updated_at, _, lines, *_ = locked
-                await conn.execute("UPDATE runs SET state = $2 WHERE pk = $1", run.pk, state)
-                changes = values.diff({"state": old}, {"state": state})
-                await values.write(conn, run.project.pk, [(run.pk, changes)])
-                data = {"run": run.name, "state": state, "lines": lines, "updated_at": updated_at}
-                message = live.event_message(run.project.pk, run.name, "run", data)
-                await live.publish(conn, [message])
-            run.state = state
-            project = run.project
-            project.table.set(run.row, "state", state)
-            self._sync_state(run, project)
 
-    async def mark_crashed_runs(self) -> list[Run]:
-        """Mark active runs whose client stopped sending heartbeats as crashed."""
+            def read() -> list[tuple[str | None, int]]:
+                found = []
+                for run in runs:
+                    path = self.file_path(run, self.METADATA_FILE)
+                    try:
+                        data = path.read_bytes() if path is not None else b""
+                    except OSError:
+                        data = b""
+                    found.append(self._read_gpus(data))
+                return found
+
+            for run, (gpu_type, count) in zip(runs, await asyncio.to_thread(read), strict=True):
+                async with self.db.pool.acquire() as conn, conn.transaction():
+                    locked = await conn.fetchrow(self.LOCK_RUN, run.pk)
+                    if locked is not None:
+                        await self._set_detected_gpus(conn, run, locked, gpu_type, count)
+            log.info("read the GPUs of %d runs from their metadata", len(runs))
+        except Exception:
+            log.exception("could not read the GPUs of older runs")
+
+    async def mark_crashed_runs(self) -> list[str]:
+        """Mark active runs whose client stopped sending heartbeats as crashed; returns their
+        paths. Safe on every replica (D81): each stale run is claimed by one of them."""
         cutoff = time.time() - self.settings.crash_timeout
-        stale = [run for run in self.active.values() if run.heartbeat_at < cutoff]
-        for run in stale:
-            if run.heartbeat_at < cutoff and run.active:
-                await self.set_state(run, "crashed")
-        return stale
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            records = await conn.fetch(
+                """
+                WITH stale AS (
+                    SELECT pk FROM runs
+                    WHERE state = ANY($1) AND deleted_at IS NULL
+                        AND heartbeat_at < to_timestamp($2)
+                    ORDER BY pk FOR UPDATE SKIP LOCKED
+                )
+                UPDATE runs r SET state = 'crashed' FROM stale, projects p, orgs o
+                WHERE r.pk = stale.pk AND p.pk = r.project_pk AND o.pk = p.org_pk
+                RETURNING r.pk, r.project_pk, r.name, r.history_line_count,
+                    extract(epoch FROM r.updated_at)::float8, o.name, p.name
+                """,
+                list(ACTIVE_STATES),
+                cutoff,
+            )
+            by_project: dict[int, list[tuple[int, values.Changes]]] = {}
+            messages = []
+            for pk, project_pk, name, lines, updated_at, *_ in records:
+                changes = values.Changes()
+                changes.set("state", "running", "crashed")
+                by_project.setdefault(project_pk, []).append((pk, changes))
+                data = {"run": name, "state": "crashed", "lines": lines, "updated_at": updated_at}
+                messages.append(live.event_message(project_pk, name, "run", data))
+            for project_pk, runs in sorted(by_project.items()):
+                await values.write(conn, project_pk, runs)
+            await live.publish(conn, messages)
+        if records:
+            self._work_wanted.set()
+        return [f"{entity}/{project}/{name}" for _, _, name, _, _, entity, project in records]
 
     # ------------------------------------------------------------------ projects and edits
 
@@ -1342,88 +1258,168 @@ class Store:
         "gpu_count": "gpu_count_override",
     }
 
+    async def _insert_project(
+        self,
+        conn: asyncpg.Connection,
+        org: Org,
+        name: str,
+        description: str | None = None,
+        created_at: float | None = None,
+    ) -> Project | None:
+        """Insert a project row (with ``org`` locked); None if the name is taken.
+
+        ``created_at`` is for projects copied from elsewhere, which keep their creation time."""
+        # Stamped with this process's clock, like runs: the database's can run ahead of it, which
+        # would date a project created by a run's upload after that run started.
+        record = await conn.fetchrow(
+            "INSERT INTO projects (org_pk, name, description, created_at, updated_at) "
+            "VALUES ($1, $2, $3, to_timestamp($4), to_timestamp($4)) "
+            "ON CONFLICT (org_pk, name) WHERE deleted_at IS NULL DO NOTHING "
+            "RETURNING pk, name, description, "
+            "extract(epoch FROM created_at)::float8, extract(epoch FROM updated_at)::float8",
+            org.pk,
+            name,
+            description,
+            time.time() if created_at is None else created_at,
+        )
+        if record is None:
+            return None
+        pk, *rest = record
+        return Project(pk, org, *rest)
+
     async def create_project(
         self, entity: str, name: str, description: str | None = None
     ) -> Project:
-        async with self._catalog:
-            project = None
-            if (entity, name) not in self.projects:
-                project = await self._insert_project(self.org(entity), name, description)
-            if project is None:
-                raise Conflict(f"project {entity}/{name} already exists")
-            return project
+        org = await self.org(entity)
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            await self._lock_org(conn, org)
+            project = await self._insert_project(conn, org, name, description)
+        if project is None:
+            raise Conflict(f"project {entity}/{name} already exists")
+        return project
 
-    async def update_project(self, project: Project, fields: dict[str, Any]) -> None:
-        """Rename a project and/or change its description (the keys present in ``fields``)."""
-        async with self._locked([project]):
-            if project.deleted:
-                raise NotFound(f"project {project.entity}/{project.name} not found")
-            name = fields.get("name") or project.name
-            renamed = name != project.name
-            if renamed and project.active:
-                # Their clients address them by the old name in every request.
-                raise Conflict("cannot rename a project with active runs", project.active)
-            description = fields.get("description", project.description)
-            async with self._catalog:
-                if renamed and (project.entity, name) in self.projects:
-                    raise Conflict(f"project {project.entity}/{name} already exists")
-                now = time.time()
-                async with self.db.pool.acquire() as conn, conn.transaction():
-                    await conn.execute(
-                        "UPDATE projects SET name = $2, description = $3, "
-                        "updated_at = to_timestamp($4) WHERE pk = $1",
-                        project.pk,
-                        name,
-                        description,
-                        now,
-                    )
-                    if renamed:
-                        # Dashboards address the project by name: tell them, then end their
-                        # streams.
-                        event = {"renamed_to": name}
-                        await live.publish(
-                            conn,
-                            [
-                                live.event_message(project.pk, None, "project", event),
-                                live.close_message(project.pk),
-                            ],
-                        )
-                if renamed:
-                    del self.projects[project.key]
-                    project.name = name
-                    self.projects[project.key] = project
-                project.description = description
-                project.updated_at = now
+    async def ensure_project(
+        self,
+        entity: str,
+        name: str,
+        description: str | None = None,
+        created_at: float | None = None,
+    ) -> Project:
+        """The project ``entity/name``, created if it doesn't exist (as ``wandb.init`` does).
+
+        Organizations are never created implicitly: an unknown ``entity`` is ``NotFound``.
+        """
+        while True:
+            project = await self.project(entity, name)
+            if project is not None:
+                return project
+            org = await self.org(entity)
+            async with self.db.pool.acquire() as conn, conn.transaction():
+                await self._lock_org(conn, org)
+                project = await self._insert_project(conn, org, name, description, created_at)
+            if project is not None:
+                return project
+            # Another request created it meanwhile: read that one.
+
+    async def update_project(self, project: Project, fields: dict[str, Any]) -> Project:
+        """Rename a project or change its description; returns it as it now is."""
+        name = fields.get("name") or project.name
+        renamed = name != project.name
+        description = fields.get("description", project.description)
+        now = time.time()
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            await self._lock_org(conn, project.org)
+            await self._lock_projects(conn, [project], update=True)
+            if renamed:
+                active = await self.active_runs(project)
+                if active:
+                    # Their clients address them by the old name in every request.
+                    raise Conflict("cannot rename a project with active runs", active)
+            try:
+                await conn.execute(
+                    "UPDATE projects SET name = $2, description = $3, "
+                    "updated_at = to_timestamp($4) WHERE pk = $1",
+                    project.pk,
+                    name,
+                    description,
+                    now,
+                )
+            except asyncpg.UniqueViolationError:
+                raise Conflict(f"project {project.entity}/{name} already exists") from None
+            if renamed:
+                # Dashboards address the project by name: tell them, then end their streams.
+                event = {"renamed_to": name}
+                await live.publish(
+                    conn,
+                    [
+                        live.event_message(project.pk, None, "project", event),
+                        live.close_message(project.pk),
+                    ],
+                )
+        return Project(project.pk, project.org, name, description, project.created_at, now)
 
     async def delete_project(self, project: Project, force: bool = False) -> None:
-        """Delete a project with all its runs; refused while runs are active unless ``force``."""
-        async with self._locked([project], all_runs=True):
-            if project.deleted:
-                raise NotFound(f"project {project.entity}/{project.name} not found")
-            if project.active and not force:
-                raise Conflict("project has active runs (pass force=true)", project.active)
-            now = time.time()
-            async with self.db.pool.acquire() as conn, conn.transaction():
-                # Its ledger entries lose the project: keep which deleted project they were of.
-                deleted = await conn.fetchval(
-                    "INSERT INTO deleted_projects (org_pk, name, deleted_at) "
-                    "SELECT $1, $2, to_timestamp($3) "
-                    "WHERE EXISTS (SELECT FROM gpu_usage WHERE project_pk = $4) RETURNING pk",
-                    project.org.pk,
-                    project.name,
-                    now,
+        """Delete a project with all its runs; refused while runs are active unless ``force``.
+
+        The delete commits at once; a background purge removes the rows and files (D80)."""
+        now = time.time()
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            await self._lock_org(conn, project.org)
+            await self._lock_projects(conn, [project], update=True)
+            await self._delete_projects(conn, [project], force, now)
+        self._work_wanted.set()
+
+    async def _delete_projects(
+        self,
+        conn: asyncpg.Connection,
+        projects: Sequence[Project],
+        force: bool,
+        now: float,
+        org: bool = False,
+    ) -> None:
+        """Mark ``projects`` (locked) and their runs deleted, telling their dashboards."""
+        if not projects:
+            return
+        by_pk = {project.pk: project for project in projects}
+        # Waits for writes to their runs in flight, so the states are the latest.
+        runs = await conn.fetch(
+            "UPDATE runs SET deleted_at = to_timestamp($2) "
+            "WHERE project_pk = ANY($1) AND deleted_at IS NULL RETURNING project_pk, name, state",
+            list(by_pk),
+            now,
+        )
+        active = [(by_pk[pk], name) for pk, name, state in runs if state in ACTIVE_STATES]
+        if active and not force:
+            # An org's delete names them with their project.
+            names = [f"{p.name}/{name}" if org else name for p, name in active]
+            what = "organization" if org else "project"
+            raise Conflict(f"{what} has active runs (pass force=true)", names)
+        await self._mark_discarded(
+            conn, [(project.entity, project.name, name) for project, name in active]
+        )
+        for project in projects:
+            # Its ledger entries lose the project: keep which deleted project they were of.
+            deleted = await conn.fetchval(
+                "INSERT INTO deleted_projects (org_pk, name, deleted_at) "
+                "SELECT $1, $2, to_timestamp($3) "
+                "WHERE EXISTS (SELECT FROM gpu_usage WHERE project_pk = $4) RETURNING pk",
+                project.org.pk,
+                project.name,
+                now,
+                project.pk,
+            )
+            if deleted is not None:
+                await conn.execute(
+                    "UPDATE gpu_usage SET deleted_project_pk = $1 WHERE project_pk = $2",
+                    deleted,
                     project.pk,
                 )
-                if deleted is not None:
-                    await conn.execute(
-                        "UPDATE gpu_usage SET deleted_project_pk = $1 WHERE project_pk = $2",
-                        deleted,
-                        project.pk,
-                    )
-                await conn.execute("DELETE FROM projects WHERE pk = $1", project.pk)
-                await live.publish(conn, self._closing(project))
-            pks = self._drop_project(project)
-        await self._remove_files(pks)
+        await conn.execute(
+            "UPDATE projects SET deleted_at = to_timestamp($2) WHERE pk = ANY($1)",
+            list(by_pk),
+            now,
+        )
+        await live.publish(conn, [m for project in projects for m in self._closing(project)])
 
     @staticmethod
     def _closing(project: Project) -> list[str]:
@@ -1431,38 +1427,20 @@ class Store:
         event = live.event_message(project.pk, None, "project", {"deleted": True})
         return [event, live.close_message(project.pk)]
 
-    def _drop_project(self, project: Project) -> list[int]:
-        """Forget a project whose delete committed; returns its runs' pks."""
-        pks = [run.pk for run in project.runs]
-        self._mark_deleted_live(project.active.values())
-        for run in project.runs:
-            self._forget_run(run)
-        del self.projects[project.key]
-        del self.projects_by_pk[project.pk]
-        project.deleted = True
-        return pks
-
     # ------------------------------------------------------------------ imports
 
     async def import_project(
         self, org: Org, name: str, description: str | None, created_at: float | None
     ) -> Project:
         """The project ``name`` of ``org``, created with the given creation time if missing."""
-        async with self._catalog:
-            if org.deleted:
-                raise NotFound(f"organization {org.name} not found")
-            project = self.projects.get((org.name, name))
-            if project is None:
-                project = await self._insert_project(org, name, description, created_at)
-                assert project is not None  # only created under _catalog, and it was missing
-            return project
+        return await self.ensure_project(org.name, name, description, created_at)
 
     async def import_run(self, project: Project, data: ImportedRun) -> Run | None:
         """Add a finished run copied from elsewhere, with its timestamps, series, logs and
         files; None if the project already has a run of that name (so imports can resume).
 
-        Series are stored as one chunk per metric straight away, and its lifetime is entered in the usage
-        ledger as if it had sent heartbeats throughout.
+        Series are stored as one chunk per metric straight away, and its lifetime is entered
+        in the usage ledger as if it had sent heartbeats throughout.
         """
         if data.state in Run.ACTIVE_STATES:
             raise ValueError(f"cannot import a {data.state} run")
@@ -1485,175 +1463,124 @@ class Store:
         history, events, logs = (
             self._pg_text(lines) for lines in (data.history, data.events, data.logs)
         )
-
-        async with project.lock:
-            if project.deleted:
-                raise NotFound(f"project {project.entity}/{project.name} not found")
-            if data.name in project.by_name:
-                return None
-            async with self.db.pool.acquire() as conn, conn.transaction():
-                pk = await conn.fetchval(
-                    """
-                    INSERT INTO runs (project_pk, name, display_name, state, created_at,
-                        updated_at, heartbeat_at, config, summary, tags, notes, group_name,
-                        job_type, host, program, commit_hash, sweep, exitcode,
-                        history_line_count, events_line_count, log_line_count, owner_pk,
-                        gpu_type, gpu_count, metric_defs)
-                    VALUES ($1, $2, $3, $4, to_timestamp($5), to_timestamp($6), to_timestamp($6),
-                        $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
-                        $22, $23, $24::jsonb)
-                    RETURNING pk
-                    """,
-                    project.pk,
-                    data.name,
-                    data.display_name,
-                    data.state,
-                    data.created_at,
-                    heartbeat_at,
-                    orjson.dumps(data.config).decode() if data.config is not None else None,
-                    orjson.dumps(data.summary).decode() if data.summary is not None else None,
-                    data.tags,
-                    data.notes,
-                    data.group,
-                    data.job_type,
-                    data.host,
-                    data.program,
-                    data.commit,
-                    data.sweep,
-                    data.exitcode,
-                    len(history),
-                    len(events),
-                    len(logs),
-                    data.owner,
-                    gpu_type,
-                    gpu_count,
-                    orjson.dumps(parse_metric_defs(data.config) if data.config else []).decode(),
-                )
-                for table, lines in (("history", history), ("events", events), ("logs", logs)):
-                    if lines:
-                        await conn.copy_records_to_table(
-                            table,
-                            records=[(pk, i, line) for i, line in enumerate(lines)],
-                            columns=("run_pk", "line", "data"),
-                        )
-                for stream, hist in series.items():
-                    await write_chunks(conn, pk, stream, 0, hist.series)
-                runtime = sum(seconds for _, seconds in ledger)
-                imported = {
-                    "name": data.name,
-                    "display_name": data.display_name,
-                    "state": data.state,
-                    "created_at": data.created_at,
-                    "updated_at": heartbeat_at,
-                    "heartbeat_at": heartbeat_at,
-                    "tags": list(data.tags),
-                    "group": data.group,
-                    "job_type": data.job_type,
-                    "notes": data.notes,
-                    "host": data.host,
-                    "program": data.program,
-                    "commit": data.commit,
-                    "sweep": data.sweep,
-                    "exitcode": data.exitcode,
-                    "owner": data.owner,
-                    "gpu_type": gpu_type,
-                    "gpu_count": gpu_count,
-                    "gpu_hours": values.gpu_hours(runtime, gpu_count),
-                    **(values.config_columns(data.config) if data.config else {}),
-                    **(values.summary_columns(data.summary) if data.summary else {}),
-                }
-                await values.write(conn, project.pk, [(pk, values.diff({}, imported))])
-                event = {"run": data.name, "display_name": data.display_name, "state": data.state}
-                await live.publish(conn, [live.event_message(project.pk, None, "created", event)])
-                if ledger:
-                    await conn.copy_records_to_table(
-                        "gpu_usage",
-                        records=[
-                            (
-                                project.org.pk,
-                                project.pk,
-                                pk,
-                                data.name,
-                                month,
-                                seconds,
-                                gpu_type,
-                                gpu_count,
-                            )
-                            for month, seconds in ledger
-                        ],
-                        columns=(
-                            "org_pk",
-                            "project_pk",
-                            "run_pk",
-                            "run_name",
-                            "month",
-                            "seconds",
-                            "gpu_type",
-                            "gpu_count",
-                        ),
-                    )
-                if data.files:
-                    # Written before the commit: if the commit fails, the startup sweep removes
-                    # the files of a run that doesn't exist.
-                    root = self.files_dir / str(pk)
-
-                    def write() -> None:
-                        for name, content in data.files.items():
-                            path = root.joinpath(*paths[name])
-                            path.parent.mkdir(parents=True, exist_ok=True)
-                            path.write_bytes(content)
-
-                    await asyncio.to_thread(write)
-                    await conn.executemany(
-                        "INSERT INTO run_files (run_pk, name, size, updated_at) "
-                        "VALUES ($1, $2, $3, to_timestamp($4))",
-                        [
-                            (pk, name, len(content), heartbeat_at)
-                            for name, content in data.files.items()
-                        ],
-                    )
-
-            run = Run(
-                pk=pk,
-                project=project,
-                name=data.name,
-                row=project.table.add_row(),
-                display_name=data.display_name,
-                state=data.state,
-                created_at=data.created_at,
-                updated_at=heartbeat_at,
-                heartbeat_at=heartbeat_at,
-                tags=list(data.tags),
-                notes=data.notes,
-                group=data.group,
-                job_type=data.job_type,
-                host=data.host,
-                program=data.program,
-                commit=data.commit,
-                sweep=data.sweep,
-                exitcode=data.exitcode,
-                owner=data.owner,
-                gpu_type_detected=gpu_type,
-                gpu_count_detected=gpu_count,
-                history_line_count=len(history),
-                events_line_count=len(events),
-                log_line_count=len(logs),
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            await self._lock_projects(conn, [project])
+            pk = await conn.fetchval(
+                """
+                INSERT INTO runs (project_pk, name, display_name, state, created_at,
+                    updated_at, heartbeat_at, config, summary, tags, notes, group_name,
+                    job_type, host, program, commit_hash, sweep, exitcode,
+                    history_line_count, events_line_count, log_line_count, owner_pk,
+                    gpu_type, gpu_count, metric_defs)
+                VALUES ($1, $2, $3, $4, to_timestamp($5), to_timestamp($6), to_timestamp($6),
+                    $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
+                    $22, $23, $24::jsonb)
+                ON CONFLICT (project_pk, name) WHERE deleted_at IS NULL DO NOTHING
+                RETURNING pk
+                """,
+                project.pk,
+                data.name,
+                data.display_name,
+                data.state,
+                data.created_at,
+                heartbeat_at,
+                orjson.dumps(data.config).decode() if data.config is not None else None,
+                orjson.dumps(data.summary).decode() if data.summary is not None else None,
+                data.tags,
+                data.notes,
+                data.group,
+                data.job_type,
+                data.host,
+                data.program,
+                data.commit,
+                data.sweep,
+                data.exitcode,
+                len(history),
+                len(events),
+                len(logs),
+                data.owner,
+                gpu_type,
+                gpu_count,
+                orjson.dumps(parse_metric_defs(data.config) if data.config else []).decode(),
             )
-            project.add(run)
-            self.runs_by_pk[pk] = run
-            for month, seconds in ledger:
-                run.usage[month] = Usage(month, seconds)
-            table_values = run.attributes()
-            if data.config:
-                table_values.update(self._config_columns(data.config))
-            if data.summary:
-                table_values.update(self._summary_columns(data.summary))
-            project.table.set_many(run.row, table_values)
+            if pk is None:
+                return None
+            for table, lines in (("history", history), ("events", events), ("logs", logs)):
+                if lines:
+                    await conn.copy_records_to_table(
+                        table,
+                        records=[(pk, i, line) for i, line in enumerate(lines)],
+                        columns=("run_pk", "line", "data"),
+                    )
             for stream, hist in series.items():
-                run.note_metrics(hist.series, stream)
-            # Imported runs are older than most: keep the rows in creation order.
-            self._reindex(project, sorted(project.runs, key=lambda r: (r.created_at, r.pk)))
-        return run
+                await write_chunks(conn, pk, stream, 0, hist.series)
+            runtime = sum(seconds for _, seconds in ledger)
+            imported = {
+                "name": data.name,
+                "display_name": data.display_name,
+                "state": data.state,
+                "created_at": data.created_at,
+                "updated_at": heartbeat_at,
+                "heartbeat_at": heartbeat_at,
+                "tags": list(data.tags),
+                "group": data.group,
+                "job_type": data.job_type,
+                "notes": data.notes,
+                "host": data.host,
+                "program": data.program,
+                "commit": data.commit,
+                "sweep": data.sweep,
+                "exitcode": data.exitcode,
+                "owner": data.owner,
+                "gpu_type": gpu_type,
+                "gpu_count": gpu_count,
+                "gpu_hours": values.gpu_hours(runtime, gpu_count),
+                **(values.config_columns(data.config) if data.config else {}),
+                **(values.summary_columns(data.summary) if data.summary else {}),
+            }
+            await values.write(conn, project.pk, [(pk, values.diff({}, imported))])
+            event = {"run": data.name, "display_name": data.display_name, "state": data.state}
+            await live.publish(conn, [live.event_message(project.pk, None, "created", event)])
+            if ledger:
+                await conn.copy_records_to_table(
+                    "gpu_usage",
+                    records=[
+                        (project.org.pk, project.pk, pk, data.name, month, seconds)
+                        + (gpu_type, gpu_count)
+                        for month, seconds in ledger
+                    ],
+                    columns=(
+                        "org_pk",
+                        "project_pk",
+                        "run_pk",
+                        "run_name",
+                        "month",
+                        "seconds",
+                        "gpu_type",
+                        "gpu_count",
+                    ),
+                )
+            if data.files:
+                # Written before the commit: if the commit fails, the purge removes the files
+                # of a run that doesn't exist.
+                root = self.files_dir / str(pk)
+
+                def write() -> None:
+                    for name, content in data.files.items():
+                        path = root.joinpath(*paths[name])
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        path.write_bytes(content)
+
+                await asyncio.to_thread(write)
+                await conn.executemany(
+                    "INSERT INTO run_files (run_pk, name, size, updated_at) "
+                    "VALUES ($1, $2, $3, to_timestamp($4))",
+                    [
+                        (pk, name, len(content), heartbeat_at)
+                        for name, content in data.files.items()
+                    ],
+                )
+        return await self.project_run(project, data.name)
 
     # ------------------------------------------------------------------ organizations
 
@@ -1661,88 +1588,63 @@ class Store:
         """Create the organization ``name`` (its ID, which never changes), shown as
         ``display_name`` (``name`` if not given)."""
         display_name = display_name if display_name is not None else name
-        async with self._catalog:
-            if name in self.orgs:
+        # Raising inside the transaction rolls the insert back.
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            record = await conn.fetchrow(
+                "INSERT INTO orgs (name, display_name, created_at, updated_at) "
+                "VALUES ($1, $2, now(), now()) "
+                "ON CONFLICT (name) WHERE deleted_at IS NULL DO NOTHING "
+                "RETURNING pk, name, extract(epoch FROM created_at)::float8, "
+                "extract(epoch FROM updated_at)::float8",
+                name,
+                display_name,
+            )
+            if record is None:
                 raise Conflict(f"organization {name} already exists")
-            # Raising inside the transaction rolls the insert back.
-            async with self.db.pool.acquire() as conn, conn.transaction():
-                record = await conn.fetchrow(
-                    "INSERT INTO orgs (name, display_name, created_at, updated_at) "
-                    "VALUES ($1, $2, now(), now()) "
-                    "ON CONFLICT (name) WHERE deleted_at IS NULL DO NOTHING "
-                    "RETURNING pk, name, extract(epoch FROM created_at)::float8, "
-                    "extract(epoch FROM updated_at)::float8",
-                    name,
-                    display_name,
-                )
-                if record is None:
-                    raise Conflict(f"organization {name} already exists")
-                # S3 bucket names start with the org's pk in five digits (D53).
-                if record[0] > self.MAX_ORG_PK:
-                    raise Conflict("this server can't hold more organizations")
-            return self._add_org(Org(*record, display_name=display_name))
-
-    @contextlib.asynccontextmanager
-    async def _org_locked(self, org: Org, all_runs: bool = False) -> AsyncGenerator[list[Project]]:
-        """Hold the locks of every project of ``org``, then ``_catalog`` (so no project can be
-        created in it meanwhile); yields the projects."""
-        while True:
-            projects = self._org_projects(org)
-            async with self._locked(projects, all_runs=all_runs), self._catalog:
-                if org.deleted:
-                    raise NotFound(f"organization {org.name} not found")
-                if set(self._org_projects(org)) != set(projects):
-                    continue  # a project was created while we waited: lock it too
-                yield projects
-                return
+            # S3 bucket names start with the org's pk in five digits (D53).
+            if record[0] > self.MAX_ORG_PK:
+                raise Conflict("this server can't hold more organizations")
+        return Org(*record, display_name=display_name)
 
     async def set_org_display_name(self, org: Org, display_name: str) -> None:
         """Change what an organization is called. Its ID (``name``), which its projects, runs
         and clients address it by, never changes."""
-        async with self._catalog:
-            if org.deleted:
-                raise NotFound(f"organization {org.name} not found")
-            if display_name == org.display_name:
-                return
-            now = time.time()
-            await self.db.execute(
-                "UPDATE orgs SET display_name = $2, updated_at = to_timestamp($3) WHERE pk = $1",
-                org.pk,
-                display_name,
-                now,
-            )
-            org.display_name = display_name
-            org.updated_at = now
+        if display_name == org.display_name:
+            return
+        found = await self.db.fetchval(
+            "UPDATE orgs SET display_name = $2, updated_at = now() "
+            "WHERE pk = $1 AND deleted_at IS NULL RETURNING pk",
+            org.pk,
+            display_name,
+        )
+        if found is None:
+            raise NotFound(f"organization {org.name} not found")
+        org.display_name = display_name
 
     async def delete_org(self, org: Org, force: bool = False) -> None:
         """Delete an organization with all its projects and runs; refused while runs are
-        active unless ``force``."""
-        async with self._org_locked(org, all_runs=True) as projects:
-            active = [f"{p.name}/{run}" for p in projects for run in p.active]
-            if active and not force:
-                raise Conflict("organization has active runs (pass force=true)", active)
-            # It waits on the locks held here, so it stops before writing anything more.
-            await self.imports.cancel(org)
-            async with self.db.pool.acquire() as conn, conn.transaction():
-                # Its S3 buckets outlive it until the background purge removes them upstream.
-                await self.s3.delete_org_buckets(conn, org)
-                await conn.execute("DELETE FROM orgs WHERE pk = $1", org.pk)
-                await live.publish(conn, [m for p in projects for m in self._closing(p)])
-            pks = [pk for project in projects for pk in self._drop_project(project)]
-            del self.orgs[org.name]
-            del self.orgs_by_pk[org.pk]
-            org.deleted = True
-            self.imports.forget(org)
+        active unless ``force``. A background purge removes the rows and files (D80)."""
+        # Its import stops first: it would wait on the locks taken below.
+        await self.imports.cancel(org)
+        now = time.time()
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            await self._lock_org(conn, org, update=True)
+            projects = await self.projects([org])
+            await self._lock_projects(conn, projects, update=True)
+            await self._delete_projects(conn, projects, force, now, org=True)
+            # Its S3 buckets outlive it until the background purge removes them upstream, no
+            # longer anyone's (as the org's row will be gone).
+            await self.s3.delete_org_buckets(conn, org)
+            await conn.execute("UPDATE s3_buckets SET org_pk = NULL WHERE org_pk = $1", org.pk)
+            # Its avatar is released now: the row waits for the purge without it.
+            await conn.execute(
+                "UPDATE orgs SET deleted_at = to_timestamp($2), avatar = NULL WHERE pk = $1",
+                org.pk,
+                now,
+            )
         self.s3.purge_later()
         await self.avatars.release(org.avatar)
-        await self._remove_files(pks)
-
-    def forget_owner(self, user: int) -> None:
-        """Runs of a deleted user stay, without an owner (the database sets it to NULL)."""
-        for run in self.runs_by_pk.values():
-            if run.owner == user:
-                run.owner = None
-                run.project.table.clear(run.row, "owner")
+        self._work_wanted.set()
 
     async def edit_runs(
         self,
@@ -1752,259 +1654,291 @@ class Store:
         add_tags: Sequence[str] = (),
         remove_tags: Sequence[str] = (),
     ) -> list[Run]:
-        """Set ``edits`` (``EDITABLE`` attributes; None clears) on runs, and add or remove tags.
+        """Set ``edits`` (``EDITABLE`` attributes; None clears) on runs, and add or remove tags;
+        returns the runs that still existed.
 
         Last write wins: a client that later sends tags or notes overwrites these edits.
         """
-        async with self._locked([project], runs):
-            runs = [run for run in runs if not run.deleted and run.project is project]
+        if not runs:
+            return []
+        columns = {**self.FIELD_COLUMNS, **self.OVERRIDES}
+        sets = {columns[key]: v for key, v in edits.items() if key != "tags"}
+        assignments = "".join(f", {col} = ${i}" for i, col in enumerate(sets, start=4))
+        now = time.time()
+        # Edited fields by run attribute, overrides under their own name.
+        fields = {self.OVERRIDES.get(key, key): v for key, v in edits.items() if key != "tags"}
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            rows = await conn.fetch(
+                "SELECT pk, display_name, notes, tags, group_name, job_type, description, "
+                "extract(epoch FROM updated_at)::float8, gpu_type, gpu_count, "
+                "gpu_type_override, gpu_count_override, state, history_line_count, "
+                "(SELECT coalesce(sum(seconds), 0) FROM gpu_usage u WHERE u.run_pk = r.pk) "
+                "FROM runs r WHERE pk = ANY($1) AND project_pk = $2 AND deleted_at IS NULL "
+                "ORDER BY pk FOR UPDATE",
+                [run.pk for run in runs],
+                project.pk,
+            )
+            found = {row[0]: row for row in rows}
+            runs = [run for run in runs if run.pk in found]
             if not runs:
                 return []
-            columns = {**self.FIELD_COLUMNS, **self.OVERRIDES}
-            sets = {columns[key]: v for key, v in edits.items() if key != "tags"}
-            assignments = "".join(f", {col} = ${i}" for i, col in enumerate(sets, start=4))
-            now = time.time()
-            # Edited fields by run attribute, overrides under their own name.
-            fields = {self.OVERRIDES.get(key, key): v for key, v in edits.items() if key != "tags"}
-            async with self.db.pool.acquire() as conn, conn.transaction():
-                rows = await conn.fetch(
-                    "SELECT pk, display_name, notes, tags, group_name, job_type, description, "
-                    "extract(epoch FROM updated_at)::float8, gpu_type, gpu_count, "
-                    "gpu_type_override, gpu_count_override, state, history_line_count, "
-                    "(SELECT coalesce(sum(seconds), 0) FROM gpu_usage u WHERE u.run_pk = r.pk) "
-                    "FROM runs r WHERE pk = ANY($1) ORDER BY pk FOR UPDATE",
-                    [run.pk for run in runs],
+            tags, effective, olds, news = [], [], [], []
+            for run in runs:
+                row = found[run.pk]
+                current = (
+                    [str(tag) for tag in edits.get("tags") or []]
+                    if "tags" in edits
+                    else list(row[3])
                 )
-                found = {row[0]: row for row in rows}
-                tags, effective, olds, news = [], [], [], []
-                for run in runs:
-                    row = found[run.pk]
-                    current = (
-                        [str(tag) for tag in edits.get("tags") or []]
-                        if "tags" in edits
-                        else list(row[3])
+                current = list(dict.fromkeys([*current, *add_tags]))
+                tags.append([tag for tag in current if tag not in remove_tags])
+                old = dict(
+                    zip(
+                        ("display_name", "notes", "tags", "group", "job_type", "description"),
+                        row[1:7],
+                        strict=True,
                     )
-                    current = list(dict.fromkeys([*current, *add_tags]))
-                    tags.append([tag for tag in current if tag not in remove_tags])
-                    old = dict(
-                        zip(
-                            ("display_name", "notes", "tags", "group", "job_type", "description"),
-                            row[1:7],
-                            strict=True,
-                        )
-                    )
-                    old["tags"] = list(old["tags"])
-                    old["gpu_type"] = row[10] if row[10] is not None else row[8]
-                    old["gpu_count"] = row[11] if row[11] is not None else row[9]
-                    old["gpu_hours"] = values.gpu_hours(row[14], old["gpu_count"])
-                    old["updated_at"] = row[7]
-                    # What each run's GPUs will be, for its usage ledger rows too.
-                    gpu_type = fields.get("gpu_type_override", row[10])
-                    count = fields.get("gpu_count_override", row[11])
-                    gpus_after = (
-                        gpu_type if gpu_type is not None else row[8],
-                        count if count is not None else row[9],
-                    )
-                    effective.append(gpus_after)
-                    new = {**old, **{k: v for k, v in fields.items() if k in old}}
-                    new["tags"] = tags[-1]
-                    new["gpu_type"], new["gpu_count"] = gpus_after
-                    new["gpu_hours"] = values.gpu_hours(row[14], gpus_after[1])
-                    new["updated_at"] = now
-                    olds.append(old)
-                    news.append(new)
-                usage = ""
-                if self.OVERRIDES.keys() & edits.keys():
-                    usage = (
-                        "WITH usage AS (UPDATE gpu_usage u SET gpu_type = g.gpu_type, "
-                        "gpu_count = g.gpu_count FROM unnest($1::bigint[], "
-                        f"${len(sets) + 4}::text[], ${len(sets) + 5}::int[]) "
-                        "AS g(pk, gpu_type, gpu_count) WHERE u.run_pk = g.pk) "
-                    )
-                # One statement for the whole selection; each run's tags travel as JSON.
-                await conn.execute(
-                    f"{usage}UPDATE runs SET tags = "
-                    "ARRAY(SELECT jsonb_array_elements_text(t.tags::jsonb)), "
-                    f"updated_at = to_timestamp($3){assignments} "
-                    "FROM unnest($1::bigint[], $2::text[]) AS t(pk, tags) WHERE runs.pk = t.pk",
-                    [run.pk for run in runs],
-                    [orjson.dumps(run_tags).decode() for run_tags in tags],
-                    now,
-                    *sets.values(),
-                    *([[t for t, _ in effective], [c for _, c in effective]] if usage else []),
                 )
-                await values.write(
-                    conn,
-                    project.pk,
-                    [
-                        (run.pk, values.diff(old, new))
-                        for run, old, new in zip(runs, olds, news, strict=True)
-                    ],
+                old["tags"] = list(old["tags"])
+                old["gpu_type"] = row[10] if row[10] is not None else row[8]
+                old["gpu_count"] = row[11] if row[11] is not None else row[9]
+                old["gpu_hours"] = values.gpu_hours(row[14], old["gpu_count"])
+                old["updated_at"] = row[7]
+                # What each run's GPUs will be, for its usage ledger rows too.
+                gpu_type = fields.get("gpu_type_override", row[10])
+                count = fields.get("gpu_count_override", row[11])
+                gpus_after = (
+                    gpu_type if gpu_type is not None else row[8],
+                    count if count is not None else row[9],
                 )
-                messages = []
-                for run, old, new in zip(runs, olds, news, strict=True):
-                    row = found[run.pk]
-                    status = {"run": run.name, "state": row[12], "lines": row[13]}
-                    status["updated_at"] = now
-                    edited = ("display_name", "notes", "tags", "group", "job_type", "description")
-                    changed = {key: new[key] for key in edited if new[key] != old[key]}
-                    overrides = {"gpu_type": row[10], "gpu_count": row[11]}
-                    for attribute, field_name in self.OVERRIDES.items():
-                        if field_name in fields and fields[field_name] != overrides[attribute]:
-                            changed[attribute] = new[attribute]  # the effective value
-                    gpus = ("gpu_type", "gpu_count", "gpu_hours")
-                    if any(new[key] != old[key] for key in gpus):
-                        attributes = {key: new[key] for key in gpus}
-                        event = {**status, "attributes": attributes}
-                        messages.append(live.event_message(project.pk, run.name, "run", event))
-                        changed.pop("gpu_type", None)
-                        changed.pop("gpu_count", None)
-                    if changed:
-                        event = {**status, "attributes": changed}
-                        messages.append(live.event_message(project.pk, run.name, "run", event))
-                await live.publish(conn, messages)
-            for run, run_tags in zip(runs, tags, strict=True):
-                changed = {
-                    key: value for key, value in fields.items() if getattr(run, key) != value
-                }
-                if run_tags != run.tags:
-                    changed["tags"] = run_tags
-                gpus_before = (run.gpu_type, run.gpu_count)
-                for key, value in changed.items():
-                    setattr(run, key, value)
+                effective.append(gpus_after)
+                new = {**old, **{k: v for k, v in fields.items() if k in old}}
+                new["tags"] = tags[-1]
+                new["gpu_type"], new["gpu_count"] = gpus_after
+                new["gpu_hours"] = values.gpu_hours(row[14], gpus_after[1])
+                new["updated_at"] = now
+                olds.append(old)
+                news.append(new)
+            usage = ""
+            if self.OVERRIDES.keys() & edits.keys():
+                usage = (
+                    "WITH usage AS (UPDATE gpu_usage u SET gpu_type = g.gpu_type, "
+                    "gpu_count = g.gpu_count FROM unnest($1::bigint[], "
+                    f"${len(sets) + 4}::text[], ${len(sets) + 5}::int[]) "
+                    "AS g(pk, gpu_type, gpu_count) WHERE u.run_pk = g.pk) "
+                )
+            # One statement for the whole selection; each run's tags travel as JSON.
+            await conn.execute(
+                f"{usage}UPDATE runs SET tags = "
+                "ARRAY(SELECT jsonb_array_elements_text(t.tags::jsonb)), "
+                f"updated_at = to_timestamp($3){assignments} "
+                "FROM unnest($1::bigint[], $2::text[]) AS t(pk, tags) WHERE runs.pk = t.pk",
+                [run.pk for run in runs],
+                [orjson.dumps(run_tags).decode() for run_tags in tags],
+                now,
+                *sets.values(),
+                *([[t for t, _ in effective], [c for _, c in effective]] if usage else []),
+            )
+            await values.write(
+                conn,
+                project.pk,
+                [
+                    (run.pk, values.diff(old, new))
+                    for run, old, new in zip(runs, olds, news, strict=True)
+                ],
+            )
+            messages = []
+            for run, old, new in zip(runs, olds, news, strict=True):
+                row = found[run.pk]
+                status = {"run": run.name, "state": row[12], "lines": row[13]}
+                status["updated_at"] = now
+                edited = ("display_name", "notes", "tags", "group", "job_type", "description")
+                changed = {key: new[key] for key in edited if new[key] != old[key]}
+                overrides = {"gpu_type": row[10], "gpu_count": row[11]}
                 for attribute, field_name in self.OVERRIDES.items():
-                    if field_name in changed:  # report the effective value, not the override
-                        changed[attribute] = getattr(run, attribute)
-                        del changed[field_name]
-                run.updated_at = now
-                project.table.set_many(run.row, {**changed, "updated_at": now})
-                if (run.gpu_type, run.gpu_count) != gpus_before:
-                    self._gpus_changed(run)
-            return runs
+                    if field_name in fields and fields[field_name] != overrides[attribute]:
+                        changed[attribute] = new[attribute]  # the effective value
+                gpus = ("gpu_type", "gpu_count", "gpu_hours")
+                if any(new[key] != old[key] for key in gpus):
+                    attributes = {key: new[key] for key in gpus}
+                    event = {**status, "attributes": attributes}
+                    messages.append(live.event_message(project.pk, run.name, "run", event))
+                    changed.pop("gpu_type", None)
+                    changed.pop("gpu_count", None)
+                if changed:
+                    event = {**status, "attributes": changed}
+                    messages.append(live.event_message(project.pk, run.name, "run", event))
+            await live.publish(conn, messages)
+        return runs
+
+    # Deletes of at most this many runs are purged before they return, so their columns'
+    # counts are right at once; larger ones in the background (D80).
+    PURGE_INLINE: ClassVar[int] = 100
 
     async def delete_runs(
         self, project: Project, runs: Sequence[Run], force: bool = False
     ) -> list[str]:
         """Delete runs with everything they logged; active runs only with ``force``."""
-        async with self._locked([project], runs):
-            runs = [run for run in runs if not run.deleted and run.project is project]
-            active = [run.name for run in runs if run.active]
+        if not runs:
+            return []
+        now = time.time()
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            await self._lock_projects(conn, [project])
+            rows = await conn.fetch(
+                "SELECT pk, name, state FROM runs WHERE pk = ANY($1) AND project_pk = $2 "
+                "AND deleted_at IS NULL ORDER BY pk FOR UPDATE",
+                [run.pk for run in runs],
+                project.pk,
+            )
+            active = [name for _, name, state in rows if state in ACTIVE_STATES]
             if active and not force:
+                order = {run.pk: i for i, run in enumerate(runs)}
+                ordered = sorted(rows, key=lambda row: order[row[0]])
+                active = [name for _, name, state in ordered if state in ACTIVE_STATES]
                 raise Conflict("cannot delete active runs (pass force=true)", active)
-            if not runs:
+            if not rows:
                 return []
-            pks = [run.pk for run in runs]
-            names = [run.name for run in runs]
-            async with self.db.pool.acquire() as conn, conn.transaction():
-                await conn.execute(
-                    "SELECT FROM runs WHERE pk = ANY($1) ORDER BY pk FOR UPDATE", pks
-                )
-                await values.shift(conn, pks, project.pk, None)
-                await conn.execute("DELETE FROM runs WHERE pk = ANY($1)", pks)
-                message = live.event_message(project.pk, None, "deleted", {"runs": names})
-                await live.publish(conn, [message])
-            self._mark_deleted_live(run for run in runs if run.active)
-            for run in runs:
-                self._forget_run(run)
-            self._reindex(project, [run for run in project.runs if not run.deleted])
-        await self._remove_files(pks)
+            pks = [row[0] for row in rows]
+            await conn.execute(
+                "UPDATE runs SET deleted_at = to_timestamp($2) WHERE pk = ANY($1)", pks, now
+            )
+            await self._mark_discarded(
+                conn, [(project.entity, project.name, name) for name in active]
+            )
+            alive = {row[0] for row in rows}
+            names = [run.name for run in runs if run.pk in alive]
+            message = live.event_message(project.pk, None, "deleted", {"runs": names})
+            await live.publish(conn, [message])
+        if len(pks) <= self.PURGE_INLINE:
+            await self.purge(pks)
+        else:
+            self._work_wanted.set()
         return names
 
     async def move_runs(self, source: Project, runs: Sequence[Run], target: Project) -> list[str]:
         """Move finished runs to another project, keeping everything they logged."""
-        async with self._locked([source, target], runs):
-            if target.deleted:
-                raise NotFound(f"project {target.entity}/{target.name} not found")
-            runs = [run for run in runs if not run.deleted and run.project is source]
-            if target is source or not runs:
+        if target.pk == source.pk or not runs:
+            return []
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            await self._lock_projects(conn, [source, target])
+            rows = await conn.fetch(
+                "SELECT pk, name, state, display_name FROM runs WHERE pk = ANY($1) "
+                "AND project_pk = $2 AND deleted_at IS NULL ORDER BY pk FOR UPDATE",
+                [run.pk for run in runs],
+                source.pk,
+            )
+            order = {run.pk: i for i, run in enumerate(runs)}
+            rows = sorted(rows, key=lambda row: order[row[0]])
+            if not rows:
                 return []
-            active = [run.name for run in runs if run.active]
+            active = [name for _, name, state, _ in rows if state in ACTIVE_STATES]
             if active:
                 # Their clients address them by the old project in every request.
                 raise Conflict("cannot move active runs", active)
-            clashes = [run.name for run in runs if run.name in target.by_name]
+            names = [name for _, name, _, _ in rows]
+            clashes = await conn.fetch(
+                "SELECT name FROM runs WHERE project_pk = $1 AND name = ANY($2) "
+                "AND deleted_at IS NULL",
+                target.pk,
+                names,
+            )
             if clashes:
-                raise Conflict(f"{target.name} already has runs with these ids", clashes)
-            pks = [run.pk for run in runs]
-            async with self.db.pool.acquire() as conn, conn.transaction():
-                await conn.execute(
-                    "SELECT FROM runs WHERE pk = ANY($1) ORDER BY pk FOR UPDATE", pks
+                taken = {name for (name,) in clashes}
+                raise Conflict(
+                    f"{target.name} already has runs with these ids",
+                    [name for name in names if name in taken],
                 )
-                await values.shift(conn, pks, source.pk, target.pk)
-                await conn.execute(
-                    "WITH usage AS (UPDATE gpu_usage SET project_pk = $2 WHERE run_pk = ANY($1)),"
-                    " moved AS (UPDATE run_values SET project_pk = $2 WHERE run_pk = ANY($1)) "
-                    "UPDATE runs SET project_pk = $2 WHERE pk = ANY($1)",
-                    pks,
-                    target.pk,
-                )
-                names = [run.name for run in runs]
-                gone = {"runs": names, "moved_to": target.name}
-                messages = [live.event_message(source.pk, None, "deleted", gone)]
-                for run in runs:
-                    event = {"run": run.name, "display_name": run.display_name, "state": run.state}
-                    messages.append(live.event_message(target.pk, None, "created", event))
-                await live.publish(conn, messages)
-            rows = np.fromiter((run.row for run in runs), np.int64, len(runs))
-            new_rows = target.table.append_from(source.table, rows).tolist()
-            moving = set(runs)
-            self._reindex(source, [run for run in source.runs if run not in moving])
-            for run, row in zip(runs, new_rows, strict=True):
-                del source.by_name[run.name]
-                run.project = target
-                run.row = row
-                target.add(run)
-            # Keep the target's rows in creation order, so moved runs don't look like new ones.
-            self._reindex(target, sorted(target.runs, key=lambda r: (r.created_at, r.pk)))
-            names = [run.name for run in runs]
+            pks = [row[0] for row in rows]
+            await values.shift(conn, pks, source.pk, target.pk)
+            await conn.execute(
+                "WITH usage AS (UPDATE gpu_usage SET project_pk = $2 WHERE run_pk = ANY($1)),"
+                " moved AS (UPDATE run_values SET project_pk = $2 WHERE run_pk = ANY($1)) "
+                "UPDATE runs SET project_pk = $2 WHERE pk = ANY($1)",
+                pks,
+                target.pk,
+            )
+            gone = {"runs": names, "moved_to": target.name}
+            messages = [live.event_message(source.pk, None, "deleted", gone)]
+            for _, name, state, display_name in rows:
+                event = {"run": name, "display_name": display_name, "state": state}
+                messages.append(live.event_message(target.pk, None, "created", event))
+            await live.publish(conn, messages)
         return names
 
-    def discarding(self, entity: str, project: str, name: str) -> bool:
+    # ------------------------------------------------------------------ deleted while logging
+
+    async def discarding(self, entity: str, project: str, name: str) -> bool:
         """Whether writes to this run come from the client of a run deleted while it was running.
 
         That client keeps sending (wandb even re-creates its run with UpsertBucket when it
         finishes); its writes are acknowledged and dropped. The mark lasts until the client has
         been quiet for ``crash_timeout``, after which the run id is free again.
         """
-        key = (entity, project, name)
-        seen = self._deleted_live.get(key)
-        if seen is None:
-            return False
-        now = time.time()
-        if now - seen > self.settings.crash_timeout:
-            del self._deleted_live[key]
-            return False
-        self._deleted_live[key] = now
-        return True
-
-    def _mark_deleted_live(self, runs: Iterable[Run]) -> None:
-        now = time.time()
-        cutoff = now - self.settings.crash_timeout
-        for key in [k for k, seen in self._deleted_live.items() if seen < cutoff]:
-            del self._deleted_live[key]  # their clients are long gone
-        for run in runs:
-            self._deleted_live[(run.entity, run.project.name, run.name)] = now
-
-    def _forget_run(self, run: Run) -> None:
-        """Drop a deleted run from memory (except its table row: see ``_reindex``)."""
-        run.deleted = True
-        project = run.project
-        project.by_name.pop(run.name, None)
-        project.active.pop(run.name, None)
-        self.active.pop(run.pk, None)
-        self.runs_by_pk.pop(run.pk, None)
-        self._locks.pop(run.pk, None)
+        found = await self.db.fetchval(
+            "UPDATE discarded_runs SET last_seen = now() "
+            "WHERE entity = $1 AND project = $2 AND name = $3 "
+            "AND last_seen > now() - make_interval(secs => $4) RETURNING true",
+            entity,
+            project,
+            name,
+            self.settings.crash_timeout,
+        )
+        return bool(found)
 
     @staticmethod
-    def _reindex(project: Project, runs: list[Run]) -> None:
-        """Make ``runs`` the project's table rows, in this order, renumbering them.
+    async def _mark_discarded(
+        conn: asyncpg.Connection, runs: Sequence[tuple[str, str, str]]
+    ) -> None:
+        """Note runs deleted while active (D80's ``discarded_runs``)."""
+        if runs:
+            await conn.execute(
+                "INSERT INTO discarded_runs (entity, project, name, last_seen) "
+                "SELECT entity, project, name, now() "
+                "FROM unnest($1::text[], $2::text[], $3::text[]) AS t(entity, project, name) "
+                "ON CONFLICT (entity, project, name) DO UPDATE SET last_seen = now()",
+                [run[0] for run in runs],
+                [run[1] for run in runs],
+                [run[2] for run in runs],
+            )
 
-        Row numbers only hold until the next ``await``: readers turn rows into runs first.
-        """
-        project.table.take(np.fromiter((run.row for run in runs), np.int64, len(runs)))
-        project.runs = runs
-        for row, run in enumerate(runs):
-            run.row = row
+    # ------------------------------------------------------------------ the purge (D80, D81)
+
+    PURGE_BATCH: ClassVar[int] = 200
+
+    async def purge(self, pks: Sequence[int] | None = None) -> int:
+        """Remove deleted runs (``pks``, or a batch of any) with what they logged, then
+        deleted projects and orgs left empty; returns how many runs. Runs are claimed, so
+        replicas purging at once don't wait on each other."""
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            rows = await conn.fetch(
+                "SELECT r.pk, r.project_pk, p.deleted_at IS NULL FROM runs r "
+                "JOIN projects p ON p.pk = r.project_pk "
+                "WHERE r.deleted_at IS NOT NULL AND ($1::bigint[] IS NULL OR r.pk = ANY($1)) "
+                "ORDER BY r.pk LIMIT $2 FOR UPDATE OF r SKIP LOCKED",
+                None if pks is None else list(pks),
+                self.PURGE_BATCH if pks is None else len(pks),
+            )
+            by_project: dict[int, list[int]] = {}
+            for pk, project_pk, project_alive in rows:
+                if project_alive:  # a deleted project's counts go with it
+                    by_project.setdefault(project_pk, []).append(pk)
+            for project_pk, project_pks in sorted(by_project.items()):
+                await values.shift(conn, project_pks, project_pk, None)
+            purged = [row[0] for row in rows]
+            if purged:
+                await conn.execute("DELETE FROM runs WHERE pk = ANY($1)", purged)
+            if pks is None:
+                await conn.execute(
+                    "DELETE FROM projects p WHERE p.deleted_at IS NOT NULL "
+                    "AND NOT EXISTS (SELECT FROM runs r WHERE r.project_pk = p.pk)"
+                )
+                await conn.execute(
+                    "DELETE FROM orgs o WHERE o.deleted_at IS NOT NULL "
+                    "AND NOT EXISTS (SELECT FROM projects p WHERE p.org_pk = o.pk)"
+                )
+        if purged:
+            await self._remove_files(purged)
+        return len(purged)
 
     async def _remove_files(self, pks: Iterable[int]) -> None:
         def remove() -> None:
@@ -2012,6 +1946,37 @@ class Store:
                 shutil.rmtree(self.files_dir / str(pk), ignore_errors=True)
 
         await asyncio.to_thread(remove)
+
+    # How often each replica looks for run files without a run (a crash between a purge's
+    # commit and its file removal): listing every run's directory isn't free.
+    FILE_SWEEP_INTERVAL: ClassVar[float] = 3600.0
+
+    async def _sweep_files(self) -> int:
+        """Remove the files of runs that don't exist; returns of how many."""
+        dirs = await asyncio.to_thread(
+            lambda: [int(p.name) for p in self.files_dir.iterdir() if p.name.isdigit()]
+        )
+        if not dirs:
+            return 0
+        existing = {
+            pk for (pk,) in await self.db.fetch("SELECT pk FROM runs WHERE pk = ANY($1)", dirs)
+        }
+        orphans = [pk for pk in dirs if pk not in existing]
+        await self._remove_files(orphans)
+        return len(orphans)
+
+    async def _cleanup(self) -> None:
+        """Expired rows nothing reads any more (D81: idempotent, so every replica runs it)."""
+        await self.db.execute(
+            "DELETE FROM discarded_runs WHERE last_seen < now() - make_interval(secs => $1)",
+            self.settings.crash_timeout,
+        )
+        # Large notifications are read as soon as they are sent: a minute is plenty.
+        await self.db.execute(
+            "DELETE FROM bus_messages WHERE created_at < now() - interval '1 minute'"
+        )
+        await self.accounts.sweep()
+        await self.imports.sweep()
 
     # ------------------------------------------------------------------ series
 
@@ -2065,8 +2030,8 @@ class Store:
         FOR UPDATE SKIP LOCKED
     """
     COMPACT_AFTER: ClassVar[int] = 64
-    # How often each replica looks for runs to compact, when nothing wakes it sooner.
-    COMPACT_INTERVAL: ClassVar[float] = 5.0
+    # How often each replica looks for background work, when nothing wakes it sooner.
+    WORK_INTERVAL: ClassVar[float] = 5.0
 
     async def compact(self) -> bool:
         """Merge the chunks of one run that needs it into one chunk per metric; returns
@@ -2116,27 +2081,37 @@ class Store:
             await conn.execute("UPDATE runs SET uncompacted = 0 WHERE pk = $1", pk)
         return True
 
-    async def _compact_loop(self) -> None:
-        """Every replica folds column count changes into ``project_keys`` and compacts
-        chunks, every ``COMPACT_INTERVAL`` or when one of its runs finishes."""
-        while True:
-            try:
-                while await values.fold(self.db.pool):
-                    pass
-                while await self.compact():
-                    pass
-            except Exception:
-                log.exception("compaction failed")
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(self._compact_wanted.wait(), self.COMPACT_INTERVAL)
-            self._compact_wanted.clear()
-
-    async def flush(self) -> None:
-        """Wait for background tasks, and compact every run that needs it; used by tests and
-        on shutdown."""
-        while self._tasks:
-            await asyncio.gather(*list(self._tasks), return_exceptions=True)
+    async def work(self, sweep_files: bool = False) -> None:
+        """One round of background work (D81), until there is none left: fold column count
+        changes, compact chunks, purge deletes and remove expired rows (and, now and then or
+        with ``sweep_files``, orphaned run files)."""
         while await values.fold(self.db.pool):
             pass
         while await self.compact():
             pass
+        while await self.purge():
+            pass
+        await self._cleanup()
+        if sweep_files or time.monotonic() - self._files_swept > self.FILE_SWEEP_INTERVAL:
+            self._files_swept = time.monotonic()
+            if removed := await self._sweep_files():
+                log.info("removed files of %d deleted runs", removed)
+
+    async def _work_loop(self) -> None:
+        """Every replica does background work every ``WORK_INTERVAL``, or sooner when one of
+        its requests leaves some."""
+        while True:
+            self._work_wanted.clear()
+            try:
+                await self.work()
+            except Exception:
+                log.exception("background work failed")
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._work_wanted.wait(), self.WORK_INTERVAL)
+
+    async def flush(self) -> None:
+        """Wait for background tasks, and do all background work there is (tests)."""
+        while self._tasks:
+            await asyncio.gather(*list(self._tasks), return_exceptions=True)
+        await self.accounts.flush()
+        await self.work(sweep_files=True)

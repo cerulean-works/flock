@@ -100,8 +100,10 @@ class S3:
     # The shortest lifetime an org may set, in seconds: clients renew keys 5 minutes early.
     MIN_TTL: ClassVar[int] = 600
     SWEEP_INTERVAL: ClassVar[float] = 3600.0
-    # A purge that failed (the S3 server was down, say) is tried again this much later.
+    # A purge that failed (the S3 server was down, say) is tried again this much later, and
+    # every replica looks for work this often anyway, in case it missed a notification.
     PURGE_RETRY: ClassVar[float] = 60.0
+    PURGE_CHANNEL: ClassVar[str] = "flock_s3_purge"
     # The file browser (D65, D69).
     OBJECT_PAGE: ClassVar[int] = 200
     FOLDER_DELETE_LIMIT: ClassVar[int] = 10_000
@@ -126,6 +128,9 @@ class S3:
         self.upstream: Upstream | None = None
         self._purge_wanted = asyncio.Event()
         self._tasks: list[asyncio.Task] = []
+        self._notifying: set[asyncio.Task] = set()
+        # A bucket deleted on any replica wakes every replica's purge (D81).
+        store.bus.listen(self.PURGE_CHANNEL, lambda _: self._purge_wanted.set())
 
     async def load(self) -> None:
         self.secret = await self.store.db.fetchval(
@@ -265,11 +270,12 @@ class S3:
             raise Invalid(f"{org.name}'s keys can live at most {maximum} seconds")
         return await self._insert_key(user, org, name, read_only, ttl)
 
-    def expires_at(self, key: Key) -> float | None:
+    async def expires_at(self, key: Key) -> float | None:
         """When the proxy stops taking ``key``: its expiry, or sooner if the org's maximum
         lifetime has been lowered since it was made."""
-        org = self.store.orgs_by_pk.get(key.org)
-        maximum = org.s3_key_max_ttl if org is not None else None
+        maximum = await self.store.db.fetchval(
+            "SELECT s3_key_max_ttl FROM orgs WHERE pk = $1 AND deleted_at IS NULL", key.org
+        )
         ends = [t for t in (key.expires_at, maximum and key.created_at + maximum) if t]
         return min(ends) if ends else None
 
@@ -287,7 +293,7 @@ class S3:
         )
         now = time.time()
         keys = [Key(*record) for record in records]
-        return [k for k in keys if (ends := self.expires_at(k)) is None or ends > now]
+        return [k for k in keys if (ends := await self.expires_at(k)) is None or ends > now]
 
     async def delete_key(self, user: User, pk: int) -> None:
         deleted = await self.store.db.fetchval(
@@ -465,26 +471,44 @@ class S3:
         ]
 
     def purge_later(self) -> None:
-        """Wake the purge up: deleted buckets get emptied and removed upstream."""
+        """Wake the purge up, on every replica: deleted buckets get emptied and removed
+        upstream."""
         self._purge_wanted.set()
+
+        async def notify() -> None:
+            with contextlib.suppress(Exception):
+                await self.store.db.execute("SELECT pg_notify($1, '')", self.PURGE_CHANNEL)
+
+        task = asyncio.get_running_loop().create_task(notify())
+        self._notifying.add(task)
+        task.add_done_callback(self._notifying.discard)
 
     async def purge(self) -> int:
         """Empty and remove upstream every deleted bucket not yet purged. Returns how many
-        were; raises the first failure after trying them all."""
+        were; raises the first failure after trying them all. Each bucket is claimed while it
+        is purged, so replicas purging at once take different ones (D81)."""
         upstream = self.require()
         failure: Exception | None = None
         purged = 0
-        for pk, upstream_name in await self.store.db.fetch(
-            "SELECT pk, upstream_name FROM s3_buckets "
-            "WHERE deleted_at IS NOT NULL AND purged_at IS NULL ORDER BY pk"
-        ):
-            try:
-                objects = await upstream.purge_bucket(upstream_name)
-            except (UpstreamError, httpx.HTTPError) as e:
-                log.warning("could not purge bucket %s: %s", upstream_name, e)
-                failure = failure or e
-                continue
+        failed: list[int] = []
+        while True:
             async with self.store.db.pool.acquire() as conn, conn.transaction():
+                record = await conn.fetchrow(
+                    "SELECT pk, upstream_name FROM s3_buckets WHERE deleted_at IS NOT NULL "
+                    "AND purged_at IS NULL AND pk <> ALL($1) ORDER BY pk LIMIT 1 "
+                    "FOR UPDATE SKIP LOCKED",
+                    failed,
+                )
+                if record is None:
+                    break
+                pk, upstream_name = record
+                try:
+                    objects = await upstream.purge_bucket(upstream_name)
+                except (UpstreamError, httpx.HTTPError) as e:
+                    log.warning("could not purge bucket %s: %s", upstream_name, e)
+                    failure = failure or e
+                    failed.append(pk)
+                    continue
                 await conn.execute("UPDATE s3_buckets SET purged_at = now() WHERE pk = $1", pk)
                 await self._event(conn, pk, "purged", None, {"via": "purge", "objects": objects})
             log.info("purged bucket %s (%d objects)", upstream_name, objects)
@@ -505,7 +529,8 @@ class S3:
                 with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(self._purge_wanted.wait(), self.PURGE_RETRY)
                 continue
-            await self._purge_wanted.wait()
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._purge_wanted.wait(), self.PURGE_RETRY)
 
     # ------------------------------------------------------------------ objects (D65, D67, D69)
 
@@ -655,13 +680,13 @@ class S3:
         )
         if record is not None:
             key = Key(*record)
-            ends = self.expires_at(key)
+            ends = await self.expires_at(key)
             if ends is None or ends - now > max(self.BROWSER_KEY_MARGIN, lifetime):
                 return key, s3_credentials.secret_for(self.secret, key.access_key_id), ends
         key, secret = await self.issue_ephemeral(
             user, org, self.BROWSER_KEY, session=session, api_key=api_key
         )
-        return key, secret, self.expires_at(key)
+        return key, secret, await self.expires_at(key)
 
     def _presigned(
         self,

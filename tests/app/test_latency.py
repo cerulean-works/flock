@@ -144,16 +144,17 @@ class TestCurves:
     def test_ongoing_runs_curves_while_runs_are_logging(self, curves):
         """Read curves of running runs while those runs keep streaming history over HTTP."""
         server, client = curves
-        project = server.store.project("flock", "curves")
-        running = sorted(project.active)
+        project = server.call(server.store.project("flock", "curves"))
+        running = server.call(server.store.active_runs(project))
         assert len(running) == self.RUNNING
+        found = server.call(server.store.project_runs(project, running))
         stop = threading.Event()
         sent = {"batches": 0}
 
         def writer():
             rng = random.Random(1)
             writer_client = server.client()
-            offsets = {name: project.by_name[name].history_line_count for name in running}
+            offsets = {name: found[name].history_line_count for name in running}
             while not stop.is_set():
                 for name in running:
                     offset = offsets[name]
@@ -249,9 +250,19 @@ class TestSweep:
         started = time.perf_counter()
         server.call(populate())
         print(f"\ningested {cls.RUNS} runs in {time.perf_counter() - started:.1f}s")
-        table = server.store.project("flock", "sweep").table
-        assert table.n == cls.RUNS
-        assert len(table.columns) >= cls.CONFIG_COLUMNS + cls.SUMMARY_COLUMNS
+        store = server.store
+        server.call(store.flush())  # fold the column counts every new run changed
+        project = server.call(store.project("flock", "sweep"))
+        info = server.call(store.project_info(project))
+        assert info["run_count"] == cls.RUNS
+        assert info["column_count"] >= cls.CONFIG_COLUMNS + cls.SUMMARY_COLUMNS
+        # The main storage cost of 012 (D77): one row per run and column, with its indexes.
+        rows, size = server.call(
+            store.db.fetchrow(
+                "SELECT (SELECT count(*) FROM run_values), pg_total_relation_size('run_values')"
+            )
+        )
+        print(f"run_values: {rows} rows, {size / 1e9:.2f} GB with indexes")
         client = server.client()
         yield client, specs
         client.close()

@@ -21,14 +21,6 @@ if TYPE_CHECKING:
     from app.api.src.core.store import Org, Run, Store
 
 
-@dataclass(eq=False)
-class Usage:
-    """A run's seconds alive in one month (its entry in the ledger)."""
-
-    month: dt.date
-    seconds: float
-
-
 # One row per ledger entry of an org's month: (project name, None once deleted), run pk, alive
 # (the run still exists), seconds, GPU type and count, GPU hours, hourly cost (None: unpriced),
 # excluded (its deleted project's spend is left out of the budget), deleted project pk.
@@ -83,19 +75,6 @@ class Budgets:
     def __init__(self, store: Store) -> None:
         self.store = store
 
-    async def load(self) -> None:
-        """Each run's ledger entries, for its runtime (what the run table shows)."""
-        store = self.store
-        for run_pk, month, seconds in await store.db.fetch(
-            "SELECT run_pk, month, seconds FROM gpu_usage WHERE run_pk IS NOT NULL"
-        ):
-            run = store.runs_by_pk.get(run_pk)
-            if run is not None:
-                run.usage[month] = Usage(month, seconds)
-        for run in store.runs_by_pk.values():  # their table rows were filled before this
-            if run.usage and run.gpu_count is not None:
-                run.project.table.set(run.row, "gpu_hours", run.gpu_hours)
-
     @staticmethod
     async def _lock(conn: asyncpg.Connection, org: Org) -> None:
         """Serialize changes to ``org``'s prices, budgets and warnings (D80)."""
@@ -112,13 +91,6 @@ class Budgets:
         if not 0 < now - since <= self.store.settings.crash_timeout:
             return []
         return gpus.split_by_month(since, now)
-
-    @staticmethod
-    def accrue(run: Run, parts: list[tuple[dt.date, float]]) -> None:
-        """Record in memory what ``file_stream`` added to the ledger."""
-        for month, seconds in parts:
-            usage = run.usage.setdefault(month, Usage(month, 0.0))
-            usage.seconds += seconds
 
     async def run_cost(self, run: Run) -> float:
         cost = await self.store.db.fetchval(

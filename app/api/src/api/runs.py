@@ -19,7 +19,7 @@ from app.api.src.api.deps import (
 from app.api.src.api.home import GpuType
 from app.api.src.core import query
 from app.api.src.core.errors import NotFound
-from app.api.src.core.store import Project, Run, Store
+from app.api.src.core.store import RUN_COLUMNS, Project, Run, Store
 
 router = APIRouter(prefix="/api/v1", tags=["flock"], dependencies=[Depends(rest_user)])
 
@@ -76,9 +76,10 @@ class RunSelection(BaseModel):
     ) -> tuple[list[Run], int]:
         """Runs matching the selection, ordered by ``sort`` (default newest first), from
         ``offset`` and at most ``limit``, and how many match in all."""
-        records, total = await self.selection().runs(store.db.pool, project.pk, offset, limit)
-        runs = [project.by_name.get(record[1]) for record in records]
-        return [run for run in runs if run is not None], total
+        records, total = await self.selection().runs(
+            store.db.pool, project.pk, offset, limit, RUN_COLUMNS
+        )
+        return [Run.load(record, project) for record in records], total
 
 
 class RunsQuery(RunSelection):
@@ -128,10 +129,11 @@ class Selection(RunSelection):
 
     async def targets(self, store: Store, project: Project) -> list[Run]:
         if self.runs:
-            missing = [name for name in self.runs if name not in project.by_name]
+            found = await store.project_runs(project, self.runs)
+            missing = [name for name in self.runs if name not in found]
             if missing:
                 raise APIError(404, "runs not found", ids=missing)
-            return [project.by_name[name] for name in dict.fromkeys(self.runs)]
+            return [found[name] for name in dict.fromkeys(self.runs)]
         if self.filter is None and not self.running and not self.all:
             raise APIError(400, "select runs with runs, filter, running or all")
         return (await self.select(store, project))[0]
@@ -291,7 +293,8 @@ async def query_history(project: ProjectDep, body: HistoryQuery, store: StoreDep
     if not body.keys:
         raise APIError(400, "keys is required")
     if body.runs:
-        selected = [project.by_name[n] for n in body.runs if n in project.by_name]
+        found = await store.project_runs(project, body.runs)
+        selected = [found[n] for n in body.runs if n in found]
     else:
         selected = (await body.select(store, project, limit=body.limit))[0]
     x = body.x_axis
@@ -317,7 +320,10 @@ async def update_run(run: RunDep, body: RunFields, store: StoreDep, user: UserDe
     """Edit a run's display name, notes, tags, group, job type, description or GPUs."""
     check_owner(store, user, run.project, [run])
     await store.edit_runs(run.project, [run], body.model_dump(include=body.model_fields_set))
-    return await get_run(run, store)
+    edited = await store.project_run(run.project, run.name)
+    if edited is None:
+        raise APIError(404, f"run {run.name} not found")
+    return await get_run(edited, store)
 
 
 @router.delete("/projects/{entity}/{project}/runs/{run}", status_code=204)
@@ -379,7 +385,7 @@ async def move_runs(project: ProjectDep, body: RunMove, store: StoreDep, user: U
     """
     runs = await body.targets(store, project)
     check_owner(store, user, project, runs)
-    target = store.project(project.entity, body.to)
+    target = await store.project(project.entity, body.to)
     if target is None and not body.create:
         raise APIError(404, f"project {project.entity}/{body.to} not found")
     if body.dry_run:

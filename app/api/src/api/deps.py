@@ -182,16 +182,16 @@ def app_link(request: Request, store: Store, path: str) -> str:
     return f"{base.rstrip('/')}/{path}"
 
 
-def visible_org(name: str, store: Store, user: User) -> Org:
+async def visible_org(name: str, store: Store, user: User) -> Org:
     """The org ``name`` if ``user`` belongs to it; others get the same 404 as unknown orgs."""
-    org = store.orgs.get(name)
+    org = await store.find_org(name)
     if org is None or store.accounts.role(user, org) is None:
         raise APIError(404, f"organization {name} not found")
     return org
 
 
-def get_org(org: str, store: StoreDep, user: UserDep) -> Org:
-    return visible_org(org, store, user)
+async def get_org(org: str, store: StoreDep, user: UserDep) -> Org:
+    return await visible_org(org, store, user)
 
 
 OrgDep = Annotated[Org, Depends(get_org)]
@@ -206,8 +206,8 @@ def get_admin_org(org: OrgDep, store: StoreDep, user: UserDep) -> Org:
 AdminOrgDep = Annotated[Org, Depends(get_admin_org)]
 
 
-def get_project(entity: str, project: str, store: StoreDep, user: UserDep) -> Project:
-    found = store.project(entity, project)
+async def get_project(entity: str, project: str, store: StoreDep, user: UserDep) -> Project:
+    found = await store.project(entity, project)
     if found is None or store.accounts.role(user, found.org) is None:
         raise APIError(404, f"project {entity}/{project} not found")
     return found
@@ -225,8 +225,8 @@ def get_admin_project(project: ProjectDep, store: StoreDep, user: UserDep) -> Pr
 AdminProjectDep = Annotated[Project, Depends(get_admin_project)]
 
 
-def get_run(run: str, project: ProjectDep) -> Run:
-    found = project.by_name.get(run)
+async def get_run(run: str, project: ProjectDep, store: StoreDep) -> Run:
+    found = await store.project_run(project, run)
     if found is None:
         raise APIError(404, f"run {run} not found")
     return found
