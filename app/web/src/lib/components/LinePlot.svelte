@@ -279,9 +279,9 @@
 	/**
 	 * The tooltip for the readings just taken: rows sorted high to low, windowed around the
 	 * focused line, beside the crosshair, as many rows as fit in the plot. The hovered plot's
-	 * (`float`) floats over the page, so its card doesn't clip it and it can sit beside the
-	 * cursor outside the plot, rather than over the lines being hovered. The other plots following
-	 * the cursor keep theirs inside the plot, so none spills over the plot the pointer is in.
+	 * (and in the grid every plot's: `float`) floats over the page, so its card doesn't clip it
+	 * and it can sit beside the crosshair outside the plot, rather than over the lines. The
+	 * hovered plot's is stacked over the others'.
 	 */
 	function layoutTip(
 		lines: readonly Line[],
@@ -290,7 +290,8 @@
 		fx: number,
 		d: typeof domain,
 		[cw, ch]: [number, number],
-		float: boolean
+		float: boolean,
+		hovered: boolean
 	): Tip | null {
 		const n = readout.count;
 		if (!n) return null;
@@ -318,9 +319,15 @@
 		let box: TipBox | null = null;
 		if (float && area) {
 			const rect = area.getBoundingClientRect();
+			// Only what the pane shows of the plot: none for a plot scrolled out of it, and the
+			// pane's top for one partly scrolled under it.
+			const shown = root?.getBoundingClientRect();
+			const top = Math.max(rect.top, shown?.top ?? 0);
+			const bottom = Math.min(rect.bottom, shown?.bottom ?? window.innerHeight);
+			if (!(bottom > top)) return null;
 			box = {
 				x: rect.left + x,
-				y: rect.top + (side ? 0 : fy * ch),
+				y: side ? top : rect.top + fy * ch,
 				w: window.innerWidth,
 				h: window.innerHeight
 			};
@@ -357,7 +364,8 @@
 			rows,
 			above: fit.above,
 			below: fit.below,
-			float
+			float,
+			hovered
 		};
 	}
 
@@ -379,7 +387,10 @@
 		const focus = focused;
 		const within = tol;
 		const withTip = tips;
-		const float = here;
+		// Every grid plot's tooltip floats over the page, so no card clips it; full screen and
+		// in the editor, only the hovered plot's.
+		const float = here || surface === 'grid';
+		const hovered = here;
 		const opts = {
 			focus,
 			markers: readout,
@@ -400,7 +411,7 @@
 				else readout.clear();
 				const surf = prepare(canvas, size[0], size[1], cdpr);
 				if (surf) drawOverlay(surf, d, opts);
-				tip = withTip && c ? layoutTip(lines, c.step, c.fy, c.fx, d, size, float) : null;
+				tip = withTip && c ? layoutTip(lines, c.step, c.fy, c.fx, d, size, float, hovered) : null;
 			},
 			'urgent'
 		);

@@ -22,10 +22,12 @@
 		left: number;
 		top: number;
 		/**
-		 * Over the page, in a layer of its own (the hovered plot's), rather than inside the plot,
+		 * Over the page, in a layer of its own (every grid plot's, else the hovered plot's), rather than inside the plot,
 		 * which a card's edges and its pane's scrolling would clip.
 		 */
 		float: boolean;
+		/** The hovered plot's: stacked over the other plots' floating tooltips. */
+		hovered: boolean;
 		width: number;
 		/** The crosshair's x: `Step 1,200`, `Runtime 3m 05s`... */
 		header: string;
@@ -66,15 +68,15 @@
 	}
 </script>
 
-<!-- Every plot following the cursor shows one; none takes the pointer. The hovered plot's is
-     moved to the end of the document, out of any card, pane or dialog that would clip it or
+<!-- Every plot following the cursor shows one; none takes the pointer, so the next plot can
+     still be hovered. Floating ones (every grid plot's) are moved to the end of the document, out of any card, pane or dialog that would clip it or
      position it (a transformed ancestor would). -->
 <div class="contents">
 	<div
 		{@attach tip.float ? toBody : undefined}
 		class={[
 			'pointer-events-none top-0 left-0 rounded-lg',
-			tip.float ? 'fixed z-60' : 'absolute z-10',
+			tip.float ? ['fixed', tip.hovered ? 'z-61' : 'z-60'] : 'absolute z-10',
 			'bg-popover/95 p-1 text-popover-foreground tabular-nums shadow-md ring-1 ring-foreground/10 will-change-transform',
 			compact ? 'text-[11px]' : 'text-xs'
 		]}

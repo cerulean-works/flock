@@ -179,4 +179,21 @@ describe('placeTip', () => {
 		expect(low.top + low.fit.height).toBe(900 - 8);
 		expect(low.left).toBe(800 - 16 - 248);
 	});
+
+	it('floats every grid tooltip alike: each at its own plot top, all on one side', () => {
+		// Three cards on screen: two in a row, one below; crosshairs at different x.
+		const plots = [
+			{ x: 300, y: 120 },
+			{ x: 900, y: 120 },
+			{ x: 500, y: 480 }
+		];
+		const tips = plots.map((p) =>
+			placeTip(64, 10, plot, m, 248, { float: { ...window, ...p }, side: 'right' })
+		);
+		expect(tips.map((t) => t.top)).toEqual([120, 120, 480]);
+		expect(tips.map((t) => t.left)).toEqual([316, 916, 516]);
+		// Floating changes where, never how big: the plot-sized cap holds for every one.
+		const inPlot = placeTip(64, 10, plot, m, 248, { side: 'right' });
+		for (const t of tips) expect([t.fit, t.width]).toEqual([inPlot.fit, inPlot.width]);
+	});
 });
