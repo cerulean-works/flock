@@ -146,8 +146,8 @@ class S3Env:
         }
 
 
-def make_env(flocks: Flocks, server: S3Server) -> S3Env:
-    flock = flocks.s3(server)
+def make_env(flocks: Flocks, server: S3Server, **settings: Any) -> S3Env:
+    flock = flocks.s3(server, **settings)
     assert flock.client().post("/api/v1/orgs", {"name": "lab"}).status == 201
     env = S3Env(flock, server)
     for name, role, org in [
