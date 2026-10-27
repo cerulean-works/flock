@@ -3,7 +3,15 @@
 import dataclasses
 from typing import Any
 
-from flock.eval.tasks import Dataset, Fewshot, MultipleChoiceTask
+from flock.eval.tasks import (
+    CHINESE_ANSWER_PREFIX,
+    CHINESE_QUESTION_PREFIX,
+    Dataset,
+    Fewshot,
+    MCDoc,
+    MultipleChoiceTask,
+    cloze,
+)
 from flock.eval.tasks.arc import arc_doc
 
 ROWS = {
@@ -43,6 +51,22 @@ ROWS = {
     ],
 }
 
+
+def chinese_doc(row: dict[str, Any]) -> MCDoc:
+    """A toy row in the Traditional Chinese cloze format, with no space before the answer, as TMMLU+ renders it."""
+    return MCDoc(
+        id=row["id"],
+        choices=cloze(
+            row["question"],
+            row["choices"]["text"],
+            question_prefix=CHINESE_QUESTION_PREFIX,
+            answer_prefix=CHINESE_ANSWER_PREFIX,
+            separator="",
+        ),
+        gold=row["choices"]["label"].index(row["answerKey"]),
+    )
+
+
 TASK = MultipleChoiceTask(
     name="toy",
     dataset=Dataset("cerulean/toy", "0" * 40, None, "test"),
@@ -67,6 +91,14 @@ PROMPT_PATHS = (
     ),
     dataclasses.replace(TASK, name="toy:rows", fewshot=Fewshot(rows=tuple(ROWS["train"]))),
     dataclasses.replace(TASK, name="toy:zero_shot", fewshot=None, unconditional_context=None),
+    # The Chinese prefixes, with PMI scored after `答案：`.
+    dataclasses.replace(
+        TASK,
+        name="toy:chinese",
+        to_doc=chinese_doc,
+        description="以下是關於常識考試單選題，請選出正確的答案。\n\n",
+        unconditional_context=CHINESE_ANSWER_PREFIX,
+    ),
 )
 
 
