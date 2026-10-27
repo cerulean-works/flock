@@ -2,11 +2,12 @@
 
 | | |
 | --- | --- |
-| Status | proposed |
+| Status | applied |
 | Date | 2026-10-28 |
 | Builds on | [009](009-s3-proxy.md), [010](010-storage-tab.md) |
 | Amends | D53 (one bucket per org is managed by Flock, and `flock-` names are reserved), D64 (the overview marks the managed bucket) |
 | Keeps | D54–D62, D63, D65–D69 |
+| Result | 414 tests in `tests/app`, `tests/cli` and `tests/s3` pass on moto (25 new in `tests/app/test_datasets.py`, 1 in `tests/app/test_migrations.py`), and the 125 S3-backed ones also pass against the real Ceph; 440 in `app/web` (41 new); see [section 6](#6-how-it-was-actually-built) |
 
 ## 1. Goal
 
@@ -31,8 +32,9 @@ import lance
 from flock.cli import s3
 
 creds = s3.credentials("acme")
-lance.write_dataset(table, creds.uri("flock-datasets", "eval", "mmlu"),
-                    storage_options=creds.storage_options())
+lance.write_dataset(
+    table, creds.uri("flock-datasets", "eval", "mmlu"), storage_options=creds.storage_options()
+)
 ```
 
 **Out of scope:**
@@ -90,7 +92,7 @@ The numbering continues from 012.
   | `/datasets/{org}/{path…}` | a folder, or a dataset if the folder is one (D88) |
 
   Whether a path is a folder or a dataset is decided by the API (D87), so URLs need no marker.
-- **`datasets` is reserved** in `RESERVED` (`src/lib/utils.ts`), and migration 0014 refuses to
+- **`datasets` is reserved** in `RESERVED` (`src/lib/utils.ts`), and migration 0013 refuses to
   run if an org is named `datasets`, as 0012 does for `storage`.
 - **Breadcrumbs** appear once you're inside a folder or dataset, as on the Storage tab: Datasets ›
   org › folders › dataset. Each one is a link. The root page has none.
@@ -361,7 +363,7 @@ One PR, `feat/datasets-tab`, from main.
 
 ### Step 1. Migration
 
-`0014_datasets.sql` (renumbered if 012's `0013` hasn't landed first):
+`0013_datasets.sql`:
 - `s3_buckets.managed text CHECK (managed IN ('datasets'))`, with a unique index on
   `(org_pk, managed)` for live managed buckets;
 - the `dataset_trash` table (D93);
@@ -459,3 +461,87 @@ files and `docs/source/configuration.md`.
    org settings, removed after 14 days (D93).
 5. **Members can rename and move datasets** (D95), and **create, move and delete tags** (D96).
    Everything else in the UI is read-only.
+
+## 6. How it was actually built
+
+The plan was followed, in six commits: the API, the migration and the settings (steps 1 to 4),
+the tests (step 6), the web app (step 5), the docs (step 7), and two fixes found by trying the
+tab in a browser. These are the places where the code differs from the decisions above, or adds
+to them.
+
+- **Blob columns (D90's open question).** Confirmed with pylance 14: a scan reads a blob column
+  (`lance.blob.v2`, data storage 2.2, or `lance-encoding:blob` metadata) as a description,
+  `{kind, position, size, blob_id, blob_uri}`, without fetching the bytes. The row viewer shows
+  its `size`. `blob_handling="all_descriptions"` doesn't do the same for plain binary columns, so
+  those are read.
+- **The 64 MiB page limit** bounds what a page sends, not what it reads. A binary cell's size can
+  only be known by reading it, so with binary columns the API reads the page one row at a time,
+  sends images until 64 MiB of them are sent, and shows only the size of the rest. A page holds
+  at most one row's bytes beyond what it sends.
+- **The managed bucket.** Creating it on org creation is best effort: a failure is logged and the
+  org is still created (startup and the Datasets tab try again). The startup pass runs in the
+  background with the trash bucket's creation. `ensure_managed` takes a live bucket already named
+  `flock-datasets` (adopting it, with its objects) before creating one. Its creator is null, and
+  the Storage overview and `flock s3 buckets list` say Flock made it. The `flock-` check applies
+  only to creating buckets. Every test org now has `flock-datasets`, so three existing tests that
+  counted an org's buckets were updated.
+- **The cache** is keyed by the manifest's ETag too, `(bucket, path, version, etag)`. A dataset
+  deleted outside Flock and written again at the same path reuses version numbers, and without
+  the ETag would be served from the old one's cache. Explicit versions are resolved with a HEAD
+  of their manifest (either naming), tags by opening the latest version.
+- **Times.** A version's time is the one in Lance's manifest (`get_version()`), since S3's time of
+  the manifest object changes when a rename or restore copies it. The folder listing's "Updated"
+  is still S3's time of the newest manifest (one LIST, as D87 asks), so it shows the time of a
+  rename.
+- **Data size** is the sum of the data files' `file_size_bytes` in the version's fragments.
+  Deletion files and indices aren't counted.
+- **Routes beyond D94's table.** `rows` takes `limit` (at most 100) and repeated `columns`.
+  `versions` returns `latest`, and per version `rows` and `rows_delta` (only when the version just
+  before still exists). `PUT tags/{tag}` takes `move`: without it, a tag on another version
+  answers 409 with that `version`, which is how the dialog asks to move it. The same version again
+  answers 200. Refusals of a rename or restore because something exists at the path carry
+  `taken: true`, and refusals over the limits carry `command`.
+- **Paths.** `at` answers 404 for a path inside a dataset (it checks the ancestors) and for a
+  folder with nothing in it and no folder marker. A new path (D95) also can't hold `.`, `..` or a
+  `_versions` segment, and can't be inside another dataset, which the browser would never show.
+  Restoring to a new path follows the same rules.
+- **Tag names** can't be only digits, since `?version=12` must mean version 12.
+- **Cells.** Integers beyond 2^53 and non-finite floats come as strings. An HF `Image` struct with
+  no bytes shows its path. The `cell` route returns a whole vector as JSON. `ClassLabel` labels
+  come from the `huggingface` schema metadata.
+- **The trash.** The row is inserted and committed first, then locked `FOR UPDATE` by the request
+  for the rest of the move, so the sweep's `SKIP LOCKED` leaves a move that is still running
+  alone. Restore and delete-now answer 409 while a move is unfinished. Settling a stuck move whose
+  dataset is gone from its path deletes only the objects there that are older than the delete, so
+  a new dataset written there since is kept. Deleting an org removes its rows in the org's
+  transaction and empties `{org pk}/` of the trash in the background. The sweep's orphan pass
+  covers an interrupted one.
+- **Renames** compare the latest version's number and manifest ETag before and after the copy.
+  Multipart copies use 512 MiB parts and are aborted if a part fails. `Upstream` gained
+  `copy_object`, `copy_large`, `complete_upload`, `get_range` and `list_all`.
+- **Web.** One route, `datasets/[org]/[...path]`, whose load reads only `?version=`. Tabs
+  (`?tab=`) and row pages (`?offset=`) change the URL without running it again, and every read
+  of the tabs carries the version it resolved. The browser reaches Flock through one relay,
+  `/api/datasets/{org}/{op}`, limited to the routes above. It keeps Flock's extra fields
+  (`taken`, `version`, `command`), so it uses a new `flockAnswer` in `server/flock.ts` instead of
+  the Storage tab's `relay`. Deleting, renaming, tagging, restoring and deleting for good are
+  `fetch` calls rather than form actions for the same reason. The org page reloads after the
+  last two. Choosing in the version picker always puts the number or tag in the URL. "New version
+  available" shows whenever the version shown is older than the latest, with a link to the
+  latest by number. After a tag changes, the header reads the tags again but keeps its version.
+  After a delete, the page goes to the nearest folder that still exists, since a folder that held
+  only the dataset is gone with it. Tag chips sit under the version number rather than in a
+  column of their own, so they show on narrow screens. The Storage tab's Markdown rendering moved
+  to `Markdown.svelte`, shared with the README tab. Folder pages also have "Browse files".
+- **Formatting.** Prettier reformatted `routes/device/+page.svelte`, which `pnpm lint` failed on
+  before.
+- **Docs.** A Datasets section in the S3 guide, an API page (`api/datasets`), and a Datasets
+  section in `flock.cli.s3`. The doc-builder build and link check weren't run.
+
+Checked by hand in a browser against moto with a local Postgres, API, proxy and web dev server:
+a dataset with HF images, class labels, embeddings and long captions written with Lance through
+the proxy and appended to, its README, rows, side sheet, schema and versions, the version picker
+and a tag, moving a tag to another version, renaming it into another folder, deleting it, the
+Deleted datasets section, restoring it, and the Storage overview's badge. Deleting for good and
+the restore-to-another-path dialog were checked by the specs only, and none of this was repeated
+against Ceph by hand.
