@@ -1,6 +1,7 @@
 import dataclasses
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from click.testing import CliRunner
@@ -219,13 +220,22 @@ def test_cli_prints_causes_then_one_sided_names_then_breaches(write):
     ]
 
 
-def test_the_bank_is_a_float32_results_file_that_compare_reads():
-    # Offline: a change to the results layout or to `compare` that breaks the bank fails in CI,
-    # not in the GPU job.
+def test_the_bank_compares_equal_to_itself_rewritten_in_the_current_layout(write):
+    # Offline: a change to what `Results` writes, or to what `compare` reads, that the bank can
+    # no longer pass fails here rather than after a GPU rerun.
     bank = Path(__file__).parent / "regression" / "olmo-2-0425-1b-float32.json"
+    data = json.loads(bank.read_text())
+    tasks = []
+    for task in data["tasks"]:
+        fields: dict[str, Any] = dict(task)
+        del fields["docs_per_second"]  # derived, not a field
+        fields["truncation"] = Truncation(**fields["truncation"])
+        tasks.append(TaskResult(**fields))
+    suites = [SuiteResult(**suite) for suite in data["suites"]]
+    rewritten = Results(Provenance(**data["provenance"]), tasks, suites, data["schema_version"])
 
-    comparison = compare(bank, bank)
+    comparison = compare(bank, write("rewritten", rewritten))
 
+    assert data["provenance"]["dtype"] == "float32"
     assert "base_easy" in comparison.suites
     assert comparison.breaches == []
-    assert json.loads(bank.read_text())["provenance"]["dtype"] == "float32"

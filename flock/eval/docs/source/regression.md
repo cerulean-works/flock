@@ -20,7 +20,7 @@ The bank is float32 because float32 scores repeat exactly when you rerun the sam
 
 ## Running the check
 
-1. On a GPU machine, run the command above at the commit you want to check, into a new directory. It takes about three hours on one H200.
+1. On a GPU machine, run the command above at the commit you want to check. It takes about three hours on one H200. `--out` must be new or empty, so remove `results/regression` from an earlier check first, or give another directory and use it in the next step.
 2. Compare the new results with the bank:
    ```bash
    uv run flock-eval compare tests/eval/regression/olmo-2-0425-1b-float32.json results/regression/results.json
@@ -61,9 +61,10 @@ A difference in score only means something if both runs scored the same requests
 - the provenance's `model`, `dtype`, `batch_tokens`, `max_length` or `attention` differ
 - a task in both files has a different `task_hash` (see [The task hash](results#the-task-hash)) or `limit`
 - a suite in both files has a different `metric`, so its score averages another metric
-- no task is in both files, a file isn't JSON, or a field it reads is missing
+- no task is in both files
+- a file isn't JSON, a field it reads is missing, or a value there has the wrong type
 
-The message names the field and both values. A refused pair needs a new bank, not a looser check.
+The message names the field and both values. Two runs that differ in a setting or a task hash need a new bank, not a looser check. A file that isn't a complete results file, such as one from a job killed while writing, needs a new run instead.
 
 ## Refreshing the bank
 
