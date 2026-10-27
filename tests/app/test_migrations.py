@@ -407,7 +407,7 @@ def test_0009_keeps_the_spend_of_projects_deleted_before_it(postgres, make_flock
             await conn.close()
 
     asyncio.run(seed())
-    assert asyncio.run(Migrations().apply(url)) == ["0009_budget_management"]
+    assert asyncio.run(Migrations().apply(url)) == ["0009_budget_management", "0010_cli_sessions"]
     api = make_flock(database_url=url).client()
     (deleted,) = api.get("/api/v1/orgs/flock/budget/deleted-projects").json()["deleted_projects"]
     assert (deleted["name"], deleted["deleted_at"], deleted["runs"]) == (None, None, 2)
