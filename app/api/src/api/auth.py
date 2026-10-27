@@ -11,7 +11,7 @@ from urllib.parse import quote, urlencode
 
 import jwt
 import orjson
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -27,6 +27,7 @@ from app.api.src.api.deps import (
     UserDep,
     app_link,
     current_user,
+    rest_user,
     visible_org,
 )
 from app.api.src.core.accounts import DeviceGrant, User
@@ -36,7 +37,10 @@ from app.api.src.settings import Settings
 
 log = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1", tags=["auth"])
+# Signing in, and the links that carry their own secret, take no credential. The rest is the
+# REST API, which wandb keys can't use (D72).
+public = APIRouter(prefix="/api/v1", tags=["auth"])
+router = APIRouter(prefix="/api/v1", tags=["auth"], dependencies=[Depends(rest_user)])
 
 DisplayName = Annotated[str, Field(min_length=1, max_length=128)]
 
@@ -95,7 +99,7 @@ class PasswordChange(BaseModel):
     new: Password
 
 
-class ApiKeyCreate(BaseModel):
+class WandbKeyCreate(BaseModel):
     name: str = Field("default", min_length=1, max_length=128)
 
 
@@ -128,7 +132,7 @@ async def signed_in(store: Store, user: User, status_code: int = 200) -> Respons
 # ---------------------------------------------------------------------- sign in
 
 
-@router.get("/auth/config")
+@public.get("/auth/config")
 async def auth_config(store: StoreDep) -> Response:
     """What a sign-in page should offer, and whether S3 is on (``s3``: the proxy's endpoint and
     region, or null)."""
@@ -141,7 +145,7 @@ async def auth_config(store: StoreDep) -> Response:
     )
 
 
-@router.post("/auth/signup", status_code=201)
+@public.post("/auth/signup", status_code=201)
 async def signup(body: SignupBody, store: StoreDep) -> Response:
     """Create the first account, which becomes the super admin. Everyone else joins through
     an invitation."""
@@ -149,7 +153,7 @@ async def signup(body: SignupBody, store: StoreDep) -> Response:
     return await signed_in(store, user, 201)
 
 
-@router.post("/auth/login")
+@public.post("/auth/login")
 async def login(body: LoginBody, store: StoreDep) -> Response:
     user = await store.accounts.login(body.email, body.password)
     if user is None:
@@ -157,7 +161,7 @@ async def login(body: LoginBody, store: StoreDep) -> Response:
     return await signed_in(store, user)
 
 
-@router.post("/auth/refresh")
+@public.post("/auth/refresh")
 async def refresh(body: RefreshBody, store: StoreDep) -> Response:
     """New tokens for a refresh token. Each refresh token works once: use the new one next."""
     tokens = await store.accounts.refresh(body.refresh_token)
@@ -169,8 +173,7 @@ async def refresh(body: RefreshBody, store: StoreDep) -> Response:
 @router.post("/auth/logout", status_code=204)
 async def logout(session: SessionDep, store: StoreDep) -> Response:
     """End the session of the request's access token or CLI token (``flock logout``)."""
-    if session is None:
-        raise APIError(400, "sign out with an access token or CLI token, not an API key")
+    assert session is not None  # the router refuses wandb keys
     await store.accounts.end_session(session)
     return Response(status_code=204)
 
@@ -195,7 +198,7 @@ def shown_code(code: str) -> str:
     return f"{code[:4]}-{code[4:]}"
 
 
-@router.post("/auth/device")
+@public.post("/auth/device")
 async def device_start(body: DeviceStart, request: Request, store: StoreDep) -> Response:
     """Start a command-line sign-in (RFC 8628). The user approves ``user_code`` at
     ``verification_uri`` while the client polls ``auth/device/token`` with ``device_code``."""
@@ -218,7 +221,7 @@ async def device_start(body: DeviceStart, request: Request, store: StoreDep) -> 
     )
 
 
-@router.post("/auth/device/token")
+@public.post("/auth/device/token")
 async def device_token(body: DeviceToken, store: StoreDep) -> Response:
     """Poll a sign-in: a 400 with an RFC 8628 ``error`` until it's decided, then the CLI token
     (``access_token``) and the user, once."""
@@ -321,7 +324,7 @@ class Google:
         return jwt.decode(tokens["id_token"], options={"verify_signature": False})
 
 
-@router.get("/auth/google/start")
+@public.get("/auth/google/start")
 async def google_start(request: Request, store: StoreDep, invite: str | None = None) -> Response:
     """Redirect to Google's sign-in; ``invite`` accepts an invitation on the way."""
     settings = store.settings
@@ -362,7 +365,7 @@ async def google_start(request: Request, store: StoreDep, invite: str | None = N
     return response
 
 
-@router.get("/auth/google/callback")
+@public.get("/auth/google/callback")
 async def google_callback(
     request: Request, store: StoreDep, code: str = "", state: str = "", error: str = ""
 ) -> Response:
@@ -425,7 +428,7 @@ async def google_callback(
     return redirect(f"auth/google?code={accounts.issue_code(user)}")
 
 
-@router.post("/auth/google/exchange")
+@public.post("/auth/google/exchange")
 async def google_exchange(body: CodeBody, store: StoreDep) -> Response:
     """Tokens for the one-time code a Google sign-in ended with (valid for a minute)."""
     user = store.accounts.redeem_code(body.code)
@@ -467,8 +470,13 @@ async def change_password(
     return Response(status_code=204)
 
 
-@router.get("/me/api-keys")
-async def list_api_keys(user: UserDep, store: StoreDep) -> Response:
+# ``me/api-keys`` is what these routes were called before wandb keys were told apart (D71).
+
+
+@router.get("/me/wandb-keys")
+@router.get("/me/api-keys", deprecated=True)
+async def list_wandb_keys(user: UserDep, store: StoreDep) -> Response:
+    """Your wandb keys, older ``flock-`` ones included."""
     keys = store.accounts.api_keys(user)
     return JSONResponse(
         {
@@ -480,9 +488,11 @@ async def list_api_keys(user: UserDep, store: StoreDep) -> Response:
     )
 
 
-@router.post("/me/api-keys", status_code=201)
-async def create_api_key(body: ApiKeyCreate, user: UserDep, store: StoreDep) -> Response:
-    """A new API key, for the wandb SDK (``WANDB_API_KEY``) or scripts. It is shown only once."""
+@router.post("/me/wandb-keys", status_code=201)
+@router.post("/me/api-keys", status_code=201, deprecated=True)
+async def create_wandb_key(body: WandbKeyCreate, user: UserDep, store: StoreDep) -> Response:
+    """A new wandb key (``flock-wandb-…``) for the wandb SDK: its ``WANDB_API_KEY``, or ``wandb
+    login``. It works only there, and is shown only once. A wandb key can't create one."""
     api_key, key = await store.accounts.create_api_key(user, body.name)
     return JSONResponse(
         {
@@ -496,8 +506,10 @@ async def create_api_key(body: ApiKeyCreate, user: UserDep, store: StoreDep) -> 
     )
 
 
-@router.delete("/me/api-keys/{key_id}", status_code=204)
-async def delete_api_key(key_id: int, user: UserDep, store: StoreDep) -> Response:
+@router.delete("/me/wandb-keys/{key_id}", status_code=204)
+@router.delete("/me/api-keys/{key_id}", status_code=204, deprecated=True)
+async def delete_wandb_key(key_id: int, user: UserDep, store: StoreDep) -> Response:
+    """Revoke a wandb key, and the S3 keys it was exchanged for before D72."""
     await store.accounts.delete_api_key(user, key_id)
     return Response(status_code=204)
 
@@ -585,7 +597,7 @@ async def create_password_reset(
 # ---------------------------------------------------------------------- links
 
 
-@router.get("/invites/{token}")
+@public.get("/invites/{token}")
 async def get_invite(token: str, store: StoreDep) -> Response:
     """What an invitation link is for (no sign-in needed: the token is the secret)."""
     accounts = store.accounts
@@ -606,7 +618,7 @@ async def get_invite(token: str, store: StoreDep) -> Response:
     )
 
 
-@router.post("/invites/{token}/accept")
+@public.post("/invites/{token}/accept")
 async def accept_invite(
     token: str, body: InviteAccept, request: Request, store: StoreDep
 ) -> Response:
@@ -620,14 +632,14 @@ async def accept_invite(
         has_credentials = "authorization" in request.headers or "x-api-key" in request.headers
         if not has_credentials:
             raise APIError(401, "sign in as the invited user, or give a name and password")
-        user = current_user(request, store)
+        user = rest_user(request, current_user(request, store))
         await accounts.accept_invite(invite, user)
         return JSONResponse({"user": accounts.info(user)})
     user = await accounts.register(invite, body.name or invite.email, body.password)
     return await signed_in(store, user, 201)
 
 
-@router.get("/password-resets/{token}")
+@public.get("/password-resets/{token}")
 async def get_password_reset(token: str, store: StoreDep) -> Response:
     user = await store.accounts.find_reset(token)
     if user is None:
@@ -635,7 +647,7 @@ async def get_password_reset(token: str, store: StoreDep) -> Response:
     return JSONResponse({"email": user.email})
 
 
-@router.post("/password-resets/{token}")
+@public.post("/password-resets/{token}")
 async def redeem_password_reset(token: str, body: PasswordReset, store: StoreDep) -> Response:
     """Set a new password from a reset link. Every other session of the user ends."""
     user = await store.accounts.redeem_reset(token, body.password)

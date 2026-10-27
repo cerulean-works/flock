@@ -1,11 +1,20 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 
-from app.api.src.api.deps import AdminOrgDep, APIError, JSONResponse, StoreDep, UserDep
+from app.api.src.api.deps import (
+    AdminOrgDep,
+    APIError,
+    JSONResponse,
+    StoreDep,
+    UserDep,
+    rest_user,
+)
 from app.api.src.api.orgs import org_info
 from app.api.src.core.avatars import Avatars, ImageError
 
-router = APIRouter(prefix="/api/v1", tags=["avatars"])
+# Avatar images are public (their URL is the secret); changing one is the REST API.
+public = APIRouter(prefix="/api/v1", tags=["avatars"])
+router = APIRouter(prefix="/api/v1", tags=["avatars"], dependencies=[Depends(rest_user)])
 
 IMAGE_BODY = {
     "requestBody": {
@@ -38,7 +47,7 @@ async def changed(change) -> None:
         raise APIError(e.status, str(e)) from None
 
 
-@router.get("/avatars/{digest}", response_class=Response)
+@public.get("/avatars/{digest}", response_class=Response)
 async def get_avatar(digest: str, request: Request, store: StoreDep) -> Response:
     """An avatar image. Public: its URL (the SHA-256 of the image) is the secret, and the
     image behind a URL never changes, so it may be cached for good."""

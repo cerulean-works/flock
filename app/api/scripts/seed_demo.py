@@ -7,7 +7,7 @@ Flock loads it. Writing through Flock's API instead would stamp everything "now"
 What it creates (at ``--scale 1``):
 - 3 organizations with GPU prices (one GPU type left unpriced) and monthly budgets for this
   month and the last, set around what they spend, so one or two end up over budget;
-- ~40 users (a super admin with an API key, org admins, members, people who joined
+- ~40 users (a super admin with a wandb key, org admins, members, people who joined
   mid-month), most with an identicon avatar, plus a few pending invitations;
 - ~20 projects of five kinds: long multi-node pretraining runs (preempted and resumed), large
   hyperparameter sweeps run by parallel agents, fine-tunes, evaluation jobs and scratch runs;
@@ -855,7 +855,8 @@ class Writer:
                 hashlib.sha256(person.avatar).digest() if person.avatar else None,
                 person.avatar_source,
             )
-        key = f"flock-{secrets.token_hex(24)}"
+        alphabet = string.ascii_letters + string.digits  # a wandb key, as Accounts makes them
+        key = "flock-wandb-" + "".join(secrets.choice(alphabet) for _ in range(40))
         await conn.execute(
             "INSERT INTO api_keys (user_pk, name, prefix, hash, created_at) "
             "VALUES ($1, 'simulate-month', $2, $3, now())",
@@ -1081,7 +1082,7 @@ async def simulate(
     log: Callable[[str], None] = print,
 ) -> dict[str, Any]:
     """Write a simulated month into the database at ``database_url``; returns statistics,
-    including the super admin's new ``api_key``."""
+    including the super admin's new wandb key (``api_key``)."""
     started = time.perf_counter()
     plan = Planner(random.Random(seed), now or time.time(), scale, keep_running).plan()
     log(
@@ -1153,7 +1154,7 @@ def main(argv: list[str] | None = None) -> None:
         f"in {stats['seconds']:.0f}s"
     )
     print(f"sign in as {ADMIN_EMAIL} / {PASSWORD} (every simulated user has that password)")
-    print(f"super admin API key: {stats['api_key']}")
+    print(f"super admin wandb key: {stats['api_key']}")
     print("start (or restart) Flock to load it")
 
 

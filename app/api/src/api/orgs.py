@@ -1,6 +1,6 @@
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
@@ -16,12 +16,13 @@ from app.api.src.api.deps import (
     SuperadminDep,
     UserDep,
     app_link,
+    rest_user,
 )
 from app.api.src.core.accounts import Invite, User
 from app.api.src.core.store import Org, Store
 from app.api.src.core.wandb_source import WandbAuthError, WandbError, WandbNotFound, WandbSource
 
-router = APIRouter(prefix="/api/v1", tags=["organizations"])
+router = APIRouter(prefix="/api/v1", tags=["organizations"], dependencies=[Depends(rest_user)])
 
 Role = Literal["admin", "member"]
 
@@ -175,7 +176,7 @@ async def update_org(org: AdminOrgDep, body: OrgUpdate, user: UserDep, store: St
     Its ID (``name``) is fixed: projects, runs, URLs and wandb clients address the organization
     by it. A different ``name`` answers 400.
 
-    ``s3_ephemeral_ttl`` is how long keys exchanged for a CLI token or API key live, and
+    ``s3_ephemeral_ttl`` is how long keys exchanged for a CLI token live, and
     ``s3_key_max_ttl`` the longest any key may live (null: no limit), both in seconds. The
     ephemeral lifetime can't exceed the maximum (422); lowering only the maximum below it
     lowers it too. A lower maximum applies to existing keys at once.

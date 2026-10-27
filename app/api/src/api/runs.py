@@ -15,13 +15,13 @@ from app.api.src.api.deps import (
     StoreDep,
     UserDep,
     check_owner,
-    current_user,
+    rest_user,
 )
 from app.api.src.api.home import GpuType
 from app.api.src.core.errors import NotFound
 from app.api.src.core.store import Project, Run
 
-router = APIRouter(prefix="/api/v1", tags=["flock"], dependencies=[Depends(current_user)])
+router = APIRouter(prefix="/api/v1", tags=["flock"], dependencies=[Depends(rest_user)])
 
 
 class SortKey(BaseModel):

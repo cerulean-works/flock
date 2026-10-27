@@ -13,14 +13,14 @@ from app.api.src.api.deps import (
     OrgDep,
     StoreDep,
     UserDep,
-    current_user,
+    rest_user,
     visible_org,
 )
 from app.api.src.core import gpus
 from app.api.src.core.budgets import Budgets, fingerprint
 from app.api.src.core.feed import KINDS, decode_cursor
 
-router = APIRouter(prefix="/api/v1", tags=["home"], dependencies=[Depends(current_user)])
+router = APIRouter(prefix="/api/v1", tags=["home"], dependencies=[Depends(rest_user)])
 
 
 def check_gpu_type(value: str) -> str:

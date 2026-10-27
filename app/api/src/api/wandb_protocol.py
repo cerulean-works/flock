@@ -7,16 +7,26 @@ from typing import Any, ClassVar
 from urllib.parse import quote
 
 import orjson
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 
-from app.api.src.api.deps import APIError, JSONResponse, StoreDep, UserDep, visible_org
+from app.api.src.api.deps import (
+    APIError,
+    JSONResponse,
+    StoreDep,
+    WandbUser,
+    visible_org,
+    wandb_user,
+)
 from app.api.src.core.accounts import User
 from app.api.src.core.errors import Discarded, Forbidden, NotFound
 from app.api.src.core.store import DEFAULT_PROJECT, Org, Store
 from app.api.src.utils import encode_id, loads_lenient
 
-router = APIRouter(include_in_schema=False)
+# The calls the wandb SDK makes with its key, which take any credential (D72). Uploads to
+# signed URLs and the SDK's telemetry come without one.
+router = APIRouter(include_in_schema=False, dependencies=[Depends(wandb_user)])
+public = APIRouter(include_in_schema=False)
 
 
 class GraphQLError(Exception):
@@ -296,7 +306,7 @@ class GraphQL:
 
 
 @router.post("/graphql")
-async def graphql(request: Request, store: StoreDep, user: UserDep) -> Response:
+async def graphql(request: Request, store: StoreDep, user: WandbUser) -> Response:
     body = await request.body()
     try:
         if request.headers.get("content-encoding", "").lower() == "gzip":  # the SDK may gzip
@@ -312,7 +322,7 @@ async def graphql(request: Request, store: StoreDep, user: UserDep) -> Response:
 
 @router.post("/files/{entity}/{project}/{run}/file_stream")
 async def file_stream(
-    entity: str, project: str, run: str, request: Request, store: StoreDep, user: UserDep
+    entity: str, project: str, run: str, request: Request, store: StoreDep, user: WandbUser
 ) -> Response:
     body = await request.body()
     try:
@@ -330,7 +340,7 @@ async def file_stream(
     return JSONResponse({"exitcode": None, "limits": {}})
 
 
-@router.put("/storage/{entity}/{project}/{run}/{name:path}")
+@public.put("/storage/{entity}/{project}/{run}/{name:path}")
 async def upload(
     entity: str,
     project: str,
@@ -356,7 +366,7 @@ async def upload(
     return Response(status_code=200)
 
 
-@router.post("/sdk/otel/{path:path}")
+@public.post("/sdk/otel/{path:path}")
 async def discard_telemetry(path: str, request: Request) -> Response:
     """wandb-core exports its own OpenTelemetry metrics/logs to the server; drop them."""
     await request.body()

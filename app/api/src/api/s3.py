@@ -1,6 +1,6 @@
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -12,13 +12,14 @@ from app.api.src.api.deps import (
     SessionUserDep,
     StoreDep,
     UserDep,
+    rest_user,
     visible_org,
 )
 from app.api.src.core.accounts import User
 from app.api.src.core.s3 import S3, Bucket, Key, TooMany
 from app.api.src.core.store import Org, Store
 
-router = APIRouter(prefix="/api/v1", tags=["s3"])
+router = APIRouter(prefix="/api/v1", tags=["s3"], dependencies=[Depends(rest_user)])
 
 KeyName = Annotated[str, Field(min_length=1, max_length=128)]
 
@@ -65,17 +66,13 @@ def key_org(store: Store, user: User, name: str | None) -> Org:
 
 
 def via(request: Request) -> dict[str, Any]:
-    """How a request was made, as bucket events record it: the dashboard (a browser session),
-    the CLI (with its session and machine) or the API (with its key)."""
-    session = getattr(request.state, "session", None)
-    if session is not None and session.kind == "cli":
+    """How a request was made, as bucket events record it: the dashboard (a browser session)
+    or the CLI (with its session and machine). Events from before D72 may say ``"api"``, with
+    the API key that made them."""
+    session = request.state.session  # the router refuses wandb keys, which have none
+    if session.kind == "cli":
         return {"via": "cli", "session": session.pk, "machine": session.name}
-    if session is not None:
-        return {"via": "ui", "session": session.pk}
-    api_key = getattr(request.state, "api_key", None)
-    if api_key is not None:
-        return {"via": "api", "api_key": api_key.pk, "key_name": api_key.name}
-    return {"via": "api"}
+    return {"via": "ui", "session": session.pk}
 
 
 def key_info(store: Store, key: Key) -> dict[str, Any]:
@@ -87,7 +84,8 @@ def key_info(store: Store, key: Key) -> dict[str, Any]:
         "org": org.name if org is not None else None,
         "read_only": key.read_only,
         "ephemeral": key.ephemeral,
-        # The CLI sign-in or API key an ephemeral key was issued for, and its name.
+        # The CLI sign-in (or, before D72, the wandb key) an ephemeral key was issued for,
+        # and its name.
         "session_id": key.session,
         "api_key_id": key.api_key,
         "source": key.source,
@@ -127,7 +125,8 @@ def bucket_info(store: Store, bucket: Bucket) -> dict[str, Any]:
 async def s3_credentials(
     body: CredentialsRequest, request: Request, user: UserDep, store: StoreDep
 ) -> Response:
-    """Exchange the request's credential (a CLI token or API key) for an ephemeral S3 key.
+    """Exchange the request's credential (a CLI token or browser session) for an ephemeral S3
+    key. wandb keys can't be exchanged (D72).
 
     It covers ``org``'s buckets and lives ``ttl`` seconds, or the org's ephemeral lifetime if
     that is shorter. It's revoked with the credential that asked for it. Each call makes a new
@@ -135,21 +134,11 @@ async def s3_credentials(
     """
     store.s3.require()
     org = key_org(store, user, body.org)
-    session = getattr(request.state, "session", None)
-    api_key = getattr(request.state, "api_key", None)
-    # The key is named after the machine of a CLI sign-in, or the API key.
-    if session is not None:
-        name = (session.name if session.kind == "cli" else None) or "browser"
-    else:
-        name = api_key.name if api_key is not None else "api"
+    session = request.state.session
+    # The key is named after the machine of a CLI sign-in.
+    name = (session.name if session.kind == "cli" else None) or "browser"
     key, secret = await store.s3.issue_ephemeral(
-        user,
-        org,
-        name,
-        body.ttl,
-        body.read_only,
-        session=session.pk if session is not None else None,
-        api_key=api_key.pk if api_key is not None else None,
+        user, org, name, body.ttl, body.read_only, session=session.pk
     )
     config = store.s3.config() or {}
     return JSONResponse(
@@ -168,7 +157,7 @@ async def s3_credentials(
 @router.get("/me/s3-keys")
 async def list_s3_keys(user: UserDep, store: StoreDep) -> Response:
     """Your S3 keys that still work: long-lived ones, and the ephemeral ones your CLI
-    sign-ins and API keys were issued."""
+    sign-ins (and, before D72, your wandb keys) were issued."""
     store.s3.require()
     keys = await store.s3.keys(user)
     return JSONResponse({"keys": [key_info(store, key) for key in keys]})
@@ -178,7 +167,7 @@ async def list_s3_keys(user: UserDep, store: StoreDep) -> Response:
 async def create_s3_key(body: KeyCreate, user: SessionUserDep, store: StoreDep) -> Response:
     """A long-lived S3 key for ``org``, living ``ttl`` seconds (null: forever) within the org's
     maximum key lifetime. Its secret is shown only now. Only a signed-in browser can create one,
-    so a leaked CLI token or API key can't mint keys that outlive the ephemeral lifetime."""
+    so a leaked CLI token can't mint keys that outlive the ephemeral lifetime."""
     store.s3.require()
     org = key_org(store, user, body.org)
     key, secret = await store.s3.create_key(user, org, body.name, body.read_only, body.ttl)
@@ -325,8 +314,8 @@ async def presign(
 ) -> Response:
     """Presigned URLs to the S3 proxy, so the dashboard moves object bytes directly.
 
-    They're signed with the caller's browser key: an ephemeral key of the session (or API key)
-    and org, reused while it has 15 minutes left. ``get`` and ``put`` return a ``url`` lasting 15
+    They're signed with the caller's browser key: an ephemeral key of the session and org,
+    reused while it has 15 minutes left. ``get`` and ``put`` return a ``url`` lasting 15
     minutes (an hour for a ``get`` with ``link``). ``multipart`` starts an upload of ``size``
     bytes and returns its ``upload_id``, ``part_size`` and ``part_count``; ``parts`` signs up to
     100 of its parts; ``complete`` signs its completion; ``abort`` cancels it.
@@ -334,14 +323,5 @@ async def presign(
     store.s3.require()
     if body.method in ("parts", "complete", "abort") and not body.upload_id:
         raise APIError(422, f"{body.method} needs the upload_id")
-    session = getattr(request.state, "session", None)
-    api_key = getattr(request.state, "api_key", None)
-    out = await store.s3.presign(
-        user,
-        org,
-        name,
-        body.model_dump(),
-        session.pk if session is not None else None,
-        api_key.pk if api_key is not None else None,
-    )
+    out = await store.s3.presign(user, org, name, body.model_dump(), request.state.session.pk, None)
     return JSONResponse(out)
