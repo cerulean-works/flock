@@ -80,9 +80,9 @@ Password = Annotated[str, Field(min_length=8, max_length=256)]
 
 
 def current_user(request: Request, store: StoreDep) -> User:
-    """The user behind the request's access token (``Bearer <jwt>``) or API key (``Bearer``,
-    ``x-api-key``, or the wandb SDK's basic auth). The token's session is kept in
-    ``request.state.session``."""
+    """The user behind the request's access token (``Bearer <jwt>``), CLI token (``Bearer
+    flock_cli_…``) or API key (``Bearer``, ``x-api-key``, or the wandb SDK's basic auth). The
+    session of an access token or CLI token is kept in ``request.state.session``."""
     accounts = store.accounts
     key = request.headers.get("x-api-key")
     scheme, _, credentials = request.headers.get("authorization", "").partition(" ")
@@ -98,6 +98,12 @@ def current_user(request: Request, store: StoreDep) -> User:
                 raise APIError(401, "invalid or expired access token")
             request.state.session = session
             return accounts.users[session.user]
+        if credentials.startswith(accounts.CLI_TOKEN_PREFIX):
+            session = accounts.session_for_cli_token(credentials)
+            if session is None:
+                raise APIError(401, "invalid or expired CLI token: run flock login again")
+            request.state.session = session
+            return accounts.users[session.user]
         key = credentials
     user = accounts.user_for_key(key) if key else None
     if user is None:
@@ -109,11 +115,23 @@ UserDep = Annotated[User, Depends(current_user)]
 
 
 def current_session(request: Request, user: UserDep) -> Session | None:
-    """The sign-in session of a request made with an access token (None for API keys)."""
+    """The sign-in session of a request made with an access token or CLI token (None for API
+    keys)."""
     return getattr(request.state, "session", None)
 
 
 SessionDep = Annotated[Session | None, Depends(current_session)]
+
+
+def session_user(user: UserDep, session: SessionDep) -> User:
+    """The user behind a browser's access token. API keys and CLI tokens are refused, so a
+    leaked one can't approve sign-ins for new machines."""
+    if session is None or session.kind != "web":
+        raise APIError(403, "only a signed-in browser can do this, not an API key or CLI token")
+    return user
+
+
+SessionUserDep = Annotated[User, Depends(session_user)]
 
 
 def get_superadmin(user: UserDep) -> User:

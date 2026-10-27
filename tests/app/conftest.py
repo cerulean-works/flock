@@ -618,9 +618,9 @@ SETTINGS = wandb.Settings(x_file_stream_transmit_interval=0.1)
         return proc
 
 
-@pytest.fixture(scope="session")
-def postgres() -> Iterator[Postgres]:
-    """``FLOCK_TEST_DATABASE_URL`` (an admin URL) if set, else a PostgreSQL container."""
+def serve_postgres() -> Iterator[Postgres]:
+    """``FLOCK_TEST_DATABASE_URL`` (an admin URL) if set, else a PostgreSQL container. The
+    session's ``postgres`` fixture (in ``tests/conftest.py``, shared with the CLI tests)."""
     container = None
     url = os.environ.get("FLOCK_TEST_DATABASE_URL")
     if not url:

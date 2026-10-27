@@ -16,6 +16,8 @@ Flock reads its settings from environment variables when it starts. Each setting
 | `FLOCK_REFRESH_TOKEN_TTL` | `2592000` (30 days) | Seconds a sign-in lasts without being refreshed. |
 | `FLOCK_INVITE_TTL` | `604800` (7 days) | Seconds an invitation link is valid. |
 | `FLOCK_RESET_TTL` | `86400` (24 hours) | Seconds a password reset link is valid. |
+| `FLOCK_DEVICE_CODE_TTL` | `900` (15 minutes) | Seconds a `flock login` code waits to be approved in the browser. See [Signing in from the command line](accounts#signing-in-from-the-command-line). |
+| `FLOCK_CLI_SESSION_TTL` | `7776000` (90 days) | Seconds a command-line sign-in lasts without being used. Each use extends it. |
 | `FLOCK_GOOGLE_CLIENT_ID` | none | OAuth client ID. With the secret, it turns on Sign in with Google. See [Setting up Sign in with Google](google-sign-in). |
 | `FLOCK_GOOGLE_CLIENT_SECRET` | none | That OAuth client's secret. |
 | `FLOCK_GOOGLE_REDIRECT_URL` | `<FLOCK_WEB_URL>/api/v1/auth/google/callback` | Callback URL registered with Google. Without `FLOCK_WEB_URL`, the default uses `FLOCK_API_PUBLIC_URL`, else the address of the request. |

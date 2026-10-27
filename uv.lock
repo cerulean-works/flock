@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.14"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -694,6 +694,7 @@ wheels = [
 name = "flock"
 version = "0.1.0"
 source = { editable = "." }
+default-groups = ["components", "dev"]
 
 [package.dev-dependencies]
 components = [
@@ -761,11 +762,17 @@ name = "flock-cli"
 version = "0.1.0"
 source = { virtual = "flock/cli" }
 dependencies = [
+    { name = "click" },
     { name = "flock" },
+    { name = "httpx" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "flock", editable = "." }]
+requires-dist = [
+    { name = "click", specifier = ">=8.5.0" },
+    { name = "flock", editable = "." },
+    { name = "httpx", specifier = ">=0.28.1" },
+]
 
 [[package]]
 name = "flock-eval"

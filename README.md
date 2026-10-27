@@ -60,9 +60,12 @@ training runs and compare results under a consistent setup. Its docs start at
 
 ### CLI
 
-[`flock.cli`](flock/cli/) is where we're building command-line tools for our
-training and evaluation workflows, including managing datasets and model
-checkpoints in our own storage infrastructure.
+[`flock.cli`](flock/cli/) is the `flock` command. `flock login` signs a machine in to
+our Flock server by approving a code in the browser, and can point the `wandb` SDK at
+it too. `flock whoami`, `flock token` and `flock logout` manage that sign-in, and
+`flock.cli.credentials` lets any Flock client find it. We'll add commands for our
+training and evaluation workflows here. Its docs start at
+[`flock/cli/docs/source/index.md`](flock/cli/docs/source/index.md).
 
 ### Flock
 

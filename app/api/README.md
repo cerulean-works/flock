@@ -66,6 +66,10 @@ export WANDB_BASE_URL=http://flock.internal:8080 WANDB_API_KEY=<your API key>
 
 `wandb.init` logs to your default organization unless you pass `entity=`.
 
+`flock login --host http://flock.internal:8080` signs a machine in from a terminal instead:
+you approve a code in the dashboard, and the machine gets a CLI token. It can also log the
+wandb SDK in for you, with a new API key. See [the `flock` command](../../flock/cli/).
+
 ## Code layout
 
 | Path | Contents |
@@ -149,7 +153,10 @@ admin) creates a one-time link with `POST /api/v1/users/{id}/password-reset`.
 them with `POST /api/v1/auth/refresh` (each refresh token works once). Logging out, changing
 your password or a password reset end sessions at once, not when their tokens expire. The wandb
 SDK and scripts use API keys, sent as the SDK does (basic auth), as `Bearer <key>` or as
-`x-api-key`. Keys are stored hashed and shown only when created.
+`x-api-key`. Keys are stored hashed and shown only when created. `flock login` gets a CLI
+token (`Bearer flock_cli_...`) through the device grant (`POST /api/v1/auth/device`, approved
+on the dashboard's `/device` page): a session that never rotates, lasts 90 idle days, and is
+listed and revocable at `/api/v1/me/cli-sessions`.
 
 **Sign in with Google** runs the OAuth code flow in Flock. Register
 `<FLOCK_WEB_URL>/api/v1/auth/google/callback` with Google: flock-ui proxies

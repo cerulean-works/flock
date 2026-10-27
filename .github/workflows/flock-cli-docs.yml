@@ -1,0 +1,42 @@
+name: Flock CLI docs build
+
+# Builds the flock command's docs (flock/cli/docs/source) with doc-builder, so a change that
+# breaks them fails here. Nothing is published: doc-builder names a site after the package it
+# documents, and the `flock` site is the app's docs (flock-docs.yml). This workflow's name is not
+# the one flock-docs-pr-publish.yml listens for, so its build never reaches a preview either.
+
+on:
+  pull_request:
+    paths:
+      - "flock/cli/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/flock-cli-docs.yml"
+  push:
+    branches: [main]
+    paths:
+      - "flock/cli/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/flock-cli-docs.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: flock-cli-docs-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: cerulean-works/doc-builder/.github/workflows/build_docs.yml@main
+    permissions:
+      contents: read
+    with:
+      # The package autodoc resolves `flock.cli.*` in; also the site name, unused here.
+      project: flock
+      # The build checks the repository out into a folder named after it.
+      path_to_docs: flock/flock/cli/docs/source
+      python_version: "3.14"
+      # Autodoc only imports flock.cli.credentials, which needs nothing beyond the standard
+      # library, so the root `flock` package the build installs is enough.

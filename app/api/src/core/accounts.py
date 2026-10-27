@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import logging
 import secrets
 import time
 from dataclasses import dataclass, field
@@ -9,12 +10,14 @@ import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 
-from app.api.src.core.errors import Conflict, Forbidden, NotFound
+from app.api.src.core.errors import Conflict, Forbidden, NotFound, TooManyAttempts
 
 if TYPE_CHECKING:
     import asyncpg
 
     from app.api.src.core.store import Org, Store
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(eq=False)
@@ -45,11 +48,36 @@ class ApiKey:
 
 @dataclass(eq=False)
 class Session:
-    """A sign-in: its refresh token (stored hashed) mints access tokens until it expires."""
+    """A sign-in. A web session's refresh token (stored hashed) mints access tokens until it
+    expires; a CLI session's token (``flock login``) is sent as is, and each use extends it."""
 
     pk: int
     user: int
     expires_at: float
+    kind: str = "web"  # or "cli"
+    name: str | None = None  # a CLI session's machine (its hostname)
+    created_at: float = 0.0
+    last_used_at: float | None = None
+    # A CLI session's token digest, and when its use was last written to the database.
+    token_hash: bytes | None = field(default=None, repr=False)
+    written_at: float = field(default=0.0, repr=False)
+
+
+@dataclass(eq=False)
+class DeviceGrant:
+    """A pending ``flock login`` (RFC 8628's device authorization grant): the CLI polls with
+    its device code while the user approves ``user_code`` in a signed-in browser."""
+
+    user_code: str  # 8 letters, without the dash it is shown with
+    hostname: str
+    platform: str
+    ip: str | None
+    created_at: float
+    expires_at: float
+    interval: float  # seconds the CLI waits between polls
+    polled_at: float = 0.0
+    user: int | None = None  # who approved it
+    denied: bool = False
 
 
 @dataclass(eq=False)
@@ -79,6 +107,17 @@ class Accounts:
     )
     # How long a one-time Google sign-in code (exchanged for tokens by the UI) stays valid.
     CODE_TTL: ClassVar[float] = 60.0
+    CLI_TOKEN_PREFIX: ClassVar[str] = "flock_cli_"
+    # A CLI session's use is written to the database at most this often (seconds).
+    CLI_WRITE_INTERVAL: ClassVar[float] = 3600.0
+    # Device sign-ins (RFC 8628): user codes use GitHub's alphabet, without vowels or
+    # lookalikes. Pending sign-ins are capped so the public start route can't grow memory.
+    USER_CODE_ALPHABET: ClassVar[str] = "BCDFGHJKLMNPQRSTVWXZ"
+    DEVICE_INTERVAL: ClassVar[float] = 5.0
+    MAX_DEVICE_GRANTS: ClassVar[int] = 1000
+    # Wrong user codes a user may type per window before being refused (429).
+    WRONG_CODES: ClassVar[int] = 10
+    WRONG_CODE_WINDOW: ClassVar[float] = 600.0
 
     def __init__(self, store: Store) -> None:
         self.store = store
@@ -87,9 +126,15 @@ class Accounts:
         self.by_google: dict[str, User] = {}
         self.keys: dict[bytes, ApiKey] = {}  # by sha256 of the key
         self.sessions: dict[int, Session] = {}
+        self.cli_tokens: dict[bytes, Session] = {}  # CLI sessions, by sha256 of their token
         self.secret = b""
         self._signup = asyncio.Lock()
         self._codes: dict[bytes, tuple[int, float]] = {}  # code digest -> (user pk, expiry)
+        self._grants: dict[bytes, DeviceGrant] = {}  # by sha256 of the device code
+        self._grants_by_code: dict[str, bytes] = {}  # user code -> device code digest
+        self._wrong_codes: dict[int, list[float]] = {}  # user pk -> times of wrong codes
+        self._tasks: set[asyncio.Task] = set()
+        self._loop: asyncio.AbstractEventLoop | None = None
         # Verified against when a login names an unknown email, so it takes as long as any.
         self._dummy_hash = ""
 
@@ -98,6 +143,7 @@ class Accounts:
         return hashlib.sha256(secret.encode()).digest()
 
     async def load(self) -> None:
+        self._loop = asyncio.get_running_loop()
         db = self.store.db
         secret = self.store.settings.jwt_secret
         if not secret:
@@ -119,10 +165,16 @@ class Accounts:
         ):
             self.keys[bytes(digest)] = ApiKey(pk, user, name, prefix, created_at)
         await db.execute("DELETE FROM sessions WHERE expires_at < now()")
-        for record in await db.fetch(
-            "SELECT pk, user_pk, extract(epoch FROM expires_at)::float8 FROM sessions"
+        for *fields, digest in await db.fetch(
+            "SELECT pk, user_pk, extract(epoch FROM expires_at)::float8, kind, name, "
+            "extract(epoch FROM created_at)::float8, extract(epoch FROM last_used_at)::float8, "
+            "refresh_hash FROM sessions"
         ):
-            self.sessions[record[0]] = Session(*record)
+            session = self.sessions[fields[0]] = Session(*fields)
+            if session.kind == "cli":
+                session.token_hash = bytes(digest)
+                session.written_at = session.last_used_at or session.created_at
+                self.cli_tokens[session.token_hash] = session
         self._dummy_hash = await asyncio.to_thread(self.hasher.hash, secrets.token_hex(16))
 
     def _add_user(self, user: User) -> User:
@@ -264,12 +316,13 @@ class Accounts:
         }
 
     async def refresh(self, refresh: str) -> dict[str, Any] | None:
-        """New tokens for a refresh token, which is replaced (each one works once)."""
+        """New tokens for a refresh token, which is replaced (each one works once). CLI tokens
+        are refused: they never rotate."""
         new = secrets.token_urlsafe(32)
         expires_at = time.time() + self.store.settings.refresh_token_ttl
         pk = await self.store.db.fetchval(
             "UPDATE sessions SET refresh_hash = $2, expires_at = to_timestamp($3) "
-            "WHERE refresh_hash = $1 AND expires_at > now() RETURNING pk",
+            "WHERE refresh_hash = $1 AND kind = 'web' AND expires_at > now() RETURNING pk",
             self.digest(refresh),
             self.digest(new),
             expires_at,
@@ -280,19 +333,25 @@ class Accounts:
         session.expires_at = expires_at
         return self._tokens(session, new)
 
+    def _forget_session(self, session: Session) -> None:
+        self.sessions.pop(session.pk, None)
+        if session.token_hash is not None:
+            self.cli_tokens.pop(session.token_hash, None)
+
     async def end_session(self, session: Session) -> None:
         await self.store.db.execute("DELETE FROM sessions WHERE pk = $1", session.pk)
-        self.sessions.pop(session.pk, None)
+        self._forget_session(session)
 
     async def end_sessions(self, user: User, keep: Session | None = None) -> None:
-        """Sign ``user`` out everywhere (except ``keep``); their access tokens stop working."""
+        """Sign ``user`` out everywhere (except ``keep``), CLI sessions included; their access
+        tokens and CLI tokens stop working."""
         kept = keep.pk if keep is not None else None
         await self.store.db.execute(
             "DELETE FROM sessions WHERE user_pk = $1 AND pk IS DISTINCT FROM $2", user.pk, kept
         )
         for session in [s for s in self.sessions.values() if s.user == user.pk]:
             if session.pk != kept:
-                del self.sessions[session.pk]
+                self._forget_session(session)
 
     def issue_code(self, user: User) -> str:
         """A one-time code standing for a completed Google sign-in (see ``redeem_code``)."""
@@ -307,6 +366,159 @@ class Accounts:
     def redeem_code(self, code: str) -> User | None:
         user, expires_at = self._codes.pop(self.digest(code), (None, 0.0))
         return self.users.get(user) if user is not None and expires_at > time.time() else None
+
+    # ------------------------------------------------------------------ CLI sessions
+
+    async def start_cli_session(self, user: User, name: str) -> tuple[Session, str]:
+        """A new CLI session on the machine ``name``; its token is returned only here."""
+        token = f"{self.CLI_TOKEN_PREFIX}{secrets.token_urlsafe(32)}"
+        digest = self.digest(token)
+        expires_at = time.time() + self.store.settings.cli_session_ttl
+        record = await self.store.db.fetchrow(
+            "INSERT INTO sessions (user_pk, refresh_hash, created_at, expires_at, kind, name) "
+            "VALUES ($1, $2, now(), to_timestamp($3), 'cli', $4) "
+            "RETURNING pk, extract(epoch FROM created_at)::float8",
+            user.pk,
+            digest,
+            expires_at,
+            name,
+        )
+        assert record is not None
+        pk, created_at = record
+        session = Session(pk, user.pk, expires_at, "cli", name, created_at)
+        session.token_hash, session.written_at = digest, created_at
+        self.sessions[pk] = self.cli_tokens[digest] = session
+        return session, token
+
+    def session_for_cli_token(self, token: str) -> Session | None:
+        """The live CLI session ``token`` belongs to, or None. Each use extends the session by
+        ``cli_session_ttl``; the database hears of it at most every ``CLI_WRITE_INTERVAL``."""
+        session = self.cli_tokens.get(self.digest(token))
+        if session is None or session.user not in self.users:
+            return None
+        now = time.time()
+        if session.expires_at <= now:  # idle too long; its row goes at the next startup
+            self._forget_session(session)
+            return None
+        session.last_used_at = now
+        session.expires_at = now + self.store.settings.cli_session_ttl
+        if now - session.written_at >= self.CLI_WRITE_INTERVAL and self._loop is not None:
+            session.written_at = now
+            # Credentials are checked in FastAPI's thread pool: write from the event loop.
+            self._loop.call_soon_threadsafe(self._write_use, session)
+        return session
+
+    def _write_use(self, session: Session) -> None:
+        async def write() -> None:
+            try:
+                await self.store.db.execute(
+                    "UPDATE sessions SET last_used_at = to_timestamp($2), "
+                    "expires_at = to_timestamp($3) WHERE pk = $1",
+                    session.pk,
+                    session.last_used_at,
+                    session.expires_at,
+                )
+            except Exception:
+                log.exception("could not record the use of CLI session %s", session.pk)
+
+        task = asyncio.get_running_loop().create_task(write())
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    def cli_sessions(self, user: User) -> list[Session]:
+        now = time.time()
+        return sorted(
+            (s for s in self.cli_tokens.values() if s.user == user.pk and s.expires_at > now),
+            key=lambda s: s.pk,
+        )
+
+    async def end_cli_session(self, user: User, pk: int) -> None:
+        session = self.sessions.get(pk)
+        if session is None or session.kind != "cli" or session.user != user.pk:
+            raise NotFound(f"command line sign-in {pk} not found")
+        await self.end_session(session)
+
+    # ------------------------------------------------------------------ device sign-in
+
+    def _drop_grant(self, digest: bytes) -> None:
+        grant = self._grants.pop(digest, None)
+        if grant is not None:
+            self._grants_by_code.pop(grant.user_code, None)
+
+    @staticmethod
+    def normalize_user_code(code: str) -> str:
+        """A user code as typed (any case, with or without the dash) in its stored form."""
+        return "".join(ch for ch in code.upper() if ch.isalnum())
+
+    def start_device(
+        self, hostname: str, platform: str, ip: str | None
+    ) -> tuple[DeviceGrant, str] | None:
+        """A new pending sign-in and its device code, or None when too many are pending."""
+        now = time.time()
+        for digest in [d for d, g in self._grants.items() if g.expires_at <= now]:
+            self._drop_grant(digest)
+        if len(self._grants) >= self.MAX_DEVICE_GRANTS:
+            return None
+        user_code = ""
+        while not user_code or user_code in self._grants_by_code:
+            user_code = "".join(secrets.choice(self.USER_CODE_ALPHABET) for _ in range(8))
+        device_code = secrets.token_urlsafe(32)
+        digest = self.digest(device_code)
+        ttl = self.store.settings.device_code_ttl
+        grant = DeviceGrant(user_code, hostname, platform, ip, now, now + ttl, self.DEVICE_INTERVAL)
+        self._grants[digest] = grant
+        self._grants_by_code[user_code] = digest
+        return grant, device_code
+
+    async def poll_device(self, device_code: str) -> str | tuple[User, str]:
+        """What the CLI's poll gets: an RFC 8628 error code (``authorization_pending``,
+        ``slow_down``, ``access_denied`` or ``expired_token``), or once approved, the user and
+        a new CLI token. Any answer but the first two uses the sign-in up."""
+        digest = self.digest(device_code)
+        grant = self._grants.get(digest)
+        now = time.time()
+        if grant is None or grant.expires_at <= now:
+            self._drop_grant(digest)
+            return "expired_token"  # unknown codes too: a restart forgets pending sign-ins
+        if grant.denied:
+            self._drop_grant(digest)
+            return "access_denied"
+        user = self.users.get(grant.user) if grant.user is not None else None
+        if user is None:
+            # Polling sooner than asked slows the CLI down; some slack absorbs network jitter.
+            too_soon = now - grant.polled_at < grant.interval * 0.8
+            grant.polled_at = now
+            if too_soon:
+                grant.interval += 5
+                return "slow_down"
+            return "authorization_pending"
+        self._drop_grant(digest)  # before awaiting: of concurrent polls, one gets the token
+        _, token = await self.start_cli_session(user, grant.hostname)
+        return user, token
+
+    def device_grant(self, user: User, user_code: str) -> DeviceGrant | None:
+        """The undecided sign-in ``user_code`` names, as ``user`` typed it. Each miss counts
+        against the user, who gets ``TooManyAttempts`` after ``WRONG_CODES`` misses within
+        ``WRONG_CODE_WINDOW`` seconds."""
+        now = time.time()
+        recent = [t for t in self._wrong_codes.pop(user.pk, []) if t > now - self.WRONG_CODE_WINDOW]
+        if recent:
+            self._wrong_codes[user.pk] = recent
+        if len(recent) >= self.WRONG_CODES:
+            raise TooManyAttempts("too many wrong codes: wait a few minutes and try again")
+        digest = self._grants_by_code.get(self.normalize_user_code(user_code))
+        grant = self._grants.get(digest) if digest is not None else None
+        if grant is None or grant.expires_at <= now or grant.user is not None or grant.denied:
+            self._wrong_codes[user.pk] = [*recent, now]
+            return None
+        return grant
+
+    def decide_device(self, user: User, grant: DeviceGrant, approve: bool) -> None:
+        """Approve the sign-in as ``user`` (the CLI's next poll gets a token), or deny it."""
+        if approve:
+            grant.user = user.pk
+        else:
+            grant.denied = True
 
     # ------------------------------------------------------------------ API keys
 
@@ -435,8 +647,8 @@ class Accounts:
             del self.by_google[user.google_sub]
         for digest in [d for d, k in self.keys.items() if k.user == user.pk]:
             del self.keys[digest]
-        for pk in [pk for pk, s in self.sessions.items() if s.user == user.pk]:
-            del self.sessions[pk]
+        for session in [s for s in self.sessions.values() if s.user == user.pk]:
+            self._forget_session(session)
         self.store.forget_owner(user.pk)
         await self.store.avatars.release(user.avatar)
 

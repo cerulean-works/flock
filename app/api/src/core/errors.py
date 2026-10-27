@@ -31,3 +31,7 @@ class Forbidden(Exception):
         super().__init__(message)
         self.message = message
         self.ids = list(ids)
+
+
+class TooManyAttempts(Exception):
+    """Too many wrong guesses, such as sign-in codes, in a short time (HTTP 429)."""
