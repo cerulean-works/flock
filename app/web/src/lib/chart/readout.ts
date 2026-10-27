@@ -134,3 +134,33 @@ export function tooltipPosition(
 	const top = Math.max(pad, Math.min(y - 12, h - pad - bh));
 	return { left, top };
 }
+
+/** A point in a box: the crosshair's, in the box's coordinates, and the box's size. */
+export interface TipBox {
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+}
+
+/**
+ * Where a tooltip of `total` readings goes and which of them it lists: sized for the `plot` it
+ * reads out (as many rows as fit in it, at most `maxWidth` wide), and placed beside the
+ * crosshair in the plot, or in `float` (the window) when it floats over the page. Floating
+ * moves it, never grows it: a page of runs would otherwise make a column as tall as the window.
+ */
+export function placeTip(
+	total: number,
+	at: number,
+	plot: TipBox,
+	m: TooltipMetrics,
+	maxWidth: number,
+	float: TipBox | null = null
+) {
+	const fit = tooltipRows(total, at, plot.h - 4, m);
+	const width = Math.min(maxWidth, plot.w - 4);
+	const pos = float
+		? tooltipPosition(float.x, float.y, width, fit.height, float.w, float.h, 16, 8)
+		: tooltipPosition(plot.x, plot.y, width, fit.height, plot.w, plot.h);
+	return { fit, width, ...pos };
+}

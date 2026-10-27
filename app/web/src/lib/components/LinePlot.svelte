@@ -9,7 +9,7 @@
 		type PlotSeries
 	} from '#lib/chart/engine.ts';
 	import { formatX, formatXTick, formatXValue } from '#lib/chart/axes.ts';
-	import { Readout, tooltipPosition, tooltipRows } from '#lib/chart/readout.ts';
+	import { placeTip, Readout, type TipBox } from '#lib/chart/readout.ts';
 	import { cancel, schedule } from '#lib/chart/scheduler.ts';
 	import { pointAt, SNAP_PX, smoothed, snapStep } from '#lib/chart/series.ts';
 	import { formatMetric, formatTick, sameItems } from '#lib/utils.ts';
@@ -278,9 +278,9 @@
 
 	/**
 	 * The tooltip for the readings just taken: rows sorted high to low, windowed around the
-	 * focused line, beside the crosshair. The hovered plot's (`float`) floats over the page, as
-	 * many rows as fit in the window, so it never hides the lines being hovered in a small
-	 * card. The other plots following the cursor keep theirs inside the plot, so none spills
+	 * focused line, beside the crosshair, as many rows as fit in the plot. The hovered plot's
+	 * (`float`) floats over the page, so its card doesn't clip it and it can sit beside the
+	 * cursor outside the plot, rather than over the lines being hovered. The other plots following the cursor keep theirs inside the plot, so none spills
 	 * over the plot the pointer is in.
 	 */
 	function layoutTip(
@@ -304,20 +304,23 @@
 				break;
 			}
 		// The box, and the crosshair's point, in its coordinates: the window's, or the plot's.
-		let boxW = gutter + cw + 6;
-		let boxH = PLOT_TOP + ch + below;
-		let px = gutter + x;
-		let py = PLOT_TOP + fy * ch;
+		const plot = {
+			x: gutter + x,
+			y: PLOT_TOP + fy * ch,
+			w: gutter + cw + 6,
+			h: PLOT_TOP + ch + below
+		};
+		let box: TipBox | null = null;
 		if (float && area) {
 			const rect = area.getBoundingClientRect();
-			[boxW, boxH] = [window.innerWidth, window.innerHeight];
-			[px, py] = [rect.left + x, rect.top + fy * ch];
+			box = {
+				x: rect.left + x,
+				y: rect.top + fy * ch,
+				w: window.innerWidth,
+				h: window.innerHeight
+			};
 		}
-		const fit = tooltipRows(n, at, boxH - (float ? 16 : 4), TIP_METRICS[size]);
-		const width = Math.min(TIP_WIDTH[size], boxW - 4);
-		const pos = float
-			? tooltipPosition(px, py, width, fit.height, boxW, boxH, 16, 8)
-			: tooltipPosition(px, py, width, fit.height, boxW, boxH);
+		const { fit, width, ...pos } = placeTip(n, at, plot, TIP_METRICS[size], TIP_WIDTH[size], box);
 		const fmt = view.format;
 		const raw = smoothing > 0;
 		const byMetric = ws.byMetric(view);

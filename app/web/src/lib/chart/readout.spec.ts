@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Readout, tooltipPosition, tooltipRows, type ReadLine } from './readout.ts';
+import { placeTip, Readout, tooltipPosition, tooltipRows, type ReadLine } from './readout.ts';
 import { Series } from './series.ts';
 
 function line(steps: number[], values: number[], color = '#000'): ReadLine {
@@ -120,5 +120,29 @@ describe('tooltipPosition', () => {
 	it('keeps inside vertically', () => {
 		expect(tooltipPosition(100, 195, 120, 80, 400, 200).top).toBe(200 - 2 - 80);
 		expect(tooltipPosition(100, 0, 120, 80, 400, 200).top).toBe(2);
+	});
+});
+
+describe('placeTip', () => {
+	const m = { chrome: 30, row: 18, more: 16 };
+	// A grid card's plot, 340×240, hovered at its middle; the window is 1440×900.
+	const plot = { x: 170, y: 120, w: 340, h: 240 };
+	const window = { x: 800, y: 400, w: 1440, h: 900 };
+
+	it('lists as many rows when floating as inside the plot, only placed in the window', () => {
+		const inPlot = placeTip(64, 10, plot, m, 248);
+		const floating = placeTip(64, 10, plot, m, 248, window);
+		expect(floating.fit).toEqual(inPlot.fit);
+		expect(floating.width).toBe(inPlot.width);
+		expect(floating.fit.rows).toBeLessThan(64);
+		expect(floating.fit.above + floating.fit.below).toBe(64 - floating.fit.rows);
+		// Beside the cursor, in window coordinates.
+		expect(floating.left).toBe(800 + 16);
+		expect(floating.top).toBe(400 - 12);
+	});
+
+	it("flips a floating tooltip to the cursor's left at the window's right edge", () => {
+		const t = placeTip(5, -1, plot, m, 248, { ...window, x: 1400 });
+		expect(t.left).toBe(1400 - 16 - 248);
 	});
 });
