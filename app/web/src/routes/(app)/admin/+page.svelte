@@ -57,14 +57,14 @@
 <div class="flex min-h-0 flex-1 flex-col">
 	<main class="min-h-0 flex-1 overflow-y-auto px-5 pb-16">
 		<div class="mx-auto max-w-180">
-			<h1 class="pt-8 font-serif text-[34px] leading-[1.15] tracking-[-0.02em]">Super admin</h1>
+			<h1 class="pt-8 text-[34px] leading-[1.15] tracking-[-0.025em]">Super admin</h1>
 			<p class="mt-1 text-muted-foreground">
 				{count(data.orgs.length, 'organization')} · {count(data.users.length, 'account')}
 			</p>
 
 			<section class="mt-10">
 				<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-					<h2 class="font-serif text-2xl tracking-[-0.01em]">Organizations</h2>
+					<h2 class="text-2xl tracking-[-0.01em]">Organizations</h2>
 					<Button variant="outline" class="ml-auto" onclick={() => (creating = true)}>
 						<PlusIcon /> New organization
 					</Button>
@@ -127,7 +127,7 @@
 			</section>
 
 			<section class="mt-10">
-				<h2 class="font-serif text-2xl tracking-[-0.01em]">Accounts</h2>
+				<h2 class="text-2xl tracking-[-0.01em]">Accounts</h2>
 				<ul class="mt-4 border-t border-divider">
 					{#each data.users as user (user.id)}
 						<li class="flex min-h-14 items-center gap-3 border-b border-divider py-2">
