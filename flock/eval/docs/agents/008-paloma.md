@@ -2,11 +2,11 @@
 
 | | |
 | --- | --- |
-| Status | PR 1 built (core and `wikitext_103`); PR 2 (the other 8 sources and the parity table) next |
+| Status | built in two PRs: the core with `wikitext_103`, then the other 8 sources and the parity table |
 | Date | 2026-10-24 |
 | Builds on | [001](001-eval-core.md) (scoring, `bits_per_byte`), [003](003-base-easy.md) (D18, suites as data), [004](004-suites.md) (`Suite` and its scales), [012](012-task-snapshot.md) (the snapshot) |
 | Keeps | 001's tokenization, batching and float32 log-softmax; 002's `truncation` field (always 0 here); D18's unweighted suite means |
-| Result | PR 1: `paloma_wikitext_103` 0.7065 bits per byte in bfloat16 on OLMo 2 1B; float32 parity in section 7 |
+| Result | 309 domains on OLMo 2 1B in 424 seconds of scoring. Check 1 passes (texts not compared in one source), every domain's float32 bits per byte matches OLMES within 2.0e-7, and every source passes check 3, while 44 small domains miss its 2e-4. Of check 2's per-document misses, all but 8 documents in 7 domains come within 1e-3 scored alone, and those 8 differ by the library versions, not the code (section 7) |
 
 ## 1. Goal
 
@@ -175,6 +175,10 @@ The setup is D22's: OLMES from its own environment, `allenai/OLMo-2-0425-1B` at 
 
 **Calibration first,** as D22 was fixed. `c4_en`, `wikitext_103` and `ptb` run on both sides in both dtypes (four dev jobs). The bfloat16 tolerance is the larger of the largest observed per-domain gap (rounded up to one significant figure) and our same-commit run-to-run noise on the same three tasks, with D22's 3e-4 as the ceiling. It is written here and frozen, and only then does the full first version run.
 
+**Calibrated and frozen (2026-10-25): check 3's tolerance is 2e-4 bits per byte**, per domain and per source. On `allenai/OLMo-2-0425-1B` at `a1847dff`, the per-domain bfloat16 gaps between flock and OLMES were 9.7e-7 (`c4_en`), 2.7e-5 (`wikitext_103`) and 1.2e-4 (`ptb`), so the largest rounds up to 2e-4. Two flock bfloat16 runs on one commit were bit-for-bit equal, so the run-to-run noise adds nothing. D22's 3e-4 ceiling is not reached. The same runs passed checks 1 and 2 on `wikitext_103` and `ptb`. On `c4_en`, 3 of 2,124 documents missed check 2's 1e-3 nats per window in float32 (1.46e-3, 1.40e-3 and 1.34e-3, each one window). Scored alone they are 4.9e-4, 1.2e-4 and 3.6e-4 nats from OLMES, so the gap is our left-padded batching in float32, not the windows; the domain's bits per byte is within 2.5e-8. The rule was not changed at calibration.
+
+**Correction after the full run (Harry, 2026-10-26): check 2's per-document rule has three rungs.** The rule above is left as it was registered before the calibration. As first written, a document either came within 1e-3 nats per window batched or failed. Across two library stacks one sensitive token can move a document by 4e-3 nats with nothing batched (section 7, PR 2), so that rule can't hold for every document. A document over 1e-3 batched passes if it comes within 1e-3 scored alone, or, still over alone, if OLMES's own forward call (`model(ids).logits`, then `log_softmax`, no flock code) run on our torch and transformers agrees with ours within 1e-3. The rung each document reaches is recorded. The third rung separates the code from the library versions; it is a measurement, not an explanation.
+
 **The verdict rests on checks 1 and 2.** Check 3 is reported pass or fail for every domain, next to each side's bfloat16 drift from OLMES's float32 run, but a fail there doesn't keep a domain from being used. OLMES sums each window's bfloat16 log-probabilities in bfloat16 (`_loglikelihood_tokens_verbose` in `oe_eval/models/eleuther_huggingface.py`, the multiple-choice path), so its bfloat16 numbers are rounded values, while the two float32 runs share one answer. Our own bfloat16 drift from float32 is a domain's noise floor: a difference between two checkpoints smaller than it is not a result.
 
 ---
@@ -206,7 +210,8 @@ All on CPU with the tiny random model, no downloads.
 
 - **Traditional Chinese.** A Traditional Chinese domain set is its own task with its own name, built later. Candidates, none checked yet for licence or for overlap with our pretraining corpus: held-out zh-TW Wikipedia articles (CC BY-SA, but our corpus includes zh-Wikipedia), DRCD's passages (CC BY-SA 3.0, Wikipedia-derived, already used by the DRCD gold-answer task), and Taiwan government open-data text (Open Government Data License). Any converted or translated text gets a name of its own.
 - **A second model for rankings** (as D23): worth running on Paloma, or are per-domain levels enough?
-- **The other 7 sources**, once their licences are settled for our use.
+- **The other sources:** `redpajama`, the two `m2d2` sources and `twitterAAE_HELM_fixed` once their licences are settled for our use. The three fringe sources stay out, as in the paper's headline numbers.
+- **Names with `.`, `#` and `+`** (`paloma_c4_100_domains__1_www.nytimes.com`, `..._c#`) become tracker keys and file names as they are. The tracker may read `.` as nesting; not checked yet.
 
 ---
 
@@ -236,3 +241,29 @@ All on CPU with the tiny random model, no downloads.
 | bfloat16 drift from OLMES's float32 | 8.6e-5 | 5.9e-5 |
 
 The bfloat16 run took 5.2 seconds for 285,336 tokens on one H200. Check 3's tolerance is set by PR 2's calibration.
+
+### PR 2: the other 8 sources and parity
+
+- **Data.** `DOMAINS` lists all 9 sources: the 304 named domains of the 4 multi-domain sources, in Paloma's rank order as the census prints them, and none for the 5 one-domain sources, 309 tasks in all.
+- **Loading.** One split takes 1.6 to 2.6 seconds to load from the cache for the 100-domain sources, so a run that loaded it once for each of their 299 domains would spend about 8 to 13 minutes loading. `PerplexityTask.load` keeps the last split it loaded, grouped by domain as tuples of frozen docs (`functools.lru_cache(maxsize=1)` on the frozen `Dataset`), and the domains of a source run one after another, so each split loads once per run. A run that interleaves the domains of two sources loads their splits again each time; suites never do.
+- **Speed.** The full first version, 77,746 documents in 81,761 windows, scores in 424 seconds on one H200 in bfloat16.
+
+**Parity** (008.D8, all 309 domains; flock at `f8f928e`, `allenai/OLMo-2-0425-1B` at `a1847dff`, OLMES at `5a51f50`, batch size 1, `max_length` 2048, `test` at `65cd6fc5`). The branch was later rebuilt on `main`, and its later commits change loading, checks and layout, not the scored numbers. `main` had given `Dataset` a `row_index` field, which every task hash covers, so each hash moved; recomputed without that one field, all 309 equal the run's, and the hash covers each doc's id and text in order, so the same documents are scored. The rolling scores on the tiny model are bit-for-bit equal before and after the rebuild.
+
+| Source | Domains | float32, flock and OLMES (mean of domains) | bfloat16, flock / OLMES | Check 3 (source) | OLMES's own number (all docs pooled), float32 |
+| --- | --- | --- | --- | --- | --- |
+| `c4_en` | 1 | 0.852881 | 0.852939 / 0.852940 | pass | 0.852881 |
+| `mc4` | 1 | 0.877680 | 0.877719 / 0.877656 | pass | 0.877680 |
+| `wikitext_103` | 1 | 0.706418 | 0.706505 / 0.706477 | pass | 0.706418 |
+| `ptb` | 1 | 0.867739 | 0.867690 / 0.867570 | pass | 0.867739 |
+| `falcon-refinedweb` | 1 | 0.884158 | 0.884205 / 0.884115 | pass | 0.884158 |
+| `dolma-v1_5` | 5 | 0.770683 | 0.770731 / 0.770726 | pass | 0.779772 |
+| `c4_100_domains` | 99 | 0.803331 | 0.803370 / 0.803368 | pass | 0.799736 |
+| `dolma_100_subreddits` | 100 | 0.988086 | 0.988198 / 0.988106 | pass | 0.987239 |
+| `dolma_100_programing_languages` | 100 | 0.610011 | 0.610088 / 0.610049 | pass | 0.585758 |
+
+1. **Same documents: pass in 209 domains, and on ids, tokens, windows and bytes only in the other 100.** Ids in order, token counts, windows and bytes equal OLMES's in all 309 domains, and the texts equal OLMES's saved requests in the 8 sources other than `dolma_100_programing_languages`. OLMES can't save requests for `dolma_100_programing_languages`: its `timestamp` column reaches OLMES as a `datetime`, which OLMES's JSON writer refuses, so there the texts aren't compared, and ids, token counts, windows and bytes are.
+2. **Float32.** Every domain's bits per byte is within 2.0e-7 of OLMES's (the rule is 1e-5). The per-document rule, 1e-3 nats per window, misses on 137 of 77,746 documents in 87 domains when they are scored batched, at most 8.0e-3 (`21_sql` `dc555ff6`); 133 of the 137 are one window long. All 137 were then scored alone, one window per forward pass as OLMES does, and 129 come within 1e-3, so for them the gap is our left-padded batching in float32, as the math and code parity found for one multiple-choice request. The other 8, in 7 domains, stay at most 4.0e-3 from OLMES alone (`16_www.ncbi.nlm.nih.gov` `1b74b3bc`, 1,195 tokens, one window). They come from the library versions, not from this code: OLMES's own loaded model, called as `rolling_loglikelihood` calls it, matches OLMES's sums within 2.6e-4 per window on all 8, and OLMES's own forward call (`model(ids).logits`, then `log_softmax`) run with our torch and transformers matches ours within 2.4e-4 per window (4.9e-4 summed over the one two-window document). What is left is float32 rounding between torch 2.8.0 with transformers 4.57.6 (OLMES) and torch 2.14.1 with transformers 5.20.1 (flock), concentrated at a single token in four of the 8 documents (at least 79% of the gap at one position). So the 8 reach the third rung of 008.D8's corrected rule, and the 80 other domains pass at the first or second. Those 7 domains are judged on their bits per byte, which matches OLMES within 2.0e-7.
+3. **Bfloat16, tolerance 2e-4.** Every source's mean passes (at most 1.2e-4). 44 of the 309 domains don't (at most 1.3e-3), mostly small ones, and in 38 of those 44 OLMES's own bfloat16 result is further from the float32 answer than ours. The largest drift from float32 is 4.5e-4 for flock and 1.1e-3 for OLMES. A domain's own drift is its noise floor.
+
+Where the paper and OLMES differ (section 2.2), the table shows it: for a source with several domains, OLMES's pooled number differs from the mean of the domains by up to 0.024 bits per byte (`dolma_100_programing_languages`).
