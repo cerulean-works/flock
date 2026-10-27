@@ -6,6 +6,7 @@ import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import unquote
 
 import httpx
 import pytest
@@ -85,8 +86,11 @@ def test_listings_with_prefixes_and_pagination(env: S3Env):
     after = s3.list_objects_v2(Bucket=bucket, Prefix="a/", StartAfter="a/04")
     assert [o["Key"] for o in after["Contents"]] == ["a/05", "a/06"]
     encoded = s3.list_objects_v2(Bucket=bucket, Prefix="c/", EncodingType="url")
-    # Asked for explicitly, the encoding is left to the caller to undo.
-    assert [o["Key"] for o in encoded["Contents"]] == ["c/x%20y%2Bz", "c/%C3%BC"]
+    # Asked for explicitly, the encoding passes through for the caller to undo (servers differ
+    # on whether they encode "/").
+    keys = [o["Key"] for o in encoded["Contents"]]
+    assert "c/x%20y%2Bz" in (keys[0], keys[0].replace("%2F", "/"))
+    assert [unquote(k) for k in keys] == ["c/x y+z", "c/ü"]
 
     # ListObjects (v1), with markers.
     v1 = s3.list_objects(Bucket=bucket, Prefix="a/", MaxKeys=4)
@@ -158,7 +162,7 @@ def test_multipart_uploads(env: S3Env):
     s3.abort_multipart_upload(Bucket=bucket, Key=key + ".2", UploadId=aborted["UploadId"])
     with pytest.raises(ClientError) as error:
         s3.list_parts(Bucket=bucket, Key=key + ".2", UploadId=aborted["UploadId"])
-    assert code(error.value) == "NoSuchUpload"
+    assert code(error.value) in ("NoSuchUpload", "NoSuchKey")  # Ceph says NoSuchKey
 
 
 def test_ranges_and_conditional_reads(env: S3Env):
