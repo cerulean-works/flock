@@ -242,7 +242,7 @@
 			</section>
 
 			<section class="mt-10">
-				<h2 class="font-serif text-2xl tracking-[-0.01em]">Command line sign-ins</h2>
+				<h2 class="text-2xl tracking-[-0.01em]">Command line sign-ins</h2>
 				<p class="mt-2 max-w-[62ch] text-muted-foreground">
 					Machines signed in with <code class="font-mono text-[0.9em]">flock login</code>. Each
 					lasts until 90 days without use; revoking one signs that machine out.

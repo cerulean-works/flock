@@ -26,7 +26,7 @@
 
 <AuthShell>
 	{#if data.step === 'done'}
-		<h1 class="font-serif text-[34px] leading-[1.15] tracking-[-0.02em]">
+		<h1 class="text-[34px] leading-[1.15] tracking-[-0.025em]">
 			{data.approved ? 'You’re signed in' : 'Sign-in denied'}
 		</h1>
 		<p class="mt-3 leading-relaxed text-muted-foreground">
@@ -39,7 +39,7 @@
 	{:else if data.step === 'confirm'}
 		{@const request = data.request}
 		<p class="text-[13px] text-muted-foreground">Command line sign-in</p>
-		<h1 class="mt-1 font-serif text-[34px] leading-[1.15] tracking-[-0.02em]">
+		<h1 class="mt-1 text-[34px] leading-[1.15] tracking-[-0.025em]">
 			Authorize {request.hostname || 'this machine'}?
 		</h1>
 
@@ -96,7 +96,7 @@
 			</Button>
 		</form>
 	{:else}
-		<h1 class="font-serif text-[34px] leading-[1.15] tracking-[-0.02em]">
+		<h1 class="text-[34px] leading-[1.15] tracking-[-0.025em]">
 			Sign in from the command line
 		</h1>
 		<p class="mt-3 leading-relaxed text-muted-foreground">
