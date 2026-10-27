@@ -1,0 +1,316 @@
+{
+  "toy": {
+    "hash": "7aeef2fd6025ab6d72e67e0237ad7f331f7d314885791ec7d99b7b9cea1ab77c",
+    "requests": [
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      }
+    ]
+  },
+  "toy:num_shots": {
+    "hash": "fd1eb07494f258dbd1910f85890b79a77b1b787c64735534b2bf5dbf5def7f8b",
+    "requests": [
+      {
+        "context": "Science and geography.\n\nQuestion: 哪一個是水果？\nAnswer: 蘋果\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Science and geography.\n\nQuestion: 哪一個是水果？\nAnswer: 蘋果\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Science and geography.\n\nQuestion: 哪一個是水果？\nAnswer: 蘋果\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Science and geography.\n\nQuestion: What do bees make?\nAnswer: honey\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Science and geography.\n\nQuestion: What do bees make?\nAnswer: honey\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Science and geography.\n\nQuestion: What do bees make?\nAnswer: honey\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Science and geography.\n\nQuestion: What do bees make?\nAnswer: honey\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      }
+    ]
+  },
+  "toy:rows": {
+    "hash": "bbdaf5169b6d46e54e4fb6adc268c67ff7a2df389a47ec7021fa2b6542c4a0b4",
+    "requests": [
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      }
+    ]
+  },
+  "toy:zero_shot": {
+    "hash": "8c3c5ad79f4592dda851fa938296050a6d99fb83819d773d022175cee31c622f",
+    "requests": [
+      {
+        "context": "Question: What do bees make?\nAnswer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Question: What do bees make?\nAnswer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: What do bees make?\nAnswer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: 哪一個是水果？\nAnswer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: 哪一個是水果？\nAnswer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Question: 哪一個是水果？\nAnswer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: 哪一個是水果？\nAnswer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      }
+    ]
+  }
+}
