@@ -49,6 +49,22 @@ ROWS = {
             "answerKey": "2",
         },
     ],
+    # Another split repeating q-1 with its choices reordered, as some TMMLU+ dev rows repeat a
+    # test row.
+    "dev": [
+        {
+            "id": "dev-1",
+            "question": "What do bees make?",
+            "choices": {"text": ["silk", "honey"], "label": ["A", "B"]},
+            "answerKey": "B",
+        },
+        {
+            "id": "dev-2",
+            "question": "What do cows drink?",
+            "choices": {"text": ["water", "milk"], "label": ["A", "B"]},
+            "answerKey": "A",
+        },
+    ],
 }
 
 
@@ -91,6 +107,8 @@ PROMPT_PATHS = (
     ),
     dataclasses.replace(TASK, name="toy:rows", fewshot=Fewshot(rows=tuple(ROWS["train"]))),
     dataclasses.replace(TASK, name="toy:zero_shot", fewshot=None, unconditional_context=None),
+    # Examples from another split: q-1 isn't shown `dev-1`, which shows its own answer.
+    dataclasses.replace(TASK, name="toy:repeat", fewshot=Fewshot("dev", ("dev-1", "dev-2"))),
     # The Chinese prefixes, with PMI scored after `答案：`.
     dataclasses.replace(
         TASK,

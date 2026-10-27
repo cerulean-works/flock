@@ -77,11 +77,11 @@ No reference implementation scores Chinese as cloze, so this is our choice. It r
    In the other 76% of choices the space merges with the start of the first character, so a word the tokenizer knows becomes byte pieces: Qwen reads `臺灣` as one token, and ` 臺灣` as three. The model is then scored on a spelling of the answer it never sees in Chinese text, and the cost differs by choice. With `答案：` and no space the context/continuation boundary is clean for every choice, while English `Answer:` with no space would merge across the boundary for 5.7% of choices, which 001's encoding (as lm-evaluation-harness's `_encode_pair`) then attributes to the wrong side.
 3. **`acc_per_char` then counts only the answer.** OLMES's leading space adds one character to every English choice (OLMES sec. 3.5), which barely matters at English lengths. TMMLU+ choices are short (median 9 characters, 9% at most 2), so one extra character with a choice-dependent log-probability would move the normalization noticeably. Without it, our `acc_per_char` is exactly lm-evaluation-harness's `acc_norm` (log-likelihood over `len(choice)`), which the parity check in [005.D6](#005d6-parity-against-lm-evaluation-harness-rendering-our-format) relies on. `bpb` is unaffected in kind: it still divides by the UTF-8 bytes of the scored text, 3 per CJK character.
 
-**Code.** `cloze` gains two keyword arguments, `answer_prefix` (default `"Answer:"`) and `separator` (default `" "`), so every English task renders as before and the Chinese format is `cloze(question, answers, question_prefix="問題：", answer_prefix="答案：", separator="")`. The two Chinese prefixes are module constants that later Chinese tasks import, so the format is defined once.
+**Code.** `cloze` gains two keyword-only arguments, `answer_prefix` (default `"Answer:"`) and `separator` (default `" "`), so every English task renders as before and the Chinese format is `cloze(question, answers, question_prefix="問題：", answer_prefix="答案：", separator="")`. The two Chinese prefixes are module constants that later Chinese tasks import, so the format is defined once.
 
 ### 005.D2. 66 subject tasks, and the categories and total as suites
 
-Each subject is a `MultipleChoiceTask` named `tmmluplus_<subject>` (lm-evaluation-harness's names), generated from one table of `(subject, Chinese name, category, dev rows)` in the task module. Nothing else differs between subjects. The aggregates are 003's `Suite`s, whose score is the unweighted mean of their members, so the card's method needs no new code:
+Each subject is a `MultipleChoiceTask` named `tmmluplus_<subject>` (lm-evaluation-harness's names), generated from one table of `(subject, Chinese name, category, dev rows)` in the task module. Nothing else differs between subjects. The aggregates are 004's `Suite`s, whose score is the unweighted mean of their members, so the card's method needs no new code:
 
 | Suite | Members | Score |
 | --- | --- | --- |
@@ -134,7 +134,7 @@ Examples from the scored split are left as they were. OLMES shows a curated exam
 
 ## 4. Plan
 
-One PR, stacked on 003's suites PR and rebased when it merges:
+One PR, stacked on 004's suites PR and rebased when it merges:
 
 1. **Core:** `cloze`'s `answer_prefix` and `separator` ([005.D1](#005d1-chinese-prefixes-and-no-space-before-the-answer)) and `Dataset.row_index` ([005.D3](#005d3-docs-are-identified-by-their-row-index)), unless 003's MMLU PR has added it first, and the few-shot rule of [005.D7](#005d7-a-doc-never-sees-its-own-question-and-answer-as-an-example).
 2. **Task:** `flock/eval/tasks/tmmluplus.py` with the subject table, the generated tasks, the suites ([005.D2](#005d2-66-subject-tasks-and-the-categories-and-total-as-suites)), and their registration; a docs page entry.

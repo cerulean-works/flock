@@ -266,6 +266,95 @@
       }
     ]
   },
+  "toy:repeat": {
+    "hash": "76a95ab48cc77547a3677a521c4736a8463c3f0cfa4ab5641f0ae17707929fff",
+    "requests": [
+      {
+        "context": "Question: What do cows drink?\nAnswer: water\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Question: What do cows drink?\nAnswer: water\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: What do cows drink?\nAnswer: water\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: What do bees make?\nAnswer: honey\n\nQuestion: What do cows drink?\nAnswer: water\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: What do bees make?\nAnswer: honey\n\nQuestion: What do cows drink?\nAnswer: water\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Question: What do bees make?\nAnswer: honey\n\nQuestion: What do cows drink?\nAnswer: water\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: What do bees make?\nAnswer: honey\n\nQuestion: What do cows drink?\nAnswer: water\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      }
+    ]
+  },
   "toy:rows": {
     "hash": "2cee38ccc4b00be867508bcbdbdd5f2934980360064cbc010eb5d9225c85040a",
     "requests": [

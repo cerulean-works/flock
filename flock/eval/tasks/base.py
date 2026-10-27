@@ -130,6 +130,7 @@ CHINESE_ANSWER_PREFIX = "答案："
 def cloze(
     question: str,
     answers: Sequence[str],
+    *,
     question_prefix: str = "Question: ",
     answer_prefix: str = "Answer:",
     separator: str = " ",
@@ -141,10 +142,14 @@ def cloze(
 
     Raises:
         `TypeError`: if `answers` is one string. A doc with one answer passes `(answer,)`.
+        `ValueError`: if an answer is empty and `separator` is too, which leaves nothing to score.
     """
     # A string is a sequence of its characters, which would render one choice per character.
     if isinstance(answers, str):
         raise TypeError("answers must be a sequence of strings; pass (answer,) for one answer")
+    # Caught here, with the question, rather than as an untokenizable request mid-run.
+    if not separator and "" in answers:
+        raise ValueError(f"an empty answer to {question!r} would be an empty continuation")
     context = f"{question_prefix}{question}\n{answer_prefix}"
 
     return tuple(Choice(context, f"{separator}{answer}") for answer in answers)
@@ -516,7 +521,8 @@ class MultipleChoiceTask:
         # choices reordered, which would show the doc its own answer. Ids aren't compared there:
         # they are unique within a split only.
         if self.fewshot.split is not None and self.fewshot.split != self.dataset.split:
-            shots = [shot for shot in shots if shot.example_text != doc.example_text]
+            own = doc.example_text
+            shots = [shot for shot in shots if shot.example_text != own]
         # Examples from the scored split are dropped only by `num_shots`: OLMES shows a curated
         # example even to its own doc.
         if self.fewshot.num_shots is not None:
