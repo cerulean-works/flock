@@ -170,3 +170,121 @@ def test_budgets_are_monthly(flock, api):
     assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
     assert alice.api.get("/api/v1/orgs/lab/budget").status == 404
     assert alice.api.get("/api/v1/orgs/lab/billing").status == 404
+
+
+DELETED = "/api/v1/orgs/flock/budget/deleted-projects"
+
+
+def dismissal(warning: dict) -> str:
+    return f"/api/v1/orgs/flock/budget/warnings/{warning['id']}/dismissal"
+
+
+def test_runs_without_gpu_time_count_for_nothing(api):
+    cpu = json.dumps({"cpu_count": 4}).encode()
+    run_for(api, "p", "gpu", 0.2)
+    run_for(api, "p", "cpu", 0.2, metadata=cpu)
+    run_for(api, "q", "cpu", 0.2, metadata=cpu)
+    run_for(api, "q", "unknown", 0.2, metadata=None)
+    budget = api.get(BUDGET).json()
+    assert [(p["project"], p["runs"]) for p in budget["projects"]] == [("p", 1)]
+    assert budget["unknown_gpu"]["runs"] == 1
+    assert budget["warnings"] == []  # under three minutes: it would read "0 h"
+    (h200,) = api.get(BILLING).json()["gpu_types"]
+    assert (h200["gpu_type"], h200["runs"]) == ("H200", 1)
+
+    # Deleted runs' GPUs can't be corrected any more, so they aren't reported as unknown.
+    assert api.delete("/api/v1/projects/flock/q/runs/unknown").status == 204
+    assert api.get(BUDGET).json()["unknown_gpu"] == {"runs": 0, "hours": 0}
+
+
+def test_warnings_can_be_dismissed_until_they_change(make_flock):
+    server = make_flock()
+    api = server.client()
+    alice = server.add_user("alice@lab.test")
+    server.store.budgets.WARN_HOURS = 0  # no need to run for minutes
+    run_for(api, "p", "r1", 0.1, metadata=None)
+    run_for(api, "p", "r2", 0.1)
+    budget = api.get(BUDGET).json()
+    unpriced, unknown = budget["warnings"]
+    assert (unpriced["kind"], unknown["kind"]) == ("unpriced", "unknown_gpu")
+    assert unpriced["id"] == f"unpriced:{budget['month']}"
+    assert [t["gpu_type"] for t in unpriced["gpu_types"]] == ["H200"]
+    assert (unknown["runs"], unknown["dismissed"]) == (1, False)
+
+    seen = {"fingerprint": unknown["fingerprint"]}
+    assert alice.api.request("PUT", dismissal(unknown), body=seen).status == 403  # admins only
+    assert api.request("PUT", dismissal(unknown), body={"fingerprint": "stale"}).status == 409
+    for bad in ("nothing:2026-10", "unpriced:2026-13", "unpriced:1999-01"):
+        assert api.request("PUT", dismissal({"id": bad}), body=seen).status == 404
+    assert api.request("PUT", dismissal(unknown), body=seen).status == 204
+    warnings = alice.api.get(BUDGET).json()["warnings"]  # dismissed for everyone
+    assert [w["dismissed"] for w in warnings] == [False, True]
+    assert warnings[1]["dismissed_by"]["email"] == server.ADMIN_EMAIL
+
+    # Its run's GPUs become known, then unknown again: nothing new, so it stays dismissed.
+    api.patch("/api/v1/projects/flock/p/runs/r1", {"gpu_count": 0})
+    assert [w["kind"] for w in api.get(BUDGET).json()["warnings"]] == ["unpriced"]
+    api.patch("/api/v1/projects/flock/p/runs/r1", {"gpu_count": None})
+    assert api.get(BUDGET).json()["warnings"][1]["dismissed"] is True
+
+    server.stop()
+    server = make_flock(reuse=server)
+    server.store.budgets.WARN_HOURS = 0
+    api = server.client()
+    assert api.get(BUDGET).json()["warnings"][1]["dismissed"] is True  # kept
+
+    run_for(api, "p", "r3", 0.1, metadata=None)  # another run: it shows again
+    unknown = api.get(BUDGET).json()["warnings"][1]
+    assert (unknown["runs"], unknown["dismissed"], unknown["dismissed_by"]) == (2, False, None)
+    seen = {"fingerprint": unknown["fingerprint"]}
+    assert api.request("PUT", dismissal(unknown), body=seen).status == 204
+    assert api.get(BUDGET).json()["warnings"][1]["dismissed"] is True
+    assert server.client(api_key=alice.api_key).delete(dismissal(unknown)).status == 403
+    assert api.delete(dismissal(unknown)).status == 204
+    assert api.get(BUDGET).json()["warnings"][1]["dismissed"] is False
+
+
+def test_admins_can_exclude_the_spend_of_deleted_projects(make_flock):
+    server = make_flock()
+    api = server.client()
+    alice = server.add_user("alice@lab.test")
+    api.patch(BILLING, {"rates": {"H200": 3600}, "monthly_budget": 1000})
+    run_for(api, "p", "r1", 0.2)
+    run_for(api, "q", "r2", 0.2)
+    run_for(api, "q", "r3", 0.2)
+    run_for(api, "cpu", "r4", 0.2, metadata=json.dumps({"cpu_count": 4}).encode())
+    before = api.get(BUDGET).json()
+    q = next(p for p in before["projects"] if p["project"] == "q")
+    assert api.get(DELETED).json() == {"currency": "USD", "deleted_projects": []}
+
+    assert api.delete("/api/v1/projects/flock/q").status == 204
+    assert api.delete("/api/v1/projects/flock/cpu").status == 204  # no GPU time: not listed
+    assert alice.api.get(DELETED).status == 403  # admins only
+    (deleted,) = api.get(DELETED).json()["deleted_projects"]
+    assert (deleted["name"], deleted["runs"], deleted["excluded"]) == ("q", 2, False)
+    assert deleted["cost"] == q["cost"]
+    assert [m["month"] for m in deleted["months"]] == [before["month"]]
+    assert deleted["deleted_at"] == pytest.approx(time.time(), abs=60)
+
+    path = f"{DELETED}/{deleted['id']}"
+    assert alice.api.patch(path, {"excluded": True}).status == 403
+    assert api.patch(f"{DELETED}/999999", {"excluded": True}).status == 404
+    excluded = api.patch(path, {"excluded": True}).json()
+    assert excluded["excluded"] is True
+    assert excluded["excluded_by"]["email"] == server.ADMIN_EMAIL
+    budget = alice.api.get(BUDGET).json()
+    assert budget["spent"] == pytest.approx(before["spent"] - q["cost"], abs=0.02)
+    assert [p["project"] for p in budget["projects"]] == ["p"]
+    assert budget["excluded"]["projects"] == 1
+    assert budget["excluded"]["cost"] == q["cost"]
+
+    server.stop()
+    server = make_flock(reuse=server)
+    api = server.client()
+    assert api.get(BUDGET).json() == budget  # kept
+
+    assert api.patch(path, {"excluded": False}).json()["excluded_by"] is None
+    budget = api.get(BUDGET).json()
+    assert budget["spent"] == before["spent"]  # counted again
+    assert budget["excluded"] == {"projects": 0, "cost": 0, "gpu_hours": 0}
+    assert {p["project"] for p in budget["projects"]} == {"p", None}

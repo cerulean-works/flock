@@ -1,3 +1,4 @@
+import datetime as dt
 import time
 from typing import Annotated
 
@@ -16,6 +17,7 @@ from app.api.src.api.deps import (
     visible_org,
 )
 from app.api.src.core import gpus
+from app.api.src.core.budgets import Budgets, fingerprint
 from app.api.src.core.feed import KINDS, decode_cursor
 
 router = APIRouter(prefix="/api/v1", tags=["home"], dependencies=[Depends(current_user)])
@@ -41,6 +43,18 @@ class BillingUpdate(BaseModel):
     monthly_budget: Money | None = None
     currency: str | None = Field(None, pattern=r"^[A-Z]{3}$")
     rates: dict[GpuType, Money | None] = Field(default_factory=dict)
+
+
+class Dismissal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    fingerprint: str = Field(max_length=64, description="the warning's, as it was shown")
+
+
+class Exclusion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    excluded: bool
 
 
 @router.get("/feed")
@@ -105,19 +119,78 @@ async def update_billing(org: AdminOrgDep, body: BillingUpdate, store: StoreDep)
     return JSONResponse(store.budgets.billing(org))
 
 
+def parse_month(month: str | None) -> dt.date:
+    if month is None:
+        return gpus.month_of(time.time())
+    try:
+        return gpus.parse_month(month)
+    except ValueError as e:
+        raise APIError(422, f"month {e}") from None
+
+
 @router.get("/orgs/{org}/budget")
 async def get_budget(
     org: OrgDep,
     store: StoreDep,
     month: Annotated[str | None, Query(description="YYYY-MM, default this month (UTC)")] = None,
 ) -> Response:
-    """Spend in a month against the budget: by project, the top runs, and GPU hours that
-    have no price yet."""
-    if month is None:
-        when = gpus.month_of(time.time())
-    else:
-        try:
-            when = gpus.parse_month(month)
-        except ValueError as e:
-            raise APIError(422, f"month {e}") from None
-    return JSONResponse(store.budgets.budget(org, when))
+    """Spend in a month against the budget: by project, the top runs, GPU hours that have no
+    price yet, and the warnings to show."""
+    return JSONResponse(store.budgets.budget(org, parse_month(month)))
+
+
+def parse_warning(warning: str) -> tuple[dt.date, str]:
+    """A warning id, ``{kind}:{YYYY-MM}``, as (month, kind); 404 if it's no such warning."""
+    kind, _, month = warning.partition(":")
+    try:
+        when = gpus.parse_month(month)
+    except ValueError:
+        when = None
+    if kind not in Budgets.WARNINGS or when is None:
+        raise APIError(404, f"no warning {warning}")
+    return when, kind
+
+
+@router.put("/orgs/{org}/budget/warnings/{warning}/dismissal")
+async def dismiss_warning(
+    org: AdminOrgDep, warning: str, body: Dismissal, store: StoreDep, user: UserDep
+) -> Response:
+    """Dismiss a budget warning for everyone in the org (admins). It shows again once it is
+    about something new."""
+    month, kind = parse_warning(warning)
+    items = store.budgets.warning_items(org, month, kind)
+    if items is None:
+        raise APIError(404, f"no warning {warning}")
+    if fingerprint(items) != body.fingerprint:
+        raise APIError(409, "the warning changed: reload it")
+    await store.budgets.dismiss(org, month, kind, items, user.pk)
+    return Response(status_code=204)
+
+
+@router.delete("/orgs/{org}/budget/warnings/{warning}/dismissal")
+async def restore_warning(org: AdminOrgDep, warning: str, store: StoreDep) -> Response:
+    """Show a dismissed budget warning again (admins)."""
+    month, kind = parse_warning(warning)
+    await store.budgets.restore(org, month, kind)
+    return Response(status_code=204)
+
+
+@router.get("/orgs/{org}/budget/deleted-projects")
+async def list_deleted_projects(org: AdminOrgDep, store: StoreDep) -> Response:
+    """Deleted projects that used GPU hours, with their spend, and whether it's excluded from
+    the budget (admins)."""
+    return JSONResponse(
+        {"currency": org.currency, "deleted_projects": store.budgets.deleted_projects(org)}
+    )
+
+
+@router.patch("/orgs/{org}/budget/deleted-projects/{deleted}")
+async def update_deleted_project(
+    org: AdminOrgDep, deleted: int, body: Exclusion, store: StoreDep, user: UserDep
+) -> Response:
+    """Leave a deleted project's spend out of the budget, or count it again (admins)."""
+    found = org.deleted_projects.get(deleted)
+    if found is None or store.budgets.deleted_project(org, deleted) is None:
+        raise APIError(404, f"no deleted project {deleted}")
+    await store.budgets.set_excluded(org, found, body.excluded, user.pk)
+    return JSONResponse(store.budgets.deleted_project(org, deleted))
