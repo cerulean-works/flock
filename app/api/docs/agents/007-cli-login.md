@@ -2,11 +2,12 @@
 
 | | |
 | --- | --- |
-| Status | proposed |
+| Status | applied |
 | Date | 2026-10-27 |
 | Builds on | [003](003-organizations-and-auth.md) |
 | Amends | D20 (a third kind of credential, the CLI token), D24 (new auth and `me` routes) |
 | Keeps | D2 (one server per database, small state in memory), D19, D20's API keys and JWTs as they are, D23 |
+| Result | 272 tests in `tests/app/` and `tests/cli/` pass (18 new in `tests/app/`, 36 in `tests/cli/`), and 315 in `app/web`; see [section 5](#5-how-it-was-actually-built) |
 
 ## 1. Goal
 
@@ -324,3 +325,73 @@ with a "how it was actually built" section.
 2. **The default server** is the API at `https://flock-api.cerulean.works` (D39).
 3. **CLI sessions** expire after 90 idle days, extended by use (D36).
 4. **`flock logout`, `flock whoami` and `flock token`** are in scope (D39).
+
+---
+
+## 5. How it was actually built
+
+The plan was followed in order, in four commits: the API (steps 1 to 3 and its tests), the CLI
+(step 5 and its tests), the web app (step 4) and the docs (step 7). These are the places where
+the code differs from the decisions above, or adds to them.
+
+- **No proxy routes in the web app.** Step 4 planned proxy routes under
+  `routes/api/v1/auth/device`. The CLI talks to the API's public address (D39), so it never
+  needs the dashboard, and the approval page talks to Flock from the server like every other
+  signed-in page: its load reads `GET auth/device/{user_code}` and a form action posts the
+  decision. Entering the code is a plain `GET /device?code=…` form. After a decision the page
+  redirects to `/device?done=approved|denied`, so a reload doesn't decide twice. A failed
+  decision (the code expired meanwhile) lands back on step 1 with an error.
+- **Approving creates the session lazily.** Approving only marks the grant. The CLI session
+  (and its row) is created by the next poll, so a sign-in approved but never collected leaves
+  nothing behind. The grant is dropped before the insert is awaited, so of two concurrent polls
+  only one gets a token.
+- **RFC 8628 details.** An unknown device code answers `expired_token` too (that is what a
+  restart leaves the CLI with). `slow_down` is answered to polls sooner than 0.8 × the interval,
+  so network jitter around a 5-second poll doesn't trip it. Errors carry an `error_description`.
+  A full table of pending sign-ins answers 503. Wrong codes count on both the `GET` and the
+  `POST` with a user code; past the limit, `TooManyAttempts` (new in `core/errors.py`) maps to
+  429.
+- **The hourly write-back is scheduled from FastAPI's thread pool.** `current_user` is a sync
+  dependency, so it runs in a worker thread with no event loop. `session_for_cli_token` hands the
+  write to the loop `Accounts.load` ran on, with `call_soon_threadsafe`. Because the database's
+  `expires_at` can lag the in-memory one by up to an hour, a session idle for 90 days can be
+  deleted up to an hour early after a restart.
+- **`SessionUserDep`.** The browser-only dependency is `deps.session_user`, used as
+  `SessionUserDep` like the other `*Dep` aliases. A CLI token's session is also kept in
+  `request.state.session`, so `POST auth/logout` ends it, and `POST me/password` sent with a CLI
+  token keeps that CLI session like it keeps a browser's.
+- **`flock.cli.api`.** A fifth module beside the four planned: the small httpx client the
+  commands share, kept out of `credentials.py` so that one stays standard-library only (a test
+  checks its imports against `sys.stdlib_module_names`). Its `TRANSPORT` hook is how the
+  `flock token` test proves no request is made.
+- **`resolve()` never sends the saved token to another server.** `FLOCK_HOST` (or `host=`) also
+  decides whether the saved sign-in applies: when it names another server, `resolve()` returns
+  `None` rather than the file's token. Hosts are normalized (no trailing slash, `https://` added
+  when no scheme is given). `auth_headers()` returns `{}` without a credential.
+- **The credentials file can name the wandb key.** When `flock login` creates the D41 key, it
+  adds `wandb_key: {name, prefix}` to the file, which is how `flock logout` names the key it
+  leaves. The file is otherwise as D40 says.
+- **Without a terminal** (stdin and stdout not both TTYs), `flock login` keeps a working
+  sign-in instead of asking to replace it, and skips the wandb question unless `--wandb` is
+  given. EOF at "Press Enter" aborts like Ctrl-C.
+- **Detecting an existing wandb login** reads the SDK's own state: `base_url` from
+  `wandb.sdk.wandb_setup.singleton().settings`, and the key from those settings
+  (`WANDB_API_KEY`) or `wbauth.read_netrc_auth`. These are not public APIs, so any error reading
+  them counts as "not logged in". The key is then checked against `GET /api/v1/me`. A wandb key
+  that no longer works is replaced with a new one.
+- **Tests.** The session's `postgres` fixture moved to `tests/conftest.py` (calling
+  `tests.app.conftest.serve_postgres`), so `tests/app` and `tests/cli` share one container. The
+  CLI tests run `flock` in-process with click's `CliRunner` against a real `FlockServer` whose
+  device interval is 50 ms. The browser stand-in signs in with an access token, reads the
+  pending code from the server's grant table (what a person reads off the terminal; each test
+  then checks the printed code matches), and approves through the API. The wandb tests isolate
+  the SDK with `WANDB_CONFIG_DIR`, `NETRC` and `wandb.teardown()` between tests.
+- **Docs build.** `.github/workflows/flock-cli-docs.yml` builds `flock/cli/docs/source` on
+  changes, like the hub's workflow on its branch, without publishing (the `flock` site name is
+  the app's).
+
+Checked by hand against a local Flock: `flock login --host <server> --no-browser` printed the
+code, an approval through the API with a browser session's JWT completed it, and `flock
+whoami` showed the account. The `/device` page (sign-in redirect, confirm, done) and the
+account page's revoke button were also tried in a browser; after the revoke, `flock whoami`
+reported the credential refused and `flock logout` still cleaned up.
