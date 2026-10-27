@@ -70,7 +70,7 @@
 </PageHeader>
 
 {#if fresh}
-	<main class="min-h-0 flex-1 overflow-y-auto">
+	<main class="relative min-h-0 flex-1 overflow-y-auto">
 		<EmptyState variant="onboarding" title="Log your first run">
 			{#snippet lead()}Runs appear here once they’re logged.{/snippet}
 			<ol class="mt-8 grid gap-8">
@@ -99,7 +99,7 @@
 		</EmptyState>
 	</main>
 {:else}
-	<main class="min-h-0 flex-1 overflow-y-auto pb-10">
+	<main class="relative min-h-0 flex-1 overflow-y-auto pb-10">
 		{#key JSON.stringify(data.query)}
 			<LatestRuns
 				first={() => data.feed}
