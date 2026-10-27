@@ -1,9 +1,54 @@
 import asyncio
-from collections.abc import Iterable
-from typing import Any
+from collections.abc import Iterable, Sequence
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import orjson
+
+if TYPE_CHECKING:
+    import asyncpg
+
+# Every replica's ``Hub`` is fed by notifications on this channel (D79), sent by writers inside
+# their write transactions, so a dashboard on any replica sees a write on any other.
+CHANNEL = "flock_live"
+# NOTIFY payloads are at most 8000 bytes: larger messages go in ``bus_messages``, and the
+# notification names their row as ``@<pk>``.
+PAYLOAD_LIMIT = 7900
+
+
+def points_message(project: int, run: int, name: str, stream: str, start: int, end: int) -> str:
+    """New lines ``[start, end)`` of a run's ``stream``: replicas watching the run read them
+    and send their points (``Hub.points_event``)."""
+    message = {"p": project, "k": run, "r": name, "s": stream, "f": start, "t": end}
+    return orjson.dumps(message).decode()
+
+
+def event_message(project: int, run: str | None, event: str, data: Any) -> str:
+    """An event for the subscribers of ``project`` watching ``run`` (None: all of them)."""
+    message = {"p": project, "r": run, "e": event, "d": data}
+    return orjson.dumps(message, option=orjson.OPT_SERIALIZE_NUMPY).decode()
+
+
+def close_message(project: int) -> str:
+    """End every stream of ``project`` (renamed or deleted), after the events before it."""
+    return orjson.dumps({"p": project, "close": True}).decode()
+
+
+async def publish(conn: asyncpg.Connection, messages: Sequence[str]) -> None:
+    """Send ``messages`` on ``CHANNEL``, in order, when ``conn``'s transaction commits."""
+    if not messages:
+        return
+    payloads = []
+    for message in messages:
+        if len(message.encode()) > PAYLOAD_LIMIT:
+            pk = await conn.fetchval(
+                "INSERT INTO bus_messages (payload) VALUES ($1) RETURNING pk", message
+            )
+            message = f"@{pk}"
+        payloads.append(message)
+    await conn.execute(
+        "SELECT pg_notify($1, payload) FROM unnest($2::text[]) AS t(payload)", CHANNEL, payloads
+    )
 
 
 class Subscriber:

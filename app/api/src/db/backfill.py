@@ -146,6 +146,12 @@ async def backfill(dsn: str, report: Callable[[str], None] = log.info, batch: in
                 for project_pk, runs in sorted(by_project.items()):
                     await values.write(conn, project_pk, runs)
                 pks = [record[0] for record in records]
+                # Metrics of the chunks there already (compacted ones, copied in SQL).
+                await conn.execute(
+                    "INSERT INTO run_metrics (run_pk, stream, key) SELECT DISTINCT run_pk, "
+                    "stream, key FROM series_chunks WHERE run_pk = ANY($1) ON CONFLICT DO NOTHING",
+                    pks,
+                )
                 await conn.execute("DELETE FROM backfill WHERE run_pk = ANY($1)", pks)
             after = pks[-1]
             done += len(records)

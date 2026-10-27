@@ -12,16 +12,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
+import asyncpg
 import numpy as np
 import orjson
 
-from app.api.src.core import gpus
+from app.api.src.core import gpus, live, values
 from app.api.src.core.accounts import Accounts
 from app.api.src.core.avatars import Avatars
-from app.api.src.core.budgets import Budgets, DeletedProject, Dismissal, Usage
+from app.api.src.core.budgets import Budgets, Usage
+from app.api.src.core.bus import Bus
 from app.api.src.core.errors import Conflict, Discarded, Forbidden, NotFound
 from app.api.src.core.feed import Feed
-from app.api.src.core.history import History, PointCounter, Series
+from app.api.src.core.history import History, PointCounter, Series, write_chunks
 from app.api.src.core.imports import Imports
 from app.api.src.core.live import Hub
 from app.api.src.core.metric_defs import parse_metric_defs
@@ -222,16 +224,6 @@ class Org:
         # any key may live (None: no limit).
         self.s3_ephemeral_ttl = s3_ephemeral_ttl
         self.s3_key_max_ttl = s3_key_max_ttl
-        # GPU prices: lowercased type -> (type as set, hourly cost of one GPU).
-        self.rates: dict[str, tuple[str, float]] = {}
-        # Monthly budgets, by the month they apply from (None: no budget), in month order.
-        self.budgets: list[tuple[dt.date, float | None]] = []
-        # The usage ledger, by month, including entries of deleted runs and projects.
-        self.usage: dict[dt.date, list[Usage]] = {}
-        # Deleted projects with ledger entries, by pk (see DeletedProject).
-        self.deleted_projects: dict[int, DeletedProject] = {}
-        # Budget warnings dismissed for everyone, by (month, kind).
-        self.dismissals: dict[tuple[dt.date, str], Dismissal] = {}
         self.deleted = False
 
 
@@ -299,6 +291,16 @@ class Store:
         "sweep": "sweep",
         "state": "state",
     }
+    # A run's row, locked by a write to it (D80), with what resends, summary diffs and the
+    # usage ledger need.
+    LOCK_RUN: ClassVar[str] = """
+        SELECT state, exitcode, extract(epoch FROM updated_at)::float8,
+               extract(epoch FROM heartbeat_at)::float8, history_line_count, events_line_count,
+               log_line_count, coalesce(gpu_type_override, gpu_type),
+               coalesce(gpu_count_override, gpu_count),
+               (SELECT coalesce(sum(seconds), 0) FROM gpu_usage u WHERE u.run_pk = r.pk)
+        FROM runs r WHERE pk = $1 FOR UPDATE
+    """
     # Tables holding one row per line of a wandb file.
     LINE_TABLES: ClassVar[frozenset[str]] = frozenset({"history", "events", "logs"})
     # Plottable series streams -> the table holding their raw lines.
@@ -329,6 +331,8 @@ class Store:
         self._tasks: set[asyncio.Task] = set()
         self.live = Hub()
         self.secret = b""
+        # Notifications from every replica (D79): created first, as the parts below listen.
+        self.bus = Bus(settings.listen_database_url or settings.database_url)
         self.accounts = Accounts(self)
         self.budgets = Budgets(self)
         self.avatars = Avatars(self)
@@ -355,6 +359,20 @@ class Store:
         return flatten({k: v for k, v in summary.items() if k != "_wandb"}, "summary.")
 
     @staticmethod
+    async def _prefixed(conn: asyncpg.Connection, pk: int, prefix: str) -> dict[str, Any]:
+        """A run's stored columns starting with ``prefix`` (``"summary."``, ``"config."``)."""
+        # Keys sort by code point: those starting with "summary." lie below "summary/".
+        upper = prefix[:-1] + chr(ord(prefix[-1]) + 1)
+        rows = await conn.fetch(
+            "SELECT key, num, txt, obj::text FROM run_values "
+            "WHERE run_pk = $1 AND key >= $2 AND key < $3",
+            pk,
+            prefix,
+            upper,
+        )
+        return {key: values.decode(num, txt, obj) for key, num, txt, obj in rows}
+
+    @staticmethod
     def _pg_text(lines: list[str]) -> list[str]:
         """Postgres text cannot hold NUL bytes, which raw console output occasionally contains."""
         return [line.replace("\x00", "") if "\x00" in line else line for line in lines]
@@ -368,6 +386,7 @@ class Store:
         try:
             secret = await self.db.fetchval("SELECT value FROM meta WHERE key = 'upload_secret'")
             self.secret = bytes.fromhex(secret)
+            await self.bus.start()
             await self._load()
             await self.accounts.load()
             await self.budgets.load()
@@ -375,6 +394,7 @@ class Store:
             await self.s3.load()
             await self._detect_missing_gpus()
         except BaseException:
+            await self.bus.close()
             await self.db.close()
             raise
 
@@ -382,7 +402,9 @@ class Store:
         await self.s3.close()
         await self.imports.close()
         await self.avatars.flush()
+        await self.accounts.flush()
         await self.flush()
+        await self.bus.close()
         await self.db.close()
 
     async def _load(self) -> None:
@@ -715,58 +737,85 @@ class Store:
             fields.get("display_name")
             or f"{secrets.choice(ADJECTIVES)}-{secrets.choice(NOUNS)}-{len(project.runs) + 1}"
         )
-        values = {col: fields.get(key) for key, col in self.FIELD_COLUMNS.items()}
-        values["display_name"] = display_name
-        values["state"] = fields.get("state") or "running"
+        cols = {col: fields.get(key) for key, col in self.FIELD_COLUMNS.items()}
+        cols["display_name"] = display_name
+        cols["state"] = fields.get("state") or "running"
         tags = [str(tag) for tag in fields.get("tags") or []]
         config = fields.get("config")
         summary = fields.get("summary")
-        pk = await self.db.fetchval(
-            """
-            INSERT INTO runs (project_pk, name, display_name, state, created_at, updated_at,
-                              heartbeat_at, config, summary, tags, notes, group_name, job_type,
-                              host, program, commit_hash, description, sweep, owner_pk)
-            VALUES ($1, $2, $3, $4, to_timestamp($5), to_timestamp($5), to_timestamp($5),
-                    $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-            RETURNING pk
-            """,
-            project.pk,
-            name,
-            display_name,
-            values["state"],
-            now,
-            orjson.dumps(config).decode() if config is not None else None,
-            orjson.dumps(summary).decode() if summary is not None else None,
-            tags,
-            values["notes"],
-            values["group_name"],
-            values["job_type"],
-            values["host"],
-            values["program"],
-            values["commit_hash"],
-            values["description"],
-            values["sweep"],
-            owner,
-        )
+        metric_defs = parse_metric_defs(config) if config else []
+        columns = {
+            "name": name,
+            "display_name": display_name,
+            "state": cols["state"],
+            "created_at": now,
+            "updated_at": now,
+            "heartbeat_at": now,
+            "tags": tags,
+            "group": cols["group_name"],
+            "job_type": cols["job_type"],
+            "notes": cols["notes"],
+            "description": cols["description"],
+            "host": cols["host"],
+            "program": cols["program"],
+            "commit": cols["commit_hash"],
+            "sweep": cols["sweep"],
+            "owner": owner,
+            **(values.config_columns(config) if config else {}),
+            **(values.summary_columns(summary) if summary else {}),
+        }
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            pk = await conn.fetchval(
+                """
+                INSERT INTO runs (project_pk, name, display_name, state, created_at, updated_at,
+                                  heartbeat_at, config, summary, tags, notes, group_name,
+                                  job_type, host, program, commit_hash, description, sweep,
+                                  owner_pk, metric_defs)
+                VALUES ($1, $2, $3, $4, to_timestamp($5), to_timestamp($5), to_timestamp($5),
+                        $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb)
+                RETURNING pk
+                """,
+                project.pk,
+                name,
+                display_name,
+                cols["state"],
+                now,
+                orjson.dumps(config).decode() if config is not None else None,
+                orjson.dumps(summary).decode() if summary is not None else None,
+                tags,
+                cols["notes"],
+                cols["group_name"],
+                cols["job_type"],
+                cols["host"],
+                cols["program"],
+                cols["commit_hash"],
+                cols["description"],
+                cols["sweep"],
+                owner,
+                orjson.dumps(metric_defs).decode(),
+            )
+            await values.write(conn, project.pk, [(pk, values.diff({}, columns))])
+            created = {"run": name, "display_name": display_name, "state": cols["state"]}
+            await live.publish(conn, [live.event_message(project.pk, None, "created", created)])
         run = Run(
             pk=pk,
             project=project,
             name=name,
             row=project.table.add_row(),
             display_name=display_name,
-            state=values["state"],
+            state=cols["state"],
             created_at=now,
             updated_at=now,
             heartbeat_at=now,
             tags=tags,
-            notes=values["notes"],
-            group=values["group_name"],
-            job_type=values["job_type"],
-            host=values["host"],
-            program=values["program"],
-            commit=values["commit_hash"],
-            description=values["description"],
-            sweep=values["sweep"],
+            notes=cols["notes"],
+            group=cols["group_name"],
+            job_type=cols["job_type"],
+            host=cols["host"],
+            program=cols["program"],
+            commit=cols["commit_hash"],
+            description=cols["description"],
+            sweep=cols["sweep"],
             owner=owner,
         )
         project.add(run)
@@ -806,14 +855,57 @@ class Store:
             sets["config"] = orjson.dumps(config).decode()
         if summary is not None:
             sets["summary"] = orjson.dumps(summary).decode()
+        defs = parse_metric_defs(config) if config is not None else None
+        if defs is not None:
+            sets["metric_defs"] = orjson.dumps(defs).decode()
         assignments = ", ".join(f"{col} = ${i}" for i, col in enumerate(sets, start=3))
-        await self.db.execute(
-            f"UPDATE runs SET updated_at = to_timestamp($2){', ' if sets else ''}{assignments} "
-            "WHERE pk = $1",
-            run.pk,
-            now,
-            *sets.values(),
-        )
+        attributes: dict[str, Any] = {"updated_at": now}
+        for key in self.FIELD_COLUMNS:
+            if fields.get(key) is not None:
+                attributes[key] = fields[key]
+        if tags is not None:
+            attributes["tags"] = tags
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            old = await conn.fetchrow(
+                "SELECT display_name, notes, description, group_name, job_type, host, program, "
+                "commit_hash, sweep, state, tags, extract(epoch FROM updated_at)::float8, "
+                "history_line_count, metric_defs::text FROM runs WHERE pk = $1 FOR UPDATE",
+                run.pk,
+            )
+            assert old is not None
+            await conn.execute(
+                f"UPDATE runs SET updated_at = to_timestamp($2){', ' if sets else ''}"
+                f"{assignments} WHERE pk = $1",
+                run.pk,
+                now,
+                *sets.values(),
+            )
+            before = dict(zip((*self.FIELD_COLUMNS, "tags", "updated_at"), old, strict=False))
+            before["tags"] = list(before["tags"])
+            changes = values.diff(before, attributes, keys=attributes)
+            if config is not None:
+                previous = await self._prefixed(conn, run.pk, "config.")
+                values.diff(previous, values.config_columns(config), into=changes)
+            if summary is not None:
+                previous = await self._prefixed(conn, run.pk, "summary.")
+                values.diff(previous, values.summary_columns(summary), into=changes)
+            await values.write(conn, run.project.pk, [(run.pk, changes)])
+            state = attributes.get("state", old[9])
+            data: dict[str, Any] = {
+                "run": run.name,
+                "state": state,
+                "lines": old[12],
+                "updated_at": now,
+            }
+            summary_changed = {
+                key: value for key, value in changes.values.items() if key.startswith("summary.")
+            }
+            if summary_changed:
+                data["summary"] = summary_changed
+            if defs is not None and defs != orjson.loads(old[13] or "[]"):
+                data["metric_defs"] = defs
+            message = live.event_message(run.project.pk, run.name, "run", data)
+            await live.publish(conn, [message])
         project = run.project
         run.updated_at = now
         for key in self.FIELD_COLUMNS:
@@ -824,10 +916,9 @@ class Store:
         self._sync_state(run, project)
         table = project.table
         table.set_many(run.row, run.attributes())
-        defs = None
         if config is not None:
             self._replace_columns(table, run.row, "config.", self._config_columns(config))
-            defs = parse_metric_defs(config)
+        if defs is not None:
             if defs == run.metric_defs:
                 defs = None
             else:
@@ -977,61 +1068,133 @@ class Store:
                 if new_from < offset + len(lines):
                     (series,) = await self.histories([run], None, stream)
                     appends[stream] = (series, new_from, lines[new_from - offset :])
-            accrued = self.budgets.accrual(run, now)
+            # Each metric's new points, as one chunk per stream (D78).
+            fresh: dict[str, tuple[int, dict[str, Series]]] = {}
+            for stream, (_, new_from, lines) in appends.items():
+                hist = History()
+                hist.append_rows(new_from, parse_rows(lines))
+                if hist.series:
+                    fresh[stream] = (new_from, hist.series)
+            chunk_rows = [
+                (stream, key, start, series.n, series.encode(start))
+                for stream, (start, by_key) in fresh.items()
+                for key, series in by_key.items()
+            ]
 
-            # The whole request in one statement, so one round trip and one transaction. Lines
-            # are upserted because clients resend chunks they could not confirm.
-            await self.db.execute(
-                """
-                WITH history_lines AS (
-                    INSERT INTO history (run_pk, line, data)
-                    SELECT $1, line, data FROM unnest($2::int[], $3::text[]) AS t(line, data)
-                    ON CONFLICT (run_pk, line) DO UPDATE SET data = excluded.data
-                ), event_lines AS (
-                    INSERT INTO events (run_pk, line, data)
-                    SELECT $1, line, data FROM unnest($4::int[], $5::text[]) AS t(line, data)
-                    ON CONFLICT (run_pk, line) DO UPDATE SET data = excluded.data
-                ), log_lines AS (
-                    INSERT INTO logs (run_pk, line, data)
-                    SELECT $1, line, data FROM unnest($6::int[], $7::text[]) AS t(line, data)
-                    ON CONFLICT (run_pk, line) DO UPDATE SET data = excluded.data
-                ), usage AS (
-                    INSERT INTO gpu_usage (org_pk, project_pk, run_pk, run_name, month, seconds,
-                                           gpu_type, gpu_count)
-                    SELECT $15::bigint, $16::bigint, $1, $17::text, month, seconds, $18::text,
-                           $19::int
-                    FROM unnest($20::date[], $21::float8[]) AS t(month, seconds)
-                    ON CONFLICT (run_pk, month)
-                    DO UPDATE SET seconds = gpu_usage.seconds + excluded.seconds
+            async with self.db.pool.acquire() as conn, conn.transaction():
+                locked = await conn.fetchrow(self.LOCK_RUN, pk)
+                assert locked is not None
+                old_state, old_exitcode, old_updated, old_heartbeat, *_, gpu_count, runtime = locked
+                accrued = self.budgets.accrual(old_heartbeat, now)
+                previous = (
+                    await self._prefixed(conn, pk, "summary.") if summary_data is not None else {}
                 )
-                UPDATE runs
-                SET state = $8, exitcode = $9, updated_at = to_timestamp($10),
-                    heartbeat_at = to_timestamp($10), summary = COALESCE($11, summary),
-                    history_line_count = $12, events_line_count = $13, log_line_count = $14
-                WHERE pk = $1
-                """,
-                pk,
-                list(range(h_off, h_off + len(h_lines))),
-                self._pg_text(h_lines),
-                list(range(e_off, e_off + len(e_lines))),
-                self._pg_text(e_lines),
-                list(range(o_off, o_off + len(o_lines))),
-                self._pg_text(o_lines),
-                state,
-                exitcode,
-                now,
-                summary_raw.replace("\x00", "") if summary_raw else None,
-                history_count,
-                events_count,
-                log_count,
-                project.org.pk,
-                project.pk,
-                run.name,
-                run.gpu_type,
-                run.gpu_count,
-                [month for month, _ in accrued],
-                [seconds for _, seconds in accrued],
-            )
+                # The request's lines, ledger and chunks in one statement, so one round trip.
+                # Lines are upserted because clients resend chunks they could not confirm.
+                await conn.execute(
+                    """
+                    WITH history_lines AS (
+                        INSERT INTO history (run_pk, line, data)
+                        SELECT $1, line, data FROM unnest($2::int[], $3::text[]) AS t(line, data)
+                        ON CONFLICT (run_pk, line) DO UPDATE SET data = excluded.data
+                    ), event_lines AS (
+                        INSERT INTO events (run_pk, line, data)
+                        SELECT $1, line, data FROM unnest($4::int[], $5::text[]) AS t(line, data)
+                        ON CONFLICT (run_pk, line) DO UPDATE SET data = excluded.data
+                    ), log_lines AS (
+                        INSERT INTO logs (run_pk, line, data)
+                        SELECT $1, line, data FROM unnest($6::int[], $7::text[]) AS t(line, data)
+                        ON CONFLICT (run_pk, line) DO UPDATE SET data = excluded.data
+                    ), usage AS (
+                        INSERT INTO gpu_usage (org_pk, project_pk, run_pk, run_name, month,
+                                               seconds, gpu_type, gpu_count)
+                        SELECT $15::bigint, $16::bigint, $1, $17::text, month, seconds,
+                               $18::text, $19::int
+                        FROM unnest($20::date[], $21::float8[]) AS t(month, seconds)
+                        ON CONFLICT (run_pk, month)
+                        DO UPDATE SET seconds = gpu_usage.seconds + excluded.seconds
+                    ), chunks AS (
+                        INSERT INTO series_chunks (run_pk, stream, key, first_line, n, data)
+                        SELECT $1, stream, key, first_line, n, data
+                        FROM unnest($22::text[], $23::text[], $24::int[], $25::int[],
+                                    $26::bytea[]) AS t(stream, key, first_line, n, data)
+                    ), metrics AS (
+                        INSERT INTO run_metrics (run_pk, stream, key)
+                        SELECT $1, stream, key FROM unnest($22::text[], $23::text[]) AS t(stream, key)
+                        ON CONFLICT DO NOTHING
+                    )
+                    UPDATE runs
+                    SET state = $8, exitcode = $9, updated_at = to_timestamp($10),
+                        heartbeat_at = to_timestamp($10), summary = COALESCE($11, summary),
+                        history_line_count = $12, events_line_count = $13,
+                        log_line_count = $14, uncompacted = uncompacted + $27
+                    WHERE pk = $1
+                    """,
+                    pk,
+                    list(range(h_off, h_off + len(h_lines))),
+                    self._pg_text(h_lines),
+                    list(range(e_off, e_off + len(e_lines))),
+                    self._pg_text(e_lines),
+                    list(range(o_off, o_off + len(o_lines))),
+                    self._pg_text(o_lines),
+                    state,
+                    exitcode,
+                    now,
+                    summary_raw.replace("\x00", "") if summary_raw else None,
+                    history_count,
+                    events_count,
+                    log_count,
+                    project.org.pk,
+                    project.pk,
+                    run.name,
+                    run.gpu_type,
+                    run.gpu_count,
+                    [month for month, _ in accrued],
+                    [seconds for _, seconds in accrued],
+                    *([row[i] for row in chunk_rows] for i in range(5)),
+                    1 if chunk_rows else 0,
+                )
+                accrued_seconds = sum(seconds for _, seconds in accrued)
+                changes = values.diff(
+                    {
+                        "state": old_state,
+                        "exitcode": old_exitcode,
+                        "updated_at": old_updated,
+                        "heartbeat_at": old_heartbeat,
+                        "gpu_hours": values.gpu_hours(runtime, gpu_count),
+                    },
+                    {
+                        "state": state,
+                        "exitcode": exitcode,
+                        "updated_at": now,
+                        "heartbeat_at": now,
+                        "gpu_hours": values.gpu_hours(runtime + accrued_seconds, gpu_count),
+                    },
+                )
+                if summary_data is not None:
+                    values.diff(previous, values.summary_columns(summary_data), into=changes)
+                await values.write(conn, project.pk, [(pk, changes)])
+                ends = {"history": history_count, "system": events_count}
+                messages = [
+                    live.points_message(project.pk, pk, name, stream, start, ends[stream])
+                    for stream, (start, _) in fresh.items()
+                ]
+                summary_changed = {
+                    key: value
+                    for key, value in changes.values.items()
+                    if key.startswith("summary.")
+                }
+                if summary_changed or state != old_state:
+                    data: dict[str, Any] = {
+                        "run": name,
+                        "state": state,
+                        "lines": history_count,
+                        "updated_at": now,
+                    }
+                    if summary_changed:
+                        data["summary"] = summary_changed
+                    messages.append(live.event_message(project.pk, name, "run", data))
+                await live.publish(conn, messages)
 
             for stream, (series, new_from, lines) in appends.items():
                 if self._history.get((pk, stream)) is not series:  # evicted while we wrote
@@ -1118,20 +1281,53 @@ class Store:
         before = (run.gpu_type, run.gpu_count)
         run.gpu_type_detected, run.gpu_count_detected = gpu_type, count
         effective = (run.gpu_type, run.gpu_count)
-        await self.db.execute(
-            "WITH usage AS (UPDATE gpu_usage SET gpu_type = $4, gpu_count = $5 WHERE run_pk = $1) "
-            "UPDATE runs SET gpu_type = $2, gpu_count = $3 WHERE pk = $1",
-            run.pk,
-            gpu_type,
-            count,
-            *effective,
-        )
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            locked = await conn.fetchrow(self.LOCK_RUN, run.pk)
+            assert locked is not None
+            state, _, updated_at, _, lines, *_, old_type, old_count, runtime = locked
+            await conn.execute(
+                "WITH usage AS (UPDATE gpu_usage SET gpu_type = $4, gpu_count = $5 "
+                "WHERE run_pk = $1) UPDATE runs SET gpu_type = $2, gpu_count = $3 WHERE pk = $1",
+                run.pk,
+                gpu_type,
+                count,
+                *effective,
+            )
+            await self._gpus_written(
+                conn, run, (old_type, old_count), effective, runtime, (state, lines, updated_at)
+            )
         if effective != before:
             self._gpus_changed(run)
 
+    async def _gpus_written(
+        self,
+        conn: asyncpg.Connection,
+        run: Run,
+        before: tuple[str | None, int | None],
+        after: tuple[str | None, int | None],
+        runtime: float,
+        status: tuple[str, int, float],
+    ) -> None:
+        """Write a run's new effective GPUs to the run table, and tell dashboards."""
+        if before == after:
+            return
+        old = {"gpu_type": before[0], "gpu_count": before[1]}
+        new = {"gpu_type": after[0], "gpu_count": after[1]}
+        old["gpu_hours"] = values.gpu_hours(runtime, before[1])
+        new["gpu_hours"] = values.gpu_hours(runtime, after[1])
+        await values.write(conn, run.project.pk, [(run.pk, values.diff(old, new))])
+        state, lines, updated_at = status
+        data = {
+            "run": run.name,
+            "state": state,
+            "lines": lines,
+            "updated_at": updated_at,
+            "attributes": new,
+        }
+        await live.publish(conn, [live.event_message(run.project.pk, run.name, "run", data)])
+
     def _gpus_changed(self, run: Run) -> None:
         """Show a run's new effective GPUs in its ledger entries, table row and dashboards."""
-        self.budgets.sync_gpus(run)
         changed: dict[str, Any] = {
             "gpu_type": run.gpu_type,
             "gpu_count": run.gpu_count,
@@ -1172,7 +1368,16 @@ class Store:
         async with self._run_lock(run):
             if run.deleted:
                 return
-            await self.db.execute("UPDATE runs SET state = $2 WHERE pk = $1", run.pk, state)
+            async with self.db.pool.acquire() as conn, conn.transaction():
+                locked = await conn.fetchrow(self.LOCK_RUN, run.pk)
+                assert locked is not None
+                old, _, updated_at, _, lines, *_ = locked
+                await conn.execute("UPDATE runs SET state = $2 WHERE pk = $1", run.pk, state)
+                changes = values.diff({"state": old}, {"state": state})
+                await values.write(conn, run.project.pk, [(run.pk, changes)])
+                data = {"run": run.name, "state": state, "lines": lines, "updated_at": updated_at}
+                message = live.event_message(run.project.pk, run.name, "run", data)
+                await live.publish(conn, [message])
             run.state = state
             project = run.project
             project.table.set(run.row, "state", state)
@@ -1233,14 +1438,26 @@ class Store:
                 if renamed and (project.entity, name) in self.projects:
                     raise Conflict(f"project {project.entity}/{name} already exists")
                 now = time.time()
-                await self.db.execute(
-                    "UPDATE projects SET name = $2, description = $3, "
-                    "updated_at = to_timestamp($4) WHERE pk = $1",
-                    project.pk,
-                    name,
-                    description,
-                    now,
-                )
+                async with self.db.pool.acquire() as conn, conn.transaction():
+                    await conn.execute(
+                        "UPDATE projects SET name = $2, description = $3, "
+                        "updated_at = to_timestamp($4) WHERE pk = $1",
+                        project.pk,
+                        name,
+                        description,
+                        now,
+                    )
+                    if renamed:
+                        # Dashboards address the project by name: tell them, then end their
+                        # streams.
+                        event = {"renamed_to": name}
+                        await live.publish(
+                            conn,
+                            [
+                                live.event_message(project.pk, None, "project", event),
+                                live.close_message(project.pk),
+                            ],
+                        )
                 if renamed:
                     del self.projects[project.key]
                     project.name = name
@@ -1278,17 +1495,21 @@ class Store:
                         project.pk,
                     )
                 await conn.execute("DELETE FROM projects WHERE pk = $1", project.pk)
-            if deleted is not None:
-                self.budgets.retire_project(project, DeletedProject(deleted, project.name, now))
+                await live.publish(conn, self._closing(project))
             pks = self._drop_project(project)
         self.live.broadcast(project.pk, Hub.event("project", {"deleted": True}))
         self.live.close_project(project.pk)
         await self._remove_files(pks)
 
+    @staticmethod
+    def _closing(project: Project) -> list[str]:
+        """Messages telling a deleted project's dashboards, then ending their streams."""
+        event = live.event_message(project.pk, None, "project", {"deleted": True})
+        return [event, live.close_message(project.pk)]
+
     def _drop_project(self, project: Project) -> list[int]:
         """Forget a project whose delete committed; returns its runs' pks."""
         pks = [run.pk for run in project.runs]
-        self.budgets.forget_project(project)
         self._mark_deleted_live(project.active.values())
         for run in project.runs:
             self._forget_run(run)
@@ -1359,10 +1580,10 @@ class Store:
                         job_type, host, program, commit_hash, sweep, exitcode,
                         history_line_count, events_line_count, log_line_count,
                         history_compacted_line_count, system_compacted_line_count, owner_pk,
-                        gpu_type, gpu_count)
+                        gpu_type, gpu_count, metric_defs)
                     VALUES ($1, $2, $3, $4, to_timestamp($5), to_timestamp($6), to_timestamp($6),
                         $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $18,
-                        $19, $21, $22, $23)
+                        $19, $21, $22, $23, $24::jsonb)
                     RETURNING pk
                     """,
                     project.pk,
@@ -1388,6 +1609,7 @@ class Store:
                     data.owner,
                     gpu_type,
                     gpu_count,
+                    orjson.dumps(parse_metric_defs(data.config) if data.config else []).decode(),
                 )
                 for table, lines in (("history", history), ("events", events), ("logs", logs)):
                     if lines:
@@ -1402,6 +1624,35 @@ class Store:
                         records=[(pk, *column) for column in columns],
                         columns=("run_pk", "stream", "key", "n", "data"),
                     )
+                for stream, hist in series.items():
+                    await write_chunks(conn, pk, stream, 0, hist.series)
+                runtime = sum(seconds for _, seconds in ledger)
+                imported = {
+                    "name": data.name,
+                    "display_name": data.display_name,
+                    "state": data.state,
+                    "created_at": data.created_at,
+                    "updated_at": heartbeat_at,
+                    "heartbeat_at": heartbeat_at,
+                    "tags": list(data.tags),
+                    "group": data.group,
+                    "job_type": data.job_type,
+                    "notes": data.notes,
+                    "host": data.host,
+                    "program": data.program,
+                    "commit": data.commit,
+                    "sweep": data.sweep,
+                    "exitcode": data.exitcode,
+                    "owner": data.owner,
+                    "gpu_type": gpu_type,
+                    "gpu_count": gpu_count,
+                    "gpu_hours": values.gpu_hours(runtime, gpu_count),
+                    **(values.config_columns(data.config) if data.config else {}),
+                    **(values.summary_columns(data.summary) if data.summary else {}),
+                }
+                await values.write(conn, project.pk, [(pk, values.diff({}, imported))])
+                event = {"run": data.name, "display_name": data.display_name, "state": data.state}
+                await live.publish(conn, [live.event_message(project.pk, None, "created", event)])
                 if ledger:
                     await conn.copy_records_to_table(
                         "gpu_usage",
@@ -1481,17 +1732,13 @@ class Store:
             project.add(run)
             self.runs_by_pk[pk] = run
             for month, seconds in ledger:
-                self.budgets._add(
-                    Usage(
-                        project.org, project, run, pk, run.name, month, seconds, gpu_type, gpu_count
-                    )
-                )
-            values = run.attributes()
+                run.usage[month] = Usage(month, seconds)
+            table_values = run.attributes()
             if data.config:
-                values.update(self._config_columns(data.config))
+                table_values.update(self._config_columns(data.config))
             if data.summary:
-                values.update(self._summary_columns(data.summary))
-            project.table.set_many(run.row, values)
+                table_values.update(self._summary_columns(data.summary))
+            project.table.set_many(run.row, table_values)
             for stream, hist in series.items():
                 run.note_metrics(hist.series, stream)
             # Imported runs are older than most: keep the rows in creation order.
@@ -1576,11 +1823,11 @@ class Store:
                 # Its S3 buckets outlive it until the background purge removes them upstream.
                 await self.s3.delete_org_buckets(conn, org)
                 await conn.execute("DELETE FROM orgs WHERE pk = $1", org.pk)
+                await live.publish(conn, [m for p in projects for m in self._closing(p)])
             pks = [pk for project in projects for pk in self._drop_project(project)]
             del self.orgs[org.name]
             del self.orgs_by_pk[org.pk]
             org.deleted = True
-            self.accounts.forget_org(org)
             self.imports.forget(org)
         self.s3.purge_later()
         await self.avatars.release(org.avatar)
@@ -1600,11 +1847,11 @@ class Store:
         self,
         project: Project,
         runs: Sequence[Run],
-        values: dict[str, Any],
+        edits: dict[str, Any],
         add_tags: Sequence[str] = (),
         remove_tags: Sequence[str] = (),
     ) -> list[Run]:
-        """Set ``values`` (``EDITABLE`` attributes; None clears) on runs, and add or remove tags.
+        """Set ``edits`` (``EDITABLE`` attributes; None clears) on runs, and add or remove tags.
 
         Last write wins: a client that later sends tags or notes overwrites these edits.
         """
@@ -1612,53 +1859,109 @@ class Store:
             runs = [run for run in runs if not run.deleted and run.project is project]
             if not runs:
                 return []
-            tags = []
-            for run in runs:
-                current = (
-                    [str(tag) for tag in values.get("tags") or []] if "tags" in values else run.tags
-                )
-                current = list(dict.fromkeys([*current, *add_tags]))
-                tags.append([tag for tag in current if tag not in remove_tags])
             columns = {**self.FIELD_COLUMNS, **self.OVERRIDES}
-            sets = {columns[key]: v for key, v in values.items() if key != "tags"}
+            sets = {columns[key]: v for key, v in edits.items() if key != "tags"}
             assignments = "".join(f", {col} = ${i}" for i, col in enumerate(sets, start=4))
             now = time.time()
-            # What each run's GPUs will be, for its usage ledger rows.
-            fields = {self.OVERRIDES.get(key, key): v for key, v in values.items() if key != "tags"}
-            effective = [
-                (
-                    fields.get("gpu_type_override", run.gpu_type_override),
-                    fields.get("gpu_count_override", run.gpu_count_override),
+            # Edited fields by run attribute, overrides under their own name.
+            fields = {self.OVERRIDES.get(key, key): v for key, v in edits.items() if key != "tags"}
+            async with self.db.pool.acquire() as conn, conn.transaction():
+                rows = await conn.fetch(
+                    "SELECT pk, display_name, notes, tags, group_name, job_type, description, "
+                    "extract(epoch FROM updated_at)::float8, gpu_type, gpu_count, "
+                    "gpu_type_override, gpu_count_override, state, history_line_count, "
+                    "(SELECT coalesce(sum(seconds), 0) FROM gpu_usage u WHERE u.run_pk = r.pk) "
+                    "FROM runs r WHERE pk = ANY($1) ORDER BY pk FOR UPDATE",
+                    [run.pk for run in runs],
                 )
-                for run in runs
-            ]
-            effective = [
-                (
-                    gpu_type if gpu_type is not None else run.gpu_type_detected,
-                    count if count is not None else run.gpu_count_detected,
+                found = {row[0]: row for row in rows}
+                tags, effective, olds, news = [], [], [], []
+                for run in runs:
+                    row = found[run.pk]
+                    current = (
+                        [str(tag) for tag in edits.get("tags") or []]
+                        if "tags" in edits
+                        else list(row[3])
+                    )
+                    current = list(dict.fromkeys([*current, *add_tags]))
+                    tags.append([tag for tag in current if tag not in remove_tags])
+                    old = dict(
+                        zip(
+                            ("display_name", "notes", "tags", "group", "job_type", "description"),
+                            row[1:7],
+                            strict=True,
+                        )
+                    )
+                    old["tags"] = list(old["tags"])
+                    old["gpu_type"] = row[10] if row[10] is not None else row[8]
+                    old["gpu_count"] = row[11] if row[11] is not None else row[9]
+                    old["gpu_hours"] = values.gpu_hours(row[14], old["gpu_count"])
+                    old["updated_at"] = row[7]
+                    # What each run's GPUs will be, for its usage ledger rows too.
+                    gpu_type = fields.get("gpu_type_override", row[10])
+                    count = fields.get("gpu_count_override", row[11])
+                    gpus_after = (
+                        gpu_type if gpu_type is not None else row[8],
+                        count if count is not None else row[9],
+                    )
+                    effective.append(gpus_after)
+                    new = {**old, **{k: v for k, v in fields.items() if k in old}}
+                    new["tags"] = tags[-1]
+                    new["gpu_type"], new["gpu_count"] = gpus_after
+                    new["gpu_hours"] = values.gpu_hours(row[14], gpus_after[1])
+                    new["updated_at"] = now
+                    olds.append(old)
+                    news.append(new)
+                usage = ""
+                if self.OVERRIDES.keys() & edits.keys():
+                    usage = (
+                        "WITH usage AS (UPDATE gpu_usage u SET gpu_type = g.gpu_type, "
+                        "gpu_count = g.gpu_count FROM unnest($1::bigint[], "
+                        f"${len(sets) + 4}::text[], ${len(sets) + 5}::int[]) "
+                        "AS g(pk, gpu_type, gpu_count) WHERE u.run_pk = g.pk) "
+                    )
+                # One statement for the whole selection; each run's tags travel as JSON.
+                await conn.execute(
+                    f"{usage}UPDATE runs SET tags = "
+                    "ARRAY(SELECT jsonb_array_elements_text(t.tags::jsonb)), "
+                    f"updated_at = to_timestamp($3){assignments} "
+                    "FROM unnest($1::bigint[], $2::text[]) AS t(pk, tags) WHERE runs.pk = t.pk",
+                    [run.pk for run in runs],
+                    [orjson.dumps(run_tags).decode() for run_tags in tags],
+                    now,
+                    *sets.values(),
+                    *([[t for t, _ in effective], [c for _, c in effective]] if usage else []),
                 )
-                for run, (gpu_type, count) in zip(runs, effective, strict=True)
-            ]
-            usage = ""
-            if self.OVERRIDES.keys() & values.keys():
-                usage = (
-                    "WITH usage AS (UPDATE gpu_usage u SET gpu_type = g.gpu_type, "
-                    "gpu_count = g.gpu_count FROM unnest($1::bigint[], "
-                    f"${len(sets) + 4}::text[], ${len(sets) + 5}::int[]) "
-                    "AS g(pk, gpu_type, gpu_count) WHERE u.run_pk = g.pk) "
+                await values.write(
+                    conn,
+                    project.pk,
+                    [
+                        (run.pk, values.diff(old, new))
+                        for run, old, new in zip(runs, olds, news, strict=True)
+                    ],
                 )
-            # One statement for the whole selection; each run's tags travel as a JSON array.
-            await self.db.execute(
-                f"{usage}UPDATE runs SET tags = "
-                "ARRAY(SELECT jsonb_array_elements_text(t.tags::jsonb)), "
-                f"updated_at = to_timestamp($3){assignments} "
-                "FROM unnest($1::bigint[], $2::text[]) AS t(pk, tags) WHERE runs.pk = t.pk",
-                [run.pk for run in runs],
-                [orjson.dumps(run_tags).decode() for run_tags in tags],
-                now,
-                *sets.values(),
-                *([[t for t, _ in effective], [c for _, c in effective]] if usage else []),
-            )
+                messages = []
+                for run, old, new in zip(runs, olds, news, strict=True):
+                    row = found[run.pk]
+                    status = {"run": run.name, "state": row[12], "lines": row[13]}
+                    status["updated_at"] = now
+                    edited = ("display_name", "notes", "tags", "group", "job_type", "description")
+                    changed = {key: new[key] for key in edited if new[key] != old[key]}
+                    overrides = {"gpu_type": row[10], "gpu_count": row[11]}
+                    for attribute, field_name in self.OVERRIDES.items():
+                        if field_name in fields and fields[field_name] != overrides[attribute]:
+                            changed[attribute] = new[attribute]  # the effective value
+                    gpus = ("gpu_type", "gpu_count", "gpu_hours")
+                    if any(new[key] != old[key] for key in gpus):
+                        attributes = {key: new[key] for key in gpus}
+                        event = {**status, "attributes": attributes}
+                        messages.append(live.event_message(project.pk, run.name, "run", event))
+                        changed.pop("gpu_type", None)
+                        changed.pop("gpu_count", None)
+                    if changed:
+                        event = {**status, "attributes": changed}
+                        messages.append(live.event_message(project.pk, run.name, "run", event))
+                await live.publish(conn, messages)
             for run, run_tags in zip(runs, tags, strict=True):
                 changed = {
                     key: value for key, value in fields.items() if getattr(run, key) != value
@@ -1694,12 +1997,19 @@ class Store:
             if not runs:
                 return []
             pks = [run.pk for run in runs]
-            await self.db.execute("DELETE FROM runs WHERE pk = ANY($1)", pks)
+            names = [run.name for run in runs]
+            async with self.db.pool.acquire() as conn, conn.transaction():
+                await conn.execute(
+                    "SELECT FROM runs WHERE pk = ANY($1) ORDER BY pk FOR UPDATE", pks
+                )
+                await values.shift(conn, pks, project.pk, None)
+                await conn.execute("DELETE FROM runs WHERE pk = ANY($1)", pks)
+                message = live.event_message(project.pk, None, "deleted", {"runs": names})
+                await live.publish(conn, [message])
             self._mark_deleted_live(run for run in runs if run.active)
             for run in runs:
                 self._forget_run(run)
             self._reindex(project, [run for run in project.runs if not run.deleted])
-            names = [run.name for run in runs]
             self.live.broadcast(project.pk, Hub.event("deleted", {"runs": names}))
         await self._remove_files(pks)
         return names
@@ -1719,12 +2029,26 @@ class Store:
             clashes = [run.name for run in runs if run.name in target.by_name]
             if clashes:
                 raise Conflict(f"{target.name} already has runs with these ids", clashes)
-            await self.db.execute(
-                "WITH usage AS (UPDATE gpu_usage SET project_pk = $2 WHERE run_pk = ANY($1)) "
-                "UPDATE runs SET project_pk = $2 WHERE pk = ANY($1)",
-                [run.pk for run in runs],
-                target.pk,
-            )
+            pks = [run.pk for run in runs]
+            async with self.db.pool.acquire() as conn, conn.transaction():
+                await conn.execute(
+                    "SELECT FROM runs WHERE pk = ANY($1) ORDER BY pk FOR UPDATE", pks
+                )
+                await values.shift(conn, pks, source.pk, target.pk)
+                await conn.execute(
+                    "WITH usage AS (UPDATE gpu_usage SET project_pk = $2 WHERE run_pk = ANY($1)),"
+                    " moved AS (UPDATE run_values SET project_pk = $2 WHERE run_pk = ANY($1)) "
+                    "UPDATE runs SET project_pk = $2 WHERE pk = ANY($1)",
+                    pks,
+                    target.pk,
+                )
+                names = [run.name for run in runs]
+                gone = {"runs": names, "moved_to": target.name}
+                messages = [live.event_message(source.pk, None, "deleted", gone)]
+                for run in runs:
+                    event = {"run": run.name, "display_name": run.display_name, "state": run.state}
+                    messages.append(live.event_message(target.pk, None, "created", event))
+                await live.publish(conn, messages)
             rows = np.fromiter((run.row for run in runs), np.int64, len(runs))
             new_rows = target.table.append_from(source.table, rows).tolist()
             moving = set(runs)
@@ -1733,7 +2057,6 @@ class Store:
                 del source.by_name[run.name]
                 run.project = target
                 run.row = row
-                self.budgets.moved(run)
                 target.add(run)
             # Keep the target's rows in creation order, so moved runs don't look like new ones.
             self._reindex(target, sorted(target.runs, key=lambda r: (r.created_at, r.pk)))
@@ -1775,7 +2098,6 @@ class Store:
     def _forget_run(self, run: Run) -> None:
         """Drop a deleted run from memory (except its table row: see ``_reindex``)."""
         run.deleted = True
-        self.budgets.forget_run(run)
         project = run.project
         project.by_name.pop(run.name, None)
         project.active.pop(run.name, None)

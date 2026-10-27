@@ -56,6 +56,7 @@ from argon2 import PasswordHasher
 
 from app.api.src.core import gpus
 from app.api.src.core.names import ADJECTIVES, NOUNS
+from app.api.src.db.backfill import backfill
 from app.api.src.db.migrate import Migrations
 from app.api.src.settings import Settings
 
@@ -812,7 +813,8 @@ def utc(t: float) -> dt.datetime:
 
 
 TABLES = (
-    "gpu_usage", "gpu_rates", "org_budgets", "history_columns", "history", "events", "logs",
+    "gpu_usage", "gpu_rates", "org_budgets", "history_columns", "series_chunks", "run_metrics",
+    "run_values", "project_keys", "backfill", "history", "events", "logs",
     "run_files", "runs", "projects", "invites", "password_resets", "sessions", "api_keys",
     "memberships", "users", "orgs", "avatars",
 )  # fmt: skip
@@ -943,6 +945,7 @@ class Writer:
     async def _write_batch(self, batch: list[RunPlan], logged: list[Logged | None]) -> None:
         conn = self.conn
         history, events, logs, columns, files, usage = [], [], [], [], [], []
+        inserted: list[int] = []
         async with conn.transaction():
             for plan, sent in zip(batch, logged, strict=True):
                 project = plan.project
@@ -988,6 +991,7 @@ class Writer:
                         plan.gpu_count,
                         plan.gpu_count_override,
                     )
+                    inserted.append(plan.pk)
                     history += [(plan.pk, i, line) for i, line in enumerate(sent.history)]
                     events += [(plan.pk, i, line) for i, line in enumerate(sent.events)]
                     logs += [(plan.pk, i, line) for i, line in enumerate(sent.logs)]
@@ -1021,6 +1025,13 @@ class Writer:
                 ("events", events, ("run_pk", "line", "data")),
                 ("logs", logs, ("run_pk", "line", "data")),
                 ("history_columns", columns, ("run_pk", "stream", "key", "n", "data")),
+                (
+                    "series_chunks",
+                    [(pk, stream, key, 0, n, data) for pk, stream, key, n, data in columns],
+                    ("run_pk", "stream", "key", "first_line", "n", "data"),
+                ),
+                # The run table's values and columns are filled by the backfill (see simulate).
+                ("backfill", [(pk, []) for pk in inserted], ("run_pk", "streams")),
                 (
                     "gpu_usage",
                     usage,
@@ -1107,6 +1118,7 @@ async def simulate(
             stats = await Writer(conn, plan, files_dir, log).write()
     finally:
         await conn.close()
+    await backfill(database_url, report=log)
     stats["seconds"] = time.perf_counter() - started
     stats["orgs"] = len(plan.orgs)
     stats["users"] = len(plan.people)
