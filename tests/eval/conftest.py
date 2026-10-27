@@ -6,7 +6,7 @@ from transformers import LlamaConfig, LlamaForCausalLM, PreTrainedTokenizerFast
 from flock.eval.model import ScoringModel
 from flock.eval.tasks import Dataset
 
-from .toy import ROWS
+from . import toy
 
 CORPUS = [
     "Question: Which gas do plants take in?\nAnswer: carbon dioxide",
@@ -64,7 +64,7 @@ def scorer(lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast) -> ScoringM
 @pytest.fixture(autouse=True)
 def offline_rows(monkeypatch):
     """Every task in every eval test reads `toy.ROWS` by split instead of downloading. A test that loads another task must patch `Dataset.load` with rows in that task's format."""
-    monkeypatch.setattr(Dataset, "load", lambda self, split=None: ROWS[split or self.split])
+    monkeypatch.setattr(Dataset, "load", toy.load)
 
 
 @pytest.fixture(scope="session")

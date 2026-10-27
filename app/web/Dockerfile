@@ -4,7 +4,7 @@
 # runs it with Flock.
 #   docker build --build-arg FLOCK_WEB_URL=https://flock.example.com -t flock-ui .
 
-FROM node:24-slim AS build
+FROM node:24.22.1-slim AS build
 RUN npm install --global pnpm@12.4.1
 WORKDIR /app
 
@@ -19,7 +19,7 @@ RUN FLOCK_WEB_URL=$FLOCK_WEB_URL pnpm build
 
 
 # Every package is bundled into build/ at build time: the server needs no node_modules.
-FROM node:24-slim
+FROM node:24.22.1-slim
 WORKDIR /app
 COPY --from=build /app/package.json ./
 COPY --from=build /app/build ./build

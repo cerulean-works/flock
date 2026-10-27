@@ -58,6 +58,28 @@ rebuild; the API addresses are read at runtime. The dashboard always requires a 
 See [Environment variables](../api/docs/source/deploying.md#environment-variables) for all
 variables, their consumers and migration from previous names.
 
+## Node.js security updates
+
+Both build and runtime stages pin Node.js **24.22.1** to include the
+[October 21, 2026 security fixes](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases),
+including CVE-2026-111497 in Brotli decoding. The Node server makes outbound
+requests to the API, so response decompression is relevant. The Python API and
+PostgreSQL do not use this Node runtime. A cached `node:24-slim` image can predate
+the fixes; the major tag alone does not establish that an installation is patched.
+
+From `app/`, after updating the checkout:
+
+```sh
+docker compose build --pull ui
+docker compose up -d --no-deps --force-recreate ui
+docker compose exec ui node --version
+docker compose ps ui
+```
+
+Expect `v24.22.1`, then verify sign-in and an API-backed page. Rebuilding and
+recreating the UI is required to patch an existing deployment. Production
+runtime versions still need verification on the deployment host.
+
 ## Styling
 
 Components come from [shadcn-svelte](https://shadcn-svelte.com) (`src/lib/components/ui`), set

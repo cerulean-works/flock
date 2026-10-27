@@ -1,0 +1,316 @@
+{
+  "toy": {
+    "hash": "82293825e855161cefe708da63e9a62f5a97498385be22ecab075a81437f22b3",
+    "requests": [
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      }
+    ]
+  },
+  "toy:num_shots": {
+    "hash": "8ee9cd70e966bc67c461fc635a06af316c7c8cc153d7e2045f66eea49faf3a2b",
+    "requests": [
+      {
+        "context": "Science and geography.\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer:",
+        "continuation": " oxygen",
+        "doc": "shot-1",
+        "gold": false
+      },
+      {
+        "context": "Science and geography.\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer:",
+        "continuation": " carbon dioxide",
+        "doc": "shot-1",
+        "gold": true
+      },
+      {
+        "context": "Science and geography.\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer:",
+        "continuation": " 玉山",
+        "doc": "shot-2",
+        "gold": true
+      },
+      {
+        "context": "Science and geography.\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer:",
+        "continuation": " 雪山",
+        "doc": "shot-2",
+        "gold": false
+      },
+      {
+        "context": "Science and geography.\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer:",
+        "continuation": " 合歡山",
+        "doc": "shot-2",
+        "gold": false
+      },
+      {
+        "context": "Science and geography.\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do cows drink?\nAnswer:",
+        "continuation": " water",
+        "doc": "shot-3",
+        "gold": true
+      },
+      {
+        "context": "Science and geography.\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do cows drink?\nAnswer:",
+        "continuation": " milk",
+        "doc": "shot-3",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " oxygen",
+        "doc": "shot-1",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " carbon dioxide",
+        "doc": "shot-1",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 玉山",
+        "doc": "shot-2",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 雪山",
+        "doc": "shot-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 合歡山",
+        "doc": "shot-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " water",
+        "doc": "shot-3",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " milk",
+        "doc": "shot-3",
+        "gold": false
+      }
+    ]
+  },
+  "toy:rows": {
+    "hash": "2cee38ccc4b00be867508bcbdbdd5f2934980360064cbc010eb5d9225c85040a",
+    "requests": [
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do cows drink?\nAnswer: water\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do cows drink?\nAnswer: water\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do cows drink?\nAnswer: water\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do cows drink?\nAnswer: water\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do cows drink?\nAnswer: water\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do cows drink?\nAnswer: water\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do cows drink?\nAnswer: water\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      }
+    ]
+  },
+  "toy:zero_shot": {
+    "hash": "5aed28bb98e281c6156753b00cfd65646b37a55377980f94d9e8293dc008cf68",
+    "requests": [
+      {
+        "context": "Question: What do bees make?\nAnswer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Question: What do bees make?\nAnswer:",
+        "continuation": " milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: What do bees make?\nAnswer:",
+        "continuation": " silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "Question: 哪一個是水果？\nAnswer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: 哪一個是水果？\nAnswer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Question: 哪一個是水果？\nAnswer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: 哪一個是水果？\nAnswer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      }
+    ]
+  }
+}

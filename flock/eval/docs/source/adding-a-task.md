@@ -16,7 +16,8 @@ This is the whole task, `flock/eval/tasks/arc.py`:
 4. **Choose the primary metric.** Follow OLMES or OLMo 3 for the task. [Metrics](metrics) lists the options.
 5. **Register the task.** Add it to its suite, such as `_QA_TASKS` in `flock/eval/tasks/base_easy.py` for a Base Easy QA task (see [Suites](tasks#suites)): every task in a suite is registered. A task in no suite goes in the tuple that builds `TASKS` in `flock/eval/tasks/registry.py`, and a new top-level suite in the expression that builds `SUITES` there. `flock-eval run --task` accepts it from then on.
 6. **Test the row function.** Add a test in `tests/eval/` that maps a hand-written row to the expected [`~eval.tasks.MCDoc`], as `test_arc_doc_maps_letter_and_digit_keys` does. Tests never download: `tests/eval/conftest.py` makes every task read the toy rows in `tests/eval/toy.py`.
-7. **List the task** in the table of [Tasks](tasks#available-tasks).
+7. **Update the snapshot.** CI pins every registered task's definition (dataset, revision, few-shot examples, metrics, row function) in `tests/eval/snapshot/tasks.json`, and fails when the code no longer matches it. Run `uv run python -m tests.eval.snapshot` and commit the files it rewrites. The JSON diff shows your reviewer exactly what changed, so regenerate it only for a change you mean to make. A new prompt format also adds a toy task to `PROMPT_PATHS` in `tests/eval/toy.py`, which pins the requests it renders in `toy_requests.json`.
+8. **List the task** in the table of [Tasks](tasks#available-tasks).
 
 To check a new task, print the first doc's prompt:
 
