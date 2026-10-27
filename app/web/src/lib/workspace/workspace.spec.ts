@@ -109,6 +109,24 @@ describe('panels of a page whose runs define different step metrics', () => {
 	});
 });
 
+describe('a metric logged where its step metric never was', () => {
+	it('stays on _step rather than lose every line', () => {
+		// `val/*` is plotted against `train/step`, which the run logged on rows 0-9 only; the
+		// final evaluation logged `val/loss` on rows 10-12, past the mapping's end.
+		const defs: MetricDefinition[] = [{ key: 'train/step' }, { glob: 'val/*', step: 'train/step' }];
+		const ws = workspace([
+			{ defs, logged: ['train/step', 'val/loss', 'val/loss_ema'], axes: { 'train/step': 10 } }
+		]);
+		const m = ws.metricOf('history', 'val/loss')!;
+		ws.page.series[slotOf(ws.page.metricCount, 0, m)] = new Series(
+			Float32Array.from([3, 2.9, 2.8]),
+			Float64Array.from([10, 11, 12])
+		);
+		expect(plotted(ws, 'val/loss')).toEqual({ axis: '_step', rows: [0] });
+		expect(plotted(ws, 'val/loss_ema')).toEqual({ axis: 'train/step', rows: [0] });
+	});
+});
+
 describe('a cursor followed across x axes', () => {
 	// `train/matrix_lr` on its step metric, `train/loss` on `_step`, as in a run's own panels.
 	const defs: MetricDefinition[] = [

@@ -306,7 +306,14 @@ export class Workspace {
 			const m = this.metricOf('history', key);
 			const step = sharedStepMetric(defs, key, {
 				logged: (row) => m !== undefined && !!page.series[slotOf(page.metricCount, row, m)]?.n,
-				maps: (row, step) => !!this.#mapping(row, 'history', step)?.n
+				// The run's line has points on the step metric: a mapping that covers none of the
+				// rows the metric was logged on (an eval logged before or after the steps were)
+				// would leave the line off the chart as surely as no mapping.
+				maps: (row, step) => {
+					const s = m === undefined ? null : page.series[slotOf(page.metricCount, row, m)];
+					const map = this.#mapping(row, 'history', step);
+					return !!s?.n && !!map?.n && remapped(s, step, map).n > 0;
+				}
 			});
 			memo.set(key, { version, step });
 			return step;
