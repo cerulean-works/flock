@@ -20,8 +20,8 @@ from app.api.src.core.errors import (
     NotFound,
     TooManyAttempts,
 )
+from app.api.src.core.query import FilterError
 from app.api.src.core.store import Store
-from app.api.src.core.table import FilterError
 from app.api.src.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ def create_app(store: Store) -> FastAPI:
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await store.open()
-        if store.accounts.signup_open:
+        if await store.accounts.signup_open():
             # A fresh server: say where the first account comes from, since every request
             # (including the dashboard's) is refused until it exists.
             setup = store.settings.web_url

@@ -289,7 +289,13 @@ def test_filter_via_query_string(table_api):
 
 @pytest.mark.parametrize(
     "bad",
-    [{"$bogus": []}, {"config.lr": {"$near": 1}}, {"config.opt": {"$regex": "("}}, [1, 2]],
+    [
+        {"$bogus": []},
+        {"config.lr": {"$near": 1}},
+        {"config.opt": {"$regex": "("}},
+        {"config.opt": {"$regex": r"\bsgd"}},  # PostgreSQL reads \b differently (012)
+        [1, 2],
+    ],
 )
 def test_invalid_filters_are_rejected(table_api, bad):
     resp = table_api.post("/api/v1/projects/flock/t/runs/query", {"filter": bad})

@@ -9,6 +9,7 @@ from fastapi.responses import Response, StreamingResponse
 
 from app.api.src.api.deps import ProjectDep, StoreDep, rest_user
 from app.api.src.api.runs import RunSelection
+from app.api.src.core import query
 from app.api.src.core.history import History
 from app.api.src.core.live import Hub
 from app.api.src.core.metric_defs import step_metrics
@@ -59,16 +60,15 @@ class Snapshot:
         max_points: int,
         system: bool = False,
     ) -> bytes:
-        table = project.table
-        rows = selection.select(project)
-        page_rows = rows[offset : offset + limit]
-        runs = [project.runs[r] for r in page_rows.tolist()]
-        names = table.column_names()
+        runs, total = await selection.select(store, project, offset, limit)
+        found = {column.name: column for column in await query.columns(store.db.pool, project.pk)}
+        names = list(found)  # sorted
         columns = [
-            *(c for c in cls.INFO_COLUMNS if c in table.columns),
+            *(c for c in cls.INFO_COLUMNS if c in found),
             *(c for c in names if c.startswith("config.")),
             *(c for c in names if c.startswith("summary.")),
         ]
+        values = await query.cells(store.db.pool, project.pk, [run.pk for run in runs], columns)
         # The metrics the page's runs logged: they are all a dashboard can plot. The project's
         # other runs (other pages, or filtered out) may log metrics none of these do, which
         # would otherwise make empty charts.
@@ -82,16 +82,14 @@ class Snapshot:
         text: dict[int, list[Any]] = {}
         kinds: list[str] = []
         for i, name in enumerate(columns):
-            column = table.columns.get(name)
-            if column is not None and column.obj is None:
+            column = found.get(name)
+            if column is not None and column.objs == 0:
                 numeric.append(i)
-                num_blocks.append(column.num[page_rows])
-            else:
-                text[i] = (
-                    [column.get(r) for r in page_rows.tolist()]
-                    if column is not None
-                    else [None] * n_runs
+                num_blocks.append(
+                    np.array([np.nan if v is None else v for v in values[name]], dtype=np.float64)
                 )
+            else:
+                text[i] = values[name]
             # Display type: state, time, duration, num, str, bool or json.
             if name == "state":
                 kinds.append("state")
@@ -99,7 +97,7 @@ class Snapshot:
                 kinds.append("time")
             elif name in cls.DURATION_COLUMNS:
                 kinds.append("duration")
-            elif column is None or column.n_obj == 0:
+            elif column is None or column.objs == 0:
                 kinds.append("num")
             else:
                 kinds.append({"string": "str", "bool": "bool"}.get(column.kind, "json"))
@@ -193,7 +191,7 @@ class Snapshot:
                 "entity": project.entity,
                 "project": project.name,
                 "now": time.time(),
-                "total": len(rows),
+                "total": total,
                 "runs_total": len(project.runs),
                 "active": len(project.active),
                 "offset": offset,

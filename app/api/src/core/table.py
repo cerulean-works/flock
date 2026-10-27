@@ -5,9 +5,7 @@ from typing import TypeGuard
 
 import numpy as np
 
-
-class FilterError(ValueError):
-    pass
+from app.api.src.core.query import FilterError
 
 
 class Column:
