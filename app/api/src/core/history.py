@@ -1,9 +1,12 @@
 from collections.abc import Iterable
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 import numpy as np
 
 from app.api.src.utils import flatten
+
+if TYPE_CHECKING:
+    import asyncpg
 
 
 class Series:
@@ -46,24 +49,33 @@ class Series:
         self._vals[self.n : need] = vals
         self.n = need
 
-    def encode(self) -> bytes:
+    def encode(self, first_line: int = 0) -> bytes:
         """``rows (int32[n]) || values (float64[n])``, little-endian.
 
-        A series logged on every line from line 0 (rows ``0..n-1``) omits its rows.
+        A series logged on every line from ``first_line`` on (rows ``first_line..+n-1``: a
+        chunk's lines, see D78, or ``0..n-1`` for a whole series) omits its rows.
         """
         rows = self.rows
-        if self.n and rows[0] == 0 and rows[-1] == self.n - 1:  # rows strictly increase
+        # Rows strictly increase, so the ends tell whether every line in between is there.
+        if self.n and rows[0] == first_line and rows[-1] == first_line + self.n - 1:
             return self.vals.tobytes()
         return rows.tobytes() + self.vals.tobytes()
 
     @classmethod
-    def decode(cls, blob: bytes, n: int) -> Self:
+    def decode(cls, blob: bytes, n: int, first_line: int = 0) -> Self:
         if len(blob) == n * cls.VALUE_DTYPE.itemsize:  # dense: rows were omitted
-            rows = np.arange(n, dtype=cls.ROW_DTYPE)
+            rows = np.arange(first_line, first_line + n, dtype=cls.ROW_DTYPE)
             return cls(rows, np.frombuffer(blob, dtype=cls.VALUE_DTYPE, count=n))
         rows = np.frombuffer(blob, dtype=cls.ROW_DTYPE, count=n)
         offset = n * cls.ROW_DTYPE.itemsize
         return cls(rows, np.frombuffer(blob, dtype=cls.VALUE_DTYPE, count=n, offset=offset))
+
+    @classmethod
+    def concat(cls, parts: list[Self]) -> Self:
+        """One series of ``parts`` in line order (chunks of one metric, oldest first)."""
+        if len(parts) == 1:
+            return parts[0]
+        return cls(np.concatenate([p.rows for p in parts]), np.concatenate([p.vals for p in parts]))
 
 
 class PointCounter:
@@ -221,3 +233,40 @@ class History:
             if len(rows):
                 out[key] = (rows, x.astype(np.int64) if x_key == "_step" else x, y)
         return out
+
+
+async def write_chunks(
+    conn: asyncpg.Connection,
+    run_pk: int,
+    stream: str,
+    first_line: int,
+    series: dict[str, Series],
+    replace: bool = False,
+) -> None:
+    """Insert one chunk per metric starting at ``first_line``, and note new metrics; with
+    ``replace``, the stream's existing chunks go first."""
+    if replace:
+        await conn.execute(
+            "DELETE FROM series_chunks WHERE run_pk = $1 AND stream = $2", run_pk, stream
+        )
+    if not series:
+        return
+    keys = list(series)
+    await conn.execute(
+        """
+        WITH chunks AS (
+            INSERT INTO series_chunks (run_pk, stream, key, first_line, n, data)
+            SELECT $1, $2, key, $3, n, data
+            FROM unnest($4::text[], $5::int[], $6::bytea[]) AS t(key, n, data)
+        )
+        INSERT INTO run_metrics (run_pk, stream, key)
+        SELECT $1, $2, key FROM unnest($4::text[]) AS t(key)
+        ON CONFLICT DO NOTHING
+        """,
+        run_pk,
+        stream,
+        first_line,
+        keys,
+        [series[key].n for key in keys],
+        [series[key].encode(first_line) for key in keys],
+    )

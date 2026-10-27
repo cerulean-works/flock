@@ -2,6 +2,7 @@ from typing import Any
 
 import asyncpg
 
+from app.api.src.db import backfill
 from app.api.src.db.migrate import Migrations
 
 
@@ -35,11 +36,17 @@ class Database:
                 raise SchemaError("another flock server is already using this database")
             if migrate:
                 await Migrations().apply(self.dsn)
+                await backfill.backfill(self.dsn)
             pending = await Migrations().pending(conn)
             if pending:
                 raise SchemaError(
                     f"database has unapplied migrations ({', '.join(pending)}) and "
                     "FLOCK_MIGRATE_ON_STARTUP is off"
+                )
+            if await backfill.pending(conn):
+                raise SchemaError(
+                    "database migrations wait for their backfill and FLOCK_MIGRATE_ON_STARTUP "
+                    "is off: run python -m app.api.src.db.migrate"
                 )
         except BaseException:
             await conn.close()

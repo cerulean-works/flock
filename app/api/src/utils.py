@@ -1,5 +1,6 @@
 import base64
 import json
+from collections.abc import Iterable
 from typing import Any
 
 import orjson
@@ -11,6 +12,18 @@ def loads_lenient(raw: str | bytes) -> Any:
         return orjson.loads(raw)
     except orjson.JSONDecodeError:
         return json.loads(raw)
+
+
+def parse_rows(lines: Iterable[str]) -> list[dict]:
+    """History lines as dicts; unparseable lines become empty rows so line numbers hold."""
+    rows = []
+    for line in lines:
+        try:
+            row = loads_lenient(line)
+        except ValueError:
+            row = None
+        rows.append(row if isinstance(row, dict) else {})
+    return rows
 
 
 def flatten(data: dict, prefix: str = "", out: dict | None = None) -> dict:

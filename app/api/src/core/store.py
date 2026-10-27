@@ -30,7 +30,7 @@ from app.api.src.core.s3 import S3
 from app.api.src.core.table import ColumnTable
 from app.api.src.db.database import Database
 from app.api.src.settings import Settings
-from app.api.src.utils import encode_id, flatten, loads_lenient
+from app.api.src.utils import encode_id, flatten, loads_lenient, parse_rows
 
 log = logging.getLogger(__name__)
 
@@ -359,18 +359,6 @@ class Store:
         """Postgres text cannot hold NUL bytes, which raw console output occasionally contains."""
         return [line.replace("\x00", "") if "\x00" in line else line for line in lines]
 
-    @staticmethod
-    def _parse_rows(lines: Iterable[str]) -> list[dict]:
-        """History lines as dicts; unparseable lines become empty rows so line numbers hold."""
-        rows = []
-        for line in lines:
-            try:
-                row = loads_lenient(line)
-            except ValueError:
-                row = None
-            rows.append(row if isinstance(row, dict) else {})
-        return rows
-
     # ------------------------------------------------------------------ lifecycle
 
     async def open(self) -> None:
@@ -588,7 +576,7 @@ class Store:
         record = await self.db.fetchrow(
             "INSERT INTO projects (org_pk, name, description, created_at, updated_at) "
             "VALUES ($1, $2, $3, to_timestamp($4), to_timestamp($4)) "
-            "ON CONFLICT (org_pk, name) DO NOTHING "
+            "ON CONFLICT (org_pk, name) WHERE deleted_at IS NULL DO NOTHING "
             "RETURNING pk, name, description, "
             "extract(epoch FROM created_at)::float8, extract(epoch FROM updated_at)::float8",
             org.pk,
@@ -1048,7 +1036,7 @@ class Store:
             for stream, (series, new_from, lines) in appends.items():
                 if self._history.get((pk, stream)) is not series:  # evicted while we wrote
                     self._cache_history((pk, stream), series)
-                series.append_rows(new_from, self._parse_rows(lines))
+                series.append_rows(new_from, parse_rows(lines))
                 run.note_metrics(series.series, stream)
             previous_state = run.state
             run.history_line_count = history_count
@@ -1345,7 +1333,7 @@ class Store:
         series = {}
         for stream, lines in (("history", data.history), ("system", data.events)):
             hist = History()
-            hist.append_rows(0, self._parse_rows(lines))
+            hist.append_rows(0, parse_rows(lines))
             series[stream] = hist
         columns = [
             (stream, key, s.n, s.encode())
@@ -1529,8 +1517,9 @@ class Store:
             async with self.db.pool.acquire() as conn, conn.transaction():
                 record = await conn.fetchrow(
                     "INSERT INTO orgs (name, display_name, created_at, updated_at) "
-                    "VALUES ($1, $2, now(), now()) ON CONFLICT (name) DO NOTHING RETURNING pk, "
-                    "name, extract(epoch FROM created_at)::float8, "
+                    "VALUES ($1, $2, now(), now()) "
+                    "ON CONFLICT (name) WHERE deleted_at IS NULL DO NOTHING "
+                    "RETURNING pk, name, extract(epoch FROM created_at)::float8, "
                     "extract(epoch FROM updated_at)::float8",
                     name,
                     display_name,
@@ -1899,12 +1888,12 @@ class Store:
         for line, data in records:
             if start is None or line != expected:
                 if batch and start is not None:
-                    hist.append_rows(start, self._parse_rows(batch))
+                    hist.append_rows(start, parse_rows(batch))
                 start, batch = line, []
             batch.append(data)
             expected = line + 1
         if batch and start is not None:
-            hist.append_rows(start, self._parse_rows(batch))
+            hist.append_rows(start, parse_rows(batch))
         hist.n_rows = max(hist.n_rows, run.lines(stream))
         cached = self._history.get((run.pk, stream))
         if cached is not None:
