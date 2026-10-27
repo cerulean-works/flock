@@ -59,6 +59,8 @@ reference:
         title: Home feed and budgets
       - local: api/s3
         title: S3 keys and buckets
+      - local: api/datasets
+        title: Datasets
   - title: Behavior
     sections:
       - local: permissions

@@ -22,6 +22,26 @@ import lance
 ds = lance.dataset(creds.uri("datasets", "rows"), storage_options=creds.storage_options())
 ```
 
+## Datasets
+
+Every organization has a bucket named `flock-datasets`, which Flock creates and manages. Any Lance dataset you write into it shows up in the dashboard's **Datasets** tab, with its README, rows, schema and versions. A dataset is any folder that holds a Lance `_versions/` folder, so folders can nest to any depth.
+
+```python
+import lance
+import pyarrow as pa
+from flock.cli import s3
+
+creds = s3.credentials("acme")
+table = pa.table({"question": ["2 + 2?"], "answer": ["4"]})
+lance.write_dataset(
+    table, creds.uri("flock-datasets", "eval", "mmlu"), storage_options=creds.storage_options()
+)
+```
+
+- **Path.** This writes `s3://flock-datasets/eval/mmlu`, which the tab shows as `eval/mmlu`.
+- **Versions.** Each write makes a new version, as Lance always does. Append with `mode="append"`. To describe a version, pass `transaction_properties={"message": "…"}`, which the Versions tab shows.
+- **README.** A `README.md` in the dataset's folder (`eval/mmlu/README.md`) is shown as its card.
+
 [[autodoc]] cli.s3.credentials
 
 [[autodoc]] cli.s3.S3Credentials
