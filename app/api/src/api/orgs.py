@@ -79,14 +79,14 @@ class InviteCreate(BaseModel):
     role: Role = "member"
 
 
-def org_info(store: Store, org: Org, user: User) -> dict:
+async def org_info(store: Store, org: Org, user: User) -> dict:
     return {
         "name": org.name,
         "display_name": org.display_name,
         "created_at": org.created_at,
         "updated_at": org.updated_at,
         "project_count": sum(1 for p in store.projects_by_pk.values() if p.org is org),
-        "member_count": len(store.accounts.members(org)),
+        "member_count": len(await store.accounts.members(org)),
         "role": store.accounts.role(user, org),  # the caller's
         "avatar_url": store.avatars.url(org.avatar),
         "s3_ephemeral_ttl": org.s3_ephemeral_ttl,
@@ -105,8 +105,8 @@ def invite_info(invite: Invite) -> dict:
     }
 
 
-def find_member(store: Store, org: Org, user_id: int) -> User:
-    user = store.accounts.users.get(user_id)
+async def find_member(store: Store, org: Org, user_id: int) -> User:
+    user = await store.accounts.user(user_id)
     if user is None or org.pk not in user.roles:
         raise APIError(404, f"user {user_id} is not a member of {org.name}")
     return user
@@ -120,7 +120,7 @@ async def list_orgs(user: UserDep, store: StoreDep) -> Response:
     """The user's organizations (every organization, for super admins)."""
     orgs = [org for org in store.orgs.values() if store.accounts.role(user, org)]
     orgs.sort(key=lambda org: (org.display_name.casefold(), org.name))
-    return JSONResponse({"orgs": [org_info(store, org, user) for org in orgs]})
+    return JSONResponse({"orgs": [await org_info(store, org, user) for org in orgs]})
 
 
 async def wandb_source(store: Store, body: WandbImport) -> tuple[WandbSource, dict[str, str]]:
@@ -157,7 +157,7 @@ async def create_org(body: OrgCreate, user: SuperadminDep, store: StoreDep) -> R
         if source is not None:
             await source.close()
         raise
-    info = org_info(store, org, user)
+    info = await org_info(store, org, user)
     if source is not None and body.wandb is not None and members is not None:
         job = await store.imports.start(org, source, body.wandb.entity, user, members)
         info["import"] = job.info()
@@ -166,7 +166,7 @@ async def create_org(body: OrgCreate, user: SuperadminDep, store: StoreDep) -> R
 
 @router.get("/orgs/{org}")
 async def get_org(org: OrgDep, user: UserDep, store: StoreDep) -> Response:
-    return JSONResponse(org_info(store, org, user))
+    return JSONResponse(await org_info(store, org, user))
 
 
 @router.patch("/orgs/{org}")
@@ -190,7 +190,7 @@ async def update_org(org: AdminOrgDep, body: OrgUpdate, user: UserDep, store: St
         await store.s3.set_ttls(org, ttls)
     if body.display_name is not None:
         await store.set_org_display_name(org, body.display_name)
-    return JSONResponse(org_info(store, org, user))
+    return JSONResponse(await org_info(store, org, user))
 
 
 @router.delete("/orgs/{org}", status_code=204)
@@ -247,7 +247,7 @@ async def cancel_import(org: AdminOrgDep, user: SuperadminDep, store: StoreDep) 
 
 @router.get("/orgs/{org}/members")
 async def list_members(org: OrgDep, store: StoreDep) -> Response:
-    members = sorted(store.accounts.members(org), key=lambda member: member[0].email)
+    members = sorted(await store.accounts.members(org), key=lambda member: member[0].email)
     return JSONResponse(
         {"members": [{**store.accounts.brief(u), "role": role} for u, role in members]}
     )
@@ -256,7 +256,7 @@ async def list_members(org: OrgDep, store: StoreDep) -> Response:
 @router.patch("/orgs/{org}/members/{user_id}")
 async def set_role(org: AdminOrgDep, user_id: int, body: RoleBody, store: StoreDep) -> Response:
     """Change a member's role; an organization always keeps an admin."""
-    await store.accounts.set_role(find_member(store, org, user_id), org, body.role)
+    await store.accounts.set_role(await find_member(store, org, user_id), org, body.role)
     return JSONResponse({"id": user_id, "role": body.role})
 
 
@@ -266,7 +266,7 @@ async def remove_member(org: OrgDep, user_id: int, user: UserDep, store: StoreDe
     Their runs stay."""
     if user_id != user.pk and store.accounts.role(user, org) != "admin":
         raise APIError(403, f"only admins of {org.name} can remove members")
-    await store.accounts.remove_member(find_member(store, org, user_id), org)
+    await store.accounts.remove_member(await find_member(store, org, user_id), org)
     return Response(status_code=204)
 
 
