@@ -51,6 +51,13 @@ def main() -> None:
     show_default=True,
     help="Padded tokens per forward pass.",
 )
+@click.option(
+    "--dtype",
+    type=click.Choice(["bfloat16", "float32"]),
+    default="bfloat16",
+    show_default=True,
+    help="The weights' dtype.",
+)
 @click.option("--device", help="Torch device (default: cuda if available).")
 @click.option("--wandb-project", help="Also log the summary to this tracker project.")
 def run(
@@ -60,6 +67,7 @@ def run(
     out: Path,
     limit: int | None,
     batch_tokens: int,
+    dtype: str,
     device: str | None,
     wandb_project: str | None,
 ) -> None:
@@ -72,6 +80,7 @@ def run(
             out=out,
             limit=limit,
             batch_tokens=batch_tokens,
+            dtype=dtype,
             device=device,
             wandb_project=wandb_project,
             command=shlex.join(["flock-eval", *sys.argv[1:]]),
