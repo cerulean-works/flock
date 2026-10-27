@@ -13,5 +13,8 @@ if __name__ == "__main__":
         (TOY_REQUESTS_FILE, toy_requests(toy.PROMPT_PATHS)),
     ):
         # Sorted keys and a two-space indent, so a change reads as a diff in review.
-        path.write_text(json.dumps(snapshot, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+        path.write_text(
+            json.dumps(snapshot, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
         print(f"wrote {path}")

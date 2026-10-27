@@ -42,18 +42,24 @@ def definitions(
                 "count": len(task.fewshot.rows),
                 "sha256": hashlib.sha256(rows).hexdigest(),
             }
-        pinned_tasks[name] = definition
+        # As the file reads back: JSON turns tuples into lists. A field JSON can't hold fails here,
+        # naming the task, until this code says how to pin it.
+        try:
+            pinned_tasks[name] = json.loads(json.dumps(definition))
+        except TypeError as error:
+            raise TypeError(f"{name}: {error}") from None
 
     pinned_suites = {}
     for name, suite in suites.items():
-        pinned_suites[name] = {
-            "members": [member.name for member in suite.members],
-            "metric": suite.metric,
-            "scored": suite.scored,
-        }
+        # Every field but the name, members by name: each member task is pinned on its own.
+        definition = {}
+        for field in dataclasses.fields(suite):
+            definition[field.name] = getattr(suite, field.name)
+        del definition["name"]
+        definition["members"] = [member.name for member in suite.members]
+        pinned_suites[name] = json.loads(json.dumps(definition))
 
-    # As the file reads back: JSON turns tuples into lists.
-    return json.loads(json.dumps({"tasks": pinned_tasks, "suites": pinned_suites}))
+    return {"tasks": pinned_tasks, "suites": pinned_suites}
 
 
 def toy_requests(tasks: Iterable[MultipleChoiceTask]) -> dict[str, Any]:
@@ -96,6 +102,7 @@ def differences(kind: str, stored: Mapping[str, Any], live: Mapping[str, Any]) -
         elif name not in stored:
             lines.append(f"{kind} {name}: added")
         else:
+            count = len(lines)
             before, after = dict(_leaves(stored[name])), dict(_leaves(live[name]))
             for field in sorted(before.keys() | after.keys()):
                 # Compared as JSON text, not with `==`: `True == 1` and `1 == 1.0` in Python, but
@@ -106,6 +113,10 @@ def differences(kind: str, stored: Mapping[str, Any], live: Mapping[str, Any]) -
                 new = json.dumps(after[field], ensure_ascii=False) if field in after else "missing"
                 if old != new:
                     lines.append(f"{kind} {name}: {field} was {old}, is now {new}")
+            # Dotted paths can coincide, as a list `[x]` and a dict `{"0": x}` do.
+            old_text = json.dumps(stored[name], sort_keys=True)
+            if len(lines) == count and old_text != json.dumps(live[name], sort_keys=True):
+                lines.append(f"{kind} {name}: changed shape")
 
     return lines
 
