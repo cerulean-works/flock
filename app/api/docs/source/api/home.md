@@ -127,18 +127,50 @@ What the organization spent in a month, against its budget. Every member can rea
     }
   ],
   "unpriced": [{"gpu_type": "L40S", "gpu_hours": 8.0}],
-  "unknown_gpu": {"runs": 2, "hours": 3.5},
+  "unknown_gpu": {"runs": 2, "hours": 3.5}
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `budget` | The month's budget, or `null` if none was set. |
+| `spent` | The month's cost: GPU hours times the current price of each GPU type, rounded to cents. Leaves out `excluded`. |
+| `remaining` | `budget` minus `spent`. Negative when the budget is exceeded, `null` without a budget. |
+| `gpu_hours` | GPU hours in the month, priced or not. Leaves out `excluded`. |
+| `projects` | Cost, GPU hours and number of runs of each project that used GPU hours in the month, most expensive first. Runs without GPU hours aren't counted. Deleted runs count under their project. `"project": null` collects the spend of deleted projects that wasn't left out. |
+| `excluded` | The deleted projects an admin [left out of the budget](#update-deleted-project) that used GPU hours in the month, and their cost and GPU hours. |
+| `top_runs` | Up to 5 runs that cost the most in the month (ordered by GPU hours where there's no price). Deleted runs aren't listed, though their spend counts. `owner` is `null` for runs without one. |
+| `unpriced` | Admins only: GPU hours of GPU types without a price, which cost nothing. Left out for members. |
+| `unknown_gpu` | Admins only: runs that still exist and were alive in the month with no GPU information, and their hours (not GPU hours). Left out for members. |
+
+The warnings about `unpriced` and `unknown_gpu` are served by [`GET /orgs/{org}/budget/warnings`](#warnings).
+
+## `GET /orgs/{org}/budget/warnings`[[warnings]]
+
+The organization's budget warnings. Org admins only; members answer 403.
+
+| Query parameter | Default | Meaning |
+|---|---|---|
+| `month` | the current UTC month | The month of the active warnings, as `YYYY-MM`. Anything else answers 422. |
+
+```json
+{
+  "month": "2026-10",
   "warnings": [
     {
       "id": "unpriced:2026-10",
+      "month": "2026-10",
       "kind": "unpriced",
       "fingerprint": "4f0e2c9a1b7d6e35",
       "dismissed": false,
       "dismissed_by": null,
       "dismissed_at": null,
       "gpu_types": [{"gpu_type": "L40S", "gpu_hours": 8.0}]
-    },
+    }
+  ],
+  "dismissed": [
     {
+      "month": "2026-10",
       "id": "unknown_gpu:2026-10",
       "kind": "unknown_gpu",
       "fingerprint": "9b1c4e0f2a7d3c55",
@@ -154,22 +186,15 @@ What the organization spent in a month, against its budget. Every member can rea
 
 | Field | Meaning |
 |---|---|
-| `budget` | The month's budget, or `null` if none was set. |
-| `spent` | The month's cost: GPU hours times the current price of each GPU type, rounded to cents. Leaves out `excluded`. |
-| `remaining` | `budget` minus `spent`. Negative when the budget is exceeded, `null` without a budget. |
-| `gpu_hours` | GPU hours in the month, priced or not. Leaves out `excluded`. |
-| `projects` | Cost, GPU hours and number of runs of each project that used GPU hours in the month, most expensive first. Runs without GPU hours aren't counted. Deleted runs count under their project. `"project": null` collects the spend of deleted projects that wasn't left out. |
-| `excluded` | The deleted projects an admin [left out of the budget](#update-deleted-project) that used GPU hours in the month, and their cost and GPU hours. |
-| `top_runs` | Up to 5 runs that cost the most in the month (ordered by GPU hours where there's no price). Deleted runs aren't listed, though their spend counts. `owner` is `null` for runs without one. |
-| `unpriced` | GPU hours of GPU types without a price, which cost nothing. |
-| `unknown_gpu` | Runs that still exist and were alive in the month with no GPU information, and their hours (not GPU hours). |
-| `warnings` | What the dashboard warns about, described below. |
+| `warnings` | The month's warnings that nobody dismissed. |
+| `dismissed` | Every dismissed warning, of any month, that is still raised and about nothing new since it was dismissed. Newest month first. |
 
 Each warning is about a set of things: GPU types for `unpriced`, runs for `unknown_gpu`. A warning is raised only when they add up to 0.05 hours or more (GPU hours for `unpriced`, hours for `unknown_gpu`), and an `unpriced` warning lists only the GPU types that do.
 
 | Warning field | Meaning |
 |---|---|
 | `id` | `{kind}:{month}`, used to [dismiss](#dismiss-warning) it. |
+| `month` | The month it's about, as `YYYY-MM`. |
 | `kind` | `unpriced` or `unknown_gpu`. |
 | `fingerprint` | Changes when what the warning is about changes. |
 | `dismissed` | An admin dismissed it, and it's about nothing new since. |
@@ -185,7 +210,7 @@ Dismisses a warning for everyone in the organization. Org admins only; members a
 |---|---|
 | `fingerprint` | The warning's `fingerprint`, as you read it. |
 
-It answers 204. The warning stays dismissed while it's about the same GPU types or runs, or a subset of them, and shows again once it's about something new. A warning that isn't raised now, or an unknown kind or month, answers 404. A `fingerprint` that no longer matches answers 409: read the budget again.
+It answers 204. The warning stays dismissed while it's about the same GPU types or runs, or a subset of them, and is active again once it's about something new. A warning that isn't raised now, or an unknown kind or month, answers 404. A `fingerprint` that no longer matches answers 409: read the warnings again.
 
 ## `DELETE /orgs/{org}/budget/warnings/{warning}/dismissal`[[restore-warning]]
 

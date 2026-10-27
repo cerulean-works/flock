@@ -92,34 +92,40 @@ The response has:
 - **the cost of each project**, most expensive first. Spend of deleted projects is grouped under `"project": null`;
 - **spend left out of the budget:** `excluded`, from the deleted projects an admin left out;
 - **the five most expensive runs** of the month;
-- **GPU hours with no price:** `unpriced`, by GPU type, which cost nothing until an admin sets a price;
-- **runs with no GPU information:** `unknown_gpu`, for example runs logged without the SDK's metadata. Only runs that still exist count, because a deleted run's GPUs can't be corrected;
-- **the warnings to show:** `warnings`, described in [Dismissing warnings](#dismissing-warnings).
+- **for admins only:** `unpriced`, the GPU hours of GPU types with no price, which cost nothing until an admin sets one, and `unknown_gpu`, the runs with no GPU information, for example runs logged without the SDK's metadata. Only runs that still exist count in `unknown_gpu`, because a deleted run's GPUs can't be corrected. Members get neither field.
 
 Runs with no GPU hours count towards none of the totals. A run that used no GPU, or whose GPUs aren't known, isn't counted in a project's runs or in a GPU type's runs, and doesn't appear in the breakdown.
 
 Add `?month=2026-09` for an earlier month. The full response is in [`GET /orgs/{org}/budget`](api/home#budget).
 
-## Dismissing warnings
+## Budget warnings
 
-The budget raises two kinds of warning:
+Flock warns org admins about GPU time it can't price:
 
 | Kind | Raised when |
 |---|---|
-| `unpriced` | A GPU type without a price has a tenth of an hour or more of GPU time in the month. |
-| `unknown_gpu` | Runs with no GPU information were alive for a tenth of an hour or more in the month, together. |
+| `unpriced` | A GPU type without a price has 3 minutes (0.05 hours) or more of GPU time in the month. |
+| `unknown_gpu` | Runs with no GPU information were alive for 3 minutes or more in the month, together. |
 
-Less than that would show as `0 h` on the dashboard, so it isn't raised. The numbers are still in `unpriced` and `unknown_gpu`.
+Less than that would show as `0 h`, so it isn't raised. Only admins see warnings, because only admins can act on them: set a price, or correct a run's GPUs. They're listed under **Budget warnings** in the organization's settings, not on the home page. Read them from the API:
 
-Org admins can dismiss a warning for everyone in the organization. Send the warning's `fingerprint` as you read it:
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/orgs/flock/budget/warnings
+```
+
+The response has the current month's warnings that nobody dismissed, and every dismissed warning of any month. Add `?month=2026-09` for an earlier month's warnings.
+
+### Dismissing a warning
+
+An admin can dismiss a warning for the whole organization. Send the warning's `fingerprint` as you read it:
 
 ```bash
 curl -s -X PUT --json '{"fingerprint": "9b1c4e0f2a7d3c55"}' -H "Authorization: Bearer $TOKEN" "$FLOCK/api/v1/orgs/flock/budget/warnings/unknown_gpu:2026-10/dismissal"
 ```
 
-A dismissed warning keeps `"dismissed": true` while it's about the same GPU types or runs, or fewer of them. Once another GPU type goes unpriced, or another run has unknown GPUs, it shows again: what was dismissed is no longer the whole story. If the warning changed after you read it, the request answers 409, so nobody dismisses something they haven't seen.
+A dismissed warning moves to the dismissed list and stays there while it's about the same GPU types or runs, or fewer of them. Once another GPU type goes unpriced, or another run has unknown GPUs, it's active again: what was dismissed is no longer the whole story. If the warning changed after you read it, the request answers 409, so nobody dismisses something they haven't seen.
 
-Only admins dismiss, because a dismissal hides the warning from every member. `DELETE` on the same path shows it again. On the dashboard, admins dismiss a warning with the **×** beside it, and bring it back from **Show dismissed warnings**.
+`DELETE` on the same path shows it again. On the dashboard, dismiss a warning with the **×** beside it, and bring it back with **Show again** in the dismissed list, which also says who dismissed it and when.
 
 ## Leaving out deleted projects
 
