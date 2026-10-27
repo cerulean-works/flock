@@ -215,17 +215,39 @@ export function stepMetricOf(defs: readonly MetricDefinition[], key: string): st
 	return step && step !== key ? step : null;
 }
 
+/** What `sharedStepMetric` knows of the runs' data, by run index. */
+export interface StepMetricData {
+	/** Whether the run logged the metric: it has a line to plot. */
+	logged(run: number): boolean;
+	/** Whether the run's x values on `step` are known: it logged that step metric. */
+	maps(run: number, step: string): boolean;
+}
+
 /**
  * The step metric of `key` for a chart of several runs, which has one x axis: the first run
  * that defined `key` (by name or glob) decides, so an explicit "no step metric" counts too.
  * Runs that defined nothing don't.
+ *
+ * With `data`, only runs that logged `key` decide: a glob such as Hugging Face's `*` of a run
+ * that never logged the metric says nothing about it. And a step metric some run that logged
+ * `key` didn't log is no axis for that run's line, which would be left off the chart: the chart
+ * stays on `_step` then (null), where every line is.
  */
 export function sharedStepMetric(
 	runs: readonly (readonly MetricDefinition[])[],
-	key: string
+	key: string,
+	data?: StepMetricData
 ): string | null {
-	for (const defs of runs) if (definitionOf(defs, key)) return stepMetricOf(defs, key);
-	return null;
+	let of = runs.map((_, i) => i);
+	if (data) {
+		const logged = of.filter((i) => data.logged(i));
+		// None did (yet): no lines to plot either way, so the definitions alone decide.
+		if (logged.length) of = logged;
+	}
+	const first = of.find((i) => definitionOf(runs[i], key));
+	const step = first === undefined ? null : stepMetricOf(runs[first], key);
+	if (!step || !data) return step;
+	return of.every((i) => !data.logged(i) || data.maps(i, step)) ? step : null;
 }
 
 // ------------------------------------------------------------------------------------------

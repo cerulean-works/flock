@@ -74,6 +74,8 @@ Flock reads these definitions from the run's config, where the SDK records them.
 - A metric without a step metric, such as `train/global_step` above, is plotted against `_step`.
 - A step metric still gets a chart of its own. Pass `hidden=True` to `define_metric` to leave a metric out of the charts.
 
+A chart of several runs has one x-axis. The first run on the page that logged the metric and defines it decides its step metric. Runs that never logged the metric don't decide, even if they have a `*` glob. If some run that logged the metric didn't log that step metric, the chart uses `_step` instead, so every run's line still shows.
+
 The [snapshot](api/dashboard#metric-definitions) and the [run detail](api/projects#get-run) carry each run's definitions, and the snapshot carries what a dashboard needs to switch the x-axis without fetching again. The [query endpoints](api/queries) still return curves against `_step` unless you pass `x`.
 
 ## System metrics

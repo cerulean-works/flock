@@ -275,17 +275,27 @@ export class Workspace {
 	// X axes (see #lib/chart/axes.ts)
 
 	/**
-	 * A logged metric's step metric, as the first of the page's runs to define the metric says
-	 * (`sharedStepMetric`). Memoised until the page or a run's definitions change.
+	 * A logged metric's step metric, as the first of the page's runs to log and define the metric
+	 * says (`sharedStepMetric`), provided every run that logged it logged that step metric too.
+	 * Memoised until the page, a run's definitions or the metric's points change.
 	 */
 	#steps = $derived.by(() => {
 		void this.defsVersion;
-		const defs = this.page.runs.map((r) => r.defs);
+		const page = this.page;
+		const defs = page.runs.map((r) => r.defs);
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a memo, never rendered
-		const memo = new Map<string, string | null>();
+		const memo = new Map<string, { version: number; step: string | null }>();
 		return (key: string) => {
-			let step = memo.get(key);
-			if (step === undefined) memo.set(key, (step = sharedStepMetric(defs, key)));
+			// Read on every call, so callers repaint when live points change who logged the metric.
+			const version = this.metricVersion.get(key) ?? 0;
+			const hit = memo.get(key);
+			if (hit?.version === version) return hit.step;
+			const m = this.metricOf('history', key);
+			const step = sharedStepMetric(defs, key, {
+				logged: (row) => m !== undefined && !!page.series[slotOf(page.metricCount, row, m)]?.n,
+				maps: (row, step) => !!this.#mapping(row, 'history', step)?.n
+			});
+			memo.set(key, { version, step });
 			return step;
 		};
 	});

@@ -87,6 +87,24 @@ describe('metric definitions', () => {
 		expect(sharedStepMetric([HF, explicit], 'plain')).toBe('train/global_step');
 		expect(sharedStepMetric([[]], 'plain')).toBeNull();
 	});
+
+	it('leave the decision to runs that logged the metric, and to a step metric they all have', () => {
+		/** Runs by index: which logged the metric, and which logged `train/global_step`. */
+		const data = (logged: number[], maps: number[]) => ({
+			logged: (i: number) => logged.includes(i),
+			maps: (i: number, step: string) => step === 'train/global_step' && maps.includes(i)
+		});
+		// HF's glob of a run that never logged `memory/peak` names no axis for it.
+		expect(sharedStepMetric([HF, []], 'memory/peak', data([1], [0]))).toBeNull();
+		expect(sharedStepMetric([HF, []], 'train/loss', data([0], [0]))).toBe('train/global_step');
+		// A run that logged it without the step metric would lose its line: `_step` then.
+		expect(sharedStepMetric([HF, []], 'train/loss', data([0, 1], [0]))).toBeNull();
+		expect(sharedStepMetric([HF, HF], 'train/loss', data([0, 1], [0, 1]))).toBe(
+			'train/global_step'
+		);
+		// Nobody logged it (yet): the definitions alone.
+		expect(sharedStepMetric([HF], 'new', data([], [0]))).toBe('train/global_step');
+	});
 });
 
 describe('resolveAxis', () => {
