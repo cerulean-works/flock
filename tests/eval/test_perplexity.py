@@ -10,7 +10,7 @@ from flock.eval.run import EvalConfig, evaluate, score_task
 from flock.eval.tasks import SUITES, TASKS, Dataset, PerplexityTask, Suite
 from flock.eval.tasks.paloma import PALOMA, source_suite
 
-from .toy import TASK, TEXT_ROWS, TEXT_TASK
+from .toy import DOMAIN_ROWS, TASK, TEXT_ROWS, TEXT_TASK
 
 DOMAINS = dataclasses.replace(TEXT_TASK.dataset, split="domains")
 NEWS = dataclasses.replace(TEXT_TASK, name="toy_text__news", dataset=DOMAINS, domain="news")
@@ -144,8 +144,20 @@ def test_evaluate_scores_perplexity_tasks_and_their_source(monkeypatch, scorer, 
 
 def test_paloma_is_registered_as_sources_of_domain_tasks():
     assert SUITES["paloma"] == PALOMA
-    assert [suite.name for suite in PALOMA.members] == ["paloma:wikitext_103"]
-    assert [suite.metric for suite in PALOMA.suites] == ["bits_per_byte", None]
+    sources = [
+        "c4_en",
+        "mc4",
+        "wikitext_103",
+        "ptb",
+        "falcon-refinedweb",
+        "dolma-v1_5",
+        "c4_100_domains",
+        "dolma_100_subreddits",
+        "dolma_100_programing_languages",
+    ]
+    assert [suite.name for suite in PALOMA.members] == [f"paloma:{source}" for source in sources]
+    assert [suite.metric for suite in PALOMA.suites] == ["bits_per_byte"] * 9 + [None]
+    assert len(PALOMA.tasks) == 309
     wikitext = TASKS["paloma_wikitext_103"]
     assert isinstance(wikitext, PerplexityTask)
     assert (wikitext.dataset.subset, wikitext.dataset.split) == ("wikitext_103", "test")
@@ -180,3 +192,35 @@ def test_a_null_or_empty_subdomain_counts_as_one_domain(monkeypatch, subdomain):
     rows = [{**row, "subdomain": subdomain} for row in TEXT_ROWS]
     monkeypatch.setattr(Dataset, "load", lambda self, split=None: rows)
     assert len(TEXT_TASK.load()) == 3
+
+
+def test_the_domains_of_a_source_load_its_split_once(monkeypatch):
+    loads = []
+
+    def load(self, split=None):
+        loads.append(self)
+        return DOMAIN_ROWS
+
+    monkeypatch.setattr(Dataset, "load", load)
+    assert [len(task.load()) for task in SOURCE.tasks] == [2, 1]
+    assert loads == [DOMAINS]
+
+
+def test_the_cache_reloads_when_another_split_comes_between(monkeypatch):
+    loads = []
+
+    def load(self, split=None):
+        loads.append(self.split)
+        return DOMAIN_ROWS if self.split == "domains" else TEXT_ROWS
+
+    monkeypatch.setattr(Dataset, "load", load)
+    assert [doc.id for doc in NEWS.load()] == ["t-1", "t-3"]
+    assert [doc.id for doc in TEXT_TASK.load()] == ["t-1", "t-2", "t-3"]
+    assert [doc.id for doc in EXAM.load()] == ["t-2"]
+    assert loads == ["domains", "text", "domains"]
+
+
+def test_an_empty_split_has_no_rows_to_score(monkeypatch):
+    monkeypatch.setattr(Dataset, "load", lambda self, split=None: [])
+    with pytest.raises(ValueError, match="the split has no rows"):
+        TEXT_TASK.load()

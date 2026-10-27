@@ -262,10 +262,374 @@
     },
     "paloma": {
       "members": [
-        "paloma:wikitext_103"
+        "paloma:c4_en",
+        "paloma:mc4",
+        "paloma:wikitext_103",
+        "paloma:ptb",
+        "paloma:falcon-refinedweb",
+        "paloma:dolma-v1_5",
+        "paloma:c4_100_domains",
+        "paloma:dolma_100_subreddits",
+        "paloma:dolma_100_programing_languages"
       ],
       "metric": null,
       "scored": false
+    },
+    "paloma:c4_100_domains": {
+      "members": [
+        "paloma_c4_100_domains__1_www.nytimes.com",
+        "paloma_c4_100_domains__2_en.wikipedia.org",
+        "paloma_c4_100_domains__4_www.latimes.com",
+        "paloma_c4_100_domains__5_www.theguardian.com",
+        "paloma_c4_100_domains__6_www.huffpost.com",
+        "paloma_c4_100_domains__7_patents.google.com",
+        "paloma_c4_100_domains__8_www.businessinsider.com",
+        "paloma_c4_100_domains__9_www.forbes.com",
+        "paloma_c4_100_domains__10_www.eventbrite.com",
+        "paloma_c4_100_domains__11_link.springer.com",
+        "paloma_c4_100_domains__12_www.chicagotribune.com",
+        "paloma_c4_100_domains__13_www.foxnews.com",
+        "paloma_c4_100_domains__14_www.aljazeera.com",
+        "paloma_c4_100_domains__15_www.dailymail.co.uk",
+        "paloma_c4_100_domains__16_www.ncbi.nlm.nih.gov",
+        "paloma_c4_100_domains__17_www.express.co.uk",
+        "paloma_c4_100_domains__18_en.m.wikipedia.org",
+        "paloma_c4_100_domains__19_www.cnet.com",
+        "paloma_c4_100_domains__20_www.telegraph.co.uk",
+        "paloma_c4_100_domains__21_www.theatlantic.com",
+        "paloma_c4_100_domains__22_forums.macrumors.com",
+        "paloma_c4_100_domains__23_www.oreilly.com",
+        "paloma_c4_100_domains__24_www.washingtonpost.com",
+        "paloma_c4_100_domains__25_www.zdnet.com",
+        "paloma_c4_100_domains__26_www.foxbusiness.com",
+        "paloma_c4_100_domains__27_www.reuters.com",
+        "paloma_c4_100_domains__28_www.ibtimes.co.uk",
+        "paloma_c4_100_domains__29_www.rt.com",
+        "paloma_c4_100_domains__30_www.prweb.com",
+        "paloma_c4_100_domains__31_www.deviantart.com",
+        "paloma_c4_100_domains__32_www.si.com",
+        "paloma_c4_100_domains__33_www.bbc.com",
+        "paloma_c4_100_domains__34_github.com",
+        "paloma_c4_100_domains__35_nypost.com",
+        "paloma_c4_100_domains__36_itunes.apple.com",
+        "paloma_c4_100_domains__37_www.instructables.com",
+        "paloma_c4_100_domains__38_www.youtube.com",
+        "paloma_c4_100_domains__39_www.booking.com",
+        "paloma_c4_100_domains__40_www.etsy.com",
+        "paloma_c4_100_domains__41_www.marketwired.com",
+        "paloma_c4_100_domains__42_sites.google.com",
+        "paloma_c4_100_domains__43_www.baltimoresun.com",
+        "paloma_c4_100_domains__44_www.agreatertown.com",
+        "paloma_c4_100_domains__45_www.npr.org",
+        "paloma_c4_100_domains__46_www.fool.com",
+        "paloma_c4_100_domains__47_www.tripadvisor.com",
+        "paloma_c4_100_domains__48_www.bbc.co.uk",
+        "paloma_c4_100_domains__49_lists.w3.org",
+        "paloma_c4_100_domains__50_mashable.com",
+        "paloma_c4_100_domains__51_disneyparksmomspanel.disney.go.com",
+        "paloma_c4_100_domains__52_www.cnbc.com",
+        "paloma_c4_100_domains__53_answers.sap.com",
+        "paloma_c4_100_domains__54_homestars.com",
+        "paloma_c4_100_domains__55_www.hindustantimes.com",
+        "paloma_c4_100_domains__56_www.reference.com",
+        "paloma_c4_100_domains__57_www.city-data.com",
+        "paloma_c4_100_domains__58_medium.com",
+        "paloma_c4_100_domains__59_app-wiringdiagram.herokuapp.com",
+        "paloma_c4_100_domains__60_www.csmonitor.com",
+        "paloma_c4_100_domains__61_www.adweek.com",
+        "paloma_c4_100_domains__62_docs.microsoft.com",
+        "paloma_c4_100_domains__63_www.yahoo.com",
+        "paloma_c4_100_domains__64_www.thesun.co.uk",
+        "paloma_c4_100_domains__65_www.nydailynews.com",
+        "paloma_c4_100_domains__66_www.dailystar.co.uk",
+        "paloma_c4_100_domains__67_fineartamerica.com",
+        "paloma_c4_100_domains__68_www.kickstarter.com",
+        "paloma_c4_100_domains__69_uk.reuters.com",
+        "paloma_c4_100_domains__70_www.insiderpages.com",
+        "paloma_c4_100_domains__71_www.inquisitr.com",
+        "paloma_c4_100_domains__72_lists.debian.org",
+        "paloma_c4_100_domains__73_www.straitstimes.com",
+        "paloma_c4_100_domains__74_www.cbsnews.com",
+        "paloma_c4_100_domains__75_simple.wikipedia.org",
+        "paloma_c4_100_domains__76_deadline.com",
+        "paloma_c4_100_domains__77_www.androidheadlines.com",
+        "paloma_c4_100_domains__78_www.wired.com",
+        "paloma_c4_100_domains__79_www.bustle.com",
+        "paloma_c4_100_domains__80_premium.wpmudev.org",
+        "paloma_c4_100_domains__81_www.librarything.com",
+        "paloma_c4_100_domains__82_mail-archives.apache.org",
+        "paloma_c4_100_domains__83_scholars.duke.edu",
+        "paloma_c4_100_domains__84_www.glassdoor.com",
+        "paloma_c4_100_domains__85_www.pcworld.com",
+        "paloma_c4_100_domains__86_www.shutterstock.com",
+        "paloma_c4_100_domains__87_myemail.constantcontact.com",
+        "paloma_c4_100_domains__88_www.eventbrite.co.uk",
+        "paloma_c4_100_domains__89_www.fastcompany.com",
+        "paloma_c4_100_domains__90_www.firstpost.com",
+        "paloma_c4_100_domains__91_www.entrepreneur.com",
+        "paloma_c4_100_domains__92_www.breitbart.com",
+        "paloma_c4_100_domains__93_techcrunch.com",
+        "paloma_c4_100_domains__94_www.nme.com",
+        "paloma_c4_100_domains__95_www.ndtv.com",
+        "paloma_c4_100_domains__96_finance.yahoo.com",
+        "paloma_c4_100_domains__97_archives.lib.state.ma.us",
+        "paloma_c4_100_domains__98_www.gsmarena.com",
+        "paloma_c4_100_domains__99_www.lonelyplanet.com",
+        "paloma_c4_100_domains__100_www.ign.com"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "paloma:c4_en": {
+      "members": [
+        "paloma_c4_en"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "paloma:dolma-v1_5": {
+      "members": [
+        "paloma_dolma-v1_5__common-crawl",
+        "paloma_dolma-v1_5__pes2o",
+        "paloma_dolma-v1_5__reddit_uniform",
+        "paloma_dolma-v1_5__stack_uniform",
+        "paloma_dolma-v1_5__wiki"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "paloma:dolma_100_programing_languages": {
+      "members": [
+        "paloma_dolma_100_programing_languages__00_text",
+        "paloma_dolma_100_programing_languages__01_markdown",
+        "paloma_dolma_100_programing_languages__02_c",
+        "paloma_dolma_100_programing_languages__03_php",
+        "paloma_dolma_100_programing_languages__04_java",
+        "paloma_dolma_100_programing_languages__05_c++",
+        "paloma_dolma_100_programing_languages__06_python",
+        "paloma_dolma_100_programing_languages__07_javascript",
+        "paloma_dolma_100_programing_languages__08_html",
+        "paloma_dolma_100_programing_languages__09_c#",
+        "paloma_dolma_100_programing_languages__10_yaml",
+        "paloma_dolma_100_programing_languages__11_go",
+        "paloma_dolma_100_programing_languages__12_typescript",
+        "paloma_dolma_100_programing_languages__13_xml",
+        "paloma_dolma_100_programing_languages__14_css",
+        "paloma_dolma_100_programing_languages__15_jupyter-notebook",
+        "paloma_dolma_100_programing_languages__16_rust",
+        "paloma_dolma_100_programing_languages__17_unity3d-asset",
+        "paloma_dolma_100_programing_languages__18_gettext-catalog",
+        "paloma_dolma_100_programing_languages__19_ruby",
+        "paloma_dolma_100_programing_languages__20_vue",
+        "paloma_dolma_100_programing_languages__21_sql",
+        "paloma_dolma_100_programing_languages__22_swift",
+        "paloma_dolma_100_programing_languages__23_kotlin",
+        "paloma_dolma_100_programing_languages__24_scala",
+        "paloma_dolma_100_programing_languages__25_scss",
+        "paloma_dolma_100_programing_languages__26_tex",
+        "paloma_dolma_100_programing_languages__27_dart",
+        "paloma_dolma_100_programing_languages__28_kicad",
+        "paloma_dolma_100_programing_languages__29_shell",
+        "paloma_dolma_100_programing_languages__30_smali",
+        "paloma_dolma_100_programing_languages__31_lua",
+        "paloma_dolma_100_programing_languages__32_restructuredtext",
+        "paloma_dolma_100_programing_languages__33_perl",
+        "paloma_dolma_100_programing_languages__34_diff",
+        "paloma_dolma_100_programing_languages__35_ini",
+        "paloma_dolma_100_programing_languages__36_jsx",
+        "paloma_dolma_100_programing_languages__37_haskell",
+        "paloma_dolma_100_programing_languages__38_gnuplot",
+        "paloma_dolma_100_programing_languages__39_postscript",
+        "paloma_dolma_100_programing_languages__40_groff",
+        "paloma_dolma_100_programing_languages__41_turtle",
+        "paloma_dolma_100_programing_languages__42_fortran",
+        "paloma_dolma_100_programing_languages__43_makefile",
+        "paloma_dolma_100_programing_languages__44_mathematica",
+        "paloma_dolma_100_programing_languages__45_pascal",
+        "paloma_dolma_100_programing_languages__46_common-lisp",
+        "paloma_dolma_100_programing_languages__47_gas",
+        "paloma_dolma_100_programing_languages__48_vhdl",
+        "paloma_dolma_100_programing_languages__49_julia",
+        "paloma_dolma_100_programing_languages__50_edn",
+        "paloma_dolma_100_programing_languages__51_visual-basic",
+        "paloma_dolma_100_programing_languages__52_powershell",
+        "paloma_dolma_100_programing_languages__53_g-code",
+        "paloma_dolma_100_programing_languages__54_ocaml",
+        "paloma_dolma_100_programing_languages__55_java-server-pages",
+        "paloma_dolma_100_programing_languages__56_solidity",
+        "paloma_dolma_100_programing_languages__57_graphviz-dot",
+        "paloma_dolma_100_programing_languages__58_less",
+        "paloma_dolma_100_programing_languages__59_twig",
+        "paloma_dolma_100_programing_languages__60_asciidoc",
+        "paloma_dolma_100_programing_languages__61_groovy",
+        "paloma_dolma_100_programing_languages__62_llvm",
+        "paloma_dolma_100_programing_languages__63_hcl",
+        "paloma_dolma_100_programing_languages__64_html+erb",
+        "paloma_dolma_100_programing_languages__65_erlang",
+        "paloma_dolma_100_programing_languages__66_elixir",
+        "paloma_dolma_100_programing_languages__67_eagle",
+        "paloma_dolma_100_programing_languages__68_arduino",
+        "paloma_dolma_100_programing_languages__69_coffeescript",
+        "paloma_dolma_100_programing_languages__70_toml",
+        "paloma_dolma_100_programing_languages__71_cuda",
+        "paloma_dolma_100_programing_languages__72_nix",
+        "paloma_dolma_100_programing_languages__73_smalltalk",
+        "paloma_dolma_100_programing_languages__74_cmake",
+        "paloma_dolma_100_programing_languages__75_actionscript",
+        "paloma_dolma_100_programing_languages__76_glsl",
+        "paloma_dolma_100_programing_languages__77_systemverilog",
+        "paloma_dolma_100_programing_languages__78_haxe",
+        "paloma_dolma_100_programing_languages__79_f#",
+        "paloma_dolma_100_programing_languages__80_max",
+        "paloma_dolma_100_programing_languages__81_objective-c++",
+        "paloma_dolma_100_programing_languages__82_standard-ml",
+        "paloma_dolma_100_programing_languages__83_dockerfile",
+        "paloma_dolma_100_programing_languages__84_emacs-lisp",
+        "paloma_dolma_100_programing_languages__85_scheme",
+        "paloma_dolma_100_programing_languages__86_clojure",
+        "paloma_dolma_100_programing_languages__87_handlebars",
+        "paloma_dolma_100_programing_languages__88_smarty",
+        "paloma_dolma_100_programing_languages__89_logos",
+        "paloma_dolma_100_programing_languages__90_stata",
+        "paloma_dolma_100_programing_languages__91_yacc",
+        "paloma_dolma_100_programing_languages__92_nimrod",
+        "paloma_dolma_100_programing_languages__93_tcl",
+        "paloma_dolma_100_programing_languages__94_viml",
+        "paloma_dolma_100_programing_languages__95_asp",
+        "paloma_dolma_100_programing_languages__96_protocol-buffer",
+        "paloma_dolma_100_programing_languages__97_r",
+        "paloma_dolma_100_programing_languages__98_cython",
+        "paloma_dolma_100_programing_languages__99_mediawiki"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "paloma:dolma_100_subreddits": {
+      "members": [
+        "paloma_dolma_100_subreddits__00_AskReddit",
+        "paloma_dolma_100_subreddits__01_politics",
+        "paloma_dolma_100_subreddits__02_AmItheAsshole",
+        "paloma_dolma_100_subreddits__03_worldnews",
+        "paloma_dolma_100_subreddits__04_relationships",
+        "paloma_dolma_100_subreddits__05_relationship_advice",
+        "paloma_dolma_100_subreddits__06_news",
+        "paloma_dolma_100_subreddits__07_leagueoflegends",
+        "paloma_dolma_100_subreddits__08_todayilearned",
+        "paloma_dolma_100_subreddits__09_TwoXChromosomes",
+        "paloma_dolma_100_subreddits__10_personalfinance",
+        "paloma_dolma_100_subreddits__11_changemyview",
+        "paloma_dolma_100_subreddits__12_unpopularopinion",
+        "paloma_dolma_100_subreddits__13_movies",
+        "paloma_dolma_100_subreddits__14_Games",
+        "paloma_dolma_100_subreddits__15_nba",
+        "paloma_dolma_100_subreddits__16_pics",
+        "paloma_dolma_100_subreddits__17_gaming",
+        "paloma_dolma_100_subreddits__18_soccer",
+        "paloma_dolma_100_subreddits__19_nfl",
+        "paloma_dolma_100_subreddits__20_explainlikeimfive",
+        "paloma_dolma_100_subreddits__21_conspiracy",
+        "paloma_dolma_100_subreddits__22_atheism",
+        "paloma_dolma_100_subreddits__23_AskMen",
+        "paloma_dolma_100_subreddits__24_videos",
+        "paloma_dolma_100_subreddits__25_sex",
+        "paloma_dolma_100_subreddits__26_raisedbynarcissists",
+        "paloma_dolma_100_subreddits__27_NoStupidQuestions",
+        "paloma_dolma_100_subreddits__28_DestinyTheGame",
+        "paloma_dolma_100_subreddits__29_anime",
+        "paloma_dolma_100_subreddits__30_DnD",
+        "paloma_dolma_100_subreddits__31_ukpolitics",
+        "paloma_dolma_100_subreddits__32_funny",
+        "paloma_dolma_100_subreddits__33_europe",
+        "paloma_dolma_100_subreddits__34_canada",
+        "paloma_dolma_100_subreddits__35_Christianity",
+        "paloma_dolma_100_subreddits__36_SquaredCircle",
+        "paloma_dolma_100_subreddits__37_AskWomen",
+        "paloma_dolma_100_subreddits__38_legaladvice",
+        "paloma_dolma_100_subreddits__39_JUSTNOMIL",
+        "paloma_dolma_100_subreddits__40_technology",
+        "paloma_dolma_100_subreddits__41_IAmA",
+        "paloma_dolma_100_subreddits__42_wow",
+        "paloma_dolma_100_subreddits__43_Parenting",
+        "paloma_dolma_100_subreddits__44_exmormon",
+        "paloma_dolma_100_subreddits__45_AdviceAnimals",
+        "paloma_dolma_100_subreddits__46_childfree",
+        "paloma_dolma_100_subreddits__47_unitedkingdom",
+        "paloma_dolma_100_subreddits__48_ffxiv",
+        "paloma_dolma_100_subreddits__49_dndnext",
+        "paloma_dolma_100_subreddits__50_ADHD",
+        "paloma_dolma_100_subreddits__51_loseit",
+        "paloma_dolma_100_subreddits__52_asoiaf",
+        "paloma_dolma_100_subreddits__53_BabyBumps",
+        "paloma_dolma_100_subreddits__54_Advice",
+        "paloma_dolma_100_subreddits__55_australia",
+        "paloma_dolma_100_subreddits__56_CFB",
+        "paloma_dolma_100_subreddits__57_offmychest",
+        "paloma_dolma_100_subreddits__58_PublicFreakout",
+        "paloma_dolma_100_subreddits__59_TrueOffMyChest",
+        "paloma_dolma_100_subreddits__60_science",
+        "paloma_dolma_100_subreddits__61_magicTCG",
+        "paloma_dolma_100_subreddits__62_asktransgender",
+        "paloma_dolma_100_subreddits__63_DotA2",
+        "paloma_dolma_100_subreddits__64_neoliberal",
+        "paloma_dolma_100_subreddits__65_whowouldwin",
+        "paloma_dolma_100_subreddits__66_depression",
+        "paloma_dolma_100_subreddits__67_WTF",
+        "paloma_dolma_100_subreddits__68_pathofexile",
+        "paloma_dolma_100_subreddits__69_PoliticalDiscussion",
+        "paloma_dolma_100_subreddits__70_Libertarian",
+        "paloma_dolma_100_subreddits__71_PurplePillDebate",
+        "paloma_dolma_100_subreddits__72_Fitness",
+        "paloma_dolma_100_subreddits__73_books",
+        "paloma_dolma_100_subreddits__74_dogs",
+        "paloma_dolma_100_subreddits__75_pcmasterrace",
+        "paloma_dolma_100_subreddits__76_teenagers",
+        "paloma_dolma_100_subreddits__77_stopdrinking",
+        "paloma_dolma_100_subreddits__78_Overwatch",
+        "paloma_dolma_100_subreddits__79_television",
+        "paloma_dolma_100_subreddits__80_buildapc",
+        "paloma_dolma_100_subreddits__81_askscience",
+        "paloma_dolma_100_subreddits__82_programming",
+        "paloma_dolma_100_subreddits__83_Guildwars2",
+        "paloma_dolma_100_subreddits__84_cars",
+        "paloma_dolma_100_subreddits__85_formula1",
+        "paloma_dolma_100_subreddits__86_sysadmin",
+        "paloma_dolma_100_subreddits__87_hockey",
+        "paloma_dolma_100_subreddits__88_india",
+        "paloma_dolma_100_subreddits__89_SubredditDrama",
+        "paloma_dolma_100_subreddits__90_DMAcademy",
+        "paloma_dolma_100_subreddits__91_dating_advice",
+        "paloma_dolma_100_subreddits__92_Catholicism",
+        "paloma_dolma_100_subreddits__93_Drugs",
+        "paloma_dolma_100_subreddits__94_trees",
+        "paloma_dolma_100_subreddits__95_boardgames",
+        "paloma_dolma_100_subreddits__96_Conservative",
+        "paloma_dolma_100_subreddits__97_Futurology",
+        "paloma_dolma_100_subreddits__98_beyondthebump",
+        "paloma_dolma_100_subreddits__99_weddingplanning"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "paloma:falcon-refinedweb": {
+      "members": [
+        "paloma_falcon-refinedweb"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "paloma:mc4": {
+      "members": [
+        "paloma_mc4"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "paloma:ptb": {
+      "members": [
+        "paloma_ptb"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
     },
     "paloma:wikitext_103": {
       "members": [
@@ -2996,6 +3360,3702 @@
       "to_doc": "flock.eval.tasks.gen2mc.naturalqs_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
+    },
+    "paloma_c4_100_domains__100_www.ign.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "100_www.ign.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__10_www.eventbrite.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "10_www.eventbrite.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__11_link.springer.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "11_link.springer.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__12_www.chicagotribune.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "12_www.chicagotribune.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__13_www.foxnews.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "13_www.foxnews.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__14_www.aljazeera.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "14_www.aljazeera.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__15_www.dailymail.co.uk": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "15_www.dailymail.co.uk",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__16_www.ncbi.nlm.nih.gov": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "16_www.ncbi.nlm.nih.gov",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__17_www.express.co.uk": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "17_www.express.co.uk",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__18_en.m.wikipedia.org": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "18_en.m.wikipedia.org",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__19_www.cnet.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "19_www.cnet.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__1_www.nytimes.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "1_www.nytimes.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__20_www.telegraph.co.uk": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "20_www.telegraph.co.uk",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__21_www.theatlantic.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "21_www.theatlantic.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__22_forums.macrumors.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "22_forums.macrumors.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__23_www.oreilly.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "23_www.oreilly.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__24_www.washingtonpost.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "24_www.washingtonpost.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__25_www.zdnet.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "25_www.zdnet.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__26_www.foxbusiness.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "26_www.foxbusiness.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__27_www.reuters.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "27_www.reuters.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__28_www.ibtimes.co.uk": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "28_www.ibtimes.co.uk",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__29_www.rt.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "29_www.rt.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__2_en.wikipedia.org": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "2_en.wikipedia.org",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__30_www.prweb.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "30_www.prweb.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__31_www.deviantart.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "31_www.deviantart.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__32_www.si.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "32_www.si.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__33_www.bbc.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "33_www.bbc.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__34_github.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "34_github.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__35_nypost.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "35_nypost.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__36_itunes.apple.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "36_itunes.apple.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__37_www.instructables.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "37_www.instructables.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__38_www.youtube.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "38_www.youtube.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__39_www.booking.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "39_www.booking.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__40_www.etsy.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "40_www.etsy.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__41_www.marketwired.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "41_www.marketwired.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__42_sites.google.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "42_sites.google.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__43_www.baltimoresun.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "43_www.baltimoresun.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__44_www.agreatertown.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "44_www.agreatertown.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__45_www.npr.org": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "45_www.npr.org",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__46_www.fool.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "46_www.fool.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__47_www.tripadvisor.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "47_www.tripadvisor.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__48_www.bbc.co.uk": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "48_www.bbc.co.uk",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__49_lists.w3.org": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "49_lists.w3.org",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__4_www.latimes.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "4_www.latimes.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__50_mashable.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "50_mashable.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__51_disneyparksmomspanel.disney.go.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "51_disneyparksmomspanel.disney.go.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__52_www.cnbc.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "52_www.cnbc.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__53_answers.sap.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "53_answers.sap.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__54_homestars.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "54_homestars.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__55_www.hindustantimes.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "55_www.hindustantimes.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__56_www.reference.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "56_www.reference.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__57_www.city-data.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "57_www.city-data.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__58_medium.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "58_medium.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__59_app-wiringdiagram.herokuapp.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "59_app-wiringdiagram.herokuapp.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__5_www.theguardian.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "5_www.theguardian.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__60_www.csmonitor.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "60_www.csmonitor.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__61_www.adweek.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "61_www.adweek.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__62_docs.microsoft.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "62_docs.microsoft.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__63_www.yahoo.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "63_www.yahoo.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__64_www.thesun.co.uk": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "64_www.thesun.co.uk",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__65_www.nydailynews.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "65_www.nydailynews.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__66_www.dailystar.co.uk": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "66_www.dailystar.co.uk",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__67_fineartamerica.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "67_fineartamerica.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__68_www.kickstarter.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "68_www.kickstarter.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__69_uk.reuters.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "69_uk.reuters.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__6_www.huffpost.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "6_www.huffpost.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__70_www.insiderpages.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "70_www.insiderpages.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__71_www.inquisitr.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "71_www.inquisitr.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__72_lists.debian.org": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "72_lists.debian.org",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__73_www.straitstimes.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "73_www.straitstimes.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__74_www.cbsnews.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "74_www.cbsnews.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__75_simple.wikipedia.org": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "75_simple.wikipedia.org",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__76_deadline.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "76_deadline.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__77_www.androidheadlines.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "77_www.androidheadlines.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__78_www.wired.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "78_www.wired.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__79_www.bustle.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "79_www.bustle.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__7_patents.google.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "7_patents.google.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__80_premium.wpmudev.org": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "80_premium.wpmudev.org",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__81_www.librarything.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "81_www.librarything.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__82_mail-archives.apache.org": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "82_mail-archives.apache.org",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__83_scholars.duke.edu": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "83_scholars.duke.edu",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__84_www.glassdoor.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "84_www.glassdoor.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__85_www.pcworld.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "85_www.pcworld.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__86_www.shutterstock.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "86_www.shutterstock.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__87_myemail.constantcontact.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "87_myemail.constantcontact.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__88_www.eventbrite.co.uk": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "88_www.eventbrite.co.uk",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__89_www.fastcompany.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "89_www.fastcompany.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__8_www.businessinsider.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "8_www.businessinsider.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__90_www.firstpost.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "90_www.firstpost.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__91_www.entrepreneur.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "91_www.entrepreneur.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__92_www.breitbart.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "92_www.breitbart.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__93_techcrunch.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "93_techcrunch.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__94_www.nme.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "94_www.nme.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__95_www.ndtv.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "95_www.ndtv.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__96_finance.yahoo.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "96_finance.yahoo.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__97_archives.lib.state.ma.us": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "97_archives.lib.state.ma.us",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__98_www.gsmarena.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "98_www.gsmarena.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__99_www.lonelyplanet.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "99_www.lonelyplanet.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_100_domains__9_www.forbes.com": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_100_domains"
+      },
+      "domain": "9_www.forbes.com",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_c4_en": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "c4_en"
+      },
+      "domain": null,
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma-v1_5__common-crawl": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma-v1_5"
+      },
+      "domain": "common-crawl",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma-v1_5__pes2o": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma-v1_5"
+      },
+      "domain": "pes2o",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma-v1_5__reddit_uniform": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma-v1_5"
+      },
+      "domain": "reddit_uniform",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma-v1_5__stack_uniform": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma-v1_5"
+      },
+      "domain": "stack_uniform",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma-v1_5__wiki": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma-v1_5"
+      },
+      "domain": "wiki",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__00_text": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "00_text",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__01_markdown": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "01_markdown",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__02_c": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "02_c",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__03_php": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "03_php",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__04_java": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "04_java",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__05_c++": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "05_c++",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__06_python": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "06_python",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__07_javascript": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "07_javascript",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__08_html": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "08_html",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__09_c#": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "09_c#",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__10_yaml": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "10_yaml",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__11_go": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "11_go",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__12_typescript": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "12_typescript",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__13_xml": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "13_xml",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__14_css": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "14_css",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__15_jupyter-notebook": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "15_jupyter-notebook",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__16_rust": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "16_rust",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__17_unity3d-asset": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "17_unity3d-asset",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__18_gettext-catalog": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "18_gettext-catalog",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__19_ruby": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "19_ruby",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__20_vue": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "20_vue",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__21_sql": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "21_sql",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__22_swift": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "22_swift",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__23_kotlin": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "23_kotlin",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__24_scala": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "24_scala",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__25_scss": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "25_scss",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__26_tex": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "26_tex",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__27_dart": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "27_dart",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__28_kicad": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "28_kicad",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__29_shell": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "29_shell",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__30_smali": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "30_smali",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__31_lua": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "31_lua",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__32_restructuredtext": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "32_restructuredtext",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__33_perl": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "33_perl",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__34_diff": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "34_diff",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__35_ini": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "35_ini",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__36_jsx": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "36_jsx",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__37_haskell": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "37_haskell",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__38_gnuplot": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "38_gnuplot",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__39_postscript": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "39_postscript",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__40_groff": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "40_groff",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__41_turtle": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "41_turtle",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__42_fortran": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "42_fortran",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__43_makefile": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "43_makefile",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__44_mathematica": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "44_mathematica",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__45_pascal": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "45_pascal",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__46_common-lisp": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "46_common-lisp",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__47_gas": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "47_gas",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__48_vhdl": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "48_vhdl",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__49_julia": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "49_julia",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__50_edn": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "50_edn",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__51_visual-basic": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "51_visual-basic",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__52_powershell": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "52_powershell",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__53_g-code": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "53_g-code",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__54_ocaml": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "54_ocaml",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__55_java-server-pages": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "55_java-server-pages",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__56_solidity": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "56_solidity",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__57_graphviz-dot": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "57_graphviz-dot",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__58_less": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "58_less",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__59_twig": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "59_twig",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__60_asciidoc": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "60_asciidoc",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__61_groovy": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "61_groovy",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__62_llvm": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "62_llvm",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__63_hcl": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "63_hcl",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__64_html+erb": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "64_html+erb",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__65_erlang": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "65_erlang",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__66_elixir": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "66_elixir",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__67_eagle": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "67_eagle",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__68_arduino": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "68_arduino",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__69_coffeescript": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "69_coffeescript",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__70_toml": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "70_toml",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__71_cuda": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "71_cuda",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__72_nix": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "72_nix",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__73_smalltalk": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "73_smalltalk",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__74_cmake": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "74_cmake",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__75_actionscript": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "75_actionscript",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__76_glsl": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "76_glsl",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__77_systemverilog": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "77_systemverilog",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__78_haxe": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "78_haxe",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__79_f#": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "79_f#",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__80_max": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "80_max",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__81_objective-c++": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "81_objective-c++",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__82_standard-ml": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "82_standard-ml",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__83_dockerfile": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "83_dockerfile",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__84_emacs-lisp": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "84_emacs-lisp",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__85_scheme": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "85_scheme",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__86_clojure": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "86_clojure",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__87_handlebars": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "87_handlebars",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__88_smarty": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "88_smarty",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__89_logos": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "89_logos",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__90_stata": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "90_stata",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__91_yacc": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "91_yacc",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__92_nimrod": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "92_nimrod",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__93_tcl": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "93_tcl",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__94_viml": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "94_viml",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__95_asp": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "95_asp",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__96_protocol-buffer": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "96_protocol-buffer",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__97_r": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "97_r",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__98_cython": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "98_cython",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_programing_languages__99_mediawiki": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_programing_languages"
+      },
+      "domain": "99_mediawiki",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__00_AskReddit": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "00_AskReddit",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__01_politics": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "01_politics",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__02_AmItheAsshole": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "02_AmItheAsshole",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__03_worldnews": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "03_worldnews",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__04_relationships": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "04_relationships",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__05_relationship_advice": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "05_relationship_advice",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__06_news": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "06_news",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__07_leagueoflegends": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "07_leagueoflegends",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__08_todayilearned": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "08_todayilearned",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__09_TwoXChromosomes": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "09_TwoXChromosomes",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__10_personalfinance": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "10_personalfinance",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__11_changemyview": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "11_changemyview",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__12_unpopularopinion": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "12_unpopularopinion",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__13_movies": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "13_movies",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__14_Games": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "14_Games",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__15_nba": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "15_nba",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__16_pics": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "16_pics",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__17_gaming": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "17_gaming",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__18_soccer": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "18_soccer",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__19_nfl": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "19_nfl",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__20_explainlikeimfive": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "20_explainlikeimfive",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__21_conspiracy": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "21_conspiracy",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__22_atheism": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "22_atheism",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__23_AskMen": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "23_AskMen",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__24_videos": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "24_videos",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__25_sex": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "25_sex",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__26_raisedbynarcissists": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "26_raisedbynarcissists",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__27_NoStupidQuestions": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "27_NoStupidQuestions",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__28_DestinyTheGame": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "28_DestinyTheGame",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__29_anime": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "29_anime",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__30_DnD": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "30_DnD",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__31_ukpolitics": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "31_ukpolitics",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__32_funny": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "32_funny",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__33_europe": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "33_europe",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__34_canada": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "34_canada",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__35_Christianity": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "35_Christianity",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__36_SquaredCircle": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "36_SquaredCircle",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__37_AskWomen": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "37_AskWomen",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__38_legaladvice": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "38_legaladvice",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__39_JUSTNOMIL": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "39_JUSTNOMIL",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__40_technology": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "40_technology",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__41_IAmA": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "41_IAmA",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__42_wow": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "42_wow",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__43_Parenting": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "43_Parenting",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__44_exmormon": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "44_exmormon",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__45_AdviceAnimals": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "45_AdviceAnimals",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__46_childfree": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "46_childfree",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__47_unitedkingdom": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "47_unitedkingdom",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__48_ffxiv": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "48_ffxiv",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__49_dndnext": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "49_dndnext",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__50_ADHD": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "50_ADHD",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__51_loseit": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "51_loseit",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__52_asoiaf": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "52_asoiaf",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__53_BabyBumps": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "53_BabyBumps",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__54_Advice": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "54_Advice",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__55_australia": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "55_australia",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__56_CFB": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "56_CFB",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__57_offmychest": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "57_offmychest",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__58_PublicFreakout": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "58_PublicFreakout",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__59_TrueOffMyChest": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "59_TrueOffMyChest",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__60_science": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "60_science",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__61_magicTCG": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "61_magicTCG",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__62_asktransgender": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "62_asktransgender",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__63_DotA2": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "63_DotA2",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__64_neoliberal": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "64_neoliberal",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__65_whowouldwin": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "65_whowouldwin",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__66_depression": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "66_depression",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__67_WTF": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "67_WTF",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__68_pathofexile": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "68_pathofexile",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__69_PoliticalDiscussion": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "69_PoliticalDiscussion",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__70_Libertarian": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "70_Libertarian",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__71_PurplePillDebate": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "71_PurplePillDebate",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__72_Fitness": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "72_Fitness",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__73_books": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "73_books",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__74_dogs": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "74_dogs",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__75_pcmasterrace": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "75_pcmasterrace",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__76_teenagers": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "76_teenagers",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__77_stopdrinking": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "77_stopdrinking",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__78_Overwatch": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "78_Overwatch",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__79_television": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "79_television",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__80_buildapc": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "80_buildapc",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__81_askscience": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "81_askscience",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__82_programming": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "82_programming",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__83_Guildwars2": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "83_Guildwars2",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__84_cars": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "84_cars",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__85_formula1": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "85_formula1",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__86_sysadmin": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "86_sysadmin",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__87_hockey": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "87_hockey",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__88_india": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "88_india",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__89_SubredditDrama": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "89_SubredditDrama",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__90_DMAcademy": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "90_DMAcademy",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__91_dating_advice": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "91_dating_advice",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__92_Catholicism": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "92_Catholicism",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__93_Drugs": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "93_Drugs",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__94_trees": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "94_trees",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__95_boardgames": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "95_boardgames",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__96_Conservative": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "96_Conservative",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__97_Futurology": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "97_Futurology",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__98_beyondthebump": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "98_beyondthebump",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_dolma_100_subreddits__99_weddingplanning": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "dolma_100_subreddits"
+      },
+      "domain": "99_weddingplanning",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_falcon-refinedweb": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "falcon-refinedweb"
+      },
+      "domain": null,
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_mc4": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "mc4"
+      },
+      "domain": null,
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "paloma_ptb": {
+      "dataset": {
+        "repo": "allenai/paloma",
+        "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptb"
+      },
+      "domain": null,
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
     },
     "paloma_wikitext_103": {
       "dataset": {

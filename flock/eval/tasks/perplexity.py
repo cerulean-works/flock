@@ -1,6 +1,7 @@
 """Perplexity tasks as data: a pinned dataset of plain texts, each scored whole."""
 
 import dataclasses
+import functools
 import hashlib
 import json
 from collections.abc import Sequence
@@ -69,23 +70,23 @@ class PerplexityTask:
         """
         Loads the scored split's docs in the task's domain, keeping the first `limit` (all if `None`).
 
+        The last split loaded is kept in memory, so the domains of one source load it once. A changed dataset needs a new process.
+
         Raises:
             `ValueError`: if `limit` is less than 1, no row is in the domain, or the rows have domains and the task sets none, which would pool the domains into one number.
         """
         if limit is not None and limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
 
-        rows = self.dataset.load()
-        # A null or empty `subdomain` counts as none, as the census reads it: `datasets` fills a
-        # column a row lacks with None.
-        if self.domain is None and any(row.get("subdomain") for row in rows):
+        docs_by_domain = _docs_by_domain(self.dataset)
+        if self.domain is None and any(domain is not None for domain in docs_by_domain):
             raise ValueError(f"{self.name}: the rows have domains; give the task its domain")
-        if self.domain is not None:
-            rows = [row for row in rows if row.get("subdomain") == self.domain]
-        if not rows:
+        if not docs_by_domain:
+            raise ValueError(f"{self.name}: the split has no rows")
+        if self.domain not in docs_by_domain:
             raise ValueError(f"{self.name}: no rows in domain {self.domain!r}")
 
-        return [TextDoc(row["id"], row["text"]) for row in rows[:limit]]
+        return list(docs_by_domain[self.domain][:limit])
 
     def task_hash(self, docs: Sequence[TextDoc]) -> str:
         """Returns the sha256 of the definition and every doc's id and text, as [Results files](results#the-task-hash) defines it."""
@@ -94,3 +95,20 @@ class PerplexityTask:
             digest.update(json.dumps([doc.id, doc.text]).encode())
 
         return digest.hexdigest()
+
+
+# One split at a time: the domains of a source run one after another and share its split, which
+# takes about 2 seconds to load for the 100-domain sources, so loading it once per domain would
+# add about 10 minutes to a run. A bound of one keeps a training process from holding every
+# source.
+@functools.lru_cache(maxsize=1)
+def _docs_by_domain(dataset: Dataset) -> dict[str | None, tuple[TextDoc, ...]]:
+    """The scored split's docs grouped by `subdomain`, in row order, under `None` for rows without one. Tuples of frozen docs, so tasks sharing the split can't change each other's docs."""
+    grouped: dict[str | None, list[TextDoc]] = {}
+    for row in dataset.load():
+        # A null or empty `subdomain` counts as none, as the census reads it: `datasets` fills a
+        # column a row lacks with None.
+        domain = row.get("subdomain") or None
+        grouped.setdefault(domain, []).append(TextDoc(row["id"], row["text"]))
+
+    return {domain: tuple(docs) for domain, docs in grouped.items()}

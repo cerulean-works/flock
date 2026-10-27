@@ -5,6 +5,7 @@ from transformers import LlamaConfig, LlamaForCausalLM, PreTrainedTokenizerFast
 
 from flock.eval.model import ScoringModel
 from flock.eval.tasks import Dataset
+from flock.eval.tasks.perplexity import _docs_by_domain
 
 from . import toy
 
@@ -65,6 +66,9 @@ def scorer(lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast) -> ScoringM
 def offline_rows(monkeypatch):
     """Every task in every eval test reads `toy.ROWS` by split instead of downloading. A test that loads another task must patch `Dataset.load` with rows in that task's format."""
     monkeypatch.setattr(Dataset, "load", toy.load)
+    # Perplexity tasks keep the last split they loaded. Cleared so a test that patches
+    # `Dataset.load` again never reads another test's rows.
+    _docs_by_domain.cache_clear()
 
 
 @pytest.fixture(scope="session")
