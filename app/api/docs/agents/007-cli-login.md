@@ -94,7 +94,7 @@ gets an opaque token, `flock_cli_` followed by 43 random URL-safe characters, an
   - It ends, like any session, when the user changes their password, a password reset is
     redeemed, or the user is deleted (`Accounts.end_sessions`). API keys survive all of these.
   - API keys keep their D20 role: the wandb SDK, and machines without a person.
-- **Storage.** Migration `0009_cli_sessions.sql` adds `kind text NOT NULL DEFAULT 'web' CHECK
+- **Storage.** Migration `0010_cli_sessions.sql` adds `kind text NOT NULL DEFAULT 'web' CHECK
   (kind IN ('web', 'cli'))`, `name text` (the machine's hostname) and `last_used_at
   timestamptz` to `sessions`.
   - A CLI session keeps its token's sha256 in `refresh_hash`, which is never rotated.
@@ -240,9 +240,9 @@ Flock server. Then `wandb.init`, and `flock.eval`'s tracking, go to Flock.
 
 This is one PR, `feat/cli-login`. Run `tests/app` and the new `tests/cli` after every step.
 
-### Step 1. Migration 0009 and CLI sessions in `Accounts`
+### Step 1. Migration 0010 and CLI sessions in `Accounts`
 
-`0009_cli_sessions.sql` per D36. In `accounts.py`:
+`0010_cli_sessions.sql` per D36. In `accounts.py`:
 - `Session` gains `kind`, `name` and `last_used_at`;
 - token digests go in an in-memory map;
 - new methods `start_cli_session`, `session_for_cli_token` (with the hourly write-back),

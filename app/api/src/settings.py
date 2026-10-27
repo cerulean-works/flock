@@ -35,6 +35,12 @@ class Settings:
     )
     invite_ttl: float = field(default=7 * 86400.0, doc="seconds an invite link is valid")
     reset_ttl: float = field(default=86400.0, doc="seconds a password reset link is valid")
+    device_code_ttl: float = field(
+        default=900.0, doc="seconds a `flock login` code waits to be approved"
+    )
+    cli_session_ttl: float = field(
+        default=90 * 86400.0, doc="seconds a command-line sign-in lasts without being used"
+    )
     google_client_id: str | None = field(
         default=None, doc="OAuth client id enabling Sign in with Google"
     )

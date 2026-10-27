@@ -1,0 +1,153 @@
+"""CLI sessions: the credential ``flock login`` ends with."""
+
+import time
+
+from tests.app.utils import cli_login
+
+ME = "/api/v1/me"
+SESSIONS = "/api/v1/me/cli-sessions"
+VIEWER = "query Viewer { viewer { id username entity } }"
+
+
+def browser(server, user):
+    return server.client(token=user.signup["access_token"])
+
+
+def db_session(server, pk: int):
+    return server.call(
+        server.store.db.fetchrow(
+            "SELECT kind, name, extract(epoch FROM last_used_at)::float8 AS last_used_at, "
+            "extract(epoch FROM expires_at)::float8 AS expires_at FROM sessions WHERE pk = $1",
+            pk,
+        )
+    )
+
+
+def test_a_cli_token_authenticates_rest_and_the_wandb_protocol(flock):
+    alice = flock.add_user("alice@lab.test")
+    cli = flock.client(token=cli_login(flock, browser(flock, alice)))
+    assert cli.get(ME).json()["email"] == alice.email
+    assert cli.get("/api/v1/projects").status == 200
+    viewer = cli.graphql(VIEWER)
+    assert viewer.status == 200, viewer.body
+    assert viewer.json()["data"]["viewer"]["username"] == alice.email
+    assert flock.client(token="flock_cli_" + "x" * 43).get(ME).status == 401
+
+
+def test_listing_and_revoking_cli_sessions(flock):
+    alice = flock.add_user("alice@lab.test")
+    bob = flock.add_user("bob@lab.test")
+    laptop = flock.client(token=cli_login(flock, browser(flock, alice), "laptop"))
+    node = flock.client(token=cli_login(flock, browser(flock, alice), "node-7"))
+    cli_login(flock, browser(flock, bob), "bobs-laptop")
+
+    before = time.time()
+    assert laptop.get(ME).status == 200
+    listed = alice.api.get(SESSIONS).json()["sessions"]
+    assert [s["name"] for s in listed] == ["laptop", "node-7"]
+    by_name = {s["name"]: s for s in listed}
+    assert by_name["laptop"]["last_used_at"] >= before
+    assert by_name["node-7"]["last_used_at"] is None  # never used
+    assert abs(by_name["node-7"]["expires_at"] - by_name["node-7"]["created_at"] - 90 * 86400) < 5
+
+    # Web sessions and other people's sign-ins aren't CLI sessions of this user.
+    web = next(s for s in flock.store.accounts.sessions.values() if s.kind == "web")
+    assert alice.api.delete(f"{SESSIONS}/{web.pk}").status == 404
+    assert alice.api.delete(f"{SESSIONS}/{by_name['laptop']['id'] + 2}").status == 404
+    assert bob.api.delete(f"{SESSIONS}/{by_name['laptop']['id']}").status == 404
+
+    assert browser(flock, alice).delete(f"{SESSIONS}/{by_name['laptop']['id']}").status == 204
+    assert laptop.get(ME).status == 401
+    assert node.get(ME).status == 200
+    assert [s["name"] for s in alice.api.get(SESSIONS).json()["sessions"]] == ["node-7"]
+
+
+def test_logging_out_with_a_cli_token_ends_its_session(flock):
+    alice = flock.add_user("alice@lab.test")
+    cli = flock.client(token=cli_login(flock, browser(flock, alice)))
+    assert cli.post("/api/v1/auth/logout", None).status == 204
+    assert cli.get(ME).status == 401
+    assert alice.api.get(SESSIONS).json() == {"sessions": []}
+    assert alice.api.post("/api/v1/auth/logout", None).status == 400  # API keys have none
+
+
+def test_a_password_change_or_reset_ends_cli_sessions(flock):
+    alice = flock.add_user("alice@lab.test")
+    web = browser(flock, alice)
+    cli = flock.client(token=cli_login(flock, web))
+    changed = web.post("/api/v1/me/password", {"current": alice.password, "new": "new password"})
+    assert changed.status == 204
+    assert cli.get(ME).status == 401
+    assert web.get(ME).status == 200
+    assert alice.api.get(ME).status == 200  # API keys stay valid
+
+    cli = flock.client(token=cli_login(flock, web))
+    reset = flock.client().post(f"/api/v1/users/{alice.id}/password-reset", None).json()
+    token = reset["url"].rpartition("/")[2]
+    redeemed = flock.anonymous().post(f"/api/v1/password-resets/{token}", {"password": "third one"})
+    assert redeemed.status == 200
+    assert cli.get(ME).status == 401
+
+
+def test_deleting_the_user_ends_cli_sessions(flock):
+    alice = flock.add_user("alice@lab.test")
+    cli = flock.client(token=cli_login(flock, browser(flock, alice)))
+    assert flock.client().delete(f"/api/v1/users/{alice.id}").status == 204
+    assert cli.get(ME).status == 401
+    assert flock.store.accounts.cli_tokens == {}
+
+
+def test_cli_sessions_expire_when_idle(make_flock):
+    server = make_flock(cli_session_ttl=1.0)
+    alice = server.add_user("alice@lab.test")
+    cli = server.client(token=cli_login(server, browser(server, alice)))
+    time.sleep(0.6)
+    assert cli.get(ME).status == 200  # each use extends the session
+    time.sleep(0.6)
+    assert cli.get(ME).status == 200
+    time.sleep(1.1)
+    assert cli.get(ME).status == 401
+    assert alice.api.get(SESSIONS).json() == {"sessions": []}
+
+
+def test_use_is_written_at_most_once_an_interval(flock, wait_for):
+    alice = flock.add_user("alice@lab.test")
+    cli = flock.client(token=cli_login(flock, browser(flock, alice)))
+    (session,) = flock.store.accounts.cli_tokens.values()
+    created = db_session(flock, session.pk)
+    assert (created["kind"], created["name"], created["last_used_at"]) == ("cli", "laptop", None)
+
+    assert cli.get(ME).status == 200
+    time.sleep(0.2)
+    assert db_session(flock, session.pk)["last_used_at"] is None  # within the hour
+
+    flock.store.accounts.CLI_WRITE_INTERVAL = 0.0
+    assert cli.get(ME).status == 200
+    used = wait_for(lambda: db_session(flock, session.pk)["last_used_at"])
+    assert abs(used - session.last_used_at) < 1
+    assert db_session(flock, session.pk)["expires_at"] > created["expires_at"]
+
+
+def test_cli_sessions_survive_a_restart(make_flock, wait_for):
+    server = make_flock()
+    alice = server.add_user("alice@lab.test")
+    token = cli_login(server, browser(server, alice))
+    server.store.accounts.CLI_WRITE_INTERVAL = 0.0
+    assert server.client(token=token).get(ME).status == 200
+    (session,) = server.store.accounts.cli_tokens.values()
+    wait_for(lambda: db_session(server, session.pk)["last_used_at"])
+    server.stop()
+
+    restarted = make_flock(reuse=server)
+    (listed,) = restarted.client(api_key=alice.api_key).get(SESSIONS).json()["sessions"]
+    assert listed["name"] == "laptop"
+    assert abs(listed["last_used_at"] - session.last_used_at) < 1
+    assert restarted.client(token=token).get(ME).json()["id"] == alice.id
+
+
+def test_refresh_refuses_cli_tokens(flock):
+    alice = flock.add_user("alice@lab.test")
+    token = cli_login(flock, browser(flock, alice))
+    refused = flock.anonymous().post("/api/v1/auth/refresh", {"refresh_token": token})
+    assert refused.status == 401
+    assert flock.client(token=token).get(ME).status == 200

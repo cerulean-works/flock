@@ -116,6 +116,7 @@ def test_0002_upgrades_existing_data(postgres, make_flock, tmp_path):
         "0007_org_imports",
         "0008_org_display_names",
         "0009_budget_management",
+        "0010_cli_sessions",
     ]
 
     server = make_flock(database_url=url)  # rebuilds and compacts system metrics on startup
@@ -196,6 +197,7 @@ def test_0003_creates_projects_from_runs(postgres, make_flock, tmp_path):
         "0007_org_imports",
         "0008_org_display_names",
         "0009_budget_management",
+        "0010_cli_sessions",
     ]
 
     api = make_flock(database_url=url).client()
@@ -240,6 +242,7 @@ def test_0004_creates_orgs_from_entities(postgres, make_flock, tmp_path):
         "0007_org_imports",
         "0008_org_display_names",
         "0009_budget_management",
+        "0010_cli_sessions",
     ]
 
     async def rows() -> list:
@@ -310,6 +313,7 @@ def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(postgres, make_floc
         "0007_org_imports",
         "0008_org_display_names",
         "0009_budget_management",
+        "0010_cli_sessions",
     ]
     # Flock's first files directory (see ``Flocks``) already holds the upload.
     metadata = tmp_path / "flock-files-0" / str(run_pk) / "wandb-metadata.json"
@@ -349,6 +353,7 @@ def test_0008_shows_existing_orgs_by_their_name(postgres, make_flock, tmp_path):
     assert asyncio.run(Migrations().apply(url)) == [
         "0008_org_display_names",
         "0009_budget_management",
+        "0010_cli_sessions",
     ]
 
     async def nullable() -> str:

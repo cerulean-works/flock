@@ -12,7 +12,7 @@ from fastapi.responses import Response
 
 from app.api.src.api import auth, avatars, dashboard, home, orgs, projects, runs, wandb_protocol
 from app.api.src.api.deps import APIError, JSONResponse
-from app.api.src.core.errors import Conflict, Forbidden, NotFound
+from app.api.src.core.errors import Conflict, Forbidden, NotFound, TooManyAttempts
 from app.api.src.core.store import Store
 from app.api.src.core.table import FilterError
 from app.api.src.settings import Settings
@@ -107,6 +107,10 @@ def create_app(store: Store) -> FastAPI:
     @app.exception_handler(NotFound)
     async def not_found(request: Request, exc: NotFound) -> Response:
         return JSONResponse({"error": str(exc)}, status_code=404)
+
+    @app.exception_handler(TooManyAttempts)
+    async def too_many_attempts(request: Request, exc: TooManyAttempts) -> Response:
+        return JSONResponse({"error": str(exc)}, status_code=429)
 
     @app.exception_handler(FilterError)
     async def filter_error(request: Request, exc: FilterError) -> Response:

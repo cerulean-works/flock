@@ -21,6 +21,7 @@ from app.api.src.api.deps import (
     JSONResponse,
     Password,
     SessionDep,
+    SessionUserDep,
     StoreDep,
     SuperadminDep,
     UserDep,
@@ -28,7 +29,7 @@ from app.api.src.api.deps import (
     current_user,
     visible_org,
 )
-from app.api.src.core.accounts import User
+from app.api.src.core.accounts import DeviceGrant, User
 from app.api.src.core.errors import Conflict, Forbidden, NotFound
 from app.api.src.core.store import Store
 from app.api.src.settings import Settings
@@ -59,6 +60,25 @@ class RefreshBody(BaseModel):
 
 class CodeBody(BaseModel):
     code: str
+
+
+class DeviceClient(BaseModel):
+    """The machine asking to sign in, as the approval page shows it."""
+
+    hostname: str = Field("", max_length=255)
+    platform: str = Field("", max_length=255)
+
+
+class DeviceStart(BaseModel):
+    client: DeviceClient = Field(default_factory=DeviceClient)
+
+
+class DeviceToken(BaseModel):
+    device_code: str = Field(max_length=256)
+
+
+class DeviceDecision(BaseModel):
+    approve: bool
 
 
 class MeUpdate(BaseModel):
@@ -143,10 +163,101 @@ async def refresh(body: RefreshBody, store: StoreDep) -> Response:
 
 @router.post("/auth/logout", status_code=204)
 async def logout(session: SessionDep, store: StoreDep) -> Response:
-    """End the session of the request's access token."""
+    """End the session of the request's access token or CLI token (``flock logout``)."""
     if session is None:
-        raise APIError(400, "sign out with an access token, not an API key")
+        raise APIError(400, "sign out with an access token or CLI token, not an API key")
     await store.accounts.end_session(session)
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------- device sign-in
+
+
+def device_error(code: str, description: str) -> APIError:
+    """An RFC 8628 error: the code goes in ``error``, which is what clients branch on."""
+    return APIError(400, code, error_description=description)
+
+
+DEVICE_ERRORS = {
+    "authorization_pending": "the sign-in hasn't been approved yet",
+    "slow_down": "polling too often: wait 5 seconds longer between polls",
+    "access_denied": "the sign-in was denied",
+    "expired_token": "the sign-in code expired: start again",
+}
+
+
+def shown_code(code: str) -> str:
+    return f"{code[:4]}-{code[4:]}"
+
+
+@router.post("/auth/device")
+async def device_start(body: DeviceStart, request: Request, store: StoreDep) -> Response:
+    """Start a command-line sign-in (RFC 8628). The user approves ``user_code`` at
+    ``verification_uri`` while the client polls ``auth/device/token`` with ``device_code``."""
+    ip = request.client.host if request.client is not None else None
+    started = store.accounts.start_device(body.client.hostname, body.client.platform, ip)
+    if started is None:
+        raise APIError(503, "too many sign-ins are waiting for approval: try again later")
+    grant, device_code = started
+    uri = app_link(request, store, "device")
+    code = shown_code(grant.user_code)
+    return JSONResponse(
+        {
+            "device_code": device_code,
+            "user_code": code,
+            "verification_uri": uri,
+            "verification_uri_complete": f"{uri}?code={code}",
+            "expires_in": round(grant.expires_at - grant.created_at),
+            "interval": grant.interval,
+        }
+    )
+
+
+@router.post("/auth/device/token")
+async def device_token(body: DeviceToken, store: StoreDep) -> Response:
+    """Poll a sign-in: a 400 with an RFC 8628 ``error`` until it's decided, then the CLI token
+    (``access_token``) and the user, once."""
+    accounts = store.accounts
+    result = await accounts.poll_device(body.device_code)
+    if isinstance(result, str):
+        raise device_error(result, DEVICE_ERRORS[result])
+    user, token = result
+    return JSONResponse(
+        {"access_token": token, "token_type": "bearer", "user": accounts.info(user)}
+    )
+
+
+def device_info(grant: DeviceGrant) -> dict[str, Any]:
+    return {
+        "user_code": shown_code(grant.user_code),
+        "hostname": grant.hostname,
+        "platform": grant.platform,
+        "ip": grant.ip,
+        "created_at": grant.created_at,
+        "expires_at": grant.expires_at,
+    }
+
+
+def find_grant(store: Store, user: User, user_code: str) -> DeviceGrant:
+    grant = store.accounts.device_grant(user, user_code)
+    if grant is None:
+        raise APIError(404, "this code is wrong, expired or already used")
+    return grant
+
+
+@router.get("/auth/device/{user_code}")
+async def device_request(user_code: str, user: SessionUserDep, store: StoreDep) -> Response:
+    """The machine asking to sign in with ``user_code``, for the approval page. Only a browser
+    session can look; each wrong code counts against the user (10 per 10 minutes)."""
+    return JSONResponse(device_info(find_grant(store, user, user_code)))
+
+
+@router.post("/auth/device/{user_code}", status_code=204)
+async def device_decide(
+    user_code: str, body: DeviceDecision, user: SessionUserDep, store: StoreDep
+) -> Response:
+    """Approve the sign-in as the current user, or deny it. Only a browser session can."""
+    store.accounts.decide_device(user, find_grant(store, user, user_code), body.approve)
     return Response(status_code=204)
 
 
@@ -383,6 +494,32 @@ async def create_api_key(body: ApiKeyCreate, user: UserDep, store: StoreDep) -> 
 @router.delete("/me/api-keys/{key_id}", status_code=204)
 async def delete_api_key(key_id: int, user: UserDep, store: StoreDep) -> Response:
     await store.accounts.delete_api_key(user, key_id)
+    return Response(status_code=204)
+
+
+@router.get("/me/cli-sessions")
+async def list_cli_sessions(user: UserDep, store: StoreDep) -> Response:
+    """Your command-line sign-ins (``flock login``), one per machine."""
+    return JSONResponse(
+        {
+            "sessions": [
+                {
+                    "id": s.pk,
+                    "name": s.name,
+                    "created_at": s.created_at,
+                    "last_used_at": s.last_used_at,
+                    "expires_at": s.expires_at,
+                }
+                for s in store.accounts.cli_sessions(user)
+            ]
+        }
+    )
+
+
+@router.delete("/me/cli-sessions/{session_id}", status_code=204)
+async def delete_cli_session(session_id: int, user: UserDep, store: StoreDep) -> Response:
+    """Sign a machine out: its CLI token stops working on its next request."""
+    await store.accounts.end_cli_session(user, session_id)
     return Response(status_code=204)
 
 
