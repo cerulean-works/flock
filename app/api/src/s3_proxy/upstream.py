@@ -4,10 +4,12 @@ Used by the proxy to forward requests, and by the API to create and purge bucket
 """
 
 import base64
+import datetime as dt
 import hashlib
 import time
 import xml.etree.ElementTree as ET
 from collections.abc import AsyncIterable, Mapping
+from dataclasses import dataclass
 
 import httpx
 
@@ -16,6 +18,28 @@ from app.api.src.settings import Settings
 
 # DeleteObjects takes at most this many keys.
 DELETE_BATCH = 1000
+
+
+@dataclass(frozen=True)
+class ListedObject:
+    key: str
+    size: int
+    last_modified: float
+    etag: str
+
+
+@dataclass(frozen=True)
+class Listing:
+    objects: list[ListedObject]
+    prefixes: list[str]
+    cursor: str | None  # the continuation token of the next page, if there is one
+
+
+def parse_time(text: str | None) -> float:
+    """A listing's ``2026-10-27T12:00:00.000Z`` as a timestamp."""
+    if not text:
+        return 0.0
+    return dt.datetime.fromisoformat(text).timestamp()
 
 
 class UpstreamError(Exception):
@@ -131,16 +155,96 @@ class Upstream:
             )
         )
 
-    async def _keys(self, bucket: str) -> list[str]:
-        """Up to 1000 keys of ``bucket``."""
-        response = await self.send("GET", bucket, params={"list-type": "2", "max-keys": "1000"})
+    async def list_objects(
+        self,
+        bucket: str,
+        prefix: str = "",
+        delimiter: str | None = None,
+        token: str | None = None,
+        limit: int = 1000,
+    ) -> Listing:
+        """One page of ListObjectsV2: objects and, with ``delimiter``, common prefixes."""
+        params = {"list-type": "2", "max-keys": str(limit)}
+        if prefix:
+            params["prefix"] = prefix
+        if delimiter:
+            params["delimiter"] = delimiter
+        if token:
+            params["continuation-token"] = token
+        response = await self.send("GET", bucket, params=params)
         self._raise(response)
         root = ET.fromstring(response.content)
-        return [
-            element.text
-            for element in root.iter()
-            if s3xml.local(element.tag) == "Key" and element.text is not None
-        ]
+        objects, prefixes, top = [], [], {}
+        for child in root:
+            fields = {s3xml.local(field.tag): field for field in child}
+            name = s3xml.local(child.tag)
+            top[name] = child.text or ""
+            if name == "Contents" and (key := fields.get("Key")) is not None:
+                objects.append(
+                    ListedObject(
+                        key.text or "",
+                        int(fields["Size"].text or 0) if "Size" in fields else 0,
+                        parse_time(fields["LastModified"].text) if "LastModified" in fields else 0,
+                        (fields["ETag"].text or "") if "ETag" in fields else "",
+                    )
+                )
+            elif name == "CommonPrefixes" and (common := fields.get("Prefix")) is not None:
+                prefixes.append(common.text or "")
+        truncated = top.get("IsTruncated", "").lower() == "true"
+        return Listing(objects, prefixes, top.get("NextContinuationToken") if truncated else None)
+
+    async def head(self, bucket: str, key: str) -> httpx.Response | None:
+        """An object's HEAD answer, or None if there's no such object."""
+        response = await self.send("HEAD", bucket, key)
+        if response.status_code == 404:
+            return None
+        if response.status_code != 200:
+            raise UpstreamError("InternalError", f"HEAD answered {response.status_code}", 502)
+        return response
+
+    async def put_empty(self, bucket: str, key: str) -> None:
+        self._raise(await self.send("PUT", bucket, key, headers={"content-length": "0"}))
+
+    async def delete_keys(self, bucket: str, keys: list[str]) -> None:
+        """DeleteObjects for up to ``DELETE_BATCH`` keys; raises if any isn't deleted."""
+        root = ET.Element("Delete")
+        ET.SubElement(root, "Quiet").text = "true"
+        for key in keys:
+            ET.SubElement(ET.SubElement(root, "Object"), "Key").text = key
+        body = s3xml.dump(root)
+        headers = {
+            "content-type": "application/xml",
+            "content-md5": base64.b64encode(hashlib.md5(body).digest()).decode(),
+        }
+        response = await self.send(
+            "POST", bucket, None, {"delete": ""}, headers, body, hashlib.sha256(body).hexdigest()
+        )
+        self._raise(response)
+        if (failed := s3xml.parse_error(response.content)) is not None:
+            raise UpstreamError(*failed, 500)
+        result = ET.fromstring(response.content)
+        if any(s3xml.local(element.tag) == "Error" for element in result):
+            raise UpstreamError("InternalError", f"some objects of {bucket} weren't deleted", 500)
+
+    async def create_upload(self, bucket: str, key: str, content_type: str | None) -> str:
+        """CreateMultipartUpload; returns the upload id."""
+        headers = {"content-type": content_type} if content_type else {}
+        response = await self.send("POST", bucket, key, {"uploads": ""}, headers)
+        self._raise(response)
+        root = ET.fromstring(response.content)
+        upload_id = next((c.text for c in root if s3xml.local(c.tag) == "UploadId"), None)
+        if not upload_id:
+            raise UpstreamError("InternalError", "no UploadId in the answer", 502)
+        return upload_id
+
+    async def abort_upload(self, bucket: str, key: str, upload_id: str) -> None:
+        response = await self.send("DELETE", bucket, key, {"uploadId": upload_id})
+        if response.status_code != 404:
+            self._raise(response)
+
+    async def _keys(self, bucket: str) -> list[str]:
+        """Up to 1000 keys of ``bucket``."""
+        return [o.key for o in (await self.list_objects(bucket)).objects]
 
     async def _abort_uploads(self, bucket: str) -> None:
         response = await self.send("GET", bucket, params={"uploads": ""})
@@ -163,32 +267,7 @@ class Upstream:
         try:
             await self._abort_uploads(bucket)
             while keys := await self._keys(bucket):
-                root = ET.Element("Delete")
-                ET.SubElement(root, "Quiet").text = "true"
-                for key in keys:
-                    ET.SubElement(ET.SubElement(root, "Object"), "Key").text = key
-                body = s3xml.dump(root)
-                headers = {
-                    "content-type": "application/xml",
-                    "content-md5": base64.b64encode(hashlib.md5(body).digest()).decode(),
-                }
-                response = await self.send(
-                    "POST",
-                    bucket,
-                    None,
-                    {"delete": ""},
-                    headers,
-                    body,
-                    hashlib.sha256(body).hexdigest(),
-                )
-                self._raise(response)
-                if (failed := s3xml.parse_error(response.content)) is not None:
-                    raise UpstreamError(*failed, 500)
-                result = ET.fromstring(response.content)
-                if any(s3xml.local(element.tag) == "Error" for element in result):
-                    raise UpstreamError(
-                        "InternalError", f"some objects of {bucket} weren't deleted", 500
-                    )
+                await self.delete_keys(bucket, keys)
                 deleted += len(keys)
             response = await self.send("DELETE", bucket)
             self._raise(response)

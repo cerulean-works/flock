@@ -297,3 +297,35 @@ def sign(
         f"SignedHeaders={';'.join(signed)}, Signature={signature}"
     )
     return out
+
+
+def presign(
+    method: str,
+    host: str,
+    path: str,
+    params: Iterable[tuple[str, str]],
+    access_key_id: str,
+    secret_access_key: str,
+    region: str,
+    now: float,
+    expires: int,
+) -> str:
+    """The query string of a presigned URL valid for ``expires`` seconds, signing only the host
+    and leaving the body unsigned; ``path`` must already be URI-encoded."""
+    date = amz_date(now)
+    scope = f"{date[:8]}/{region}/s3/aws4_request"
+    query = [
+        *params,
+        ("X-Amz-Algorithm", ALGORITHM),
+        ("X-Amz-Credential", f"{access_key_id}/{scope}"),
+        ("X-Amz-Date", date),
+        ("X-Amz-Expires", str(expires)),
+        ("X-Amz-SignedHeaders", "host"),
+    ]
+    request = canonical_request(method, path, query, [("host", host)], ["host"], UNSIGNED_PAYLOAD)
+    signature = hmac.new(
+        signing_key(secret_access_key, date[:8], region, "s3"),
+        string_to_sign(date, scope, request).encode(),
+        "sha256",
+    ).hexdigest()
+    return canonical_query([*query, ("X-Amz-Signature", signature)])
