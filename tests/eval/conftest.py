@@ -65,3 +65,9 @@ def scorer(lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast) -> ScoringM
 def offline_rows(monkeypatch):
     """Every task in every eval test reads `toy.ROWS` by split instead of downloading. A test that loads another task must patch `Dataset.load` with rows in that task's format."""
     monkeypatch.setattr(Dataset, "load", toy.load)
+
+
+@pytest.fixture(scope="session")
+def real_load():
+    """The real `Dataset.load`, for tests of loading itself. Session scope: pytest builds it before the function-scoped `offline_rows` patches the method, and no patch outlives its test."""
+    return Dataset.load

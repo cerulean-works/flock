@@ -1,6 +1,6 @@
 {
   "toy": {
-    "hash": "7aeef2fd6025ab6d72e67e0237ad7f331f7d314885791ec7d99b7b9cea1ab77c",
+    "hash": "82293825e855161cefe708da63e9a62f5a97498385be22ecab075a81437f22b3",
     "requests": [
       {
         "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: What do bees make?\nAnswer:",
@@ -89,7 +89,7 @@
     ]
   },
   "toy:num_shots": {
-    "hash": "887b509a8edfb397628d5910a3d6f0e705b7f8ab9c7c2b82776a57d2a8f8b8d4",
+    "hash": "8ee9cd70e966bc67c461fc635a06af316c7c8cc153d7e2045f66eea49faf3a2b",
     "requests": [
       {
         "context": "Science and geography.\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer:",
@@ -178,7 +178,7 @@
     ]
   },
   "toy:rows": {
-    "hash": "713057468da63d05a78e0015d00f3a3d743e9fb5a73e591ab839be487b14d3bc",
+    "hash": "2cee38ccc4b00be867508bcbdbdd5f2934980360064cbc010eb5d9225c85040a",
     "requests": [
       {
         "context": "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: What do cows drink?\nAnswer: water\n\nQuestion: What do bees make?\nAnswer:",
@@ -267,7 +267,7 @@
     ]
   },
   "toy:zero_shot": {
-    "hash": "8c3c5ad79f4592dda851fa938296050a6d99fb83819d773d022175cee31c622f",
+    "hash": "5aed28bb98e281c6156753b00cfd65646b37a55377980f94d9e8293dc008cf68",
     "requests": [
       {
         "context": "Question: What do bees make?\nAnswer:",

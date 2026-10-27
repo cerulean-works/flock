@@ -1,5 +1,6 @@
 import dataclasses
 
+import datasets
 import pytest
 import torch
 
@@ -42,6 +43,35 @@ def test_load_keeps_fewshot_order_and_limit():
 def test_load_rejects_limit_below_one(limit):
     with pytest.raises(ValueError, match="at least 1"):
         TASK.load(limit=limit)
+
+
+def test_row_index_numbers_rows_per_split(monkeypatch, real_load):
+    splits = {"dev": [{"q": "a"}, {"q": "b"}], "test": [{"q": "c"}]}
+    monkeypatch.setattr(
+        datasets,
+        "load_dataset",
+        lambda *args, split, **kwargs: datasets.Dataset.from_list(splits[split]),
+    )
+    dataset = Dataset("cerulean/toy", "0" * 40, None, "test", row_index=True)
+
+    assert real_load(dataset, "dev") == [{"q": "a", "index": 0}, {"q": "b", "index": 1}]
+    assert real_load(dataset) == [{"q": "c", "index": 0}]
+    assert real_load(dataclasses.replace(dataset, row_index=False)) == [{"q": "c"}]
+
+
+def test_row_index_task_needs_an_index_in_written_out_examples():
+    numbered = dataclasses.replace(TASK.dataset, row_index=True)
+    with pytest.raises(ValueError, match="needs an index in each written-out example"):
+        dataclasses.replace(TASK, dataset=numbered, fewshot=Fewshot(rows=({"q": "a"},)))
+    # With the index present the task defines fine.
+    dataclasses.replace(TASK, dataset=numbered, fewshot=Fewshot(rows=({"q": "a", "index": 0},)))
+
+
+def test_row_index_rejects_an_index_column(monkeypatch, real_load):
+    rows = datasets.Dataset.from_list([{"index": 7}])
+    monkeypatch.setattr(datasets, "load_dataset", lambda *args, **kwargs: rows)
+    with pytest.raises(ValueError, match="test: the rows already have an index column"):
+        real_load(Dataset("cerulean/toy", "0" * 40, None, "test", row_index=True))
 
 
 def test_load_rejects_unknown_fewshot_id():
@@ -326,6 +356,24 @@ def test_description_and_per_choice_contexts():
     assert [(r.context, r.continuation) for r in built.requests] == [
         (head + "Tom gave it to", " him."),
         (head + "Ann gave it to", " him."),
+    ]
+
+
+def test_doc_rejects_an_empty_example():
+    with pytest.raises(ValueError, match="empty example"):
+        MCDoc("s", (Choice("Q1", " a"),), 0, example="")
+
+
+def test_example_replaces_the_gold_choice_in_the_shots():
+    shot = MCDoc("s", (Choice("Q1", " a"),), 0, example="Q1  a")
+    doc = MCDoc("d", (Choice("Q2", " b"),), 0)
+    task = dataclasses.replace(TASK, unconditional_context=None)
+
+    # The doc's own `example` doesn't change how it is scored, only how it reads as a shot.
+    built = task.requests([doc, shot], [shot])
+    assert [(r.context, r.continuation) for r in built.requests] == [
+        ("Q1  a\n\nQ2", " b"),
+        ("Q1  a\n\nQ1", " a"),
     ]
 
 

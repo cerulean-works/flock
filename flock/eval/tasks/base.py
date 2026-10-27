@@ -29,20 +29,34 @@ class Dataset:
             The configuration name, for example `ARC-Easy`.
         split (`str`):
             The split a task is scored on.
+        row_index (`bool`, *optional*, defaults to `False`):
+            Whether each row gets its position in its split as `"index"`, for datasets with no id column. A `to_doc` then reads the doc's id as `str(row["index"])`, as OLMES does for MMLU (`oe_eval/tasks/oe_eval_tasks/mmlu.py`). Written-out `Fewshot.rows` don't go through `load`, so they need an `"index"` of their own.
     """
 
     repo: str
     revision: str
     subset: str | None
     split: str
+    row_index: bool = False
 
     def load(self, split: str | None = None) -> list[dict[str, Any]]:
-        """Returns the rows of `split`, defaulting to the scored split."""
+        """
+        Returns the rows of `split`, defaulting to the scored split.
+
+        Raises:
+            `ValueError`: if `row_index` is set and the rows already have an `"index"` column.
+        """
         rows = datasets.load_dataset(
             self.repo, self.subset, revision=self.revision, split=split or self.split
         )
+        if not self.row_index:
+            return list(rows)
 
-        return list(rows)
+        if "index" in rows.column_names:
+            where = f"{self.repo} {self.subset or ''} {split or self.split}".replace("  ", " ")
+            raise ValueError(f"{where}: the rows already have an index column")
+
+        return [{**row, "index": position} for position, row in enumerate(rows)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,18 +149,23 @@ class MCDoc:
             The answer choices, rendered as the model sees them. A task scored only on its gold text, such as a math solution, has one.
         gold (`int`):
             The index of the correct choice in `choices`.
+        example (`str`, *optional*):
+            The doc's text when another doc shows it as a few-shot example. Its gold choice's context and continuation if not set. Only for tasks whose examples read differently from the scored text, such as HumanEval's.
 
     Raises:
-        `ValueError`: naming the doc, if `choices` is empty or `gold` isn't an index into it.
+        `ValueError`: naming the doc, if `choices` is empty, `gold` isn't an index into it, or `example` is an empty string.
     """
 
     id: str
     choices: tuple[Choice, ...]
     gold: int
+    example: str | None = None
 
     def __post_init__(self) -> None:
         if not self.choices:
             raise ValueError(f"doc {self.id}: no choices")
+        if self.example == "":
+            raise ValueError(f"doc {self.id}: an empty example would render as a blank shot")
         if not 0 <= self.gold < len(self.choices):
             raise ValueError(
                 f"doc {self.id}: gold {self.gold} is not one of {len(self.choices)} choices"
@@ -306,7 +325,7 @@ class MultipleChoiceTask:
     """
     A multiple-choice task scored as OLMES scores it: each choice's continuation after the few-shot examples and the choice's context.
 
-    The context of a request is `description`, then each few-shot example's gold choice (its context and continuation) followed by a blank line, then the scored choice's context. This is OLMES's few-shot format (OLMES, sec. 3.1 and 3.2; `fewshot_context` in `oe_eval/tasks/base_task.py`).
+    The context of a request is `description`, then each few-shot example (its gold choice's context and continuation, or its `example`) followed by a blank line, then the scored choice's context. This is OLMES's few-shot format (OLMES, sec. 3.1 and 3.2; `fewshot_context`).
 
     Args:
         name (`str`):
@@ -327,7 +346,7 @@ class MultipleChoiceTask:
             The metrics the task reports, from [`~eval.metrics.multiple_choice`]'s names. Every metric the task computes if not set, which leaves out `acc_uncond` when PMI is skipped. A task scored only on its gold text reports `("bpb",)`, since an accuracy over one choice is always 1.
 
     Raises:
-        `ValueError`: if `metrics` is empty or names a metric the task doesn't compute, `primary_metric` isn't reported, or `fewshot.num_shots` is set on examples from a split other than the scored one.
+        `ValueError`: if `metrics` is empty or names a metric the task doesn't compute, `primary_metric` isn't reported, a written-out example lacks the `"index"` a `row_index` dataset reads, or `fewshot.num_shots` is set on examples from a split other than the scored one.
     """
 
     name: str
@@ -359,8 +378,13 @@ class MultipleChoiceTask:
             raise ValueError(f"{self.name}: primary_metric must be one of {self.reported_metrics}")
 
     def _check_fewshot(self) -> None:
-        """Raises `ValueError` if `num_shots` would drop a doc's own example by an id from another split."""
-        if self.fewshot is None or self.fewshot.num_shots is None:
+        """Raises `ValueError` if a written-out example lacks the index a numbered dataset reads, or `num_shots` would drop a doc's own example by an id from another split."""
+        if self.fewshot is None:
+            return
+        # Written-out examples skip `load`, so they carry the index themselves.
+        if self.dataset.row_index and any("index" not in row for row in self.fewshot.rows):
+            raise ValueError(f"{self.name}: row_index needs an index in each written-out example")
+        if self.fewshot.num_shots is None:
             return
         # Ids are unique within a split only. Across splits, a doc that shares an id with an
         # example would lose that example, and a doc that is itself an example would keep it.
@@ -450,11 +474,14 @@ class MultipleChoiceTask:
         )
 
     def _head(self, shots: Sequence[MCDoc]) -> str:
-        """Renders `description`, then each example's gold choice followed by a blank line."""
+        """Renders `description`, then each example followed by a blank line."""
         head = self.description
         for shot in shots:
-            gold = shot.choices[shot.gold]
-            head += f"{gold.context}{gold.continuation}\n\n"
+            example = shot.example
+            if example is None:
+                gold = shot.choices[shot.gold]
+                example = gold.context + gold.continuation
+            head += f"{example}\n\n"
 
         return head
 
@@ -484,3 +511,16 @@ class MultipleChoiceTask:
         digest.update(json.dumps([doc.gold for doc in docs]).encode())
 
         return digest.hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class GoldOnlyTask(MultipleChoiceTask):
+    """
+    A task scored on each doc's gold text alone, by `bpb`, such as a math solution or a program (OLMES's `:bpb` tasks). It takes the same arguments as [`MultipleChoiceTask`] but `primary_metric`, `unconditional_context` and `metrics`, which it fixes.
+
+    Each doc has one choice, so an accuracy is always 1 and pointwise mutual information (PMI) has nothing to compare: the task reports `bpb` only and has no unconditional context.
+    """
+
+    primary_metric: str = dataclasses.field(default="bpb", init=False)
+    unconditional_context: str | None = dataclasses.field(default=None, init=False)
+    metrics: tuple[str, ...] | None = dataclasses.field(default=("bpb",), init=False)

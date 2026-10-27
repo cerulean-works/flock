@@ -32,6 +32,10 @@ def test_nested_suites_count_as_one_member_under_their_own_metric():
     bpb = Suite("bpb", (GOLD_ONLY, Suite("inner", (TASK, OTHER), metric="bpb")))
     assert bpb.score(METRICS) == pytest.approx((4.0 + 1.5) / 2)
 
+    # A suite reading `bpb` may hold a member suite that reads `bpb` too, as `qa_bpb` holds MMLU.
+    bpb = Suite("bpb", (GOLD_ONLY, Suite("inner", (TASK, OTHER), metric="bpb")), metric="bpb")
+    assert bpb.score(METRICS) == pytest.approx((4.0 + 1.5) / 2)
+
 
 def test_a_suite_may_share_a_name_with_a_task():
     # Tasks and suites are separate namespaces in the registries and in results.json.
@@ -76,7 +80,7 @@ def test_score_needs_every_member_tasks_metric():
         ),
         pytest.param(
             {"members": (Suite("rc", (TASK,)),), "metric": "bpb"},
-            "metric reads member tasks only",
+            "member rc isn't scored by bpb",
             id="metric-over-suite",
         ),
         pytest.param(
@@ -108,7 +112,37 @@ def test_suite_rejects_bad_definitions(kwargs, match):
 
 
 def test_registry_suites_hold_registered_tasks():
-    assert SUITES["base_easy"].tasks == (TASKS["arc_easy"],)
+    qa = (
+        "arc_easy",
+        "arc_challenge",
+        "csqa",
+        "hellaswag",
+        "winogrande",
+        "socialiqa",
+        "piqa",
+        "sciq",
+        "qasper_yesno",
+        "sciriff_yesno",
+        "lab_bench_dbqa",
+        "lab_bench_protocolqa",
+        "medmcqa",
+        "medqa_en",
+        "coqa",
+        "drop",
+        "jeopardy",
+        "naturalqs",
+        "squad",
+    )
+    mmlu = tuple(task.name for task in SUITES["mmlu"].tasks)
+    skills = tuple(task.name for task in SUITES["basic_skills"].tasks)
+    math = tuple(task.name for task in SUITES["base_easy:math_bpb"].tasks)
+    code = tuple(task.name for task in SUITES["base_easy:code_bpb"].tasks)
+    members = [*qa, *mmlu, *skills, "lambada", *math, *code]
+    assert [task.name for task in SUITES["base_easy"].tasks] == members
+    # The two suites read one list of tasks, MMLU and basic skills through a suite of each kind.
+    rc, bpb = SUITES["base_easy:qa_rc"].members, SUITES["base_easy:qa_bpb"].members
+    assert [member.name for member in rc] == [*qa, "mmlu", "basic_skills"]
+    assert [member.name for member in bpb] == [*qa, "mmlu:bpb", "basic_skills:bpb", "lambada"]
     assert SUITES["base_easy:qa_bpb"].metric == "bpb"
     for suite in SUITES.values():
         assert all(TASKS[task.name] is task for task in suite.tasks)

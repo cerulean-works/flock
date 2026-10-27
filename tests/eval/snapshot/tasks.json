@@ -3,31 +3,297 @@
     "base_easy": {
       "members": [
         "base_easy:qa_rc",
-        "base_easy:qa_bpb"
+        "base_easy:qa_bpb",
+        "base_easy:math_bpb",
+        "base_easy:code_bpb"
       ],
       "metric": null,
       "scored": false
     },
+    "base_easy:code_bpb": {
+      "members": [
+        "humaneval",
+        "mbpp",
+        "mt_mbpp"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "base_easy:math_bpb": {
+      "members": [
+        "minerva_math_algebra",
+        "minerva_math_counting_and_probability",
+        "minerva_math_geometry",
+        "minerva_math_intermediate_algebra",
+        "minerva_math_number_theory",
+        "minerva_math_prealgebra",
+        "minerva_math_precalculus"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
     "base_easy:qa_bpb": {
       "members": [
-        "arc_easy"
+        "arc_easy",
+        "arc_challenge",
+        "csqa",
+        "hellaswag",
+        "winogrande",
+        "socialiqa",
+        "piqa",
+        "sciq",
+        "qasper_yesno",
+        "sciriff_yesno",
+        "lab_bench_dbqa",
+        "lab_bench_protocolqa",
+        "medmcqa",
+        "medqa_en",
+        "coqa",
+        "drop",
+        "jeopardy",
+        "naturalqs",
+        "squad",
+        "mmlu:bpb",
+        "basic_skills:bpb",
+        "lambada"
       ],
       "metric": "bpb",
       "scored": true
     },
     "base_easy:qa_rc": {
       "members": [
-        "arc_easy"
+        "arc_easy",
+        "arc_challenge",
+        "csqa",
+        "hellaswag",
+        "winogrande",
+        "socialiqa",
+        "piqa",
+        "sciq",
+        "qasper_yesno",
+        "sciriff_yesno",
+        "lab_bench_dbqa",
+        "lab_bench_protocolqa",
+        "medmcqa",
+        "medqa_en",
+        "coqa",
+        "drop",
+        "jeopardy",
+        "naturalqs",
+        "squad",
+        "mmlu",
+        "basic_skills"
       ],
       "metric": null,
+      "scored": true
+    },
+    "basic_skills": {
+      "members": [
+        "basic_skills_arithmetic",
+        "basic_skills_coding",
+        "basic_skills_common_knowledge",
+        "basic_skills_logical_reasoning",
+        "basic_skills_string_operations",
+        "basic_skills_pattern"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "basic_skills:bpb": {
+      "members": [
+        "basic_skills_arithmetic",
+        "basic_skills_coding",
+        "basic_skills_common_knowledge",
+        "basic_skills_logical_reasoning",
+        "basic_skills_string_operations",
+        "basic_skills_pattern"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "mmlu": {
+      "members": [
+        "mmlu_abstract_algebra",
+        "mmlu_anatomy",
+        "mmlu_astronomy",
+        "mmlu_business_ethics",
+        "mmlu_clinical_knowledge",
+        "mmlu_college_biology",
+        "mmlu_college_chemistry",
+        "mmlu_college_computer_science",
+        "mmlu_college_mathematics",
+        "mmlu_college_medicine",
+        "mmlu_college_physics",
+        "mmlu_computer_security",
+        "mmlu_conceptual_physics",
+        "mmlu_econometrics",
+        "mmlu_electrical_engineering",
+        "mmlu_elementary_mathematics",
+        "mmlu_formal_logic",
+        "mmlu_global_facts",
+        "mmlu_high_school_biology",
+        "mmlu_high_school_chemistry",
+        "mmlu_high_school_computer_science",
+        "mmlu_high_school_european_history",
+        "mmlu_high_school_geography",
+        "mmlu_high_school_government_and_politics",
+        "mmlu_high_school_macroeconomics",
+        "mmlu_high_school_mathematics",
+        "mmlu_high_school_microeconomics",
+        "mmlu_high_school_physics",
+        "mmlu_high_school_psychology",
+        "mmlu_high_school_statistics",
+        "mmlu_high_school_us_history",
+        "mmlu_high_school_world_history",
+        "mmlu_human_aging",
+        "mmlu_human_sexuality",
+        "mmlu_international_law",
+        "mmlu_jurisprudence",
+        "mmlu_logical_fallacies",
+        "mmlu_machine_learning",
+        "mmlu_management",
+        "mmlu_marketing",
+        "mmlu_medical_genetics",
+        "mmlu_miscellaneous",
+        "mmlu_moral_disputes",
+        "mmlu_moral_scenarios",
+        "mmlu_nutrition",
+        "mmlu_philosophy",
+        "mmlu_prehistory",
+        "mmlu_professional_accounting",
+        "mmlu_professional_law",
+        "mmlu_professional_medicine",
+        "mmlu_professional_psychology",
+        "mmlu_public_relations",
+        "mmlu_security_studies",
+        "mmlu_sociology",
+        "mmlu_us_foreign_policy",
+        "mmlu_virology",
+        "mmlu_world_religions"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "mmlu:bpb": {
+      "members": [
+        "mmlu_abstract_algebra",
+        "mmlu_anatomy",
+        "mmlu_astronomy",
+        "mmlu_business_ethics",
+        "mmlu_clinical_knowledge",
+        "mmlu_college_biology",
+        "mmlu_college_chemistry",
+        "mmlu_college_computer_science",
+        "mmlu_college_mathematics",
+        "mmlu_college_medicine",
+        "mmlu_college_physics",
+        "mmlu_computer_security",
+        "mmlu_conceptual_physics",
+        "mmlu_econometrics",
+        "mmlu_electrical_engineering",
+        "mmlu_elementary_mathematics",
+        "mmlu_formal_logic",
+        "mmlu_global_facts",
+        "mmlu_high_school_biology",
+        "mmlu_high_school_chemistry",
+        "mmlu_high_school_computer_science",
+        "mmlu_high_school_european_history",
+        "mmlu_high_school_geography",
+        "mmlu_high_school_government_and_politics",
+        "mmlu_high_school_macroeconomics",
+        "mmlu_high_school_mathematics",
+        "mmlu_high_school_microeconomics",
+        "mmlu_high_school_physics",
+        "mmlu_high_school_psychology",
+        "mmlu_high_school_statistics",
+        "mmlu_high_school_us_history",
+        "mmlu_high_school_world_history",
+        "mmlu_human_aging",
+        "mmlu_human_sexuality",
+        "mmlu_international_law",
+        "mmlu_jurisprudence",
+        "mmlu_logical_fallacies",
+        "mmlu_machine_learning",
+        "mmlu_management",
+        "mmlu_marketing",
+        "mmlu_medical_genetics",
+        "mmlu_miscellaneous",
+        "mmlu_moral_disputes",
+        "mmlu_moral_scenarios",
+        "mmlu_nutrition",
+        "mmlu_philosophy",
+        "mmlu_prehistory",
+        "mmlu_professional_accounting",
+        "mmlu_professional_law",
+        "mmlu_professional_medicine",
+        "mmlu_professional_psychology",
+        "mmlu_public_relations",
+        "mmlu_security_studies",
+        "mmlu_sociology",
+        "mmlu_us_foreign_policy",
+        "mmlu_virology",
+        "mmlu_world_religions"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "mt_mbpp": {
+      "members": [
+        "mt_mbpp_bash",
+        "mt_mbpp_c",
+        "mt_mbpp_cpp",
+        "mt_mbpp_csharp",
+        "mt_mbpp_go",
+        "mt_mbpp_haskell",
+        "mt_mbpp_java",
+        "mt_mbpp_javascript",
+        "mt_mbpp_matlab",
+        "mt_mbpp_php",
+        "mt_mbpp_python",
+        "mt_mbpp_r",
+        "mt_mbpp_ruby",
+        "mt_mbpp_rust",
+        "mt_mbpp_scala",
+        "mt_mbpp_swift",
+        "mt_mbpp_typescript"
+      ],
+      "metric": "bpb",
       "scored": true
     }
   },
   "tasks": {
+    "arc_challenge": {
+      "dataset": {
+        "repo": "allenai/ai2_arc",
+        "revision": "210d026faf9955653af8916fad021475a3f00453",
+        "row_index": false,
+        "split": "test",
+        "subset": "ARC-Challenge"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "Mercury_SC_415702",
+          "MCAS_2009_5_6516",
+          "Mercury_7233695",
+          "Mercury_7041615",
+          "MCAS_1998_4_3"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_uncond",
+      "to_doc": "flock.eval.tasks.arc.arc_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
     "arc_easy": {
       "dataset": {
         "repo": "allenai/ai2_arc",
         "revision": "210d026faf9955653af8916fad021475a3f00453",
+        "row_index": false,
         "split": "test",
         "subset": "ARC-Easy"
       },
@@ -49,6 +315,2859 @@
       "to_doc": "flock.eval.tasks.arc.arc_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
+    },
+    "basic_skills_arithmetic": {
+      "dataset": {
+        "repo": "cerulean-works/basic-skills",
+        "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
+        "row_index": false,
+        "split": "validation",
+        "subset": "arithmetic"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "903",
+          "240",
+          "15",
+          "186",
+          "71",
+          "172"
+        ],
+        "num_shots": 5,
+        "rows": [],
+        "split": "validation"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_token",
+      "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "basic_skills_coding": {
+      "dataset": {
+        "repo": "cerulean-works/basic-skills",
+        "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
+        "row_index": false,
+        "split": "validation",
+        "subset": "coding"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "989",
+          "796",
+          "451",
+          "119",
+          "7",
+          "92"
+        ],
+        "num_shots": 5,
+        "rows": [],
+        "split": "validation"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_token",
+      "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "basic_skills_common_knowledge": {
+      "dataset": {
+        "repo": "cerulean-works/basic-skills",
+        "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
+        "row_index": false,
+        "split": "validation",
+        "subset": "common_knowledge"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "902",
+          "239",
+          "15",
+          "185",
+          "71",
+          "171"
+        ],
+        "num_shots": 5,
+        "rows": [],
+        "split": "validation"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_token",
+      "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "basic_skills_logical_reasoning": {
+      "dataset": {
+        "repo": "cerulean-works/basic-skills",
+        "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
+        "row_index": false,
+        "split": "validation",
+        "subset": "logical_reasoning"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "902",
+          "239",
+          "15",
+          "185",
+          "71",
+          "171"
+        ],
+        "num_shots": 5,
+        "rows": [],
+        "split": "validation"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_token",
+      "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "basic_skills_pattern": {
+      "dataset": {
+        "repo": "cerulean-works/basic-skills",
+        "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
+        "row_index": false,
+        "split": "validation",
+        "subset": "pattern"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "451",
+          "119",
+          "7",
+          "92",
+          "35",
+          "85"
+        ],
+        "num_shots": 5,
+        "rows": [],
+        "split": "validation"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_token",
+      "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "basic_skills_string_operations": {
+      "dataset": {
+        "repo": "cerulean-works/basic-skills",
+        "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
+        "row_index": false,
+        "split": "validation",
+        "subset": "string_operations"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "902",
+          "239",
+          "15",
+          "185",
+          "1192",
+          "71"
+        ],
+        "num_shots": 5,
+        "rows": [],
+        "split": "validation"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_token",
+      "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "coqa": {
+      "dataset": {
+        "repo": "allenai/coqa-gen2mc",
+        "revision": "5e0394a08cc63398a22b745541e5cedf9c171bf3",
+        "row_index": false,
+        "split": "validation",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.gen2mc.coqa_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "csqa": {
+      "dataset": {
+        "repo": "tau/commonsense_qa",
+        "revision": "94630fe30dad47192a8546eb75f094926d47e155",
+        "row_index": false,
+        "split": "validation",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "61fe6e879ff18686d7552425a36344c8",
+          "02e821a3e53cb320790950aab4489e85",
+          "23505889b94e880c3e89cff4ba119860",
+          "a76403b4921a9281b6ee2a7241a5ec9f",
+          "6dc921840aa1e5dda3333b79007f630b"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_uncond",
+      "to_doc": "flock.eval.tasks.arc.arc_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "drop": {
+      "dataset": {
+        "repo": "allenai/drop-gen2mc",
+        "revision": "33191ccb7014f77bc6dc3f59792acd43f658eb06",
+        "row_index": false,
+        "split": "validation",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [],
+        "num_shots": null,
+        "rows": {
+          "count": 5,
+          "sha256": "7da55ab4f2dc74273816774af09c2e4138362090d50a222d4d6f2d41efe7cb99"
+        },
+        "split": null
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.gen2mc.drop_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "hellaswag": {
+      "dataset": {
+        "repo": "allenai/hellaswag",
+        "revision": "55aa56627db098098f50549e650a00be2684f4bf",
+        "row_index": true,
+        "split": "validation",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "14745",
+          "14755",
+          "2",
+          "19",
+          "14754"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.hellaswag.hellaswag_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "humaneval": {
+      "dataset": {
+        "repo": "openai/openai_humaneval",
+        "revision": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544",
+        "row_index": false,
+        "split": "test",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "HumanEval/112",
+          "HumanEval/29",
+          "HumanEval/1",
+          "HumanEval/23"
+        ],
+        "num_shots": 3,
+        "rows": [],
+        "split": "test"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.humaneval.humaneval_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "jeopardy": {
+      "dataset": {
+        "repo": "allenai/jeopardy-gen2mc",
+        "revision": "0bbd389863e56b304b22b66106caf72566144aa8",
+        "row_index": false,
+        "split": "test",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [],
+        "num_shots": null,
+        "rows": {
+          "count": 5,
+          "sha256": "fcaa34951f2996a99dd2804dd2746a05837333bcd3c3c7e9721094a7d9206435"
+        },
+        "split": null
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.gen2mc.jeopardy_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "lab_bench_dbqa": {
+      "dataset": {
+        "repo": "futurehouse/lab-bench",
+        "revision": "5c77cec648430f30611808808861eb86f81d5eaa",
+        "row_index": false,
+        "split": "train",
+        "subset": "DbQA"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "b7d66443-572b-4ffd-b72d-8839db7afc5c",
+          "fec11ed9-ea38-489c-ae0f-a57dacaf47f6",
+          "901552e2-b5a0-4462-a68b-2796823dedee"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.lab_bench.lab_bench_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "lab_bench_protocolqa": {
+      "dataset": {
+        "repo": "futurehouse/lab-bench",
+        "revision": "5c77cec648430f30611808808861eb86f81d5eaa",
+        "row_index": false,
+        "split": "train",
+        "subset": "ProtocolQA"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "eebdad6c-9209-40bd-88a2-23ceb6e9db66",
+          "be697753-fe7c-4ed5-ad28-4853e435d21e",
+          "7ad6f06c-1e25-452e-a5d1-58258ff2ed18"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.lab_bench.lab_bench_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "lambada": {
+      "dataset": {
+        "repo": "EleutherAI/lambada_openai",
+        "revision": "900124bf3b8235c6daf21033af9948b3f07346c4",
+        "row_index": true,
+        "split": "test",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": null,
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.lambada.lambada_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": null
+    },
+    "mbpp": {
+      "dataset": {
+        "repo": "google-research-datasets/mbpp",
+        "revision": "4bb6404fdc6cacfda99d4ac4205087b89d32030c",
+        "row_index": false,
+        "split": "test",
+        "subset": "full"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "medmcqa": {
+      "dataset": {
+        "repo": "openlifescienceai/medmcqa",
+        "revision": "91c6572c454088bf71b679ad90aa8dffcd0d5868",
+        "row_index": false,
+        "split": "validation",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "ad9ceec9-93f9-40ef-b436-6bb4f23551fd",
+          "248808d1-2a95-44f2-9df2-0447b002555c",
+          "83b524ec-a747-489a-8021-3a2d96f64b2b",
+          "77abb3bf-2058-4dc2-8e6c-efe247008d88",
+          "771ffafb-2b91-4beb-8839-1f0d49290cc3"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.medical.medmcqa_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "medqa_en": {
+      "dataset": {
+        "repo": "davidheineman/medqa-en",
+        "revision": "a9cc2ff94f0444e1970fd785c986f4b1571239c0",
+        "row_index": true,
+        "split": "test",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "7220",
+          "1914",
+          "122",
+          "1485",
+          "9539"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.medical.medqa_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": null
+    },
+    "minerva_math_algebra": {
+      "dataset": {
+        "repo": "EleutherAI/hendrycks_math",
+        "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "row_index": true,
+        "split": "test",
+        "subset": "algebra"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [],
+        "num_shots": null,
+        "rows": {
+          "count": 4,
+          "sha256": "8cd733a3435ff9544ba36f5d629db476208a2566d4ce2f84e6db2864e2557bff"
+        },
+        "split": null
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.minerva_math.minerva_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "minerva_math_counting_and_probability": {
+      "dataset": {
+        "repo": "EleutherAI/hendrycks_math",
+        "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "row_index": true,
+        "split": "test",
+        "subset": "counting_and_probability"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [],
+        "num_shots": null,
+        "rows": {
+          "count": 4,
+          "sha256": "8cd733a3435ff9544ba36f5d629db476208a2566d4ce2f84e6db2864e2557bff"
+        },
+        "split": null
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.minerva_math.minerva_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "minerva_math_geometry": {
+      "dataset": {
+        "repo": "EleutherAI/hendrycks_math",
+        "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "row_index": true,
+        "split": "test",
+        "subset": "geometry"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [],
+        "num_shots": null,
+        "rows": {
+          "count": 4,
+          "sha256": "8cd733a3435ff9544ba36f5d629db476208a2566d4ce2f84e6db2864e2557bff"
+        },
+        "split": null
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.minerva_math.minerva_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "minerva_math_intermediate_algebra": {
+      "dataset": {
+        "repo": "EleutherAI/hendrycks_math",
+        "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "row_index": true,
+        "split": "test",
+        "subset": "intermediate_algebra"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [],
+        "num_shots": null,
+        "rows": {
+          "count": 4,
+          "sha256": "8cd733a3435ff9544ba36f5d629db476208a2566d4ce2f84e6db2864e2557bff"
+        },
+        "split": null
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.minerva_math.minerva_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "minerva_math_number_theory": {
+      "dataset": {
+        "repo": "EleutherAI/hendrycks_math",
+        "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "row_index": true,
+        "split": "test",
+        "subset": "number_theory"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [],
+        "num_shots": null,
+        "rows": {
+          "count": 4,
+          "sha256": "8cd733a3435ff9544ba36f5d629db476208a2566d4ce2f84e6db2864e2557bff"
+        },
+        "split": null
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.minerva_math.minerva_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "minerva_math_prealgebra": {
+      "dataset": {
+        "repo": "EleutherAI/hendrycks_math",
+        "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "row_index": true,
+        "split": "test",
+        "subset": "prealgebra"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [],
+        "num_shots": null,
+        "rows": {
+          "count": 4,
+          "sha256": "8cd733a3435ff9544ba36f5d629db476208a2566d4ce2f84e6db2864e2557bff"
+        },
+        "split": null
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.minerva_math.minerva_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "minerva_math_precalculus": {
+      "dataset": {
+        "repo": "EleutherAI/hendrycks_math",
+        "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "row_index": true,
+        "split": "test",
+        "subset": "precalculus"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [],
+        "num_shots": null,
+        "rows": {
+          "count": 4,
+          "sha256": "8cd733a3435ff9544ba36f5d629db476208a2566d4ce2f84e6db2864e2557bff"
+        },
+        "split": null
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.minerva_math.minerva_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mmlu_abstract_algebra": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "abstract_algebra"
+      },
+      "description": "The following are multiple choice questions (with answers) about abstract algebra.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_anatomy": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "anatomy"
+      },
+      "description": "The following are multiple choice questions (with answers) about anatomy.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_astronomy": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "astronomy"
+      },
+      "description": "The following are multiple choice questions (with answers) about astronomy.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_business_ethics": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "business_ethics"
+      },
+      "description": "The following are multiple choice questions (with answers) about business ethics.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_clinical_knowledge": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "clinical_knowledge"
+      },
+      "description": "The following are multiple choice questions (with answers) about clinical knowledge.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_college_biology": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_biology"
+      },
+      "description": "The following are multiple choice questions (with answers) about college biology.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_college_chemistry": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_chemistry"
+      },
+      "description": "The following are multiple choice questions (with answers) about college chemistry.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_college_computer_science": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_computer_science"
+      },
+      "description": "The following are multiple choice questions (with answers) about college computer science.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_college_mathematics": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_mathematics"
+      },
+      "description": "The following are multiple choice questions (with answers) about college mathematics.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_college_medicine": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_medicine"
+      },
+      "description": "The following are multiple choice questions (with answers) about college medicine.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_college_physics": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_physics"
+      },
+      "description": "The following are multiple choice questions (with answers) about college physics.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_computer_security": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "computer_security"
+      },
+      "description": "The following are multiple choice questions (with answers) about computer security.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_conceptual_physics": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "conceptual_physics"
+      },
+      "description": "The following are multiple choice questions (with answers) about conceptual physics.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_econometrics": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "econometrics"
+      },
+      "description": "The following are multiple choice questions (with answers) about econometrics.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_electrical_engineering": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "electrical_engineering"
+      },
+      "description": "The following are multiple choice questions (with answers) about electrical engineering.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_elementary_mathematics": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "elementary_mathematics"
+      },
+      "description": "The following are multiple choice questions (with answers) about elementary mathematics.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_formal_logic": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "formal_logic"
+      },
+      "description": "The following are multiple choice questions (with answers) about formal logic.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_global_facts": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "global_facts"
+      },
+      "description": "The following are multiple choice questions (with answers) about global facts.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_high_school_biology": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_biology"
+      },
+      "description": "The following are multiple choice questions (with answers) about high school biology.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_high_school_chemistry": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_chemistry"
+      },
+      "description": "The following are multiple choice questions (with answers) about high school chemistry.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_high_school_computer_science": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_computer_science"
+      },
+      "description": "The following are multiple choice questions (with answers) about high school computer science.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_high_school_european_history": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_european_history"
+      },
+      "description": "The following are multiple choice questions (with answers) about high school european history.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_high_school_geography": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_geography"
+      },
+      "description": "The following are multiple choice questions (with answers) about high school geography.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_high_school_government_and_politics": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_government_and_politics"
+      },
+      "description": "The following are multiple choice questions (with answers) about high school government and politics.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_high_school_macroeconomics": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_macroeconomics"
+      },
+      "description": "The following are multiple choice questions (with answers) about high school macroeconomics.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_high_school_mathematics": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_mathematics"
+      },
+      "description": "The following are multiple choice questions (with answers) about high school mathematics.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_high_school_microeconomics": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_microeconomics"
+      },
+      "description": "The following are multiple choice questions (with answers) about high school microeconomics.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_high_school_physics": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_physics"
+      },
+      "description": "The following are multiple choice questions (with answers) about high school physics.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_high_school_psychology": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_psychology"
+      },
+      "description": "The following are multiple choice questions (with answers) about high school psychology.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_high_school_statistics": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_statistics"
+      },
+      "description": "The following are multiple choice questions (with answers) about high school statistics.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_high_school_us_history": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_us_history"
+      },
+      "description": "The following are multiple choice questions (with answers) about high school us history.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_high_school_world_history": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_world_history"
+      },
+      "description": "The following are multiple choice questions (with answers) about high school world history.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_human_aging": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "human_aging"
+      },
+      "description": "The following are multiple choice questions (with answers) about human aging.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_human_sexuality": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "human_sexuality"
+      },
+      "description": "The following are multiple choice questions (with answers) about human sexuality.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_international_law": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "international_law"
+      },
+      "description": "The following are multiple choice questions (with answers) about international law.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_jurisprudence": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "jurisprudence"
+      },
+      "description": "The following are multiple choice questions (with answers) about jurisprudence.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_logical_fallacies": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "logical_fallacies"
+      },
+      "description": "The following are multiple choice questions (with answers) about logical fallacies.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_machine_learning": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "machine_learning"
+      },
+      "description": "The following are multiple choice questions (with answers) about machine learning.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_management": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "management"
+      },
+      "description": "The following are multiple choice questions (with answers) about management.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_marketing": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "marketing"
+      },
+      "description": "The following are multiple choice questions (with answers) about marketing.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_medical_genetics": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "medical_genetics"
+      },
+      "description": "The following are multiple choice questions (with answers) about medical genetics.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_miscellaneous": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "miscellaneous"
+      },
+      "description": "The following are multiple choice questions (with answers) about miscellaneous.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_moral_disputes": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "moral_disputes"
+      },
+      "description": "The following are multiple choice questions (with answers) about moral disputes.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_moral_scenarios": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "moral_scenarios"
+      },
+      "description": "The following are multiple choice questions (with answers) about moral scenarios.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_nutrition": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "nutrition"
+      },
+      "description": "The following are multiple choice questions (with answers) about nutrition.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_philosophy": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "philosophy"
+      },
+      "description": "The following are multiple choice questions (with answers) about philosophy.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_prehistory": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "prehistory"
+      },
+      "description": "The following are multiple choice questions (with answers) about prehistory.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_professional_accounting": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "professional_accounting"
+      },
+      "description": "The following are multiple choice questions (with answers) about professional accounting.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_professional_law": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "professional_law"
+      },
+      "description": "The following are multiple choice questions (with answers) about professional law.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_professional_medicine": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "professional_medicine"
+      },
+      "description": "The following are multiple choice questions (with answers) about professional medicine.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_professional_psychology": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "professional_psychology"
+      },
+      "description": "The following are multiple choice questions (with answers) about professional psychology.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_public_relations": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "public_relations"
+      },
+      "description": "The following are multiple choice questions (with answers) about public relations.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_security_studies": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "security_studies"
+      },
+      "description": "The following are multiple choice questions (with answers) about security studies.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_sociology": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "sociology"
+      },
+      "description": "The following are multiple choice questions (with answers) about sociology.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_us_foreign_policy": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "us_foreign_policy"
+      },
+      "description": "The following are multiple choice questions (with answers) about us foreign policy.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_virology": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "virology"
+      },
+      "description": "The following are multiple choice questions (with answers) about virology.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mmlu_world_religions": {
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "row_index": true,
+        "split": "test",
+        "subset": "world_religions"
+      },
+      "description": "The following are multiple choice questions (with answers) about world religions.\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "mt_mbpp_bash": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "bash"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_c": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "c"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_cpp": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "cpp"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_csharp": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "csharp"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_go": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "go"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_haskell": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "haskell"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_java": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "java"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_javascript": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "javascript"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_matlab": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "matlab"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_php": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "php"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_python": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "python"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_r": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "r"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_ruby": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "ruby"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_rust": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "rust"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_scala": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "scala"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_swift": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "swift"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "mt_mbpp_typescript": {
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "row_index": false,
+        "split": "test",
+        "subset": "typescript"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "3",
+          "9",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "prompt"
+      },
+      "metrics": [
+        "bpb"
+      ],
+      "primary_metric": "bpb",
+      "to_doc": "flock.eval.tasks.mbpp.mt_mbpp_doc",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
+      "unconditional_context": null
+    },
+    "naturalqs": {
+      "dataset": {
+        "repo": "allenai/nq-gen2mc",
+        "revision": "a7e553744f28cb673bf25b734513c41e3f413840",
+        "row_index": false,
+        "split": "validation",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [],
+        "num_shots": null,
+        "rows": {
+          "count": 5,
+          "sha256": "e545cfb6df8c62d268c0e54d6765d2efbab47b3f3023a76edd5e3d6448777d70"
+        },
+        "split": null
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.gen2mc.naturalqs_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "piqa": {
+      "dataset": {
+        "repo": "ybisk/piqa",
+        "revision": "142c51238b3ca2bc61e9a075913871b8b600e8e1",
+        "row_index": true,
+        "split": "validation",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "9",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.piqa.piqa_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "qasper_yesno": {
+      "dataset": {
+        "repo": "allenai/qasper-yesno",
+        "revision": "f47a392e5444515c600ab595bf7227f8710a8c68",
+        "row_index": false,
+        "split": "train",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "1909.00338_0",
+          "1812.06705_2",
+          "1907.05664_0",
+          "1908.10449_0",
+          "1909.05890_0"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_raw",
+      "to_doc": "flock.eval.tasks.yesno.qasper_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "sciq": {
+      "dataset": {
+        "repo": "allenai/sciq",
+        "revision": "2c94ad3e1aafab77146f384e23536f97a4849815",
+        "row_index": true,
+        "split": "validation",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "7220",
+          "1914",
+          "122",
+          "1485",
+          "9539"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.sciq.sciq_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "sciriff_yesno": {
+      "dataset": {
+        "repo": "allenai/sciriff-yesno",
+        "revision": "c5ce62cb03b2b6052ff9fd24817444ea79e66bd4",
+        "row_index": false,
+        "split": "train",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "bioasq_yesno_qa:train:727",
+          "bioasq_yesno_qa:train:1232",
+          "bioasq_yesno_qa:train:1010",
+          "bioasq_yesno_qa:train:1179",
+          "pubmedqa_qa:train:108"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_raw",
+      "to_doc": "flock.eval.tasks.yesno.sciriff_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "socialiqa": {
+      "dataset": {
+        "repo": "allenai/social_i_qa",
+        "revision": "537a2ec8ec565adc0b70b70752893e59e024df26",
+        "row_index": true,
+        "split": "validation",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "0",
+          "8",
+          "1",
+          "13",
+          "2"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.socialiqa.socialiqa_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "squad": {
+      "dataset": {
+        "repo": "allenai/squad-gen2mc",
+        "revision": "e80f601243d8ed28732c5073cea1092aa4b8bc09",
+        "row_index": false,
+        "split": "validation",
+        "subset": null
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [],
+        "num_shots": null,
+        "rows": {
+          "count": 5,
+          "sha256": "deaf16a441a76e07b6e247e1ebada87ee162be91da8da36f3874221e4aaa33de"
+        },
+        "split": null
+      },
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.gen2mc.squad_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "winogrande": {
+      "dataset": {
+        "repo": "allenai/winogrande",
+        "revision": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+        "row_index": true,
+        "split": "validation",
+        "subset": "winogrande_xl"
+      },
+      "description": "",
+      "fewshot": {
+        "ids": [
+          "19875",
+          "26035",
+          "2302",
+          "13568",
+          "7412"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "train"
+      },
+      "metrics": null,
+      "primary_metric": "acc_raw",
+      "to_doc": "flock.eval.tasks.winogrande.winogrande_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": null
     }
   }
 }
