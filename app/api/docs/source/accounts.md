@@ -129,6 +129,17 @@ These end a session at once, not when its access token expires:
 
 Passwords are 8 to 256 characters. Emails are stored in lowercase, and only checked for their shape.
 
+## Signing in from the command line
+
+`flock login` signs a machine in without an API key. It prints a code, which the user enters on the dashboard's `/device` page while signed in there. The page shows the machine's hostname, platform and IP address, so the user can check the request is theirs before selecting **Authorize**. The machine then holds a CLI token. The [`flock` command's docs](https://docs.cerulean.works/flock/latest/guide/) describe the client side.
+
+A CLI token is a session, like a browser's:
+- It never rotates, so any number of processes on the machine can use it at once.
+- It lasts until it goes 90 days without use (`FLOCK_CLI_SESSION_TTL`). Each use extends it.
+- It ends like other sessions: with `flock logout`, a password change, a password reset or deleting the account. The account page lists each machine under **Command line sign-ins**, where it can be revoked.
+
+Only a browser session can approve a sign-in. An API key or CLI token can't, so a leaked one can't sign in new machines. [Device sign-in](api/auth#device) lists the endpoints.
+
 ## API keys
 
 The `wandb` SDK and scripts use API keys. Each user creates their own:

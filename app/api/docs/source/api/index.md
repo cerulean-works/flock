@@ -11,9 +11,10 @@ Every endpoint needs credentials, except the public ones marked in the index bel
 | Credential | How to send it |
 |---|---|
 | Access token | `Authorization: Bearer <access_token>` |
+| CLI token | `Authorization: Bearer <token>`, from `flock login` (see [Device sign-in](auth#device)). |
 | API key | `Authorization: Bearer <key>`, or `x-api-key: <key>`, or HTTP Basic auth with any user name and the key as the password. Basic auth is what the `wandb` SDK sends, as `api:<key>`. |
 
-A Bearer value with two dots is read as an access token, and anything else as an API key. Missing, unknown, expired or revoked credentials answer 401. [Accounts, organizations and roles](../accounts#sessions) explains how to get each kind.
+A Bearer value with two dots is read as an access token, one starting with `flock_cli_` as a CLI token, and anything else as an API key. Missing, unknown, expired or revoked credentials answer 401. [Accounts, organizations and roles](../accounts#sessions) explains how to get each kind.
 
 ## Conventions
 
@@ -37,10 +38,13 @@ All paths are relative to `/api/v1`. In paths, `{entity}` is an organization's I
 | `POST /auth/signup` | Create the first account. Public. | [Sign-in](auth#signup) |
 | `POST /auth/login`, `POST /auth/refresh` | Sign in, and refresh tokens. Public. | [Sign-in](auth#login) |
 | `POST /auth/logout` | End the current session. | [Sign-in](auth#logout) |
+| `POST /auth/device`, `POST /auth/device/token` | Start and poll a command-line sign-in. Public. | [Sign-in](auth#device) |
+| `GET /auth/device/{user_code}`, `POST /auth/device/{user_code}` | Show and approve a command-line sign-in. Browser sessions only. | [Sign-in](auth#device) |
 | `GET /auth/google/start`, `GET /auth/google/callback`, `POST /auth/google/exchange` | Sign in with Google. Public. | [Sign-in](auth#google) |
 | `GET /me`, `PATCH /me` | Your profile and default organization. | [Accounts](auth#me) |
 | `POST /me/password` | Change your password. | [Accounts](auth#change-password) |
 | `GET /me/api-keys`, `POST /me/api-keys`, `DELETE /me/api-keys/{id}` | Your API keys. | [Accounts](auth#api-keys) |
+| `GET /me/cli-sessions`, `DELETE /me/cli-sessions/{id}` | Your command-line sign-ins. | [Accounts](auth#cli-sessions) |
 | `PUT /me/avatar`, `DELETE /me/avatar`, `POST /me/avatar/gravatar` | Your avatar. | [Accounts](auth#avatars) |
 | `GET /avatars/{digest}` | An avatar image. Public. | [Accounts](auth#avatars) |
 | `GET /users`, `PATCH /users/{id}`, `DELETE /users/{id}` | All accounts. Super admins only. | [Accounts](auth#users) |
