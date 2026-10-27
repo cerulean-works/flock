@@ -358,6 +358,18 @@ def test_a_shot_showing_the_docs_answer_is_not_shown_to_it(reorder):
     assert built.requests[3].context.count("Question:") == 3
 
 
+def test_a_shot_is_compared_with_the_doc_by_the_text_it_shows():
+    docs, _ = TASK.load()
+    # A doc whose examples read differently from its scored text, as HumanEval's do. An example
+    # is the doc itself only if it shows the same text, so the plain repeat stays.
+    doc = dataclasses.replace(docs[0], example="Question: q-1, as an example")
+    repeat = dataclasses.replace(docs[0], id="shot-9")
+
+    built = TASK.requests([doc], [repeat, dataclasses.replace(doc, id="shot-8")])
+    assert built.requests[0].context.count("Question:") == 2
+    assert "as an example" not in built.requests[0].context
+
+
 def test_shots_from_the_scored_split_are_shown_to_their_own_doc():
     # OLMES shows a curated example from the scored split to every doc, its own included.
     task = dataclasses.replace(TASK, fewshot=Fewshot("test", ("q-1",)))
@@ -400,7 +412,8 @@ def test_doc_rejects_an_empty_example():
 def test_example_replaces_the_gold_choice_in_the_shots():
     shot = MCDoc("s", (Choice("Q1", " a"),), 0, example="Q1  a")
     doc = MCDoc("d", (Choice("Q2", " b"),), 0)
-    task = dataclasses.replace(TASK, unconditional_context=None)
+    # An example from the scored split is shown to its own doc too, as OLMES's curated ones are.
+    task = dataclasses.replace(TASK, fewshot=Fewshot("test", ("s",)), unconditional_context=None)
 
     # The doc's own `example` doesn't change how it is scored, only how it reads as a shot.
     built = task.requests([doc, shot], [shot])

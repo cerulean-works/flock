@@ -9,9 +9,6 @@ from flock.eval.run import score_task
 from flock.eval.tasks import SUITES, TASKS, Choice, Dataset, Fewshot, MCDoc, cloze
 from flock.eval.tasks.tmmluplus import CATEGORIES, TAIWAN_TASKS, TMMLUPLUS, tmmluplus_doc
 
-# The real `Dataset.load`, read before the `offline_rows` fixture replaces it in each test.
-LOAD = Dataset.load
-
 ROWS = {
     "train": [
         {
@@ -61,9 +58,9 @@ ROWS = {
 
 
 @pytest.fixture
-def tmmluplus_rows(monkeypatch):
+def tmmluplus_rows(monkeypatch, real_load):
     """Every task loads `ROWS` by split through the real `Dataset.load`, which numbers the rows."""
-    monkeypatch.setattr(Dataset, "load", LOAD)
+    monkeypatch.setattr(Dataset, "load", real_load)
     monkeypatch.setattr(
         datasets,
         "load_dataset",

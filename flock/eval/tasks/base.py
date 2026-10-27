@@ -62,7 +62,7 @@ class Dataset:
 @dataclass(frozen=True, slots=True)
 class Fewshot:
     """
-    Fixed few-shot examples: dataset rows picked by id, or rows written out in the task's module. Either way they are shown in the order given, except that a doc is never shown a row of another split that renders its own question and answer, that is, whose gold choice equals the doc's.
+    Fixed few-shot examples: dataset rows picked by id, or rows written out in the task's module. Either way they are shown in the order given, except that a doc is never shown a row of another split that shows the doc's own question and answer, that is, the text the doc would show as an example.
 
     Args:
         split (`str`, *optional*):
@@ -183,6 +183,15 @@ class MCDoc:
             raise ValueError(
                 f"doc {self.id}: gold {self.gold} is not one of {len(self.choices)} choices"
             )
+
+    @property
+    def example_text(self) -> str:
+        """The text another doc is shown when this doc is its few-shot example: `example`, or the gold choice's context and continuation."""
+        if self.example is not None:
+            return self.example
+        gold = self.choices[self.gold]
+
+        return gold.context + gold.continuation
 
 
 @dataclass(frozen=True, slots=True)
@@ -490,11 +499,7 @@ class MultipleChoiceTask:
         """Renders `description`, then each example followed by a blank line."""
         head = self.description
         for shot in shots:
-            example = shot.example
-            if example is None:
-                gold = shot.choices[shot.gold]
-                example = gold.context + gold.continuation
-            head += f"{example}\n\n"
+            head += f"{shot.example_text}\n\n"
 
         return head
 
@@ -502,26 +507,22 @@ class MultipleChoiceTask:
         """
         Returns the examples `doc` is shown: those that aren't `doc` itself, and with `num_shots` only the first that many.
 
-        An example from another split is `doc` itself if its gold choice, the only one it shows, equals the doc's gold choice. An example from the scored split is `doc` itself only with `num_shots`, if it has the doc's id. lm-evaluation-harness drops an example only if its whole dataset row equals the doc's (`lm_eval/api/samplers.py`, v0.4.3), which misses a repeat with its choices reordered. OLMES samples one example extra and drops the scored doc (`fewshot_context` in `oe_eval/tasks/base_task.py`).
+        An example from another split is `doc` itself if it shows the text `doc` would show as an example. lm-evaluation-harness drops an example only if its whole dataset row equals the doc's (`lm_eval/api/samplers.py`, v0.4.3), which misses a repeat with its choices reordered. An example from the scored split is `doc` itself only with `num_shots`, if it has the doc's id: OLMES samples one example extra and drops the scored doc (`fewshot_context` in `oe_eval/tasks/base_task.py`).
         """
         if self.fewshot is None:
             return shots
 
-        # Ids are compared only with `num_shots`, whose examples come from the scored split: an
-        # example from another split may share an id with a different doc.
-        match_id = self.fewshot.num_shots is not None
         # A dataset may repeat a doc's question and answer in another split, possibly with the
-        # choices reordered, which would show the doc its own answer. Examples from the scored
-        # split are left to `num_shots`: OLMES shows a curated example even to its own doc.
-        match_content = self.fewshot.split is not None and self.fewshot.split != self.dataset.split
-        others = []
-        for shot in shots:
-            same_id = match_id and shot.id == doc.id
-            same_content = match_content and shot.choices[shot.gold] == doc.choices[doc.gold]
-            if not (same_id or same_content):
-                others.append(shot)
+        # choices reordered, which would show the doc its own answer. Ids aren't compared there:
+        # they are unique within a split only.
+        if self.fewshot.split is not None and self.fewshot.split != self.dataset.split:
+            shots = [shot for shot in shots if shot.example_text != doc.example_text]
+        # Examples from the scored split are dropped only by `num_shots`: OLMES shows a curated
+        # example even to its own doc.
+        if self.fewshot.num_shots is not None:
+            shots = [shot for shot in shots if shot.id != doc.id][: self.fewshot.num_shots]
 
-        return others[: self.fewshot.num_shots]
+        return shots
 
     def _hash(self, docs: Sequence[MCDoc], requests: Sequence[Request]) -> str:
         """Returns the sha256 of the definition's data fields, every request and every gold index."""
