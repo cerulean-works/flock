@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { Readout, tooltipPosition, tooltipRows, type ReadLine } from './readout.ts';
+import {
+	placeTip,
+	Readout,
+	tipSide,
+	tooltipPosition,
+	tooltipRows,
+	type ReadLine
+} from './readout.ts';
 import { Series } from './series.ts';
 
 function line(steps: number[], values: number[], color = '#000'): ReadLine {
@@ -34,6 +41,13 @@ describe('Readout', () => {
 		expect(r.count).toBe(1);
 		expect(r.step[0]).toBe(500);
 		expect(new Readout().read([sparse], 900, 5).count).toBe(0);
+	});
+
+	it('reads each line at its own x, skipping lines without one', () => {
+		const r = new Readout().read([a, b, sparse], (j) => [20, 0, NaN][j], 1);
+		expect(r.count).toBe(2);
+		expect(Array.from(r.step.subarray(0, 2))).toEqual([20, 0]);
+		expect(Array.from(r.value.subarray(0, 2))).toEqual([3, 2]);
 	});
 
 	it('marks focused lines', () => {
@@ -113,5 +127,73 @@ describe('tooltipPosition', () => {
 	it('keeps inside vertically', () => {
 		expect(tooltipPosition(100, 195, 120, 80, 400, 200).top).toBe(200 - 2 - 80);
 		expect(tooltipPosition(100, 0, 120, 80, 400, 200).top).toBe(2);
+	});
+});
+
+describe('placeTip', () => {
+	const m = { chrome: 30, row: 18, more: 16 };
+	// A grid card's plot, 340×240, hovered at its middle; the window is 1440×900.
+	const plot = { x: 170, y: 120, w: 340, h: 240 };
+	const window = { x: 800, y: 400, w: 1440, h: 900 };
+
+	it('lists as many rows when floating as inside the plot, only placed in the window', () => {
+		const inPlot = placeTip(64, 10, plot, m, 248);
+		const floating = placeTip(64, 10, plot, m, 248, { float: window });
+		expect(floating.fit).toEqual(inPlot.fit);
+		expect(floating.width).toBe(inPlot.width);
+		expect(floating.fit.rows).toBeLessThan(64);
+		expect(floating.fit.above + floating.fit.below).toBe(64 - floating.fit.rows);
+		// Beside the cursor, in window coordinates.
+		expect(floating.left).toBe(800 + 16);
+		expect(floating.top).toBe(400 - 12);
+	});
+
+	it("flips a floating tooltip to the cursor's left at the window's right edge", () => {
+		const t = placeTip(5, -1, plot, m, 248, { float: { ...window, x: 1400 } });
+		expect(t.left).toBe(1400 - 16 - 248);
+	});
+
+	it('puts every grid tooltip on the side the hovered pointer decides, top-aligned', () => {
+		expect(tipSide(0.8)).toBe('left');
+		expect(tipSide(0.2)).toBe('right');
+		// Panels following the cursor have their crosshairs at different x; y is the plot top.
+		const crosshairs = [60, 170, 300];
+		const left = crosshairs.map((x) =>
+			placeTip(3, -1, { ...plot, x, y: 6 }, m, 120, { side: 'left' })
+		);
+		const right = crosshairs.map((x) =>
+			placeTip(3, -1, { ...plot, x, y: 6 }, m, 120, { side: 'right' })
+		);
+		expect(left.map((t) => t.top)).toEqual([6, 6, 6]);
+		expect(right.map((t) => t.top)).toEqual([6, 6, 6]);
+		// Beside the crosshair where it fits; against the plot's edge, still on that side, where not.
+		expect(left.map((t) => t.left)).toEqual([2, 170 - 12 - 120, 300 - 12 - 120]);
+		expect(right.map((t) => t.left)).toEqual([60 + 12, 170 + 12, 340 - 2 - 120]);
+	});
+
+	it('anchors the hovered, floating tooltip at its plot top, growing down past the plot', () => {
+		const t = placeTip(64, 10, plot, m, 248, { float: { ...window, y: 300 }, side: 'right' });
+		expect([t.left, t.top]).toEqual([800 + 16, 300]);
+		// Near the window's bottom it moves up to stay in view.
+		const low = placeTip(64, 10, plot, m, 248, { float: { ...window, y: 880 }, side: 'left' });
+		expect(low.top + low.fit.height).toBe(900 - 8);
+		expect(low.left).toBe(800 - 16 - 248);
+	});
+
+	it('floats every grid tooltip alike: each at its own plot top, all on one side', () => {
+		// Three cards on screen: two in a row, one below; crosshairs at different x.
+		const plots = [
+			{ x: 300, y: 120 },
+			{ x: 900, y: 120 },
+			{ x: 500, y: 480 }
+		];
+		const tips = plots.map((p) =>
+			placeTip(64, 10, plot, m, 248, { float: { ...window, ...p }, side: 'right' })
+		);
+		expect(tips.map((t) => t.top)).toEqual([120, 120, 480]);
+		expect(tips.map((t) => t.left)).toEqual([316, 916, 516]);
+		// Floating changes where, never how big: the plot-sized cap holds for every one.
+		const inPlot = placeTip(64, 10, plot, m, 248, { side: 'right' });
+		for (const t of tips) expect([t.fit, t.width]).toEqual([inPlot.fit, inPlot.width]);
 	});
 });

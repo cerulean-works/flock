@@ -42,6 +42,22 @@ For a production web build, supply the same `FLOCK_WEB_URL` at build time:
 FLOCK_WEB_URL=https://flock.example.com pnpm build
 ```
 
+### Against a hosted Flock
+
+To work on the dashboard with real data, point the dev server at a deployed API instead of a
+local one:
+
+```sh
+pnpm dev:remote          # http://localhost:5173, against https://flock-api.cerulean.works
+FLOCK_REMOTE_API_URL=https://api.flock.example.com pnpm dev:remote   # another deployment
+```
+
+It only sets `FLOCK_API_URL` for `vite dev`; plain `pnpm dev` still uses the local API. The
+browser still talks only to `localhost`, which keeps the session cookies, so sign in with an
+email and password of an account on that deployment. Google sign-in returns to the
+deployment's own dashboard (its `FLOCK_WEB_URL`), not to `localhost`. Everything you do
+changes that deployment's data.
+
 ## Docker
 
 [`../compose.yaml`](../compose.yaml) runs the dashboard, API and PostgreSQL for deployment.
@@ -145,8 +161,8 @@ pnpm dlx shadcn-svelte@latest add <component>   # aliases already point at #lib
 - **Charts**: one panel per logged metric in collapsible, paginated sections (grouped by the
   prefix before `/`), each plotting every visible run on the page. System metrics (CPU, GPU,
   memory, ... as sampled by wandb) follow in a **system** section, plotted against runtime with
-  clock-friendly ticks; the crosshair syncs only between panels on the same kind of x axis. Synced crosshair across
-  panels, hover-to-focus the nearest run everywhere, click a line to pin its run, eye
+  clock-friendly ticks. Synced crosshair across
+  panels (see Chart tooltips), hover-to-focus the nearest run everywhere, click a line to pin its run, eye
   toggles to hide runs, drag to zoom (y auto-fits the zoomed window), double-click to reset.
   Drag a panel by its header to move it within its section (or use its grip and the arrow
   keys), and drag its bottom edge to resize the section's panels (double-click resets). The
@@ -168,9 +184,13 @@ pnpm dlx shadcn-svelte@latest add <component>   # aliases already point at #lib
   screen as they arrive, summary
   columns and run states update in the table, the header counts running runs, and runs created
   after the page loaded are offered as a refresh ("2 new runs · Show").
-- **Chart tooltips**: hovering one chart shows a tooltip in every chart on the same x axis, with
+- **Chart tooltips**: hovering one chart shows a tooltip in every chart that follows it, with
   each run's value at the crosshair step, sorted, windowed around the focused run, with raw values
-  shown next to smoothed ones.
+  shown next to smoothed ones. Charts of logged metrics follow each other whatever their x axis
+  (`_step`, a step metric, a time): the hovered x is turned into each run's history row, and
+  every other chart reads each run at that row's x on its own axis. System metric charts follow
+  charts on their own axis. The hovered chart's tooltip floats over the page beside the cursor,
+  so it never hides the lines being hovered in a small card; the others stay inside their chart.
 - **Full screen**: per panel, deep-linkable (`?panel=train%2Floss`), server-rendered on reload,
   ←/→ to move between panels, Esc or back to close, full run legend.
 - **Settings**: smoothing (debiased EMA), show original under smoothing, ignore outliers, panels per
