@@ -9,6 +9,7 @@ from flock.cli import credentials
 from flock.cli import login as login_module
 from flock.cli.credentials import DEFAULT_HOST
 from flock.cli.login import login_host
+from tests.app.utils import machines
 
 ME = "/api/v1/me"
 
@@ -38,7 +39,7 @@ def test_logging_in_without_a_terminal(server, alice, browser, flock_cli):
     assert saved is not None
     assert (saved["host"], saved["user"]["email"]) == (server.url, "alice@lab.test")
     assert server.client(token=saved["token"]).get(ME).json()["id"] == alice.id
-    (listed,) = alice.api.get("/api/v1/me/cli-sessions").json()["sessions"]
+    (listed,) = machines(alice)
     assert listed["name"] == socket.gethostname()
 
 
@@ -97,11 +98,10 @@ def test_logging_in_again(server, alice, browser, signed_in, flock_cli, monkeypa
     assert result.exit_code == 0, result.output
     saved = credentials.load()
     assert saved is not None and saved["token"] != signed_in
-    assert len(alice.api.get("/api/v1/me/cli-sessions").json()["sessions"]) == 2
+    assert len(machines(alice)) == 2
 
     # A sign-in that stopped working is replaced without asking.
-    sessions = alice.api.get("/api/v1/me/cli-sessions").json()["sessions"]
-    for session in sessions:
+    for session in machines(alice):
         assert alice.api.delete(f"/api/v1/me/cli-sessions/{session['id']}").status == 204
     approval = browser.answer()
     result = flock_cli("login", "--no-browser", "--no-wandb")  # the saved sign-in's server
@@ -166,7 +166,7 @@ def test_logout_ends_the_session_on_the_server(server, alice, signed_in, flock_c
     assert result.exit_code == 0, result.output
     assert result.stdout == f"Logged out of {server.url}.\n"
     assert server.client(token=signed_in).get(ME).status == 401
-    assert alice.api.get("/api/v1/me/cli-sessions").json() == {"sessions": []}
+    assert machines(alice) == []
     assert not (isolated / "credentials.json").exists()
     assert flock_cli("logout").stdout == "Not logged in.\n"
 
@@ -181,7 +181,7 @@ def test_logout_deletes_the_file_when_the_server_is_down(flock_cli):
 
 
 def test_logout_of_a_revoked_sign_in(server, alice, signed_in, flock_cli):
-    (session,) = alice.api.get("/api/v1/me/cli-sessions").json()["sessions"]
+    (session,) = machines(alice)
     alice.api.delete(f"/api/v1/me/cli-sessions/{session['id']}")
     result = flock_cli("logout")
     assert result.exit_code == 0, result.output
@@ -201,10 +201,10 @@ def test_logout_refuses_a_token_from_the_environment(server, signed_in, flock_cl
 def test_logout_names_the_wandb_key_it_leaves(server, alice, signed_in, flock_cli):
     saved = credentials.load()
     assert saved is not None
-    key = {"name": "wandb on node-7", "prefix": "flock-abcdef"}
+    key = {"name": "wandb on node-7", "prefix": "flock-wandb-"}
     credentials.save(saved["host"], saved["token"], saved["user"], wandb_key=key)
     result = flock_cli("logout")
     assert result.exit_code == 0, result.output
-    assert "The wandb SDK stays logged in with the API key wandb on node-7 (flock-abcdef…)" in (
+    assert "The wandb SDK stays logged in with the wandb key wandb on node-7 (flock-wandb-…)" in (
         result.stdout
     )

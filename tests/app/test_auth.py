@@ -106,7 +106,6 @@ def test_login_refresh_and_logout(flock):
     renewed = flock.client(token=fresh["access_token"])
     assert renewed.get(ME).status == 200
 
-    assert alice.api.post("/api/v1/auth/logout", {}).status == 400  # API keys have no session
     assert renewed.post("/api/v1/auth/logout", {}).status == 204
     assert renewed.get(ME).status == 401  # the session ended, not just when the token expires
     assert api.get(ME).status == 401  # same session
@@ -147,32 +146,10 @@ def test_changing_the_password_ends_other_sessions(flock):
     assert here.post(change, {"current": alice.password, "new": "new password"}).status == 204
     assert here.get(ME).status == 200
     assert there.get(ME).status == 401
-    assert alice.api.get(ME).status == 200  # API keys stay valid
+    assert alice.api.get(ME).status == 401  # CLI sessions end too
+    assert alice.api.graphql("query Viewer { viewer { id } }").status == 200  # wandb keys stay
     assert login(flock, alice.email, alice.password).status == 401
     assert login(flock, alice.email, "new password").status == 200
-
-
-def test_api_keys(flock):
-    alice = flock.add_user("alice@lab.test")
-    keys = "/api/v1/me/api-keys"
-    created = alice.api.post(keys, {"name": "laptop"})
-    assert created.status == 201
-    key = created.json()["key"]
-    assert key.startswith("flock-") and len(key) == 54  # the shape the wandb SDK accepts
-    listed = alice.api.get(keys).json()["keys"]
-    assert [(k["name"], k["prefix"]) for k in listed] == [
-        ("tests", alice.api_key[:12]),
-        ("laptop", key[:12]),
-    ]
-    assert all("key" not in k for k in listed)
-
-    for headers in ({"x-api-key": key}, {"Authorization": f"Bearer {key}"}):
-        assert flock.anonymous().get(ME, headers=headers).json()["id"] == alice.id
-    key_id = created.json()["id"]
-    assert flock.client().delete(f"{keys}/{key_id}").status == 404  # not the admin's key
-    assert alice.api.delete(f"{keys}/{key_id}").status == 204
-    assert flock.client(api_key=key).get(ME).status == 401
-    assert alice.api.delete(f"{keys}/{key_id}").status == 404
 
 
 def test_me(flock):
@@ -190,7 +167,7 @@ def test_accounts_survive_a_restart(make_flock):
     tokens = login(server, alice.email, alice.password).json()
     server.stop()
     restarted = make_flock(reuse=server)
-    assert restarted.client(api_key=alice.api_key).get(ME).json()["email"] == alice.email
+    assert restarted.client(token=alice.token).get(ME).json()["email"] == alice.email
     assert restarted.client(token=tokens["access_token"]).get(ME).status == 200
     refreshed = restarted.anonymous().post(
         "/api/v1/auth/refresh", {"refresh_token": tokens["refresh_token"]}

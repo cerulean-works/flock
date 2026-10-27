@@ -5,6 +5,7 @@ import json
 import httpx
 
 from flock.cli import api, credentials
+from tests.app.utils import machines
 
 
 def test_whoami(server, alice, signed_in, flock_cli):
@@ -28,11 +29,16 @@ def test_whoami_json(server, alice, signed_in, flock_cli):
 
 def test_whoami_with_flock_token(server, alice, flock_cli, monkeypatch):
     monkeypatch.setenv("FLOCK_HOST", server.url)
-    monkeypatch.setenv("FLOCK_TOKEN", alice.api_key)  # an API key works too
+    monkeypatch.setenv("FLOCK_TOKEN", alice.token)
     result = flock_cli("whoami", "--json")
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout)["source"] == "env"
     assert flock_cli("whoami").stdout.endswith("  From:   FLOCK_TOKEN\n")
+
+    monkeypatch.setenv("FLOCK_TOKEN", alice.api_key)  # a wandb key doesn't work (D72)
+    refused = flock_cli("whoami")
+    assert refused.exit_code == 1
+    assert "refused the credential from FLOCK_TOKEN: wandb keys only work" in refused.stderr
 
 
 def test_whoami_signed_out_or_revoked(server, alice, signed_in, flock_cli):
@@ -40,7 +46,7 @@ def test_whoami_signed_out_or_revoked(server, alice, signed_in, flock_cli):
     assert other.exit_code == 1
     assert other.stderr == "Error: Not logged in to http://other.test. Run flock login.\n"
 
-    (session,) = alice.api.get("/api/v1/me/cli-sessions").json()["sessions"]
+    (session,) = machines(alice)
     alice.api.delete(f"/api/v1/me/cli-sessions/{session['id']}")
     revoked = flock_cli("whoami")
     assert revoked.exit_code == 1

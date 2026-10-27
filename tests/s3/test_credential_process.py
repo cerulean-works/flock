@@ -19,7 +19,7 @@ def flock_env(env: S3Env, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> di
     for name in list(os.environ):
         if name.startswith(("AWS_", "FLOCK_")):
             monkeypatch.delenv(name)
-    monkeypatch.setenv("FLOCK_TOKEN", env.users["alice"].api_key)
+    monkeypatch.setenv("FLOCK_TOKEN", env.users["alice"].token)
     monkeypatch.setenv("FLOCK_HOST", env.flock.url)
     monkeypatch.setenv("FLOCK_CONFIG_DIR", str(tmp_path / "flock"))
     monkeypatch.setenv("AWS_CONFIG_FILE", str(tmp_path / "aws-config"))

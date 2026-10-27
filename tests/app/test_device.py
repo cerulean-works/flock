@@ -82,9 +82,8 @@ def test_a_denied_sign_in(flock):
     assert browser(flock, alice).get(f"{START}/{code}").status == 404  # decided
     assert error(poll(flock, started)) == "access_denied"
     assert error(poll(flock, started)) == "expired_token"
-    assert flock.client(token=alice.signup["access_token"]).get(
-        "/api/v1/me/cli-sessions"
-    ).json() == {"sessions": []}
+    listed = alice.api.get("/api/v1/me/cli-sessions").json()["sessions"]
+    assert [s["name"] for s in listed] == ["tests"]  # add_user's only
 
 
 def test_codes_expire(make_flock):

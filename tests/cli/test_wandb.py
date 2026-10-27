@@ -21,7 +21,7 @@ def wandb_logins(monkeypatch) -> list[dict]:
 
 
 def keys(user) -> list[str]:
-    return [k["name"] for k in user.api.get("/api/v1/me/api-keys").json()["keys"]]
+    return [k["name"] for k in user.api.get("/api/v1/me/wandb-keys").json()["keys"]]
 
 
 @pytest.mark.parametrize("answer", ["y\n", "\n"])  # the default is yes
@@ -38,8 +38,12 @@ def test_yes_creates_a_key_and_logs_wandb_in(
     assert keys(alice) == ["tests", name]
     (call,) = wandb_logins
     assert call == {"key": call["key"], "host": server.url, "relogin": True, "verify": True}
-    assert server.client(api_key=call["key"]).get("/api/v1/me").json()["id"] == alice.id
-    assert f"✓ Logged the wandb SDK in to {server.url} with a new API key, {name}" in result.stdout
+    assert call["key"].startswith("flock-wandb-")
+    viewer = server.client(api_key=call["key"]).graphql("query Viewer { viewer { username } }")
+    assert viewer.json()["data"]["viewer"]["username"] == alice.email
+    assert (
+        f"✓ Logged the wandb SDK in to {server.url} with a new wandb key, {name}" in result.stdout
+    )
     saved = credentials.load()
     assert saved is not None and saved["wandb_key"] == {"name": name, "prefix": call["key"][:12]}
 
