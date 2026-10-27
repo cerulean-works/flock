@@ -1,5 +1,6 @@
 import dataclasses
 import json
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
@@ -216,3 +217,15 @@ def test_cli_prints_causes_then_one_sided_names_then_breaches(write):
         "toy:rc  members  ['arc_easy', 'piqa']  ->  ['arc_easy']",
         "compared: tasks 2, suites 1, breaches 2",
     ]
+
+
+def test_the_bank_is_a_float32_results_file_that_compare_reads():
+    # Offline: a change to the results layout or to `compare` that breaks the bank fails in CI,
+    # not in the GPU job.
+    bank = Path(__file__).parent / "regression" / "olmo-2-0425-1b-float32.json"
+
+    comparison = compare(bank, bank)
+
+    assert "base_easy" in comparison.suites
+    assert comparison.breaches == []
+    assert json.loads(bank.read_text())["provenance"]["dtype"] == "float32"

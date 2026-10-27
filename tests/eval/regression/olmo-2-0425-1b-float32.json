@@ -1,0 +1,2552 @@
+{
+  "provenance": {
+    "model": "allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf",
+    "flock_commit": "d23f66846b528327acbeb38fc6ce90279fd8bd79",
+    "command": "flock-eval run --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf --suite base_easy --dtype float32 --out /work/harrychang08/eval-lab/022/bank",
+    "device": "NVIDIA H200",
+    "dtype": "float32",
+    "batch_tokens": 32768,
+    "max_length": 4096,
+    "attention": "sdpa",
+    "torch": "2.14.1+cu130",
+    "transformers": "5.20.1",
+    "python": "3.14.7",
+    "created_at": "2026-10-27T10:26:55+00:00"
+  },
+  "tasks": [
+    {
+      "task": "arc_easy",
+      "task_hash": "ad683d6e1cd5c9f42d3bdb32a0278f3b347112a780f3df1aeb9247007a295856",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.75,
+        "acc_per_token": 0.7584174871444702,
+        "acc_per_char": 0.7706228494644165,
+        "acc_per_byte": 0.7706228494644165,
+        "acc_uncond": 0.6565656661987305,
+        "bpb": 0.539100706577301
+      },
+      "num_docs": 2376,
+      "limit": null,
+      "seconds": 86.97490788903087,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 27.318223814982126
+    },
+    {
+      "task": "arc_challenge",
+      "task_hash": "be1051582e766bb1c93ef0252132ae2a5df9e1fdc670c993fe2ce05e731cc167",
+      "primary_metric": "acc_uncond",
+      "metrics": {
+        "acc_raw": 0.4129692614078522,
+        "acc_per_token": 0.4564846158027649,
+        "acc_per_char": 0.4505119323730469,
+        "acc_per_byte": 0.4505119323730469,
+        "acc_uncond": 0.45989760756492615,
+        "bpb": 0.7586174011230469
+      },
+      "num_docs": 1172,
+      "limit": null,
+      "seconds": 47.61050525307655,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 24.61641593110937
+    },
+    {
+      "task": "csqa",
+      "task_hash": "3755da25be6385a9801962ec2798686fb8f22e68f8a6057eced18f3909151ba4",
+      "primary_metric": "acc_uncond",
+      "metrics": {
+        "acc_raw": 0.6355446577072144,
+        "acc_per_token": 0.6674856543540955,
+        "acc_per_char": 0.6748566627502441,
+        "acc_per_byte": 0.6748566627502441,
+        "acc_uncond": 0.6584766507148743,
+        "bpb": 0.8090765476226807
+      },
+      "num_docs": 1221,
+      "limit": null,
+      "seconds": 39.78713401500136,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 30.68831244642134
+    },
+    {
+      "task": "hellaswag",
+      "task_hash": "fd4a7e122ebabcddb0f31053b4e788aa96820184a00a0f1e4815514799828a1e",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.5033857822418213,
+        "acc_per_token": 0.676658034324646,
+        "acc_per_char": 0.6890061497688293,
+        "acc_per_byte": 0.6889065504074097,
+        "acc_uncond": 0.5233021378517151,
+        "bpb": 0.7274113297462463
+      },
+      "num_docs": 10042,
+      "limit": null,
+      "seconds": 935.7393031660467,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 10.731621474082775
+    },
+    {
+      "task": "winogrande",
+      "task_hash": "5d0efe0919910ecd898bbcde7a3605c905a5e670e1087ce45e0b5c8d028e68c0",
+      "primary_metric": "acc_raw",
+      "metrics": {
+        "acc_raw": 0.6582478284835815,
+        "acc_per_token": 0.6582478284835815,
+        "acc_per_char": 0.6582478284835815,
+        "acc_per_byte": 0.6582478284835815,
+        "bpb": 1.3080804347991943
+      },
+      "num_docs": 1267,
+      "limit": null,
+      "seconds": 15.214503335999325,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 83.27580414683187
+    },
+    {
+      "task": "socialiqa",
+      "task_hash": "02df1ce68f5e0d507913876a5fbcc6cb099202da5055354b2293552e7adf96d0",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.5005117654800415,
+        "acc_per_token": 0.5414534211158752,
+        "acc_per_char": 0.5516888499259949,
+        "acc_per_byte": 0.5516888499259949,
+        "acc_uncond": 0.5230296850204468,
+        "bpb": 0.9667675495147705
+      },
+      "num_docs": 1954,
+      "limit": null,
+      "seconds": 59.72115955199115,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 32.718721717030895
+    },
+    {
+      "task": "piqa",
+      "task_hash": "5e50f46bbe7f1e0c957b5ae39dda7ec783bce41ebdc1c9383a5237e436b31b0b",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.7584330439567566,
+        "acc_per_token": 0.764417827129364,
+        "acc_per_char": 0.7633296847343445,
+        "acc_per_byte": 0.7638737559318542,
+        "acc_uncond": 0.6267682313919067,
+        "bpb": 0.960448145866394
+      },
+      "num_docs": 1838,
+      "limit": null,
+      "seconds": 42.34854436619207,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 43.40172791080211
+    },
+    {
+      "task": "sciq",
+      "task_hash": "f85730f92fb09c0846fabf9f3085259813a2faea85b1061aba2f44d9eef898ef",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.8740000128746033,
+        "acc_per_token": 0.8790000677108765,
+        "acc_per_char": 0.8760000467300415,
+        "acc_per_byte": 0.8760000467300415,
+        "acc_uncond": 0.8490000367164612,
+        "bpb": 0.3915192484855652
+      },
+      "num_docs": 1000,
+      "limit": null,
+      "seconds": 28.731730476021767,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 34.80472576598043
+    },
+    {
+      "task": "qasper_yesno",
+      "task_hash": "94708da07342a93480929cfc14b6e84c84f9dbda89ab2e3e2c20792f0edf401d",
+      "primary_metric": "acc_raw",
+      "metrics": {
+        "acc_raw": 0.6489028334617615,
+        "acc_per_token": 0.6489028334617615,
+        "acc_per_char": 0.6896551847457886,
+        "acc_per_byte": 0.6896551847457886,
+        "acc_uncond": 0.6833855509757996,
+        "bpb": 0.28870925307273865
+      },
+      "num_docs": 319,
+      "limit": null,
+      "seconds": 31.27839780598879,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 10.198732108296223
+    },
+    {
+      "task": "sciriff_yesno",
+      "task_hash": "8ef0b3766511bdaab3f419c60b944515aa078f5bf67a65b8b4ca690f00208382",
+      "primary_metric": "acc_raw",
+      "metrics": {
+        "acc_raw": 0.8508217930793762,
+        "acc_per_token": 0.8508217930793762,
+        "acc_per_char": 0.8584071397781372,
+        "acc_per_byte": 0.8584071397781372,
+        "acc_uncond": 0.8577749729156494,
+        "bpb": 0.1740955412387848
+      },
+      "num_docs": 1582,
+      "limit": null,
+      "seconds": 351.66789439483546,
+      "truncation": {
+        "requests": 10,
+        "docs": 5,
+        "max_tokens_cut": 467
+      },
+      "docs_per_second": 4.498562493805045
+    },
+    {
+      "task": "lab_bench_dbqa",
+      "task_hash": "2d6a873f6b767c54db5b45aecb0475db3c1609269cc06cc4ea07291d9071c7ca",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.3153846263885498,
+        "acc_per_token": 0.26346153020858765,
+        "acc_per_char": 0.25,
+        "acc_per_byte": 0.25,
+        "acc_uncond": 0.22884614765644073,
+        "bpb": 3.596099853515625
+      },
+      "num_docs": 520,
+      "limit": null,
+      "seconds": 67.66440615500323,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 7.684985793103723
+    },
+    {
+      "task": "lab_bench_protocolqa",
+      "task_hash": "c4276fcf093590a5837503a46beea4f3d6985f826e1ccbc7396697d99ef067ea",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.26851850748062134,
+        "acc_per_token": 0.3240740895271301,
+        "acc_per_char": 0.2777777910232544,
+        "acc_per_byte": 0.2777777910232544,
+        "acc_uncond": 0.3888888955116272,
+        "bpb": 1.1953035593032837
+      },
+      "num_docs": 108,
+      "limit": null,
+      "seconds": 6.983275320846587,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 15.465522271132091
+    },
+    {
+      "task": "medmcqa",
+      "task_hash": "8b3c2f0d3a142dac0deca276a9e2b39e23932748212935368841335a01cab8b4",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.27468323707580566,
+        "acc_per_token": 0.31030362844467163,
+        "acc_per_char": 0.3138895630836487,
+        "acc_per_byte": 0.3138895630836487,
+        "acc_uncond": 0.3177145719528198,
+        "bpb": 1.1872941255569458
+      },
+      "num_docs": 4183,
+      "limit": null,
+      "seconds": 115.98341244505718,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 36.06550205600771
+    },
+    {
+      "task": "medqa_en",
+      "task_hash": "d4030e109a8374714e9fe971c105bb9e6e04bf7748bba48705230c0c10cda203",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.28043991327285767,
+        "acc_per_token": 0.28750982880592346,
+        "acc_per_char": 0.27808326482772827,
+        "acc_per_byte": 0.27808326482772827,
+        "bpb": 0.7676975727081299
+      },
+      "num_docs": 1273,
+      "limit": null,
+      "seconds": 349.53042214387096,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 3.6420291893105023
+    },
+    {
+      "task": "coqa",
+      "task_hash": "7bc676a7fa19cf91c4845ca63c19fd1da4a0f38476db39dfba5d4970c091af9d",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.8333333730697632,
+        "acc_per_token": 0.8047360181808472,
+        "acc_per_char": 0.778856098651886,
+        "acc_per_byte": 0.7785972952842712,
+        "acc_uncond": 0.6215062141418457,
+        "bpb": 0.4982078969478607
+      },
+      "num_docs": 7728,
+      "limit": null,
+      "seconds": 750.932366078021,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 10.291206437620868
+    },
+    {
+      "task": "drop",
+      "task_hash": "658af15617f028abe6bed07786369d7a276cb5c341446e4a583f56bc47d36045",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.48890215158462524,
+        "acc_per_token": 0.47684964537620544,
+        "acc_per_char": 0.4812649190425873,
+        "acc_per_byte": 0.4813842475414276,
+        "acc_uncond": 0.4813842475414276,
+        "bpb": 1.2248268127441406
+      },
+      "num_docs": 8380,
+      "limit": null,
+      "seconds": 2841.8135961268563,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 2.9488211371151185
+    },
+    {
+      "task": "jeopardy",
+      "task_hash": "89491e85f017cce0cdb3f7625b19f19843365ff187e2f612fb3463bb9940343b",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.7956169247627258,
+        "acc_per_token": 0.7589328289031982,
+        "acc_per_char": 0.7622677087783813,
+        "acc_per_byte": 0.7622677087783813,
+        "acc_uncond": 0.7031919956207275,
+        "bpb": 0.4608006477355957
+      },
+      "num_docs": 2099,
+      "limit": null,
+      "seconds": 91.66632941900752,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 22.89826606239958
+    },
+    {
+      "task": "naturalqs",
+      "task_hash": "c64d899ec069a7fa8a9d9fae2b6fd2648d5c71f82c1c853c4531cd545146a7c8",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.46401458978652954,
+        "acc_per_token": 0.4864864945411682,
+        "acc_per_char": 0.46887335181236267,
+        "acc_per_byte": 0.46887335181236267,
+        "acc_uncond": 0.5712116360664368,
+        "bpb": 0.7925668954849243
+      },
+      "num_docs": 3293,
+      "limit": null,
+      "seconds": 74.7936213510111,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 44.02781868985521
+    },
+    {
+      "task": "squad",
+      "task_hash": "5068125af5a78e51938b5c2b468f7777b044f84ef15234ed3b9bfd13be742722",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.8967172503471375,
+        "acc_per_token": 0.8623223900794983,
+        "acc_per_char": 0.8719255328178406,
+        "acc_per_byte": 0.8713375329971313,
+        "acc_uncond": 0.709554135799408,
+        "bpb": 0.24788033962249756
+      },
+      "num_docs": 10205,
+      "limit": null,
+      "seconds": 2312.8762212689035,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 4.412255141955359
+    },
+    {
+      "task": "mmlu_abstract_algebra",
+      "task_hash": "2ea632c4044a32d93a1a4de23f71080df8d1b9a52b6982017a333d4ea553ca30",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.23999999463558197,
+        "acc_per_token": 0.29999998211860657,
+        "acc_per_char": 0.29999998211860657,
+        "acc_per_byte": 0.29999998211860657,
+        "acc_uncond": 0.3100000023841858,
+        "bpb": 0.8297352194786072
+      },
+      "num_docs": 100,
+      "limit": null,
+      "seconds": 6.497625611023977,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 15.390237293810584
+    },
+    {
+      "task": "mmlu_anatomy",
+      "task_hash": "9acf17c4fcd4bd3e0ab2098f1289f2844b4c35d8ae7d93fb729b7d49de9e98a3",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.46666666865348816,
+        "acc_per_token": 0.46666666865348816,
+        "acc_per_char": 0.43703702092170715,
+        "acc_per_byte": 0.43703702092170715,
+        "acc_uncond": 0.35555553436279297,
+        "bpb": 0.6340712904930115
+      },
+      "num_docs": 135,
+      "limit": null,
+      "seconds": 5.379344982095063,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 25.09599225358146
+    },
+    {
+      "task": "mmlu_astronomy",
+      "task_hash": "9df62e2f387450f83f01ef00e89c4181899c22690ef94567943f0cc6e10cdfeb",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.4013157784938812,
+        "acc_per_token": 0.4802631735801697,
+        "acc_per_char": 0.45394736528396606,
+        "acc_per_byte": 0.44736841320991516,
+        "acc_uncond": 0.4736842215061188,
+        "bpb": 0.7264723777770996
+      },
+      "num_docs": 152,
+      "limit": null,
+      "seconds": 8.691213968209922,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 17.48892623699915
+    },
+    {
+      "task": "mmlu_business_ethics",
+      "task_hash": "9b78853607bef910e069e330e520783ff54786f918405b1cc92933982ab62cdc",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.6499999761581421,
+        "acc_per_token": 0.550000011920929,
+        "acc_per_char": 0.5899999737739563,
+        "acc_per_byte": 0.5899999737739563,
+        "acc_uncond": 0.4099999964237213,
+        "bpb": 1.1388181447982788
+      },
+      "num_docs": 100,
+      "limit": null,
+      "seconds": 8.19048884883523,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 12.209283456166478
+    },
+    {
+      "task": "mmlu_clinical_knowledge",
+      "task_hash": "8eed55816470cb1591f3d87f31992d57e063c6f5d8f833f0c01c56f480adf95d",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.3396226465702057,
+        "acc_per_token": 0.43396228551864624,
+        "acc_per_char": 0.44528302550315857,
+        "acc_per_byte": 0.44528302550315857,
+        "acc_uncond": 0.3811320662498474,
+        "bpb": 0.8772215247154236
+      },
+      "num_docs": 265,
+      "limit": null,
+      "seconds": 12.003270724089816,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 22.077315932578404
+    },
+    {
+      "task": "mmlu_college_biology",
+      "task_hash": "fe365292e02ade8b3797e05cc19ae43ed901753f30895f562ee43e77f24bab3d",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.4513888955116272,
+        "acc_per_token": 0.4930555522441864,
+        "acc_per_char": 0.4791666567325592,
+        "acc_per_byte": 0.4791666567325592,
+        "acc_uncond": 0.4166666567325592,
+        "bpb": 0.5859067440032959
+      },
+      "num_docs": 144,
+      "limit": null,
+      "seconds": 8.853040779940784,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 16.26559772844096
+    },
+    {
+      "task": "mmlu_college_chemistry",
+      "task_hash": "466aa56f805c8c2c990908d4cfdb243c9f43cceb89668af8d76ecb59060e00b1",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.35999998450279236,
+        "acc_per_token": 0.38999998569488525,
+        "acc_per_char": 0.3400000035762787,
+        "acc_per_byte": 0.3400000035762787,
+        "acc_uncond": 0.26999998092651367,
+        "bpb": 1.4418549537658691
+      },
+      "num_docs": 100,
+      "limit": null,
+      "seconds": 8.218753591179848,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 12.167295063732947
+    },
+    {
+      "task": "mmlu_college_computer_science",
+      "task_hash": "981a9877fac290f43176f9824c60a590f0e7d9cd930fa7587e5e19363adea3cc",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.3100000023841858,
+        "acc_per_token": 0.29999998211860657,
+        "acc_per_char": 0.3100000023841858,
+        "acc_per_byte": 0.3100000023841858,
+        "acc_uncond": 0.3100000023841858,
+        "bpb": 1.0201733112335205
+      },
+      "num_docs": 100,
+      "limit": null,
+      "seconds": 14.937270315829664,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 6.69466360892095
+    },
+    {
+      "task": "mmlu_college_mathematics",
+      "task_hash": "126b06522acf5b3ca6d0f8a71f9d2e662dd5397bdf25aff30a4dbb2ccf78dc8e",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.1599999964237213,
+        "acc_per_token": 0.25999999046325684,
+        "acc_per_char": 0.20999999344348907,
+        "acc_per_byte": 0.19999998807907104,
+        "acc_uncond": 0.3100000023841858,
+        "bpb": 1.3468459844589233
+      },
+      "num_docs": 100,
+      "limit": null,
+      "seconds": 10.226510227192193,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 9.778506819863237
+    },
+    {
+      "task": "mmlu_college_medicine",
+      "task_hash": "a85402f4c0a0dde9ca3cf308e126464131ab47285a9481cbcf7db27b4a88af25",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.34682080149650574,
+        "acc_per_token": 0.34682080149650574,
+        "acc_per_char": 0.36994218826293945,
+        "acc_per_byte": 0.36994218826293945,
+        "acc_uncond": 0.323699414730072,
+        "bpb": 0.873932421207428
+      },
+      "num_docs": 173,
+      "limit": null,
+      "seconds": 11.743949834024534,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 14.7309893557945
+    },
+    {
+      "task": "mmlu_college_physics",
+      "task_hash": "e154074e8342a6a3aae6c96dd6af5181250a84c0a0d5e9b058ff96e4288eb01a",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.2450980544090271,
+        "acc_per_token": 0.2352941334247589,
+        "acc_per_char": 0.2352941334247589,
+        "acc_per_byte": 0.2352941334247589,
+        "acc_uncond": 0.2450980544090271,
+        "bpb": 1.2701998949050903
+      },
+      "num_docs": 102,
+      "limit": null,
+      "seconds": 8.29959217691794,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 12.289760487710828
+    },
+    {
+      "task": "mmlu_computer_security",
+      "task_hash": "ed5c61841e6bc0a80767781ab085d3f2aa90fbf4866e7337a1cc8f6ee1e6b2e3",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.5,
+        "acc_per_token": 0.5099999904632568,
+        "acc_per_char": 0.4899999797344208,
+        "acc_per_byte": 0.4899999797344208,
+        "acc_uncond": 0.550000011920929,
+        "bpb": 0.9278805255889893
+      },
+      "num_docs": 100,
+      "limit": null,
+      "seconds": 5.100472467020154,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 19.606026823319553
+    },
+    {
+      "task": "mmlu_conceptual_physics",
+      "task_hash": "dd78315485deb4ed237923d56a2b2021e4c344bf63ee9ce83de452439cb44ec8",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.4723404049873352,
+        "acc_per_token": 0.4723404049873352,
+        "acc_per_char": 0.44255316257476807,
+        "acc_per_byte": 0.44255316257476807,
+        "acc_uncond": 0.38723403215408325,
+        "bpb": 0.7605700492858887
+      },
+      "num_docs": 235,
+      "limit": null,
+      "seconds": 8.766012132866308,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 26.80808518606964
+    },
+    {
+      "task": "mmlu_econometrics",
+      "task_hash": "08f11ce94680aa840269db4d8408e4d1c04ff6f914e04407f360cc9cbe95c652",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.2982456088066101,
+        "acc_per_token": 0.3245614171028137,
+        "acc_per_char": 0.35087719559669495,
+        "acc_per_byte": 0.35087719559669495,
+        "acc_uncond": 0.28070175647735596,
+        "bpb": 0.6338671445846558
+      },
+      "num_docs": 114,
+      "limit": null,
+      "seconds": 11.605533621972427,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 9.822900326114006
+    },
+    {
+      "task": "mmlu_electrical_engineering",
+      "task_hash": "2938e269f42505c9455ccabb4831089e245754ebc8b311c3559d6537559c2ca8",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.30344825983047485,
+        "acc_per_token": 0.37931033968925476,
+        "acc_per_char": 0.35862070322036743,
+        "acc_per_byte": 0.35862070322036743,
+        "acc_uncond": 0.29655173420906067,
+        "bpb": 1.2692687511444092
+      },
+      "num_docs": 145,
+      "limit": null,
+      "seconds": 9.771577975945547,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 14.8389543998874
+    },
+    {
+      "task": "mmlu_elementary_mathematics",
+      "task_hash": "df4bc498b1290c6aceec149365ff2202aa61637ef9f04baceafb5c00e5a06764",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.4920634627342224,
+        "acc_per_token": 0.4920634627342224,
+        "acc_per_char": 0.5026454925537109,
+        "acc_per_byte": 0.4973544776439667,
+        "acc_uncond": 0.48677247762680054,
+        "bpb": 1.4832606315612793
+      },
+      "num_docs": 378,
+      "limit": null,
+      "seconds": 24.365730857942253,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 15.51359169990943
+    },
+    {
+      "task": "mmlu_formal_logic",
+      "task_hash": "708bba99c20ff103feac5ccad1db998135a049264e797a9e4f1131dff82186a6",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.3571428656578064,
+        "acc_per_token": 0.3333333432674408,
+        "acc_per_char": 0.3492063581943512,
+        "acc_per_byte": 0.3492063581943512,
+        "acc_uncond": 0.2777777910232544,
+        "bpb": 1.0463618040084839
+      },
+      "num_docs": 126,
+      "limit": null,
+      "seconds": 10.4919399919454,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 12.009218514090763
+    },
+    {
+      "task": "mmlu_global_facts",
+      "task_hash": "fc3645f68a19e844957990dff4b53052fa6fa9fa879b97b6c2193d2959c52254",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.38999998569488525,
+        "acc_per_token": 0.3700000047683716,
+        "acc_per_char": 0.3999999761581421,
+        "acc_per_byte": 0.3999999761581421,
+        "acc_uncond": 0.29999998211860657,
+        "bpb": 1.9431867599487305
+      },
+      "num_docs": 100,
+      "limit": null,
+      "seconds": 5.301323928171769,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 18.863212539907238
+    },
+    {
+      "task": "mmlu_high_school_biology",
+      "task_hash": "46e68f2cb29bd9bbb3807d527d390d9038f6eef8a8e9b0d52e3ec0bf17ef3fca",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.39032256603240967,
+        "acc_per_token": 0.4838709533214569,
+        "acc_per_char": 0.46451613306999207,
+        "acc_per_byte": 0.46451613306999207,
+        "acc_uncond": 0.4354838728904724,
+        "bpb": 0.6954552531242371
+      },
+      "num_docs": 310,
+      "limit": null,
+      "seconds": 19.016107789007947,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 16.301969016982124
+    },
+    {
+      "task": "mmlu_high_school_chemistry",
+      "task_hash": "821e6503d65833c1e4d22e435e0f79ec78da52eb116714b2395f0b2d13be4197",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.21674875915050507,
+        "acc_per_token": 0.2610837519168854,
+        "acc_per_char": 0.25615763664245605,
+        "acc_per_byte": 0.25615763664245605,
+        "acc_uncond": 0.30049261450767517,
+        "bpb": 1.1126792430877686
+      },
+      "num_docs": 203,
+      "limit": null,
+      "seconds": 15.189959638984874,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 13.364090808971119
+    },
+    {
+      "task": "mmlu_high_school_computer_science",
+      "task_hash": "53e5e10901890fc934371839d4279d910e86f0c1ef80e403d377d01cdaacc70e",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.3400000035762787,
+        "acc_per_token": 0.3199999928474426,
+        "acc_per_char": 0.3499999940395355,
+        "acc_per_byte": 0.3499999940395355,
+        "acc_uncond": 0.4099999964237213,
+        "bpb": 0.8790167570114136
+      },
+      "num_docs": 100,
+      "limit": null,
+      "seconds": 12.056150530930609,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 8.29452151774693
+    },
+    {
+      "task": "mmlu_high_school_european_history",
+      "task_hash": "4ebc58557934f0b2abb428e9a48342811268024a3a43f6cd3130a77c22e5f5d7",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.3636363446712494,
+        "acc_per_token": 0.4787878692150116,
+        "acc_per_char": 0.521212100982666,
+        "acc_per_byte": 0.521212100982666,
+        "acc_uncond": 0.45454543828964233,
+        "bpb": 0.6054413318634033
+      },
+      "num_docs": 165,
+      "limit": null,
+      "seconds": 93.81750007905066,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 1.7587337102456464
+    },
+    {
+      "task": "mmlu_high_school_geography",
+      "task_hash": "23cfa1621afdc6953a0f2fdae9530a90c792939c6337e3dae7a29a09c7422ad2",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.44949495792388916,
+        "acc_per_token": 0.49494948983192444,
+        "acc_per_char": 0.4747474789619446,
+        "acc_per_byte": 0.4747474789619446,
+        "acc_uncond": 0.5404040217399597,
+        "bpb": 0.846066415309906
+      },
+      "num_docs": 198,
+      "limit": null,
+      "seconds": 8.527417334029451,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 23.219222449669797
+    },
+    {
+      "task": "mmlu_high_school_government_and_politics",
+      "task_hash": "2e392577d7c1d50d5608cd758eb1d9da70bdfaaed2658260cc2d19549cae0947",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.48704662919044495,
+        "acc_per_token": 0.5336787700653076,
+        "acc_per_char": 0.5233160257339478,
+        "acc_per_byte": 0.5233160257339478,
+        "acc_uncond": 0.5077720284461975,
+        "bpb": 0.4956129789352417
+      },
+      "num_docs": 193,
+      "limit": null,
+      "seconds": 10.317810925189406,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 18.705518195610573
+    },
+    {
+      "task": "mmlu_high_school_macroeconomics",
+      "task_hash": "18c9f6c3297db593753607efbe870eed8cad153f1fe9f0270c686615ccaf0a8d",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.34871795773506165,
+        "acc_per_token": 0.39743590354919434,
+        "acc_per_char": 0.3820512890815735,
+        "acc_per_byte": 0.3820512890815735,
+        "acc_uncond": 0.3769230842590332,
+        "bpb": 0.7645235657691956
+      },
+      "num_docs": 390,
+      "limit": null,
+      "seconds": 15.606697492068633,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 24.989271445685358
+    },
+    {
+      "task": "mmlu_high_school_mathematics",
+      "task_hash": "eac01d1384073066625b591025ceac1bf14ce17d7abfa5a55f1ae4428540ff66",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.19629628956317902,
+        "acc_per_token": 0.2222222238779068,
+        "acc_per_char": 0.2074074000120163,
+        "acc_per_byte": 0.2074074000120163,
+        "acc_uncond": 0.29629629850387573,
+        "bpb": 2.1296911239624023
+      },
+      "num_docs": 270,
+      "limit": null,
+      "seconds": 22.82858342002146,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 11.827277892468818
+    },
+    {
+      "task": "mmlu_high_school_microeconomics",
+      "task_hash": "67ab1270a07d45628cc87339cabb6d1b0837d567792ac0fdde0e17342631670c",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.3907563090324402,
+        "acc_per_token": 0.4327731430530548,
+        "acc_per_char": 0.4537815451622009,
+        "acc_per_byte": 0.4537815451622009,
+        "acc_uncond": 0.3739495873451233,
+        "bpb": 0.7591089010238647
+      },
+      "num_docs": 238,
+      "limit": null,
+      "seconds": 10.524441492045298,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 22.61402661413319
+    },
+    {
+      "task": "mmlu_high_school_physics",
+      "task_hash": "d5d8229b22848b34676c4ef73f78a07cdc0e4d02d8118e3d15f1b0edded6b154",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.25827813148498535,
+        "acc_per_token": 0.23178808391094208,
+        "acc_per_char": 0.25827813148498535,
+        "acc_per_byte": 0.26490065455436707,
+        "acc_uncond": 0.20529800653457642,
+        "bpb": 1.0496563911437988
+      },
+      "num_docs": 151,
+      "limit": null,
+      "seconds": 12.566047570900992,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 12.01650711156533
+    },
+    {
+      "task": "mmlu_high_school_psychology",
+      "task_hash": "b61ac1e23da37d6d94543afbec8b8ebca4270b4c04f5a531d3a27e693bf65166",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.6036697030067444,
+        "acc_per_token": 0.5908256769180298,
+        "acc_per_char": 0.5669724941253662,
+        "acc_per_byte": 0.5669724941253662,
+        "acc_uncond": 0.5045871734619141,
+        "bpb": 0.5916853547096252
+      },
+      "num_docs": 545,
+      "limit": null,
+      "seconds": 32.50711522507481,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 16.765560285078962
+    },
+    {
+      "task": "mmlu_high_school_statistics",
+      "task_hash": "d0758f7f5d426597da716278b589a186fb04d9ae029dcca3067637f2037178e3",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.29629629850387573,
+        "acc_per_token": 0.30092594027519226,
+        "acc_per_char": 0.32870370149612427,
+        "acc_per_byte": 0.3333333432674408,
+        "acc_uncond": 0.3055555522441864,
+        "bpb": 0.9873355627059937
+      },
+      "num_docs": 216,
+      "limit": null,
+      "seconds": 24.01054875086993,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 8.996045956349668
+    },
+    {
+      "task": "mmlu_high_school_us_history",
+      "task_hash": "3cc88feb0cb9ac874eccb4d16a75adac74d10dc0a312b36d5a42f44672e1557b",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.4215686321258545,
+        "acc_per_token": 0.4117647111415863,
+        "acc_per_char": 0.44607844948768616,
+        "acc_per_byte": 0.44607844948768616,
+        "acc_uncond": 0.45588237047195435,
+        "bpb": 0.6132740378379822
+      },
+      "num_docs": 204,
+      "limit": null,
+      "seconds": 90.86387308407575,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 2.24511671224096
+    },
+    {
+      "task": "mmlu_high_school_world_history",
+      "task_hash": "ab2d269cdebd098a1e98d35c6ebbc39efc75723961b0b4d8d8ed3fd353d5f513",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.37552741169929504,
+        "acc_per_token": 0.4177215099334717,
+        "acc_per_char": 0.4135020971298218,
+        "acc_per_byte": 0.4135020971298218,
+        "acc_uncond": 0.4514767825603485,
+        "bpb": 0.6797857284545898
+      },
+      "num_docs": 237,
+      "limit": null,
+      "seconds": 62.72480987291783,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 3.7784092208516604
+    },
+    {
+      "task": "mmlu_human_aging",
+      "task_hash": "33e085c6dd2d027d906ae57be4c89368fbb2643bc3d6268aea1def2cd7a7dbc1",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.4798206388950348,
+        "acc_per_token": 0.43946191668510437,
+        "acc_per_char": 0.43497759103775024,
+        "acc_per_byte": 0.43497759103775024,
+        "acc_uncond": 0.3766816258430481,
+        "bpb": 0.7611191272735596
+      },
+      "num_docs": 223,
+      "limit": null,
+      "seconds": 8.72360698506236,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 25.56282056056035
+    },
+    {
+      "task": "mmlu_human_sexuality",
+      "task_hash": "0c8b010c2391c3115864f21f4d249cc8229fe354a6bf48b1335f8b761dfea4b2",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.42748090624809265,
+        "acc_per_token": 0.5190839767456055,
+        "acc_per_char": 0.47328245639801025,
+        "acc_per_byte": 0.47328245639801025,
+        "acc_uncond": 0.37404578924179077,
+        "bpb": 0.7761809229850769
+      },
+      "num_docs": 131,
+      "limit": null,
+      "seconds": 6.518390927929431,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 20.09698427854375
+    },
+    {
+      "task": "mmlu_international_law",
+      "task_hash": "cb5ed3ead2c8dedc5450c579c225461d6647331ec72b7b325f69e1b054a72427",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.24793387949466705,
+        "acc_per_token": 0.3966941833496094,
+        "acc_per_char": 0.3801652789115906,
+        "acc_per_byte": 0.3801652789115906,
+        "acc_uncond": 0.4876032769680023,
+        "bpb": 0.5924411416053772
+      },
+      "num_docs": 121,
+      "limit": null,
+      "seconds": 8.534611065173522,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 14.177564633701312
+    },
+    {
+      "task": "mmlu_jurisprudence",
+      "task_hash": "e946f25b35e85e2814b642f1fa888be931e80f7386380753fbae282b401f82b4",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.2777777910232544,
+        "acc_per_token": 0.3240740895271301,
+        "acc_per_char": 0.3888888955116272,
+        "acc_per_byte": 0.3888888955116272,
+        "acc_uncond": 0.45370370149612427,
+        "bpb": 0.8361319303512573
+      },
+      "num_docs": 108,
+      "limit": null,
+      "seconds": 5.549256392056122,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 19.462067053633398
+    },
+    {
+      "task": "mmlu_logical_fallacies",
+      "task_hash": "965902c38128c898dfc9a5d35aab684272036e4927a2a464c9f6ebe9a6163640",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.3987729847431183,
+        "acc_per_token": 0.39263802766799927,
+        "acc_per_char": 0.453987717628479,
+        "acc_per_byte": 0.453987717628479,
+        "acc_uncond": 0.48466256260871887,
+        "bpb": 0.6913195252418518
+      },
+      "num_docs": 163,
+      "limit": null,
+      "seconds": 10.043325142934918,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 16.229684659234998
+    },
+    {
+      "task": "mmlu_machine_learning",
+      "task_hash": "c9cd145c2999f86c92587602cacc5077369571241d39263ce2a567ea7f3edd0f",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.2142857313156128,
+        "acc_per_token": 0.196428582072258,
+        "acc_per_char": 0.2232142984867096,
+        "acc_per_byte": 0.2232142984867096,
+        "acc_uncond": 0.25,
+        "bpb": 1.1462018489837646
+      },
+      "num_docs": 112,
+      "limit": null,
+      "seconds": 10.26817711116746,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 10.907486186442098
+    },
+    {
+      "task": "mmlu_management",
+      "task_hash": "7301ccb113a74e7f43c3c9d0394f072ad5bd2338babcbcba1846f7e694f27045",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.42718446254730225,
+        "acc_per_token": 0.43689319491386414,
+        "acc_per_char": 0.5436893105506897,
+        "acc_per_byte": 0.5436893105506897,
+        "acc_uncond": 0.4660194218158722,
+        "bpb": 0.7424038648605347
+      },
+      "num_docs": 103,
+      "limit": null,
+      "seconds": 3.5497211469337344,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 29.016363747043027
+    },
+    {
+      "task": "mmlu_marketing",
+      "task_hash": "f8ee545c860e1df2dc7d6ea2295dd33773001c2b3f5d5d40d31616f4ffcf15bb",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.5940171480178833,
+        "acc_per_token": 0.5982906222343445,
+        "acc_per_char": 0.5598291158676147,
+        "acc_per_byte": 0.5598291158676147,
+        "acc_uncond": 0.6196581721305847,
+        "bpb": 0.9060342311859131
+      },
+      "num_docs": 234,
+      "limit": null,
+      "seconds": 11.687128545017913,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 20.02202671927926
+    },
+    {
+      "task": "mmlu_medical_genetics",
+      "task_hash": "3bce75ae72b11bd538d04c0abc4c5826ceb9bc4e90dd90856918d906a25ac4a6",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.429999977350235,
+        "acc_per_token": 0.44999998807907104,
+        "acc_per_char": 0.5099999904632568,
+        "acc_per_byte": 0.5199999809265137,
+        "acc_uncond": 0.4599999785423279,
+        "bpb": 0.838110625743866
+      },
+      "num_docs": 100,
+      "limit": null,
+      "seconds": 3.67638469603844,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 27.200635479675714
+    },
+    {
+      "task": "mmlu_miscellaneous",
+      "task_hash": "293e0feab819159d8d777d09ff3e7f1d0eed7862f0ec15dbc79b5ce63d03efcc",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.6079182624816895,
+        "acc_per_token": 0.6130267977714539,
+        "acc_per_char": 0.6385695934295654,
+        "acc_per_byte": 0.6385695934295654,
+        "acc_uncond": 0.5989782810211182,
+        "bpb": 0.7030214071273804
+      },
+      "num_docs": 783,
+      "limit": null,
+      "seconds": 26.388236213009804,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 29.67231283210846
+    },
+    {
+      "task": "mmlu_moral_disputes",
+      "task_hash": "e8a2474313714717ca2dcc14839628027a081bef602d2f5d7c81a77ed8de8767",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.338150292634964,
+        "acc_per_token": 0.34682080149650574,
+        "acc_per_char": 0.34682080149650574,
+        "acc_per_byte": 0.34682080149650574,
+        "acc_uncond": 0.37283235788345337,
+        "bpb": 0.8207923769950867
+      },
+      "num_docs": 346,
+      "limit": null,
+      "seconds": 18.977113887900487,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 18.232487934880563
+    },
+    {
+      "task": "mmlu_moral_scenarios",
+      "task_hash": "ce52e373a12faf75666e812f841dee29f8d367279f2b3e1df2953d6031dda5cb",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.25251394510269165,
+        "acc_per_token": 0.26592177152633667,
+        "acc_per_char": 0.27597764134407043,
+        "acc_per_byte": 0.27597764134407043,
+        "acc_uncond": 0.24245809018611908,
+        "bpb": 0.13597184419631958
+      },
+      "num_docs": 895,
+      "limit": null,
+      "seconds": 88.60533713991754,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 10.100971667053159
+    },
+    {
+      "task": "mmlu_nutrition",
+      "task_hash": "331a8983db96240381f925259948a9115b16f88075d9e6076c847f85ea304b75",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.33986929059028625,
+        "acc_per_token": 0.4215686321258545,
+        "acc_per_char": 0.3888888955116272,
+        "acc_per_byte": 0.3921568691730499,
+        "acc_uncond": 0.379084974527359,
+        "bpb": 0.7377642393112183
+      },
+      "num_docs": 306,
+      "limit": null,
+      "seconds": 19.58895888295956,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 15.62104458068925
+    },
+    {
+      "task": "mmlu_philosophy",
+      "task_hash": "568bf5328d91cac7fa11260ede4e235b756c0dd89dcfbde102b202de1208b40f",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.36012861132621765,
+        "acc_per_token": 0.39228296279907227,
+        "acc_per_char": 0.37620577216148376,
+        "acc_per_byte": 0.37620577216148376,
+        "acc_uncond": 0.4244372844696045,
+        "bpb": 0.9084914326667786
+      },
+      "num_docs": 311,
+      "limit": null,
+      "seconds": 13.841229081852362,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 22.46910286368724
+    },
+    {
+      "task": "mmlu_prehistory",
+      "task_hash": "35842b5af8670571d93e3de32745d110dc34b5797af7676759dd3d669c92ff8d",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.4753086566925049,
+        "acc_per_token": 0.45987653732299805,
+        "acc_per_char": 0.4413580298423767,
+        "acc_per_byte": 0.4413580298423767,
+        "acc_uncond": 0.45370370149612427,
+        "bpb": 0.7884755730628967
+      },
+      "num_docs": 324,
+      "limit": null,
+      "seconds": 17.1092119240202,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 18.93716679873054
+    },
+    {
+      "task": "mmlu_professional_accounting",
+      "task_hash": "9a631a88bd3de6056e75f19f27d9d61b3a0b05da3b4091d02fd3ed9301bc02f9",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.27659574151039124,
+        "acc_per_token": 0.23758864402770996,
+        "acc_per_char": 0.25886523723602295,
+        "acc_per_byte": 0.25886523723602295,
+        "acc_uncond": 0.3120567202568054,
+        "bpb": 1.1005089282989502
+      },
+      "num_docs": 282,
+      "limit": null,
+      "seconds": 30.431996342958882,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 9.266562627766842
+    },
+    {
+      "task": "mmlu_professional_law",
+      "task_hash": "2efda5abe49b71db42c0462f1eb6e799695f4af89222ca703e1f051ffe802016",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.2548891603946686,
+        "acc_per_token": 0.2816166877746582,
+        "acc_per_char": 0.28357234597206116,
+        "acc_per_byte": 0.28357234597206116,
+        "acc_uncond": 0.29009124636650085,
+        "bpb": 0.6099938750267029
+      },
+      "num_docs": 1534,
+      "limit": null,
+      "seconds": 396.43332641595043,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 3.8695031365513364
+    },
+    {
+      "task": "mmlu_professional_medicine",
+      "task_hash": "86bf8ba43fa7f18628c1d6bb2c5474fe4724bb564c1481ec44da014140f5e8be",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.3345588147640228,
+        "acc_per_token": 0.375,
+        "acc_per_char": 0.3639705777168274,
+        "acc_per_byte": 0.3639705777168274,
+        "acc_uncond": 0.33088234066963196,
+        "bpb": 0.6576167941093445
+      },
+      "num_docs": 272,
+      "limit": null,
+      "seconds": 53.48505220212974,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 5.0855330377553445
+    },
+    {
+      "task": "mmlu_professional_psychology",
+      "task_hash": "846cbea3f42d0a2add5993643418bde1972ebbb89a36dc741feb91dc5dfdb943",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.3480392098426819,
+        "acc_per_token": 0.3888888955116272,
+        "acc_per_char": 0.3692810535430908,
+        "acc_per_byte": 0.3692810535430908,
+        "acc_uncond": 0.343137264251709,
+        "bpb": 0.7626807689666748
+      },
+      "num_docs": 612,
+      "limit": null,
+      "seconds": 39.6205698789563,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 15.446521891777532
+    },
+    {
+      "task": "mmlu_public_relations",
+      "task_hash": "4ebb00b50576dd43eb3ebb200dc905eb39d328436d9a86f31011295a137e2d5a",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.4727272689342499,
+        "acc_per_token": 0.3909090757369995,
+        "acc_per_char": 0.38181817531585693,
+        "acc_per_byte": 0.38181817531585693,
+        "acc_uncond": 0.37272727489471436,
+        "bpb": 0.9204130172729492
+      },
+      "num_docs": 110,
+      "limit": null,
+      "seconds": 6.472522160969675,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 16.994920567953752
+    },
+    {
+      "task": "mmlu_security_studies",
+      "task_hash": "efe32830eed91fb1dec199055a84aaac5351ed22ab9ccfc0314336607962b69c",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.3346938490867615,
+        "acc_per_token": 0.3959183394908905,
+        "acc_per_char": 0.2897959053516388,
+        "acc_per_byte": 0.2897959053516388,
+        "acc_uncond": 0.3183673322200775,
+        "bpb": 0.8094476461410522
+      },
+      "num_docs": 245,
+      "limit": null,
+      "seconds": 22.17711418494582,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 11.047424744122475
+    },
+    {
+      "task": "mmlu_sociology",
+      "task_hash": "61196c4d6369ff72ec78a4308dcf2d84e3d4df635e08f081525954e370e737a5",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.3432835638523102,
+        "acc_per_token": 0.4527363181114197,
+        "acc_per_char": 0.4029850661754608,
+        "acc_per_byte": 0.4029850661754608,
+        "acc_uncond": 0.4776119291782379,
+        "bpb": 0.7277973294258118
+      },
+      "num_docs": 201,
+      "limit": null,
+      "seconds": 9.191830141004175,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 21.867244815953644
+    },
+    {
+      "task": "mmlu_us_foreign_policy",
+      "task_hash": "939e8502842a1263c09fcbf5e39e4b23f139b7058e7654976ff006e7e942415f",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.41999998688697815,
+        "acc_per_token": 0.4399999976158142,
+        "acc_per_char": 0.41999998688697815,
+        "acc_per_byte": 0.41999998688697815,
+        "acc_uncond": 0.4399999976158142,
+        "bpb": 0.6550588607788086
+      },
+      "num_docs": 100,
+      "limit": null,
+      "seconds": 5.129028309136629,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 19.496870356879164
+    },
+    {
+      "task": "mmlu_virology",
+      "task_hash": "71e17985395d4bcc179155cbd3e15b3b55c253440b5f41dd5ac1e5232d9cabb2",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.3012048006057739,
+        "acc_per_token": 0.34939756989479065,
+        "acc_per_char": 0.34337347745895386,
+        "acc_per_byte": 0.34337347745895386,
+        "acc_uncond": 0.27108433842658997,
+        "bpb": 0.8659327626228333
+      },
+      "num_docs": 166,
+      "limit": null,
+      "seconds": 8.157464073970914,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 20.34946136381745
+    },
+    {
+      "task": "mmlu_world_religions",
+      "task_hash": "252e786c01f9598b1aa9daa45e72d231633080c2229ec03727648b1f66340347",
+      "primary_metric": "acc_per_char",
+      "metrics": {
+        "acc_raw": 0.6783626079559326,
+        "acc_per_token": 0.6666666865348816,
+        "acc_per_char": 0.7134503126144409,
+        "acc_per_byte": 0.7134503126144409,
+        "acc_uncond": 0.6666666865348816,
+        "bpb": 0.7098577618598938
+      },
+      "num_docs": 171,
+      "limit": null,
+      "seconds": 6.472834426909685,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 26.418101981582783
+    },
+    {
+      "task": "basic_skills_arithmetic",
+      "task_hash": "0e24eebba242b68eacd58317044512b7b033c9ad5c9af70f672fea43608c4feb",
+      "primary_metric": "acc_per_token",
+      "metrics": {
+        "acc_raw": 0.622731626033783,
+        "acc_per_token": 0.622731626033783,
+        "acc_per_char": 0.6284622550010681,
+        "acc_per_byte": 0.6284622550010681,
+        "acc_uncond": 0.6055396199226379,
+        "bpb": 0.8617242574691772
+      },
+      "num_docs": 1047,
+      "limit": null,
+      "seconds": 30.28526258794591,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 34.57127033188496
+    },
+    {
+      "task": "basic_skills_coding",
+      "task_hash": "b75e494a5d87f57dd54d427ed88329f3c8bfffc7b1c4c5d4d8eda0bfb7da4ad0",
+      "primary_metric": "acc_per_token",
+      "metrics": {
+        "acc_raw": 0.47727274894714355,
+        "acc_per_token": 0.647233247756958,
+        "acc_per_char": 0.6561264991760254,
+        "acc_per_byte": 0.6561264991760254,
+        "acc_uncond": 0.5276679992675781,
+        "bpb": 0.4881252348423004
+      },
+      "num_docs": 1012,
+      "limit": null,
+      "seconds": 46.01741238194518,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 21.991675490146765
+    },
+    {
+      "task": "basic_skills_common_knowledge",
+      "task_hash": "84076ba9681854eccefd6cdd416a12306a4b4639c9e5ec27709b71a0e94991c6",
+      "primary_metric": "acc_per_token",
+      "metrics": {
+        "acc_raw": 0.9479267001152039,
+        "acc_per_token": 0.9431051015853882,
+        "acc_per_char": 0.9450337290763855,
+        "acc_per_byte": 0.9450337290763855,
+        "acc_uncond": 0.8592092394828796,
+        "bpb": 0.2619263231754303
+      },
+      "num_docs": 1037,
+      "limit": null,
+      "seconds": 21.673617974855006,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 47.846187987768914
+    },
+    {
+      "task": "basic_skills_logical_reasoning",
+      "task_hash": "e595e562f17bfac48cf59404a247bc864f5f1d24ca05f90f05c402c1957e5e67",
+      "primary_metric": "acc_per_token",
+      "metrics": {
+        "acc_raw": 0.9194990992546082,
+        "acc_per_token": 0.951699435710907,
+        "acc_per_char": 0.9481216073036194,
+        "acc_per_byte": 0.9481216073036194,
+        "acc_uncond": 0.8917710185050964,
+        "bpb": 0.22356432676315308
+      },
+      "num_docs": 1118,
+      "limit": null,
+      "seconds": 31.362982359016314,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 35.64712013679382
+    },
+    {
+      "task": "basic_skills_string_operations",
+      "task_hash": "0fb8021b569e795aaa1e1f86b5e1e7532f818309d1991bb62e64b3975f547b38",
+      "primary_metric": "acc_per_token",
+      "metrics": {
+        "acc_raw": 0.3330598771572113,
+        "acc_per_token": 0.3995077908039093,
+        "acc_per_char": 0.43806397914886475,
+        "acc_per_byte": 0.43806397914886475,
+        "acc_uncond": 0.17391304671764374,
+        "bpb": 1.2665035724639893
+      },
+      "num_docs": 1219,
+      "limit": null,
+      "seconds": 31.138290244154632,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 39.14794262760892
+    },
+    {
+      "task": "basic_skills_pattern",
+      "task_hash": "fde63838949f4eea1683bf1434bc6e60e09857b62cd6601921a5c611144a1dba",
+      "primary_metric": "acc_per_token",
+      "metrics": {
+        "acc_raw": 0.7340824007987976,
+        "acc_per_token": 0.7453183531761169,
+        "acc_per_char": 0.7490636706352234,
+        "acc_per_byte": 0.7471910119056702,
+        "acc_uncond": 0.6797752976417542,
+        "bpb": 0.8424324989318848
+      },
+      "num_docs": 534,
+      "limit": null,
+      "seconds": 5.366666988935322,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 99.50309961489502
+    },
+    {
+      "task": "lambada",
+      "task_hash": "2fbcb961926feff33aa7b67c94f89a2ef0f552182f1a74687a88b53c2c6c2ab2",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.4381837546825409
+      },
+      "num_docs": 5153,
+      "limit": null,
+      "seconds": 20.043578472919762,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 257.0898209100762
+    },
+    {
+      "task": "minerva_math_algebra",
+      "task_hash": "39dfc110cc99c2a1c5ad4ece37a4e417f0fd6da3d1b822d89744f14da9950b1b",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.5453245639801025
+      },
+      "num_docs": 1187,
+      "limit": null,
+      "seconds": 51.33532196097076,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 23.12248087004213
+    },
+    {
+      "task": "minerva_math_counting_and_probability",
+      "task_hash": "42207c8f9d004bd51f9f9f58513ad0574896b543c750b1b15a07c7df12d49616",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.5248324275016785
+      },
+      "num_docs": 474,
+      "limit": null,
+      "seconds": 21.760491390014067,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 21.7825963350037
+    },
+    {
+      "task": "minerva_math_geometry",
+      "task_hash": "5c041550dc23054b75ecc4bb4954ea40888c5cbda53fc7bb4d2415e84819689d",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.5237168073654175
+      },
+      "num_docs": 479,
+      "limit": null,
+      "seconds": 27.49596347194165,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 17.42073888368368
+    },
+    {
+      "task": "minerva_math_intermediate_algebra",
+      "task_hash": "c55dc4c24a9c3f7b1a9c4264133c472606700a6cf4998dd92e6f9f20eaa9fa8b",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.5163050293922424
+      },
+      "num_docs": 903,
+      "limit": null,
+      "seconds": 49.49953194800764,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 18.242596737045425
+    },
+    {
+      "task": "minerva_math_number_theory",
+      "task_hash": "38ceacbbe26be47f1b9b1ab9e3999e86a44a00743c1b1d9620e71d49b58b7cba",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.6019933223724365
+      },
+      "num_docs": 540,
+      "limit": null,
+      "seconds": 24.346667599165812,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 22.179626751814773
+    },
+    {
+      "task": "minerva_math_prealgebra",
+      "task_hash": "dc57e97f6aa926b8b1d8412b72c7f5085a242ad047448f296cb120309135d030",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.5146699547767639
+      },
+      "num_docs": 871,
+      "limit": null,
+      "seconds": 36.90876081818715,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 23.5987332192092
+    },
+    {
+      "task": "minerva_math_precalculus",
+      "task_hash": "91ad3ae3e47ab2f43947ef1eeb9dfafa0166e25abdebb630bf7947fb236fe130",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.3883899748325348
+      },
+      "num_docs": 546,
+      "limit": null,
+      "seconds": 32.12341659003869,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 16.996946712365332
+    },
+    {
+      "task": "humaneval",
+      "task_hash": "165426f5a1e0ccc691388206caf83d97a30add54a02a1becaa77f3445e673b13",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.5522783994674683
+      },
+      "num_docs": 164,
+      "limit": null,
+      "seconds": 6.194819981930777,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 26.47373135593282
+    },
+    {
+      "task": "mbpp",
+      "task_hash": "db2a554b7c8fcaf4e9d1205b60a439d36d833e882344d62bf5ce607dbaba40af",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.6956456899642944
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 8.487568294862285,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 58.909687984797856
+    },
+    {
+      "task": "mt_mbpp_bash",
+      "task_hash": "2ee09e1de4d6e1fa8909e26194f83a88cb5f512336370010b49e74424e9d45dd",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.574123740196228
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 10.966106910957024,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 45.59503240848529
+    },
+    {
+      "task": "mt_mbpp_c",
+      "task_hash": "7c303aa27000494bc67e9aa02b6af4d4da6e2fc7cbabb28f973fce1f0b4dd0d6",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.3671846389770508
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 22.36042171018198,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 22.360937842792175
+    },
+    {
+      "task": "mt_mbpp_cpp",
+      "task_hash": "a3dc3b14faca5bb18335a308363afdece3150e0fc221e3210d66c5085b87f4a1",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.3626273274421692
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 13.680691595887765,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 36.54785991596312
+    },
+    {
+      "task": "mt_mbpp_csharp",
+      "task_hash": "a0b2034de08696a736fb9df3c5ffd5e15faf30a146372c7030c008e2bebb25df",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.30115023255348206
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 12.701411742018536,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 39.36570281757821
+    },
+    {
+      "task": "mt_mbpp_go",
+      "task_hash": "619df528850a3ee4907e8406ca81f8c224f4ece0bb1b30f99c940d2e6e6dd453",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.3966333866119385
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 16.331000719917938,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 30.61661735096124
+    },
+    {
+      "task": "mt_mbpp_haskell",
+      "task_hash": "04d8755a574616e6a96f67e1339d01f098cbe1dffaed85cc21332f6af632974f",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.5923982262611389
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 9.065847107907757,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 55.152044155241825
+    },
+    {
+      "task": "mt_mbpp_java",
+      "task_hash": "987af8cc9d79ef964c95f92909c96f31c2e1b1cdd50bdcb6aed54eb4da4c4c27",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.2674088776111603
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 12.701941859908402,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 39.36405988269936
+    },
+    {
+      "task": "mt_mbpp_javascript",
+      "task_hash": "e50d883cfbedf213ea21b0d86aff90b161ef8b4bd4865a916669ae850ae93757",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.45726436376571655
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 17.878972284961492,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 27.965813248704688
+    },
+    {
+      "task": "mt_mbpp_matlab",
+      "task_hash": "faba3b27fbe300724e3c1a823a0539dad2baebdbb49dd94b19a74c67787a7b65",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.57746821641922
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 8.724389288108796,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 57.31060174968259
+    },
+    {
+      "task": "mt_mbpp_php",
+      "task_hash": "f1c879dc4a72ebfa90ffb7d8b57c6aa5b20a6e8482226e0aa44a29a6f4149577",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.4057673513889313
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 11.914636610075831,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 41.96519091292854
+    },
+    {
+      "task": "mt_mbpp_python",
+      "task_hash": "b6a39c403a4b876626451309c30d099d38a350d6374cce94b9e7a919508b2f94",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.6955448389053345
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 8.28774124616757,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 60.33006885093218
+    },
+    {
+      "task": "mt_mbpp_r",
+      "task_hash": "2f014c7f4bb691a1ed77f95c83c91e1c2c70bd385cd56ed937fa749db92730cd",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.5633040070533752
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 9.22990616899915,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 54.171731634647564
+    },
+    {
+      "task": "mt_mbpp_ruby",
+      "task_hash": "5a7d1932c217e9629afd6c9b7f30eca4ca375b14b035cc476a2904dd46ba7c7d",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.6529707312583923
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 7.718102332903072,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 64.78276374601151
+    },
+    {
+      "task": "mt_mbpp_rust",
+      "task_hash": "7bb6b31503ce2c49b321d2801559aba697b3f598dc9239300a280222c4a777c4",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.48690512776374817
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 11.384822252904996,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 43.91812088874888
+    },
+    {
+      "task": "mt_mbpp_scala",
+      "task_hash": "dc6424a04739491ba6a1c5507d3292985019456c0136fdb949efa8c65f2a6fa5",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.5576241612434387
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 10.455488336039707,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 47.821773974584936
+    },
+    {
+      "task": "mt_mbpp_swift",
+      "task_hash": "1556255d2904140b14d6b7881dd5c2c208d7023c0715f6e049f88a7548c4ea36",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.4559977352619171
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 20.89078844501637,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 23.933993746381468
+    },
+    {
+      "task": "mt_mbpp_typescript",
+      "task_hash": "4e0b007b0d3eac761fe9d40ac8befd59d652943e776ebb49a6abfab26017fa1d",
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.409159392118454
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 22.340370666934177,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 22.38100734559639
+    }
+  ],
+  "suites": [
+    {
+      "suite": "mmlu",
+      "members": [
+        "mmlu_abstract_algebra",
+        "mmlu_anatomy",
+        "mmlu_astronomy",
+        "mmlu_business_ethics",
+        "mmlu_clinical_knowledge",
+        "mmlu_college_biology",
+        "mmlu_college_chemistry",
+        "mmlu_college_computer_science",
+        "mmlu_college_mathematics",
+        "mmlu_college_medicine",
+        "mmlu_college_physics",
+        "mmlu_computer_security",
+        "mmlu_conceptual_physics",
+        "mmlu_econometrics",
+        "mmlu_electrical_engineering",
+        "mmlu_elementary_mathematics",
+        "mmlu_formal_logic",
+        "mmlu_global_facts",
+        "mmlu_high_school_biology",
+        "mmlu_high_school_chemistry",
+        "mmlu_high_school_computer_science",
+        "mmlu_high_school_european_history",
+        "mmlu_high_school_geography",
+        "mmlu_high_school_government_and_politics",
+        "mmlu_high_school_macroeconomics",
+        "mmlu_high_school_mathematics",
+        "mmlu_high_school_microeconomics",
+        "mmlu_high_school_physics",
+        "mmlu_high_school_psychology",
+        "mmlu_high_school_statistics",
+        "mmlu_high_school_us_history",
+        "mmlu_high_school_world_history",
+        "mmlu_human_aging",
+        "mmlu_human_sexuality",
+        "mmlu_international_law",
+        "mmlu_jurisprudence",
+        "mmlu_logical_fallacies",
+        "mmlu_machine_learning",
+        "mmlu_management",
+        "mmlu_marketing",
+        "mmlu_medical_genetics",
+        "mmlu_miscellaneous",
+        "mmlu_moral_disputes",
+        "mmlu_moral_scenarios",
+        "mmlu_nutrition",
+        "mmlu_philosophy",
+        "mmlu_prehistory",
+        "mmlu_professional_accounting",
+        "mmlu_professional_law",
+        "mmlu_professional_medicine",
+        "mmlu_professional_psychology",
+        "mmlu_public_relations",
+        "mmlu_security_studies",
+        "mmlu_sociology",
+        "mmlu_us_foreign_policy",
+        "mmlu_virology",
+        "mmlu_world_religions"
+      ],
+      "metric": null,
+      "score": 0.40305728452247486
+    },
+    {
+      "suite": "basic_skills",
+      "members": [
+        "basic_skills_arithmetic",
+        "basic_skills_coding",
+        "basic_skills_common_knowledge",
+        "basic_skills_logical_reasoning",
+        "basic_skills_string_operations",
+        "basic_skills_pattern"
+      ],
+      "metric": null,
+      "score": 0.7182659258445104
+    },
+    {
+      "suite": "base_easy:qa_rc",
+      "members": [
+        "arc_easy",
+        "arc_challenge",
+        "csqa",
+        "hellaswag",
+        "winogrande",
+        "socialiqa",
+        "piqa",
+        "sciq",
+        "qasper_yesno",
+        "sciriff_yesno",
+        "lab_bench_dbqa",
+        "lab_bench_protocolqa",
+        "medmcqa",
+        "medqa_en",
+        "coqa",
+        "drop",
+        "jeopardy",
+        "naturalqs",
+        "squad",
+        "mmlu",
+        "basic_skills"
+      ],
+      "metric": null,
+      "score": 0.5967264635396581
+    },
+    {
+      "suite": "mmlu:bpb",
+      "members": [
+        "mmlu_abstract_algebra",
+        "mmlu_anatomy",
+        "mmlu_astronomy",
+        "mmlu_business_ethics",
+        "mmlu_clinical_knowledge",
+        "mmlu_college_biology",
+        "mmlu_college_chemistry",
+        "mmlu_college_computer_science",
+        "mmlu_college_mathematics",
+        "mmlu_college_medicine",
+        "mmlu_college_physics",
+        "mmlu_computer_security",
+        "mmlu_conceptual_physics",
+        "mmlu_econometrics",
+        "mmlu_electrical_engineering",
+        "mmlu_elementary_mathematics",
+        "mmlu_formal_logic",
+        "mmlu_global_facts",
+        "mmlu_high_school_biology",
+        "mmlu_high_school_chemistry",
+        "mmlu_high_school_computer_science",
+        "mmlu_high_school_european_history",
+        "mmlu_high_school_geography",
+        "mmlu_high_school_government_and_politics",
+        "mmlu_high_school_macroeconomics",
+        "mmlu_high_school_mathematics",
+        "mmlu_high_school_microeconomics",
+        "mmlu_high_school_physics",
+        "mmlu_high_school_psychology",
+        "mmlu_high_school_statistics",
+        "mmlu_high_school_us_history",
+        "mmlu_high_school_world_history",
+        "mmlu_human_aging",
+        "mmlu_human_sexuality",
+        "mmlu_international_law",
+        "mmlu_jurisprudence",
+        "mmlu_logical_fallacies",
+        "mmlu_machine_learning",
+        "mmlu_management",
+        "mmlu_marketing",
+        "mmlu_medical_genetics",
+        "mmlu_miscellaneous",
+        "mmlu_moral_disputes",
+        "mmlu_moral_scenarios",
+        "mmlu_nutrition",
+        "mmlu_philosophy",
+        "mmlu_prehistory",
+        "mmlu_professional_accounting",
+        "mmlu_professional_law",
+        "mmlu_professional_medicine",
+        "mmlu_professional_psychology",
+        "mmlu_public_relations",
+        "mmlu_security_studies",
+        "mmlu_sociology",
+        "mmlu_us_foreign_policy",
+        "mmlu_virology",
+        "mmlu_world_religions"
+      ],
+      "metric": "bpb",
+      "score": 0.8811004914735493
+    },
+    {
+      "suite": "basic_skills:bpb",
+      "members": [
+        "basic_skills_arithmetic",
+        "basic_skills_coding",
+        "basic_skills_common_knowledge",
+        "basic_skills_logical_reasoning",
+        "basic_skills_string_operations",
+        "basic_skills_pattern"
+      ],
+      "metric": "bpb",
+      "score": 0.6573793689409891
+    },
+    {
+      "suite": "base_easy:qa_bpb",
+      "members": [
+        "arc_easy",
+        "arc_challenge",
+        "csqa",
+        "hellaswag",
+        "winogrande",
+        "socialiqa",
+        "piqa",
+        "sciq",
+        "qasper_yesno",
+        "sciriff_yesno",
+        "lab_bench_dbqa",
+        "lab_bench_protocolqa",
+        "medmcqa",
+        "medqa_en",
+        "coqa",
+        "drop",
+        "jeopardy",
+        "naturalqs",
+        "squad",
+        "mmlu:bpb",
+        "basic_skills:bpb",
+        "lambada"
+      ],
+      "metric": "bpb",
+      "score": 0.8577803398528548
+    },
+    {
+      "suite": "base_easy:math_bpb",
+      "members": [
+        "minerva_math_algebra",
+        "minerva_math_counting_and_probability",
+        "minerva_math_geometry",
+        "minerva_math_intermediate_algebra",
+        "minerva_math_number_theory",
+        "minerva_math_prealgebra",
+        "minerva_math_precalculus"
+      ],
+      "metric": "bpb",
+      "score": 0.5164617257458823
+    },
+    {
+      "suite": "mt_mbpp",
+      "members": [
+        "mt_mbpp_bash",
+        "mt_mbpp_c",
+        "mt_mbpp_cpp",
+        "mt_mbpp_csharp",
+        "mt_mbpp_go",
+        "mt_mbpp_haskell",
+        "mt_mbpp_java",
+        "mt_mbpp_javascript",
+        "mt_mbpp_matlab",
+        "mt_mbpp_php",
+        "mt_mbpp_python",
+        "mt_mbpp_r",
+        "mt_mbpp_ruby",
+        "mt_mbpp_rust",
+        "mt_mbpp_scala",
+        "mt_mbpp_swift",
+        "mt_mbpp_typescript"
+      ],
+      "metric": "bpb",
+      "score": 0.47785484440186443
+    },
+    {
+      "suite": "base_easy:code_bpb",
+      "members": [
+        "humaneval",
+        "mbpp",
+        "mt_mbpp"
+      ],
+      "metric": "bpb",
+      "score": 0.575259644611209
+    },
+    {
+      "suite": "base_easy",
+      "members": [
+        "base_easy:qa_rc",
+        "base_easy:qa_bpb",
+        "base_easy:math_bpb",
+        "base_easy:code_bpb"
+      ],
+      "metric": null,
+      "score": null
+    }
+  ],
+  "schema_version": 4
+}
