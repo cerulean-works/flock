@@ -4,49 +4,31 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Served from our origin (the files come from the @fontsource-variable packages) so the browser
-   finds them in the HTML <head> preloads (see hooks.server.ts) instead of after a third-party
-   stylesheet: no request waterfall on first paint. Latin subset only. */
-@font-face {
-	font-family: 'Newsreader';
-	src: url('@fontsource-variable/newsreader/files/newsreader-latin-opsz-normal.woff2')
-		format('woff2');
-	font-weight: 200 800;
-	font-style: normal;
-	font-display: swap;
-}
-
-@font-face {
-	font-family: 'DM Sans';
-	src: url('@fontsource-variable/dm-sans/files/dm-sans-latin-opsz-normal.woff2') format('woff2');
-	font-weight: 100 1000;
-	font-style: normal;
-	font-display: swap;
-}
-
 /*
- * Cerulean colors on shadcn's semantic tokens. Component padding and rounding come from the
- * "nova" preset (--radius below); every color comes from the Cerulean style reference
- * (design.md). Daylight is the app's appearance; Evening is mapped for completeness.
+ * Cerulean colors on shadcn's semantic tokens, mirrored from cerulean.works: its ink, slate,
+ * reading blue, focus blue, quiet rule and selection wash, on a pure white canvas instead of
+ * the site's paper. Panels are the site's flat tint (ink at 4% over the canvas); nothing is
+ * beige, textured or warm. Host Grotesk is loaded from Google Fonts in app.html. Light is the
+ * app's appearance; dark is mapped for completeness.
  */
 :root {
-	--radius: 0.625rem;
+	--radius: 0.5rem;
 
-	--background: #fcfbf6; /* Paper */
+	--background: #ffffff; /* Canvas: pure white */
 	--foreground: #172a50; /* Ink */
-	--card: #f6f4ed; /* Paper, one step deeper: chart panels */
+	--card: #f6f7f8; /* Panel: ink 4% over white, the site's card tint. Chart and log panels */
 	--card-foreground: #172a50;
-	--popover: #fcfbf6;
+	--popover: #ffffff;
 	--popover-foreground: #172a50;
 	--primary: #145a9a; /* Reading blue: small functional emphasis (switches, sliders, checks) */
-	--primary-foreground: #fffdf4; /* Porcelain */
-	--secondary: #efede5;
+	--primary-foreground: #ffffff;
+	--secondary: #eff0f3; /* Panel hover: ink 7% over white */
 	--secondary-foreground: #172a50;
-	--muted: #efede5; /* hover and quiet surfaces */
+	--muted: #eff0f3; /* hover and quiet surfaces */
 	--muted-foreground: #4b5d79; /* Slate */
-	--accent: #efede5;
+	--accent: #eff0f3;
 	--accent-foreground: #172a50;
-	--destructive: #b4452f;
+	--destructive: #c0392f;
 	--border: #cdd3db; /* Quiet rule */
 	--input: #cdd3db;
 	--ring: #1768af; /* Focus blue */
@@ -55,28 +37,28 @@
 	--chart-3: #1baf7a;
 	--chart-4: #eda100;
 	--chart-5: #e87ba4;
-	--sidebar: #fcfbf6;
+	--sidebar: #ffffff;
 	--sidebar-foreground: #172a50;
 	--sidebar-primary: #145a9a;
-	--sidebar-primary-foreground: #fffdf4;
-	--sidebar-accent: #efede5;
+	--sidebar-primary-foreground: #ffffff;
+	--sidebar-accent: #eff0f3;
 	--sidebar-accent-foreground: #172a50;
 	--sidebar-border: #cdd3db;
 	--sidebar-ring: #1768af;
 
 	/* Cerulean roles shadcn has no slot for. */
 	--faint: #7b88a0; /* tertiary text: counts, empty cells */
-	--divider: #e7e8e6; /* row and section dividers, lighter than a rule */
+	--divider: #e6e9ee; /* row and section dividers, lighter than a rule */
 	--selection: #cce7fb; /* Selection wash */
 	--link: #145a9a;
 	--deep: #102c60;
 	--state-running: #1768af;
-	--state-finished: #3f7a4c;
-	--state-preempting: #8a6d4f;
-	--state-failed: #b4452f;
+	--state-finished: #23804f;
+	--state-preempting: #b86e00; /* amber: a warning, not a decoration */
+	--state-failed: #c0392f;
 	/* Terminal colors, for console output: ANSI codes and log levels. */
-	--ansi-red: #b4452f;
-	--ansi-green: #3f7a4c;
+	--ansi-red: #c0392f;
+	--ansi-green: #23804f;
 	--ansi-yellow: #94660c;
 	--ansi-blue: #1768af;
 	--ansi-magenta: #8a3f8f;
@@ -85,29 +67,29 @@
 
 .dark {
 	--background: #10254b; /* Evening field */
-	--foreground: #f4f2e9; /* Warm reverse */
+	--foreground: #f3f5f9;
 	--card: #142c56;
-	--card-foreground: #f4f2e9;
+	--card-foreground: #f3f5f9;
 	--popover: #10254b;
-	--popover-foreground: #f4f2e9;
+	--popover-foreground: #f3f5f9;
 	--primary: #a8d4ff;
 	--primary-foreground: #10254b;
 	--secondary: #1a3462;
-	--secondary-foreground: #f4f2e9;
+	--secondary-foreground: #f3f5f9;
 	--muted: #1a3462;
 	--muted-foreground: #c1cbe0; /* Pale slate */
 	--accent: #1a3462;
-	--accent-foreground: #f4f2e9;
-	--destructive: #e0866f;
+	--accent-foreground: #f3f5f9;
+	--destructive: #f08a80;
 	--border: #415577;
 	--input: #415577;
 	--ring: #a8d4ff;
 	--sidebar: #10254b;
-	--sidebar-foreground: #f4f2e9;
+	--sidebar-foreground: #f3f5f9;
 	--sidebar-primary: #a8d4ff;
 	--sidebar-primary-foreground: #10254b;
 	--sidebar-accent: #1a3462;
-	--sidebar-accent-foreground: #f4f2e9;
+	--sidebar-accent-foreground: #f3f5f9;
 	--sidebar-border: #415577;
 	--sidebar-ring: #a8d4ff;
 	--faint: #8a99b8;
@@ -115,7 +97,7 @@
 	--selection: #235fa2;
 	--link: #a8d4ff;
 	--deep: #0c2048;
-	--ansi-red: #e0866f;
+	--ansi-red: #f08a80;
 	--ansi-green: #8fc79b;
 	--ansi-yellow: #e6c271;
 	--ansi-blue: #a8d4ff;
@@ -124,8 +106,7 @@
 }
 
 @theme inline {
-	--font-sans: 'DM Sans', Arial, sans-serif;
-	--font-serif: 'Newsreader', Georgia, serif;
+	--font-sans: 'Host Grotesk', Arial, sans-serif;
 	--font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
 
 	--color-background: var(--background);
@@ -218,7 +199,6 @@
 
 	body {
 		@apply bg-background font-sans text-sm/[1.45] text-foreground antialiased;
-		font-optical-sizing: auto;
 	}
 
 	::selection {

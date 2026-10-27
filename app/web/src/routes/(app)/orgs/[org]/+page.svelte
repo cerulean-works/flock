@@ -61,9 +61,7 @@
 <div class="flex min-h-0 flex-1 flex-col">
 	<main class="min-h-0 flex-1 overflow-y-auto px-5 pb-16">
 		<div class="mx-auto max-w-180">
-			<h1
-				class="flex items-center gap-3 pt-8 font-serif text-[34px] leading-[1.15] tracking-[-0.02em]"
-			>
+			<h1 class="flex items-center gap-3 pt-8 text-[34px] leading-[1.15] tracking-[-0.025em]">
 				<OrgMark
 					name={data.org.display_name}
 					src={data.org.avatar_url}
@@ -87,7 +85,7 @@
 
 			{#if data.import || data.me.is_superadmin}
 				<section class="mt-10 scroll-mt-6" id="import">
-					<h2 class="font-serif text-2xl tracking-[-0.01em]">Import from W&B</h2>
+					<h2 class="text-2xl tracking-[-0.01em]">Import from W&B</h2>
 					<OrgImport
 						org={data.org.name}
 						label={data.org.display_name}
@@ -99,7 +97,7 @@
 			{/if}
 
 			<section class="mt-10">
-				<h2 class="font-serif text-2xl tracking-[-0.01em]">Members</h2>
+				<h2 class="text-2xl tracking-[-0.01em]">Members</h2>
 				<ul class="mt-4 border-t border-divider">
 					{#each data.members as member (member.id)}
 						{@const self = member.id === data.me.id}
@@ -131,7 +129,7 @@
 
 			{#if admin && data.invites}
 				<section class="mt-10">
-					<h2 class="font-serif text-2xl tracking-[-0.01em]">Invite people</h2>
+					<h2 class="text-2xl tracking-[-0.01em]">Invite people</h2>
 					<p class="mt-2 max-w-[62ch] text-muted-foreground">
 						Flock sends no email: send the link yourself. It works once, for that address only.
 					</p>
@@ -233,13 +231,13 @@
 			{/if}
 
 			<section class="mt-10 scroll-mt-6" id="budget">
-				<h2 class="font-serif text-2xl tracking-[-0.01em]">Budget</h2>
+				<h2 class="text-2xl tracking-[-0.01em]">Budget</h2>
 				<BillingForm billing={data.billing} {admin} />
 			</section>
 
 			{#if admin}
 				<section class="mt-10">
-					<h2 class="font-serif text-2xl tracking-[-0.01em]">Organization</h2>
+					<h2 class="text-2xl tracking-[-0.01em]">Organization</h2>
 					<div class="mt-4">
 						<AvatarField kind="org" name={data.org.display_name} src={data.org.avatar_url} />
 					</div>

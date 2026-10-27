@@ -40,7 +40,7 @@
 
 	const ws = getWorkspace();
 	// Canvas colors come from the theme tokens (read once the plot is in the document).
-	let palette = $state({ ink: '#172a50', paper: '#fcfbf6', wash: '#cce7fb' });
+	let palette = $state({ ink: '#172a50', paper: '#ffffff', wash: '#cce7fb' });
 
 	const view = $derived(preview ?? ws.panels[panel]);
 	const config = $derived(view.config);

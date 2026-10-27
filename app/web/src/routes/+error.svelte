@@ -17,11 +17,11 @@
 
 <main class="mx-auto mt-[12vh] max-w-160 px-6">
 	<p class="text-[13px] text-muted-foreground">{page.status}</p>
-	<h1 class="mt-1 mb-4 font-serif text-4xl leading-tight tracking-[-0.02em]">
+	<h1 class="mt-1 mb-4 text-4xl leading-tight tracking-[-0.025em]">
 		{message}
 	</h1>
 	{#if page.status === 502}
-		<p class="mb-6 font-serif text-[19px] leading-normal">
+		<p class="mb-6 text-[17px] leading-[1.45]">
 			Start Flock with
 			<code class="rounded-md bg-muted px-1.5 py-0.5 font-mono text-sm"
 				>docker compose up -d --build</code
