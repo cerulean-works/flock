@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | design |
+| Status | built |
 | Date | 2026-10-27 |
 | Builds on | [001](001-eval-core.md) (D7: the task hash), [004](004-suites.md) (suites), [012](012-task-snapshot.md) (definitions pinned in CI) |
 | Keeps | every task, request and score; `results.json` unchanged |
@@ -77,4 +77,14 @@ The run-path provenance stage in flight adds three things the bank gains at its 
 
 ## 4. How it was actually built
 
-To be written with the code.
+- `flock/eval/compare.py` holds `compare`, `Comparison` and `Breach`; `cli.py` adds `compare` and `format_comparison`, and `run --dtype`. `run.py` adds `Dtype` and `EvalConfig.dtype`.
+- Review added four refusals and one rule to D1 and D2, all in the decisions above: a common suite with a different `metric` refuses (it changes what the score averages, while `members` and `score` stay breaches); a file that is not JSON, or has a value of the wrong type where a key is read, refuses like a missing key; the printed provenance fields are read only if present; `schema_version` is printed with them when it differs. A NaN on both sides is equal, since NaN never equals itself and a NaN that repeats is reproduced.
+- The bank was written by the command of D4 at `d23f668`, on one H200 (2 h 58 min, of which scoring 2 h 53 min): 109 tasks and 10 suites, 10 truncated requests in all, ARC-Easy `task_hash` `ad683d6e`. It was copied unchanged to `tests/eval/regression/olmo-2-0425-1b-float32.json`, about 76 kB.
+- The rerun at `7dd26fb` (the bank's commit plus the bank file) ran on a different node with the same GPU type and libraries (`torch` 2.14.1+cu130, `transformers` 5.20.1), then `compare` against the bank: `compared: tasks 109, suites 10, breaches 0`, exit 0, with only `flock_commit` printed as differing. Beyond what `compare` reads, all 109 predictions files were byte-identical, so every request's log-likelihood repeated, not only the means. This extends the float32 run-to-run measurement of D1 from ARC-Easy to all of `base_easy`, and across two nodes.
+- A CI test reads the bank with `compare` offline, so a change to the results layout or to `compare` that the bank can no longer pass fails in CI rather than in a GPU job.
+
+## 5. Known gaps
+
+- A task added to `base_easy` does not fail CI against the bank: the bank is refreshed by hand in that PR or a later one, and until then `compare` lists the task and reports breaches on the suites that hold it (D1).
+- The check needs about three H200 hours and is run on request; there is no schedule.
+- A bfloat16 bank waits for the SDPA kernel pin.

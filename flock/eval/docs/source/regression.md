@@ -20,7 +20,7 @@ The bank is float32 because float32 scores repeat exactly when you rerun the sam
 
 ## Running the check
 
-1. On a GPU machine, run the command above at the commit you want to check, into a new directory.
+1. On a GPU machine, run the command above at the commit you want to check, into a new directory. It takes about three hours on one H200.
 2. Compare the new results with the bank:
    ```bash
    uv run flock-eval compare tests/eval/regression/olmo-2-0425-1b-float32.json results/regression/results.json
@@ -46,11 +46,14 @@ The output lists, in order:
 - one line per breach, with the task or suite, the field, both values and their difference
 - a count of what was compared
 
+A rerun that reproduces the bank prints the two commits and the count:
+
 ```text
-flock_commit  0695663f...  ->  4c1e2b7a...
-piqa  metrics.acc_raw  0.6  ->  0.625  (+0.025)
-compared: tasks 109, suites 10, breaches 1
+flock_commit  d23f66846b528327acbeb38fc6ce90279fd8bd79  ->  7dd26fbb6cc5d6452355dfe1336d76e814af2873
+compared: tasks 109, suites 10, breaches 0
 ```
+
+A breach adds a line such as `piqa  metrics.acc_raw  0.6  ->  0.625  (+0.025)`.
 
 ## Refusals
 
