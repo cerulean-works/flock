@@ -32,8 +32,6 @@ The 26 math and code tasks share one shape: a doc with one choice, scored by `bp
 
 The first version was a classmethod, `MultipleChoiceTask.gold_only`. Review asked for its own task type, since a gold-only task reads differently enough from a multiple-choice one that the name should say so.
 
-The suites follow OLMES's `olmo3:base_easy:math_bpb` and `code_bpb` (`oe_eval/configs/task_suites.py`), both reading `bpb`. `mt_mbpp`, the 17 languages, is one member of `code_bpb` beside HumanEval and MBPP, as OLMES's `mt_mbpp_v2fix` suite is, so each language has a 51st of the weight.
-
 ---
 
 ## 3. Corrections to 003
