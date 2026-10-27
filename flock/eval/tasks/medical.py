@@ -6,7 +6,7 @@ from flock.eval.tasks.base import Dataset, Fewshot, MCDoc, MultipleChoiceTask, c
 
 
 def medmcqa_doc(row: dict[str, Any]) -> MCDoc:
-    """A MedMCQA row as a cloze doc over its four options (`oe_eval/tasks/oe_eval_tasks/medmcqa.py`)."""
+    """A MedMCQA row as a cloze doc over its four options."""
     return MCDoc(
         id=row["id"],
         choices=cloze(row["question"], (row["opa"], row["opb"], row["opc"], row["opd"])),
@@ -15,7 +15,7 @@ def medmcqa_doc(row: dict[str, Any]) -> MCDoc:
 
 
 def medqa_doc(row: dict[str, Any]) -> MCDoc:
-    """A MedQA row as a cloze doc, identified by its row index as in OLMES (`oe_eval/tasks/oe_eval_tasks/medqa_en.py`)."""
+    """A MedQA row as a cloze doc, identified by its row index as in OLMES."""
     return MCDoc(
         id=str(row["index"]),
         choices=cloze(row["question"], row["choices"]),
@@ -24,9 +24,8 @@ def medqa_doc(row: dict[str, Any]) -> MCDoc:
 
 
 # OLMES draws `Random(1234).sample(train, 5)` afresh for every doc of both tasks, so every doc
-# gets the same 5 (`fewshot_examples` in `oe_eval/tasks/base_task.py`). Drawn once with OLMES's
-# code. Both primary metrics are OLMES's `medmcqa:rc::none` and `medqa_en:rc::none`
-# (`oe_eval/configs/tasks.py`).
+# gets the same 5 (`fewshot_examples`). Drawn once with OLMES's code. Both primary metrics are
+# OLMES's `medmcqa:rc::none` and `medqa_en:rc::none`.
 MEDMCQA = MultipleChoiceTask(
     name="medmcqa",
     dataset=Dataset(

@@ -17,20 +17,19 @@ def _yesno_doc(row: dict[str, Any], evidence: str) -> MCDoc:
 
 
 def qasper_doc(row: dict[str, Any]) -> MCDoc:
-    """A Qasper row, its evidence paragraphs joined by spaces (`oe_eval/tasks/oe_eval_tasks/qasper_yesno.py`)."""
+    """A Qasper row, its evidence paragraphs joined by spaces."""
     return _yesno_doc(row, " ".join(row["evidence"]))
 
 
 def sciriff_doc(row: dict[str, Any]) -> MCDoc:
-    """A SciRIFF row, its context as the evidence (`oe_eval/tasks/oe_eval_tasks/sciriff_yesno.py`)."""
+    """A SciRIFF row, its context as the evidence."""
     return _yesno_doc(row, row["context"])
 
 
 # Both are OLMES's `<task>:rc::olmes`, scored on the train split by accuracy over the raw
-# log-probability (`oe_eval/configs/tasks.py`). OLMES draws `Random(1234).sample(train, 5)` afresh
-# for every doc, from the split it scores, and never drops the doc itself (`fewshot_examples` in
-# `oe_eval/tasks/base_task.py`). So these 5 docs see their own answer, kept for parity (stage file
-# 003, D17). Drawn once with OLMES's code.
+# log-probability. OLMES draws `Random(1234).sample(train, 5)` afresh for every doc, from the
+# split it scores, and never drops the doc itself (`fewshot_examples`). So these 5 docs see their
+# own answer, kept for parity (stage file 003, D17). Drawn once with OLMES's code.
 QASPER_YESNO = MultipleChoiceTask(
     name="qasper_yesno",
     dataset=Dataset(

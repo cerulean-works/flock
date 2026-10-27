@@ -6,7 +6,7 @@ from flock.eval.tasks.base import Dataset, Fewshot, MCDoc, MultipleChoiceTask, c
 
 
 def lab_bench_doc(row: dict[str, Any]) -> MCDoc:
-    """A LAB-Bench row as a cloze doc: the distractors, then the ideal answer, in OLMES's order (`GenericLabBenchRC` in `oe_eval/tasks/oe_eval_tasks/lab_bench.py`)."""
+    """A LAB-Bench row as a cloze doc: the distractors, then the ideal answer, in OLMES's order (`GenericLabBenchRC`)."""
     return MCDoc(
         id=row["id"],
         choices=cloze(row["question"], (*row["distractors"], row["ideal"])),
@@ -15,7 +15,7 @@ def lab_bench_doc(row: dict[str, Any]) -> MCDoc:
 
 
 def _lab_bench_task(subset: str, shot_ids: tuple[str, ...]) -> MultipleChoiceTask:
-    """OLMES's `lab_bench_<subset>`, scored on the only split, train (`oe_eval/configs/tasks.py`)."""
+    """OLMES's `lab_bench_<subset>`, scored on the only split, train."""
     return MultipleChoiceTask(
         name=f"lab_bench_{subset.lower()}",
         dataset=Dataset(
@@ -28,9 +28,8 @@ def _lab_bench_task(subset: str, shot_ids: tuple[str, ...]) -> MultipleChoiceTas
         # OLMES's `lab_bench_<subset>` scores accuracy per character.
         primary_metric="acc_per_char",
         # OLMES draws `Random(1234).sample(train, 3)` afresh for every doc, from the split it
-        # scores, and never drops the doc itself (`fewshot_examples` in
-        # `oe_eval/tasks/base_task.py`). So these 3 docs see their own answer, kept for parity
-        # (stage file 003, D17). Drawn once with OLMES's code.
+        # scores, and never drops the doc itself (`fewshot_examples`). So these 3 docs see their
+        # own answer, kept for parity (stage file 003, D17). Drawn once with OLMES's code.
         fewshot=Fewshot(split="train", ids=shot_ids),
     )
 
