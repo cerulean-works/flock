@@ -87,10 +87,8 @@ def format_results(results: Results) -> str:
     lines = [f"model {results.provenance.model}  flock {results.provenance.flock_commit}"]
 
     for task in results.tasks:
-        lines.append(
-            f"{task.task}  docs {task.num_docs}  {task.docs_per_second:.1f} docs/s  "
-            f"hash {task.task_hash[:12]}"
-        )
+        speed = "" if task.docs_per_second is None else f"{task.docs_per_second:.1f} docs/s  "
+        lines.append(f"{task.task}  docs {task.num_docs}  {speed}hash {task.task_hash[:12]}")
         names = [task.primary_metric] + [
             name for name in task.metrics if name != task.primary_metric
         ]

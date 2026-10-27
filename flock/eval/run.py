@@ -1,5 +1,7 @@
 """Run tasks against a model: the one entry point the CLI and job runners call."""
 
+import hashlib
+import json
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -13,6 +15,12 @@ from flock.eval.provenance import Provenance
 from flock.eval.results import Results, SuiteResult, TaskResult, write_predictions
 from flock.eval.tasks import SUITES, TASKS, MultipleChoiceTask
 from flock.eval.tasks.suite import by_name
+
+# Why `evaluate` and `score_task` refuse an output that is already there, and what to do.
+_ONE_RUN = (
+    "one directory holds one run, and a run that crashed leaves its predictions behind. "
+    "Pass a new out directory or delete this one."
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,8 +43,8 @@ class EvalConfig:
             Where to run. Defaults to CUDA when available.
         wandb_project (`str`, *optional*):
             Also log the summary to this tracker project through the `wandb` SDK.
-        command (`str`, *optional*, defaults to `"python"`):
-            The command line recorded in the provenance. The default marks a run started from the Python API. The CLI passes its own command line.
+        command (`str`, *optional*):
+            The command line recorded in the provenance, or `None` if not given. The CLI passes its own command line.
         suites (`tuple[str, ...]`, *optional*):
             Registry names of the suites to run. Their tasks run after `tasks`, each task once, and each suite and the suites it holds are scored.
 
@@ -51,7 +59,7 @@ class EvalConfig:
     batch_tokens: int = DEFAULT_BATCH_TOKENS
     device: str | None = None
     wandb_project: str | None = None
-    command: str = "python"
+    command: str | None = None
     suites: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -61,6 +69,8 @@ class EvalConfig:
             raise ValueError(f"tasks repeat: {self.tasks}")
         if len(set(self.suites)) != len(self.suites):
             raise ValueError(f"suites repeat: {self.suites}")
+        # `MultipleChoiceTask.load` and `ScoringModel` check these too, but a config is plain data
+        # that may be built where no task or model loads, such as before it goes to a worker.
         if self.limit is not None and self.limit < 1:
             raise ValueError(f"limit must be at least 1, got {self.limit}")
         if self.batch_tokens < 1:
@@ -69,11 +79,11 @@ class EvalConfig:
 
 def evaluate(config: EvalConfig) -> Results:
     """
-    Loads the model, scores every task and suite and writes the results, then logs them to the tracker if `wandb_project` is set.
+    Loads the model, collects the provenance, scores every task and suite and writes the results, then logs them to the tracker if `wandb_project` is set.
 
     Raises:
         `KeyError`: if a task or suite name isn't in its registry.
-        `ValueError`: if two different tasks, or two different suites, to run share a name, or a task is named `suites`.
+        `ValueError`: if two different tasks, or two different suites, to run share a name, a task and a suite share a name, or a task is named `suites`.
         `FileExistsError`: if `config.out` exists and isn't an empty directory.
     """
     _check_names("tasks", config.tasks, TASKS)
@@ -95,12 +105,16 @@ def evaluate(config: EvalConfig) -> Results:
     # The tracker logs suite scores as `suites/<suite>` beside `<task>/<metric>`.
     if any(task.name == "suites" for task in tasks):
         raise ValueError("a task can't be named suites: suite scores are logged under that name")
+    # Results and suite hashes look members up by name, so a suite can't share one with a task.
+    clashes = sorted({task.name for task in tasks} & {suite.name for suite in held})
+    if clashes:
+        raise ValueError(f"a task and a suite share the names {clashes}")
 
     model = ScoringModel.from_pretrained(
         config.model, device=config.device, batch_tokens=config.batch_tokens
     )
-    task_results = [score_task(model, task, config.limit, config.out) for task in tasks]
-
+    # Collected before scoring, so the commit's dirty flag describes the tree as scoring starts
+    # and `created_at` is when scoring started, as lm-evaluation-harness records `start_date`.
     provenance = Provenance.collect(
         model=model.name,
         command=config.command,
@@ -110,14 +124,29 @@ def evaluate(config: EvalConfig) -> Results:
         max_length=model.max_length,
         attention=model.attention,
     )
+    task_results = [score_task(model, task, config.limit, config.out) for task in tasks]
 
-    # Suite scores are means of the per-task means already on the host.
+    # Suite scores are means of the per-task means already on the host. A suite's hash covers
+    # each member's hash, and `held` puts every suite after its members, so equal hashes mean
+    # the same members scored the same requests all the way down.
     metrics = {result.task: result.metrics for result in task_results}
+    hashes = {result.task: result.task_hash for result in task_results}
     suite_results = []
     for suite in held:
         score = suite.score(metrics) if suite.scored else None
         members = [member.name for member in suite.members]
-        suite_results.append(SuiteResult(suite.name, members, suite.metric, score))
+        definition = {
+            "suite": suite.name,
+            "metric": suite.metric,
+            "scored": suite.scored,
+            "members": [[name, hashes[name]] for name in members],
+        }
+        hashes[suite.name] = hashlib.sha256(
+            json.dumps(definition, sort_keys=True).encode()
+        ).hexdigest()
+        suite_results.append(
+            SuiteResult(suite.name, hashes[suite.name], members, suite.metric, score)
+        )
     results = Results(provenance, task_results, suite_results)
 
     if config.out is not None:
@@ -145,7 +174,7 @@ def _check_out(out: Path | None) -> None:
     """Raises `FileExistsError` if `out` exists and isn't an empty directory."""
     # Old predictions next to a new results.json would mix two runs.
     if out is not None and out.exists() and (not out.is_dir() or any(out.iterdir())):
-        raise FileExistsError(f"{out} is not an empty directory")
+        raise FileExistsError(f"{out} is not an empty directory: {_ONE_RUN}")
 
 
 def score_task(
@@ -162,8 +191,15 @@ def score_task(
         limit (`int`, *optional*):
             Score only the first `limit` docs.
         out (`Path`, *optional*):
-            Write per-doc scores to `out/predictions/<task>.jsonl`, replacing an existing file. No `results.json` is written: that is [`evaluate`]'s job.
+            Write per-doc scores to `out/predictions/<task>.jsonl`. A training loop gives each step its own `out`. No `results.json` is written: that is [`evaluate`]'s job.
+
+    Raises:
+        `FileExistsError`: if the predictions file already exists, before anything is scored.
     """
+    predictions = out / "predictions" / f"{task.name}.jsonl" if out is not None else None
+    if predictions is not None and predictions.exists():
+        raise FileExistsError(f"{predictions} exists: {_ONE_RUN}")
+
     docs, shots = task.load(limit)
     prepared = task.requests(docs, shots)
 
@@ -180,12 +216,13 @@ def score_task(
     metrics = dict(zip(per_doc, means, strict=True))
     truncation = prepared.truncation(request_scores)
 
-    if out is not None:
-        write_predictions(out / "predictions" / f"{task.name}.jsonl", prepared.docs, scores)
+    if predictions is not None:
+        write_predictions(predictions, prepared.docs, scores)
 
     return TaskResult(
         task=task.name,
         task_hash=prepared.hash,
+        dataset=task.dataset,
         primary_metric=task.primary_metric,
         metrics=metrics,
         num_docs=len(prepared.docs),

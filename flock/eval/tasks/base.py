@@ -229,10 +229,11 @@ class MCRequests:
         num_chars, num_bytes = self._continuation_lengths(num_choices, device)
         gold = torch.tensor([doc.gold for doc in self.docs], dtype=torch.int64, device=device)
 
-        logprob_uncond = None
+        logprob_uncond = tokens_cut_uncond = None
         if self.has_uncond:
             # The unconditional requests follow all conditional ones, in the same order.
             logprob_uncond = scores.logprob[gather_index + num_choices]
+            tokens_cut_uncond = scores.tokens_cut[gather_index + num_choices]
 
         return ChoiceScores(
             logprob=scores.logprob[gather_index],
@@ -241,7 +242,9 @@ class MCRequests:
             num_bytes=num_bytes[gather_index],
             valid=valid,
             gold=gold,
+            tokens_cut=scores.tokens_cut[gather_index],
             logprob_uncond=logprob_uncond,
+            tokens_cut_uncond=tokens_cut_uncond,
         )
 
     def truncation(self, scores: Scores) -> Truncation:
