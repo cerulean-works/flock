@@ -1,6 +1,6 @@
 # Tasks
 
-A task is a [`~eval.tasks.MultipleChoiceTask`] registered by name in `TASKS`, and a suite is a [`~eval.tasks.Suite`] of tasks registered in `SUITES`. [Adding a task](adding-a-task) shows how to write one.
+A task is a [`~eval.tasks.MultipleChoiceTask`] or a [`~eval.tasks.PerplexityTask`] registered by name in `TASKS`, and a suite is a [`~eval.tasks.Suite`] of tasks registered in `SUITES`. [Adding a task](adding-a-task) shows how to write one.
 
 ## Available tasks
 
@@ -46,9 +46,19 @@ A few behaviours follow OLMES for parity and are worth knowing:
 - **Basic skills shuffles each doc's choices** with a generator seeded by the doc's id, as OLMES does, so the order is fixed per doc. Its primary metric is `acc_per_token`; OLMES's own `acc_per_token` equals its `acc_raw`, so compare with OLMES's numbers on `acc_raw`.
 - **LAMBADA reports only `bpb` for now.** Its Base Easy accuracy is greedy match of the last word, which the scorer doesn't compute yet, so it is only in `base_easy:qa_bpb`.
 
+### Perplexity tasks
+
+A perplexity task scores each doc's text whole and reports `bits_per_byte` over all of its docs (see [Metrics](metrics#perplexity)). Each [Paloma](https://arxiv.org/abs/2312.10523) domain is one task, scored on its whole `test` split in windows of 2048 tokens.
+
+| Name | Source | Split | Docs | Window | Primary metric |
+|---|---|---|---|---|---|
+| `paloma_wikitext_103` | [Paloma](https://huggingface.co/datasets/allenai/paloma)'s `wikitext_103` | `test`, all of it | 61 | 2048 | `bits_per_byte` |
+
+Paloma is gated: accept its terms on the dataset page before the first run.
+
 ## Suites
 
-A suite's score is the unweighted mean of its members' scores, as OLMES's `macro` aggregate. A member task gives the suite's `metric`, or its own primary metric if the suite sets none. A member suite counts as one member, whatever its size, and gives its own score, so a suite that sets `metric` holds only suites that set the same one. A scored suite's members share one scale: all accuracies, or all one other metric such as `bpb`, since those don't average. `base_easy` has no score of its own: it groups suites whose scores don't average, so that one name runs them all.
+A suite's score is the unweighted mean of its members' scores, as OLMES's `macro` aggregate. A member task gives the suite's `metric`, or its own primary metric if the suite sets none. A member suite counts as one member, whatever its size, and gives its own score, so a suite that sets `metric` holds only suites that set the same one. A scored suite's members share one scale: all accuracies, or all one other metric such as `bpb` or perplexity `bits_per_byte`, since those don't average. `base_easy` has no score of its own: it groups suites whose scores don't average, so that one name runs them all.
 
 | Name | Members | Metric | OLMES suite |
 |---|---|---|---|
@@ -62,6 +72,10 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `mt_mbpp` | the 17 `mt_mbpp_<language>` tasks | `bpb` | `mt_mbpp_v2fix` |
 | `base_easy:code_bpb` | `humaneval`, `mbpp`, `mt_mbpp` | `bpb` | `olmo3:base_easy:code_bpb` |
 | `base_easy` | `base_easy:qa_rc`, `base_easy:qa_bpb`, `base_easy:math_bpb`, `base_easy:code_bpb` | unscored | none |
+| `paloma:wikitext_103` | `paloma_wikitext_103` | `bits_per_byte` | none; OLMES's task `paloma_wikitext_103::paloma` |
+| `paloma` | `paloma:wikitext_103` | unscored | none |
+
+A Paloma source is a suite of its domains, scored as their unweighted mean, as the paper averages a source's domains. OLMES instead reports a source's bits per byte over all of its docs together, so a source with several domains differs from OLMES's number. `paloma` has no score, since Paloma defines none over all sources.
 
 The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. OLMES groups ARC-Easy and ARC-Challenge into one suite with no metric of its own; here they are two members of `base_easy:qa_rc`. `basic_skills`, and so `base_easy:qa_rc`, averages our `acc_per_token`, which divides by the real token count. OLMES's equals its `acc_raw`, so these two scores differ from OLMES's by that member. See [Suites in results](results#suites) for when two suite scores compare.
 
@@ -82,5 +96,9 @@ The Base Easy suites hold only the tasks that exist so far, so their scores chan
 [[autodoc]] eval.tasks.cloze
 
 [[autodoc]] eval.tasks.MCRequests
+
+[[autodoc]] eval.tasks.PerplexityTask
+
+[[autodoc]] eval.tasks.TextDoc
 
 [[autodoc]] eval.tasks.Suite
