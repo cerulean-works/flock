@@ -38,7 +38,7 @@
 <div class="flex min-h-0 flex-1 flex-col">
 	<main class="min-h-0 flex-1 overflow-y-auto px-5 pb-16">
 		<div class="mx-auto max-w-180">
-			<h1 class="pt-8 font-serif text-[34px] leading-[1.15] tracking-[-0.02em]">
+			<h1 class="pt-8 text-[34px] leading-[1.15] tracking-[-0.025em]">
 				{data.profile.name}
 			</h1>
 			<p class="mt-1 text-muted-foreground">
@@ -47,7 +47,7 @@
 			</p>
 
 			<section class="mt-10">
-				<h2 class="font-serif text-2xl tracking-[-0.01em]">Picture</h2>
+				<h2 class="text-2xl tracking-[-0.01em]">Picture</h2>
 				<div class="mt-4">
 					<AvatarField
 						kind="user"
@@ -59,7 +59,7 @@
 			</section>
 
 			<section class="mt-10">
-				<h2 class="font-serif text-2xl tracking-[-0.01em]">Name</h2>
+				<h2 class="text-2xl tracking-[-0.01em]">Name</h2>
 				<p class="mt-2 max-w-[62ch] text-muted-foreground">
 					What others see on your runs and in member lists.
 				</p>
@@ -87,7 +87,7 @@
 			</section>
 
 			<section class="mt-10">
-				<h2 class="font-serif text-2xl tracking-[-0.01em]">Password</h2>
+				<h2 class="text-2xl tracking-[-0.01em]">Password</h2>
 				<p class="mt-2 max-w-[62ch] text-muted-foreground">
 					{#if data.profile.has_password}
 						Changing it signs you out everywhere else.
@@ -161,7 +161,7 @@
 			</section>
 
 			<section class="mt-10">
-				<h2 class="font-serif text-2xl tracking-[-0.01em]">Organizations</h2>
+				<h2 class="text-2xl tracking-[-0.01em]">Organizations</h2>
 				{#if data.profile.orgs.length}
 					<ul class="mt-3 border-t border-divider">
 						{#each data.profile.orgs as org (org.name)}
@@ -207,7 +207,7 @@
 			</section>
 
 			<section class="mt-10">
-				<h2 class="font-serif text-2xl tracking-[-0.01em]">API keys</h2>
+				<h2 class="text-2xl tracking-[-0.01em]">API keys</h2>
 				<p class="mt-2 max-w-[62ch] text-muted-foreground">Keys work until deleted.</p>
 				{#if data.keys.length}
 					<ul class="mt-4 border-t border-divider">

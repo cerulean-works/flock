@@ -34,10 +34,10 @@
 		withParam(page.url, 'month', month === thisMonth ? null : month);
 </script>
 
-<section aria-labelledby="budget-title" class="grid gap-6">
+<section aria-labelledby="budget-title" class="grid grid-cols-1 gap-6">
 	<!-- The same 40px band as the activity's heading beside it. -->
 	<div class="flex h-10 items-center gap-1">
-		<h2 id="budget-title" class="flex-1 font-serif text-[22px] tracking-[-0.01em]">Budget</h2>
+		<h2 id="budget-title" class="flex-1 text-[22px] tracking-[-0.01em]">Budget</h2>
 		<Button
 			variant="ghost"
 			size="icon-sm"
@@ -72,7 +72,7 @@
 			<p class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
 				<span
 					class={[
-						'font-serif text-[34px] leading-none tracking-[-0.02em]',
+						'text-[34px] leading-none tracking-[-0.025em] tabular-nums',
 						over && 'text-destructive'
 					]}
 				>
@@ -97,7 +97,7 @@
 			</p>
 		{:else}
 			<p class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-				<span class="font-serif text-[34px] leading-none tracking-[-0.02em]">
+				<span class="text-[34px] leading-none tracking-[-0.025em] tabular-nums">
 					{fmt(budget.spent)}
 				</span>
 				<span class="text-muted-foreground">spent</span>
@@ -112,7 +112,7 @@
 	</div>
 
 	{#if budget.unpriced.length || budget.unknown_gpu.runs}
-		<div class="grid gap-1.5 border-l-2 border-state-preempting pl-3 text-[13px]">
+		<div class="grid gap-1.5 bg-card px-3 py-2.5 text-[13px]">
 			{#if budget.unpriced.length}
 				<p>
 					No price for {budget.unpriced
@@ -141,7 +141,7 @@
 	>
 		{expanded ? 'Hide breakdown' : 'Show breakdown'}
 	</Button>
-	<div class={['grid gap-6', !expanded && 'hidden xl:grid']}>
+	<div class={['grid grid-cols-1 gap-6', !expanded && 'hidden xl:grid']}>
 		<div>
 			<h3 class="text-xs font-medium text-muted-foreground">By project</h3>
 			<ul class="mt-2">

@@ -22,7 +22,7 @@
 </svelte:head>
 
 <AuthShell>
-	<h1 class="font-serif text-[34px] leading-[1.15] tracking-[-0.02em]">Sign in to Flock</h1>
+	<h1 class="text-[34px] leading-[1.15] tracking-[-0.025em]">Sign in to Flock</h1>
 	<p class="mt-3 leading-relaxed text-muted-foreground">Experiment tracking for Cerulean.</p>
 
 	{#if googleError}

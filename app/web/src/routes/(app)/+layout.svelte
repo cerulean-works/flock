@@ -101,10 +101,10 @@
 			</Button>
 			<a
 				href={resolve('/(app)')}
-				class="flex items-center gap-2 rounded-md font-serif text-[19px] tracking-[-0.01em] outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+				class="flex items-center gap-2 rounded-md text-[19px] font-medium tracking-[-0.025em] outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
 			>
 				<LogoMark class="size-6" />
-				<span class="translate-y-[0.13em]">Flock</span>
+				<span>Flock</span>
 			</a>
 		</header>
 		{@render children()}

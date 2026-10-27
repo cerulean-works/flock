@@ -54,12 +54,10 @@
 	<div class="flex h-12 flex-none items-center gap-2 border-b border-divider pr-2 pl-4">
 		<a
 			href={resolve('/(app)')}
-			class="flex items-center gap-2 rounded-md font-serif text-[19px] tracking-[-0.01em] outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+			class="flex items-center gap-2 rounded-md text-[19px] font-medium tracking-[-0.025em] outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
 		>
 			<LogoMark class="size-6" />
-			<!-- Newsreader's line box leaves room for descenders "Flock" doesn't have: centered as
-			     is, the letters sit high of the disc. This moves their ink to its middle. -->
-			<span class="translate-y-[0.13em]">Flock</span>
+			<span>Flock</span>
 		</a>
 		{#if oncollapse}
 			<Button
