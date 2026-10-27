@@ -387,9 +387,7 @@ class Column:
 async def columns(conn: asyncpg.Pool | asyncpg.Connection, project_pk: int) -> list[Column]:
     """A project's columns, sorted by name (code point order, as Python sorts)."""
     records = await conn.fetch(
-        "SELECT key, int_only, runs, nums, strs, bools, lists, objects FROM project_keys "
-        "WHERE project_pk = $1 AND runs > 0 ORDER BY key",
-        project_pk,
+        f"SELECT * FROM ({values.COLUMNS}) c WHERE runs > 0 ORDER BY key", project_pk
     )
     return [Column(*record) for record in records]
 
@@ -425,7 +423,7 @@ async def cells(
         return out
     records = await conn.fetch(
         "SELECT v.run_pk, v.key, v.num, v.txt, v.obj::text, coalesce(k.int_only, false) "
-        "FROM run_values v LEFT JOIN project_keys k ON k.project_pk = $1 AND k.key = v.key "
+        f"FROM run_values v LEFT JOIN ({values.COLUMNS}) k ON k.key = v.key "
         "WHERE v.run_pk = ANY($2) AND v.key = ANY($3)",
         project_pk,
         list(run_pks),

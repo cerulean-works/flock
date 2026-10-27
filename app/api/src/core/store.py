@@ -6,7 +6,6 @@ import secrets
 import shutil
 import string
 import time
-from collections import OrderedDict
 from collections.abc import AsyncGenerator, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,7 +22,7 @@ from app.api.src.core.budgets import Budgets, Usage
 from app.api.src.core.bus import Bus
 from app.api.src.core.errors import Conflict, Discarded, Forbidden, NotFound
 from app.api.src.core.feed import Feed
-from app.api.src.core.history import History, PointCounter, Series, write_chunks
+from app.api.src.core.history import History, Series, write_chunks
 from app.api.src.core.imports import Imports
 from app.api.src.core.live import Hub
 from app.api.src.core.metric_defs import parse_metric_defs
@@ -99,12 +98,6 @@ class Run:
     history_line_count: int = 0
     events_line_count: int = 0
     log_line_count: int = 0
-    # Per series stream ("history", "system"): lines covered by the columnar copy in
-    # history_columns, and the metrics it holds, so a compacted stream can load lazily.
-    compacted: dict[str, int] = field(default_factory=lambda: {"history": 0, "system": 0})
-    compacted_keys: dict[str, list[str]] = field(
-        default_factory=lambda: {"history": [], "system": []}
-    )
     # Flattened summary of an active run, kept to diff successive summary updates.
     summary_flat: dict[str, Any] | None = None
     # What ``wandb.define_metric`` set for plotting: step metrics and hidden metrics.
@@ -324,15 +317,17 @@ class Store:
         # Runs deleted while a client was still logging to them: (entity, project, run) -> when
         # that client was last heard from (see ``discarding``).
         self._deleted_live: dict[tuple[str, str, str], float] = {}
-        # Series of active and recently read runs, keyed by (run pk, stream), in LRU order.
-        self._history: OrderedDict[tuple[int, str], History] = OrderedDict()
-        self._history_points = PointCounter()
-        self._rebuilding: dict[tuple[int, str], asyncio.Future[History]] = {}
         self._tasks: set[asyncio.Task] = set()
+        # Wakes the compaction loop early, when a run of this replica finishes (D78).
+        self._compact_wanted = asyncio.Event()
+        self._compactor: asyncio.Task | None = None
         self.live = Hub()
+        self.relay = live.Relay(self.live, None)
         self.secret = b""
         # Notifications from every replica (D79): created first, as the parts below listen.
         self.bus = Bus(settings.listen_database_url or settings.database_url)
+        self.bus.listen(live.CHANNEL, self.relay.receive)
+        self.bus.on_reset(self.relay.reset)
         self.accounts = Accounts(self)
         self.budgets = Budgets(self)
         self.avatars = Avatars(self)
@@ -386,6 +381,7 @@ class Store:
         try:
             secret = await self.db.fetchval("SELECT value FROM meta WHERE key = 'upload_secret'")
             self.secret = bytes.fromhex(secret)
+            self.relay.start(self.db.pool)
             await self.bus.start()
             await self._load()
             await self.accounts.load()
@@ -393,18 +389,25 @@ class Store:
             await self.imports.load()
             await self.s3.load()
             await self._detect_missing_gpus()
+            self._compactor = asyncio.get_running_loop().create_task(self._compact_loop())
         except BaseException:
             await self.bus.close()
+            await self.relay.close()
             await self.db.close()
             raise
 
     async def close(self) -> None:
         await self.s3.close()
         await self.imports.close()
+        if self._compactor is not None:
+            self._compactor.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._compactor
         await self.avatars.flush()
         await self.accounts.flush()
         await self.flush()
         await self.bus.close()
+        await self.relay.close()
         await self.db.close()
 
     async def _load(self) -> None:
@@ -436,9 +439,8 @@ class Store:
                    extract(epoch FROM created_at)::float8, extract(epoch FROM updated_at)::float8,
                    extract(epoch FROM heartbeat_at)::float8, tags, notes, group_name, job_type,
                    host, program, commit_hash, description, sweep, exitcode, history_line_count,
-                   events_line_count, log_line_count, history_compacted_line_count,
-                   system_compacted_line_count, config, summary, owner_pk, gpu_type, gpu_count,
-                   gpu_type_override, gpu_count_override
+                   events_line_count, log_line_count, config, summary, owner_pk, gpu_type,
+                   gpu_count, gpu_type_override, gpu_count_override
             FROM runs
             ORDER BY created_at, pk
         """
@@ -468,17 +470,16 @@ class Store:
                     history_line_count=record[18],
                     events_line_count=record[19],
                     log_line_count=record[20],
-                    compacted={"history": record[21], "system": record[22]},
-                    owner=record[25],
-                    gpu_type_detected=record[26],
-                    gpu_count_detected=record[27],
-                    gpu_type_override=record[28],
-                    gpu_count_override=record[29],
+                    owner=record[23],
+                    gpu_type_detected=record[24],
+                    gpu_count_detected=record[25],
+                    gpu_type_override=record[26],
+                    gpu_count_override=record[27],
                 )
                 project.add(run)
                 self.runs_by_pk[run.pk] = run
                 values = run.attributes()
-                config_raw, summary_raw = record[23], record[24]
+                config_raw, summary_raw = record[21], record[22]
                 if config_raw:
                     config = loads_lenient(config_raw)
                     values.update(self._config_columns(config))
@@ -501,20 +502,9 @@ class Store:
             for name, (rows, vals) in columns.items():
                 table.bulk_set(name, rows, vals)
         for pk, stream, keys in await self.db.fetch(
-            "SELECT run_pk, stream, array_agg(key) FROM history_columns GROUP BY run_pk, stream"
+            "SELECT run_pk, stream, array_agg(key) FROM run_metrics GROUP BY run_pk, stream"
         ):
-            run = self.runs_by_pk[pk]
-            run.compacted_keys[stream] = list(keys)
-            run.note_metrics(keys, stream)
-        # Active runs are always kept in memory. Streams that stopped before being compacted
-        # (a crash, or system metrics logged before migration 0002) are rebuilt so their metric
-        # keys are known, one run at a time so memory stays bounded while they compact.
-        for stream in self.STREAMS:
-            for run in list(self.runs_by_pk.values()):
-                if run.active or run.compacted[stream] < run.lines(stream):
-                    (hist,) = await self.histories([run], (), stream)
-                    run.note_metrics(hist.series, stream)
-                    await self.flush()
+            self.runs_by_pk[pk].note_metrics(keys, stream)
 
         # Files of runs whose delete committed but whose files were not removed (a crash).
         def sweep() -> int:
@@ -831,12 +821,6 @@ class Store:
             if run.active:
                 run.summary_flat = self._summary_columns(summary)
         project.table.set_many(run.row, table_values)
-        for stream in self.STREAMS:
-            self._cache_history((run.pk, stream), History())
-        self.live.broadcast(
-            project.pk,
-            Hub.event("created", {"run": name, "display_name": display_name, "state": run.state}),
-        )
         return run
 
     async def _update_run(self, run: Run, fields: dict[str, Any]) -> None:
@@ -923,8 +907,8 @@ class Store:
                 defs = None
             else:
                 run.metric_defs = defs
-        changed = self._apply_summary(run, table, summary) if summary is not None else None
-        self._publish_run(run, changed, metric_defs=defs)
+        if summary is not None:
+            self._apply_summary(run, table, summary)
 
     @staticmethod
     def _replace_columns(table: ColumnTable, row: int, prefix: str, values: dict[str, Any]):
@@ -953,34 +937,6 @@ class Store:
             run.summary_flat = flat
         return changed
 
-    def _publish_run(
-        self,
-        run: Run,
-        summary: dict[str, Any] | None = None,
-        attributes: dict[str, Any] | None = None,
-        metric_defs: list[dict[str, Any]] | None = None,
-    ) -> None:
-        """Tell dashboards showing ``run`` about its state, line count, summary, edited
-        attributes and changed metric definitions."""
-        subs = self.live.watching(run.project.pk, run.name)
-        if not subs:
-            return
-        data: dict[str, Any] = {
-            "run": run.name,
-            "state": run.state,
-            "lines": run.history_line_count,
-            "updated_at": run.updated_at,
-        }
-        if summary:
-            data["summary"] = summary
-        if attributes:
-            data["attributes"] = attributes
-        if metric_defs is not None:
-            data["metric_defs"] = metric_defs
-        event = Hub.event("run", data)
-        for sub in subs:
-            sub.push(event)
-
     def _sync_state(self, run: Run, project: Project) -> None:
         if run.active:
             if run.pk not in self.active:
@@ -989,8 +945,7 @@ class Store:
             self.active.pop(run.pk, None)
             project.active.pop(run.name, None)
             run.summary_flat = None
-            for stream in self.STREAMS:
-                self._schedule_compaction(run, stream)
+            self._compact_wanted.set()
 
     async def file_stream(
         self,
@@ -1059,26 +1014,20 @@ class Store:
             history_count = max(run.history_line_count, h_off + len(h_lines))
             events_count = max(run.events_line_count, e_off + len(e_lines))
             log_count = max(run.log_line_count, o_off + len(o_lines))
-            # Retries can resend lines we already have; only append unseen ones. Series are
-            # loaded before persisting so that rebuilding them from the database can't see the
-            # new lines (which would then be appended twice).
-            appends: dict[str, tuple[History, int, list[str]]] = {}
+            # Retries can resend lines we already have: only unseen ones become points. Each
+            # metric's new points are one chunk per stream (D78).
+            fresh: dict[str, tuple[int, History]] = {}
             for stream, offset, lines in (("history", h_off, h_lines), ("system", e_off, e_lines)):
                 new_from = max(offset, run.lines(stream))
                 if new_from < offset + len(lines):
-                    (series,) = await self.histories([run], None, stream)
-                    appends[stream] = (series, new_from, lines[new_from - offset :])
-            # Each metric's new points, as one chunk per stream (D78).
-            fresh: dict[str, tuple[int, dict[str, Series]]] = {}
-            for stream, (_, new_from, lines) in appends.items():
-                hist = History()
-                hist.append_rows(new_from, parse_rows(lines))
-                if hist.series:
-                    fresh[stream] = (new_from, hist.series)
+                    hist = History()
+                    hist.append_rows(new_from, parse_rows(lines[new_from - offset :]))
+                    if hist.series:
+                        fresh[stream] = (new_from, hist)
             chunk_rows = [
                 (stream, key, start, series.n, series.encode(start))
-                for stream, (start, by_key) in fresh.items()
-                for key, series in by_key.items()
+                for stream, (start, hist) in fresh.items()
+                for key, series in hist.series.items()
             ]
 
             async with self.db.pool.acquire() as conn, conn.transaction():
@@ -1196,12 +1145,8 @@ class Store:
                     messages.append(live.event_message(project.pk, name, "run", data))
                 await live.publish(conn, messages)
 
-            for stream, (series, new_from, lines) in appends.items():
-                if self._history.get((pk, stream)) is not series:  # evicted while we wrote
-                    self._cache_history((pk, stream), series)
-                series.append_rows(new_from, parse_rows(lines))
-                run.note_metrics(series.series, stream)
-            previous_state = run.state
+            for stream, (_, hist) in fresh.items():
+                run.note_metrics(hist.series, stream)
             run.history_line_count = history_count
             run.events_line_count = events_count
             run.log_line_count = log_count
@@ -1210,9 +1155,8 @@ class Store:
             run.updated_at = run.heartbeat_at = now
             self.budgets.accrue(run, accrued)
             table = project.table
-            changed = (
-                self._apply_summary(run, table, summary_data) if summary_data is not None else None
-            )
+            if summary_data is not None:
+                self._apply_summary(run, table, summary_data)
             table.set(run.row, "state", state)
             table.set(run.row, "exitcode", exitcode)
             table.set(run.row, "updated_at", now)
@@ -1220,18 +1164,6 @@ class Store:
             if accrued:
                 table.set(run.row, "gpu_hours", run.gpu_hours)
             self._sync_state(run, project)
-            subs = self.live.watching(project.pk, name)
-            if subs:
-                for stream, (series, new_from, _) in appends.items():
-                    watchers = subs if stream == "history" else [s for s in subs if s.system]
-                    x_key = "_step" if stream == "history" else "_runtime"
-                    points = series.delta(new_from, x_key) if watchers else None
-                    if points:
-                        event = Hub.points_event(stream, name, run.lines(stream), points)
-                        for sub in watchers:
-                            sub.push(event)
-                if changed or state != previous_state:
-                    self._publish_run(run, changed)
 
     async def save_file(self, run: Run, name: str, data: bytes) -> None:
         path = self.file_path(run, name)
@@ -1334,7 +1266,6 @@ class Store:
             "gpu_hours": run.gpu_hours,
         }
         run.project.table.set_many(run.row, changed)
-        self._publish_run(run, attributes=changed)
 
     async def _detect_missing_gpus(self) -> None:
         """Read the GPUs of runs whose metadata was uploaded before GPUs were tracked."""
@@ -1382,7 +1313,6 @@ class Store:
             project = run.project
             project.table.set(run.row, "state", state)
             self._sync_state(run, project)
-            self._publish_run(run)
 
     async def mark_crashed_runs(self) -> list[Run]:
         """Mark active runs whose client stopped sending heartbeats as crashed."""
@@ -1464,10 +1394,6 @@ class Store:
                     self.projects[project.key] = project
                 project.description = description
                 project.updated_at = now
-        if renamed:
-            # Dashboards address the project by name: tell them, then end their streams.
-            self.live.broadcast(project.pk, Hub.event("project", {"renamed_to": name}))
-            self.live.close_project(project.pk)
 
     async def delete_project(self, project: Project, force: bool = False) -> None:
         """Delete a project with all its runs; refused while runs are active unless ``force``."""
@@ -1497,8 +1423,6 @@ class Store:
                 await conn.execute("DELETE FROM projects WHERE pk = $1", project.pk)
                 await live.publish(conn, self._closing(project))
             pks = self._drop_project(project)
-        self.live.broadcast(project.pk, Hub.event("project", {"deleted": True}))
-        self.live.close_project(project.pk)
         await self._remove_files(pks)
 
     @staticmethod
@@ -1537,7 +1461,7 @@ class Store:
         """Add a finished run copied from elsewhere, with its timestamps, series, logs and
         files; None if the project already has a run of that name (so imports can resume).
 
-        Series are stored compacted straight away, and its lifetime is entered in the usage
+        Series are stored as one chunk per metric straight away, and its lifetime is entered in the usage
         ledger as if it had sent heartbeats throughout.
         """
         if data.state in Run.ACTIVE_STATES:
@@ -1556,11 +1480,6 @@ class Store:
             hist = History()
             hist.append_rows(0, parse_rows(lines))
             series[stream] = hist
-        columns = [
-            (stream, key, s.n, s.encode())
-            for stream, hist in series.items()
-            for key, s in hist.series.items()
-        ]
         heartbeat_at = max(data.heartbeat_at, data.created_at)
         ledger = gpus.split_by_month(data.created_at, heartbeat_at)
         history, events, logs = (
@@ -1578,12 +1497,11 @@ class Store:
                     INSERT INTO runs (project_pk, name, display_name, state, created_at,
                         updated_at, heartbeat_at, config, summary, tags, notes, group_name,
                         job_type, host, program, commit_hash, sweep, exitcode,
-                        history_line_count, events_line_count, log_line_count,
-                        history_compacted_line_count, system_compacted_line_count, owner_pk,
+                        history_line_count, events_line_count, log_line_count, owner_pk,
                         gpu_type, gpu_count, metric_defs)
                     VALUES ($1, $2, $3, $4, to_timestamp($5), to_timestamp($6), to_timestamp($6),
-                        $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $18,
-                        $19, $21, $22, $23, $24::jsonb)
+                        $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
+                        $22, $23, $24::jsonb)
                     RETURNING pk
                     """,
                     project.pk,
@@ -1618,12 +1536,6 @@ class Store:
                             records=[(pk, i, line) for i, line in enumerate(lines)],
                             columns=("run_pk", "line", "data"),
                         )
-                if columns:
-                    await conn.copy_records_to_table(
-                        "history_columns",
-                        records=[(pk, *column) for column in columns],
-                        columns=("run_pk", "stream", "key", "n", "data"),
-                    )
                 for stream, hist in series.items():
                     await write_chunks(conn, pk, stream, 0, hist.series)
                 runtime = sum(seconds for _, seconds in ledger)
@@ -1726,8 +1638,6 @@ class Store:
                 history_line_count=len(history),
                 events_line_count=len(events),
                 log_line_count=len(logs),
-                compacted={"history": len(history), "system": len(events)},
-                compacted_keys={stream: list(hist.series) for stream, hist in series.items()},
             )
             project.add(run)
             self.runs_by_pk[pk] = run
@@ -1743,12 +1653,6 @@ class Store:
                 run.note_metrics(hist.series, stream)
             # Imported runs are older than most: keep the rows in creation order.
             self._reindex(project, sorted(project.runs, key=lambda r: (r.created_at, r.pk)))
-        self.live.broadcast(
-            project.pk,
-            Hub.event(
-                "created", {"run": run.name, "display_name": run.display_name, "state": run.state}
-            ),
-        )
         return run
 
     # ------------------------------------------------------------------ organizations
@@ -1831,9 +1735,6 @@ class Store:
             self.imports.forget(org)
         self.s3.purge_later()
         await self.avatars.release(org.avatar)
-        for project in projects:
-            self.live.broadcast(project.pk, Hub.event("project", {"deleted": True}))
-            self.live.close_project(project.pk)
         await self._remove_files(pks)
 
     def forget_owner(self, user: int) -> None:
@@ -1979,10 +1880,6 @@ class Store:
                 project.table.set_many(run.row, {**changed, "updated_at": now})
                 if (run.gpu_type, run.gpu_count) != gpus_before:
                     self._gpus_changed(run)
-                    changed.pop("gpu_type", None)
-                    changed.pop("gpu_count", None)
-                if changed:
-                    self._publish_run(run, attributes=changed)
             return runs
 
     async def delete_runs(
@@ -2010,7 +1907,6 @@ class Store:
             for run in runs:
                 self._forget_run(run)
             self._reindex(project, [run for run in project.runs if not run.deleted])
-            self.live.broadcast(project.pk, Hub.event("deleted", {"runs": names}))
         await self._remove_files(pks)
         return names
 
@@ -2061,12 +1957,6 @@ class Store:
             # Keep the target's rows in creation order, so moved runs don't look like new ones.
             self._reindex(target, sorted(target.runs, key=lambda r: (r.created_at, r.pk)))
             names = [run.name for run in runs]
-        self.live.broadcast(
-            source.pk, Hub.event("deleted", {"runs": names, "moved_to": target.name})
-        )
-        for run in runs:
-            event = {"run": run.name, "display_name": run.display_name, "state": run.state}
-            self.live.broadcast(target.pk, Hub.event("created", event))
         return names
 
     def discarding(self, entity: str, project: str, name: str) -> bool:
@@ -2104,10 +1994,6 @@ class Store:
         self.active.pop(run.pk, None)
         self.runs_by_pk.pop(run.pk, None)
         self._locks.pop(run.pk, None)
-        for stream in self.STREAMS:
-            hist = self._history.pop((run.pk, stream), None)
-            if hist is not None:
-                hist.detach()
 
     @staticmethod
     def _reindex(project: Project, runs: list[Run]) -> None:
@@ -2129,177 +2015,128 @@ class Store:
 
     # ------------------------------------------------------------------ series
 
+    # Every chunk of the runs $1 in stream $2, of the keys $3 (all if NULL), oldest first, and
+    # the names of the runs' other metrics (with NULL chunks).
+    HISTORIES: ClassVar[str] = """
+        SELECT m.run_pk, m.key, c.first_line, c.n, c.data
+        FROM run_metrics m
+        LEFT JOIN series_chunks c ON c.run_pk = m.run_pk AND c.stream = m.stream
+            AND c.key = m.key AND ($3::text[] IS NULL OR m.key = ANY($3))
+        WHERE m.run_pk = ANY($1) AND m.stream = $2
+        ORDER BY m.run_pk, m.key, c.first_line
+    """
+
     async def histories(
         self, runs: Sequence[Run], keys: Iterable[str] | None = None, stream: str = "history"
     ) -> list[History]:
-        """Series of ``runs`` in ``stream`` ("history" or "system"), with ``keys`` loaded.
-
-        Every metric is loaded when ``keys`` is None. Compacted series of all runs are fetched in
-        one query; other keys may stay unloaded.
-        """
-        if stream not in self.STREAMS:  # stream names are interpolated into SQL
+        """Series of ``runs`` in ``stream`` ("history" or "system"), with ``keys`` loaded
+        (every metric when None), from their chunks in one query (D78)."""
+        if stream not in self.STREAMS:
             raise ValueError(f"unknown series stream {stream!r}")
         wanted = None if keys is None else list(dict.fromkeys(keys))
-        out: list[History | None] = []
-        rebuilds: list[tuple[int, asyncio.Future[History]]] = []
+        records = await self.db.fetch(self.HISTORIES, [run.pk for run in runs], stream, wanted)
+        chunks: dict[int, dict[str, list[Series]]] = {}
+        for run_pk, key, first_line, n, data in records:
+            parts = chunks.setdefault(run_pk, {}).setdefault(key, [])
+            if data is not None:
+                parts.append(Series.decode(data, n, first_line))
+        out = []
         for run in runs:
-            key = (run.pk, stream)
-            hist = self._history.get(key)
-            if hist is not None:
-                self._history.move_to_end(key)
-            elif run.lines(stream) == 0:
-                hist = self._insert_history(run, stream, History())
-            elif run.compacted[stream] >= run.lines(stream):
-                hist = History(run.lines(stream), run.compacted_keys[stream])
-                hist = self._insert_history(run, stream, hist)
-            else:
-                # Rebuild from raw lines; concurrent callers share one load.
-                future = self._rebuilding.get(key)
-                if future is None:
-                    future = asyncio.ensure_future(self._rebuild_history(run, stream))
-                    self._rebuilding[key] = future
-                    future.add_done_callback(lambda _, key=key: self._rebuilding.pop(key, None))
-                rebuilds.append((len(out), future))
+            found = chunks.get(run.pk, {})
+            hist = History(
+                run.lines(stream),
+                (key for key, parts in found.items() if not parts and wanted is not None),
+            )
+            for key, parts in found.items():
+                if parts:
+                    hist.series[key] = Series.concat(parts)
             out.append(hist)
-        for index, future in rebuilds:
-            out[index] = await future
-        histories: list[History] = [h for h in out if h is not None]
+        return out
 
-        missing = [(run.pk, h, h.missing(wanted)) for run, h in zip(runs, histories, strict=True)]
-        missing = [(pk, h, m) for pk, h, m in missing if m]
-        if missing:
-            pks = [pk for pk, _, _ in missing]
-            if wanted is None:
-                rows = await self.db.fetch(
-                    "SELECT run_pk, key, n, data FROM history_columns "
-                    "WHERE run_pk = ANY($1) AND stream = $2",
-                    pks,
-                    stream,
+    # ------------------------------------------------------------------ compaction (D78, D81)
+
+    # A run whose chunks need merging: a finished one with any appended, or an active one with
+    # COMPACT_AFTER of them. Claimed so that only one replica merges it, and locked like a write.
+    CLAIM_COMPACTION: ClassVar[str] = """
+        SELECT pk FROM runs
+        WHERE uncompacted > 0 AND deleted_at IS NULL
+            AND (state NOT IN ('running', 'preempting') OR uncompacted >= $1)
+        ORDER BY pk LIMIT 1
+        FOR UPDATE SKIP LOCKED
+    """
+    COMPACT_AFTER: ClassVar[int] = 64
+    # How often each replica looks for runs to compact, when nothing wakes it sooner.
+    COMPACT_INTERVAL: ClassVar[float] = 5.0
+
+    async def compact(self) -> bool:
+        """Merge the chunks of one run that needs it into one chunk per metric; returns
+        whether there was one."""
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            pk = await conn.fetchval(self.CLAIM_COMPACTION, self.COMPACT_AFTER)
+            if pk is None:
+                return False
+            groups: dict[tuple[str, str], list[tuple[int, Series]]] = {}
+            for stream, key, first_line, n, data in await conn.fetch(
+                "SELECT stream, key, first_line, n, data FROM series_chunks WHERE run_pk = $1 "
+                "ORDER BY stream, key, first_line",
+                pk,
+            ):
+                groups.setdefault((stream, key), []).append(
+                    (first_line, Series.decode(data, n, first_line))
                 )
-            else:
-                keyset = list(set().union(*(m for _, _, m in missing)))
-                rows = await self.db.fetch(
-                    "SELECT run_pk, key, n, data FROM history_columns "
-                    "WHERE run_pk = ANY($1) AND stream = $2 AND key = ANY($3)",
-                    pks,
-                    stream,
-                    keyset,
+            merged = [(stream, key, parts) for (stream, key), parts in groups.items()]
+            merged = [item for item in merged if len(item[2]) > 1]
+            if merged:
+                series = [Series.concat([part for _, part in parts]) for *_, parts in merged]
+                firsts = [parts[0][0] for *_, parts in merged]
+                streams, keys = [stream for stream, _, _ in merged], [key for _, key, _ in merged]
+                # Two statements: one statement's insert would still see the rows it deletes.
+                await conn.execute(
+                    "DELETE FROM series_chunks c USING unnest($2::text[], $3::text[]) "
+                    "AS t(stream, key) WHERE c.run_pk = $1 AND c.stream = t.stream "
+                    "AND c.key = t.key",
+                    pk,
+                    streams,
+                    keys,
                 )
-            by_run: dict[int, list] = {}
-            for pk, key, n, data in rows:
-                by_run.setdefault(pk, []).append((key, Series.decode(data, n)))
-            for pk, hist, requested in missing:
-                hist.preload(by_run.get(pk, ()), requested)
-            self._evict_history()
-        return histories
-
-    def _insert_history(self, run: Run, stream: str, hist: History) -> History:
-        if run.deleted:  # deleted while we read it: don't cache what nothing will evict
-            return hist
-        self._evict_history()
-        self._cache_history((run.pk, stream), hist)
-        return hist
-
-    async def _rebuild_history(self, run: Run, stream: str) -> History:
-        records = await self.db.fetch(
-            f"SELECT line, data FROM {self.STREAMS[stream]} WHERE run_pk = $1 ORDER BY line",
-            run.pk,
-        )
-        hist = History()
-        start, batch, expected = None, [], 0
-        for line, data in records:
-            if start is None or line != expected:
-                if batch and start is not None:
-                    hist.append_rows(start, parse_rows(batch))
-                start, batch = line, []
-            batch.append(data)
-            expected = line + 1
-        if batch and start is not None:
-            hist.append_rows(start, parse_rows(batch))
-        hist.n_rows = max(hist.n_rows, run.lines(stream))
-        cached = self._history.get((run.pk, stream))
-        if cached is not None:
-            return cached
-        self._insert_history(run, stream, hist)
-        if not run.active and run.compacted[stream] < run.lines(stream):
-            self._schedule_compaction(run, stream)
-        return hist
-
-    def _schedule_compaction(self, run: Run, stream: str) -> None:
-        """Store a finished run's series as one blob per metric, in the background."""
-        hist = self._history.get((run.pk, stream))
-        if hist is None or not hist.complete or run.lines(stream) == 0 or run.deleted:
-            return
-        line_count = run.lines(stream)
-        pk = run.pk
-        keys = list(hist.series)
-        counts = [hist.series[key].n for key in keys]
-        blobs = [hist.series[key].encode() for key in keys]
-
-        async def compact() -> None:
-            try:
-                # Upsert every metric's blob and drop metrics the stream no longer has.
-                await self.db.execute(
-                    f"""
-                    WITH upserted AS (
-                        INSERT INTO history_columns (run_pk, stream, key, n, data)
-                        SELECT $1, $2, key, n, data
-                        FROM unnest($3::text[], $4::int[], $5::bytea[]) AS t(key, n, data)
-                        ON CONFLICT (run_pk, stream, key)
-                        DO UPDATE SET n = excluded.n, data = excluded.data
-                    ), removed AS (
-                        DELETE FROM history_columns
-                        WHERE run_pk = $1 AND stream = $2 AND key <> ALL($3::text[])
-                    )
-                    UPDATE runs SET {stream}_compacted_line_count = $6 WHERE pk = $1
+                await conn.execute(
+                    """
+                    INSERT INTO series_chunks (run_pk, stream, key, first_line, n, data)
+                    SELECT $1, stream, key, first_line, n, data
+                    FROM unnest($2::text[], $3::text[], $4::int[], $5::int[], $6::bytea[])
+                        AS t(stream, key, first_line, n, data)
                     """,
                     pk,
-                    stream,
+                    streams,
                     keys,
-                    counts,
-                    blobs,
-                    line_count,
+                    firsts,
+                    [item.n for item in series],
+                    [item.encode(first) for item, first in zip(series, firsts, strict=True)],
                 )
+            await conn.execute("UPDATE runs SET uncompacted = 0 WHERE pk = $1", pk)
+        return True
+
+    async def _compact_loop(self) -> None:
+        """Every replica folds column count changes into ``project_keys`` and compacts
+        chunks, every ``COMPACT_INTERVAL`` or when one of its runs finishes."""
+        while True:
+            try:
+                while await values.fold(self.db.pool):
+                    pass
+                while await self.compact():
+                    pass
             except Exception:
-                if not run.deleted:  # else the run's rows were deleted under us, as intended
-                    log.exception("failed to compact %s of run %s", stream, run.path)
-                return
-            if line_count >= run.compacted[stream]:
-                run.compacted[stream] = line_count
-                run.compacted_keys[stream] = keys
-            self._evict_history()  # the run's in-memory series are now evictable
-
-        task = asyncio.get_running_loop().create_task(compact())
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
-
-    def _cache_history(self, key: tuple[int, str], hist: History) -> None:
-        previous = self._history.pop(key, None)
-        if previous is not None and previous is not hist:
-            previous.detach()
-        if previous is not hist:
-            hist.attach(self._history_points)
-        self._history[key] = hist
-
-    def _evict_history(self) -> None:
-        """Drop least recently used series of finished runs until under the point budget.
-
-        Active runs count towards the budget but are never evicted.
-        """
-        budget = self.settings.history_cache_points
-        if self._history_points.total <= budget:
-            return
-        for key in list(self._history):
-            if self._history_points.total <= budget:
-                break
-            run = self.runs_by_pk.get(key[0])
-            if run is None:
-                continue
-            if run.active or run.compacted[key[1]] < run.lines(key[1]):
-                continue  # active or not yet durable in compacted form
-            self._history.pop(key).detach()
+                log.exception("compaction failed")
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._compact_wanted.wait(), self.COMPACT_INTERVAL)
+            self._compact_wanted.clear()
 
     async def flush(self) -> None:
-        """Wait for background compactions; used by tests, on startup and on shutdown."""
+        """Wait for background tasks, and compact every run that needs it; used by tests and
+        on shutdown."""
         while self._tasks:
             await asyncio.gather(*list(self._tasks), return_exceptions=True)
+        while await values.fold(self.db.pool):
+            pass
+        while await self.compact():
+            pass

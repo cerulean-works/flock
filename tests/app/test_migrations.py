@@ -124,9 +124,7 @@ def test_0002_upgrades_existing_data(postgres, make_flock, tmp_path):
         "0013_postgres_only",
     ]
 
-    server = make_flock(database_url=url)  # rebuilds and compacts system metrics on startup
-    run = server.store.get_run("flock", "p", "r1")
-    assert run.compacted == {"history": 2, "system": 3}
+    server = make_flock(database_url=url)  # the backfill rebuilds system metrics' chunks
     api = server.client()
     assert api.run_history("p", "r1", keys="loss")["loss"] == {"x": [0, 1], "y": [1.0, 0.5]}
     system = api.run_history("p", "r1", stream="system", keys="system.cpu")["system.cpu"]
@@ -135,7 +133,7 @@ def test_0002_upgrades_existing_data(postgres, make_flock, tmp_path):
     async def streams() -> list[tuple[str, str]]:
         conn = await asyncpg.connect(url)
         try:
-            rows = await conn.fetch("SELECT stream, key FROM history_columns")
+            rows = await conn.fetch("SELECT stream, key FROM series_chunks")
             return sorted((r[0], r[1]) for r in rows)  # Python order; collations differ
         finally:
             await conn.close()

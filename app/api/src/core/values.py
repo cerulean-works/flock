@@ -1,5 +1,6 @@
 """The run table's values (D77): a run's attributes, ``config.*`` and ``summary.*`` columns as
-rows of ``run_values``, and the per-column counts ``project_keys`` keeps of them.
+rows of ``run_values``, and the per-column counts ``project_keys`` keeps of them (with
+``project_key_changes``, see ``write``).
 
 Numbers go in ``num`` (NaN and infinities included), strings in ``txt``, and everything else
 (booleans, lists, wandb media and other objects) in ``obj`` as JSON, as ``ColumnTable`` kept
@@ -169,17 +170,44 @@ def diff(
     return changes
 
 
+# A project's ($1) columns: ``project_keys`` plus the changes not folded into it yet, with
+# columns no run has any more. A column's ``int_only`` starts afresh when it comes back.
+COLUMNS = """
+    SELECT key, bool_and(int_only) AS int_only, sum(runs)::int AS runs, sum(nums)::int AS nums,
+           sum(strs)::int AS strs, sum(bools)::int AS bools, sum(lists)::int AS lists,
+           sum(objects)::int AS objects
+    FROM (
+        SELECT key, int_only OR runs <= 0 AS int_only, runs, nums, strs, bools, lists, objects
+        FROM project_keys WHERE project_pk = $1
+        UNION ALL
+        SELECT key, int_only, runs, nums, strs, bools, lists, objects
+        FROM project_key_changes WHERE project_pk = $1
+    ) counted
+    GROUP BY key
+"""
+
+# Appends the count changes ($2..$9: key, int_only, then [runs, *KINDS]) of project $1 that
+# change something: a count, or a column's int_only that isn't already false.
+_CHANGES = """
+    INSERT INTO project_key_changes
+        (project_pk, key, int_only, runs, nums, strs, bools, lists, objects)
+    SELECT $1, key, int_only, runs, nums, strs, bools, lists, objects
+    FROM unnest($2::text[], $3::bool[], $4::int[], $5::int[], $6::int[], $7::int[], $8::int[],
+                $9::int[]) AS t(key, int_only, runs, nums, strs, bools, lists, objects)
+    WHERE runs <> 0 OR nums <> 0 OR strs <> 0 OR bools <> 0 OR lists <> 0 OR objects <> 0
+        OR (NOT int_only
+            AND NOT EXISTS (SELECT FROM project_keys p WHERE p.project_pk = $1
+                            AND p.key = t.key AND p.runs > 0 AND NOT p.int_only)
+            AND NOT EXISTS (SELECT FROM project_key_changes c WHERE c.project_pk = $1
+                            AND c.key = t.key AND NOT c.int_only))
+"""
+
+
 async def write(
     conn: asyncpg.Connection, project_pk: int, runs: Sequence[tuple[int, Changes]]
 ) -> None:
-    """Apply each run's changes to ``run_values`` and ``project_keys``, in one statement.
-
-    ``project_keys`` rows are upserted in key order, so concurrent writers to one project lock
-    them in the same order and never deadlock. (Writers lock their runs' rows first, and runs
-    in pk order, so the order of everything they lock is the same.) A count that drops to 0 leaves its row, which
-    reads ignore and the purge removes; a column that comes back starts its ``int_only``
-    afresh, as a new column did in ``ColumnTable``.
-    """
+    """Apply each run's changes to ``run_values``, and append how they change the project's
+    column counts to ``project_key_changes`` (``fold`` adds them to ``project_keys``)."""
     removed: tuple[list[int], list[str]] = ([], [])
     written: tuple[list[Any], ...] = ([], [], [], [], [])
     counts: dict[str, list[int]] = {}
@@ -204,44 +232,27 @@ async def write(
     keys = sorted(counts.keys() | int_only.keys())
     deltas = [counts.get(key, [0] * (len(KINDS) + 1)) for key in keys]
     await conn.execute(
-        """
+        f"""
         WITH removed AS (
             DELETE FROM run_values v
-            USING unnest($2::bigint[], $3::text[]) AS d(run_pk, key)
+            USING unnest($10::bigint[], $11::text[]) AS d(run_pk, key)
             WHERE v.run_pk = d.run_pk AND v.key = d.key
         ), written AS (
             INSERT INTO run_values (project_pk, run_pk, key, num, txt, obj)
             SELECT $1, run_pk, key, num, txt, obj::jsonb
-            FROM unnest($4::bigint[], $5::text[], $6::float8[], $7::text[], $8::text[])
+            FROM unnest($12::bigint[], $13::text[], $14::float8[], $15::text[], $16::text[])
                 AS t(run_pk, key, num, txt, obj)
             ON CONFLICT (run_pk, key)
             DO UPDATE SET num = excluded.num, txt = excluded.txt, obj = excluded.obj
         )
-        INSERT INTO project_keys AS k
-            (project_pk, key, int_only, runs, nums, strs, bools, lists, objects)
-        SELECT $1, key, int_only, runs, nums, strs, bools, lists, objects
-        FROM unnest($9::text[], $10::bool[], $11::int[], $12::int[], $13::int[], $14::int[],
-                    $15::int[], $16::int[])
-            AS t(key, int_only, runs, nums, strs, bools, lists, objects)
-        -- Rows whose counts stay, and whose int_only can't change, aren't touched (and so not
-        -- locked): most writes only change values of columns every run has.
-        WHERE runs <> 0 OR nums <> 0 OR strs <> 0 OR bools <> 0 OR lists <> 0 OR objects <> 0
-            OR (NOT int_only AND EXISTS (
-                SELECT FROM project_keys p WHERE p.project_pk = $1 AND p.key = t.key AND p.int_only
-            ))
-        ON CONFLICT (project_pk, key) DO UPDATE SET
-            int_only = CASE WHEN k.runs <= 0 THEN excluded.int_only
-                            ELSE k.int_only AND excluded.int_only END,
-            runs = k.runs + excluded.runs, nums = k.nums + excluded.nums,
-            strs = k.strs + excluded.strs, bools = k.bools + excluded.bools,
-            lists = k.lists + excluded.lists, objects = k.objects + excluded.objects
+        {_CHANGES}
         """,
         project_pk,
-        *removed,
-        *written,
         keys,
         [int_only.get(key, True) for key in keys],
         *([delta[i] for delta in deltas] for i in range(len(KINDS) + 1)),
+        *removed,
+        *written,
     )
 
 
@@ -249,13 +260,9 @@ async def shift(
     conn: asyncpg.Connection, run_pks: Sequence[int], source: int | None, target: int | None
 ) -> None:
     """Move the column counts of runs' values from project ``source`` to project ``target``
-    (call with the runs locked, before moving or deleting their values). Either may be None:
-    a purge only takes counts out, and a copy only adds them.
-
-    Each project's rows are locked in key order, as ``write`` locks them. A moved column keeps
-    its ``int_only`` only if both projects' columns had it, as ``ColumnTable.append_from``
-    did.
-    """
+    (call before moving or deleting their values). Either may be None: a purge only takes
+    counts out. A moved column keeps its ``int_only`` only if both projects' columns had it,
+    as ``ColumnTable.append_from`` did."""
     moved = await conn.fetch(
         """
         SELECT key, count(*)::int, count(num)::int, count(txt)::int,
@@ -273,45 +280,47 @@ async def shift(
     counts = [[row[i] for row in moved] for i in range(1, len(KINDS) + 2)]
     int_only = dict.fromkeys(keys, True)
     if source is not None:
-        # Locking happens above the sort, so the rows are locked in key order.
-        await conn.execute(
-            "SELECT FROM project_keys WHERE project_pk = $1 AND key = ANY($2) "
-            "ORDER BY key FOR UPDATE",
-            source,
-            keys,
-        )
         for key, flag in await conn.fetch(
-            """
-            UPDATE project_keys k
-            SET runs = k.runs - t.runs, nums = k.nums - t.nums, strs = k.strs - t.strs,
-                bools = k.bools - t.bools, lists = k.lists - t.lists,
-                objects = k.objects - t.objects
-            FROM unnest($2::text[], $3::int[], $4::int[], $5::int[], $6::int[], $7::int[],
-                        $8::int[]) AS t(key, runs, nums, strs, bools, lists, objects)
-            WHERE k.project_pk = $1 AND k.key = t.key
-            RETURNING k.key, k.int_only
-            """,
-            source,
-            keys,
-            *counts,
+            f"SELECT key, int_only FROM ({COLUMNS}) c WHERE key = ANY($2)", source, keys
         ):
             int_only[key] = flag
-    if target is not None:
         await conn.execute(
-            """
-            INSERT INTO project_keys AS k
-                (project_pk, key, int_only, runs, nums, strs, bools, lists, objects)
-            SELECT $1, * FROM unnest($2::text[], $3::bool[], $4::int[], $5::int[], $6::int[],
-                                     $7::int[], $8::int[], $9::int[])
-            ON CONFLICT (project_pk, key) DO UPDATE SET
-                int_only = CASE WHEN k.runs <= 0 THEN excluded.int_only
-                                ELSE k.int_only AND excluded.int_only END,
-                runs = k.runs + excluded.runs, nums = k.nums + excluded.nums,
-                strs = k.strs + excluded.strs, bools = k.bools + excluded.bools,
-                lists = k.lists + excluded.lists, objects = k.objects + excluded.objects
-            """,
-            target,
-            keys,
-            [int_only[key] for key in keys],
-            *counts,
+            _CHANGES, source, keys, [True] * len(keys), *([-n for n in c] for c in counts)
         )
+    if target is not None:
+        await conn.execute(_CHANGES, target, keys, [int_only[key] for key in keys], *counts)
+
+
+# Folds at most $1 changes into project_keys, in key order (so concurrent folds lock rows in
+# the same order). Changes are claimed, so folds on several replicas don't count one twice.
+_FOLD = """
+    WITH claimed AS (
+        DELETE FROM project_key_changes WHERE id IN (
+            SELECT id FROM project_key_changes ORDER BY id LIMIT $1 FOR UPDATE SKIP LOCKED
+        )
+        RETURNING *
+    ), summed AS (
+        SELECT project_pk, key, bool_and(int_only) AS int_only, sum(runs)::int AS runs,
+               sum(nums)::int AS nums, sum(strs)::int AS strs, sum(bools)::int AS bools,
+               sum(lists)::int AS lists, sum(objects)::int AS objects, count(*) AS n
+        FROM claimed GROUP BY project_pk, key
+    ), folded AS (
+        INSERT INTO project_keys AS k
+            (project_pk, key, int_only, runs, nums, strs, bools, lists, objects)
+        SELECT project_pk, key, int_only, runs, nums, strs, bools, lists, objects
+        FROM summed ORDER BY project_pk, key
+        ON CONFLICT (project_pk, key) DO UPDATE SET
+            int_only = CASE WHEN k.runs <= 0 THEN excluded.int_only
+                            ELSE k.int_only AND excluded.int_only END,
+            runs = k.runs + excluded.runs, nums = k.nums + excluded.nums,
+            strs = k.strs + excluded.strs, bools = k.bools + excluded.bools,
+            lists = k.lists + excluded.lists, objects = k.objects + excluded.objects
+    )
+    SELECT coalesce(sum(n), 0)::int FROM summed
+"""
+FOLD_BATCH = 50_000
+
+
+async def fold(conn: asyncpg.Connection | asyncpg.Pool, batch: int = FOLD_BATCH) -> int:
+    """Add pending changes to ``project_keys``, up to ``batch`` of them; returns how many."""
+    return await conn.fetchval(_FOLD, batch)

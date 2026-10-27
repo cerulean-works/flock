@@ -78,45 +78,19 @@ class Series:
         return cls(np.concatenate([p.rows for p in parts]), np.concatenate([p.vals for p in parts]))
 
 
-class PointCounter:
-    """Total number of history points held by the histories attached to it."""
-
-    __slots__ = ("total",)
-
-    def __init__(self) -> None:
-        self.total = 0
-
-
 class History:
     """All numeric history series of one run.
 
-    A history is either *complete* (every series is in memory, as for running runs) or
-    partially loaded: the keys of a compacted run are known, and their series are fetched by
-    the store in batches (``Store.histories``) before they are read.
+    Every metric's name is known, and the series of those ``Store.histories`` was asked for
+    are loaded from the run's chunks (D78). Reading one that wasn't asked for is an error.
     """
 
-    __slots__ = ("_counter", "_pending", "n_rows", "points", "series")
+    __slots__ = ("_pending", "n_rows", "series")
 
     def __init__(self, n_rows: int = 0, pending: Iterable[str] = ()) -> None:
         self.n_rows = n_rows
         self.series: dict[str, Series] = {}
         self._pending: set[str] = set(pending)
-        self.points = 0
-        self._counter: PointCounter | None = None
-
-    def attach(self, counter: PointCounter) -> None:
-        self._counter = counter
-        counter.total += self.points
-
-    def detach(self) -> None:
-        if self._counter is not None:
-            self._counter.total -= self.points
-            self._counter = None
-
-    def _add_points(self, count: int) -> None:
-        self.points += count
-        if self._counter is not None:
-            self._counter.total += count
 
     @property
     def complete(self) -> bool:
@@ -125,26 +99,10 @@ class History:
     def keys(self) -> list[str]:
         return sorted(self.series.keys() | self._pending)
 
-    def missing(self, keys: Iterable[str] | None = None) -> set[str]:
-        """Keys that exist but are not loaded yet (all of them when ``keys`` is None)."""
-        if keys is None:
-            return set(self._pending)
-        return self._pending.intersection(keys)
-
     def get(self, key: str) -> Series | None:
         if key in self._pending:
             raise LookupError(f"history series {key!r} has not been loaded")
         return self.series.get(key)
-
-    def preload(self, items: Iterable[tuple[str, Series]], requested: Iterable[str]) -> None:
-        """Install series fetched from the database for the ``requested`` keys."""
-        for key, series in items:
-            if key in self._pending:
-                self._pending.discard(key)
-                self.series[key] = series
-                self._add_points(series.n)
-        # Requested keys the database had no blob for don't exist; stop expecting them.
-        self._pending.difference_update(requested)
 
     def append_rows(self, start_row: int, rows: Iterable[dict]) -> None:
         """Append parsed history lines, the first of which is line ``start_row``."""
@@ -168,7 +126,6 @@ class History:
             if series is None:
                 series = self.series[key] = Series()
             series.extend(idx, vals)
-            self._add_points(len(idx))
         self.n_rows = max(self.n_rows, row)
 
     def x_at(self, x_key: str, rows: np.ndarray) -> np.ndarray:

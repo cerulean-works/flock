@@ -45,11 +45,11 @@ def test_system_metrics_compact_and_survive_restart(make_flock):
     samples = system_samples(8, {"system.cpu": float})
     api.stream("p", "r1", history_rows(5, loss=float), events=samples, complete=0)
     server.call(server.store.flush())
-    run = server.store.get_run("flock", "p", "r1")
-    assert run.compacted == {"history": 5, "system": 8}
-    assert "system.cpu" in run.compacted_keys["system"]
+    chunks = server.call(
+        server.store.db.fetch("SELECT stream, key, first_line, n FROM series_chunks")
+    )
+    assert ("system", "system.cpu", 0, 8) in {tuple(record) for record in chunks}
 
-    server.store._history.clear()  # force reading the compacted blobs back
     expected = [float(i) for i in range(8)]
     cold = api.run_history("p", "r1", stream="system", keys="system.cpu")
     assert cold["system.cpu"] == {"x": sample_runtimes(range(8)), "y": expected}

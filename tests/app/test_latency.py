@@ -122,18 +122,11 @@ class TestCurves:
         timing.check(self.P50_MS, self.P95_MS)
 
     def test_recent_50_runs_loss_curves_cold(self, curves):
-        server, client = curves
-
-        async def drop_cached_histories() -> None:
-            # Evict finished runs so the next read loads their compacted data from PostgreSQL.
-            store = server.store
-            for key in list(store._history):  # keyed by (run pk, stream)
-                if store.runs_by_pk[key[0]].state == "finished":
-                    del store._history[key]
-
+        """Curves aren't cached in Flock (D78): every read, like this one, decodes the chunks
+        PostgreSQL returns. Only PostgreSQL's own buffer cache is warm."""
+        _, client = curves
         times = []
         for _ in range(25):
-            server.call(drop_cached_histories())
             start = time.perf_counter()
             runs = client.get(self.PATH, keys="loss").json()["runs"]
             times.append((time.perf_counter() - start) * 1000)

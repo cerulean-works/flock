@@ -784,9 +784,10 @@ class Accounts:
                     WHERE r.owner_pk = $1 AND v.run_pk = r.pk AND v.key = 'owner'
                     RETURNING v.project_pk
                 )
-                UPDATE project_keys k SET runs = k.runs - g.n, nums = k.nums - g.n
-                FROM (SELECT project_pk, count(*)::int AS n FROM gone GROUP BY project_pk) g
-                WHERE k.project_pk = g.project_pk AND k.key = 'owner'
+                INSERT INTO project_key_changes
+                    (project_pk, key, int_only, runs, nums, strs, bools, lists, objects)
+                SELECT project_pk, 'owner', true, -count(*), -count(*), 0, 0, 0, 0
+                FROM gone GROUP BY project_pk
                 """,
                 user.pk,
             )

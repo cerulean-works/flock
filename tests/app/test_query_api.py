@@ -168,8 +168,20 @@ def test_stale_runs_are_marked_crashed_and_revive(make_flock, wait_for):
     assert api.runs("p", columns=["state"])["data"]["state"] == ["running"]
 
 
-def test_history_cache_eviction_and_compaction(make_flock):
-    server = make_flock(history_cache_points=100)
+def chunk_counts(server, name: str) -> dict[str, int]:
+    """How many chunks each history metric of run ``name`` (project ``p``) is stored in."""
+    records = server.call(
+        server.store.db.fetch(
+            "SELECT key, count(*) FROM series_chunks c JOIN runs r ON r.pk = c.run_pk "
+            "WHERE r.name = $1 AND c.stream = 'history' GROUP BY key",
+            name,
+        )
+    )
+    return dict(records)
+
+
+def test_finished_runs_are_compacted_into_one_chunk_per_metric(make_flock):
+    server = make_flock()
     api = server.client()
     expected = {}
     for i in range(5):
@@ -180,12 +192,9 @@ def test_history_cache_eviction_and_compaction(make_flock):
         api.stream("p", name, history[20:], offset=20, complete=0)
         expected[name] = [i + s / 100 for s in range(40)]
     server.call(server.store.flush())
-    store = server.store
-    assert all(r.compacted["history"] == 40 for r in store.runs_by_pk.values())
-    for _ in range(2):  # second pass reads evicted runs back from compacted blobs
-        data = api.get("/api/v1/projects/flock/p/history", keys="loss,acc").json()["runs"]
-        assert {r["id"]: r["series"]["loss"]["y"] for r in data} == pytest.approx(expected)
-        assert sum(h.points for h in store._history.values()) <= 100 + 80
+    assert set(chunk_counts(server, "r0").values()) == {1}
+    data = api.get("/api/v1/projects/flock/p/history", keys="loss,acc").json()["runs"]
+    assert {r["id"]: r["series"]["loss"]["y"] for r in data} == pytest.approx(expected)
 
     server.stop()
     restarted = make_flock(reuse=server)
@@ -193,11 +202,26 @@ def test_history_cache_eviction_and_compaction(make_flock):
     assert {r["id"]: r["series"]["loss"]["y"] for r in data} == pytest.approx(expected)
 
 
+def test_active_runs_compact_once_they_have_many_chunks(api, flock):
+    api.create_run("p", "r1")
+    api.create_run("p", "few")
+    every = flock.store.COMPACT_AFTER
+    for start in range(every):
+        api.stream("p", "r1", history_rows(1, start=start, loss=float), offset=start)
+    for start in range(2):
+        api.stream("p", "few", history_rows(1, start=start, loss=float), offset=start)
+    flock.call(flock.store.flush())
+    assert chunk_counts(flock, "r1")["loss"] == 1
+    assert chunk_counts(flock, "few")["loss"] == 2  # one per request, until there are many
+    api.stream("p", "r1", history_rows(2, start=every, loss=float), offset=every)
+    series = api.get("/api/v1/projects/flock/p/runs/r1/history", keys="loss").json()["series"]
+    assert series["loss"]["y"] == [float(s) for s in range(every + 2)]
+
+
 def test_resumed_compacted_run_appends(api, flock):
     api.create_run("p", "r1")
     api.stream("p", "r1", history_rows(5, loss=float), complete=0)
-    flock.call(flock.store.flush())
-    flock.store._history.clear()  # force the lazily loaded, compacted representation
+    flock.call(flock.store.flush())  # compacted into one chunk per metric
     api.stream("p", "r1", history_rows(3, start=5, loss=float), offset=5)
     series = api.get("/api/v1/projects/flock/p/runs/r1/history", keys="loss").json()["series"]
     assert series["loss"]["x"] == list(range(8))
@@ -205,20 +229,11 @@ def test_resumed_compacted_run_appends(api, flock):
 
 
 def test_resumed_uncompacted_run_does_not_duplicate_history(api, flock):
-    """A finished run whose compaction never landed (e.g. server crash) is rebuilt from raw
-    lines on resume; the lines of the resuming request must not be applied twice."""
+    """A finished run whose chunks were never compacted (e.g. a server crash) resumes; the
+    lines of the resuming request, and lines it resends, must not be applied twice."""
     api.create_run("p", "r1")
     api.stream("p", "r1", history_rows(5, loss=float), complete=0)
-
-    async def forget_compaction():
-        store = flock.store
-        await store.flush()
-        run = store.get_run("flock", "p", "r1")
-        run.compacted["history"] = 0
-        store._history.pop((run.pk, "history")).detach()
-
-    flock.call(forget_compaction())
-    api.stream("p", "r1", history_rows(3, start=5, loss=float), offset=5)
+    api.stream("p", "r1", history_rows(5, start=3, loss=float), offset=3)  # resends 3 and 4
     series = api.get("/api/v1/projects/flock/p/runs/r1/history", keys="loss").json()["series"]
     assert series["loss"]["x"] == list(range(8))
     assert series["loss"]["y"] == [float(s) for s in range(8)]

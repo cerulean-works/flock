@@ -66,10 +66,6 @@ class Settings:
         default="https://api.wandb.ai",
         doc="W&B API that organization imports read from, unless the import names another",
     )
-    history_cache_points: int = field(
-        default=20_000_000,
-        doc="history points cached in memory for finished runs (active runs are always kept)",
-    )
     crash_timeout: float = field(
         default=600.0, doc="seconds without heartbeats before a running run is marked crashed"
     )

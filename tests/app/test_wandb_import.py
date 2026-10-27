@@ -285,10 +285,18 @@ def test_create_org_imports_wandb_projects_and_runs(flock, api, wandb, wait_for)
     content = api.get("/api/v1/projects/lab/vision/runs/r1/files/requirements.txt")
     assert content.body == b"torch\n"
 
-    # Imported series are stored compacted, so a restart has nothing to rebuild.
+    # Imported series are stored as one chunk per metric, so there is nothing to compact.
     store = flock.store
     r1 = store.get_run("lab", "vision", "r1")
-    assert r1.compacted == {"history": 3, "system": 4}
+    chunks = flock.call(
+        store.db.fetch(
+            "SELECT stream, max(first_line), sum(n) FROM series_chunks WHERE run_pk = $1 "
+            "AND key IN ('_step', '_runtime') GROUP BY stream",
+            r1.pk,
+        )
+    )
+    assert sorted(tuple(c) for c in chunks) == [("history", 0, 3), ("system", 0, 4)]
+    assert flock.call(store.db.fetchval("SELECT uncompacted FROM runs WHERE pk = $1", r1.pk)) == 0
     assert alice.api.get("/api/v1/orgs/lab/import").status == 404  # not a member
 
 

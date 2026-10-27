@@ -130,7 +130,7 @@ def test_delete_project_removes_everything(make_flock, events):
     assert api.get(f"{PROJECTS}/flock/gone").status == 404
     assert api.get(f"{PROJECTS}/flock/gone/runs/r1").status == 404
     assert not (server.files_dir / str(run.pk)).exists()
-    for table in ("runs", "history", "events", "history_columns", "run_files"):
+    for table in ("runs", "history", "events", "series_chunks", "run_values", "run_files"):
         column = "pk" if table == "runs" else "run_pk"
         count = server.call(
             store.db.fetchval(f"SELECT count(*) FROM {table} WHERE {column} = ANY($1)", pks)

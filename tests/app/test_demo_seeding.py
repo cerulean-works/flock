@@ -13,8 +13,8 @@ def test_a_simulated_month_loads_into_the_flock(postgres, make_flock, tmp_path):
     server = make_flock(database_url=url, api_key=stats["api_key"])
     store = server.store
     assert len(store.runs_by_pk) == stats["runs"]
-    stale = [r for r in store.runs_by_pk.values() if r.compacted["history"] < r.history_line_count]
-    assert stale == []  # stored compacted, as Flock keeps finished runs
+    uncompacted = server.call(store.db.fetchval("SELECT count(*) FROM runs WHERE uncompacted > 0"))
+    assert uncompacted == 0  # one chunk per metric, as Flock keeps finished runs
     api = server.client()
     login = server.anonymous().post(
         "/api/v1/auth/login", {"email": ADMIN_EMAIL, "password": PASSWORD}

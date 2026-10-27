@@ -153,6 +153,8 @@ async def backfill(dsn: str, report: Callable[[str], None] = log.info, batch: in
                     pks,
                 )
                 await conn.execute("DELETE FROM backfill WHERE run_pk = ANY($1)", pks)
+            while await values.fold(conn):
+                pass
             after = pks[-1]
             done += len(records)
             report(f"  {done}/{total} runs in {time.perf_counter() - started:.0f}s")

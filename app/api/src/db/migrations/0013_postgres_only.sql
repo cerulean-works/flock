@@ -61,6 +61,23 @@ CREATE TABLE project_keys (
     PRIMARY KEY (project_pk, key)
 );
 
+-- Changes to project_keys' counts not folded into it yet. Writers append here rather than
+-- update project_keys, whose rows every new run of a project would otherwise lock and queue
+-- on. Readers add the two up, and every replica folds changes in the background.
+CREATE TABLE project_key_changes (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    project_pk bigint NOT NULL REFERENCES projects ON DELETE CASCADE,
+    key text COLLATE "C" NOT NULL,
+    int_only boolean NOT NULL,
+    runs integer NOT NULL,
+    nums integer NOT NULL,
+    strs integer NOT NULL,
+    bools integer NOT NULL,
+    lists integer NOT NULL,
+    objects integer NOT NULL
+);
+CREATE INDEX project_key_changes_key ON project_key_changes (project_pk, key);
+
 -- Curves (D78): each request's new points of a metric are one chunk, in D5's encoding (int32
 -- lines unless they run on from first_line, then float64 values). Compaction merges a
 -- metric's chunks into one.
@@ -109,6 +126,11 @@ SELECT pk, array_remove(ARRAY[
     CASE WHEN system_compacted_line_count < events_line_count THEN 'system' END
 ], NULL)
 FROM runs;
+
+-- Chunks replace the compacted blobs (D78).
+DROP TABLE history_columns;
+ALTER TABLE runs DROP COLUMN history_compacted_line_count,
+    DROP COLUMN system_compacted_line_count;
 
 -- Runs deleted while a client was still logging to them (D15, D80): that client's writes are
 -- acknowledged and dropped until it has been quiet for FLOCK_CRASH_TIMEOUT.
