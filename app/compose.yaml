@@ -22,6 +22,7 @@ services:
       dockerfile: app/api/Dockerfile
     environment:
       FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
+      FLOCK_LISTEN_DATABASE_URL: ${FLOCK_LISTEN_DATABASE_URL:-}
       FLOCK_WEB_URL: ${FLOCK_WEB_URL:-http://localhost:3000}
       FLOCK_API_PUBLIC_URL: ${FLOCK_API_PUBLIC_URL:-http://localhost:8080}
       FLOCK_MIGRATE_ON_STARTUP: ${FLOCK_MIGRATE_ON_STARTUP:-}
@@ -67,6 +68,7 @@ services:
     command: ["uvicorn", "app.api.src.s3_proxy.app:app", "--host", "0.0.0.0", "--port", "8090"]
     environment:
       FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
+      FLOCK_LISTEN_DATABASE_URL: ${FLOCK_LISTEN_DATABASE_URL:-}
       FLOCK_S3_UPSTREAM_ENDPOINT: ${FLOCK_S3_UPSTREAM_ENDPOINT:-}
       FLOCK_S3_UPSTREAM_REGION: ${FLOCK_S3_UPSTREAM_REGION:-}
       FLOCK_S3_UPSTREAM_ACCESS_KEY_ID: ${FLOCK_S3_UPSTREAM_ACCESS_KEY_ID:-}

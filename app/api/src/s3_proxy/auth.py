@@ -11,6 +11,7 @@ from typing import Any
 import asyncpg
 
 from app.api.src import s3_credentials
+from app.api.src.core.bus import Bus
 from app.api.src.s3_proxy.sigv4 import SignedRequest, SigV4Error
 
 log = logging.getLogger(__name__)
@@ -57,25 +58,26 @@ class _Key:
 class Directory:
     """Keys, roles and orgs' buckets and policies, cached for ``TTL`` seconds.
 
-    Any notification on ``s3_invalidate`` drops the whole cache. While the listening
-    connection is down nothing is cached, so a missed notification can't leave stale
-    permissions behind. Keys are never cached as missing, so a new key works at once.
+    Any notification on ``s3_invalidate`` drops the whole cache, and so does the bus losing or
+    making its listening connection (``core/bus.py``). While it is down nothing is cached, so a
+    missed notification can't leave stale permissions behind. Keys are never cached as missing,
+    so a new key works at once.
     """
 
     TTL = 10.0
     # s3_keys.last_used_at is written at most this often per key.
     LAST_USED_INTERVAL = 60.0
 
-    def __init__(self, pool: asyncpg.Pool, database_url: str) -> None:
+    def __init__(self, pool: asyncpg.Pool, bus: Bus) -> None:
         self.pool = pool
-        self.database_url = database_url
+        self.bus = bus
         self.server_secret = ""
         self._cache: dict[tuple, tuple[float, Any]] = {}
         self._generation = 0
-        self._listening = False
-        self._listener: asyncio.Task | None = None
         self._last_used: dict[int, float] = {}
         self._tasks: set[asyncio.Task] = set()
+        bus.listen(CHANNEL, self.invalidate)
+        bus.on_reset(self.invalidate)
 
     async def start(self) -> None:
         self.server_secret = await self.pool.fetchval(
@@ -83,17 +85,8 @@ class Directory:
         )
         if not self.server_secret:
             raise RuntimeError("the database has no s3_key_secret: start the API first")
-        connected = asyncio.Event()
-        self._listener = asyncio.create_task(self._listen(connected))
-        # Serve as soon as the first connection is listening (or failed to; then uncached).
-        with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(connected.wait(), 10)
 
     async def close(self) -> None:
-        if self._listener is not None:
-            self._listener.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._listener
         for task in list(self._tasks):
             with contextlib.suppress(Exception):
                 await task
@@ -101,30 +94,6 @@ class Directory:
     def invalidate(self, *_: object) -> None:
         self._generation += 1
         self._cache.clear()
-
-    async def _listen(self, connected: asyncio.Event) -> None:
-        while True:
-            closed = asyncio.Event()
-            conn = None
-            try:
-                conn = await asyncpg.connect(self.database_url)
-                conn.add_termination_listener(lambda _, closed=closed: closed.set())
-                await conn.add_listener(CHANNEL, self.invalidate)
-                self.invalidate()  # anything cached before now may have missed a notification
-                self._listening = True
-                connected.set()
-                await closed.wait()
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                log.exception("listening for %s failed; retrying", CHANNEL)
-                connected.set()
-            finally:
-                self._listening = False
-                self.invalidate()
-                if conn is not None and not conn.is_closed():
-                    await conn.close()
-            await asyncio.sleep(1)
 
     async def _cached(self, key: tuple, load: Callable[[], Awaitable[Any]]) -> Any:
         hit = self._cache.get(key)
@@ -134,7 +103,7 @@ class Directory:
         generation = self._generation
         value = await load()
         # Not if a notification arrived while loading: the value may predate the change.
-        if value is not None and self._listening and generation == self._generation:
+        if value is not None and self.bus.listening and generation == self._generation:
             self._cache[key] = (now + self.TTL, value)
         return value
 

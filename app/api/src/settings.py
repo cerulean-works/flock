@@ -14,6 +14,11 @@ class Settings:
         default="postgresql://flock:flock@127.0.0.1:5432/flock",
         doc="PostgreSQL connection URL",
     )
+    listen_database_url: str | None = field(
+        default=None,
+        doc="PostgreSQL URL of the connection that listens for notifications, which must "
+        "bypass a pooler such as PgBouncer (default: database_url)",
+    )
     files_dir: Path = field(default=Path("flock-files"), doc="where uploaded run files go")
     migrate_on_startup: bool = field(
         default=True,
