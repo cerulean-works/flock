@@ -17,7 +17,7 @@ from collections.abc import Coroutine, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import asyncpg
 import numpy as np
@@ -435,10 +435,8 @@ class FlockServer:
         )
         self._server = uvicorn.Server(config)
         self.loop = uvloop.new_event_loop()
-        self._thread = threading.Thread(
-            target=lambda: self.loop.run_until_complete(self._server.serve(sockets=[sock])),
-            daemon=True,
-        )
+        self.killed = False
+        self._thread = threading.Thread(target=self._serve, args=(sock,), daemon=True)
         self._thread.start()
         deadline = time.monotonic() + 30
         while not self._server.started:
@@ -447,6 +445,13 @@ class FlockServer:
             time.sleep(0.01)
         if bootstrap and (self.api_key is None or self.token is None):
             self.call(self.bootstrap())
+
+    def _serve(self, sock: socket.socket) -> None:
+        try:
+            self.loop.run_until_complete(self._server.serve(sockets=[sock]))
+        except RuntimeError:
+            if not self.killed:  # ``kill`` stops the loop under the server
+                raise
 
     async def bootstrap(self) -> None:
         """Complete setup with an explicit ``flock`` org on fresh databases, and give the super
@@ -502,10 +507,67 @@ class FlockServer:
         return User(body["user"]["id"], email, password, key, api, body, token)
 
     def stop(self) -> None:
+        if self.killed:
+            return
         # As on SIGTERM in production: end dashboard streams, which never finish on their own.
-        self.loop.call_soon_threadsafe(self.store.live.close)
+        self.loop.call_soon_threadsafe(self.store.drain)
         self._server.should_exit = True
         self._thread.join(timeout=60)
+
+    def kill(self) -> None:
+        """Stop dead, as a replica whose process or node died: nothing it was doing finishes,
+        and PostgreSQL ends its connections (rolling back what they hadn't committed)."""
+        self.killed = True
+        self.loop.call_soon_threadsafe(self.loop.stop)
+        self._thread.join(timeout=60)
+        name = parse_qs(urlparse(self.database_url).query).get("application_name", [""])[0]
+        assert name, "only replicas (Flocks.replicas) can be killed"
+
+        async def terminate() -> None:
+            conn = await asyncpg.connect(self.database_url.partition("?")[0])
+            try:
+                await conn.execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE application_name = $1",
+                    name,
+                )
+            finally:
+                await conn.close()
+
+        asyncio.run(terminate())
+
+
+class SpreadClient(Client):
+    """A client whose requests go to each replica in turn, as a load balancer spreads them."""
+
+    def __init__(self, clients: list[Client]) -> None:
+        super().__init__(clients[0].port)
+        self.clients = clients
+        self.headers, self.wandb_headers = clients[0].headers, clients[0].wandb_headers
+        self._turn = itertools.cycle(clients)
+
+    def request(self, *args: Any, **kwargs: Any) -> Response:
+        return next(self._turn).request(*args, **kwargs)
+
+    def close(self) -> None:
+        for client in self.clients:
+            client.close()
+
+
+class Replicas:
+    """Several flocks on one database and one files directory (012's ``replicas=2``)."""
+
+    def __init__(self, replicas: list[FlockServer]) -> None:
+        self.replicas = replicas
+
+    def __getitem__(self, index: int) -> FlockServer:
+        return self.replicas[index]
+
+    def __iter__(self) -> Iterator[FlockServer]:
+        return iter(self.replicas)
+
+    def client(self, api_key: str | None = None, token: str | None = None) -> SpreadClient:
+        return SpreadClient([replica.client(api_key, token) for replica in self.replicas])
 
 
 def _listen() -> socket.socket:
@@ -624,6 +686,22 @@ class Flocks:
             server = FlockServer(url, files_dir, **settings)
         self.servers.append(server)
         return server
+
+    def replicas(self, count: int = 2, **settings: Any) -> Replicas:
+        """``count`` flocks serving one fresh database, each named for ``kill``."""
+        url = self.postgres.create()
+        files_dir = self.base / f"flock-files-{len(self.servers)}"
+        first = FlockServer(f"{url}?application_name=flock-replica-0", files_dir, **settings)
+        self.servers.append(first)
+        replicas = [first]
+        for i in range(1, count):
+            settings.setdefault("api_key", first.api_key)
+            settings.setdefault("token", first.token)
+            name = f"{url}?application_name=flock-replica-{i}"
+            replica = FlockServer(name, files_dir, **settings)
+            self.servers.append(replica)
+            replicas.append(replica)
+        return Replicas(replicas)
 
     def s3(self, s3: S3Server, reuse: S3Flock | None = None, **settings: Any) -> S3Flock:
         """A flock with S3 on over ``s3`` (see ``S3Flock``), fresh or restarted like ``reuse``
