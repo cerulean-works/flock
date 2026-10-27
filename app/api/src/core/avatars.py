@@ -108,7 +108,7 @@ class Avatars:
     async def set_user(self, user: User, data: bytes | None, source: str = "upload") -> None:
         """Set (``data``: image bytes) or remove (None) a user's avatar."""
         async with self._lock, self.store.db.pool.acquire() as conn, conn.transaction():
-            if user.pk not in self.store.accounts.users:
+            if not await conn.fetchval("SELECT EXISTS (SELECT FROM users WHERE pk = $1)", user.pk):
                 return  # deleted meanwhile
             digest = await self._store(conn, data)
             source_value = source if digest is not None else None

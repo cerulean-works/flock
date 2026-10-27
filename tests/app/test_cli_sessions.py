@@ -23,6 +23,13 @@ def db_session(server, pk: int):
     )
 
 
+def token_session(server, token: str) -> int:
+    """The pk of the session a CLI token belongs to."""
+    digest = server.store.accounts.digest(token)
+    query = "SELECT pk FROM sessions WHERE refresh_hash = $1"
+    return server.call(server.store.db.fetchval(query, digest))
+
+
 def test_a_cli_token_authenticates_rest_and_the_wandb_protocol(flock):
     alice = flock.add_user("alice@lab.test")
     cli = flock.client(token=cli_login(flock, browser(flock, alice)))
@@ -51,8 +58,8 @@ def test_listing_and_revoking_cli_sessions(flock):
     assert abs(by_name["node-7"]["expires_at"] - by_name["node-7"]["created_at"] - 90 * 86400) < 5
 
     # Web sessions and other people's sign-ins aren't CLI sessions of this user.
-    web = next(s for s in flock.store.accounts.sessions.values() if s.kind == "web")
-    assert alice.api.delete(f"{SESSIONS}/{web.pk}").status == 404
+    web = flock.call(flock.store.db.fetchval("SELECT pk FROM sessions WHERE kind = 'web'"))
+    assert alice.api.delete(f"{SESSIONS}/{web}").status == 404
     assert alice.api.delete(f"{SESSIONS}/{by_name['laptop']['id'] + 2}").status == 404
     assert bob.api.delete(f"{SESSIONS}/{by_name['laptop']['id']}").status == 404
 
@@ -94,7 +101,10 @@ def test_deleting_the_user_ends_cli_sessions(flock):
     cli = flock.client(token=cli_login(flock, browser(flock, alice)))
     assert flock.client().delete(f"/api/v1/users/{alice.id}").status == 204
     assert cli.get(ME).status == 401
-    assert all(s.user != alice.id for s in flock.store.accounts.cli_tokens.values())
+    left = flock.call(
+        flock.store.db.fetchval("SELECT count(*) FROM sessions WHERE user_pk = $1", alice.id)
+    )
+    assert left == 0
 
 
 def test_cli_sessions_expire_when_idle(make_flock):
@@ -114,19 +124,20 @@ def test_use_is_written_at_most_once_an_interval(flock, wait_for):
     alice = flock.add_user("alice@lab.test")
     token = cli_login(flock, browser(flock, alice))
     cli = flock.client(token=token)
-    session = flock.store.accounts.cli_tokens[flock.store.accounts.digest(token)]
-    created = db_session(flock, session.pk)
+    pk = token_session(flock, token)
+    created = db_session(flock, pk)
     assert (created["kind"], created["name"], created["last_used_at"]) == ("cli", "laptop", None)
 
     assert cli.get(ME).status == 200
     time.sleep(0.2)
-    assert db_session(flock, session.pk)["last_used_at"] is None  # within the hour
+    assert db_session(flock, pk)["last_used_at"] is None  # within the hour
 
     flock.store.accounts.CLI_WRITE_INTERVAL = 0.0
+    used_at = time.time()
     assert cli.get(ME).status == 200
-    used = wait_for(lambda: db_session(flock, session.pk)["last_used_at"])
-    assert abs(used - session.last_used_at) < 1
-    assert db_session(flock, session.pk)["expires_at"] > created["expires_at"]
+    used = wait_for(lambda: db_session(flock, pk)["last_used_at"])
+    assert abs(used - used_at) < 1
+    assert db_session(flock, pk)["expires_at"] > created["expires_at"]
 
 
 def test_cli_sessions_survive_a_restart(make_flock, wait_for):
@@ -134,15 +145,16 @@ def test_cli_sessions_survive_a_restart(make_flock, wait_for):
     alice = server.add_user("alice@lab.test")
     token = cli_login(server, browser(server, alice))
     server.store.accounts.CLI_WRITE_INTERVAL = 0.0
+    used_at = time.time()
     assert server.client(token=token).get(ME).status == 200
-    session = server.store.accounts.cli_tokens[server.store.accounts.digest(token)]
-    wait_for(lambda: db_session(server, session.pk)["last_used_at"])
+    pk = token_session(server, token)
+    wait_for(lambda: db_session(server, pk)["last_used_at"])
     server.stop()
 
     restarted = make_flock(reuse=server)
     tests, listed = restarted.client(token=alice.token).get(SESSIONS).json()["sessions"]
     assert (tests["name"], listed["name"]) == ("tests", "laptop")
-    assert abs(listed["last_used_at"] - session.last_used_at) < 1
+    assert abs(listed["last_used_at"] - used_at) < 1
     assert restarted.client(token=token).get(ME).json()["id"] == alice.id
 
 

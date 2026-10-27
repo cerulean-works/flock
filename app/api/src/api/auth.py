@@ -126,7 +126,8 @@ class UserUpdate(BaseModel):
 async def signed_in(store: Store, user: User, status_code: int = 200) -> Response:
     """Start a session: tokens plus the user's profile."""
     tokens = await store.accounts.start_session(user)
-    return JSONResponse({**tokens, "user": store.accounts.info(user)}, status_code=status_code)
+    info = await store.accounts.info(user)
+    return JSONResponse({**tokens, "user": info}, status_code=status_code)
 
 
 # ---------------------------------------------------------------------- sign in
@@ -138,7 +139,7 @@ async def auth_config(store: StoreDep) -> Response:
     region, or null)."""
     return JSONResponse(
         {
-            "signup_open": store.accounts.signup_open,
+            "signup_open": await store.accounts.signup_open(),
             "google": Google.configured(store.settings),
             "s3": store.s3.config(),
         }
@@ -203,7 +204,7 @@ async def device_start(body: DeviceStart, request: Request, store: StoreDep) -> 
     """Start a command-line sign-in (RFC 8628). The user approves ``user_code`` at
     ``verification_uri`` while the client polls ``auth/device/token`` with ``device_code``."""
     ip = request.client.host if request.client is not None else None
-    started = store.accounts.start_device(body.client.hostname, body.client.platform, ip)
+    started = await store.accounts.start_device(body.client.hostname, body.client.platform, ip)
     if started is None:
         raise APIError(503, "too many sign-ins are waiting for approval: try again later")
     grant, device_code = started
@@ -231,7 +232,7 @@ async def device_token(body: DeviceToken, store: StoreDep) -> Response:
         raise device_error(result, DEVICE_ERRORS[result])
     user, token = result
     return JSONResponse(
-        {"access_token": token, "token_type": "bearer", "user": accounts.info(user)}
+        {"access_token": token, "token_type": "bearer", "user": await accounts.info(user)}
     )
 
 
@@ -246,8 +247,8 @@ def device_info(grant: DeviceGrant) -> dict[str, Any]:
     }
 
 
-def find_grant(store: Store, user: User, user_code: str) -> DeviceGrant:
-    grant = store.accounts.device_grant(user, user_code)
+async def find_grant(store: Store, user: User, user_code: str) -> DeviceGrant:
+    grant = await store.accounts.device_grant(user, user_code)
     if grant is None:
         raise APIError(404, "this code is wrong, expired or already used")
     return grant
@@ -257,7 +258,7 @@ def find_grant(store: Store, user: User, user_code: str) -> DeviceGrant:
 async def device_request(user_code: str, user: SessionUserDep, store: StoreDep) -> Response:
     """The machine asking to sign in with ``user_code``, for the approval page. Only a browser
     session can look; each wrong code counts against the user (10 per 10 minutes)."""
-    return JSONResponse(device_info(find_grant(store, user, user_code)))
+    return JSONResponse(device_info(await find_grant(store, user, user_code)))
 
 
 @router.post("/auth/device/{user_code}", status_code=204)
@@ -265,7 +266,8 @@ async def device_decide(
     user_code: str, body: DeviceDecision, user: SessionUserDep, store: StoreDep
 ) -> Response:
     """Approve the sign-in as the current user, or deny it. Only a browser session can."""
-    store.accounts.decide_device(user, find_grant(store, user, user_code), body.approve)
+    grant = await find_grant(store, user, user_code)
+    await store.accounts.decide_device(user, grant, body.approve)
     return Response(status_code=204)
 
 
@@ -425,13 +427,13 @@ async def google_callback(
         )
     except (Forbidden, Conflict, NotFound) as exc:
         return fail("forbidden", str(exc))
-    return redirect(f"auth/google?code={accounts.issue_code(user)}")
+    return redirect(f"auth/google?code={await accounts.issue_code(user)}")
 
 
 @public.post("/auth/google/exchange")
 async def google_exchange(body: CodeBody, store: StoreDep) -> Response:
     """Tokens for the one-time code a Google sign-in ended with (valid for a minute)."""
-    user = store.accounts.redeem_code(body.code)
+    user = await store.accounts.redeem_code(body.code)
     if user is None:
         raise APIError(401, "invalid or expired sign-in code")
     return await signed_in(store, user)
@@ -442,7 +444,7 @@ async def google_exchange(body: CodeBody, store: StoreDep) -> Response:
 
 @router.get("/me")
 async def me(user: UserDep, store: StoreDep) -> Response:
-    return JSONResponse(store.accounts.info(user))
+    return JSONResponse(await store.accounts.info(user))
 
 
 @router.patch("/me")
@@ -453,7 +455,7 @@ async def update_me(body: MeUpdate, user: UserDep, store: StoreDep) -> Response:
     if fields.get("default_org") is not None:
         fields["default_org"] = visible_org(fields["default_org"], store, user)
     await store.accounts.update_user(user, fields)
-    return JSONResponse(store.accounts.info(user))
+    return JSONResponse(await store.accounts.info(user))
 
 
 @router.post("/me/password", status_code=204)
@@ -477,7 +479,7 @@ async def change_password(
 @router.get("/me/api-keys", deprecated=True)
 async def list_wandb_keys(user: UserDep, store: StoreDep) -> Response:
     """Your wandb keys, older ``flock-`` ones included."""
-    keys = store.accounts.api_keys(user)
+    keys = await store.accounts.api_keys(user)
     return JSONResponse(
         {
             "keys": [
@@ -527,7 +529,7 @@ async def list_cli_sessions(user: UserDep, store: StoreDep) -> Response:
                     "last_used_at": s.last_used_at,
                     "expires_at": s.expires_at,
                 }
-                for s in store.accounts.cli_sessions(user)
+                for s in await store.accounts.cli_sessions(user)
             ]
         }
     )
@@ -543,8 +545,8 @@ async def delete_cli_session(session_id: int, user: UserDep, store: StoreDep) ->
 # ---------------------------------------------------------------------- users
 
 
-def find_user(store: Store, user_id: int) -> User:
-    user = store.accounts.users.get(user_id)
+async def find_user(store: Store, user_id: int) -> User:
+    user = await store.accounts.user(user_id)
     if user is None:
         raise APIError(404, f"user {user_id} not found")
     return user
@@ -552,8 +554,8 @@ def find_user(store: Store, user_id: int) -> User:
 
 @router.get("/users")
 async def list_users(admin: SuperadminDep, store: StoreDep) -> Response:
-    users = sorted(store.accounts.users.values(), key=lambda u: u.pk)
-    return JSONResponse({"users": [store.accounts.info(u) for u in users]})
+    users = await store.accounts.users()
+    return JSONResponse({"users": [await store.accounts.info(u) for u in users]})
 
 
 @router.patch("/users/{user_id}")
@@ -561,15 +563,15 @@ async def update_user(
     user_id: int, body: UserUpdate, admin: SuperadminDep, store: StoreDep
 ) -> Response:
     """Make a user a super admin, or stop them being one (there is always one left)."""
-    user = find_user(store, user_id)
+    user = await find_user(store, user_id)
     await store.accounts.update_user(user, {"is_superadmin": body.is_superadmin})
-    return JSONResponse(store.accounts.info(user))
+    return JSONResponse(await store.accounts.info(user))
 
 
 @router.delete("/users/{user_id}", status_code=204)
 async def delete_user(user_id: int, admin: SuperadminDep, store: StoreDep) -> Response:
     """Delete an account. Its runs stay, without an owner."""
-    await store.accounts.delete_user(find_user(store, user_id))
+    await store.accounts.delete_user(await find_user(store, user_id))
     return Response(status_code=204)
 
 
@@ -582,7 +584,7 @@ async def create_password_reset(
     Super admins can reset anyone; org admins the members of their orgs, except super admins.
     """
     accounts = store.accounts
-    user = accounts.users.get(user_id)
+    user = await accounts.user(user_id)
     if user is None or not (actor.is_superadmin or set(user.roles) & set(actor.roles)):
         raise APIError(404, f"user {user_id} not found")
     if not accounts.can_reset_password(actor, user):
@@ -613,7 +615,7 @@ async def get_invite(token: str, store: StoreDep) -> Response:
             "email": invite.email,
             "role": invite.role,
             "expires_at": invite.expires_at,
-            "account_exists": invite.email in accounts.by_email,
+            "account_exists": await accounts.user_by_email(invite.email) is not None,
         }
     )
 
@@ -632,9 +634,9 @@ async def accept_invite(
         has_credentials = "authorization" in request.headers or "x-api-key" in request.headers
         if not has_credentials:
             raise APIError(401, "sign in as the invited user, or give a name and password")
-        user = rest_user(request, current_user(request, store))
+        user = await rest_user(request, await current_user(request, store))
         await accounts.accept_invite(invite, user)
-        return JSONResponse({"user": accounts.info(user)})
+        return JSONResponse({"user": await accounts.info(user)})
     user = await accounts.register(invite, body.name or invite.email, body.password)
     return await signed_in(store, user, 201)
 

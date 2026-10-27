@@ -84,7 +84,7 @@ WANDB_KEY_REFUSED = (
 )
 
 
-def current_user(request: Request, store: StoreDep) -> User:
+async def current_user(request: Request, store: StoreDep) -> User:
     """The user behind the request's access token (``Bearer <jwt>``), CLI token (``Bearer
     flock_cli_…``) or wandb key (``Bearer``, ``x-api-key``, or the wandb SDK's basic auth).
     Which kind it was (D70) is kept in ``request.state.credential``: ``"browser"``, ``"cli"``
@@ -101,20 +101,22 @@ def current_user(request: Request, store: StoreDep) -> User:
             key = None
     elif scheme.lower() == "bearer":
         if credentials.count(".") == 2:  # a JWT; wandb keys have no dots
-            session = accounts.session_for_token(credentials)
-            if session is None:
+            session = await accounts.session_for_token(credentials)
+            user = await accounts.user(session.user) if session is not None else None
+            if session is None or user is None:
                 raise APIError(401, "invalid or expired access token")
             request.state.session, request.state.credential = session, "browser"
-            return accounts.users[session.user]
+            return user
         if credentials.startswith(accounts.CLI_TOKEN_PREFIX):
-            session = accounts.session_for_cli_token(credentials)
-            if session is None:
+            session = await accounts.session_for_cli_token(credentials)
+            user = await accounts.user(session.user) if session is not None else None
+            if session is None or user is None:
                 raise APIError(401, "invalid or expired CLI token: run flock login again")
             request.state.session, request.state.credential = session, "cli"
-            return accounts.users[session.user]
+            return user
         key = credentials
-    api_key = accounts.api_key(key) if key else None
-    user = accounts.users.get(api_key.user) if api_key is not None else None
+    api_key = await accounts.api_key(key) if key else None
+    user = await accounts.user(api_key.user) if api_key is not None else None
     if user is None:
         raise APIError(401, "invalid or missing access token, CLI token or wandb key")
     request.state.api_key, request.state.credential = api_key, "wandb"
@@ -124,7 +126,7 @@ def current_user(request: Request, store: StoreDep) -> User:
 UserDep = Annotated[User, Depends(current_user)]
 
 
-def rest_user(request: Request, user: UserDep) -> User:
+async def rest_user(request: Request, user: UserDep) -> User:
     """The user of a REST API request: a browser session or CLI token. wandb keys are refused
     (D72), so a leaked one reaches tracking and nothing else. The REST routers depend on it."""
     if request.state.credential == "wandb":
@@ -135,7 +137,7 @@ def rest_user(request: Request, user: UserDep) -> User:
 RestUser = Annotated[User, Depends(rest_user)]
 
 
-def wandb_user(user: UserDep) -> User:
+async def wandb_user(user: UserDep) -> User:
     """The user of a wandb protocol request: any credential, wandb keys included. The wandb
     protocol's router depends on it."""
     return user
@@ -144,7 +146,7 @@ def wandb_user(user: UserDep) -> User:
 WandbUser = Annotated[User, Depends(wandb_user)]
 
 
-def current_session(request: Request, user: UserDep) -> Session | None:
+async def current_session(request: Request, user: UserDep) -> Session | None:
     """The sign-in session of a request made with an access token or CLI token (None for wandb
     keys)."""
     return getattr(request.state, "session", None)
@@ -153,7 +155,7 @@ def current_session(request: Request, user: UserDep) -> Session | None:
 SessionDep = Annotated[Session | None, Depends(current_session)]
 
 
-def session_user(user: UserDep, session: SessionDep) -> User:
+async def session_user(user: UserDep, session: SessionDep) -> User:
     """The user behind a browser's access token. CLI tokens (and wandb keys) are refused, so a
     leaked one can't approve sign-ins for new machines."""
     if session is None or session.kind != "web":
@@ -164,7 +166,7 @@ def session_user(user: UserDep, session: SessionDep) -> User:
 SessionUserDep = Annotated[User, Depends(session_user)]
 
 
-def get_superadmin(user: UserDep) -> User:
+async def get_superadmin(user: UserDep) -> User:
     if not user.is_superadmin:
         raise APIError(403, "only a super admin can do this")
     return user

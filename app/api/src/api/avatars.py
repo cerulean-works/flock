@@ -74,13 +74,13 @@ async def get_avatar(digest: str, request: Request, store: StoreDep) -> Response
 async def set_my_avatar(request: Request, user: UserDep, store: StoreDep) -> Response:
     """Upload your avatar: the body is a PNG, JPEG, GIF or WebP image of at most 1 MiB."""
     await changed(store.avatars.set_user(user, await read_image(request)))
-    return JSONResponse(store.accounts.info(user))
+    return JSONResponse(await store.accounts.info(user))
 
 
 @router.delete("/me/avatar")
 async def delete_my_avatar(user: UserDep, store: StoreDep) -> Response:
     await store.avatars.set_user(user, None)
-    return JSONResponse(store.accounts.info(user))
+    return JSONResponse(await store.accounts.info(user))
 
 
 @router.post("/me/avatar/gravatar")
@@ -96,7 +96,7 @@ async def fetch_my_gravatar(user: UserDep, store: StoreDep) -> Response:
         raise APIError(502, f"could not reach Gravatar: {e}") from None
     if not found:
         raise APIError(404, f"{user.email} has no Gravatar")
-    return JSONResponse(store.accounts.info(user))
+    return JSONResponse(await store.accounts.info(user))
 
 
 @router.put("/orgs/{org}/avatar", openapi_extra=IMAGE_BODY)
@@ -105,10 +105,10 @@ async def set_org_avatar(
 ) -> Response:
     """Upload the organization's avatar (admins), like ``PUT /me/avatar``."""
     await changed(store.avatars.set_org(org, await read_image(request)))
-    return JSONResponse(org_info(store, org, user))
+    return JSONResponse(await org_info(store, org, user))
 
 
 @router.delete("/orgs/{org}/avatar")
 async def delete_org_avatar(org: AdminOrgDep, user: UserDep, store: StoreDep) -> Response:
     await store.avatars.set_org(org, None)
-    return JSONResponse(org_info(store, org, user))
+    return JSONResponse(await org_info(store, org, user))

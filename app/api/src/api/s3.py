@@ -105,8 +105,8 @@ def with_secret(store: Store, key: Key, secret: str) -> dict[str, Any]:
     }
 
 
-def bucket_info(store: Store, bucket: Bucket) -> dict[str, Any]:
-    creator = store.accounts.users.get(bucket.created_by) if bucket.created_by else None
+async def bucket_info(store: Store, bucket: Bucket) -> dict[str, Any]:
+    creator = await store.accounts.user(bucket.created_by)
     info = {
         "name": bucket.name,
         "upstream_name": bucket.upstream_name,
@@ -193,7 +193,7 @@ async def list_buckets(org: OrgDep, store: StoreDep, deleting: bool = False) -> 
     buckets = await store.s3.buckets(org, deleting)
     return JSONResponse(
         {
-            "buckets": [bucket_info(store, bucket) for bucket in buckets],
+            "buckets": [await bucket_info(store, bucket) for bucket in buckets],
             "name_limit": store.s3.name_limit,
         }
     )
@@ -206,7 +206,7 @@ async def create_bucket(
     """Create a bucket (any member). Names are lowercase letters, digits, hyphens and dots,
     unique in the organization; see ``name_limit`` in the listing for their length."""
     bucket = await store.s3.create_bucket(org, body.name, user, via(request))
-    return JSONResponse(bucket_info(store, bucket), status_code=201)
+    return JSONResponse(await bucket_info(store, bucket), status_code=201)
 
 
 @router.get("/orgs/{org}/buckets/{name}")
@@ -215,10 +215,10 @@ async def get_bucket(org: OrgDep, name: str, store: StoreDep) -> Response:
     store.s3.require()
     bucket = await store.s3.bucket(org, name)
     events = await store.s3.events(org, name)
+    actors = await store.accounts.briefs(event["user"] for event in events)
     for event in events:
-        actor = store.accounts.users.get(event["user"]) if event["user"] else None
-        event["user"] = store.accounts.brief(actor) if actor is not None else None
-    return JSONResponse({**bucket_info(store, bucket), "events": events})
+        event["user"] = actors.get(event["user"]) if event["user"] else None
+    return JSONResponse({**await bucket_info(store, bucket), "events": events})
 
 
 @router.delete("/orgs/{org}/buckets/{name}", status_code=204)

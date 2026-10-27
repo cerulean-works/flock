@@ -219,7 +219,7 @@ class Imports:
         self, job: ImportJob, source: WandbSource, user: User, members: dict[str, str]
     ) -> None:
         # W&B usernames -> Flock users, matched by email; other runs belong to the importer.
-        by_email = {u.email: u.pk for u in self.store.accounts.users.values()}
+        by_email = {u.email: u.pk for u in await self.store.accounts.users()}
         owners = {name: by_email[email] for name, email in members.items() if email in by_email}
         try:
             projects = await source.projects(job.entity)

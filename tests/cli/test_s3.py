@@ -173,7 +173,7 @@ def test_buckets_commands(flock, alice, signed_in, flock_cli):
 
 def flock_admin_token(flock: S3Flock) -> str:
     """A browser session of the flock's super admin."""
-    admin = flock.store.accounts.by_email[flock.ADMIN_EMAIL]
+    admin = flock.call(flock.store.accounts.user_by_email(flock.ADMIN_EMAIL))
     return flock.call(flock.store.accounts.start_session(admin))["access_token"]
 
 
