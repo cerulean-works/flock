@@ -12,7 +12,7 @@
 		budget: Budget;
 		/** The current UTC month: there's nothing to show after it. */
 		thisMonth: string;
-		/** Admins set the budget and prices. */
+		/** Admins set the budget and prices, and manage deleted projects. */
 		admin: boolean;
 	}
 
@@ -111,24 +111,16 @@
 		{/if}
 	</div>
 
-	{#if budget.unpriced.length || budget.unknown_gpu.runs}
-		<div class="grid gap-1.5 bg-card px-3 py-2.5 text-[13px]">
-			{#if budget.unpriced.length}
-				<p>
-					No price for {budget.unpriced
-						.map((u) => `${u.gpu_type} (${hours(u.gpu_hours)} h)`)
-						.join(', ')}: counted as free.
-					{#if admin}<a class="text-link hover:underline" href={orgHref(budget.org, 'budget')}
-							>Set prices</a
-						>{/if}
-				</p>
-			{/if}
-			{#if budget.unknown_gpu.runs}
-				<p class="text-muted-foreground">
-					{count(budget.unknown_gpu.runs, 'run')} ({hours(budget.unknown_gpu.hours)} h) with unknown GPUs.
-				</p>
-			{/if}
-		</div>
+	{#if budget.excluded.projects}
+		<p class="-mt-4 text-[13px] text-muted-foreground">
+			Leaves out {fmt(budget.excluded.cost)} of {count(
+				budget.excluded.projects,
+				'deleted project'
+			)}.
+			{#if admin}<a class="text-link hover:underline" href={orgHref(budget.org, 'deleted-projects')}
+					>Manage</a
+				>{/if}
+		</p>
 	{/if}
 
 	<!-- Narrow windows show the totals first, and the breakdown on request. -->
@@ -154,6 +146,14 @@
 									href={projectHref(budget.org, p.project)}
 								>
 									{p.project}
+								</a>
+							{:else if admin}
+								<a
+									class="min-w-0 flex-1 truncate text-muted-foreground hover:text-link"
+									href={orgHref(budget.org, 'deleted-projects')}
+									title="Manage the spend of deleted projects"
+								>
+									Deleted projects
 								</a>
 							{:else}
 								<span class="min-w-0 flex-1 truncate text-muted-foreground">Deleted projects</span>

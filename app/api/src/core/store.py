@@ -18,7 +18,7 @@ import orjson
 from app.api.src.core import gpus
 from app.api.src.core.accounts import Accounts
 from app.api.src.core.avatars import Avatars
-from app.api.src.core.budgets import Budgets, Usage
+from app.api.src.core.budgets import Budgets, DeletedProject, Dismissal, Usage
 from app.api.src.core.errors import Conflict, Discarded, Forbidden, NotFound
 from app.api.src.core.feed import Feed
 from app.api.src.core.history import History, PointCounter, Series
@@ -221,6 +221,10 @@ class Org:
         self.budgets: list[tuple[dt.date, float | None]] = []
         # The usage ledger, by month, including entries of deleted runs and projects.
         self.usage: dict[dt.date, list[Usage]] = {}
+        # Deleted projects with ledger entries, by pk (see DeletedProject).
+        self.deleted_projects: dict[int, DeletedProject] = {}
+        # Budget warnings dismissed for everyone, by (month, kind).
+        self.dismissals: dict[tuple[dt.date, str], Dismissal] = {}
         self.deleted = False
 
 
@@ -1246,7 +1250,27 @@ class Store:
                 raise NotFound(f"project {project.entity}/{project.name} not found")
             if project.active and not force:
                 raise Conflict("project has active runs (pass force=true)", project.active)
-            await self.db.execute("DELETE FROM projects WHERE pk = $1", project.pk)
+            now = time.time()
+            async with self.db.pool.acquire() as conn, conn.transaction():
+                # Its ledger entries lose the project: keep which deleted project they were of.
+                deleted = await conn.fetchval(
+                    "INSERT INTO deleted_projects (org_pk, name, deleted_at) "
+                    "SELECT $1, $2, to_timestamp($3) "
+                    "WHERE EXISTS (SELECT FROM gpu_usage WHERE project_pk = $4) RETURNING pk",
+                    project.org.pk,
+                    project.name,
+                    now,
+                    project.pk,
+                )
+                if deleted is not None:
+                    await conn.execute(
+                        "UPDATE gpu_usage SET deleted_project_pk = $1 WHERE project_pk = $2",
+                        deleted,
+                        project.pk,
+                    )
+                await conn.execute("DELETE FROM projects WHERE pk = $1", project.pk)
+            if deleted is not None:
+                self.budgets.retire_project(project, DeletedProject(deleted, project.name, now))
             pks = self._drop_project(project)
         self.live.broadcast(project.pk, Hub.event("project", {"deleted": True}))
         self.live.close_project(project.pk)

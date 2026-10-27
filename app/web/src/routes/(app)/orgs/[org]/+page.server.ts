@@ -2,18 +2,38 @@ import { fail, isHttpError, redirect } from '@sveltejs/kit';
 import { refreshUser } from '#lib/server/auth.ts';
 import { removeAvatar, setAvatar } from '#lib/server/avatar.ts';
 import { change, refused, flock } from '#lib/server/flock.ts';
-import type { Billing, Invite, Member, OrgImport, OrgInfo, Role, UserInfo } from '#lib/types.ts';
+import type {
+	Billing,
+	BudgetWarnings,
+	DeletedProject,
+	Invite,
+	Member,
+	OrgImport,
+	OrgInfo,
+	Role,
+	UserInfo
+} from '#lib/types.ts';
 import { formText, orgDisplayNameError } from '#lib/utils.ts';
 import { IMPORT, wandbImport } from '#lib/wandb.ts';
 import { orgHref } from '#lib/workspace/url.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 const orgPath = (org: string) => `/api/v1/orgs/${encodeURIComponent(org)}`;
+const warningPath = (org: string, warning: string) =>
+	`${orgPath(org)}/budget/warnings/${encodeURIComponent(warning)}/dismissal`;
 
 export const load: PageServerLoad = async ({ depends, params }) => {
 	depends(IMPORT);
 	const path = orgPath(params.org);
-	const [org, members, me, billing, invites, wandb] = await Promise.all([
+	// Admin-only reads: members are refused, and the page leaves those sections out.
+	const adminOnly = <T>(res: Promise<Response>) =>
+		res
+			.then((r) => r.json() as Promise<T>)
+			.catch((e) => {
+				if (isHttpError(e) && e.status === 403) return null;
+				throw e;
+			});
+	const [org, members, me, billing, invites, wandb, deleted, warnings] = await Promise.all([
 		flock(path).then((r) => r.json() as Promise<OrgInfo>),
 		flock(`${path}/members`).then((r) => r.json() as Promise<{ members: Member[] }>),
 		flock('/api/v1/me').then((r) => r.json() as Promise<UserInfo>),
@@ -31,7 +51,9 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 			.catch((e) => {
 				if (isHttpError(e) && (e.status === 403 || e.status === 404)) return null;
 				throw e;
-			})
+			}),
+		adminOnly<{ deleted_projects: DeletedProject[] }>(flock(`${path}/budget/deleted-projects`)),
+		adminOnly<BudgetWarnings>(flock(`${path}/budget/warnings`))
 	]);
 	return {
 		org,
@@ -39,6 +61,8 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 		invites: invites?.invites ?? null,
 		import: wandb,
 		billing,
+		deletedProjects: deleted?.deleted_projects ?? null,
+		warnings,
 		me: { id: me.id, is_superadmin: me.is_superadmin },
 		now: Date.now() / 1000
 	};
@@ -96,6 +120,41 @@ export const actions: Actions = {
 		});
 		if (refused(res)) return res;
 		return { billing: res.data };
+	},
+
+	/** Dismiss a budget warning for everyone in the org, as it was shown. */
+	dismissWarning: async ({ params, request }) => {
+		const form = await request.formData();
+		const warning = formText(form, 'warning');
+		if (!warning) return fail(400, { error: 'No such warning' });
+		const res = await change('PUT', warningPath(params.org, warning), {
+			fingerprint: formText(form, 'fingerprint')
+		});
+		if (refused(res)) return res;
+		return { dismissed: warning };
+	},
+
+	/** Show a dismissed budget warning again. */
+	restoreWarning: async ({ params, request }) => {
+		const warning = formText(await request.formData(), 'warning');
+		if (!warning) return fail(400, { error: 'No such warning' });
+		const res = await change('DELETE', warningPath(params.org, warning));
+		if (refused(res)) return res;
+		return { restored: warning };
+	},
+
+	/** Leave a deleted project's spend out of the budget (`excluded=true`), or count it again. */
+	exclude: async ({ params, request }) => {
+		const form = await request.formData();
+		const id = Number(form.get('deleted'));
+		if (!Number.isInteger(id)) return fail(400, { error: 'No such deleted project' });
+		const res = await change<DeletedProject>(
+			'PATCH',
+			`${orgPath(params.org)}/budget/deleted-projects/${id}`,
+			{ excluded: form.get('excluded') === 'true' }
+		);
+		if (refused(res)) return res;
+		return { deleted: res.data };
 	},
 
 	/** An invitation link, shown this once: Flock keeps only a hash of it. */

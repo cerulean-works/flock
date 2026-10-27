@@ -285,15 +285,22 @@ correct them with `PATCH .../runs/{run}` (multi-node runs report one node, and N
 GPUs hidden by `CUDA_VISIBLE_DEVICES`). Each heartbeat adds the time since the previous one to
 a ledger of seconds per run and UTC month, unless the run was silent longer than
 `FLOCK_CRASH_TIMEOUT` (preemption gaps aren't billed). Ledger rows outlive their runs and
-projects, so deleting never gives budget back. Org admins set prices per GPU hour and a
-monthly budget; cost is GPU hours × the current price.
+projects, so deleting never gives budget back, unless an admin leaves a deleted project's
+spend out. Org admins set prices per GPU hour and a monthly budget; cost is GPU hours × the
+current price. Runs with no GPU hours count towards nothing. Budget warnings (unpriced GPU
+types, runs with unknown GPUs) are raised from 0.05 hours, shown to admins only, in the org's
+settings, and admins can dismiss them for the whole org until they're about something new.
 
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/v1/feed?org=&project=&owner=me&kinds=&cursor=&limit=` | home feed, newest first: `run_started`, `run_finished`/`run_failed`/`run_crashed`, `project_created` |
 | `GET /api/v1/orgs/{org}/billing` | currency, budgets, prices, and every GPU type the org's runs used |
 | `PATCH /api/v1/orgs/{org}/billing` `{monthly_budget?, currency?, rates?: {"H200": 60, "A100": null}}` | admins: set the budget from this month on, and merge prices (`null` removes one) |
-| `GET /api/v1/orgs/{org}/budget[?month=YYYY-MM]` | spent, remaining, cost per project (`null`: deleted projects), top 5 runs, unpriced GPU hours |
+| `GET /api/v1/orgs/{org}/budget[?month=YYYY-MM]` | spent, remaining, cost per project (`null`: deleted projects), excluded spend, top 5 runs; admins also get unpriced GPU hours and unknown-GPU runs |
+| `GET /api/v1/orgs/{org}/budget/warnings[?month=YYYY-MM]` | admins: the month's active warnings, and every dismissed one |
+| `PUT`/`DELETE /api/v1/orgs/{org}/budget/warnings/{kind}:{YYYY-MM}/dismissal` `{fingerprint}` | admins: dismiss a warning for everyone, or show it again |
+| `GET /api/v1/orgs/{org}/budget/deleted-projects` | admins: deleted projects that used GPU hours, with their spend |
+| `PATCH /api/v1/orgs/{org}/budget/deleted-projects/{id}` `{excluded}` | admins: leave a deleted project's spend out of the budget, or count it again |
 
 ```bash
 curl -s -X PATCH --json '{"monthly_budget": 20000, "rates": {"H200": 60}}' \
@@ -303,7 +310,8 @@ curl -s -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/orgs/flock/budget
 
 The feed is derived from runs and projects as they are (no activity log), so it has no
 deletes, renames or membership changes, and isn't pushed live. See
-[`docs/agents/004-home-and-budgets.md`](docs/agents/004-home-and-budgets.md).
+[`docs/agents/004-home-and-budgets.md`](docs/agents/004-home-and-budgets.md) and
+[`docs/agents/007-budget-management.md`](docs/agents/007-budget-management.md).
 
 ### System metrics
 
