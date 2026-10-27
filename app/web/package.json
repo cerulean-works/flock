@@ -5,6 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
+		"dev:remote": "FLOCK_API_URL=${FLOCK_REMOTE_API_URL:-https://flock-api.cerulean.works} vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
