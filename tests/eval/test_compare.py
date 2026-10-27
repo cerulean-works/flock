@@ -132,8 +132,13 @@ def test_files_with_no_common_task_or_a_missing_key_are_refused(write, tmp_path)
     old = BANK.to_dict()
     del old["tasks"][0]["truncation"]
     (tmp_path / "old.json").write_text(json.dumps(old))
-    with pytest.raises(ValueError, match="has no key 'truncation'"):
+    with pytest.raises(ValueError, match="not a results file: KeyError\\('truncation'\\)"):
         compare(tmp_path / "old.json", bank)
+
+    # Valid JSON of the wrong shape.
+    (tmp_path / "list.json").write_text("[]")
+    with pytest.raises(ValueError, match="not a results file: TypeError"):
+        compare(bank, tmp_path / "list.json")
 
 
 def test_cli_exits_0_on_equal_scores_1_on_a_breach_and_2_on_a_refusal(write):

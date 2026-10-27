@@ -24,7 +24,7 @@ Issue #23 asks for regression tests on scores: a change that moves a model's num
 
 Equality is the tolerance, in float32. Parity with OLMES is identical requests plus float32 scores that agree (stage 003, D22's check 2), and a rerun of our own code on the same stack is held to more than that: float32 scoring is bit-identical run to run on one GPU type and one set of library versions (measured twice on ARC-Easy, two runs on one H200 each time: 0 of 19,002 requests differ). The bank's second job extends that measurement to all of `base_easy`. Any float32 difference therefore has a cause worth reading: the code, a library, the GPU, or the data. JSON writes each float with Python's `repr`, which reads back to the same float, so equality on the file is equality on the values.
 
-A task or suite in only one file is listed and is not a breach: a rerun of a few tasks compares against a full bank, and a task added to `base_easy` after the bank was written shows as "not in the bank" until the bank is refreshed. At least one task must be in both, or `compare` refuses.
+A task or suite in only one file is listed and is not a breach: a rerun of a few tasks compares against a full bank. A task added to `base_easy` after the bank was written shows as "only in the new run", and each suite holding it as a breach on `members` and `score`, until the bank is refreshed. At least one task must be in both, or `compare` refuses.
 
 **Prior work.** lm-evaluation-harness v0.4.3 pins scores in `tests/models/test_huggingface.py`: Pythia-70M in float32 on CPU, with `torch.use_deterministic_algorithms(True)`, scores the first 10 ARC-Easy docs and checks each log-likelihood with `np.allclose(..., atol=1e-2)`, in CI, downloading the model. That is a per-request pin on a tiny model with a loose tolerance. Here the unit is a task's metrics over its full split on the model we compare against, on a GPU, with no tolerance, run on request. OLMES has no tests. Our choice of equality has no precedent beyond our own measurements.
 
@@ -33,17 +33,19 @@ A task or suite in only one file is listed and is not a breach: a rerun of a few
 A score difference means something only when both runs scored the same requests under the same settings. `compare` refuses, before comparing any score, with a message naming the field and both values, when:
 
 - `provenance.model`, `dtype`, `batch_tokens`, `max_length` or `attention` differ (the model, or the settings that change scores by design: `max_length` decides which requests are cut from the left). The SDPA kernel pin of a planned stage joins this list as `sdpa_backend` when it lands, since it changes bfloat16 scores;
-- a task in both files has a different `task_hash` (its definition, dataset revision, few-shot examples or any rendered request changed) or a different `limit`.
+- a task in both files has a different `task_hash` (its definition, dataset revision, few-shot examples or any rendered request changed) or a different `limit`;
+- a suite in both files has a different `metric`, so its score averages another metric over the same members;
+- a file is not JSON, or lacks a key `compare` reads, or has a value of the wrong type there.
 
 A refusal is not a breach: the runs are different instruments (Principle 3 of the suite), and the answer is a new bank, not a tolerance. It exits with 2, as a usage error does.
 
 The other provenance fields (`flock_commit`, `torch`, `transformers`, `python`, `device`) are printed side by side when they differ, before the breaches, because they are the usual causes of one. `device` is the GPU's name as CUDA reports it (`NVIDIA H200`), or `cpu`, so a run on another GPU type shows here. A library upgrade that moves a float32 number is a breach, and the bank is refreshed in the same pull request as the lockfile once the change is understood.
 
-`compare` reads the JSON keys it needs, not the `Results` dataclass, so a bank written under an older `schema_version` stays comparable as long as those keys exist; a missing key refuses naming the key.
+`compare` reads the JSON keys it needs, not the `Results` dataclass, so a bank written under an older `schema_version` stays comparable as long as those keys exist; a missing key refuses naming the key. The printed provenance fields are read only if present, so a field added to provenance later doesn't refuse older banks.
 
 ### 013.D3. `flock-eval run --dtype` selects the weights' dtype
 
-The bank is float32, and `flock-eval run` has always loaded weights in bfloat16, so float32 runs went through the Python API. `EvalConfig` gains `dtype: str = "bfloat16"`, passed to `ScoringModel.from_pretrained`, and `run` gains `--dtype` with the choices `bfloat16` and `float32`. The provenance already records the dtype that ran. This is the only change to `run`, and with the default every existing command scores as before.
+The bank is float32, and `flock-eval run` has always loaded weights in bfloat16, so float32 runs went through the Python API. `EvalConfig` gains `dtype: Dtype = "bfloat16"`, where `Dtype` is `Literal["bfloat16", "float32"]` in `run.py`, checked in `__post_init__` and passed to `ScoringModel.from_pretrained`, and `run` gains `--dtype` with the choices of `Dtype`. The provenance already records the dtype that ran. This is the only change to `run`, and with the default every existing command scores as before.
 
 ### 013.D4. The bank is a `results.json` beside the task snapshot, written by one documented command
 

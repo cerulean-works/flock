@@ -38,7 +38,7 @@ The bank is float32 because float32 scores repeat exactly when you rerun the sam
 
 For each task in both files, `compare` checks `num_docs` and every entry of `metrics` and `truncation`. For each suite in both files, it checks `members` and `score`. Timing isn't compared. A metric that is in one file only is a breach.
 
-A task or suite in one file only is listed and is not a breach. So you can compare a rerun of a few tasks (without `--limit`) against the full bank, and a task added to `base_easy` after the bank was written shows as only in the new run.
+A task or suite in one file only is listed and is not a breach. So you can compare a rerun of a few tasks (without `--limit`) against the full bank. A task added to `base_easy` after the bank was written shows as only in the new run, and each suite that holds it is a breach on `members` and `score` until the bank is refreshed.
 
 The output lists, in order:
 - the provenance fields that differ and often explain a breach: `flock_commit`, `device`, `torch`, `transformers` and `python`

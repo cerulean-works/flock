@@ -47,13 +47,13 @@ def compare(banked: Path, new: Path) -> Comparison:
     Each task in both files is compared on `num_docs` and every entry of `metrics` and `truncation`, and each suite in both on `members` and `score`. Timing is not compared.
 
     Raises:
-        `ValueError`: if the runs are different instruments (another model, `dtype`, `batch_tokens`, `max_length` or `attention`, a common task with another `task_hash` or `limit`, or a common suite with another `metric`), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads.
+        `ValueError`: if the runs are different instruments (another model, `dtype`, `batch_tokens`, `max_length` or `attention`, a common task with another `task_hash` or `limit`, or a common suite with another `metric`), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
     """
     files = {}
     for path in (banked, new):
         try:
             files[path] = json.loads(path.read_text())
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
             raise ValueError(f"{path} is not a results file: {error}") from None
     bank, rerun = files[banked], files[new]
 
@@ -66,11 +66,12 @@ def compare(banked: Path, new: Path) -> Comparison:
                     f"different instrument: provenance.{key} is {bank['provenance'][key]!r} "
                     f"in {banked}, {rerun['provenance'][key]!r} in {new}"
                 )
-        # The usual causes of a breach, printed beside it.
+        # The usual causes of a breach, printed beside it. Read with `get`: a file without one
+        # of them is still comparable.
         provenance = {}
         for key in ("flock_commit", "device", "torch", "transformers", "python"):
-            if bank["provenance"][key] != rerun["provenance"][key]:
-                provenance[key] = (bank["provenance"][key], rerun["provenance"][key])
+            if bank["provenance"].get(key) != rerun["provenance"].get(key):
+                provenance[key] = (bank["provenance"].get(key), rerun["provenance"].get(key))
 
         bank_tasks = {task["task"]: task for task in bank["tasks"]}
         new_tasks = {task["task"]: task for task in rerun["tasks"]}
@@ -109,8 +110,9 @@ def compare(banked: Path, new: Path) -> Comparison:
         for name in suites:
             for key in ("members", "score"):
                 values.append((name, key, bank_suites[name][key], new_suites[name][key]))
-    except KeyError as error:
-        raise ValueError(f"{banked} or {new} has no key {error}") from None
+    # A missing key, or a value of the wrong type such as a list where an object belongs.
+    except (KeyError, TypeError, AttributeError) as error:
+        raise ValueError(f"{banked} or {new} is not a results file: {error!r}") from None
 
     breaches = []
     for name, field, x, y in values:
