@@ -31,7 +31,15 @@
 			await datasetCall(datasetsApi(org, 'delete'), { method: 'POST', body: { path } });
 			toast.success(`Deleted ${nameOf(path)}`);
 			open = false;
-			await goto(datasetsHref(org, parentOf(path)), { replace: true });
+			// S3 has no folders: one that only held this dataset is gone with it, so go up to the
+			// nearest that's left (the root always is).
+			let to = parentOf(path);
+			while (to) {
+				const res = await fetch(datasetsApi(org, 'at', { path: to }));
+				if (res.ok) break;
+				to = parentOf(to);
+			}
+			await goto(datasetsHref(org, to), { replace: true });
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {

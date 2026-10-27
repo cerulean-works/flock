@@ -52,12 +52,13 @@
 			: ''}
 	</span>
 {:else}
-	<span class={['whitespace-pre-wrap', cell.k === 'json' && 'font-mono text-[12px]']}
+	<!-- Up to four lines in the table: the rest is a click away, in the side sheet. -->
+	<span class={['line-clamp-4 whitespace-pre-wrap', cell.k === 'json' && 'font-mono text-[12px]']}
 		>{cell.v}{#if cellCut(cell)}…{/if}</span
 	>
 	{#if cellCut(cell)}
 		<button
-			class="ml-1 text-[12px] whitespace-nowrap text-link underline-offset-3 hover:underline"
+			class="text-[12px] whitespace-nowrap text-link underline-offset-3 hover:underline"
 			onclick={onopen}
 		>
 			{(cell.len ?? 0).toLocaleString('en-US')} characters

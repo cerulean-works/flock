@@ -366,18 +366,24 @@ describe('CellView', () => {
 });
 
 describe('the dialogs', () => {
-	it('deletes after the path is typed, then goes to the folder', async () => {
-		const calls = serve({ '/api/datasets/acme/delete': () => ({ id: 1 }) });
-		render(DeleteDatasetDialog, { open: true, org: 'acme', path: 'eval/mmlu' });
+	it('deletes after the path is typed, then goes to the nearest folder left', async () => {
+		const calls = serve({
+			'/api/datasets/acme/delete': () => ({ id: 1 }),
+			// eval/deep held only this dataset, so it's gone too.
+			'/api/datasets/acme/at?path=eval%2Fdeep': () =>
+				Response.json({ message: 'folder eval/deep not found' }, { status: 404 }),
+			'/api/datasets/acme/at?path=eval': () => ({ kind: 'folder' })
+		});
+		render(DeleteDatasetDialog, { open: true, org: 'acme', path: 'eval/deep/mmlu' });
 		await expect.element(screen.getByText('Org admins can restore it for 14 days.')).toBeVisible();
 		const confirm = screen.getByRole('button', { name: 'Delete dataset' });
 		await expect.element(confirm).toBeDisabled();
-		await screen.getByLabelText('Type eval/mmlu to confirm').fill('eval/mmlu');
+		await screen.getByLabelText('Type eval/deep/mmlu to confirm').fill('eval/deep/mmlu');
 		await confirm.click();
 		await vi.waitFor(() =>
 			expect(goto).toHaveBeenCalledWith('/datasets/acme/eval', { replace: true })
 		);
-		expect(body(calls[0].init)).toEqual({ path: 'eval/mmlu' });
+		expect(body(calls[0].init)).toEqual({ path: 'eval/deep/mmlu' });
 	});
 
 	it('renames, showing a refusal and then going to the new path', async () => {

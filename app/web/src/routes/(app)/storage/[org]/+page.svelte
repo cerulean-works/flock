@@ -100,7 +100,7 @@
 										{relativeTime(bucket.created_at, data.now)}
 									</td>
 									<td class="hidden truncate px-2 text-muted-foreground md:table-cell">
-										{bucket.created_by?.name ?? 'A removed user'}
+										{bucket.managed ? 'Flock' : (bucket.created_by?.name ?? 'A removed user')}
 									</td>
 									<td class="text-right">
 										{#if !gone}

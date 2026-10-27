@@ -12,7 +12,7 @@
 <!-- A row of the Schema tab's tree: structs and lists open onto their children. -->
 <li>
 	<div
-		class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_5rem] items-baseline gap-3 border-b border-divider py-1.5 text-[13px]"
+		class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_5rem] items-center gap-3 border-b border-divider py-1.5 text-[13px]"
 		style:padding-left="{depth * 1.25}rem"
 	>
 		<span class="flex min-w-0 items-center gap-1">
