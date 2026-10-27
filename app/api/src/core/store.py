@@ -19,6 +19,7 @@ from app.api.src.core import gpus
 from app.api.src.core.accounts import Accounts
 from app.api.src.core.avatars import Avatars
 from app.api.src.core.budgets import Budgets, DeletedProject, Dismissal, Usage
+from app.api.src.core.datasets import Datasets
 from app.api.src.core.errors import Conflict, Discarded, Forbidden, NotFound
 from app.api.src.core.feed import Feed
 from app.api.src.core.history import History, PointCounter, Series
@@ -335,6 +336,7 @@ class Store:
         self.feed = Feed(self)
         self.imports = Imports(self)
         self.s3 = S3(self)
+        self.datasets = Datasets(self)
 
     @staticmethod
     def _config_columns(config: dict[str, Any]) -> dict[str, Any]:
@@ -385,12 +387,14 @@ class Store:
             await self.budgets.load()
             await self.imports.load()
             await self.s3.load()
+            await self.datasets.load()
             await self._detect_missing_gpus()
         except BaseException:
             await self.db.close()
             raise
 
     async def close(self) -> None:
+        await self.datasets.close()
         await self.s3.close()
         await self.imports.close()
         await self.avatars.flush()
@@ -1540,7 +1544,14 @@ class Store:
                 # S3 bucket names start with the org's pk in five digits (D53).
                 if record[0] > self.MAX_ORG_PK:
                     raise Conflict("this server can't hold more organizations")
-            return self._add_org(Org(*record, display_name=display_name))
+            org = self._add_org(Org(*record, display_name=display_name))
+        # Its flock-datasets bucket (D85). A failure leaves the org be: startup and the Datasets
+        # tab try again.
+        try:
+            await self.s3.ensure_managed(org)
+        except Exception:
+            log.exception("could not create flock-datasets for %s", org.name)
+        return org
 
     @contextlib.asynccontextmanager
     async def _org_locked(self, org: Org, all_runs: bool = False) -> AsyncGenerator[list[Project]]:
@@ -1586,6 +1597,7 @@ class Store:
             async with self.db.pool.acquire() as conn, conn.transaction():
                 # Its S3 buckets outlive it until the background purge removes them upstream.
                 await self.s3.delete_org_buckets(conn, org)
+                await self.datasets.delete_org(conn, org)
                 await conn.execute("DELETE FROM orgs WHERE pk = $1", org.pk)
             pks = [pk for project in projects for pk in self._drop_project(project)]
             del self.orgs[org.name]
@@ -1594,6 +1606,7 @@ class Store:
             self.accounts.forget_org(org)
             self.imports.forget(org)
         self.s3.purge_later()
+        self.datasets.purge_org(org.pk)
         await self.avatars.release(org.avatar)
         for project in projects:
             self.live.broadcast(project.pk, Hub.event("project", {"deleted": True}))

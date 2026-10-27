@@ -242,6 +242,98 @@ class Upstream:
         if response.status_code != 404:
             self._raise(response)
 
+    @staticmethod
+    def _copy_result(response: httpx.Response) -> str:
+        """The ETag of a CopyObject or UploadPartCopy answer. Both can answer 200 with an error
+        in the body, when the copy fails after it started."""
+        Upstream._raise(response)
+        if (failed := s3xml.parse_error(response.content)) is not None:
+            raise UpstreamError(*failed, 500)
+        root = ET.fromstring(response.content)
+        etag = next((c.text for c in root if s3xml.local(c.tag) == "ETag"), None)
+        if not etag:
+            raise UpstreamError("InternalError", "no ETag in the copy's answer", 502)
+        return etag
+
+    @staticmethod
+    def _source(bucket: str, key: str) -> str:
+        return sigv4.uri_encode(f"/{bucket}/{key}")
+
+    async def copy_object(self, source_bucket: str, source_key: str, bucket: str, key: str) -> None:
+        """CopyObject, server side: ``source_key`` of ``source_bucket`` to ``key`` of ``bucket``
+        (objects up to 5 GiB; see ``copy_large``)."""
+        headers = {"x-amz-copy-source": self._source(source_bucket, source_key)}
+        self._copy_result(await self.send("PUT", bucket, key, headers=headers))
+
+    async def copy_large(
+        self, source_bucket: str, source_key: str, size: int, bucket: str, key: str, part: int
+    ) -> None:
+        """A multipart copy (UploadPartCopy) of an object of ``size`` bytes, in parts of
+        ``part`` bytes, for objects too large for one CopyObject. Aborted if a part fails."""
+        upload_id = await self.create_upload(bucket, key, None)
+        try:
+            etags = []
+            for number, start in enumerate(range(0, size, part), start=1):
+                end = min(start + part, size) - 1
+                headers = {
+                    "x-amz-copy-source": self._source(source_bucket, source_key),
+                    "x-amz-copy-source-range": f"bytes={start}-{end}",
+                }
+                params = {"partNumber": str(number), "uploadId": upload_id}
+                response = await self.send("PUT", bucket, key, params, headers)
+                etags.append(self._copy_result(response))
+            await self.complete_upload(bucket, key, upload_id, etags)
+        except BaseException:
+            await self.abort_upload(bucket, key, upload_id)
+            raise
+
+    async def complete_upload(
+        self, bucket: str, key: str, upload_id: str, etags: list[str]
+    ) -> None:
+        """CompleteMultipartUpload, with the ETags of parts 1, 2, … in order."""
+        root = ET.Element("CompleteMultipartUpload")
+        for number, etag in enumerate(etags, start=1):
+            part = ET.SubElement(root, "Part")
+            ET.SubElement(part, "PartNumber").text = str(number)
+            ET.SubElement(part, "ETag").text = etag
+        body = s3xml.dump(root)
+        response = await self.send(
+            "POST",
+            bucket,
+            key,
+            {"uploadId": upload_id},
+            {"content-type": "application/xml"},
+            body,
+            hashlib.sha256(body).hexdigest(),
+        )
+        self._raise(response)
+        if (failed := s3xml.parse_error(response.content)) is not None:
+            raise UpstreamError(*failed, 500)
+
+    async def get_range(self, bucket: str, key: str, length: int) -> bytes | None:
+        """The first ``length`` bytes of an object, or None if there's no such object."""
+        response = await self.send("GET", bucket, key, headers={"range": f"bytes=0-{length - 1}"})
+        if response.status_code == 404:
+            return None
+        if response.status_code == 416:  # an empty object
+            return b""
+        self._raise(response)
+        return response.content
+
+    async def list_all(
+        self, bucket: str, prefix: str, limit: int | None = None
+    ) -> list[ListedObject]:
+        """Every object under ``prefix``; with ``limit``, stops once more than that are found
+        (and returns them, so the caller sees the limit was passed)."""
+        objects: list[ListedObject] = []
+        token = None
+        while True:
+            page = await self.list_objects(bucket, prefix, None, token)
+            objects.extend(page.objects)
+            token = page.cursor
+            if token is None or (limit is not None and len(objects) > limit):
+                return objects
+
     async def _keys(self, bucket: str) -> list[str]:
         """Up to 1000 keys of ``bucket``."""
         return [o.key for o in (await self.list_objects(bucket)).objects]

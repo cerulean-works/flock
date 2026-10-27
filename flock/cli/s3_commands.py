@@ -179,6 +179,9 @@ def list_command(org: str | None, host: str | None, as_json: bool) -> None:
         click.echo("No buckets yet. Create one with: flock s3 buckets create NAME")
     for bucket in found:
         created = time.strftime("%Y-%m-%d", time.localtime(bucket["created_at"]))
+        if bucket.get("managed"):
+            click.echo(f"{bucket['name']}\tcreated {created}, managed by Flock")
+            continue
         by = bucket["created_by"]["email"] if bucket["created_by"] else "a deleted user"
         click.echo(f"{bucket['name']}\tcreated {created} by {by}")
 

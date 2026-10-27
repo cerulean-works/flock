@@ -56,6 +56,7 @@ class Bucket:
     created_by: int | None
     deleted_at: float | None = None
     purged_at: float | None = None
+    managed: str | None = None  # "datasets" for the org's flock-datasets (D85)
 
 
 @dataclass(frozen=True)
@@ -115,8 +116,12 @@ class S3:
     UPLOAD_LIMIT: ClassVar[int] = 50 * 1024 * MIB
     BUCKET_COLUMNS: ClassVar[str] = (
         "pk, org_pk, name, upstream_name, extract(epoch FROM created_at)::float8, created_by, "
-        "extract(epoch FROM deleted_at)::float8, extract(epoch FROM purged_at)::float8"
+        "extract(epoch FROM deleted_at)::float8, extract(epoch FROM purged_at)::float8, managed"
     )
+    # The bucket of each org that Flock creates and owns (D85), and the prefix new bucket names
+    # can't start with, so Flock can add more of its own later.
+    DATASETS: ClassVar[str] = "flock-datasets"
+    RESERVED_PREFIX: ClassVar[str] = "flock-"
 
     def __init__(self, store: Store) -> None:
         self.store = store
@@ -320,8 +325,11 @@ class S3:
         the org's ``00017-``."""
         return self.NAME_LIMIT - len(self.settings.s3_bucket_prefix) - self.PK_DIGITS - 1
 
-    def check_name(self, name: str) -> None:
-        """Raises ``Invalid`` unless ``name`` is a bucket name S3 takes once prefixed."""
+    def check_name(self, name: str, reserved: bool = False) -> None:
+        """Raises ``Invalid`` unless ``name`` is a bucket name S3 takes once prefixed, and (unless
+        ``reserved``, for Flock's own buckets) doesn't start with ``flock-``."""
+        if not reserved and name.startswith(self.RESERVED_PREFIX):
+            raise Invalid(f"Names starting with {self.RESERVED_PREFIX} are reserved.")
         limit = self.name_limit
         if not 1 <= len(name) <= limit:
             raise Invalid(f"bucket names are 1 to {limit} characters")
@@ -374,8 +382,14 @@ class S3:
     async def create_bucket(self, org: Org, name: str, user: User, detail: dict) -> Bucket:
         """Create ``name`` in ``org``: its row and event, then the bucket upstream. If the S3
         server refuses, neither stays. ``detail`` says how it was asked for (see events)."""
-        upstream = self.require()
         self.check_name(name)
+        return await self._create(org, name, user.pk, detail)
+
+    async def _create(
+        self, org: Org, name: str, user: int | None, detail: dict, managed: str | None = None
+    ) -> Bucket:
+        upstream = self.require()
+        self.check_name(name, reserved=True)
         upstream_name = self.upstream_name(org, name)
         async with self.store.db.pool.acquire() as conn, conn.transaction():
             # Held until the transaction ends: two creates of one name wait for each other.
@@ -395,16 +409,17 @@ class S3:
                     else f"bucket {name} already exists"
                 )
             record = await conn.fetchrow(
-                "INSERT INTO s3_buckets (org_pk, name, upstream_name, created_at, created_by) "
-                f"VALUES ($1, $2, $3, now(), $4) RETURNING {self.BUCKET_COLUMNS}",
+                "INSERT INTO s3_buckets (org_pk, name, upstream_name, created_at, created_by, "
+                f"managed) VALUES ($1, $2, $3, now(), $4, $5) RETURNING {self.BUCKET_COLUMNS}",
                 org.pk,
                 name,
                 upstream_name,
-                user.pk,
+                user,
+                managed,
             )
             assert record is not None
             bucket = Bucket(*record)
-            await self._event(conn, bucket.pk, "created", user.pk, detail)
+            await self._event(conn, bucket.pk, "created", user, detail)
             # Raising here rolls the row and its event back.
             try:
                 # Some servers answer creating a bucket that exists with a 200: look first, so
@@ -429,16 +444,65 @@ class S3:
         removed upstream in the background."""
         self.require()
         async with self.store.db.pool.acquire() as conn, conn.transaction():
-            pk = await conn.fetchval(
-                "UPDATE s3_buckets SET deleted_at = now() "
-                "WHERE org_pk = $1 AND name = $2 AND deleted_at IS NULL RETURNING pk",
+            pk, managed = await conn.fetchrow(
+                "SELECT pk, managed FROM s3_buckets "
+                "WHERE org_pk = $1 AND name = $2 AND deleted_at IS NULL FOR UPDATE",
                 org.pk,
                 name,
-            )
+            ) or (None, None)
             if pk is None:
                 raise NotFound(f"bucket {name} not found")
+            if managed is not None:
+                raise Conflict(f"{name} is managed by Flock and can't be deleted")
+            await conn.execute("UPDATE s3_buckets SET deleted_at = now() WHERE pk = $1", pk)
             await self._event(conn, pk, "deleted", user.pk, detail)
         self.purge_later()
+
+    async def managed_bucket(self, org: Org, kind: str = "datasets") -> Bucket | None:
+        """The org's live managed bucket of ``kind``, if it has one."""
+        record = await self.store.db.fetchrow(
+            f"SELECT {self.BUCKET_COLUMNS} FROM s3_buckets "
+            "WHERE org_pk = $1 AND managed = $2 AND deleted_at IS NULL",
+            org.pk,
+            kind,
+        )
+        return Bucket(*record) if record is not None else None
+
+    async def ensure_managed(self, org: Org) -> Bucket | None:
+        """The org's ``flock-datasets`` bucket (D85), created if it has none: by Flock, with no
+        user, its event saying ``via: flock``. A bucket of that name the org already has is
+        marked managed instead. None when S3 is off. Raises as ``create_bucket`` does."""
+        if self.upstream is None or org.deleted:
+            return None
+        if (found := await self.managed_bucket(org)) is not None:
+            return found
+        adopted = await self.store.db.fetchrow(
+            "UPDATE s3_buckets SET managed = 'datasets' "
+            "WHERE org_pk = $1 AND name = $2 AND deleted_at IS NULL AND managed IS NULL "
+            "AND NOT EXISTS (SELECT 1 FROM s3_buckets WHERE org_pk = $1 AND managed = 'datasets' "
+            f"AND deleted_at IS NULL) RETURNING {self.BUCKET_COLUMNS}",
+            org.pk,
+            self.DATASETS,
+        )
+        if adopted is not None:
+            return Bucket(*adopted)
+        try:
+            return await self._create(org, self.DATASETS, None, {"via": "flock"}, "datasets")
+        except Conflict:
+            # Another replica (or the startup pass) made it meanwhile.
+            if (found := await self.managed_bucket(org)) is not None:
+                return found
+            raise
+
+    async def ensure_all_managed(self) -> None:
+        """``ensure_managed`` for every org that lacks its bucket (at startup, in the background:
+        existing orgs, and S3 turned on later). Failures are logged and left for the Datasets
+        tab to retry."""
+        for org in list(self.store.orgs.values()):
+            try:
+                await self.ensure_managed(org)
+            except Exception:
+                log.exception("could not create %s for %s", self.DATASETS, org.name)
 
     async def delete_org_buckets(self, conn: asyncpg.Connection, org: Org) -> None:
         """Delete every bucket of ``org``, in ``conn``'s transaction (the org's deletion); call
