@@ -187,7 +187,7 @@ def test_avatars_survive_a_restart(make_flock):
     org_url = put_image(server.client(), "/api/v1/orgs/flock/avatar", JPEG).json()["avatar_url"]
     server.stop()
     restarted = make_flock(reuse=server)
-    me = restarted.client(api_key=alice.api_key).get(ME).json()
+    me = restarted.client(token=alice.token).get(ME).json()
     assert (me["avatar_url"], me["avatar_source"]) == (url, "upload")
     assert restarted.client().get("/api/v1/orgs/flock").json()["avatar_url"] == org_url
     assert restarted.anonymous().get(url).body == PNG

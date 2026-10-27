@@ -156,7 +156,7 @@ def test_delete_org(make_flock):
         assert client.get(f"{ORGS}/lab").status == 404
         assert client.get("/api/v1/projects/lab/p").status == 404
         assert [p["name"] for p in client.get("/api/v1/projects").json()["projects"]] == ["kept"]
-        me = server.client(api_key=alice.api_key).get("/api/v1/me").json()
+        me = server.client(token=alice.token).get("/api/v1/me").json()
         assert (me["orgs"], me["default_org"]) == ([], None)
 
     check(server)
@@ -365,7 +365,7 @@ def test_user_administration(flock):
     assert alice.api.delete(f"/api/v1/users/{alice.id}").status == 409  # the last super admin
     assert alice.api.delete(f"/api/v1/users/{admin_id}").status == 204
     assert admin.get("/api/v1/me").status == 401
-    flock.api_key = alice.api_key  # add_user invites as the super admin
+    flock.token = alice.token  # add_user invites as the super admin
     bob = flock.add_user("bob@lab.test", org="alices")
     assert upsert_error(bob.api, "alices", "p", "b1") is None
     assert alice.api.delete(f"/api/v1/users/{bob.id}").status == 204

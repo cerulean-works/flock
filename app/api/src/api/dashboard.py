@@ -7,14 +7,14 @@ import orjson
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
-from app.api.src.api.deps import ProjectDep, StoreDep, current_user
+from app.api.src.api.deps import ProjectDep, StoreDep, rest_user
 from app.api.src.api.runs import RunSelection
 from app.api.src.core.history import History
 from app.api.src.core.live import Hub
 from app.api.src.core.metric_defs import step_metrics
 from app.api.src.core.store import Project, Store
 
-router = APIRouter(prefix="/api/v1", tags=["dashboard"], dependencies=[Depends(current_user)])
+router = APIRouter(prefix="/api/v1", tags=["dashboard"], dependencies=[Depends(rest_user)])
 
 
 class Snapshot:

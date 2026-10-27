@@ -26,7 +26,7 @@ Who can do what, by role. A user's role is per organization: they can be an admi
 | Create organizations | no | no | yes |
 | Create a password reset link | no | for members of their organizations, except super admins | for anyone |
 | List users, grant or revoke super admin, delete accounts | no | no | yes |
-| Manage their own profile, avatar, password and API keys | yes | yes | yes |
+| Manage their own profile, avatar, password and wandb keys | yes | yes | yes |
 | Set or remove the organization's avatar | no | yes | yes |
 
 "Own runs" are the runs whose `owner` is the user: the runs they logged. Runs without an owner, logged before accounts existed or by a deleted account, can only be changed by admins.

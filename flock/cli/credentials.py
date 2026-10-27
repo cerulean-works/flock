@@ -24,7 +24,7 @@ class Credentials:
         host (`str`):
             The Flock API's URL, without a trailing slash.
         token (`str`):
-            A CLI token from `flock login`, or an API key. It isn't shown in the `repr`.
+            A CLI token, from `flock login` or `flock token`. It isn't shown in the `repr`.
         source (`str`):
             Where it came from: `"argument"`, `"env"` (`FLOCK_TOKEN`) or `"file"` (`flock login`).
     """
@@ -131,7 +131,7 @@ def resolve(host: str | None = None, token: str | None = None) -> Credentials | 
     Picks the first that exists:
 
     1. explicit arguments: `token`, sent to `host`;
-    2. the `FLOCK_TOKEN` environment variable (a CLI token or an API key), sent to `host`;
+    2. the `FLOCK_TOKEN` environment variable (a CLI token: `flock token`), sent to `host`;
     3. the sign-in `flock login` saved, unless it's for another server than `host`.
 
     `host` defaults to `FLOCK_HOST`. In the first two cases, without either, it is

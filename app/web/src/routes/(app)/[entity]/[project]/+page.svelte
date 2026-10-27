@@ -366,7 +366,7 @@
 				title="No runs yet"
 			>
 				{#snippet lead()}
-					The SDK needs an API key: <a
+					The SDK needs a wandb key: <a
 						class="text-link underline-offset-3 hover:underline"
 						href={resolve('/(app)/account')}>create one</a
 					>.

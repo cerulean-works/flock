@@ -12,12 +12,12 @@ from app.api.src.api.deps import (
     ProjectDep,
     StoreDep,
     UserDep,
-    current_user,
+    rest_user,
     visible_org,
 )
 from app.api.src.core.errors import NotFound
 
-router = APIRouter(prefix="/api/v1", tags=["projects"], dependencies=[Depends(current_user)])
+router = APIRouter(prefix="/api/v1", tags=["projects"], dependencies=[Depends(rest_user)])
 
 
 class ProjectCreate(BaseModel):

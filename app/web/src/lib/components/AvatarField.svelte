@@ -12,11 +12,9 @@
 		kind: 'user' | 'org';
 		name: string;
 		src: string | null;
-		/** Offer "Use Gravatar" (users only); false once the picture is already from there. */
-		gravatar?: boolean;
 	}
 
-	let { kind, name, src, gravatar = false }: Props = $props();
+	let { kind, name, src }: Props = $props();
 
 	let input = $state<HTMLInputElement>();
 	let form = $state<HTMLFormElement>();
@@ -27,9 +25,8 @@
 		done: () => form?.reset()
 	});
 	const removing = new Mutation({ success: () => 'Picture removed', toastErrors: true });
-	const fetching = new Mutation({ success: () => 'Picture from Gravatar', toastErrors: true });
 
-	const busy = $derived(uploading.pending || removing.pending || fetching.pending);
+	const busy = $derived(uploading.pending || removing.pending);
 	// A failed upload is reset too, so picking the same file again tries again.
 	$effect(() => {
 		if (uploading.error) form?.reset();
@@ -69,13 +66,6 @@
 			{#if src}
 				<form method="POST" action="?/removeAvatar" use:enhance={removing.enhance}>
 					<Button type="submit" variant="ghost" disabled={busy}>Remove</Button>
-				</form>
-			{/if}
-			{#if gravatar}
-				<form method="POST" action="?/gravatar" use:enhance={fetching.enhance}>
-					<Button type="submit" variant="ghost" disabled={busy}>
-						{fetching.pending ? 'Fetching…' : 'Use Gravatar'}
-					</Button>
 				</form>
 			{/if}
 		</div>

@@ -89,7 +89,7 @@ class S3Credentials:
         host (`str`, *optional*):
             The Flock API. Defaults as [`~cli.credentials.resolve`] does.
         token (`str`, *optional*):
-            A Flock CLI token or API key to exchange. Defaults to your sign-in.
+            A Flock CLI token to exchange. Defaults to your sign-in.
         ttl (`float`, *optional*):
             Seconds each key lives, at most the org's ephemeral key lifetime (the default).
         read_only (`bool`, *optional*, defaults to `False`):
@@ -303,7 +303,7 @@ def credentials(
         host (`str`, *optional*):
             The Flock API. Defaults as [`~cli.credentials.resolve`] does.
         token (`str`, *optional*):
-            A Flock CLI token or API key to exchange. Defaults to your sign-in.
+            A Flock CLI token to exchange. Defaults to your sign-in.
         ttl (`float`, *optional*):
             Seconds each key lives, at most the org's ephemeral key lifetime (the default).
         read_only (`bool`, *optional*, defaults to `False`):

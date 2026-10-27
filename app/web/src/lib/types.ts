@@ -41,6 +41,26 @@ export interface OrgInfo {
 	s3_key_max_ttl: number | null;
 }
 
+/**
+ * One of the user's wandb keys, for the wandb SDK. Older keys (`flock-…`) are listed with the
+ * rest. Flock keeps only a hash, so the key itself is never listed.
+ */
+export interface WandbKey {
+	id: number;
+	name: string;
+	/** The key's first characters, to tell keys apart. Shown as given, never parsed. */
+	prefix: string;
+	created_at: number;
+}
+
+/** A wandb key just created: the only time its secret is shown. */
+export interface WandbKeyCreated extends WandbKey {
+	key: string;
+}
+
+/** Which of the account page's key tabs is shown (`?keys=`). */
+export type KeysTab = 'wandb' | 's3';
+
 /** The S3 proxy, from `auth/config`; null when the server has no S3. */
 export interface S3Config {
 	endpoint: string;

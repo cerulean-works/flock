@@ -96,7 +96,7 @@
 		action="?/deleteUser"
 		fields={{ user: user.id }}
 		title="Delete {user.name}’s account?"
-		description="They can’t sign in and their API keys stop working. Their runs stay. There is no undo."
+		description="They can’t sign in and their wandb keys stop working. Their runs stay. There is no undo."
 		confirm="Delete account"
 		pending="Deleting…"
 		success="Deleted {user.name}’s account"

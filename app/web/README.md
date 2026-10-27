@@ -20,7 +20,7 @@ pnpm test                # unit tests
 **First start.** A fresh Flock instance has no accounts, and refuses everything until one exists
 (its log says so). Open the dashboard: it shows **Set up Flock**, where the first account is
 created. That account is the super admin. The second screen asks them to name and create
-their organization; leaving setup and signing in later resumes at that screen. Its **Runs** page (in the sidebar) walks you through creating an API key
+their organization; leaving setup and signing in later resumes at that screen. Its **Runs** page (in the sidebar) walks you through creating a wandb key
 and logging a first run with the wandb SDK. After that the page is closed;
 everyone else signs in, and joins from an invitation an admin gives them: open an
 organization's **Settings** (in the sidebar's organization menu) and create an invite link. Flock sends
@@ -118,7 +118,7 @@ pnpm dlx shadcn-svelte@latest add <component>   # aliases already point at #lib
   an organization switcher at the bottom, which also sets your default organization. On home it
   links to the organization's runs; inside an organization it is **Home** and the projects,
   swiping in from the right. The organization menu at the bottom also opens its settings and
-  members, and holds your account: its page and API keys, super admin, and sign out. Pages
+  members, and holds your account: its page and wandb keys, super admin, and sign out. Pages
   have no header bar of their own. On wide windows the sidebar hides to a narrow rail (home and
   the same menu; remembered in a cookie); on phones a top bar opens it as a drawer.
 - **Home** (`/`): the activity of the organization in the sidebar (runs started, finished,
@@ -135,7 +135,7 @@ pnpm dlx shadcn-svelte@latest add <component>   # aliases already point at #lib
   path).
 - **Accounts**: first-run setup (`/setup`), sign in with email and password or Google
   (`/login`, shown when Flock has Google configured), sign out, and an account page
-  (`/account`) with your picture, your organizations and your API keys for the wandb SDK. See
+  (`/account`) with your profile, your organizations, and your wandb and S3 keys. See
   [Sessions](#sessions).
 - **Pictures**: people and organizations show their avatar wherever they appear (feed, runs,
   members, budget, menus, invitations), and their initials without one. Upload a PNG, JPEG, GIF

@@ -44,11 +44,9 @@ def test_creating_a_bucket(env: S3Env):
     assert event["detail"]["via"] == "cli"
     assert event["detail"]["machine"] == "gpu-node-7"
 
-    # Through an API key, and from the dashboard (a browser session).
-    other = env.name()
-    assert alice.api.post(BUCKETS.format(org="flock"), {"name": other}).status == 201
-    events = env.api("admin").get(f"{BUCKETS.format(org='flock')}/{other}").json()["events"]
-    assert events[0]["detail"]["via"] == "api" and events[0]["detail"]["key_name"] == "tests"
+    # Not with a wandb key (D72), and from the dashboard (a browser session).
+    wandb_key = env.flock.client(api_key=alice.api_key)
+    assert wandb_key.post(BUCKETS.format(org="flock"), {"name": env.name()}).status == 401
     web = env.flock.client(token=alice.signup["access_token"])
     third = env.name()
     assert web.post(BUCKETS.format(org="flock"), {"name": third}).status == 201
@@ -56,7 +54,7 @@ def test_creating_a_bucket(env: S3Env):
     assert events[0]["detail"]["via"] == "ui"
 
     assert cli.post(BUCKETS.format(org="flock"), {"name": name}).status == 409
-    assert {name, other, third} <= set(buckets_of(env, user="bob"))
+    assert {name, third} <= set(buckets_of(env, user="bob"))
 
 
 def test_bucket_names(env: S3Env):

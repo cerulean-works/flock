@@ -253,7 +253,7 @@ def test_warnings_can_be_dismissed_until_they_change(make_flock):
     assert listed["dismissed"] == []
     seen = {"fingerprint": unknown["fingerprint"]}
     assert api.request("PUT", dismissal(unknown), body=seen).status == 204
-    assert server.client(api_key=alice.api_key).delete(dismissal(unknown)).status == 403
+    assert server.client(token=alice.token).delete(dismissal(unknown)).status == 403
     assert api.delete(dismissal(unknown)).status == 204  # shown again
     listed = api.get(WARNINGS).json()
     assert ([w["kind"] for w in listed["warnings"]], listed["dismissed"]) == (

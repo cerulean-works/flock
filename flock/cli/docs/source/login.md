@@ -31,7 +31,7 @@ If the saved sign-in still works for this server, `flock login` asks `Already lo
 
 Flock speaks the wandb SDK's protocol, so the SDK can log to Flock instead of wandb.ai. After signing in, `flock login` offers to set that up:
 
-1. It creates an API key named `wandb on <hostname>`, listed on your account page like any other. The wandb SDK can only send API keys, not CLI tokens.
+1. It creates a wandb key named `wandb on <hostname>` with its new CLI token, listed on your account page like any other. The wandb SDK can only send wandb keys, and wandb keys only work with the SDK, not with the `flock` command or Flock's REST API.
 2. It calls `wandb.login(key=..., host=<host>, relogin=True, verify=True)`. That saves the key to `~/.netrc` and points the SDK's `base_url` at Flock, as `wandb login --host <host> <key>` does.
 
 The question's default is yes. That sends every wandb project on the machine to Flock, including ones meant for wandb.ai, so answer no (or pass `--no-wandb`) on a machine that also logs to wandb.ai.

@@ -44,7 +44,7 @@ def test_listing_and_revoking_cli_sessions(flock):
     before = time.time()
     assert laptop.get(ME).status == 200
     listed = alice.api.get(SESSIONS).json()["sessions"]
-    assert [s["name"] for s in listed] == ["laptop", "node-7"]
+    assert [s["name"] for s in listed] == ["tests", "laptop", "node-7"]  # "tests": add_user's
     by_name = {s["name"]: s for s in listed}
     assert by_name["laptop"]["last_used_at"] >= before
     assert by_name["node-7"]["last_used_at"] is None  # never used
@@ -59,7 +59,7 @@ def test_listing_and_revoking_cli_sessions(flock):
     assert browser(flock, alice).delete(f"{SESSIONS}/{by_name['laptop']['id']}").status == 204
     assert laptop.get(ME).status == 401
     assert node.get(ME).status == 200
-    assert [s["name"] for s in alice.api.get(SESSIONS).json()["sessions"]] == ["node-7"]
+    assert [s["name"] for s in alice.api.get(SESSIONS).json()["sessions"]] == ["tests", "node-7"]
 
 
 def test_logging_out_with_a_cli_token_ends_its_session(flock):
@@ -67,8 +67,7 @@ def test_logging_out_with_a_cli_token_ends_its_session(flock):
     cli = flock.client(token=cli_login(flock, browser(flock, alice)))
     assert cli.post("/api/v1/auth/logout", None).status == 204
     assert cli.get(ME).status == 401
-    assert alice.api.get(SESSIONS).json() == {"sessions": []}
-    assert alice.api.post("/api/v1/auth/logout", None).status == 400  # API keys have none
+    assert [s["name"] for s in alice.api.get(SESSIONS).json()["sessions"]] == ["tests"]
 
 
 def test_a_password_change_or_reset_ends_cli_sessions(flock):
@@ -79,7 +78,8 @@ def test_a_password_change_or_reset_ends_cli_sessions(flock):
     assert changed.status == 204
     assert cli.get(ME).status == 401
     assert web.get(ME).status == 200
-    assert alice.api.get(ME).status == 200  # API keys stay valid
+    assert alice.api.get(ME).status == 401  # add_user's CLI session ended too
+    assert alice.api.graphql(VIEWER).status == 200  # wandb keys stay valid
 
     cli = flock.client(token=cli_login(flock, web))
     reset = flock.client().post(f"/api/v1/users/{alice.id}/password-reset", None).json()
@@ -94,7 +94,7 @@ def test_deleting_the_user_ends_cli_sessions(flock):
     cli = flock.client(token=cli_login(flock, browser(flock, alice)))
     assert flock.client().delete(f"/api/v1/users/{alice.id}").status == 204
     assert cli.get(ME).status == 401
-    assert flock.store.accounts.cli_tokens == {}
+    assert all(s.user != alice.id for s in flock.store.accounts.cli_tokens.values())
 
 
 def test_cli_sessions_expire_when_idle(make_flock):
@@ -107,13 +107,14 @@ def test_cli_sessions_expire_when_idle(make_flock):
     assert cli.get(ME).status == 200
     time.sleep(1.1)
     assert cli.get(ME).status == 401
-    assert alice.api.get(SESSIONS).json() == {"sessions": []}
+    assert browser(server, alice).get(SESSIONS).json() == {"sessions": []}  # add_user's too
 
 
 def test_use_is_written_at_most_once_an_interval(flock, wait_for):
     alice = flock.add_user("alice@lab.test")
-    cli = flock.client(token=cli_login(flock, browser(flock, alice)))
-    (session,) = flock.store.accounts.cli_tokens.values()
+    token = cli_login(flock, browser(flock, alice))
+    cli = flock.client(token=token)
+    session = flock.store.accounts.cli_tokens[flock.store.accounts.digest(token)]
     created = db_session(flock, session.pk)
     assert (created["kind"], created["name"], created["last_used_at"]) == ("cli", "laptop", None)
 
@@ -134,13 +135,13 @@ def test_cli_sessions_survive_a_restart(make_flock, wait_for):
     token = cli_login(server, browser(server, alice))
     server.store.accounts.CLI_WRITE_INTERVAL = 0.0
     assert server.client(token=token).get(ME).status == 200
-    (session,) = server.store.accounts.cli_tokens.values()
+    session = server.store.accounts.cli_tokens[server.store.accounts.digest(token)]
     wait_for(lambda: db_session(server, session.pk)["last_used_at"])
     server.stop()
 
     restarted = make_flock(reuse=server)
-    (listed,) = restarted.client(api_key=alice.api_key).get(SESSIONS).json()["sessions"]
-    assert listed["name"] == "laptop"
+    tests, listed = restarted.client(token=alice.token).get(SESSIONS).json()["sessions"]
+    assert (tests["name"], listed["name"]) == ("tests", "laptop")
     assert abs(listed["last_used_at"] - session.last_used_at) < 1
     assert restarted.client(token=token).get(ME).json()["id"] == alice.id
 

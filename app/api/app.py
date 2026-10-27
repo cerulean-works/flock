@@ -144,12 +144,15 @@ def create_app(store: Store) -> FastAPI:
         return JSONResponse({"ok": True})
 
     app.include_router(wandb_protocol.router)
+    app.include_router(wandb_protocol.public)
+    app.include_router(auth.public)  # before auth.router: auth/device/token is public
     app.include_router(auth.router)
     app.include_router(orgs.router)
     app.include_router(projects.router)
     app.include_router(runs.router)
     app.include_router(dashboard.router)
     app.include_router(home.router)
+    app.include_router(avatars.public)
     app.include_router(avatars.router)
     app.include_router(s3.router)
     return app

@@ -112,16 +112,21 @@ def test_keys_cover_one_org_the_caller_belongs_to(flock):
     assert admin.post(CREDENTIALS, {"ttl": 0}).status == 422
 
 
-def test_an_api_key_gets_keys_that_go_with_it(flock):
+def test_keys_a_wandb_key_got_go_with_it(flock):
+    """wandb keys can't be exchanged any more (D72). Keys they got before still list, and
+    end with them."""
     alice = flock.add_user("alice@lab.test")
-    ci = alice.api.post("/api/v1/me/api-keys", {"name": "ci"}).json()
-    creds = flock.client(api_key=ci["key"]).post(CREDENTIALS, {}).json()
+    ci = alice.api.post("/api/v1/me/wandb-keys", {"name": "ci"}).json()
+    refused = flock.client(api_key=ci["key"]).post(CREDENTIALS, {})
+    assert refused.status == 401
+    user, org = flock.store.accounts.users[alice.id], flock.store.orgs["flock"]
+    key, _ = flock.call(flock.store.s3.issue_ephemeral(user, org, "ci", api_key=ci["id"]))
     (listed,) = alice.api.get(KEYS).json()["keys"]
-    assert listed["access_key_id"] == creds["access_key_id"]
+    assert listed["access_key_id"] == key.access_key_id
     assert listed["name"] == "ci (ephemeral)"
     assert listed["api_key_id"] == ci["id"]
     assert listed["source"] == "ci"
-    assert alice.api.delete(f"/api/v1/me/api-keys/{ci['id']}").status == 204
+    assert alice.api.delete(f"/api/v1/me/wandb-keys/{ci['id']}").status == 204
     assert alice.api.get(KEYS).json()["keys"] == []
     assert key_rows(flock, alice.id) == []
 
@@ -221,12 +226,12 @@ def test_keys_go_with_the_cli_session_that_got_them(flock):
     assert sources == ["node", "box", None]
 
     # Revoking the machine on the account page.
-    node = next(s for s in web.get("/api/v1/me/cli-sessions").json()["sessions"])
-    assert node["name"] == "node"
+    sessions = web.get("/api/v1/me/cli-sessions").json()["sessions"]
+    node = next(s for s in sessions if s["name"] == "node")
     assert web.delete(f"/api/v1/me/cli-sessions/{node['id']}").status == 204
     assert [k["source"] for k in web.get(KEYS).json()["keys"]] == ["box", None]
 
-    # A password change ends every other sign-in; long-lived keys stay, as API keys do.
+    # A password change ends every other sign-in; long-lived keys stay, as wandb keys do.
     changed = web.post("/api/v1/me/password", {"current": alice.password, "new": "password2"})
     assert changed.status == 204
     assert [k["id"] for k in web.get(KEYS).json()["keys"]] == [long_lived["id"]]

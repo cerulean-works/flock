@@ -27,9 +27,11 @@ def whoami(host: str | None, as_json: bool) -> None:
     found = _resolve(host)
     me = Api(found.host, found.token).get("me")
     if me.status_code == 401:
+        reason = error_of(me)
+        if not reason.startswith("wandb keys"):  # else the server's reason says what to use
+            reason = "It was revoked or has expired. Run flock login."
         raise click.ClickException(
-            f"{found.host} refused the credential from {SOURCES[found.source]}: it was revoked "
-            "or has expired. Run flock login."
+            f"{found.host} refused the credential from {SOURCES[found.source]}. {reason}"
         )
     if me.status_code != 200:
         raise click.ClickException(f"{found.host} answered: {error_of(me)}")

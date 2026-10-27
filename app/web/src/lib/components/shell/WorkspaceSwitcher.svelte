@@ -130,7 +130,7 @@
 			<DropdownMenu.Item class={ROW}>
 				{#snippet child({ props })}
 					<a href={resolve('/(app)/account')} {...props}>
-						<span class={SLOT}><KeyRoundIcon /></span> Account and API keys
+						<span class={SLOT}><KeyRoundIcon /></span> Account and wandb keys
 					</a>
 				{/snippet}
 			</DropdownMenu.Item>

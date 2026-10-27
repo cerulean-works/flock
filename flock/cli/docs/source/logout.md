@@ -19,7 +19,7 @@ If the server can't be reached, it still deletes the file, and warns that the si
 
 ## What it leaves alone
 
-- **The wandb SDK.** Its login, and the API key `flock login` created for it, stay as they are. When `flock login` created that key, `flock logout` names it, so you can revoke it on your account page.
+- **The wandb SDK.** Its login, and the wandb key `flock login` created for it, stay as they are. When `flock login` created that key, `flock logout` names it, so you can revoke it on your account page.
 - **`FLOCK_TOKEN`.** When the credential comes from the environment, `flock logout` changes nothing and exits with code `1`. Unset the variable instead.
 
 Without any credential, it prints `Not logged in.` and exits with code `0`.

@@ -17,7 +17,7 @@ class Api:
         host (`str`):
             The API's URL.
         token (`str`, *optional*):
-            A CLI token or API key, sent as `Authorization: Bearer <token>`.
+            A CLI token (or a wandb key, for `/graphql`), sent as `Authorization: Bearer <token>`.
     """
 
     def __init__(self, host: str, token: str | None = None) -> None:

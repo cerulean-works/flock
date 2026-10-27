@@ -1,6 +1,6 @@
 # Accounts, organizations and roles
 
-Every request to Flock comes from a user account. This page explains how organizations and roles work, how people join, and how to handle password resets, sessions and API keys. Flock sends no email: when someone needs an invitation or a reset, an admin creates a link and passes it on.
+Every request to Flock comes from a user account. This page explains how organizations and roles work, how people join, and how to handle password resets, sessions and wandb keys. Flock sends no email: when someone needs an invitation or a reset, an admin creates a link and passes it on.
 
 The examples use `curl` with an admin's access token in `$TOKEN` and Flock's URL in `$FLOCK`, as in the [Quickstart](quickstart). The endpoints are listed in [Sign-in and accounts](api/auth) and [Organizations and invites](api/orgs).
 
@@ -131,28 +131,29 @@ Passwords are 8 to 256 characters. Emails are stored in lowercase, and only chec
 
 ## Signing in from the command line
 
-`flock login` signs a machine in without an API key. It prints a code, which the user enters on the dashboard's `/device` page while signed in there. The page shows the machine's hostname, platform and IP address, so the user can check the request is theirs before selecting **Authorize**. The machine then holds a CLI token. The [`flock` command's docs](https://docs.cerulean.works/flock/latest/guide/) describe the client side.
+`flock login` signs a machine in without a password. It prints a code, which the user enters on the dashboard's `/device` page while signed in there. The page shows the machine's hostname, platform and IP address, so the user can check the request is theirs before selecting **Authorize**. The machine then holds a CLI token. The [`flock` command's docs](https://docs.cerulean.works/flock/latest/guide/) describe the client side.
 
 A CLI token is a session, like a browser's:
 - It never rotates, so any number of processes on the machine can use it at once.
 - It lasts until it goes 90 days without use (`FLOCK_CLI_SESSION_TTL`). Each use extends it.
 - It ends like other sessions: with `flock logout`, a password change, a password reset or deleting the account. The account page lists each machine under **Command line sign-ins**, where it can be revoked.
 
-Only a browser session can approve a sign-in. An API key or CLI token can't, so a leaked one can't sign in new machines. [Device sign-in](api/auth#device) lists the endpoints.
+Only a browser session can approve a sign-in. A CLI token can't, so a leaked one can't sign in new machines. [Device sign-in](api/auth#device) lists the endpoints.
 
-## API keys
+## wandb keys
 
-The `wandb` SDK and scripts use API keys. Each user creates their own:
+The `wandb` SDK uses a wandb key. Each user creates their own, on the account page's **Keys** section, with `flock login` (which offers to log the SDK in), or through the API with an access token or CLI token:
 
 ```bash
-curl -s --json '{"name": "laptop"}' -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/me/api-keys
+curl -s --json '{"name": "laptop"}' -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/me/wandb-keys
 ```
 
-- A key acts as its user, with all of their roles.
-- Flock shows the key once, when it's created. Listings with `GET /api/v1/me/api-keys` show only its first 12 characters (`prefix`) and its `name`.
-- Keys don't expire, and they keep working after a password change. To revoke one, delete it by its `id`: `DELETE /api/v1/me/api-keys/3`.
+- A key acts as its user, with all of their roles, but only for experiment tracking: Flock takes it on the wandb protocol, and nowhere else. Scripts and CI that call Flock's REST API use a CLI token instead (`flock token`).
+- Keys start with `flock-wandb-`. Keys made before that look like `flock-` and 48 hexadecimal characters, and work the same.
+- Flock shows the key once, when it's created. Listings with `GET /api/v1/me/wandb-keys` show only its first 12 characters (`prefix`) and its `name`.
+- Keys don't expire, and they keep working after a password change. To revoke one, delete it by its `id`: `DELETE /api/v1/me/wandb-keys/3`.
 
-The [API overview](api/index#credentials) lists the ways to send a key.
+[Credentials](api/index#credentials) lists which credential does what.
 
 When the server has [S3 storage](s3), the account page also lists your **S3 keys**, and makes long-lived ones for tools that can't renew a key themselves.
 

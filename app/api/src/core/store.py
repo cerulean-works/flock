@@ -218,8 +218,8 @@ class Org:
         self.updated_at = updated_at
         self.currency = currency
         self.avatar = avatar  # the digest of its avatar image (see Avatars)
-        # S3 key lifetimes in seconds (D56): of keys exchanged for a CLI token or API key, and
-        # the longest any key may live (None: no limit).
+        # S3 key lifetimes in seconds (D56): of keys exchanged for a CLI token, and the longest
+        # any key may live (None: no limit).
         self.s3_ephemeral_ttl = s3_ephemeral_ttl
         self.s3_key_max_ttl = s3_key_max_ttl
         # GPU prices: lowercased type -> (type as set, hourly cost of one GPU).

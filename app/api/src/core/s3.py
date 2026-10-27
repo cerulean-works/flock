@@ -61,7 +61,7 @@ class Bucket:
 @dataclass(frozen=True)
 class Key:
     """An S3 key. ``session`` or ``api_key`` is the credential an ephemeral key was exchanged
-    for; ``source`` names it (a machine or an API key)."""
+    for (a wandb key's only before D72); ``source`` names it (a machine or a wandb key)."""
 
     pk: int
     access_key_id: str
@@ -241,7 +241,7 @@ class S3:
         session: int | None = None,
         api_key: int | None = None,
     ) -> tuple[Key, str]:
-        """A key for the credential that asked (a session or an API key), living ``ttl``
+        """A key for the credential that asked (a session; a wandb key before D72), living ``ttl``
         seconds or the org's ephemeral lifetime, whichever is shorter. Returns it and its
         secret."""
         self.require()
@@ -636,7 +636,7 @@ class S3:
         session: int | None,
         api_key: int | None,
     ) -> tuple[Key, str, float | None]:
-        """The browser key of this session (or API key) and org: the newest one, if it has more
+        """The browser key of this session (or wandb key) and org: the newest one, if it has more
         than ``BROWSER_KEY_MARGIN`` seconds (or ``lifetime``, if longer) still to live, else a new
         one. Returns it, its secret and when the proxy stops taking it."""
         now = time.time()

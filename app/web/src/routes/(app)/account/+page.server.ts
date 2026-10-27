@@ -1,18 +1,18 @@
 import { fail } from '@sveltejs/kit';
 import { authConfig, refreshUser } from '#lib/server/auth.ts';
-import { removeAvatar, setAvatar, useGravatar } from '#lib/server/avatar.ts';
+import { removeAvatar, setAvatar } from '#lib/server/avatar.ts';
 import { change, refused, flock } from '#lib/server/flock.ts';
-import type { CliSession, OrgInfo, S3Key, S3KeyCreated, UserInfo } from '#lib/types.ts';
+import type {
+	CliSession,
+	OrgInfo,
+	S3Key,
+	S3KeyCreated,
+	UserInfo,
+	WandbKey,
+	WandbKeyCreated
+} from '#lib/types.ts';
 import { formText } from '#lib/utils.ts';
 import type { Actions, PageServerLoad } from './$types';
-
-export interface ApiKey {
-	id: number;
-	name: string;
-	/** The key's first characters, to tell keys apart. */
-	prefix: string;
-	created_at: number;
-}
 
 /** The user's S3 keys and the key lifetimes of their orgs, when the server has S3. */
 async function s3Keys() {
@@ -36,13 +36,13 @@ async function s3Keys() {
 export const load: PageServerLoad = async () => {
 	const [me, keys, cli, s3] = await Promise.all([
 		flock('/api/v1/me'),
-		flock('/api/v1/me/api-keys'),
+		flock('/api/v1/me/wandb-keys'),
 		flock('/api/v1/me/cli-sessions'),
 		s3Keys()
 	]);
 	return {
 		profile: (await me.json()) as UserInfo,
-		keys: ((await keys.json()) as { keys: ApiKey[] }).keys,
+		keys: ((await keys.json()) as { keys: WandbKey[] }).keys,
 		cliSessions: ((await cli.json()) as { sessions: CliSession[] }).sessions,
 		s3,
 		now: Date.now() / 1000
@@ -52,7 +52,6 @@ export const load: PageServerLoad = async () => {
 export const actions: Actions = {
 	avatar: ({ request }) => setAvatar(request, '/api/v1/me'),
 	removeAvatar: () => removeAvatar('/api/v1/me'),
-	gravatar: () => useGravatar(),
 
 	/** The name others see on runs, feeds and member lists. */
 	profile: async ({ request }) => {
@@ -94,11 +93,11 @@ export const actions: Actions = {
 		return { org };
 	},
 
-	/** A new API key. Flock shows it this once; it keeps only a hash. */
+	/** A new wandb key. Flock shows it this once; it keeps only a hash. */
 	createKey: async ({ request }) => {
 		const form = await request.formData();
 		const name = formText(form, 'name') || 'default';
-		const res = await change<ApiKey & { key: string }>('POST', '/api/v1/me/api-keys', { name });
+		const res = await change<WandbKeyCreated>('POST', '/api/v1/me/wandb-keys', { name });
 		if (refused(res)) return res;
 		return { key: res.data.key, name: res.data.name };
 	},
@@ -107,7 +106,7 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const id = Number(form.get('id'));
 		if (!Number.isInteger(id)) return fail(400, { error: 'No such key' });
-		const res = await change('DELETE', `/api/v1/me/api-keys/${id}`);
+		const res = await change('DELETE', `/api/v1/me/wandb-keys/${id}`);
 		if (refused(res)) return res;
 		return { deleted: id };
 	},

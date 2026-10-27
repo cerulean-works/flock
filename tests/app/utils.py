@@ -28,6 +28,13 @@ def sample_runtimes(indices: Iterable[int]) -> list[float]:
     return [0.25 + 1.5 * i for i in indices]
 
 
+def machines(user: Any) -> list[dict]:
+    """``user``'s command-line sign-ins, but for the one ``FlockServer.add_user`` made for
+    ``user.api`` (named ``tests``)."""
+    listed = user.api.get("/api/v1/me/cli-sessions").json()["sessions"]
+    return [s for s in listed if s["name"] != "tests"]
+
+
 def cli_login(server: Any, browser: Any, hostname: str = "laptop") -> str:
     """Sign in as ``flock login`` does: start a device sign-in, approve it with ``browser`` (a
     client on a browser session) and return the CLI token."""

@@ -79,11 +79,18 @@ Email = Annotated[str, AfterValidator(check_email)]
 Password = Annotated[str, Field(min_length=8, max_length=256)]
 
 
+WANDB_KEY_REFUSED = (
+    "wandb keys only work with the wandb SDK. Use flock login or a browser session instead."
+)
+
+
 def current_user(request: Request, store: StoreDep) -> User:
     """The user behind the request's access token (``Bearer <jwt>``), CLI token (``Bearer
-    flock_cli_…``) or API key (``Bearer``, ``x-api-key``, or the wandb SDK's basic auth). The
-    session of an access token or CLI token is kept in ``request.state.session``, an API key in
-    ``request.state.api_key``."""
+    flock_cli_…``) or wandb key (``Bearer``, ``x-api-key``, or the wandb SDK's basic auth).
+    Which kind it was (D70) is kept in ``request.state.credential``: ``"browser"``, ``"cli"``
+    or ``"wandb"`` (any ``api_keys`` row). The session of an access token or CLI token is kept
+    in ``request.state.session``, a wandb key in ``request.state.api_key``.
+    """
     accounts = store.accounts
     key = request.headers.get("x-api-key")
     scheme, _, credentials = request.headers.get("authorization", "").partition(" ")
@@ -93,32 +100,52 @@ def current_user(request: Request, store: StoreDep) -> User:
         except ValueError:
             key = None
     elif scheme.lower() == "bearer":
-        if credentials.count(".") == 2:  # a JWT; API keys have no dots
+        if credentials.count(".") == 2:  # a JWT; wandb keys have no dots
             session = accounts.session_for_token(credentials)
             if session is None:
                 raise APIError(401, "invalid or expired access token")
-            request.state.session = session
+            request.state.session, request.state.credential = session, "browser"
             return accounts.users[session.user]
         if credentials.startswith(accounts.CLI_TOKEN_PREFIX):
             session = accounts.session_for_cli_token(credentials)
             if session is None:
                 raise APIError(401, "invalid or expired CLI token: run flock login again")
-            request.state.session = session
+            request.state.session, request.state.credential = session, "cli"
             return accounts.users[session.user]
         key = credentials
     api_key = accounts.api_key(key) if key else None
     user = accounts.users.get(api_key.user) if api_key is not None else None
     if user is None:
-        raise APIError(401, "invalid or missing API key or access token")
-    request.state.api_key = api_key
+        raise APIError(401, "invalid or missing access token, CLI token or wandb key")
+    request.state.api_key, request.state.credential = api_key, "wandb"
     return user
 
 
 UserDep = Annotated[User, Depends(current_user)]
 
 
+def rest_user(request: Request, user: UserDep) -> User:
+    """The user of a REST API request: a browser session or CLI token. wandb keys are refused
+    (D72), so a leaked one reaches tracking and nothing else. The REST routers depend on it."""
+    if request.state.credential == "wandb":
+        raise APIError(401, WANDB_KEY_REFUSED)
+    return user
+
+
+RestUser = Annotated[User, Depends(rest_user)]
+
+
+def wandb_user(user: UserDep) -> User:
+    """The user of a wandb protocol request: any credential, wandb keys included. The wandb
+    protocol's router depends on it."""
+    return user
+
+
+WandbUser = Annotated[User, Depends(wandb_user)]
+
+
 def current_session(request: Request, user: UserDep) -> Session | None:
-    """The sign-in session of a request made with an access token or CLI token (None for API
+    """The sign-in session of a request made with an access token or CLI token (None for wandb
     keys)."""
     return getattr(request.state, "session", None)
 
@@ -127,10 +154,10 @@ SessionDep = Annotated[Session | None, Depends(current_session)]
 
 
 def session_user(user: UserDep, session: SessionDep) -> User:
-    """The user behind a browser's access token. API keys and CLI tokens are refused, so a
+    """The user behind a browser's access token. CLI tokens (and wandb keys) are refused, so a
     leaked one can't approve sign-ins for new machines."""
     if session is None or session.kind != "web":
-        raise APIError(403, "only a signed-in browser can do this, not an API key or CLI token")
+        raise APIError(403, "only a signed-in browser can do this, not a CLI token")
     return user
 
 

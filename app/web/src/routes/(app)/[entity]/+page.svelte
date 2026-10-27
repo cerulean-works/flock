@@ -1,7 +1,6 @@
 <script lang="ts">
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
-	import ApiKeyCreator from '#lib/components/ApiKeyCreator.svelte';
 	import CopyBlock from '#lib/components/CopyBlock.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import FeedFilters from '#lib/components/home/FeedFilters.svelte';
@@ -9,6 +8,7 @@
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProjectDialog from '#lib/components/ProjectDialog.svelte';
 	import SegmentedNav from '#lib/components/SegmentedNav.svelte';
+	import WandbKeyCreator from '#lib/components/WandbKeyCreator.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { page } from '$app/state';
 	import { pollFeed } from '#lib/data/feed.svelte.ts';
@@ -75,15 +75,19 @@
 			{#snippet lead()}Runs appear here once they’re logged.{/snippet}
 			<ol class="mt-8 grid gap-8">
 				<li class="grid gap-3">
-					<p>
-						<span class="mr-2 text-muted-foreground">1</span>Install the SDK and log in to Flock:
-					</p>
+					<p><span class="mr-2 text-muted-foreground">1</span>Install the SDK</p>
 					<CopyBlock code="pip install wandb" />
-					<ApiKeyCreator />
 				</li>
 				<li class="grid gap-3">
 					<p>
-						<span class="mr-2 text-muted-foreground">2</span>Log a run to {data.org.display_name}:
+						<span class="mr-2 text-muted-foreground">2</span>Log in to
+						<span class="font-mono text-[0.9em]">{data.flockUrl}</span> with this key
+					</p>
+					<WandbKeyCreator />
+				</li>
+				<li class="grid gap-3">
+					<p>
+						<span class="mr-2 text-muted-foreground">3</span>Log a run to {data.org.display_name}
 					</p>
 					<CopyBlock
 						code={`import wandb\n\nrun = wandb.init(entity="${params.entity}", project="my-project")\nfor step in range(100):\n    run.log({"loss": 1 / (step + 1)})\nrun.finish()`}

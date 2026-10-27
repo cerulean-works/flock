@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import logging
 import secrets
+import string
 import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -92,7 +93,7 @@ class Invite:
 
 
 class Accounts:
-    """Users, their memberships, API keys and sessions, invites and password resets.
+    """Users, their memberships, wandb keys and sessions, invites and password resets.
 
     Users, memberships, key digests and sessions are small and live in memory (this server is
     the database's only writer, D2), so authenticating a request is a hash or an HMAC and a dict
@@ -108,6 +109,7 @@ class Accounts:
     # How long a one-time Google sign-in code (exchanged for tokens by the UI) stays valid.
     CODE_TTL: ClassVar[float] = 60.0
     CLI_TOKEN_PREFIX: ClassVar[str] = "flock_cli_"
+    WANDB_KEY_PREFIX: ClassVar[str] = "flock-wandb-"
     # A CLI session's use is written to the database at most this often (seconds).
     CLI_WRITE_INTERVAL: ClassVar[float] = 3600.0
     # Device sign-ins (RFC 8628): user codes use GitHub's alphabet, without vowels or
@@ -523,15 +525,17 @@ class Accounts:
         else:
             grant.denied = True
 
-    # ------------------------------------------------------------------ API keys
+    # ------------------------------------------------------------------ wandb keys
 
     def api_keys(self, user: User) -> list[ApiKey]:
         return sorted((k for k in self.keys.values() if k.user == user.pk), key=lambda k: k.pk)
 
     async def create_api_key(self, user: User, name: str) -> tuple[ApiKey, str]:
-        """A new key for ``user``; the key itself is returned only here."""
-        # "<prefix>-<40+ word characters>" is the shape the wandb SDK accepts.
-        key = f"flock-{secrets.token_hex(24)}"
+        """A new wandb key for ``user`` (D71); the key itself is returned only here."""
+        # The wandb SDK wants 40+ word characters after a key's first "-" (older SDKs: exactly
+        # 40 after its last), so 40 random letters and digits follow the prefix.
+        alphabet = string.ascii_letters + string.digits
+        key = self.WANDB_KEY_PREFIX + "".join(secrets.choice(alphabet) for _ in range(40))
         digest = self.digest(key)
         record = await self.store.db.fetchrow(
             "INSERT INTO api_keys (user_pk, name, prefix, hash, created_at) "
@@ -548,7 +552,7 @@ class Accounts:
     async def delete_api_key(self, user: User, pk: int) -> None:
         digest = next((d for d, k in self.keys.items() if k.pk == pk and k.user == user.pk), None)
         if digest is None:
-            raise NotFound(f"API key {pk} not found")
+            raise NotFound(f"wandb key {pk} not found")
         await self.store.db.execute("DELETE FROM api_keys WHERE pk = $1", pk)
         del self.keys[digest]
 
