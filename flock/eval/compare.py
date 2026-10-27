@@ -27,7 +27,7 @@ class Comparison:
         breaches (`list[Breach]`):
             Every compared value that differs. Empty when the new run reproduces the bank.
         provenance (`dict[str, tuple[Any, Any]]`):
-            The provenance fields that may cause a breach and differ, each as `(banked, new)`.
+            The provenance fields and `schema_version` that may cause a breach and differ, each as `(banked, new)`.
         only_banked (`list[str]`), only_new (`list[str]`):
             Tasks and suites in one file only. They are listed, not compared.
     """
@@ -72,6 +72,9 @@ def compare(banked: Path, new: Path) -> Comparison:
         for key in ("flock_commit", "device", "torch", "transformers", "python"):
             if bank["provenance"].get(key) != rerun["provenance"].get(key):
                 provenance[key] = (bank["provenance"].get(key), rerun["provenance"].get(key))
+        # A new layout can add a metric or a count, which shows as breaches beside it.
+        if bank.get("schema_version") != rerun.get("schema_version"):
+            provenance["schema_version"] = (bank.get("schema_version"), rerun.get("schema_version"))
 
         bank_tasks = {task["task"]: task for task in bank["tasks"]}
         new_tasks = {task["task"]: task for task in rerun["tasks"]}

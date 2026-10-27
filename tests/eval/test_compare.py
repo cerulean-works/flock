@@ -197,3 +197,22 @@ def test_a_suite_dropped_beside_a_task_of_its_name_is_listed(write):
     comparison = compare(write("bank", bank), write("new", Results(PROVENANCE, [ARC], [])))
 
     assert comparison.only_banked == ["arc_easy"]
+
+
+def test_cli_prints_causes_then_one_sided_names_then_breaches(write):
+    piqa = dataclasses.replace(PIQA, metrics={"acc_raw": 0.6, "bpb": 1.25})
+    suite = dataclasses.replace(SUITE, members=["arc_easy"])
+    hella = dataclasses.replace(ARC, task="hellaswag", task_hash="77aa")
+    provenance = dataclasses.replace(PROVENANCE, flock_commit="def456")
+    new = write("new", Results(provenance, [ARC, piqa, hella], [suite]))
+
+    result = CliRunner().invoke(cli.main, ["compare", str(write("bank", BANK)), str(new)])
+
+    assert result.exit_code == 1
+    assert result.output.splitlines() == [
+        "flock_commit  abc123  ->  def456",
+        "only in the new run: hellaswag",
+        "piqa  metrics.bpb  None  ->  1.25",  # no difference for a missing value
+        "toy:rc  members  ['arc_easy', 'piqa']  ->  ['arc_easy']",
+        "compared: tasks 2, suites 1, breaches 2",
+    ]

@@ -37,9 +37,9 @@ A score difference means something only when both runs scored the same requests 
 - a suite in both files has a different `metric`, so its score averages another metric over the same members;
 - a file is not JSON, or lacks a key `compare` reads, or has a value of the wrong type there.
 
-A refusal is not a breach: the runs are different instruments (Principle 3 of the suite), and the answer is a new bank, not a tolerance. It exits with 2, as a usage error does.
+A refusal is not a breach: the runs are different instruments (every model in a comparison is scored with the same prompts, few-shot examples, normalizations and batching), and the answer is a new bank, not a tolerance. It exits with 2, as a usage error does.
 
-The other provenance fields (`flock_commit`, `torch`, `transformers`, `python`, `device`) are printed side by side when they differ, before the breaches, because they are the usual causes of one. `device` is the GPU's name as CUDA reports it (`NVIDIA H200`), or `cpu`, so a run on another GPU type shows here. A library upgrade that moves a float32 number is a breach, and the bank is refreshed in the same pull request as the lockfile once the change is understood.
+The other provenance fields (`flock_commit`, `torch`, `transformers`, `python`, `device`) and the file's `schema_version` are printed side by side when they differ, before the breaches, because they are the usual causes of one. `device` is the GPU's name as CUDA reports it (`NVIDIA H200`), or `cpu`, so a run on another GPU type shows here. A library upgrade that moves a float32 number is a breach, and the bank is refreshed in the same pull request as the lockfile once the change is understood.
 
 `compare` reads the JSON keys it needs, not the `Results` dataclass, so a bank written under an older `schema_version` stays comparable as long as those keys exist; a missing key refuses naming the key. The printed provenance fields are read only if present, so a field added to provenance later doesn't refuse older banks.
 
