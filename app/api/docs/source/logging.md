@@ -4,12 +4,12 @@ Flock implements the server side of the wandb protocol, so your training code us
 
 ## Connect the SDK
 
-You need an API key for your account. Create one with `POST /api/v1/me/api-keys`, as in the [Quickstart](quickstart#create-an-api-key), or from your dashboard.
+You need a wandb key for your account. Create one on your account page, with `flock login`, or with `POST /api/v1/me/wandb-keys` as in the [Quickstart](quickstart#create-an-api-key).
 
 To set up a machine once, log in with the `wandb` command:
 
 ```bash
-wandb login --host https://flock.example.com flock-2223f1ca27679b9f6e53acdb6d5328d1b0cad61686c93995
+wandb login --host https://flock.example.com flock-wandb-q7Lm2XkP9vRt4WbN8sJc3YhF6dGz1aEu5oKiT0nB
 ```
 
 It stores the key in `~/.netrc` and the host in wandb's settings, so later runs on this machine use them. It prints the account and default organization the key belongs to: `Currently logged in as: ana@example.com (flock)`.
@@ -18,7 +18,7 @@ To configure a single process instead, set two environment variables:
 
 ```bash
 export WANDB_BASE_URL=https://flock.example.com
-export WANDB_API_KEY=flock-2223f1ca27679b9f6e53acdb6d5328d1b0cad61686c93995
+export WANDB_API_KEY=flock-wandb-q7Lm2XkP9vRt4WbN8sJc3YhF6dGz1aEu5oKiT0nB
 ```
 
 Every run is owned by the user whose key created it. On a shared machine or in CI, use a key of the account that should own the runs.
@@ -128,7 +128,7 @@ WANDB_MODE=offline python train.py
 wandb sync wandb/offline-run-20261018_081002-9fc2v9ee
 ```
 
-`wandb sync` needs the same host and API key as a live run. Syncing into a project that no longer exists creates it again.
+`wandb sync` needs the same host and wandb key as a live run. Syncing into a project that no longer exists creates it again.
 
 ## Unsupported features
 

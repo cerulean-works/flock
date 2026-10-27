@@ -2,11 +2,12 @@
 
 | | |
 | --- | --- |
-| Status | proposed |
+| Status | applied |
 | Date | 2026-10-27 |
 | Builds on | [003](003-organizations-and-auth.md), [008](008-cli-login.md), [009](009-s3-proxy.md), [010](010-storage-tab.md) |
 | Amends | D20 (API keys become wandb keys, `flock-wandb-…`, accepted only where the wandb SDK goes), D51 (`FLOCK_TOKEN` takes a CLI token), D52 (the key `flock login` makes for wandb), D57 (who may exchange for S3 keys), D60 (where S3 keys are listed) |
 | Keeps | D46–D50 (device sign-in, CLI sessions), D53–D59, D61–D69 |
+| Result | 388 tests in `tests/app`, `tests/cli` and `tests/s3` pass on moto (6 new in `tests/app/test_credentials.py`, which absorbed `test_auth.py`'s API key test, and 1 in `tests/app/test_wandb_integration.py`); 381 in `app/web`, unchanged; see [section 6](#6-how-it-was-actually-built) |
 
 ## 1. Goal
 
@@ -227,3 +228,77 @@ calls it a wandb key. `FLOCK_TOKEN` docs say it takes a CLI token (`flock token`
 3. **CI uses a person's CLI token for now** (`FLOCK_TOKEN=$(flock token)`). A credential of CI's
    own is a later stage (section 4).
 4. **New keys show only their secret**, both wandb and S3 keys (D75).
+
+## 6. How it was actually built
+
+The plan was followed, in six commits: the web app (step 4, made first), the API (steps 1 and
+2), the web's switch to the `me/wandb-keys` routes, the test harness and the new tests (steps 3
+and 6), the CLI (step 5), and the docs (step 7).
+These are the places where the code differs from the decisions above, or adds to them.
+
+- **Public routes.** A router-level dependency would force a credential onto the routes that
+  take none, so `auth.py`, `avatars.py` and `wandb_protocol.py` each have a second router,
+  `public`, with no dependency: signing up and in, refresh, the device flow's start and poll,
+  Google, invitation and reset links, `auth/config`, avatar images, and, on the wandb side, the
+  signed upload URLs and the SDK's telemetry. `app.py` includes `auth.public` before
+  `auth.router`, so `POST auth/device/token` isn't taken for `POST auth/device/{user_code}`.
+  Accepting an invitation while signed in, the one public route that may read a credential,
+  calls `rest_user` itself, so a wandb key gets the same 401 there.
+- **`current_user`** still returns the `User`, as every route expects, and records the kind in
+  `request.state.credential` (`browser`, `cli` or `wandb`). `rest_user` (`RestUser`) reads it;
+  `wandb_user` (`WandbUser`) takes any kind. Routes keep `UserDep`, which FastAPI resolves once
+  per request, so the router's check costs nothing extra. Router dependencies run before the
+  route's own, so a wandb key gets the D70 message, not a 404 from a project lookup.
+- **No credential, or an unknown one,** answers 401 "invalid or missing access token, CLI token
+  or wandb key" everywhere, the wandb protocol included.
+- **Dead branches went.** `POST auth/logout` no longer has the "not an API key" 400 (a wandb key
+  gets the 401). `POST s3/credentials`, `presign` and the bucket events' `via` no longer handle
+  a wandb key; the core still takes `api_key` for S3 keys issued before D72, which list and end
+  with their wandb key as before.
+- **The key's shape** comes from `secrets.choice` over letters and digits, 40 times.
+  `Accounts.WANDB_KEY_PREFIX` holds the prefix. `seed_demo.py` makes its super admin's key the
+  same way.
+- **The aliases** are the same handlers under a second decorator, marked `deprecated` in the
+  OpenAPI schema. The response shape is unchanged, so the web's `WandbKey` types didn't change;
+  only the account page's server calls moved to `me/wandb-keys`.
+- **`flock login`** checked whether the SDK's key already works with `GET me`, which a wandb key
+  can no longer call. It asks `/graphql`'s `Viewer` instead, as the SDK does. `flock whoami`
+  shows the server's reason when `FLOCK_TOKEN` holds a wandb key, instead of "revoked or
+  expired".
+- **The test harness.** `FlockServer.bootstrap` gives the super admin a wandb key (`api_key`)
+  and a CLI token (`token`, through `Accounts.start_cli_session`), and `add_user` gives each user
+  both (`User.token` is new). A `Client` with both sends the token to `/api/…` and the wandb key
+  everywhere else; with one, it sends that one everywhere, so a test can still aim a single
+  credential at any route. Existing tests barely changed. The ones that did: listings of CLI
+  sessions now include the user's `tests` session (`tests.app.utils.machines` leaves it out in
+  the CLI tests); a password change ends `user.api`'s REST access, so those tests check the wandb
+  key still works instead; and tests that used an API key for REST, `FLOCK_TOKEN` or S3
+  exchange use the CLI token, or check the 401.
+- **Tests.** `tests/app/test_credentials.py` has the matrix (each kind against `GET me`,
+  `Viewer`, `POST s3/credentials` and the proxy, with each error), wandb keys sent all three
+  ways, their shape, creation by each credential but a wandb key, revocation, the `me/api-keys`
+  aliases, and invitations. `test_wandb_integration.py` checks `check_api_key` and logs a run
+  with a new key. `test_s3_keys.py` checks that S3 keys issued to a wandb key before D72 still
+  list and end with it.
+- **The web app** (the first commit) differs from D74 and D75 in a few places:
+  - With no S3 on the server there are no tabs: the Keys section shows the wandb keys alone.
+  - An account without a password (Google sign-in) gets **Set password** instead of **Change
+    password**, in the header and the dialog, without the current-password field.
+  - The password toast says "Password changed" or "Password set" from whether the account had
+    a password when the form was sent. The reloaded profile always has one, so reading it
+    afterwards said "changed" every time.
+  - The interface says "a wandb key" (lowercase, as wandb writes its name) everywhere it said
+    "an API key".
+  - The empty Runs page's step names only the host ("Log in to https://… with this key"); the key
+    box below it shows only the key, and installing the SDK is a step of its own.
+
+Checked by hand against a local Postgres, API and web dev server: signing up, creating a wandb
+key on the account page (it starts with `flock-wandb-`), logging a run with it through the wandb
+SDK, `curl` with it against `/api/v1/me` (401 with the D70 message, sent as Bearer, Basic and
+`x-api-key`), `flock login` against the local API approved through the API, then `flock
+whoami` (and `flock whoami` with the wandb key in `FLOCK_TOKEN`, which shows the D70 message).
+A second `flock login --wandb`, with `NETRC` and `WANDB_CONFIG_DIR` pointed at a scratch
+folder, made a `flock-wandb-` key with its CLI token and logged the SDK in with it, and
+`flock logout` then named it as a wandb key. An old-format key (`flock-` and 48
+hex characters, inserted into `api_keys` directly) logged a run through the wandb SDK and got
+the same 401 from `/api/v1/me` (D73).

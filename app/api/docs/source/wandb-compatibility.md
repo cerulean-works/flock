@@ -40,6 +40,8 @@ Calls to features Flock doesn't support fail with `operation '<name>' is not sup
 
 These endpoints serve the SDK. They aren't part of the documented HTTP API, and they don't appear in `/docs`.
 
+The first two take a [wandb key](api/auth#wandb-keys), sent as the SDK does (HTTP Basic auth, as `api:<key>`), or as `Authorization: Bearer <key>` or `x-api-key: <key>`. They also take Flock's other sign-ins, a browser session or a CLI token. wandb keys work here and nowhere else (see [Credentials](api/index#credentials)).
+
 | Endpoint | Purpose |
 |---|---|
 | `POST /graphql` | The GraphQL operations the SDK sends, recognized by their name. Requests may be gzipped. |
@@ -51,7 +53,7 @@ Flock answers these GraphQL operations:
 
 | Operation | Purpose |
 |---|---|
-| `Viewer` | Who the API key belongs to: the user, their default organization and their organizations. |
+| `Viewer` | Who the wandb key belongs to: the user, their default organization and their organizations. |
 | `UpsertBucket` | Create or update a run. |
 | `RunResumeStatus` | The state of a run to resume: line counts, last lines, summary and config. |
 | `CreateRunFiles` | Signed upload URLs for run files. |

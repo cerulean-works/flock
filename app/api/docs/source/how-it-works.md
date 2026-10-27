@@ -62,7 +62,7 @@ A dashboard renders from a snapshot first, which records each run's line count, 
 
 ## Authentication cost
 
-Users, memberships, API key hashes and sessions are loaded into memory, so authenticating a request costs a SHA-256 of the API key, or an HMAC check of the access token, plus a dictionary lookup. It never waits for the database.
+Users, memberships, wandb key hashes and sessions are loaded into memory, so authenticating a request costs a SHA-256 of the wandb key or CLI token, or an HMAC check of the access token, plus a dictionary lookup. It never waits for the database.
 
 Roles aren't put into tokens. They're looked up on every request, so a role change applies at once. Each access token names its session, and a session that ended stops its tokens at once. Passwords are hashed with argon2id in a worker thread, so the tens of milliseconds it takes don't hold up other requests.
 

@@ -137,6 +137,6 @@ What the invitation is for:
 
 Accepts the invitation in one of two ways:
 - **As a new account**, with `{"name": "Ben Okafor", "password": "..."}` and no credentials. `password` is 8 to 256 characters, and `name` defaults to the email. It creates the account as a member of the organization, with the invitation's role, and answers 201 with [tokens](auth#tokens). If an account with the email exists, it answers 409: sign in and accept as the second way.
-- **As an existing account**, with `{}` and the credentials of the invited account, an access token or an API key. It adds the membership and answers 200 with `{"user": ...}`. Credentials of another account answer 403.
+- **As an existing account**, with `{}` and the credentials of the invited account, an access token or a CLI token. It adds the membership and answers 200 with `{"user": ...}`. Credentials of another account answer 403.
 
 Without a password and without credentials, it answers 401. An invalid, expired or used token answers 404. Once accepted, the invitation is used up.

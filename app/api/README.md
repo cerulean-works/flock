@@ -56,19 +56,20 @@ and description.
 ### Pointing clients at it
 
 Every request needs credentials (see [Accounts and organizations](#accounts-and-organizations)).
-The SDK uses a personal API key, created with `POST /api/v1/me/api-keys`:
+The SDK uses a personal wandb key (`flock-wandb-…`), created on the dashboard's account page
+or with `POST /api/v1/me/wandb-keys`:
 
 ```sh
-wandb login --host http://flock.internal:8080 <your API key>
+wandb login --host http://flock.internal:8080 <your wandb key>
 # or, per process:
-export WANDB_BASE_URL=http://flock.internal:8080 WANDB_API_KEY=<your API key>
+export WANDB_BASE_URL=http://flock.internal:8080 WANDB_API_KEY=<your wandb key>
 ```
 
 `wandb.init` logs to your default organization unless you pass `entity=`.
 
 `flock login --host http://flock.internal:8080` signs a machine in from a terminal instead:
 you approve a code in the dashboard, and the machine gets a CLI token. It can also log the
-wandb SDK in for you, with a new API key. See [the `flock` command](../../flock/cli/).
+wandb SDK in for you, with a new wandb key. See [the `flock` command](../../flock/cli/).
 
 ## Code layout
 
@@ -151,12 +152,21 @@ admin) creates a one-time link with `POST /api/v1/users/{id}/password-reset`.
 **Credentials.** The dashboard signs in with `POST /api/v1/auth/login` and sends
 `Authorization: Bearer <access_token>`. Access tokens are JWTs valid for 15 minutes; refresh
 them with `POST /api/v1/auth/refresh` (each refresh token works once). Logging out, changing
-your password or a password reset end sessions at once, not when their tokens expire. The wandb
-SDK and scripts use API keys, sent as the SDK does (basic auth), as `Bearer <key>` or as
-`x-api-key`. Keys are stored hashed and shown only when created. `flock login` gets a CLI
-token (`Bearer flock_cli_...`) through the device grant (`POST /api/v1/auth/device`, approved
-on the dashboard's `/device` page): a session that never rotates, lasts 90 idle days, and is
-listed and revocable at `/api/v1/me/cli-sessions`.
+your password or a password reset end sessions at once, not when their tokens expire. `flock
+login` gets a CLI token (`Bearer flock_cli_...`) through the device grant
+(`POST /api/v1/auth/device`, approved on the dashboard's `/device` page): a session that never
+rotates, lasts 90 idle days, and is listed and revocable at `/api/v1/me/cli-sessions`. Scripts
+and CI use one too (`FLOCK_TOKEN=$(flock token)`). The wandb SDK uses wandb keys
+(`flock-wandb-...`), sent as the SDK does (basic auth), as `Bearer <key>` or as `x-api-key`.
+They're stored hashed, shown only when created, and work only on the wandb protocol: the REST
+API refuses them with 401. Each credential has one job:
+
+| Credential | Looks like | Accepted by |
+| --- | --- | --- |
+| browser session | a JWT | the REST API, from the dashboard |
+| CLI token | `flock_cli_...` | the REST API and `POST /api/v1/s3/credentials` |
+| wandb key | `flock-wandb-...` (older keys: `flock-` + 48 hex) | the wandb protocol only |
+| S3 key | `FLK...` + derived secret | the S3 proxy only |
 
 **Sign in with Google** runs the OAuth code flow in Flock. Register
 `<FLOCK_WEB_URL>/api/v1/auth/google/callback` with Google: flock-ui proxies
@@ -172,7 +182,7 @@ Google accounts are matched to existing accounts by verified email.
 | `GET /api/v1/auth/config` | whether signup is open and Google is enabled (public) |
 | `POST /api/v1/auth/signup`, `login`, `refresh`, `logout` | sessions |
 | `GET`/`PATCH /api/v1/me`, `POST /api/v1/me/password` | your profile (`name`, `default_org`) and password |
-| `GET`/`POST /api/v1/me/api-keys`, `DELETE .../{id}` | your API keys |
+| `GET`/`POST /api/v1/me/wandb-keys`, `DELETE .../{id}` | your wandb keys (also at their old path, `me/api-keys`) |
 | `PUT`/`DELETE /api/v1/me/avatar`, `POST /api/v1/me/avatar/gravatar` | your avatar: upload an image, remove it, or fetch your Gravatar |
 | `PUT`/`DELETE /api/v1/orgs/{org}/avatar` | an org's avatar (admins) |
 | `GET /api/v1/avatars/{sha256}` | an avatar image (public: the digest is the secret; cached for good) |
@@ -419,9 +429,9 @@ limit; it reconnects with its latest line counts.
   in creation order (tens of ms for 10k runs × 1.5k columns). Mutations take a lock per
   project and per run, always in the same order, and writes from a run's client hold its
   lock, so a run is never deleted halfway through a write.
-- **Auth**: users, memberships, API key digests and sessions are loaded into memory, so
-  authenticating a request costs a sha256 (API key) or an HMAC (JWT) and a dict lookup, never a
-  database round trip. Roles aren't put in tokens: they're looked up per request, so changes
+- **Auth**: users, memberships, wandb key digests and sessions are loaded into memory, so
+  authenticating a request costs a sha256 (wandb key, CLI token) or an HMAC (JWT) and a dict
+  lookup, never a database round trip. Roles aren't put in tokens: they're looked up per request, so changes
   apply at once. Passwords are hashed with argon2id in a worker thread.
 - **Spend**: the usage ledger (`gpu_usage`), prices and budgets are in memory too. Accruing
   is one more CTE in the `file_stream` statement; the budget panel reads only the month's
@@ -464,7 +474,7 @@ something realistic to show:
 It writes straight to PostgreSQL in about 25 s (about 1.5 GB), because writing through the API
 would stamp everything "now". Stop Flock, or don't use it, while the script runs, and
 restart it afterwards so it loads the data. Every simulated user's password is
-`flock-demo-password`. The script prints a super admin API key.
+`flock-demo-password`. The script prints a super admin wandb key.
 
 ```sh
 cd app/api
@@ -487,7 +497,8 @@ docker compose -f ../compose.yaml restart api
 The tests need PostgreSQL. They use the admin URL in `FLOCK_TEST_DATABASE_URL` if it is set.
 Otherwise they start a throwaway `postgres:18.4` container, which requires Docker. Migrations
 are applied once to a template database, and each test server gets a fresh copy of it, with a
-super admin signed up and an API key for it (`FlockServer.bootstrap`).
+super admin signed up, with a CLI token for REST calls and a wandb key for the wandb SDK
+(`FlockServer.bootstrap`).
 
 ```sh
 uv run --all-packages python -m pytest tests/app

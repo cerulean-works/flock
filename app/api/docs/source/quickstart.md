@@ -1,6 +1,6 @@
 # Quickstart
 
-This page takes you from an empty machine to a logged run that you read back through the API. You start Flock with Docker Compose, create the first account and an API key, log a run with `wandb`, and query it. Building the image is the slowest step.
+This page takes you from an empty machine to a logged run that you read back through the API. You start Flock with Docker Compose, create the first account and a wandb key, log a run with `wandb`, and query it. Building the image is the slowest step.
 
 ## Before you start
 
@@ -44,15 +44,15 @@ The response holds an access token, which is valid for 15 minutes, and a refresh
 > [!WARNING]
 > Whoever signs up first becomes the super admin. Create this account before Flock is reachable by anyone else.
 
-## Create an API key
+## Create a wandb key[[create-an-api-key]]
 
-The `wandb` SDK authenticates with an API key rather than a password. Create one with your access token:
+The `wandb` SDK authenticates with a wandb key rather than a password. Create one with your access token:
 
 ```bash
-export WANDB_API_KEY=$(curl -s --json '{"name": "laptop"}' -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/me/api-keys | jq -r .key)
+export WANDB_API_KEY=$(curl -s --json '{"name": "laptop"}' -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/me/wandb-keys | jq -r .key)
 ```
 
-The key is `flock-` followed by 48 hexadecimal characters. Flock stores only a hash of it, so this response is the only place you see it.
+The key is `flock-wandb-` followed by 40 letters and digits. Flock stores only a hash of it, so this response is the only place you see it.
 
 ## Log a run
 
@@ -96,10 +96,10 @@ The run lands in the project `flock/llm-pretrain`. `wandb.init` logs into your d
 
 ## Read it back
 
-The REST API accepts the same API key. List the project's runs with a few columns:
+The REST API doesn't take wandb keys: they only work with the `wandb` SDK. Use your access token instead. It lasts 15 minutes, so if it has run out, sign in again with `POST /api/v1/auth/login`. List the project's runs with a few columns:
 
 ```bash
-curl -s -H "Authorization: Bearer $WANDB_API_KEY" "$FLOCK/api/v1/projects/flock/llm-pretrain/runs?columns=display_name,state,config.lr,summary.loss"
+curl -s -H "Authorization: Bearer $TOKEN" "$FLOCK/api/v1/projects/flock/llm-pretrain/runs?columns=display_name,state,config.lr,summary.loss"
 ```
 
 ```json
