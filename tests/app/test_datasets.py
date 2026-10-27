@@ -810,7 +810,9 @@ def test_rename_keeps_everything(flock: S3Flock, writer: Writer):
     assert get(api, f"{DATASETS}/at", path="scratch/mmlu").status == 404
 
     after = get(api, f"{DATASETS}/info", path="eval/new/mmlu").json()
-    for name in ("version", "rows", "columns", "fragments", "data_size", "tags", "schema"):
+    # The time of each version is Lance's, not the copy's.
+    names = ("version", "timestamp", "rows", "columns", "fragments", "data_size", "tags", "schema")
+    for name in names:
         assert after[name] == before[name], name
     assert after["rows"] == 19
     assert [i["columns"] for i in after["details"]["indices"]] == [["id"]]

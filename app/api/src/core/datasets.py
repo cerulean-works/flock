@@ -257,6 +257,17 @@ def hf_features(schema: Any) -> dict[str, Any]:
     return features if isinstance(features, dict) else {}
 
 
+def written(ds: Any, fallback: float) -> float:
+    """When the version ``ds`` is opened at was written, as its manifest says (S3's time of the
+    manifest changes when a dataset is copied, as renames and restores do)."""
+    try:
+        stamp = ds.get_version()["timestamp"]
+    except KeyError, TypeError, ValueError:
+        return fallback
+    # Lance gives naive local times; ``timestamp()`` reads a naive time as local.
+    return stamp.timestamp() if isinstance(stamp, dt.datetime) else fallback
+
+
 def index_type(type_url: str) -> str:
     """``/lance.table.BTreeIndexDetails`` as ``BTree``."""
     name = type_url.rpartition(".")[2] or type_url
@@ -689,6 +700,7 @@ class Datasets:
                 for i in ds.describe_indices()
             ]
             return {
+                "timestamp": written(ds, resolved.modified),
                 "rows": ds.count_rows(),
                 "columns": len(schema),
                 "fragments": len(fragments),
@@ -709,7 +721,6 @@ class Datasets:
         return {
             "path": path,
             "version": resolved.number,
-            "timestamp": resolved.modified,
             "latest_version": latest,
             **info,
         }
@@ -849,7 +860,12 @@ class Datasets:
                     type(transaction.operation).__name__ if transaction is not None else None
                 )
                 properties = dict(transaction.transaction_properties or {}) if transaction else {}
-                return {"rows": ds.count_rows(), "operation": operation, "properties": properties}
+                return {
+                    "rows": ds.count_rows(),
+                    "operation": operation,
+                    "properties": properties,
+                    "timestamp": written(ds, found[n].last_modified),
+                }
 
             wanted = page + ([older] if older is not None else [])
             with ThreadPoolExecutor(8) as pool:
@@ -862,7 +878,7 @@ class Datasets:
                 out.append(
                     {
                         "version": n,
-                        "timestamp": found[n].last_modified,
+                        "timestamp": d["timestamp"],
                         "tags": sorted(tags.get(n, [])),
                         "operation": d["operation"],
                         "rows": d["rows"],
