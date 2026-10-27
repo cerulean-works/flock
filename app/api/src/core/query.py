@@ -11,7 +11,7 @@ their elements.
 import fnmatch
 import math
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, TypeGuard
 
@@ -102,8 +102,16 @@ def check_regex(pattern: str) -> None:
 class _Compiler:
     """Builds one filter's SQL: a set of run pks, with its parameters ($1 is the project)."""
 
-    def __init__(self, project_pk: int) -> None:
+    def __init__(self, project_pk: int, kinds: Mapping[str, frozenset[str]] | None = None) -> None:
         self.args: list[Any] = [project_pk]
+        # The value kinds (``values.KINDS``) each filtered column holds, if known: clauses on
+        # kinds a column doesn't hold match nothing, and aren't run.
+        self.kinds = kinds
+
+    def _holds(self, key: str, kinds: Sequence[str]) -> bool:
+        if self.kinds is None or not kinds:
+            return True
+        return not self.kinds.get(key, frozenset()).isdisjoint(kinds)
 
     def arg(self, value: Any, cast: str = "") -> str:
         self.args.append(value)
@@ -113,24 +121,66 @@ class _Compiler:
 
     @staticmethod
     def _and(parts: Sequence[str]) -> str:
+        if NONE in parts:
+            return NONE
+        parts = [part for part in parts if part != ALL]
         if not parts:
             return ALL
         return parts[0] if len(parts) == 1 else " INTERSECT ".join(f"({p})" for p in parts)
 
     @staticmethod
     def _or(parts: Sequence[str]) -> str:
+        if ALL in parts:
+            return ALL
+        parts = [part for part in parts if part != NONE]
         if not parts:
             return NONE
         return parts[0] if len(parts) == 1 else " UNION ".join(f"({p})" for p in parts)
 
     @staticmethod
     def _except(part: str) -> str:
+        if part == NONE:
+            return ALL
+        if part == ALL:
+            return NONE
         return f"({ALL}) EXCEPT ({part})"
 
-    def _leaf(self, key: str, condition: str) -> str:
+    def _leaf(
+        self, key: str, condition: str, *kinds: str, value: Any = None, cast: str = ""
+    ) -> str:
+        """Runs whose value of ``key`` meets ``condition``, which only values of ``kinds`` can
+        (any value if none are given). ``value``, if given, is the parameter ``{}`` stands for
+        in ``condition``, allocated only if the clause is run."""
+        if not self._holds(key, kinds):
+            return NONE
+        condition = self._bind(condition, value, cast)
         return (
             "SELECT run_pk FROM run_values "
             f"WHERE project_pk = $1 AND key = {self.arg(key)} AND {condition}"
+        )
+
+    def _text_leaf(self, key: str, condition: str, value: Any = None, cast: str = "") -> str:
+        """Runs whose string matches ``condition`` (as ``_leaf``): short strings from their
+        index, long ones (not indexed with their value, see 0013) from the table."""
+        if not self._holds(key, ["strs"]):
+            return NONE
+        return self._split_leaf(key, "text(key, txt)", self._bind(condition, value, cast))
+
+    def _list_leaf(self, key: str, condition: str, value: Any = None, cast: str = "") -> str:
+        """Like ``_text_leaf``, for lists."""
+        if not self._holds(key, ["lists"]):
+            return NONE
+        return self._split_leaf(key, "list(key, obj)", self._bind(condition, value, cast))
+
+    def _bind(self, condition: str, value: Any, cast: str) -> str:
+        return condition if value is None else condition.format(self.arg(value, cast))
+
+    def _split_leaf(self, key: str, kind: str, condition: str) -> str:
+        key_arg = self.arg(key)
+        leaf = f"SELECT run_pk FROM run_values WHERE project_pk = $1 AND key = {key_arg} AND "
+        return (
+            f"{leaf}run_values_short_{kind} AND {condition} "
+            f"UNION ALL {leaf}run_values_long_{kind} AND {condition}"
         )
 
     def _listed(self, key: str, items: Iterable[Any]) -> str | None:
@@ -140,16 +190,17 @@ class _Compiler:
         parts = []
         if scalars:
             # A scalar is contained in an array only as one of its own elements.
-            arrays = self.arg([_json([item]) for item in scalars], "::jsonb[]")
-            parts.append(self._leaf(key, f"jsonb_typeof(obj) = 'array' AND obj @> ANY({arrays})"))
+            arrays = [_json([item]) for item in scalars]
+            parts.append(self._list_leaf(key, "obj @> ANY({})", arrays, "::jsonb[]"))
         if nested:
             # Containers are compared whole (jsonb containment would match them in part).
-            items_arg = self.arg([_json(item) for item in nested], "::jsonb[]")
+            items_json = [_json(item) for item in nested]
             parts.append(
-                self._leaf(
+                self._list_leaf(
                     key,
-                    "jsonb_typeof(obj) = 'array' AND EXISTS (SELECT FROM jsonb_array_elements(obj)"
-                    f" e WHERE e = ANY({items_arg}))",
+                    "EXISTS (SELECT FROM jsonb_array_elements(obj) e WHERE e = ANY({}))",
+                    items_json,
+                    "::jsonb[]",
                 )
             )
         return self._or(parts) if parts else None
@@ -188,7 +239,7 @@ class _Compiler:
 
     def _op(self, name: str, op: str, operand: object) -> str:
         if op == "$exists":
-            present = self._leaf(name, "true")
+            present = self._leaf(name, "true", *values.KINDS)
             return present if operand else self._except(present)
         if op == "$ne":
             return self._except(self._op(name, "$eq", operand))
@@ -209,20 +260,20 @@ class _Compiler:
                 if math.isnan(operand):
                     return NONE  # NaN compares with nothing
                 # PostgreSQL orders NaN above every number; numpy compares it with nothing.
-                bound = self.arg(float(operand), "::float8")
-                return self._leaf(name, f"num {sql} {bound} AND num <> 'NaN'")
+                condition = f"num {sql} {{}} AND num <> 'NaN'"
+                return self._leaf(name, condition, "nums", value=float(operand), cast="::float8")
             if isinstance(operand, str):
-                return self._leaf(name, f"txt {sql} {self.arg(operand)}")
+                return self._text_leaf(name, f"txt {sql} {{}}", operand)
             raise FilterError(f"{op} expects a number or string")
         if op == "$regex":
             if not isinstance(operand, str):
                 raise FilterError("$regex expects a string")
             check_regex(operand)
             # Character classes follow the database's locale, as Python's follow Unicode.
-            return self._leaf(name, f'txt COLLATE "default" ~ {self.arg(operand)}')
+            return self._text_leaf(name, 'txt COLLATE "default" ~ {}', operand)
         if op == "$contains":
             if isinstance(operand, str):
-                substring = self._leaf(name, f"strpos(txt, {self.arg(operand)}) > 0")
+                substring = self._text_leaf(name, "strpos(txt, {}) > 0", operand)
                 listed = self._listed(name, [operand])
                 return self._or([substring, listed] if listed else [substring])
             return self._listed(name, [operand]) or NONE
@@ -230,18 +281,20 @@ class _Compiler:
 
     def _eq(self, name: str, operand: object) -> str:
         if operand is None:
-            return self._except(self._leaf(name, "true"))
+            return self._except(self._leaf(name, "true", *values.KINDS))
         if _is_number(operand):
             if math.isnan(operand):
                 return NONE
-            number = self._leaf(name, f"num = {self.arg(float(operand), '::float8')}")
+            number = self._leaf(name, "num = {}", "nums", value=float(operand), cast="::float8")
             return self._or([number, self._listed(name, [operand]) or NONE])
         if isinstance(operand, str):
-            text = self._leaf(name, f"txt = {self.arg(operand)}")
+            text = self._text_leaf(name, "txt = {}", operand)
             return self._or([text, self._listed(name, [operand]) or NONE])
         if isinstance(operand, list):
-            return self._leaf(name, f"obj = {self.arg(_json(operand), '::jsonb')}")
-        whole = self._leaf(name, f"obj = {self.arg(_json(operand), '::jsonb')}")
+            return self._leaf(name, "obj = {}", "lists", value=_json(operand), cast="::jsonb")
+        whole = self._leaf(
+            name, "obj = {}", "bools", "objects", value=_json(operand), cast="::jsonb"
+        )
         return self._or([whole, self._listed(name, [operand]) or NONE])
 
     def _in(self, name: str, operand: object) -> str:
@@ -252,16 +305,19 @@ class _Compiler:
         hashable = [v for v in others if not isinstance(v, (list, dict))]
         parts = []
         if numbers:
-            parts.append(self._leaf(name, f"num = ANY({self.arg(numbers, '::float8[]')})"))
+            parts.append(
+                self._leaf(name, "num = ANY({})", "nums", value=numbers, cast="::float8[]")
+            )
         if None in operand:
-            parts.append(self._except(self._leaf(name, "true")))
+            parts.append(self._except(self._leaf(name, "true", *values.KINDS)))
         strings = [v for v in hashable if isinstance(v, str)]
         if strings:
-            parts.append(self._leaf(name, f"txt = ANY({self.arg(strings, '::text[]')})"))
+            parts.append(self._text_leaf(name, "txt = ANY({})", strings, "::text[]"))
         flags = [v for v in hashable if isinstance(v, bool)]
         if flags:
+            flags_json = [_json(v) for v in flags]
             parts.append(
-                self._leaf(name, f"obj = ANY({self.arg([_json(v) for v in flags], '::jsonb[]')})")
+                self._leaf(name, "obj = ANY({})", "bools", value=flags_json, cast="::jsonb[]")
             )
         listed = self._listed(name, [*hashable, *numbers])
         if listed:
@@ -287,6 +343,60 @@ def _sort_terms(alias: str, desc: bool) -> list[str]:
     ]
 
 
+def _numeric_sort_terms(alias: str, desc: bool) -> list[str]:
+    """``_sort_terms`` for a column holding only numbers (joined on ``num IS NOT NULL``), in
+    the same order. Its join can then read the key's numbers from their index alone."""
+    return [
+        f"({alias}.num IS NULL OR {alias}.num = 'NaN')",
+        f"{alias}.num {'DESC' if desc else 'ASC'}",
+    ]
+
+
+def _text_sort_terms(alias: str, desc: bool) -> list[str]:
+    """``_sort_terms`` for a column holding only strings, in the same order."""
+    return [f"{alias}.txt IS NULL", f"{alias}.txt {'DESC' if desc else 'ASC'}"]
+
+
+# The value kinds that the keys $2 of project $1 hold (counting changes not folded yet).
+KEY_KINDS = f"""
+    SELECT key, {", ".join(f"sum({kind}) > 0" for kind in values.KINDS)} FROM (
+        SELECT key, {", ".join(values.KINDS)} FROM project_keys
+        WHERE project_pk = $1 AND key = ANY($2)
+        UNION ALL
+        SELECT key, {", ".join(values.KINDS)} FROM project_key_changes
+        WHERE project_pk = $1 AND key = ANY($2)
+    ) counted
+    GROUP BY key
+"""
+
+
+async def key_kinds(
+    conn: asyncpg.Pool | asyncpg.Connection, project_pk: int, keys: Iterable[str]
+) -> dict[str, frozenset[str]]:
+    """Which ``values.KINDS`` each of ``keys`` holds in the project (none if no run has it)."""
+    keys = list(keys)
+    found = dict.fromkeys(keys, frozenset[str]())
+    for key, *held in await conn.fetch(KEY_KINDS, project_pk, keys) if keys else ():
+        found[key] = frozenset(kind for kind, yes in zip(values.KINDS, held, strict=True) if yes)
+    return found
+
+
+def filter_keys(expr: object) -> set[str]:
+    """The columns a filter's clauses are on (of a well-formed filter; ``sql`` checks it)."""
+    found: set[str] = set()
+    if not isinstance(expr, dict):
+        return found
+    for key, value in expr.items():
+        if key in ("$and", "$or", "$nor") and isinstance(value, list):
+            for sub in value:
+                found |= filter_keys(sub)
+        elif key == "$not":
+            found |= filter_keys(value)
+        elif not key.startswith("$"):
+            found.add(canonical(key))
+    return found
+
+
 @dataclass(frozen=True)
 class Selection:
     """Which runs of a project, in which order: a filter, sort keys (``(column, descending)``)
@@ -296,28 +406,56 @@ class Selection:
     sort: tuple[tuple[str, bool], ...] = ()
     running: bool = False
 
-    def sql(self, project_pk: int, columns: str) -> tuple[str, list[Any]]:
-        """``SELECT columns`` of the selected runs (aliased ``r``) in order, with ``count``
-        the number of matches; the caller appends ``LIMIT``/``OFFSET``."""
-        compiler = _Compiler(project_pk)
+    def sql(
+        self,
+        project_pk: int,
+        columns: str,
+        offset: int = 0,
+        limit: int | None = None,
+        kinds: Mapping[str, frozenset[str]] | None = None,
+    ) -> tuple[str, list[Any]]:
+        """``SELECT columns`` of the selected runs (aliased ``r``) from ``offset`` and at most
+        ``limit``, in order, and the number of matches (``p.total``). With the ``kinds`` of
+        values the filtered and sorted columns hold (``key_kinds``), clauses on kinds a column
+        doesn't hold are left out, and columns of numbers or of strings sort faster.
+
+        The order is found from run pks alone, and the page's columns read for its runs only,
+        so sorting thousands of runs doesn't carry their whole rows along."""
+        compiler = _Compiler(project_pk, kinds)
+        kinds = kinds or {}
         where = ["r.project_pk = $1", "r.deleted_at IS NULL"]
         if self.running:
             where.append(f"r.state IN {ACTIVE_STATES}")
-        if self.filter is not None:
-            where.append(f"r.pk IN ({compiler.compile(self.filter)})")
+        if self.filter is not None and (matching := compiler.compile(self.filter)) != ALL:
+            where.append(f"r.pk IN ({matching})")
         joins, order = [], []
         for i, (key, desc) in enumerate(self.sort):
             alias = f"s{i}"
-            key_arg = compiler.arg(canonical(key))
-            joins.append(
-                f"LEFT JOIN run_values {alias} ON {alias}.run_pk = r.pk AND {alias}.key = {key_arg}"
+            key = canonical(key)
+            key_arg = compiler.arg(key)
+            # The project too, so the join can read the key's index (project_pk, key, ...).
+            join = (
+                f"LEFT JOIN run_values {alias} ON {alias}.project_pk = $1 "
+                f"AND {alias}.run_pk = r.pk AND {alias}.key = {key_arg}"
             )
-            order += _sort_terms(alias, desc)
+            if kinds.get(key) == {"nums"}:
+                joins.append(f"{join} AND {alias}.num IS NOT NULL")
+                order += _numeric_sort_terms(alias, desc)
+            elif kinds.get(key) == {"strs"}:
+                joins.append(join)
+                order += _text_sort_terms(alias, desc)
+            else:
+                joins.append(join)
+                order += _sort_terms(alias, desc)
         # Ties keep the order runs were created in; with no sort, newest first.
         order += ["r.created_at", "r.pk"] if self.sort else ["r.created_at DESC", "r.pk DESC"]
+        page = f" OFFSET {int(offset)}" + (f" LIMIT {int(limit)}" if limit is not None else "")
+        joined, ordered = " ".join(joins), ", ".join(order)
         sql = (
-            f"SELECT {columns} FROM runs r {' '.join(joins)} WHERE {' AND '.join(where)} "
-            f"ORDER BY {', '.join(order)}"
+            f"SELECT {columns}, p.total FROM ("
+            f"SELECT r.pk, count(*) OVER () AS total FROM runs r {joined} "
+            f"WHERE {' AND '.join(where)} ORDER BY {ordered}{page}"
+            f") p JOIN runs r ON r.pk = p.pk {joined} ORDER BY {ordered}"
         )
         return sql, compiler.args
 
@@ -331,10 +469,11 @@ class Selection:
     ) -> tuple[list[asyncpg.Record], int]:
         """The selected runs' ``columns`` (of ``runs r``), from ``offset`` and at most
         ``limit``, and how many match in all (each record's last column)."""
-        sql, args = self.sql(project_pk, f"{columns}, count(*) OVER ()")
-        sql += f" OFFSET {int(offset)}"
-        if limit is not None:
-            sql += f" LIMIT {int(limit)}"
+        # Read apart from the runs: a value of another kind written in between is left out of
+        # this answer, as if it came a moment later.
+        keys = {canonical(key) for key, _ in self.sort} | filter_keys(self.filter)
+        kinds = await key_kinds(conn, project_pk, keys)
+        sql, args = self.sql(project_pk, columns, offset, limit, kinds)
         try:
             records = await conn.fetch(sql, *args)
         except asyncpg.InvalidRegularExpressionError as exc:
@@ -411,6 +550,12 @@ def select_columns(names: Sequence[str], patterns: Iterable[str]) -> list[str]:
     return out
 
 
+# ``values.COLUMNS`` of the keys $3 only.
+_CELL_COLUMNS = values.COLUMNS.replace(
+    "WHERE project_pk = $1", "WHERE project_pk = $1 AND key = ANY($3)"
+)
+
+
 async def cells(
     conn: asyncpg.Pool | asyncpg.Connection,
     project_pk: int,
@@ -424,7 +569,7 @@ async def cells(
         return out
     records = await conn.fetch(
         "SELECT v.run_pk, v.key, v.num, v.txt, v.obj::text, coalesce(k.int_only, false) "
-        f"FROM run_values v LEFT JOIN ({values.COLUMNS}) k ON k.key = v.key "
+        f"FROM run_values v LEFT JOIN ({_CELL_COLUMNS}) k ON k.key = v.key "
         "WHERE v.run_pk = ANY($2) AND v.key = ANY($3)",
         project_pk,
         list(run_pks),

@@ -1993,6 +1993,13 @@ class Store:
         ORDER BY m.run_pk, m.key, c.first_line
     """
 
+    # The chunks of the keys $3 of the runs $1 in stream $2, oldest first.
+    CHUNKS: ClassVar[str] = """
+        SELECT run_pk, key, first_line, n, data FROM series_chunks
+        WHERE run_pk = ANY($1) AND stream = $2 AND key = ANY($3)
+        ORDER BY run_pk, key, first_line
+    """
+
     async def histories(
         self, runs: Sequence[Run], keys: Iterable[str] | None = None, stream: str = "history"
     ) -> list[History]:
@@ -2001,7 +2008,11 @@ class Store:
         if stream not in self.STREAMS:
             raise ValueError(f"unknown series stream {stream!r}")
         wanted = None if keys is None else list(dict.fromkeys(keys))
-        records = await self.db.fetch(self.HISTORIES, [run.pk for run in runs], stream, wanted)
+        pks = [run.pk for run in runs]
+        if wanted:  # only these: the other metrics' names aren't needed
+            records = await self.db.fetch(self.CHUNKS, pks, stream, wanted)
+        else:
+            records = await self.db.fetch(self.HISTORIES, pks, stream, wanted)
         chunks: dict[int, dict[str, list[Series]]] = {}
         for run_pk, key, first_line, n, data in records:
             parts = chunks.setdefault(run_pk, {}).setdefault(key, [])
@@ -2083,12 +2094,27 @@ class Store:
             await conn.execute("UPDATE runs SET uncompacted = 0 WHERE pk = $1", pk)
         return True
 
+    # Column count changes that make a round's writes a bulk load (thousands of new runs).
+    BULK_CHANGES: ClassVar[int] = 100_000
+
+    async def _after_bulk_load(self) -> None:
+        """Clean up after a bulk load without waiting for autovacuum: the folded changes leave
+        dead rows that every column read would wade through, filters and the budget panel need
+        statistics that cover the new runs (without them, they read every run row by row), and
+        index-only scans need the new rows marked all-visible (else each one reads the table)."""
+        await self.db.execute(
+            "VACUUM (ANALYZE) project_key_changes, project_keys, runs, run_values, gpu_usage"
+        )
+
     async def work(self, sweep_files: bool = False) -> None:
         """One round of background work (D81), until there is none left: fold column count
         changes, compact chunks, purge deletes and remove expired rows (and, now and then or
         with ``sweep_files``, orphaned run files)."""
-        while await values.fold(self.db.pool):
-            pass
+        folded = 0
+        while count := await values.fold(self.db.pool):
+            folded += count
+        if folded >= self.BULK_CHANGES:
+            await self._after_bulk_load()
         while await self.compact():
             pass
         while await self.purge():

@@ -198,6 +198,10 @@ def test_postgres_answers_like_the_column_table(postgres):
                 expected = np.flatnonzero(table.filter(expr)).tolist()
                 assert sorted(row_of[record[0]] for record in found) == expected, expr
                 assert total == len(expected), expr
+                # Without the columns' kinds, every clause runs: the same runs match.
+                sql, args = Selection(expr).sql(project, "r.pk")
+                unpruned = await conn.fetch(sql, *args)
+                assert sorted(row_of[record[0]] for record in unpruned) == expected, expr
             for keys in SORTS:
                 found, _ = await Selection(sort=tuple(keys)).runs(conn, project)
                 assert [row_of[record[0]] for record in found] == table.sort(

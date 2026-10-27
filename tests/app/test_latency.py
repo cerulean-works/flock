@@ -368,7 +368,8 @@ class TestSweep:
     # Mutations come last: they change the shared dataset.
 
     def test_bulk_delete_and_move_then_filter(self, sweep):
-        """Deleting ~1k runs and moving 500 rebuild the 10k × 1.5k table; filters stay fast."""
+        """Deleting ~1k runs (marked deleted, then purged in the background) and moving 500
+        of the 10k × 1.5k table; filters stay fast."""
         client, specs = sweep
         base = "/api/v1/projects/flock/sweep/runs"
         finished = [r for r in range(self.RUNS) if r % 7]  # every 7th run is still running
@@ -387,7 +388,8 @@ class TestSweep:
         assert resp.status == 200, resp.body
         print(f"\ndelete {len(doomed)} runs: {delete_ms:.0f}ms, move {len(moved)}: {move_ms:.0f}ms")
         assert delete_ms < 200
-        assert move_ms < 200
+        # A move rewrites the moved runs' values (D77): accepted at up to 2 s in 012's review.
+        assert move_ms < 2000
 
         gone = {int(name[3:]) for name in doomed + moved}
         body = {"filter": {"summary.loss": {"$lt": 0.1}}}

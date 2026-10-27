@@ -1,3 +1,4 @@
+import asyncio
 import mimetypes
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -229,17 +230,20 @@ async def query_runs(project: ProjectDep, body: RunsQuery, store: StoreDep) -> R
     column-oriented ``data`` (one list per column, aligned with ``ids``).
     """
     selection = body.selection()
+    pool = store.db.pool
+    names = body.columns
+    patterns = any(ch in name for name in names for ch in "*?[")
+    # The project's columns (to expand patterns) are read alongside the runs.
+    selected, found = await asyncio.gather(
+        selection.runs(pool, project.pk, *(() if body.all_ids else (body.offset, body.limit))),
+        query.columns(pool, project.pk) if patterns else _nothing(),
+    )
     if body.all_ids:
-        records, total = await selection.runs(store.db.pool, project.pk)
+        records, total = selected
         page = records[body.offset : body.offset + body.limit]
     else:
-        page, total = await selection.runs(store.db.pool, project.pk, body.offset, body.limit)
-    names = body.columns
-    if any(ch in name for name in names for ch in "*?["):
-        found = [column.name for column in await query.columns(store.db.pool, project.pk)]
-        names = query.select_columns(found, names)
-    else:
-        names = query.select_columns((), names)
+        page, total = selected
+    names = query.select_columns([column.name for column in found], names)
     data = await query.cells(store.db.pool, project.pk, [record[0] for record in page], names)
     out: dict[str, Any] = {
         "total": total,
@@ -252,6 +256,10 @@ async def query_runs(project: ProjectDep, body: RunsQuery, store: StoreDep) -> R
     if body.all_ids:
         out["all_ids"] = [record[1] for record in records]
     return JSONResponse(out)
+
+
+async def _nothing() -> list[query.Column]:
+    return []
 
 
 # ---------------------------------------------------------------------- curves

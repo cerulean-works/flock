@@ -349,6 +349,35 @@ def test_columns_and_paging(table_api):
     assert [c["name"] for c in found] == ["config.amp"]
 
 
+def test_long_strings_and_lists_are_kept_and_filtered(api):
+    """Values too long to index (0013) are stored, filtered and sorted like short ones."""
+    long_text = "x" * 3000 + "".join(f"{i:04d}" for i in range(2000))  # 11 kB, varied
+    long_list = [f"item-{i:04d}" for i in range(200)]
+    api.create_run("p", "long", tags=long_list[:70])
+    api.stream("p", "long", summary={"note": long_text, "items": long_list})
+    api.create_run("p", "short", tags=["baseline"])
+    api.stream("p", "short", summary={"note": "short", "items": ["item-0001"]})
+    data = api.runs("p", columns=["summary.note", "summary.items"], sort="-summary.note")
+    assert data["ids"] == ["long", "short"]
+    assert data["data"]["summary.note"] == [long_text, "short"]
+    assert data["data"]["summary.items"] == [long_list, ["item-0001"]]
+
+    def ids(expr: dict) -> list[str]:
+        return sorted(api.runs("p", filter=expr)["ids"])
+
+    assert ids({"summary.note": long_text}) == ["long"]
+    assert ids({"summary.note": {"$in": [long_text, "short"]}}) == ["long", "short"]
+    assert ids({"summary.note": {"$gt": "w"}}) == ["long"]
+    assert ids({"summary.note": {"$regex": "1999$"}}) == ["long"]
+    assert ids({"summary.note": {"$contains": "0042"}}) == ["long"]
+    assert ids({"summary.items": "item-0150"}) == ["long"]
+    assert ids({"summary.items": "item-0001"}) == ["long", "short"]
+    assert ids({"summary.items": {"$in": ["item-0199", "nope"]}}) == ["long"]
+    assert ids({"summary.items": {"$nin": ["item-0001"]}}) == []
+    assert ids({"tags": "item-0069"}) == ["long"]
+    assert ids({"tags": {"$ne": "baseline"}}) == ["long"]
+
+
 def test_not_found(api):
     assert api.get("/api/v1/projects/flock/nope/runs").status == 404
     api.create_run("p", "r1")

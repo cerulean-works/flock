@@ -42,8 +42,36 @@ CREATE TABLE run_values (
     CHECK (num_nonnulls(num, txt, obj) = 1)
 );
 CREATE INDEX run_values_num ON run_values (project_pk, key, num, run_pk) WHERE num IS NOT NULL;
-CREATE INDEX run_values_txt ON run_values (project_pk, key, txt, run_pk) WHERE txt IS NOT NULL;
 CREATE INDEX run_values_obj ON run_values (project_pk, key, run_pk) WHERE obj IS NOT NULL;
+-- An index entry holds at most ~2.7 kB, so strings and lists are indexed with their value only
+-- when short. Filters read the long ones (rare) from the table, found through their own index.
+-- Each condition says the value isn't null, which the planner can estimate.
+CREATE FUNCTION run_values_short_text(key text, txt text) RETURNS boolean
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$ SELECT txt IS NOT NULL AND octet_length(key) + octet_length(txt) < 2400 $$;
+CREATE FUNCTION run_values_long_text(key text, txt text) RETURNS boolean
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$ SELECT txt IS NOT NULL AND octet_length(key) + octet_length(txt) >= 2400 $$;
+-- 64 elements and 1280 bytes as text are under 2.4 kB as jsonb, whatever the elements.
+CREATE FUNCTION run_values_short_list(key text, obj jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$ SELECT obj IS NOT NULL AND CASE WHEN jsonb_typeof(obj) = 'array'
+             THEN jsonb_array_length(obj) <= 64
+                  AND octet_length(key) + octet_length(obj::text) < 1280 END $$;
+CREATE FUNCTION run_values_long_list(key text, obj jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $$ SELECT obj IS NOT NULL AND CASE WHEN jsonb_typeof(obj) = 'array'
+             THEN jsonb_array_length(obj) > 64
+                  OR octet_length(key) + octet_length(obj::text) >= 1280 END $$;
+CREATE INDEX run_values_txt ON run_values (project_pk, key, txt, run_pk)
+    WHERE run_values_short_text(key, txt);
+CREATE INDEX run_values_long_txt ON run_values (project_pk, key, run_pk)
+    WHERE run_values_long_text(key, txt);
+-- Lists with their elements, so "tags contains baseline" reads no table rows.
+CREATE INDEX run_values_lists ON run_values (project_pk, key, run_pk) INCLUDE (obj)
+    WHERE run_values_short_list(key, obj);
+CREATE INDEX run_values_long_lists ON run_values (project_pk, key, run_pk)
+    WHERE run_values_long_list(key, obj);
 
 -- A project's columns, for the columns menu and display types: how many runs have a value of
 -- each type. A column whose count drops to 0 is gone (the purge removes its row).

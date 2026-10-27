@@ -4,6 +4,7 @@ lacks, so clients may reach any of them, in any order."""
 import asyncio
 import contextlib
 import threading
+from typing import Any
 
 from app.api.src.core.imports import Imports
 from tests.app.conftest import Client, Flocks
@@ -171,7 +172,9 @@ def test_an_import_of_a_killed_replica_is_marked_interrupted_by_the_other(
     assert on_second.runs("p", entity="lab")["ids"] == ["r1"]
 
 
-def test_a_replica_killed_mid_request_loses_nothing_it_acknowledged(make_flock: Flocks):
+def test_a_replica_killed_mid_request_loses_nothing_it_acknowledged(
+    make_flock: Flocks, monkeypatch
+):
     """What a replica acknowledged is kept, and what it was writing when it died isn't half
     there: the other replica sees the run as it was, and can write to it at once."""
     first, second = make_flock.replicas(2)
@@ -182,11 +185,13 @@ def test_a_replica_killed_mid_request_loses_nothing_it_acknowledged(make_flock: 
     # The next request stops inside its transaction, after locking the run.
     inside = threading.Event()
 
-    async def stuck(*args, **kwargs):
+    async def stuck(conn: Any, pk: int, prefix: str) -> dict[str, Any]:
         inside.set()
         await asyncio.Event().wait()
+        return {}
 
-    first.store._prefixed = stuck  # read under the run's lock, before the request's writes
+    # Read under the run's lock, before the request's writes.
+    monkeypatch.setattr(first.store, "_prefixed", stuck)
     request = threading.Thread(
         target=lambda: _quietly(
             Client(first.port, first.api_key, first.token).stream,

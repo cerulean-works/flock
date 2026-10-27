@@ -5,6 +5,7 @@ Everything is read from PostgreSQL when asked for (D76): reports are aggregates 
 ``gpu_usage``, so every replica answers the same.
 """
 
+import asyncio
 import datetime as dt
 import hashlib
 import math
@@ -58,7 +59,7 @@ TOP_RUNS = f"""
     JOIN runs r ON r.pk = u.run_pk
     JOIN projects p ON p.pk = r.project_pk
     JOIN orgs o ON o.pk = p.org_pk
-    WHERE u.alive AND NOT u.excluded AND u.hours > 0
+    WHERE u.alive AND NOT u.excluded AND u.seconds > 0 AND u.gpu_count > 0
     ORDER BY cost DESC, u.hours DESC, u.run_pk DESC
     LIMIT $3
 """
@@ -239,7 +240,13 @@ class Budgets:
         unpriced: dict[str, list] = {}
         unknown: set[int] = set()
         unknown_seconds = 0.0
-        for record in await db.fetch(GROUPED, org.pk, month):
+        grouped, budgets, top, currency = await asyncio.gather(
+            db.fetch(GROUPED, org.pk, month),
+            self._budgets(org),
+            db.fetch(TOP_RUNS, org.pk, month, self.TOP_RUNS),
+            db.fetchval("SELECT currency FROM orgs WHERE pk = $1", org.pk),
+        )
+        for record in grouped:
             project, key, gpu_type, rate, is_excluded, deleted, hours, counted = record[:8]
             cost = hours * (rate or 0.0)
             if is_excluded:
@@ -262,12 +269,10 @@ class Budgets:
             totals[0] += cost
             totals[1] += hours
             totals[2] += counted
-        budget = self.budget_for(await self._budgets(org), month)
+        budget = self.budget_for(budgets, month)
         unknown_hours = unknown_seconds / 3600
         warnings, items = await self._warnings(org, month, unpriced, unknown, unknown_hours)
-        top = await db.fetch(TOP_RUNS, org.pk, month, self.TOP_RUNS)
         owners = await self.store.accounts.briefs(record[8] for record in top)
-        currency = await db.fetchval("SELECT currency FROM orgs WHERE pk = $1", org.pk)
         report = {
             "org": org.name,
             "month": gpus.format_month(month),
