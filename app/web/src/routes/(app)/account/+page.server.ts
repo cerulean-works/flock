@@ -2,7 +2,7 @@ import { fail } from '@sveltejs/kit';
 import { refreshUser } from '#lib/server/auth.ts';
 import { removeAvatar, setAvatar, useGravatar } from '#lib/server/avatar.ts';
 import { change, refused, flock } from '#lib/server/flock.ts';
-import type { UserInfo } from '#lib/types.ts';
+import type { CliSession, UserInfo } from '#lib/types.ts';
 import { formText } from '#lib/utils.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -15,10 +15,15 @@ export interface ApiKey {
 }
 
 export const load: PageServerLoad = async () => {
-	const [me, keys] = await Promise.all([flock('/api/v1/me'), flock('/api/v1/me/api-keys')]);
+	const [me, keys, cli] = await Promise.all([
+		flock('/api/v1/me'),
+		flock('/api/v1/me/api-keys'),
+		flock('/api/v1/me/cli-sessions')
+	]);
 	return {
 		profile: (await me.json()) as UserInfo,
 		keys: ((await keys.json()) as { keys: ApiKey[] }).keys,
+		cliSessions: ((await cli.json()) as { sessions: CliSession[] }).sessions,
 		now: Date.now() / 1000
 	};
 };
@@ -84,5 +89,15 @@ export const actions: Actions = {
 		const res = await change('DELETE', `/api/v1/me/api-keys/${id}`);
 		if (refused(res)) return res;
 		return { deleted: id };
+	},
+
+	/** Sign a machine out of `flock login`: its token stops working on its next request. */
+	revokeCli: async ({ request }) => {
+		const form = await request.formData();
+		const id = Number(form.get('id'));
+		if (!Number.isInteger(id)) return fail(400, { error: 'No such sign-in' });
+		const res = await change('DELETE', `/api/v1/me/cli-sessions/${id}`);
+		if (refused(res)) return res;
+		return { revoked: id };
 	}
 };

@@ -77,6 +77,29 @@ export interface UserInfo {
 	avatar_source?: 'gravatar' | 'upload' | null;
 }
 
+/** A command-line sign-in (`flock login`), one per machine. Times are seconds since the epoch. */
+export interface CliSession {
+	id: number;
+	/** The machine's hostname. */
+	name: string | null;
+	created_at: number;
+	/** Null until the machine first uses it. Flock records it within the hour. */
+	last_used_at: number | null;
+	/** Pushed back by each use. */
+	expires_at: number;
+}
+
+/** A machine asking to sign in with `flock login`, as the approval page shows it. */
+export interface DeviceRequest {
+	/** As the terminal shows it: `WDJB-MJHT`. */
+	user_code: string;
+	hostname: string;
+	platform: string;
+	ip: string | null;
+	created_at: number;
+	expires_at: number;
+}
+
 /** An organization as the sidebar's switcher lists it. */
 export interface OrgEntry {
 	/** The org's ID. */

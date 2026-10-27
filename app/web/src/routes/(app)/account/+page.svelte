@@ -16,6 +16,7 @@
 	let { data }: PageProps = $props();
 
 	const removal = new Mutation({ success: () => 'API key deleted', toastErrors: true });
+	const revocation = new Mutation({ success: () => 'Machine signed out', toastErrors: true });
 	const profile = new Mutation({ success: () => 'Name saved' });
 	let passwordForm = $state<HTMLFormElement>();
 	const password = new Mutation({
@@ -238,6 +239,49 @@
 				<div class="mt-4">
 					<ApiKeyCreator named />
 				</div>
+			</section>
+
+			<section class="mt-10">
+				<h2 class="font-serif text-2xl tracking-[-0.01em]">Command line sign-ins</h2>
+				<p class="mt-2 max-w-[62ch] text-muted-foreground">
+					Machines signed in with <code class="font-mono text-[0.9em]">flock login</code>. Each
+					lasts until 90 days without use; revoking one signs that machine out.
+				</p>
+				{#if data.cliSessions.length}
+					<ul class="mt-4 border-t border-divider">
+						{#each data.cliSessions as session (session.id)}
+							{@const name = session.name || 'Unnamed machine'}
+							<li class="flex h-12 items-center gap-4 border-b border-divider">
+								<span class="min-w-0 flex-1 truncate font-medium">{name}</span>
+								<span
+									class="text-muted-foreground"
+									title="Signed in {dateTime(session.created_at)}"
+								>
+									{session.last_used_at === null
+										? 'Not used yet'
+										: `Used ${relativeTime(session.last_used_at, data.now)}`}
+								</span>
+								<form method="POST" action="?/revokeCli" use:enhance={revocation.enhance}>
+									<input type="hidden" name="id" value={session.id} />
+									<Button
+										type="submit"
+										variant="ghost"
+										size="icon-sm"
+										class="text-muted-foreground hover:text-destructive"
+										aria-label="Revoke the sign-in of {name}"
+										title="Revoke: this machine is signed out"
+									>
+										<Trash2Icon />
+									</Button>
+								</form>
+							</li>
+						{/each}
+					</ul>
+				{:else}
+					<p class="mt-3 text-muted-foreground">
+						None yet. Run <code class="font-mono text-[0.9em]">flock login</code> to sign in from a terminal.
+					</p>
+				{/if}
 			</section>
 
 			<section class="mt-10">
