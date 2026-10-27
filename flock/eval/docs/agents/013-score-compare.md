@@ -32,12 +32,12 @@ A task or suite in only one file is listed and is not a breach: a rerun of a few
 
 A score difference means something only when both runs scored the same requests under the same settings. `compare` refuses, before comparing any score, with a message naming the field and both values, when:
 
-- `provenance.model`, `dtype`, `batch_tokens` or `attention` differ (the model, or the settings that change scores by design);
+- `provenance.model`, `dtype`, `batch_tokens`, `max_length` or `attention` differ (the model, or the settings that change scores by design: `max_length` decides which requests are cut from the left). The SDPA kernel pin of a planned stage joins this list as `sdpa_backend` when it lands, since it changes bfloat16 scores;
 - a task in both files has a different `task_hash` (its definition, dataset revision, few-shot examples or any rendered request changed) or a different `limit`.
 
 A refusal is not a breach: the runs are different instruments (Principle 3 of the suite), and the answer is a new bank, not a tolerance. It exits with 2, as a usage error does.
 
-The other provenance fields (`flock_commit`, `torch`, `transformers`, `python`, `device`) are printed side by side when they differ, before the breaches, because they are the usual causes of one. A library upgrade that moves a float32 number is a breach, and the bank is refreshed in the same pull request as the lockfile once the change is understood.
+The other provenance fields (`flock_commit`, `torch`, `transformers`, `python`, `device`) are printed side by side when they differ, before the breaches, because they are the usual causes of one. `device` is the GPU's name as CUDA reports it (`NVIDIA H200`), or `cpu`, so a run on another GPU type shows here. A library upgrade that moves a float32 number is a breach, and the bank is refreshed in the same pull request as the lockfile once the change is understood.
 
 `compare` reads the JSON keys it needs, not the `Results` dataclass, so a bank written under an older `schema_version` stays comparable as long as those keys exist; a missing key refuses naming the key.
 
@@ -45,9 +45,9 @@ The other provenance fields (`flock_commit`, `torch`, `transformers`, `python`, 
 
 The bank is float32, and `flock-eval run` has always loaded weights in bfloat16, so float32 runs went through the Python API. `EvalConfig` gains `dtype: str = "bfloat16"`, passed to `ScoringModel.from_pretrained`, and `run` gains `--dtype` with the choices `bfloat16` and `float32`. The provenance already records the dtype that ran. This is the only change to `run`, and with the default every existing command scores as before.
 
-### 013.D4. The bank is a `results.json` in the package, written by one documented command
+### 013.D4. The bank is a `results.json` beside the task snapshot, written by one documented command
 
-The bank is `flock/eval/regression/olmo-2-0425-1b-float32.json`: the `results.json` of
+The bank is `tests/eval/regression/olmo-2-0425-1b-float32.json`, beside stage 012's snapshot in `tests/eval/snapshot/`, so the package ships code only. It is the `results.json` of
 
 ```bash
 uv run flock-eval run \
@@ -68,7 +68,7 @@ The run-path provenance stage in flight adds three things the bank gains at its 
 1. `flock/eval/compare.py`: read two results files, refuse different instruments (D2), list breaches (D1).
 2. `cli.py`: `compare` and `run --dtype`; `run.py`: `EvalConfig.dtype` (D3).
 3. Tests on small results files built in the test: equal files pass; one changed metric, truncation count or suite score is a breach with exit 1; a changed task hash, `limit`, model, dtype, `batch_tokens` or `attention` refuses with exit 2; one-sided tasks are listed; no common task refuses; `--dtype float32` reaches the model on the tiny model.
-4. The bank: the command of D4 as a GPU job, then a second job that reruns it and runs `compare` against the first, which must report no breach.
+4. The bank: the command of D4 as a GPU job, its `results.json` copied to `tests/eval/regression/`, then a second job that reruns it and runs `compare` against the first, which must report no breach.
 5. Docs: a `regression.md` page, `compare` and `--dtype` in `cli.md`.
 
 ---
