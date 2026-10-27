@@ -36,7 +36,7 @@ async function s3Keys() {
 export const load: PageServerLoad = async () => {
 	const [me, keys, cli, s3] = await Promise.all([
 		flock('/api/v1/me'),
-		flock('/api/v1/me/api-keys'),
+		flock('/api/v1/me/wandb-keys'),
 		flock('/api/v1/me/cli-sessions'),
 		s3Keys()
 	]);
@@ -97,7 +97,7 @@ export const actions: Actions = {
 	createKey: async ({ request }) => {
 		const form = await request.formData();
 		const name = formText(form, 'name') || 'default';
-		const res = await change<WandbKeyCreated>('POST', '/api/v1/me/api-keys', { name });
+		const res = await change<WandbKeyCreated>('POST', '/api/v1/me/wandb-keys', { name });
 		if (refused(res)) return res;
 		return { key: res.data.key, name: res.data.name };
 	},
@@ -106,7 +106,7 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const id = Number(form.get('id'));
 		if (!Number.isInteger(id)) return fail(400, { error: 'No such key' });
-		const res = await change('DELETE', `/api/v1/me/api-keys/${id}`);
+		const res = await change('DELETE', `/api/v1/me/wandb-keys/${id}`);
 		if (refused(res)) return res;
 		return { deleted: id };
 	},
