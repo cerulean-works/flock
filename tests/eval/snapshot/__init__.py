@@ -27,12 +27,13 @@ def definitions(
         # Every field but the name, read off the dataclasses so a new field is pinned too.
         definition = dataclasses.asdict(task)
         del definition["name"]
-        definition["type"] = type(task).__name__
-        # A function is pinned by where it is defined. Anything else, such as a `partial`, has no
-        # stable name and fails here until this code says how to pin it.
+        definition["type"] = f"{type(task).__module__}.{type(task).__qualname__}"
+        # A module-level function is pinned by where it is defined. A lambda, a closure or a
+        # `partial` has no name that changes with what it does, so it fails here until this code
+        # says how to pin it.
         to_doc = task.to_doc
-        if not isinstance(to_doc, FunctionType):
-            raise TypeError(f"{name}: to_doc must be a function to be pinned, got {to_doc!r}")
+        if not isinstance(to_doc, FunctionType) or "<" in to_doc.__qualname__:
+            raise TypeError(f"{name}: to_doc must be a module-level function, got {to_doc!r}")
         definition["to_doc"] = f"{to_doc.__module__}.{to_doc.__qualname__}"
         # Rows written out in a task's module are long and reviewed where they are written.
         if task.fewshot is not None and task.fewshot.rows:
@@ -87,7 +88,7 @@ def toy_requests(tasks: Iterable[MultipleChoiceTask]) -> dict[str, Any]:
 
 
 def differences(kind: str, stored: Mapping[str, Any], live: Mapping[str, Any]) -> list[str]:
-    """Lists what differs between two snapshots of entries by name, one line per field, such as `task arc_easy: dataset.revision was '...', is now '...'`."""
+    """Lists what differs between two snapshots of entries by name, one line per field, such as `task arc_easy: dataset.revision was "...", is now "..."`. A field only one side has reads `missing` on the other."""
     lines = []
     for name in sorted(stored.keys() | live.keys()):
         if name not in live:
@@ -97,20 +98,23 @@ def differences(kind: str, stored: Mapping[str, Any], live: Mapping[str, Any]) -
         else:
             before, after = dict(_leaves(stored[name])), dict(_leaves(live[name]))
             for field in sorted(before.keys() | after.keys()):
-                if before.get(field) != after.get(field):
-                    lines.append(
-                        f"{kind} {name}: {field} was {before.get(field)!r}, "
-                        f"is now {after.get(field)!r}"
-                    )
+                # Compared as JSON text, not with `==`: `True == 1` and `1 == 1.0` in Python, but
+                # the file and the task hash tell them apart.
+                old = (
+                    json.dumps(before[field], ensure_ascii=False) if field in before else "missing"
+                )
+                new = json.dumps(after[field], ensure_ascii=False) if field in after else "missing"
+                if old != new:
+                    lines.append(f"{kind} {name}: {field} was {old}, is now {new}")
 
     return lines
 
 
 def _leaves(value: Any, path: str = "") -> Iterable[tuple[str, Any]]:
-    """Yields every leaf of nested dicts and lists with its dotted path, such as `dataset.revision`."""
-    if isinstance(value, dict):
+    """Yields every leaf of nested dicts and lists with its dotted path, such as `dataset.revision`. An empty dict or list is a leaf, so a new field holding one is still seen."""
+    if isinstance(value, dict) and value:
         children = value.items()
-    elif isinstance(value, list):
+    elif isinstance(value, list) and value:
         children = enumerate(value)
     else:
         yield path, value
