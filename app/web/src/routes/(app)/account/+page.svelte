@@ -132,10 +132,4 @@
 			</tbody>
 		</table>
 	</section>
-
-	<section class="mt-10">
-		<form method="POST" action="/logout">
-			<Button type="submit" variant="outline">Sign out</Button>
-		</form>
-	</section>
 </Page>
