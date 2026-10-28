@@ -305,7 +305,9 @@ def test_stream_reports_summary_state_and_new_runs(api, events):
 
 
 def test_crashed_runs_are_announced(make_flock, events):
-    server = make_flock(crash_timeout=0.3)
+    # Long enough that the stream is subscribed before the run goes quiet for that long: a
+    # crash before then would never reach it.
+    server = make_flock(crash_timeout=2.0)
     api = server.client()
     api.create_run("p", "r1")
     live = events("p", "r1", client=api)
