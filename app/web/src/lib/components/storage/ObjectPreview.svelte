@@ -90,7 +90,7 @@
 	{:else if url && preview.kind === 'pdf'}
 		<iframe src={url} title={nameOf(object.key)} class="h-[75vh] w-full border-0 bg-card"></iframe>
 	{:else if shown?.kind === 'markdown'}
-		<Markdown text={shown.body} class="bg-card px-5 py-4" />
+		<Markdown text={shown.body} class="pt-1" />
 	{:else if shown}
 		<pre
 			class="max-h-[70vh] overflow-auto bg-card px-4 py-3 font-mono text-[12.5px] leading-relaxed whitespace-pre"><code

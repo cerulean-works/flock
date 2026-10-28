@@ -245,8 +245,11 @@
 	.markdown :global(:is(th, td)) {
 		border-bottom: 1px solid var(--border);
 		padding: 8px 12px;
-		text-align: left;
 		vertical-align: top;
+	}
+	/* Columns the Markdown aligned (`:--:`, `--:`) keep it; the rest read from the left. */
+	.markdown :global(:is(th, td):not([align])) {
+		text-align: left;
 	}
 	.markdown :global(:is(th, td):first-child) {
 		padding-left: 0;
