@@ -131,11 +131,13 @@ class History:
     def x_at(self, x_key: str, rows: np.ndarray) -> np.ndarray:
         """Values of ``x_key`` at history ``rows`` (NaN where it wasn't logged)."""
         xs = self.get(x_key)
-        if xs is None or len(rows) == 0:
+        if xs is None or xs.n == 0 or len(rows) == 0:
             return np.full(len(rows), np.nan)
-        if xs.n == self.n_rows and xs.n > 0 and int(xs.rows[-1]) == xs.n - 1:
+        if int(xs.rows[-1]) == xs.n - 1 and int(rows[-1]) < xs.n:
             return xs.vals[rows]  # dense x (``_step``, ``_runtime``, ...): row == position
-        dense = np.full(max(self.n_rows, int(rows[-1]) + 1), np.nan)
+        # Chunks can be newer than the run metadata read before them, and the axis may
+        # extend past this metric's last row. Include both series when sizing the lookup.
+        dense = np.full(max(self.n_rows, int(xs.rows[-1]) + 1, int(rows[-1]) + 1), np.nan)
         dense[xs.rows] = xs.vals
         return dense[rows]
 

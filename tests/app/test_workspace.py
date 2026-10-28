@@ -1,3 +1,5 @@
+import asyncio
+
 import numpy as np
 import pytest
 
@@ -7,6 +9,31 @@ from app.api.src.core.metric_defs import parse_metric_defs
 from tests.app.utils import history_rows, system_samples
 
 # ---------------------------------------------------------------------- snapshot
+
+
+def test_snapshot_with_chunks_appended_after_run_selection(api, flock, monkeypatch):
+    api.create_run("p", "r")
+    api.stream("p", "r", history_rows(1, loss=float))
+    histories = flock.store.histories
+
+    def append():
+        writer = flock.client()
+        try:
+            writer.stream(
+                "p", "r", [{"_step": 1, "_runtime": 1}, {"_step": 2, "_runtime": 2}], offset=1
+            )
+        finally:
+            writer.close()
+
+    async def histories_after_append(runs, keys=None, stream="history"):
+        assert runs[0].history_line_count == 1
+        await asyncio.to_thread(append)
+        return await histories(runs, keys, stream)
+
+    monkeypatch.setattr(flock.store, "histories", histories_after_append)
+    snap = api.workspace()
+    assert snap["curves"][("r", "loss")] == ([0], [0.0])
+    assert snap["mappings"][("r", "_runtime")] == ([0, 2], [0, 2])
 
 
 def test_snapshot_has_table_cells_and_curves(api):
