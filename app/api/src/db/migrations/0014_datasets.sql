@@ -27,7 +27,7 @@ CREATE INDEX dataset_trash_org ON dataset_trash (org_pk);
 -- renamed, rather than hide it.
 DO $$
 BEGIN
-    IF EXISTS (SELECT 1 FROM orgs WHERE lower(name) = 'datasets') THEN
+    IF EXISTS (SELECT 1 FROM orgs WHERE lower(name) = 'datasets' AND deleted_at IS NULL) THEN
         RAISE EXCEPTION 'an organization is named "datasets", which the dashboard now uses for '
             'its Datasets tab: rename it (UPDATE orgs SET name = ... WHERE name = ...) and start '
             'Flock again';

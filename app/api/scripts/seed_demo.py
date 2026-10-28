@@ -56,6 +56,7 @@ from argon2 import PasswordHasher
 
 from app.api.src.core import gpus
 from app.api.src.core.names import ADJECTIVES, NOUNS
+from app.api.src.db.backfill import backfill
 from app.api.src.db.migrate import Migrations
 from app.api.src.settings import Settings
 
@@ -812,7 +813,8 @@ def utc(t: float) -> dt.datetime:
 
 
 TABLES = (
-    "gpu_usage", "gpu_rates", "org_budgets", "history_columns", "history", "events", "logs",
+    "gpu_usage", "gpu_rates", "org_budgets", "series_chunks", "run_metrics",
+    "run_values", "project_keys", "backfill", "history", "events", "logs",
     "run_files", "runs", "projects", "invites", "password_resets", "sessions", "api_keys",
     "memberships", "users", "orgs", "avatars",
 )  # fmt: skip
@@ -943,22 +945,20 @@ class Writer:
     async def _write_batch(self, batch: list[RunPlan], logged: list[Logged | None]) -> None:
         conn = self.conn
         history, events, logs, columns, files, usage = [], [], [], [], [], []
+        inserted: list[int] = []
         async with conn.transaction():
             for plan, sent in zip(batch, logged, strict=True):
                 project = plan.project
                 if sent is not None:
-                    active = plan.state == "running"
-                    compacted = 0 if active else None
                     plan.pk = await conn.fetchval(
                         """
                         INSERT INTO runs (project_pk, name, display_name, state, created_at,
                             updated_at, heartbeat_at, config, summary, tags, notes, group_name,
                             job_type, host, program, commit_hash, sweep, exitcode,
                             history_line_count, events_line_count, log_line_count,
-                            history_compacted_line_count, system_compacted_line_count,
                             owner_pk, gpu_type, gpu_count, gpu_count_override)
                         VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10, $11, $12, $13,
-                            $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+                            $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
                         RETURNING pk
                         """,
                         project.pk,
@@ -981,13 +981,12 @@ class Writer:
                         len(sent.history),
                         len(sent.events),
                         len(sent.logs),
-                        len(sent.history) if compacted is None else compacted,
-                        len(sent.events) if compacted is None else compacted,
                         plan.owner.pk,
                         gpus.normalize(DEVICES[plan.gpu_type][0]) if plan.gpu_type else None,
                         plan.gpu_count,
                         plan.gpu_count_override,
                     )
+                    inserted.append(plan.pk)
                     history += [(plan.pk, i, line) for i, line in enumerate(sent.history)]
                     events += [(plan.pk, i, line) for i, line in enumerate(sent.events)]
                     logs += [(plan.pk, i, line) for i, line in enumerate(sent.logs)]
@@ -1020,7 +1019,13 @@ class Writer:
                 ("history", history, ("run_pk", "line", "data")),
                 ("events", events, ("run_pk", "line", "data")),
                 ("logs", logs, ("run_pk", "line", "data")),
-                ("history_columns", columns, ("run_pk", "stream", "key", "n", "data")),
+                (
+                    "series_chunks",
+                    [(pk, stream, key, 0, n, data) for pk, stream, key, n, data in columns],
+                    ("run_pk", "stream", "key", "first_line", "n", "data"),
+                ),
+                # The run table's values and columns are filled by the backfill (see simulate).
+                ("backfill", [(pk, []) for pk in inserted], ("run_pk", "streams")),
                 (
                     "gpu_usage",
                     usage,
@@ -1107,6 +1112,7 @@ async def simulate(
             stats = await Writer(conn, plan, files_dir, log).write()
     finally:
         await conn.close()
+    await backfill(database_url, report=log)
     stats["seconds"] = time.perf_counter() - started
     stats["orgs"] = len(plan.orgs)
     stats["users"] = len(plan.people)

@@ -73,10 +73,13 @@ class Browser:
         """The code of the sign-in waiting for approval (what the user reads in the terminal)."""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            grants = list(self.server.store.accounts._grants.values())
-            for grant in grants:
-                if grant.user is None and not grant.denied:
-                    return f"{grant.user_code[:4]}-{grant.user_code[4:]}"
+            pending = self.server.call(
+                self.server.store.db.fetchval(
+                    "SELECT user_code FROM device_grants WHERE user_pk IS NULL AND NOT denied"
+                )
+            )
+            if pending is not None:
+                return f"{pending[:4]}-{pending[4:]}"
             time.sleep(0.01)
         raise AssertionError("flock login started no sign-in")
 

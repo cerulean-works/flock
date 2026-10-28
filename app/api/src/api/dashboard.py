@@ -9,6 +9,7 @@ from fastapi.responses import Response, StreamingResponse
 
 from app.api.src.api.deps import ProjectDep, StoreDep, rest_user
 from app.api.src.api.runs import RunSelection
+from app.api.src.core import query
 from app.api.src.core.history import History
 from app.api.src.core.live import Hub
 from app.api.src.core.metric_defs import step_metrics
@@ -59,21 +60,22 @@ class Snapshot:
         max_points: int,
         system: bool = False,
     ) -> bytes:
-        table = project.table
-        rows = selection.select(project)
-        page_rows = rows[offset : offset + limit]
-        runs = [project.runs[r] for r in page_rows.tolist()]
-        names = table.column_names()
+        runs, total = await selection.select(store, project, offset, limit)
+        found = {column.name: column for column in await query.columns(store.db.pool, project.pk)}
+        names = list(found)  # sorted
         columns = [
-            *(c for c in cls.INFO_COLUMNS if c in table.columns),
+            *(c for c in cls.INFO_COLUMNS if c in found),
             *(c for c in names if c.startswith("config.")),
             *(c for c in names if c.startswith("summary.")),
         ]
+        values = await query.cells(store.db.pool, project.pk, [run.pk for run in runs], columns)
         # The metrics the page's runs logged: they are all a dashboard can plot. The project's
         # other runs (other pages, or filtered out) may log metrics none of these do, which
         # would otherwise make empty charts.
-        keys = sorted(set().union(*(run.keys["history"] for run in runs)))
-        system_keys = sorted(set().union(*(run.keys["system"] for run in runs))) if system else []
+        keys = sorted(set().union(*await store.run_keys(runs)))
+        system_keys = sorted(set().union(*await store.run_keys(runs, "system"))) if system else []
+        ordinals = await store.ordinals(project, runs)
+        runs_total, active = await store.run_counts(project)
         n_runs, n_keys = len(runs), len(keys) + len(system_keys)
 
         # ---- table cells: numeric columns as one f64 block, the rest as JSON
@@ -82,16 +84,14 @@ class Snapshot:
         text: dict[int, list[Any]] = {}
         kinds: list[str] = []
         for i, name in enumerate(columns):
-            column = table.columns.get(name)
-            if column is not None and column.obj is None:
+            column = found.get(name)
+            if column is not None and column.objs == 0:
                 numeric.append(i)
-                num_blocks.append(column.num[page_rows])
-            else:
-                text[i] = (
-                    [column.get(r) for r in page_rows.tolist()]
-                    if column is not None
-                    else [None] * n_runs
+                num_blocks.append(
+                    np.array([np.nan if v is None else v for v in values[name]], dtype=np.float64)
                 )
+            else:
+                text[i] = values[name]
             # Display type: state, time, duration, num, str, bool or json.
             if name == "state":
                 kinds.append("state")
@@ -99,7 +99,7 @@ class Snapshot:
                 kinds.append("time")
             elif name in cls.DURATION_COLUMNS:
                 kinds.append("duration")
-            elif column is None or column.n_obj == 0:
+            elif column is None or column.objs == 0:
                 kinds.append("num")
             else:
                 kinds.append({"string": "str", "bool": "bool"}.get(column.kind, "json"))
@@ -193,21 +193,21 @@ class Snapshot:
                 "entity": project.entity,
                 "project": project.name,
                 "now": time.time(),
-                "total": len(rows),
-                "runs_total": len(project.runs),
-                "active": len(project.active),
+                "total": total,
+                "runs_total": runs_total,
+                "active": active,
                 "offset": offset,
                 "runs": [
                     {
                         "id": run.name,
                         "name": run.display_name or run.name,
                         "state": run.state,
-                        "ordinal": run.row,
+                        "ordinal": ordinal,
                         "lines": run.history_line_count,
                         "system_lines": run.events_line_count,
                         "metric_defs": run.metric_defs,
                     }
-                    for run in runs
+                    for run, ordinal in zip(runs, ordinals, strict=True)
                 ],
                 "columns": [{"key": n, "kind": k} for n, k in zip(columns, kinds, strict=True)],
                 "metrics": keys,
@@ -316,12 +316,14 @@ async def stream(
 
     async def events():
         try:
-            watched = [project.by_name[n] for n in cursors if n in project.by_name]
+            found = await store.project_runs(project, cursors)
+            watched = [found[n] for n in cursors if n in found]
+            total, active = await store.run_counts(project)
             yield Hub.event(
                 "hello",
                 {
-                    "active": len(project.active),
-                    "total": len(project.runs),
+                    "active": active,
+                    "total": total,
                     "runs": {
                         run.name: {
                             "state": run.state,

@@ -55,11 +55,11 @@ class BucketCreate(BaseModel):
     name: str = Field(max_length=63)
 
 
-def key_org(store: Store, user: User, name: str | None) -> Org:
+async def key_org(store: Store, user: User, name: str | None) -> Org:
     """The org ``name`` (the user's default org when None), which the user must belong to."""
     if name is not None:
-        return visible_org(name, store, user)
-    org = store.accounts.default_org(user)
+        return await visible_org(name, store, user)
+    org = await store.accounts.default_org(user)
     if org is None:
         raise APIError(404, "you don't belong to any organization")
     return org
@@ -75,8 +75,8 @@ def via(request: Request) -> dict[str, Any]:
     return {"via": "ui", "session": session.pk}
 
 
-def key_info(store: Store, key: Key) -> dict[str, Any]:
-    org = store.orgs_by_pk.get(key.org)
+async def key_info(store: Store, key: Key) -> dict[str, Any]:
+    org = await store.org_by_pk(key.org)
     return {
         "id": key.pk,
         "name": key.name,
@@ -90,23 +90,23 @@ def key_info(store: Store, key: Key) -> dict[str, Any]:
         "api_key_id": key.api_key,
         "source": key.source,
         "created_at": key.created_at,
-        "expires_at": store.s3.expires_at(key),
+        "expires_at": await store.s3.expires_at(key),
         "last_used_at": key.last_used_at,
     }
 
 
-def with_secret(store: Store, key: Key, secret: str) -> dict[str, Any]:
+async def with_secret(store: Store, key: Key, secret: str) -> dict[str, Any]:
     config = store.s3.config() or {}
     return {
-        **key_info(store, key),
+        **(await key_info(store, key)),
         "secret_access_key": secret,
         "endpoint": config.get("endpoint"),
         "region": config.get("region"),
     }
 
 
-def bucket_info(store: Store, bucket: Bucket) -> dict[str, Any]:
-    creator = store.accounts.users.get(bucket.created_by) if bucket.created_by else None
+async def bucket_info(store: Store, bucket: Bucket) -> dict[str, Any]:
+    creator = await store.accounts.user(bucket.created_by)
     info = {
         "name": bucket.name,
         "upstream_name": bucket.upstream_name,
@@ -135,7 +135,7 @@ async def s3_credentials(
     key. 404 when this server has no S3.
     """
     store.s3.require()
-    org = key_org(store, user, body.org)
+    org = await key_org(store, user, body.org)
     session = request.state.session
     # The key is named after the machine of a CLI sign-in.
     name = (session.name if session.kind == "cli" else None) or "browser"
@@ -162,7 +162,7 @@ async def list_s3_keys(user: UserDep, store: StoreDep) -> Response:
     sign-ins (and, before D72, your wandb keys) were issued."""
     store.s3.require()
     keys = await store.s3.keys(user)
-    return JSONResponse({"keys": [key_info(store, key) for key in keys]})
+    return JSONResponse({"keys": [await key_info(store, key) for key in keys]})
 
 
 @router.post("/me/s3-keys", status_code=201)
@@ -171,9 +171,9 @@ async def create_s3_key(body: KeyCreate, user: SessionUserDep, store: StoreDep) 
     maximum key lifetime. Its secret is shown only now. Only a signed-in browser can create one,
     so a leaked CLI token can't mint keys that outlive the ephemeral lifetime."""
     store.s3.require()
-    org = key_org(store, user, body.org)
+    org = await key_org(store, user, body.org)
     key, secret = await store.s3.create_key(user, org, body.name, body.read_only, body.ttl)
-    return JSONResponse(with_secret(store, key, secret), status_code=201)
+    return JSONResponse(await with_secret(store, key, secret), status_code=201)
 
 
 @router.delete("/me/s3-keys/{key_id}", status_code=204)
@@ -195,7 +195,7 @@ async def list_buckets(org: OrgDep, store: StoreDep, deleting: bool = False) -> 
     buckets = await store.s3.buckets(org, deleting)
     return JSONResponse(
         {
-            "buckets": [bucket_info(store, bucket) for bucket in buckets],
+            "buckets": [await bucket_info(store, bucket) for bucket in buckets],
             "name_limit": store.s3.name_limit,
         }
     )
@@ -208,7 +208,7 @@ async def create_bucket(
     """Create a bucket (any member). Names are lowercase letters, digits, hyphens and dots,
     unique in the organization; see ``name_limit`` in the listing for their length."""
     bucket = await store.s3.create_bucket(org, body.name, user, via(request))
-    return JSONResponse(bucket_info(store, bucket), status_code=201)
+    return JSONResponse(await bucket_info(store, bucket), status_code=201)
 
 
 @router.get("/orgs/{org}/buckets/{name}")
@@ -217,10 +217,10 @@ async def get_bucket(org: OrgDep, name: str, store: StoreDep) -> Response:
     store.s3.require()
     bucket = await store.s3.bucket(org, name)
     events = await store.s3.events(org, name)
+    actors = await store.accounts.briefs(event["user"] for event in events)
     for event in events:
-        actor = store.accounts.users.get(event["user"]) if event["user"] else None
-        event["user"] = store.accounts.brief(actor) if actor is not None else None
-    return JSONResponse({**bucket_info(store, bucket), "events": events})
+        event["user"] = actors.get(event["user"]) if event["user"] else None
+    return JSONResponse({**await bucket_info(store, bucket), "events": events})
 
 
 @router.delete("/orgs/{org}/buckets/{name}", status_code=204)

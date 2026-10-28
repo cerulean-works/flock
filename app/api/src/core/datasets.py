@@ -1270,7 +1270,7 @@ class Datasets:
     ) -> None:
         """A move to the trash whose request died: if the dataset is still at its path, undo
         it (the copy and the row go); otherwise finish it."""
-        org = self.store.orgs_by_pk.get(org_pk)
+        org = await self.store.org_by_pk(org_pk)
         bucket = await self.store.s3.managed_bucket(org) if org is not None else None
         if bucket is None:
             await self._remove_prefix(trash, prefix)

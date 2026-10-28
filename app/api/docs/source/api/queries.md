@@ -109,7 +109,7 @@ A plain value means equality. An object of operators applies each of them.
 | `$in` | equals one of the listed values. |
 | `$nin` | equals none of them, including runs without a value. |
 | `$exists` | is present (`true`) or missing (`false`). |
-| `$regex` | is a string that the regular expression matches anywhere. The syntax is Python's `re`. |
+| `$regex` | is a string that the regular expression matches anywhere. PostgreSQL runs it, so a pattern must mean the same in Python's `re` and in PostgreSQL. Those that don't, such as `\b`, named groups and flags other than a leading `(?i)`, answer 400. |
 | `$contains` | is a string that contains the operand, or a list that contains it. |
 | `$not` | doesn't match the operator object, such as `{"$not": {"$in": ["adam", "sgd"]}}`. |
 

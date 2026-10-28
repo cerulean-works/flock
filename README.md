@@ -74,9 +74,9 @@ training and evaluation workflows here. Its docs start at
 [`app/web`](app/web/) is its dashboard.
 Training code keeps logging through the regular `wandb` SDK, pointed at our server with
 `wandb login --host`, while dashboards read loss curves and filtered run tables from a
-low-latency JSON API. It stores runs in PostgreSQL and keeps the data it serves in memory, so
-curves for dozens of runs load in a few milliseconds and filters over 10k-run projects return
-in single-digit milliseconds. It can also front our Ceph object storage with an S3 proxy
+low-latency JSON API. PostgreSQL is its only state, so it runs as any number of stateless
+replicas, and curves for dozens of runs and filters over 10k-run projects still return in tens
+of milliseconds. It can also front our Ceph object storage with an S3 proxy
 (`app/api/src/s3_proxy`): organizations create buckets in Flock, and each person reaches them
 with S3 keys of their own instead of the global key. See [Flock docs](app/api/README.md) for setup,
 configuration, the API and the design.

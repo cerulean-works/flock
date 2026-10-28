@@ -77,7 +77,7 @@ class Writer:
 
 
 def upstream_name(flock: S3Flock, org: str = "flock") -> str:
-    return f"{flock.bucket_prefix}{flock.store.orgs[org].pk:05d}-flock-datasets"
+    return f"{flock.bucket_prefix}{flock.call(flock.store.org(org)).pk:05d}-flock-datasets"
 
 
 def keys(flock: S3Flock, bucket: str, prefix: str = "") -> list[str]:
@@ -174,7 +174,7 @@ def test_startup_creates_missing_buckets_and_adopts_existing_ones(
     api = plain.client()
     assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
     prefix = s3_server.bucket_prefix()
-    pk = plain.store.orgs["flock"].pk
+    pk = plain.call(plain.store.org("flock")).pk
     old = f"{prefix}{pk:05d}-flock-datasets"
     s3_server.client().create_bucket(Bucket=old)
     s3_server.client().put_object(Bucket=old, Key="mine.txt", Body=b"kept")
@@ -586,7 +586,7 @@ def test_delete_moves_to_the_trash_and_restores(
     assert get(api, f"{DATASETS}/at", path=path).status == 404
 
     trash = datasets(flock).trash
-    prefix = f"{flock.store.orgs['flock'].pk:05d}/{entry['id']}/"
+    prefix = f"{flock.call(flock.store.org('flock')).pk:05d}/{entry['id']}/"
     assert keys(flock, trash, prefix) == [prefix + k.removeprefix(f"{path}/") for k in before]
     (listed,) = get(api, f"{DATASETS}/trash").json()["entries"]
     assert listed["id"] == entry["id"] and listed["moved_at"] is not None
@@ -665,7 +665,7 @@ def test_delete_for_good_and_who_may(flock: S3Flock, writer: Writer):
     assert api.post(f"/api/v1/orgs/lab/datasets/trash/{pk}/restore", {}).status == 404
 
     assert api.delete(f"{DATASETS}/trash/{pk}").status == 204
-    prefix = f"{flock.store.orgs['flock'].pk:05d}/{pk}/"
+    prefix = f"{flock.call(flock.store.org('flock')).pk:05d}/{pk}/"
     assert keys(flock, datasets(flock).trash, prefix) == []
     assert get(api, f"{DATASETS}/trash").json()["entries"] == []
     assert api.delete(f"{DATASETS}/trash/{pk}").status == 404
@@ -718,7 +718,7 @@ def test_sweep_removes_entries_after_14_days(flock: S3Flock, writer: Writer):
     )
     done = flock.call(datasets(flock).sweep())
     assert done["expired"] == 1
-    org = flock.store.orgs["flock"].pk
+    org = flock.call(flock.store.org("flock")).pk
     trash = datasets(flock).trash
     assert keys(flock, trash, f"{org:05d}/{old}/") == []
     assert keys(flock, trash, f"{org:05d}/{new}/") != []
@@ -728,7 +728,7 @@ def test_sweep_removes_entries_after_14_days(flock: S3Flock, writer: Writer):
 def test_sweep_settles_stuck_moves_and_orphans(
     flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
 ):
-    org = flock.store.orgs["flock"].pk
+    org = flock.call(flock.store.org("flock")).pk
     bucket = upstream_name(flock)
     trash = datasets(flock).trash
     flock.call(datasets(flock)._ensure_trash())
@@ -780,7 +780,7 @@ def test_deleting_an_org_empties_its_trash(flock: S3Flock, wait_for):
     assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
     Writer(flock, "lab").write("d", table(0, 1))
     pk = api.post("/api/v1/orgs/lab/datasets/delete", {"path": "d"}).json()["id"]
-    org = flock.store.orgs["lab"].pk
+    org = flock.call(flock.store.org("lab")).pk
     trash = datasets(flock).trash
     assert keys(flock, trash, f"{org:05d}/") != []
     assert api.delete("/api/v1/orgs/lab").status == 204

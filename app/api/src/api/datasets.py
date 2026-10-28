@@ -52,8 +52,8 @@ class TagBody(PathBody):
     move: bool = Field(False, description="move the tag if it's on another version")
 
 
-def entry_info(store: Store, entry: dict[str, Any]) -> dict[str, Any]:
-    user = store.accounts.users.get(entry["deleted_by"]) if entry["deleted_by"] else None
+async def entry_info(store: Store, entry: dict[str, Any]) -> dict[str, Any]:
+    user = await store.accounts.user(entry["deleted_by"])
     return {**entry, "deleted_by": store.accounts.brief(user) if user is not None else None}
 
 
@@ -133,14 +133,14 @@ async def delete(org: OrgDep, body: PathBody, user: UserDep, store: StoreDep) ->
         entry = await datasets(store).delete(org, body.path, user)
     except TooLarge as e:
         raise APIError(409, e.message, command=e.command) from None
-    return JSONResponse(entry_info(store, entry))
+    return JSONResponse(await entry_info(store, entry))
 
 
 @router.get("/trash")
 async def trash(org: AdminOrgDep, store: StoreDep) -> Response:
     """The org's deleted datasets, newest first (admins)."""
     entries = await datasets(store).trash_entries(org)
-    return JSONResponse({"entries": [entry_info(store, e) for e in entries]})
+    return JSONResponse({"entries": [await entry_info(store, e) for e in entries]})
 
 
 @router.post("/trash/{pk}/restore")

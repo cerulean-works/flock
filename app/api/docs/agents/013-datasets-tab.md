@@ -92,7 +92,7 @@ The numbering continues from 012.
   | `/datasets/{org}/{path…}` | a folder, or a dataset if the folder is one (D88) |
 
   Whether a path is a folder or a dataset is decided by the API (D87), so URLs need no marker.
-- **`datasets` is reserved** in `RESERVED` (`src/lib/utils.ts`), and migration 0013 refuses to
+- **`datasets` is reserved** in `RESERVED` (`src/lib/utils.ts`), and migration 0014 refuses to
   run if an org is named `datasets`, as 0012 does for `storage`.
 - **Breadcrumbs** appear once you're inside a folder or dataset, as on the Storage tab: Datasets ›
   org › folders › dataset. Each one is a link. The root page has none.
@@ -363,7 +363,7 @@ One PR, `feat/datasets-tab`, from main.
 
 ### Step 1. Migration
 
-`0013_datasets.sql`:
+`0014_datasets.sql`:
 - `s3_buckets.managed text CHECK (managed IN ('datasets'))`, with a unique index on
   `(org_pk, managed)` for live managed buckets;
 - the `dataset_trash` table (D93);

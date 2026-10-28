@@ -46,23 +46,23 @@ async def list_projects(
     """Projects of the user's organizations with their run counts, including empty ones."""
     projects = [
         p
-        for p in store.projects.values()
+        for p in await store.projects()
         if (entity is None or p.entity == entity) and store.accounts.role(user, p.org)
     ]
-    return JSONResponse({"projects": [p.info() for p in projects]})
+    return JSONResponse({"projects": await store.project_infos(projects)})
 
 
 @router.post("/projects", status_code=201)
 async def create_project(body: ProjectCreate, store: StoreDep, user: UserDep) -> Response:
     """Create an empty project in an org of the user (``wandb.init`` also creates projects)."""
-    visible_org(body.entity, store, user)
+    await visible_org(body.entity, store, user)
     project = await store.create_project(body.entity, body.name, body.description)
-    return JSONResponse(project.info(), status_code=201)
+    return JSONResponse(await store.project_info(project), status_code=201)
 
 
 @router.get("/projects/{entity}/{project}")
-async def get_project(project: ProjectDep) -> Response:
-    return JSONResponse(project.info())
+async def get_project(project: ProjectDep, store: StoreDep) -> Response:
+    return JSONResponse(await store.project_info(project))
 
 
 @router.patch("/projects/{entity}/{project}")
@@ -76,10 +76,10 @@ async def update_project(
     """
     fields = body.model_dump(include=body.model_fields_set)
     try:
-        await store.update_project(project, fields)
+        project = await store.update_project(project, fields)
     except NotFound as exc:
         raise APIError(404, str(exc)) from exc
-    return JSONResponse(project.info())
+    return JSONResponse(await store.project_info(project))
 
 
 @router.delete("/projects/{entity}/{project}", status_code=204)

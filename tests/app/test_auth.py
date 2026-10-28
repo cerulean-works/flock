@@ -83,7 +83,7 @@ def test_setting_up_before_any_account_exists(make_flock):
     assert me.status == 200, me.body
     assert me.json()["default_org"] == "cerulean"
     assert me.json()["orgs"] == [{"name": "cerulean", "display_name": "cerulean", "role": "admin"}]
-    assert list(server.store.orgs) == ["cerulean"]
+    assert [org.name for org in server.call(server.store.orgs())] == ["cerulean"]
     assert login(server, "root@x.io", "rootroot").status == 200
 
 

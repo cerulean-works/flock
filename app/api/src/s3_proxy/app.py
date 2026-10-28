@@ -25,6 +25,7 @@ from starlette.requests import ClientDisconnect, Request
 from starlette.responses import Response, StreamingResponse
 from starlette.routing import Route
 
+from app.api.src.core.bus import Bus
 from app.api.src.s3_proxy import chunked, s3xml, sigv4
 from app.api.src.s3_proxy.auth import Bucket, Caller, Directory
 from app.api.src.s3_proxy.sigv4 import SigV4Error
@@ -141,6 +142,7 @@ class Proxy:
         self.upstream = Upstream(settings, max_connections=512)
         self._pool: asyncpg.Pool | None = None
         self._directory: Directory | None = None
+        self.bus = Bus(settings.listen_database_url or settings.database_url)
         web = urlsplit(settings.web_url or "")
         self.web_origin = f"{web.scheme}://{web.netloc}" if web.scheme and web.netloc else None
 
@@ -153,11 +155,14 @@ class Proxy:
         self._pool = await asyncpg.create_pool(
             self.settings.database_url, min_size=1, max_size=self.settings.pool_size
         )
-        self._directory = Directory(self._pool, self.settings.database_url)
+        self._directory = Directory(self._pool, self.bus)
         await self._directory.start()
+        # Serve as soon as the bus listens (or failed to; the directory is uncached until then).
+        await self.bus.start()
 
     async def close(self) -> None:
         await self.upstream.close()
+        await self.bus.close()
         if self._directory is not None:
             await self._directory.close()
         if self._pool is not None:
