@@ -105,7 +105,7 @@ def test_rename(make_flock, events):
     assert restarted.get(f"{PROJECTS}/flock/new").json()["description"] == "moved"
 
 
-def test_delete_project_removes_everything(make_flock, events):
+def test_delete_project_removes_everything(make_flock, events, wait_for):
     server = make_flock()
     store = server.store
     api = server.client()
@@ -130,7 +130,8 @@ def test_delete_project_removes_everything(make_flock, events):
     assert api.get(f"{PROJECTS}/flock/gone").status == 404
     assert api.get(f"{PROJECTS}/flock/gone/runs/r1").status == 404
     server.call(store.flush())  # the purge removes the rows and files in the background (D80)
-    assert not (server.files_dir / str(run.pk)).exists()
+    # Another background purge can already own the rows when flush finds no work.
+    wait_for(lambda: not (server.files_dir / str(run.pk)).exists())
     for table in ("runs", "history", "events", "series_chunks", "run_values", "run_files"):
         column = "pk" if table == "runs" else "run_pk"
         count = server.call(

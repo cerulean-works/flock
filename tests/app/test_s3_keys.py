@@ -253,9 +253,14 @@ def test_a_password_reset_ends_cli_keys(flock):
 
 def test_the_sweep_deletes_expired_keys(flock):
     alice = flock.add_user("alice@lab.test")
-    short = flock.credentials(alice.api, ttl=0.5)
+    short = flock.credentials(alice.api, ttl=60)
     kept = flock.credentials(alice.api)
-    time.sleep(0.6)
+    flock.call(
+        flock.store.db.execute(
+            "UPDATE s3_keys SET expires_at = now() - interval '1 second' WHERE access_key_id = $1",
+            short["access_key_id"],
+        )
+    )
     assert [k["access_key_id"] for k in alice.api.get(KEYS).json()["keys"]] == [
         kept["access_key_id"]
     ]

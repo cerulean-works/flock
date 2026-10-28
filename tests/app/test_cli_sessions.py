@@ -41,7 +41,7 @@ def test_a_cli_token_authenticates_rest_and_the_wandb_protocol(flock):
     assert flock.client(token="flock_cli_" + "x" * 43).get(ME).status == 401
 
 
-def test_listing_and_revoking_cli_sessions(flock):
+def test_listing_and_revoking_cli_sessions(flock, notification):
     alice = flock.add_user("alice@lab.test")
     bob = flock.add_user("bob@lab.test")
     laptop = flock.client(token=cli_login(flock, browser(flock, alice), "laptop"))
@@ -63,16 +63,18 @@ def test_listing_and_revoking_cli_sessions(flock):
     assert alice.api.delete(f"{SESSIONS}/{by_name['laptop']['id'] + 2}").status == 404
     assert bob.api.delete(f"{SESSIONS}/{by_name['laptop']['id']}").status == 404
 
-    assert browser(flock, alice).delete(f"{SESSIONS}/{by_name['laptop']['id']}").status == 204
+    with notification(flock.store.bus, flock.loop, "flock_auth", "sessions"):
+        assert browser(flock, alice).delete(f"{SESSIONS}/{by_name['laptop']['id']}").status == 204
     assert laptop.get(ME).status == 401
     assert node.get(ME).status == 200
     assert [s["name"] for s in alice.api.get(SESSIONS).json()["sessions"]] == ["tests", "node-7"]
 
 
-def test_logging_out_with_a_cli_token_ends_its_session(flock):
+def test_logging_out_with_a_cli_token_ends_its_session(flock, notification):
     alice = flock.add_user("alice@lab.test")
     cli = flock.client(token=cli_login(flock, browser(flock, alice)))
-    assert cli.post("/api/v1/auth/logout", None).status == 204
+    with notification(flock.store.bus, flock.loop, "flock_auth", "sessions"):
+        assert cli.post("/api/v1/auth/logout", None).status == 204
     assert cli.get(ME).status == 401
     assert [s["name"] for s in alice.api.get(SESSIONS).json()["sessions"]] == ["tests"]
 
@@ -107,15 +109,16 @@ def test_deleting_the_user_ends_cli_sessions(flock):
     assert left == 0
 
 
-def test_cli_sessions_expire_when_idle(make_flock):
+def test_cli_sessions_expire_when_idle(make_flock, clock):
     server = make_flock(cli_session_ttl=1.0)
     alice = server.add_user("alice@lab.test")
     cli = server.client(token=cli_login(server, browser(server, alice)))
-    time.sleep(0.6)
+    wall = clock("app.api.src.core.accounts")
+    wall.advance(0.6)
     assert cli.get(ME).status == 200  # each use extends the session
-    time.sleep(0.6)
+    wall.advance(0.6)
     assert cli.get(ME).status == 200
-    time.sleep(1.1)
+    wall.advance(1.1)
     assert cli.get(ME).status == 401
     assert browser(server, alice).get(SESSIONS).json() == {"sessions": []}  # add_user's too
 
@@ -129,7 +132,7 @@ def test_use_is_written_at_most_once_an_interval(flock, wait_for):
     assert (created["kind"], created["name"], created["last_used_at"]) == ("cli", "laptop", None)
 
     assert cli.get(ME).status == 200
-    time.sleep(0.2)
+    flock.call(flock.store.accounts.flush())
     assert db_session(flock, pk)["last_used_at"] is None  # within the hour
 
     flock.store.accounts.CLI_WRITE_INTERVAL = 0.0

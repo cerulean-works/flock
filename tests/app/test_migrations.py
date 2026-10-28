@@ -344,7 +344,9 @@ def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(postgres, make_floc
     metadata.parent.mkdir(parents=True)
     metadata.write_text(json.dumps({"gpu": "NVIDIA H100 80GB HBM3", "gpu_count": 2}))
 
-    api = make_flock(database_url=url).client()
+    server = make_flock(database_url=url)
+    server.call(server.store.flush())  # startup GPU detection runs in the background
+    api = server.client()
     run = api.get("/api/v1/projects/flock/p/runs/r1").json()
     assert (run["gpu_type"], run["gpu_count"], run["runtime"]) == ("H100", 2, 7200.0)
     api.patch("/api/v1/orgs/flock/billing", {"rates": {"H100": 10}})

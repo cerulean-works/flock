@@ -584,8 +584,9 @@ class ProxyServer:
         sock = sock or _listen()
         self.port = sock.getsockname()[1]
         self.url = f"http://127.0.0.1:{self.port}"
+        self.app = create_proxy_app(settings)
         config = uvicorn.Config(
-            create_proxy_app(settings),
+            self.app,
             log_level="warning",
             access_log=False,
             http="httptools",
@@ -603,6 +604,12 @@ class ProxyServer:
             if time.monotonic() > deadline or not self._thread.is_alive():
                 raise RuntimeError("S3 proxy failed to start")
             time.sleep(0.01)
+
+    def flush(self) -> None:
+        """Wait for the proxy's pending last-used writes on its own event loop."""
+        asyncio.run_coroutine_threadsafe(self.app.state.proxy._directory.close(), self.loop).result(
+            timeout=30
+        )
 
     def stop(self) -> None:
         self._server.should_exit = True
@@ -725,11 +732,11 @@ class Flocks:
 class WandbClient:
     """Runs real ``wandb`` SDK scripts / CLI commands against a flock in subprocesses."""
 
-    # Prepended to every script: flush the file stream quickly so tests don't wait on the SDK's
-    # default multi-second transmit interval.
+    # wandb-core truncates fractional transmit intervals to integer seconds: 0.1 becomes
+    # zero and falls back to the 15-second default. One second also exercises live delivery.
     PREAMBLE = """
 import wandb
-SETTINGS = wandb.Settings(x_file_stream_transmit_interval=0.1)
+SETTINGS = wandb.Settings(x_file_stream_transmit_interval=1)
 """
 
     def __init__(self, server: FlockServer, workdir: Path, api_key: str | None = None) -> None:

@@ -19,7 +19,8 @@ module-name = ["flock.cli", "flock.eval", "flock.training", "app.api"]
 wheel-exclude = ["pyproject.toml"]
 
 [tool.uv]
-default-groups = ["dev", "components"]
+default-groups = ["dev", "components", "gpu"]
+conflicts = [[{ group = "cpu-tests" }, { group = "gpu" }]]
 
 [tool.uv.workspace]
 members = ["flock/cli", "flock/eval", "flock/training", "app/api", "tests"]
@@ -29,6 +30,12 @@ flock = { workspace = true }
 flock-cli = { workspace = true }
 flock-eval = { workspace = true }
 flock-training = { workspace = true }
+torch = { index = "pytorch-cpu", group = "cpu-tests", marker = "sys_platform == 'linux'" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.ruff]
 target-version = "py314"
@@ -48,7 +55,7 @@ testpaths = ["tests"]
 markers = [
     "latency: tests that measure app response latency",
 ]
-addopts = ["--import-mode=importlib", "--strict-markers", "-m", "not latency"]
+addopts = ["--import-mode=importlib", "--strict-markers", "-m", "not latency", "-n", "auto", "--dist=loadgroup"]
 
 [dependency-groups]
 components = [
@@ -58,6 +65,9 @@ components = [
 ]
 dev = [
     "pytest>=9.1.1",
+    "pytest-xdist>=3.8.0",
     "ruff>=0.17.1",
     "ty>=0.0.89",
 ]
+cpu-tests = ["torch==2.14.1"]
+gpu = ["torch>=2.14.1"]

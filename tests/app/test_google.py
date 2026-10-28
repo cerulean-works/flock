@@ -41,7 +41,10 @@ class FakeGoogle:
                 pass
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.thread = threading.Thread(
+            target=lambda: self.server.serve_forever(poll_interval=0.01), daemon=True
+        )
+        self.thread.start()
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}/token"
 
     def sign_in(self, flock, email: str, sub: str = "", invite: str | None = None, **claims):
@@ -97,6 +100,9 @@ def google(monkeypatch) -> Iterator[FakeGoogle]:
     monkeypatch.setattr(Google, "TOKEN_URL", fake.url)
     yield fake
     fake.server.shutdown()
+    fake.server.server_close()
+    fake.thread.join(timeout=5)
+    assert not fake.thread.is_alive()
 
 
 GOOGLE_SETTINGS = {

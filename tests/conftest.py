@@ -1,13 +1,91 @@
 """Fixtures shared by the app tests, the CLI tests and the S3 tests."""
 
+import importlib
 import itertools
 import os
 import secrets
 import socket
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
 from typing import Any
 
 import pytest
+
+
+def pytest_xdist_auto_num_workers() -> int:
+    """Bound local resource use; explicit ``-n N`` still overrides auto detection."""
+    available = int(os.environ.get("PYTEST_XDIST_AUTO_NUM_WORKERS", os.process_cpu_count() or 1))
+    return min(4, max(1, available))
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Keep module-scoped S3 environments together, without serializing SDK tests."""
+    for item in items:
+        if "make_module_flock" in getattr(item, "fixturenames", ()):
+            item.add_marker(
+                pytest.mark.xdist_group(str(item.path.relative_to(item.config.rootpath)))
+            )
+
+
+class Clock:
+    """A module-local wall clock; event loops and database clocks keep running normally."""
+
+    def __init__(self) -> None:
+        self.now = time.time()
+
+    def time(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(time, name)
+
+
+@pytest.fixture
+def clock(monkeypatch: pytest.MonkeyPatch) -> Callable[[str], Clock]:
+    def bind(module: str) -> Clock:
+        clock = Clock()
+        monkeypatch.setattr(importlib.import_module(module), "time", clock)
+        return clock
+
+    return bind
+
+
+@pytest.fixture
+def notification():
+    """Observe a real bus notification before checking another process's cache."""
+    import asyncio
+    import threading
+    from contextlib import contextmanager
+
+    @contextmanager
+    def watch(bus, loop, channel: str, payload: str):
+        received = threading.Event()
+
+        def notified(value: str) -> None:
+            if value == payload:
+                received.set()
+
+        def on_loop(coro):
+            return asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=10)
+
+        async def listen():
+            bus.listen(channel, notified)
+
+        async def unlisten():
+            bus._channels[channel].remove(notified)
+
+        on_loop(listen())
+        try:
+            yield
+            assert received.wait(10), f"received no {channel} notification for {payload}"
+        finally:
+            on_loop(unlisten())
+
+    return watch
 
 
 @pytest.fixture(scope="session")

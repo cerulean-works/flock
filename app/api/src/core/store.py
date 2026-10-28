@@ -418,7 +418,9 @@ class Store:
         await self.avatars.flush()
         await self.accounts.flush()
         while self._tasks:
-            await asyncio.gather(*list(self._tasks), return_exceptions=True)
+            tasks = list(self._tasks)
+            await asyncio.gather(*tasks, return_exceptions=True)
+            self._tasks.difference_update(tasks)
         await self.bus.close()
         await self.relay.close()
         await self.db.close()
@@ -2153,6 +2155,8 @@ class Store:
     async def flush(self) -> None:
         """Wait for background tasks, and do all background work there is (tests)."""
         while self._tasks:
-            await asyncio.gather(*list(self._tasks), return_exceptions=True)
+            tasks = list(self._tasks)
+            await asyncio.gather(*tasks, return_exceptions=True)
+            self._tasks.difference_update(tasks)
         await self.accounts.flush()
         await self.work(sweep_files=True)

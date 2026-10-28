@@ -1,5 +1,3 @@
-import time
-
 from tests.app.utils import history_rows
 
 ORGS = "/api/v1/orgs"
@@ -133,7 +131,7 @@ def test_only_org_admins_change_display_names(flock):
     ]
 
 
-def test_delete_org(make_flock):
+def test_delete_org(make_flock, notification, wait_for):
     server = make_flock()
     store = server.store
     api = server.client()
@@ -148,9 +146,11 @@ def test_delete_org(make_flock):
     refused = api.delete(f"{ORGS}/lab")
     assert refused.status == 409
     assert refused.json()["ids"] == ["p/a1"]
-    assert api.delete(f"{ORGS}/lab", force="true").status == 204
+    with notification(store.bus, server.loop, "flock_auth", "orgs"):
+        assert api.delete(f"{ORGS}/lab", force="true").status == 204
     server.call(store.flush())  # the purge removes the rows and files in the background (D80)
-    assert not (server.files_dir / str(run.pk)).exists()
+    # Another background purge can already own the rows when flush finds no work.
+    wait_for(lambda: not (server.files_dir / str(run.pk)).exists())
 
     def check(server) -> None:
         client = server.client()
@@ -226,10 +226,12 @@ def test_invites(make_flock):
 
 
 def test_invites_expire(make_flock):
-    server = make_flock(invite_ttl=0.5)
+    server = make_flock(invite_ttl=60)
     token = server.client().post(f"{ORGS}/flock/invites", {"email": "x@lab.test"}).json()["token"]
     assert server.anonymous().get(f"/api/v1/invites/{token}").status == 200
-    time.sleep(1)
+    server.call(
+        server.store.db.execute("UPDATE invites SET expires_at = now() - interval '1 second'")
+    )
     assert server.anonymous().get(f"/api/v1/invites/{token}").status == 404
 
 

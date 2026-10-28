@@ -15,21 +15,23 @@ jobs:
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           version: "0.12.17"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Setup Python
         run: uv python install
 
       - name: Install Dependencies
-        run: uv sync --all-extras --all-packages --dev --frozen
+        run: uv sync --all-extras --all-packages --dev --no-group gpu --group cpu-tests --frozen
 
       - name: Run ruff's linter
-        run: uv run ruff check .
+        run: uv run --no-sync ruff check .
 
       - name: Run ruff's format checker
-        run: uv run ruff format --check .
+        run: uv run --no-sync ruff format --check .
 
       - name: Run ty
-        run: uv run ty check
+        run: uv run --no-sync ty check
 
   Tests:
     name: Run pytest suite
@@ -42,12 +44,14 @@ jobs:
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           version: "0.12.17"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Setup Python
         run: uv python install
 
       - name: Install Dependencies
-        run: uv sync --all-extras --all-packages --dev --frozen
+        run: uv sync --all-extras --all-packages --dev --no-group gpu --group cpu-tests --frozen
 
       - name: Run tests
-        run: uv run python -m pytest -q tests
+        run: uv run --no-sync python -m pytest -q tests -n 6
