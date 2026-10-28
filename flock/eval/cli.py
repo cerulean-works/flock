@@ -12,7 +12,7 @@ from flock.eval.run import EvalConfig, evaluate
 from flock.eval.tasks import SUITES, TASKS
 
 
-@click.group(name="eval")
+@click.group()
 def main() -> None:
     """Evaluate language models."""
 
