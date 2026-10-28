@@ -69,10 +69,11 @@ def test_listing_and_revoking_cli_sessions(flock):
     assert [s["name"] for s in alice.api.get(SESSIONS).json()["sessions"]] == ["tests", "node-7"]
 
 
-def test_logging_out_with_a_cli_token_ends_its_session(flock):
+def test_logging_out_with_a_cli_token_ends_its_session(flock, notification):
     alice = flock.add_user("alice@lab.test")
     cli = flock.client(token=cli_login(flock, browser(flock, alice)))
-    assert cli.post("/api/v1/auth/logout", None).status == 204
+    with notification(flock.store.bus, flock.loop, "flock_auth", "sessions"):
+        assert cli.post("/api/v1/auth/logout", None).status == 204
     assert cli.get(ME).status == 401
     assert [s["name"] for s in alice.api.get(SESSIONS).json()["sessions"]] == ["tests"]
 
