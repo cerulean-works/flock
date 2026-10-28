@@ -117,7 +117,7 @@ Starting a sign-in answers:
 - **Errors.** `authorization_pending` (not decided yet), `slow_down`, `access_denied` (denied) and `expired_token` (expired, already used, or unknown). Each has an `error_description`.
 - **The token.** Once approved, the poll answers `{"access_token": "flock_cli_...", "token_type": "bearer", "user": {...}}` with the [user object](#user-object). The codes then stop working.
 - **Approving.** The two routes with a user code take an access token only: CLI tokens get 403, so a leaked one can't sign in new machines. A wrong or used code answers 404. After 10 wrong codes in 10 minutes, a user gets 429 for a while.
-- **Limits.** Pending sign-ins live in memory: a restart forgets them, and polls then answer `expired_token`. At most 1000 can wait at once. Starting another answers 503.
+- **Limits.** Pending sign-ins are stored in PostgreSQL, so they survive a restart and any replica answers their polls. At most 1000 can wait at once. Starting another answers 503.
 
 ## Your account[[me]]
 

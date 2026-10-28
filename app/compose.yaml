@@ -22,6 +22,9 @@ services:
       dockerfile: app/api/Dockerfile
     environment:
       FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
+      FLOCK_LISTEN_DATABASE_URL: ${FLOCK_LISTEN_DATABASE_URL:-}
+      FLOCK_FILES_BACKEND: ${FLOCK_FILES_BACKEND:-}
+      FLOCK_FILES_BUCKET: ${FLOCK_FILES_BUCKET:-}
       FLOCK_WEB_URL: ${FLOCK_WEB_URL:-http://localhost:3000}
       FLOCK_API_PUBLIC_URL: ${FLOCK_API_PUBLIC_URL:-http://localhost:8080}
       FLOCK_MIGRATE_ON_STARTUP: ${FLOCK_MIGRATE_ON_STARTUP:-}
@@ -38,7 +41,6 @@ services:
       FLOCK_GRAVATAR: ${FLOCK_GRAVATAR:-}
       FLOCK_GRAVATAR_URL: ${FLOCK_GRAVATAR_URL:-}
       FLOCK_WANDB_BASE_URL: ${FLOCK_WANDB_BASE_URL:-}
-      FLOCK_HISTORY_CACHE_POINTS: ${FLOCK_HISTORY_CACHE_POINTS:-}
       FLOCK_CRASH_TIMEOUT: ${FLOCK_CRASH_TIMEOUT:-}
       FLOCK_S3_UPSTREAM_ENDPOINT: ${FLOCK_S3_UPSTREAM_ENDPOINT:-}
       FLOCK_S3_UPSTREAM_REGION: ${FLOCK_S3_UPSTREAM_REGION:-}
@@ -49,13 +51,15 @@ services:
       FLOCK_POOL_SIZE: ${FLOCK_POOL_SIZE:-}
       FLOCK_CORS_ORIGINS: ${FLOCK_CORS_ORIGINS:-}
       FLOCK_LOG_LEVEL: ${FLOCK_LOG_LEVEL:-}
+    # Run files, with the default local files backend. With FLOCK_FILES_BACKEND=s3 they go to
+    # FLOCK_FILES_BUCKET instead and the volume only holds files not migrated yet.
     volumes:
       - files:/data/files
     depends_on:
       postgres:
         condition: service_healthy
-    # Exactly one replica: the server keeps its working set in memory and holds a database
-    # lock, so a second instance would refuse to start.
+    # One replica by default. Replicas keep no state (012), so more can run against the same
+    # database, given a files volume they all mount or the s3 files backend.
     restart: unless-stopped
     stop_grace_period: 15s
 
@@ -67,6 +71,7 @@ services:
     command: ["uvicorn", "app.api.src.s3_proxy.app:app", "--host", "0.0.0.0", "--port", "8090"]
     environment:
       FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
+      FLOCK_LISTEN_DATABASE_URL: ${FLOCK_LISTEN_DATABASE_URL:-}
       FLOCK_S3_UPSTREAM_ENDPOINT: ${FLOCK_S3_UPSTREAM_ENDPOINT:-}
       FLOCK_S3_UPSTREAM_REGION: ${FLOCK_S3_UPSTREAM_REGION:-}
       FLOCK_S3_UPSTREAM_ACCESS_KEY_ID: ${FLOCK_S3_UPSTREAM_ACCESS_KEY_ID:-}

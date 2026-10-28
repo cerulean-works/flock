@@ -43,7 +43,7 @@ def image_type(data: bytes) -> str | None:
 class Avatars:
     """Avatars of ``store.accounts`` users and ``store`` orgs (``store.avatars``).
 
-    Users and orgs keep their avatar's digest in memory; image bytes are read from the
+    Users and orgs keep their avatar's digest in their rows; image bytes are read from the
     database when served (browsers cache them for good: a digest's bytes never change).
     """
 
@@ -53,7 +53,6 @@ class Avatars:
 
     def __init__(self, store: Store) -> None:
         self.store = store
-        self._lock = asyncio.Lock()  # serializes changes, so cleanup never races a new use
         self._tasks: set[asyncio.Task] = set()
 
     @staticmethod
@@ -80,6 +79,12 @@ class Avatars:
 
     # ------------------------------------------------------------------ changes
 
+    @staticmethod
+    async def _lock(conn: asyncpg.Connection) -> None:
+        """Serialize avatar changes on every replica (D80), so a cleanup never races a new use
+        of the same image."""
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended('avatars', 0))")
+
     async def _store(self, conn: asyncpg.Connection, data: bytes | None) -> bytes | None:
         if data is None:
             return None
@@ -101,15 +106,18 @@ class Avatars:
             await conn.execute(
                 "DELETE FROM avatars WHERE digest = $1 "
                 "AND NOT EXISTS (SELECT 1 FROM users WHERE avatar = $1) "
-                "AND NOT EXISTS (SELECT 1 FROM orgs WHERE avatar = $1)",
+                "AND NOT EXISTS (SELECT 1 FROM orgs WHERE avatar = $1 AND deleted_at IS NULL)",
                 digest,
             )
 
     async def set_user(self, user: User, data: bytes | None, source: str = "upload") -> None:
         """Set (``data``: image bytes) or remove (None) a user's avatar."""
-        async with self._lock, self.store.db.pool.acquire() as conn, conn.transaction():
-            if user.pk not in self.store.accounts.users:
+        async with self.store.db.pool.acquire() as conn, conn.transaction():
+            await self._lock(conn)
+            found = await conn.fetchrow("SELECT avatar FROM users WHERE pk = $1", user.pk)
+            if found is None:
                 return  # deleted meanwhile
+            user.avatar = bytes(found[0]) if found[0] is not None else None
             digest = await self._store(conn, data)
             source_value = source if digest is not None else None
             await conn.execute(
@@ -123,9 +131,14 @@ class Avatars:
                 await self._release(conn, old)
 
     async def set_org(self, org: Org, data: bytes | None) -> None:
-        async with self._lock, self.store.db.pool.acquire() as conn, conn.transaction():
-            if org.deleted:
-                return
+        async with self.store.db.pool.acquire() as conn, conn.transaction():
+            await self._lock(conn)
+            found = await conn.fetchrow(
+                "SELECT avatar FROM orgs WHERE pk = $1 AND deleted_at IS NULL", org.pk
+            )
+            if found is None:
+                return  # deleted meanwhile
+            org.avatar = bytes(found[0]) if found[0] is not None else None
             digest = await self._store(conn, data)
             await conn.execute("UPDATE orgs SET avatar = $2 WHERE pk = $1", org.pk, digest)
             old, org.avatar = org.avatar, digest
@@ -135,7 +148,8 @@ class Avatars:
     async def release(self, digest: bytes | None) -> None:
         """Clean up after the user or org using ``digest`` was deleted."""
         if digest is not None:
-            async with self._lock, self.store.db.pool.acquire() as conn:
+            async with self.store.db.pool.acquire() as conn, conn.transaction():
+                await self._lock(conn)
                 await self._release(conn, digest)
 
     # ------------------------------------------------------------------ Gravatar

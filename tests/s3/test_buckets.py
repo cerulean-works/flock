@@ -31,7 +31,7 @@ def test_creating_a_bucket(env: S3Env):
     created = cli.post(BUCKETS.format(org="flock"), {"name": name})
     assert created.status == 201, created.body
     bucket = created.json()
-    pk = env.flock.store.orgs["flock"].pk
+    pk = env.flock.call(env.flock.store.org("flock")).pk
     upstream = f"{env.flock.bucket_prefix}{pk:05d}-{name}"
     assert bucket["upstream_name"] == upstream
     assert bucket["created_by"]["email"] == alice.email
@@ -274,7 +274,7 @@ def test_orgs_stop_at_pk_99999(make_flock: Flocks, s3_server: S3Server):
 
     flock.call(flock.store.db.execute("ALTER TABLE orgs ALTER COLUMN pk RESTART WITH 99999"))
     assert admin.post("/api/v1/orgs", {"name": "last"}).status == 201
-    assert flock.store.orgs["last"].pk == 99999
+    assert flock.call(flock.store.org("last")).pk == 99999
     # Its buckets get the same 57 characters as everyone's.
     name = "x" * (57 - len(flock.bucket_prefix))
     created = admin.post(BUCKETS.format(org="last"), {"name": name})
@@ -284,7 +284,7 @@ def test_orgs_stop_at_pk_99999(make_flock: Flocks, s3_server: S3Server):
     refused = admin.post("/api/v1/orgs", {"name": "one-too-many"})
     assert refused.status == 409
     assert refused.json()["error"] == "this server can't hold more organizations"
-    assert "one-too-many" not in flock.store.orgs
+    assert flock.call(flock.store.find_org("one-too-many")) is None
     assert [r["name"] for r in org_names()] == ["flock", "last"]
     assert status_of_org(admin, "one-too-many") == 404
 

@@ -14,7 +14,24 @@ class Settings:
         default="postgresql://flock:flock@127.0.0.1:5432/flock",
         doc="PostgreSQL connection URL",
     )
-    files_dir: Path = field(default=Path("flock-files"), doc="where uploaded run files go")
+    listen_database_url: str | None = field(
+        default=None,
+        doc="PostgreSQL URL of the connection that listens for notifications, which must "
+        "bypass a pooler such as PgBouncer (default: database_url)",
+    )
+    files_dir: Path = field(
+        default=Path("flock-files"),
+        doc="where uploaded run files go with the local backend (and are read from until "
+        "migrated, with the s3 backend)",
+    )
+    files_backend: str = field(
+        default="local",
+        doc="where run files are kept: local (files_dir, which every replica must mount) or "
+        "s3 (files_bucket on the S3 upstream)",
+    )
+    files_bucket: str | None = field(
+        default=None, doc="the bucket on the S3 upstream that the s3 files backend uses"
+    )
     migrate_on_startup: bool = field(
         default=True,
         doc="apply pending migrations on startup; when off, refuse to start on an old schema",
@@ -60,10 +77,6 @@ class Settings:
     wandb_base_url: str = field(
         default="https://api.wandb.ai",
         doc="W&B API that organization imports read from, unless the import names another",
-    )
-    history_cache_points: int = field(
-        default=20_000_000,
-        doc="history points cached in memory for finished runs (active runs are always kept)",
     )
     crash_timeout: float = field(
         default=600.0, doc="seconds without heartbeats before a running run is marked crashed"

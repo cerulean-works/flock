@@ -104,9 +104,10 @@ def test_polling_too_often_slows_the_client_down(flock):
     assert slowed.json()["error"] == "slow_down"
     assert slowed.json()["error_description"]
     assert error(poll(flock, started)) == "slow_down"
-    (grant,) = flock.store.accounts._grants.values()
-    assert grant.interval == 15  # 5 more seconds per slow_down
-    grant.polled_at -= 15
+    interval = flock.call(flock.store.db.fetchval("SELECT poll_interval FROM device_grants"))
+    assert interval == 15  # 5 more seconds per slow_down
+    query = "UPDATE device_grants SET polled_at = polled_at - interval '15 seconds'"
+    flock.call(flock.store.db.execute(query))
     assert error(poll(flock, started)) == "authorization_pending"
 
 
@@ -141,7 +142,8 @@ def test_wrong_codes_are_limited_per_user(flock):
     )
     assert browser(flock, bob).get(f"{START}/{started['user_code']}").status == 200
 
-    flock.store.accounts._wrong_codes[alice.id] = [time.time() - 601] * 10  # the window passed
+    passed = "UPDATE auth_failures SET at = now() - interval '601 seconds' WHERE user_pk = $1"
+    flock.call(flock.store.db.execute(passed, alice.id))  # the window passed
     assert browser(flock, alice).get(f"{START}/{started['user_code']}").status == 200
 
 
@@ -151,14 +153,19 @@ def test_pending_sign_ins_are_capped(flock):
         start(flock)
     refused = flock.anonymous().post(START, {"client": CLIENT})
     assert refused.status == 503
-    for grant in flock.store.accounts._grants.values():
-        grant.expires_at = 0  # expired ones are swept to make room
+    # Expired ones are swept to make room.
+    flock.call(flock.store.db.execute("UPDATE device_grants SET expires_at = to_timestamp(0)"))
     start(flock)
 
 
-def test_pending_sign_ins_are_forgotten_on_restart(make_flock):
+def test_pending_sign_ins_survive_a_restart(make_flock):
+    """Pending sign-ins are rows (D84), so a restart (or another replica) keeps them."""
     server = make_flock()
+    alice = server.add_user("alice@lab.test")
     started = start(server)
     server.stop()
     restarted = make_flock(reuse=server)
-    assert error(poll(restarted, started)) == "expired_token"
+    assert error(poll(restarted, started)) == "authorization_pending"
+    code = started["user_code"]
+    assert browser(restarted, alice).post(f"{START}/{code}", {"approve": True}).status == 204
+    assert poll(restarted, started).json()["user"]["id"] == alice.id

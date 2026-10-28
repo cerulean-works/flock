@@ -19,7 +19,7 @@ def flock(make_flock: Flocks, s3_server: S3Server) -> S3Flock:
 def make_bucket(flock: S3Flock, name: str = "data", *keys: str) -> str:
     """A bucket of ``flock`` holding ``keys`` (each one's body is its key); returns its path."""
     assert flock.client().post(BUCKETS, {"name": name}).status == 201
-    pk = flock.store.orgs["flock"].pk
+    pk = flock.call(flock.store.org("flock")).pk
     upstream = f"{flock.bucket_prefix}{pk:05d}-{name}"
     client = flock.s3.client()
     for key in keys:
@@ -28,7 +28,7 @@ def make_bucket(flock: S3Flock, name: str = "data", *keys: str) -> str:
 
 
 def upstream_keys(flock: S3Flock, name: str = "data") -> list[str]:
-    pk = flock.store.orgs["flock"].pk
+    pk = flock.call(flock.store.org("flock")).pk
     upstream = f"{flock.bucket_prefix}{pk:05d}-{name}"
     pages = flock.s3.client().get_paginator("list_objects_v2").paginate(Bucket=upstream)
     return sorted(o["Key"] for page in pages for o in page.get("Contents", []))
@@ -82,7 +82,7 @@ def test_listing_pages_with_a_cursor(flock):
 
 def test_head_returns_an_objects_details(flock):
     path = make_bucket(flock)
-    pk = flock.store.orgs["flock"].pk
+    pk = flock.call(flock.store.org("flock")).pk
     flock.s3.client().put_object(
         Bucket=f"{flock.bucket_prefix}{pk:05d}-data",
         Key="dir/notes.md",

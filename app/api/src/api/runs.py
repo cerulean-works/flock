@@ -1,9 +1,11 @@
+import asyncio
+import mimetypes
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
-import numpy as np
 import orjson
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.api.src.api.deps import (
@@ -18,8 +20,9 @@ from app.api.src.api.deps import (
     rest_user,
 )
 from app.api.src.api.home import GpuType
+from app.api.src.core import query
 from app.api.src.core.errors import NotFound
-from app.api.src.core.store import Project, Run
+from app.api.src.core.store import RUN_COLUMNS, Project, Run, Store
 
 router = APIRouter(prefix="/api/v1", tags=["flock"], dependencies=[Depends(rest_user)])
 
@@ -59,30 +62,27 @@ class RunSelection(BaseModel):
             return [part.strip() for part in value.split(",") if part.strip()]
         return value
 
-    def select(self, project: Project, limit: int | None = None) -> np.ndarray:
-        """Table rows matching the selection, ordered by ``sort`` (default newest first)."""
-        table = project.table
-        if self.running:
-            mask = np.zeros(table.n, dtype=bool)
-            mask[[run.row for run in project.active.values()]] = True
-            if self.filter is not None:
-                mask = table.filter(self.filter, mask)
-            rows = np.flatnonzero(mask)
-        elif self.filter is not None:
-            rows = np.flatnonzero(table.filter(self.filter))
-        else:
-            rows = np.arange(table.n)
+    def selection(self) -> query.Selection:
         # "-key" sorts descending, "key" or "+key" ascending.
-        keys = [
+        keys = tuple(
             (item.key, item.desc)
             if isinstance(item, SortKey)
             else (item[1:], True)
             if item.startswith("-")
             else (item.lstrip("+"), False)
             for item in self.sort
-        ]
-        rows = table.sort(rows, keys) if keys else rows[::-1]
-        return rows if limit is None else rows[:limit]
+        )
+        return query.Selection(self.filter, keys, self.running)
+
+    async def select(
+        self, store: Store, project: Project, offset: int = 0, limit: int | None = None
+    ) -> tuple[list[Run], int]:
+        """Runs matching the selection, ordered by ``sort`` (default newest first), from
+        ``offset`` and at most ``limit``, and how many match in all."""
+        records, total = await self.selection().runs(
+            store.db.pool, project.pk, offset, limit, RUN_COLUMNS
+        )
+        return [Run.load(record, project) for record in records], total
 
 
 class RunsQuery(RunSelection):
@@ -130,15 +130,16 @@ class Selection(RunSelection):
     all: bool = Field(False, description="every run in the project")
     dry_run: bool = Field(False, description="only report the runs that would change")
 
-    def targets(self, project: Project) -> list[Run]:
+    async def targets(self, store: Store, project: Project) -> list[Run]:
         if self.runs:
-            missing = [name for name in self.runs if name not in project.by_name]
+            found = await store.project_runs(project, self.runs)
+            missing = [name for name in self.runs if name not in found]
             if missing:
                 raise APIError(404, "runs not found", ids=missing)
-            return [project.by_name[name] for name in dict.fromkeys(self.runs)]
+            return [found[name] for name in dict.fromkeys(self.runs)]
         if self.filter is None and not self.running and not self.all:
             raise APIError(400, "select runs with runs, filter, running or all")
-        return [project.runs[row] for row in self.select(project).tolist()]
+        return (await self.select(store, project))[0]
 
 
 class RunFields(BaseModel):
@@ -177,20 +178,19 @@ class RunMove(Selection):
 @router.get("/projects/{entity}/{project}/columns")
 async def list_columns(
     project: ProjectDep,
+    store: StoreDep,
     q: Annotated[str, Query(description="case-insensitive substring")] = "",
     prefix: Annotated[str, Query(description="e.g. summary.")] = "",
 ) -> Response:
     """Run-table columns with their value type and number of runs that have them."""
-    table = project.table
     q = q.lower()
     out = []
-    for name in table.column_names():
-        if prefix and not name.startswith(prefix):
+    for column in await query.columns(store.db.pool, project.pk):
+        if prefix and not column.name.startswith(prefix):
             continue
-        if q and q not in name.lower():
+        if q and q not in column.name.lower():
             continue
-        column = table.columns[name]
-        out.append({"name": name, "type": column.kind, "count": column.n_num + column.n_obj})
+        out.append({"name": column.name, "type": column.kind, "count": column.runs})
     return JSONResponse({"columns": out})
 
 
@@ -207,46 +207,59 @@ async def get_runs(
     offset: Annotated[int, Query(ge=0)] = 0,
     all_ids: bool = False,
     running: bool = False,
+    *,
+    store: StoreDep,
 ) -> Response:
     """Filter, sort and page the runs table (see the POST variant for JSON bodies)."""
     params = {"filter": filter, "sort": sort, "columns": columns}
-    query = RunsQuery(
+    runs_query = RunsQuery(
         **{k: v for k, v in params.items() if v is not None},
         limit=limit,
         offset=offset,
         all_ids=all_ids,
         running=running,
     )
-    return await query_runs(project, query)
+    return await query_runs(project, runs_query, store)
 
 
 @router.post("/projects/{entity}/{project}/runs/query")
-async def query_runs(project: ProjectDep, query: RunsQuery) -> Response:
+async def query_runs(project: ProjectDep, body: RunsQuery, store: StoreDep) -> Response:
     """Filter, sort and page the runs table.
 
     Returns ``total`` matches, the page's run ``ids`` and the requested ``columns`` as
     column-oriented ``data`` (one list per column, aligned with ``ids``).
     """
-    rows = query.select(project)
-    page = rows[query.offset : query.offset + query.limit]
-    table = project.table
-    names = table.select_columns(query.columns)
-    runs = project.runs
-    data: dict[str, Any] = {}
-    for name in names:
-        column = table.columns.get(name)
-        data[name] = column.values(page) if column is not None else [None] * len(page)
-    body: dict[str, Any] = {
-        "total": len(rows),
-        "offset": query.offset,
-        "limit": query.limit,
-        "ids": [runs[r].name for r in page.tolist()],
+    selection = body.selection()
+    pool = store.db.pool
+    names = body.columns
+    patterns = any(ch in name for name in names for ch in "*?[")
+    # The project's columns (to expand patterns) are read alongside the runs.
+    selected, found = await asyncio.gather(
+        selection.runs(pool, project.pk, *(() if body.all_ids else (body.offset, body.limit))),
+        query.columns(pool, project.pk) if patterns else _nothing(),
+    )
+    if body.all_ids:
+        records, total = selected
+        page = records[body.offset : body.offset + body.limit]
+    else:
+        page, total = selected
+    names = query.select_columns([column.name for column in found], names)
+    data = await query.cells(store.db.pool, project.pk, [record[0] for record in page], names)
+    out: dict[str, Any] = {
+        "total": total,
+        "offset": body.offset,
+        "limit": body.limit,
+        "ids": [record[1] for record in page],
         "columns": names,
         "data": data,
     }
-    if query.all_ids:
-        body["all_ids"] = [runs[r].name for r in rows.tolist()]
-    return JSONResponse(body)
+    if body.all_ids:
+        out["all_ids"] = [record[1] for record in records]
+    return JSONResponse(out)
+
+
+async def _nothing() -> list[query.Column]:
+    return []
 
 
 # ---------------------------------------------------------------------- curves
@@ -281,31 +294,32 @@ async def get_history(
 
 
 @router.post("/projects/{entity}/{project}/history/query")
-async def query_history(project: ProjectDep, query: HistoryQuery, store: StoreDep) -> Response:
+async def query_history(project: ProjectDep, body: HistoryQuery, store: StoreDep) -> Response:
     """Curves of ``keys`` for the runs chosen by ``runs`` or by ``filter``/``running``/``sort``.
 
     Each run carries ``series[key] = {"x": [...], "y": [...]}``; non-finite values are null.
     ``stream=system`` returns system metrics (``system.gpu.0.gpu``, ...) against ``_runtime``.
     """
-    if not query.keys:
+    if not body.keys:
         raise APIError(400, "keys is required")
-    if query.runs:
-        selected = [project.by_name[n] for n in query.runs if n in project.by_name]
+    if body.runs:
+        found = await store.project_runs(project, body.runs)
+        selected = [found[n] for n in body.runs if n in found]
     else:
-        selected = [project.runs[r] for r in query.select(project, query.limit).tolist()]
-    x = query.x_axis
-    histories = await store.histories(selected, [*query.keys, x], query.stream)
+        selected = (await body.select(store, project, limit=body.limit))[0]
+    x = body.x_axis
+    histories = await store.histories(selected, [*body.keys, x], body.stream)
     out = []
     for run, hist in zip(selected, histories, strict=True):
         series = {}
-        for key in query.keys:
-            xy = hist.curve(key, x, query.max_points)
+        for key in body.keys:
+            xy = hist.curve(key, x, body.max_points)
             if xy is not None:
                 series[key] = {"x": xy[0], "y": xy[1]}
         out.append(
             {"id": run.name, "display_name": run.display_name, "state": run.state, "series": series}
         )
-    return JSONResponse({"stream": query.stream, "x": x, "keys": query.keys, "runs": out})
+    return JSONResponse({"stream": body.stream, "x": x, "keys": body.keys, "runs": out})
 
 
 # ---------------------------------------------------------------------- run changes
@@ -316,7 +330,10 @@ async def update_run(run: RunDep, body: RunFields, store: StoreDep, user: UserDe
     """Edit a run's display name, notes, tags, group, job type, description or GPUs."""
     check_owner(store, user, run.project, [run])
     await store.edit_runs(run.project, [run], body.model_dump(include=body.model_fields_set))
-    return await get_run(run, store)
+    edited = await store.project_run(run.project, run.name)
+    if edited is None:
+        raise APIError(404, f"run {run.name} not found")
+    return await get_run(edited, store)
 
 
 @router.delete("/projects/{entity}/{project}/runs/{run}", status_code=204)
@@ -347,7 +364,7 @@ async def update_runs(
 
     Members can only select runs they logged (403 lists the others); admins any run.
     """
-    runs = body.targets(project)
+    runs = await body.targets(store, project)
     check_owner(store, user, project, runs)
     if body.dry_run:
         return changed([run.name for run in runs], dry_run=True)
@@ -362,7 +379,7 @@ async def delete_runs(
 ) -> Response:
     """Delete many runs. Refused (409, listing them) if any is active, unless ``force``, and
     (403) if a member selects runs they didn't log."""
-    runs = body.targets(project)
+    runs = await body.targets(store, project)
     check_owner(store, user, project, runs)
     if body.dry_run:
         return changed([run.name for run in runs], dry_run=True)
@@ -376,9 +393,9 @@ async def move_runs(project: ProjectDep, body: RunMove, store: StoreDep, user: U
     Refused (409, listing them) if any run is active or the target has a run with the same id,
     and (403) if a member selects runs they didn't log.
     """
-    runs = body.targets(project)
+    runs = await body.targets(store, project)
     check_owner(store, user, project, runs)
-    target = store.project(project.entity, body.to)
+    target = await store.project(project.entity, body.to)
     if target is None and not body.create:
         raise APIError(404, f"project {project.entity}/{body.to} not found")
     if body.dry_run:
@@ -416,7 +433,7 @@ async def get_run(run: RunDep, store: StoreDep) -> Response:
             **run.attributes(),
             "gpu_detected": {"type": run.gpu_type_detected, "count": run.gpu_count_detected},
             "runtime": run.runtime,
-            "cost": round(store.budgets.run_cost(run), 2),
+            "cost": await store.budgets.run_cost(run),
             "config": config,
             "summary": summary,
             "metric_defs": run.metric_defs,
@@ -481,8 +498,12 @@ async def list_run_files(run: RunDep, store: StoreDep) -> Response:
 
 
 @router.get("/projects/{entity}/{project}/runs/{run}/files/{name:path}")
-async def get_run_file(run: RunDep, name: str, store: StoreDep) -> FileResponse:
-    path = store.file_path(run, name)
-    if path is None or not path.is_file():
+async def get_run_file(run: RunDep, name: str, store: StoreDep) -> Response:
+    found = await store.files.get(run.pk, name) if store.file_parts(name) else None
+    if found is None:
         raise APIError(404, "file not found")
-    return FileResponse(path)
+    if isinstance(found, Path):
+        return FileResponse(found)
+    chunks, size = found  # from the s3 backend (D82), served as FileResponse would
+    media_type = mimetypes.guess_type(name)[0] or "text/plain"
+    return StreamingResponse(chunks, media_type=media_type, headers={"content-length": str(size)})

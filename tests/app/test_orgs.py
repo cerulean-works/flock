@@ -141,7 +141,7 @@ def test_delete_org(make_flock):
     alice = server.add_user("alice@lab.test", org="lab")
     assert alice.api.patch("/api/v1/me", {"default_org": "lab"}).status == 200
     assert upsert_error(alice.api, "lab", "p", "a1") is None  # still running
-    run = store.get_run("lab", "p", "a1")
+    run = server.call(store.get_run("lab", "p", "a1"))
     server.call(store.save_file(run, "config.yaml", b"x"))
     api.create_run("kept", "r1")
 
@@ -149,6 +149,7 @@ def test_delete_org(make_flock):
     assert refused.status == 409
     assert refused.json()["ids"] == ["p/a1"]
     assert api.delete(f"{ORGS}/lab", force="true").status == 204
+    server.call(store.flush())  # the purge removes the rows and files in the background (D80)
     assert not (server.files_dir / str(run.pk)).exists()
 
     def check(server) -> None:
