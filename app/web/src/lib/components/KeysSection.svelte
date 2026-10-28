@@ -78,15 +78,11 @@
 {/snippet}
 
 {#snippet wandbKeys()}
-	<p class="max-w-[62ch] text-muted-foreground">
-		Use these keys with the wandb SDK. Set one as
-		<code class="font-mono text-[0.9em]">WANDB_API_KEY</code> or paste it into
-		<code class="font-mono text-[0.9em]">wandb login</code>.
-	</p>
+	<p class="max-w-[62ch] text-muted-foreground">Use these keys with the wandb SDK.</p>
 	{#if keys.length}
-		<ul class="mt-4 border-t border-divider">
+		<ul class="mt-4 divide-y divide-divider border-t border-divider">
 			{#each keys as key (key.id)}
-				<li class="flex h-12 items-center gap-4 border-b border-divider">
+				<li class="flex h-12 items-center gap-4">
 					<span class="min-w-0 flex-1 truncate font-medium">{key.name}</span>
 					<span class="font-mono text-[12.5px] text-muted-foreground">{key.prefix}…</span>
 					<span class="w-24 text-muted-foreground" title={dateTime(key.created_at)}>
@@ -128,11 +124,9 @@
 				{@render wandbKeys()}
 			</Tabs.Content>
 			<Tabs.Content value="s3">
-				<p class="max-w-[62ch] text-muted-foreground">
-					For your organizations’ buckets at
-					<span class="font-mono text-[0.9em]">{s3.endpoint}</span>. Scripts and jobs should use
-					<code class="font-mono text-[0.9em]">flock s3 credentials</code>, whose keys renew
-					themselves. Create a key here for tools that can’t run it.
+				<p class="text-muted-foreground">
+					Persistent S3 keys should only be used with jobs that can’t use ephemeral keys generated
+					from <code class="font-mono text-[0.9em] whitespace-nowrap">flock s3 credentials</code>.
 				</p>
 				{#if s3.keys.length}
 					<ul class="mt-4 border-t border-divider">

@@ -81,46 +81,55 @@
 	<section class="mt-10">
 		<h2 class="text-2xl tracking-[-0.01em]">Command line sign-ins</h2>
 		<p class="mt-2 max-w-[62ch] text-muted-foreground">
-			Machines signed in with <code class="font-mono text-[0.9em]">flock login</code>. A sign-in
-			expires after 90 days without use. Revoking one signs that machine out.
+			Machines signed in with <code class="font-mono text-[0.9em]">flock login</code>.
 		</p>
-		{#if data.cliSessions.length}
-			<ul class="mt-4 border-t border-divider">
+		<table class="mt-4 w-full table-fixed border-collapse text-[13.5px]">
+			<thead>
+				<tr class="h-10 border-b text-left text-xs font-medium text-muted-foreground">
+					<th class="pr-2 font-medium">Machine</th>
+					<th class="hidden w-40 px-2 font-medium sm:table-cell">Signed in</th>
+					<th class="w-40 px-2 font-medium">Last used</th>
+					<th class="w-12"><span class="sr-only">Revoke</span></th>
+				</tr>
+			</thead>
+			<tbody>
 				{#each data.cliSessions as session (session.id)}
 					{@const name = session.name || 'Unnamed machine'}
-					<li class="flex h-12 items-center gap-4 border-b border-divider">
-						<span class="min-w-0 flex-1 truncate font-medium">{name}</span>
-						<span class="text-muted-foreground" title="Signed in {dateTime(session.created_at)}">
+					<tr class="h-12 border-b border-divider">
+						<td class="truncate pr-2 font-medium">{name}</td>
+						<td class="hidden px-2 text-muted-foreground sm:table-cell">
+							{dateTime(session.created_at)}
+						</td>
+						<td class="px-2 text-muted-foreground">
 							{session.last_used_at === null
 								? 'Not used yet'
-								: `Used ${relativeTime(session.last_used_at, data.now)}`}
-						</span>
-						<form method="POST" action="?/revokeCli" use:enhance={revocation.enhance}>
-							<input type="hidden" name="id" value={session.id} />
-							<Button
-								type="submit"
-								variant="ghost"
-								size="icon-sm"
-								class="text-muted-foreground hover:text-destructive"
-								aria-label="Revoke the sign-in of {name}"
-								title="Sign this machine out"
-							>
-								<Trash2Icon />
-							</Button>
-						</form>
-					</li>
+								: relativeTime(session.last_used_at, data.now)}
+						</td>
+						<td class="text-right">
+							<form method="POST" action="?/revokeCli" use:enhance={revocation.enhance}>
+								<input type="hidden" name="id" value={session.id} />
+								<Button
+									type="submit"
+									variant="ghost"
+									size="icon-sm"
+									class="text-muted-foreground hover:text-destructive"
+									aria-label="Revoke the sign-in of {name}"
+									title="Sign this machine out"
+								>
+									<Trash2Icon />
+								</Button>
+							</form>
+						</td>
+					</tr>
+				{:else}
+					<tr class="h-12 border-b border-divider">
+						<td colspan="4" class="pr-2 text-muted-foreground">
+							None yet. Run <code class="font-mono text-[0.9em]">flock login</code> to sign in from a
+							terminal.
+						</td>
+					</tr>
 				{/each}
-			</ul>
-		{:else}
-			<p class="mt-3 text-muted-foreground">
-				None yet. Run <code class="font-mono text-[0.9em]">flock login</code> to sign in from a terminal.
-			</p>
-		{/if}
-	</section>
-
-	<section class="mt-10">
-		<form method="POST" action="/logout">
-			<Button type="submit" variant="outline">Sign out</Button>
-		</form>
+			</tbody>
+		</table>
 	</section>
 </Page>

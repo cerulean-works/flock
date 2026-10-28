@@ -7,9 +7,11 @@
 		value: string;
 		/** Offer a copy button: for secrets, which are shown once. */
 		copy?: boolean;
+		/** Show the label above the value; otherwise only screen readers get it. */
+		labelled?: boolean;
 	}
 
-	let { label, value, copy = false }: Props = $props();
+	let { label, value, copy = false, labelled = true }: Props = $props();
 
 	const id = $props.id();
 	// "Copy access key ID": the label as it reads mid-sentence.
@@ -19,7 +21,7 @@
 <!-- A read-only value in monospace, with a copy button when it is a secret. min-w-0: a long
      value scrolls rather than widening the column. -->
 <div class="grid min-w-0 gap-1.5">
-	<label for={id} class="text-[13px] text-muted-foreground">{label}</label>
+	<label for={id} class={labelled ? 'text-[13px] text-muted-foreground' : 'sr-only'}>{label}</label>
 	<div class="relative min-w-0">
 		<input
 			{id}
