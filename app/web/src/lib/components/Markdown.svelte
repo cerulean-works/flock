@@ -11,7 +11,7 @@
 	import typescript from 'highlight.js/lib/languages/typescript';
 	import xml from 'highlight.js/lib/languages/xml';
 	import yaml from 'highlight.js/lib/languages/yaml';
-	import { Marked } from 'marked';
+	import { Marked, Renderer } from 'marked';
 
 	for (const [name, language] of Object.entries({
 		bash,
@@ -34,14 +34,23 @@
 	const escape = (text: string) =>
 		text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-	// Fenced code is highlighted like the docs site; languages it doesn't know stay plain.
+	const base = new Renderer();
+
+	// Fenced code is highlighted like the docs site, with a copy button; languages it doesn't
+	// know stay plain. Tables scroll sideways in a wrapper, so they can still span the width.
 	const marked = new Marked({
 		renderer: {
 			code({ text, lang }) {
 				const name = lang?.trim().split(/\s/)[0].toLowerCase() ?? '';
 				const known = !!name && !!hljs.getLanguage(name);
 				const body = known ? hljs.highlight(text, { language: name }).value : escape(text);
-				return `<pre><code class="hljs${known ? ` language-${name}` : ''}">${body}</code></pre>\n`;
+				return (
+					`<div class="code-block"><pre><code class="hljs${known ? ` language-${name}` : ''}">${body}</code></pre>` +
+					`<button type="button" class="code-copy" aria-label="Copy code">Copy</button></div>\n`
+				);
+			},
+			table(token) {
+				return `<div class="table-scroll">${base.table.call(this, token)}</div>\n`;
 			}
 		}
 	});
@@ -51,6 +60,7 @@
 </script>
 
 <script lang="ts">
+	import { toast } from 'svelte-sonner';
 	import type { ClassValue } from 'svelte/elements';
 
 	/** Markdown text, shown as HTML with anything that could run (scripts, handlers) taken out. */
@@ -59,9 +69,27 @@
 	const html = $derived(
 		DOMPurify.sanitize(marked.parse(text.replace(FRONT_MATTER, ''), { async: false }))
 	);
+
+	/** The code blocks' copy buttons, which come from the HTML above, not from Svelte. */
+	function copyButtons(node: HTMLElement) {
+		const onclick = (e: MouseEvent) => {
+			const button = (e.target as Element).closest<HTMLButtonElement>('button.code-copy');
+			const code = button?.parentElement?.querySelector('pre')?.textContent;
+			if (!button || code == null) return;
+			navigator.clipboard.writeText(code).then(
+				() => {
+					button.textContent = 'Copied';
+					setTimeout(() => (button.textContent = 'Copy'), 1500);
+				},
+				() => toast.error('Couldn’t copy to the clipboard')
+			);
+		};
+		node.addEventListener('click', onclick);
+		return () => node.removeEventListener('click', onclick);
+	}
 </script>
 
-<div class={['markdown', className]}>
+<div class={['markdown', className]} {@attach copyButtons}>
 	<!-- eslint-disable-next-line svelte/no-at-html-tags -- sanitized by DOMPurify -->
 	{@html html}
 </div>
@@ -106,7 +134,7 @@
 		font-weight: 500;
 		line-height: 1.35;
 	}
-	.markdown :global(:is(p, ul, ol, dl, figure, table, blockquote, pre)) {
+	.markdown :global(:is(p, ul, ol, dl, figure, blockquote, .code-block, .table-scroll)) {
 		margin: 0 0 20px;
 	}
 	.markdown :global(a) {
@@ -176,22 +204,55 @@
 		tab-size: 4;
 		overflow-x: auto;
 	}
-	.markdown :global(table) {
-		display: block;
+	.markdown :global(.code-block) {
+		position: relative;
+	}
+	.markdown :global(.code-copy) {
+		position: absolute;
+		top: 6px;
+		right: 6px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--background);
+		padding: 2px 8px;
+		font: 400 12px/1.5 var(--font-sans);
+		color: var(--muted-foreground);
+		opacity: 0;
+		transition: opacity 0.12s;
+	}
+	.markdown :global(.code-copy:hover) {
+		color: var(--foreground);
+	}
+	.markdown :global(:is(.code-block:hover, .code-block:focus-within) .code-copy) {
+		opacity: 1;
+	}
+	@media (hover: none) {
+		.markdown :global(.code-copy) {
+			opacity: 1;
+		}
+	}
+	.markdown :global(.table-scroll) {
 		max-width: 100%;
 		overflow-x: auto;
+	}
+	/* Full width, the space between columns the same as at the edges of each cell's text. */
+	.markdown :global(table) {
+		width: 100%;
 		border-collapse: collapse;
 		font-size: 14px;
 		line-height: 1.5;
 	}
 	.markdown :global(:is(th, td)) {
 		border-bottom: 1px solid var(--border);
-		padding: 8px 14px 8px 0;
+		padding: 8px 12px;
 		text-align: left;
 		vertical-align: top;
 	}
-	.markdown :global(:is(th + th, td + td)) {
-		padding-left: 14px;
+	.markdown :global(:is(th, td):first-child) {
+		padding-left: 0;
+	}
+	.markdown :global(:is(th, td):last-child) {
+		padding-right: 0;
 	}
 	.markdown :global(th) {
 		border-bottom-color: var(--muted-foreground);

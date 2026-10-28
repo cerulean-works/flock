@@ -1,8 +1,10 @@
 <script lang="ts">
+	import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { ResolvedPathname } from '$app/types';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { datasetCall, datasetsApi } from '#lib/datasets.ts';
 	import type { DatasetVersion, VersionsPage } from '#lib/types.ts';
 	import { dateTime, relativeTime } from '#lib/utils.ts';
@@ -60,6 +62,11 @@
 	let tagging = $state<number | null>(null);
 	let removing = $state<{ tag: string; version: number } | null>(null);
 
+	/** The message a writer gave Lance's commit; it reads as the change's description. */
+	const MESSAGE = '__lance_commit_message';
+	const extra = (properties: Record<string, string>) =>
+		Object.entries(properties).filter(([key]) => key !== MESSAGE);
+
 	const rowsChange = (delta: number) =>
 		`${delta > 0 ? '+' : '−'}${Math.abs(delta).toLocaleString('en-US')} ${Math.abs(delta) === 1 ? 'row' : 'rows'}`;
 </script>
@@ -69,83 +76,107 @@
 {:else if !loaded}
 	<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">Loading…</p>
 {:else}
-	<table class="w-full border-collapse text-[13px]">
+	<!-- Every cell starts on the same 24px line, so a row reads level whatever it holds. -->
+	<table class="w-full border-collapse text-[13px] leading-6">
 		<thead>
-			<tr class="h-9 border-b text-left text-xs text-muted-foreground">
-				<th class="w-px px-2 font-medium">Version</th>
-				<th class="w-px px-2 font-medium">Written</th>
-				<th class="px-2 font-medium">Change</th>
+			<tr class="h-10 border-b text-left text-xs text-muted-foreground">
+				<th class="w-px px-3 font-medium">Version</th>
+				<th class="w-px px-3 font-medium">Tags</th>
+				<th class="w-px px-3 font-medium">Written</th>
+				<th class="px-3 font-medium">Change</th>
 				<th class="w-px"><span class="sr-only">Actions</span></th>
 			</tr>
 		</thead>
 		<tbody>
 			{#each versions as v (v.version)}
+				{@const message = v.properties[MESSAGE]}
 				<tr
 					class={['border-b border-divider align-top', v.version === shown && 'bg-muted']}
 					aria-current={v.version === shown ? 'true' : undefined}
 				>
-					<td class="px-2 py-2">
-						<!-- Tags sit beside the number, so a tagged row keeps the height of the others. -->
-						<div class="flex min-h-7 items-center gap-2 whitespace-nowrap">
-							<span class="tabular-nums">{v.version}</span>
-							{#if v.tags.length}
-								<ul class="contents" aria-label="Tags of version {v.version}">
-									{#each v.tags as tag (tag)}
-										<li
-											class="inline-flex h-6 max-w-56 min-w-0 items-center gap-1 rounded-full bg-secondary pr-1 pl-2 text-xs"
+					<td class="px-3 py-3 tabular-nums">{v.version}</td>
+					<td class="px-3 py-3">
+						{#if v.tags.length}
+							<ul
+								class="flex w-max max-w-72 flex-wrap gap-1"
+								aria-label="Tags of version {v.version}"
+							>
+								{#each v.tags as tag (tag)}
+									<li
+										class="inline-flex h-6 max-w-full min-w-0 items-center gap-1 rounded-full bg-secondary pr-1 pl-2 text-xs"
+									>
+										<span class="truncate" title={tag}>{tag}</span>
+										<button
+											class="grid size-4 flex-none place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
+											aria-label="Remove the tag {tag}"
+											onclick={() => (removing = { tag, version: v.version })}
 										>
-											<span class="truncate" title={tag}>{tag}</span>
-											<button
-												class="grid size-4 flex-none place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
-												aria-label="Remove the tag {tag}"
-												onclick={() => (removing = { tag, version: v.version })}
-											>
-												<XIcon class="size-3" />
-											</button>
-										</li>
-									{/each}
-								</ul>
-							{/if}
-						</div>
+											<XIcon class="size-3" />
+										</button>
+									</li>
+								{/each}
+							</ul>
+						{:else}
+							<span class="text-faint">None</span>
+						{/if}
 					</td>
 					<td
-						class="px-2 py-2 leading-7 whitespace-nowrap text-muted-foreground tabular-nums"
+						class="px-3 py-3 whitespace-nowrap text-muted-foreground tabular-nums"
 						title={dateTime(v.timestamp)}
 					>
 						{relativeTime(v.timestamp, now)}
 					</td>
-					<td class="px-2 py-2">
-						<span class="leading-7">{v.operation ?? 'Unknown'}</span>
-						{#if v.rows_delta}
-							<span class="ml-1 text-muted-foreground tabular-nums">{rowsChange(v.rows_delta)}</span
-							>
+					<td class="px-3 py-3">
+						<p>
+							{v.operation ?? 'Unknown'}
+							{#if v.rows_delta}
+								<span class="ml-1 text-muted-foreground tabular-nums"
+									>{rowsChange(v.rows_delta)}</span
+								>
+							{/if}
+						</p>
+						{#if message}
+							<p class="whitespace-pre-line text-muted-foreground">{message}</p>
 						{/if}
-						{#each Object.entries(v.properties) as [key, value] (key)}
-							<p class="mt-0.5 text-[12.5px]">
-								<span class="text-muted-foreground">{key}</span>
-								{value}
+						{#each extra(v.properties) as [key, value] (key)}
+							<p class="text-[12px] leading-5">
+								<span class="font-mono text-faint">{key}</span>
+								<span class="text-muted-foreground">{value}</span>
 							</p>
 						{/each}
 					</td>
-					<td class="px-2 py-2 text-right whitespace-nowrap">
-						<Button
-							variant="ghost"
-							size="sm"
-							class="text-muted-foreground"
-							href={versionHref(String(v.version))}
-							aria-label="View version {v.version}"
-						>
-							View
-						</Button>
-						<Button
-							variant="ghost"
-							size="sm"
-							class="text-muted-foreground"
-							aria-label="Add a tag to version {v.version}"
-							onclick={() => (tagging = v.version)}
-						>
-							<TagIcon /> Add tag
-						</Button>
+					<td class="py-2.5 pr-2 pl-3 whitespace-nowrap">
+						<div class="flex items-center gap-1">
+							<Button
+								variant="ghost"
+								size="sm"
+								class="text-muted-foreground"
+								href={versionHref(String(v.version))}
+								aria-label="View version {v.version}"
+							>
+								View
+							</Button>
+							<DropdownMenu.Root>
+								<DropdownMenu.Trigger>
+									{#snippet child({ props })}
+										<Button
+											{...props}
+											variant="ghost"
+											size="icon-sm"
+											class="text-muted-foreground"
+											aria-label="Version {v.version} actions"
+										>
+											<EllipsisVerticalIcon />
+										</Button>
+									{/snippet}
+								</DropdownMenu.Trigger>
+								<DropdownMenu.Content align="end" class="w-40">
+									<DropdownMenu.Item onSelect={() => (tagging = v.version)}>
+										<TagIcon /> Add tag…
+									</DropdownMenu.Item>
+								</DropdownMenu.Content>
+							</DropdownMenu.Root>
+						</div>
 					</td>
 				</tr>
 			{/each}

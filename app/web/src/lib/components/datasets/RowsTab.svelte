@@ -201,12 +201,12 @@
 			<table class="w-full border-collapse text-[13px]" bind:this={table}>
 				<thead>
 					<tr class="h-9 border-b text-left text-xs text-muted-foreground">
-						<th class="w-px px-2 font-medium">#</th>
+						<th class="w-px px-2 pb-1.5 align-bottom font-medium">#</th>
 						{#each rows.columns as column, j (column.name)}
 							<th
 								class={[
-									'px-2 font-medium',
-									capped ? 'w-px align-bottom' : 'whitespace-nowrap',
+									'px-2 pb-1.5 align-bottom font-medium',
+									capped ? 'w-px' : 'whitespace-nowrap',
 									!wraps[j] && 'w-px'
 								]}
 								style:min-width={capOf(j) === null ? undefined : `${capOf(j)! + PAD}px`}

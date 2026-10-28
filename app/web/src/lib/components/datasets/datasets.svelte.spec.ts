@@ -16,6 +16,7 @@ import DatasetView from './DatasetView.svelte';
 import DeleteDatasetDialog from './DeleteDatasetDialog.svelte';
 import DeletedDatasets from './DeletedDatasets.svelte';
 import FolderView from './FolderView.svelte';
+import RemoveTagDialog from './RemoveTagDialog.svelte';
 import RenameDialog from './RenameDialog.svelte';
 import TagDialog from './TagDialog.svelte';
 
@@ -157,7 +158,9 @@ const versions: VersionsPage = {
 		operation: v === 1 ? 'Overwrite' : 'Append',
 		rows: v * 10,
 		rows_delta: v === 1 ? null : 10,
-		properties: (v === 5 ? { message: 'more rows' } : {}) as Record<string, string>
+		properties: (v === 5
+			? { __lance_commit_message: 'more rows', 'flock.source': 'cli' }
+			: {}) as Record<string, string>
 	}))
 };
 
@@ -434,6 +437,28 @@ describe('DatasetView', () => {
 		await expect.element(screen.getByRole('button', { name: 'Remove the tag v1.0' })).toBeVisible();
 		const current = document.querySelector('tr[aria-current="true"]');
 		expect(current?.textContent).toContain('v1.0');
+		// The commit message reads as text; other properties keep their keys.
+		await expect.element(screen.getByText('__lance_commit_message')).not.toBeInTheDocument();
+		await expect.element(screen.getByText('flock.source')).toBeVisible();
+		// Adding a tag sits in the row's menu, and removing one warns first.
+		await screen.getByRole('button', { name: 'Version 5 actions' }).click();
+		await expect.element(screen.getByRole('menuitem', { name: 'Add tag…' })).toBeVisible();
+	});
+
+	it('warns before removing a tag', async () => {
+		render(RemoveTagDialog, {
+			open: true,
+			org: 'acme',
+			path: 'eval/mmlu',
+			tag: 'v1.0',
+			version: 3,
+			onremoved: vi.fn()
+		});
+		await expect
+			.element(
+				screen.getByText(/Scripts and jobs that load this dataset by v1.0 will stop working/)
+			)
+			.toBeVisible();
 	});
 
 	it('shows Lance’s error in place of the tabs', async () => {
