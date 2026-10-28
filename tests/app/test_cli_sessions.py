@@ -41,7 +41,7 @@ def test_a_cli_token_authenticates_rest_and_the_wandb_protocol(flock):
     assert flock.client(token="flock_cli_" + "x" * 43).get(ME).status == 401
 
 
-def test_listing_and_revoking_cli_sessions(flock):
+def test_listing_and_revoking_cli_sessions(flock, notification):
     alice = flock.add_user("alice@lab.test")
     bob = flock.add_user("bob@lab.test")
     laptop = flock.client(token=cli_login(flock, browser(flock, alice), "laptop"))
@@ -63,7 +63,8 @@ def test_listing_and_revoking_cli_sessions(flock):
     assert alice.api.delete(f"{SESSIONS}/{by_name['laptop']['id'] + 2}").status == 404
     assert bob.api.delete(f"{SESSIONS}/{by_name['laptop']['id']}").status == 404
 
-    assert browser(flock, alice).delete(f"{SESSIONS}/{by_name['laptop']['id']}").status == 204
+    with notification(flock.store.bus, flock.loop, "flock_auth", "sessions"):
+        assert browser(flock, alice).delete(f"{SESSIONS}/{by_name['laptop']['id']}").status == 204
     assert laptop.get(ME).status == 401
     assert node.get(ME).status == 200
     assert [s["name"] for s in alice.api.get(SESSIONS).json()["sessions"]] == ["tests", "node-7"]

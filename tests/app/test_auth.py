@@ -87,7 +87,7 @@ def test_setting_up_before_any_account_exists(make_flock):
     assert login(server, "root@x.io", "rootroot").status == 200
 
 
-def test_login_refresh_and_logout(flock):
+def test_login_refresh_and_logout(flock, notification):
     alice = flock.add_user("alice@lab.test")
     assert login(flock, alice.email, "wrong password").status == 401
     assert login(flock, "nobody@lab.test", alice.password).status == 401
@@ -106,7 +106,8 @@ def test_login_refresh_and_logout(flock):
     renewed = flock.client(token=fresh["access_token"])
     assert renewed.get(ME).status == 200
 
-    assert renewed.post("/api/v1/auth/logout", {}).status == 204
+    with notification(flock.store.bus, flock.loop, "flock_auth", "sessions"):
+        assert renewed.post("/api/v1/auth/logout", {}).status == 204
     assert renewed.get(ME).status == 401  # the session ended, not just when the token expires
     assert api.get(ME).status == 401  # same session
     gone = anon.post("/api/v1/auth/refresh", {"refresh_token": fresh["refresh_token"]})
