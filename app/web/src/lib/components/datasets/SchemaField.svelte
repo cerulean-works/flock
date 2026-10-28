@@ -3,7 +3,12 @@
 	import type { SchemaField } from '#lib/types.ts';
 	import Self from './SchemaField.svelte';
 
-	let { field, depth = 0 }: { field: SchemaField; depth?: number } = $props();
+	/** `gutter`: whether any column opens, so names keep room for the chevron to line up. */
+	let {
+		field,
+		depth = 0,
+		gutter = true
+	}: { field: SchemaField; depth?: number; gutter?: boolean } = $props();
 
 	let open = $state(false);
 	const meta = $derived(Object.entries(field.metadata).sort(([a], [b]) => a.localeCompare(b)));
@@ -25,7 +30,7 @@
 				>
 					<ChevronRightIcon class={['size-3.5 transition-transform', open && 'rotate-90']} />
 				</button>
-			{:else}
+			{:else if gutter}
 				<span class="size-5 flex-none"></span>
 			{/if}
 			<span class="truncate font-mono text-[12.5px]" title={field.name}>{field.name}</span>

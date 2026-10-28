@@ -200,12 +200,12 @@
 			     the columns that wrap, or to a filler when none do. -->
 			<table class="w-full border-collapse text-[13px]" bind:this={table}>
 				<thead>
-					<tr class="h-9 border-b text-left text-xs text-muted-foreground">
-						<th class="w-px px-2 pb-1.5 align-bottom font-medium">#</th>
+					<tr class="border-b text-left text-xs text-muted-foreground">
+						<th class="w-px px-2 pt-1 pb-2 align-bottom font-medium">#</th>
 						{#each rows.columns as column, j (column.name)}
 							<th
 								class={[
-									'px-2 pb-1.5 align-bottom font-medium',
+									'px-2 pt-1 pb-2 align-bottom font-medium',
 									capped ? 'w-px' : 'whitespace-nowrap',
 									!wraps[j] && 'w-px'
 								]}

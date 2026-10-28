@@ -159,7 +159,7 @@
 	</div>
 </div>
 
-<div class="mt-6">
+<div class={tab === 'rows' ? 'mt-3' : 'mt-6'}>
 	{#if tab === 'about'}
 		<AboutTab {org} {path} {info} tags={tags.map((t) => t.name)} />
 	{:else if failed || !info}
