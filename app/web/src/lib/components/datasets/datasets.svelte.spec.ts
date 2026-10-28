@@ -216,6 +216,17 @@ describe('DatasetView', () => {
 		);
 	});
 
+	it('shows the README without its front matter, with code highlighted', async () => {
+		const text = '---\nlicense: odc-by\n---\n\n# MMLU\n\n```python\nimport lance\n```\n';
+		serve({ '/api/datasets/acme/readme': () => ({ text, truncated: false }) });
+		view();
+		await expect.element(screen.getByRole('heading', { name: 'MMLU' })).toBeVisible();
+		await expect.element(screen.getByText('license: odc-by')).not.toBeInTheDocument();
+		await expect.element(screen.getByText('import', { exact: true })).toHaveClass('hljs-keyword');
+		// This version's numbers sit beside it.
+		await expect.element(screen.getByRole('rowheader', { name: 'Rows' })).toBeVisible();
+	});
+
 	it('says when there is no README', async () => {
 		serve({ '/api/datasets/acme/readme': () => Response.json({ message: 'no' }, { status: 404 }) });
 		view();

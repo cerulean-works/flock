@@ -11,11 +11,10 @@
 	import { DATASETS_BUCKET, datasetCall, datasetsApi, nameOf } from '#lib/datasets.ts';
 	import { objectHref } from '#lib/storage.ts';
 	import type { DatasetInfo, S3Config } from '#lib/types.ts';
-	import { bytes, dateTime } from '#lib/utils.ts';
 	import { withParam } from '#lib/workspace/url.ts';
+	import AboutTab from './AboutTab.svelte';
 	import ColumnsPicker from './ColumnsPicker.svelte';
 	import DeleteDatasetDialog from './DeleteDatasetDialog.svelte';
-	import ReadmeTab from './ReadmeTab.svelte';
 	import RenameDialog from './RenameDialog.svelte';
 	import RowsTab from './RowsTab.svelte';
 	import S3AccessDialog from './S3AccessDialog.svelte';
@@ -38,9 +37,9 @@
 
 	let { org, path, info, failed, requested, s3, now }: Props = $props();
 
-	type Tab = 'readme' | 'rows' | 'schema' | 'versions';
+	type Tab = 'about' | 'rows' | 'schema' | 'versions';
 	const TABS: { value: Tab; label: string }[] = [
-		{ value: 'readme', label: 'README' },
+		{ value: 'about', label: 'About' },
 		{ value: 'rows', label: 'Viewer' },
 		{ value: 'schema', label: 'Schema' },
 		{ value: 'versions', label: 'Versions' }
@@ -48,7 +47,7 @@
 	// In the URL, so a tab can be linked to; switching never re-runs the page's load.
 	let tabOverride = $state<Tab | null>(null);
 	const urlTab = $derived<Tab>(
-		TABS.find((t) => t.value === page.url.searchParams.get('tab'))?.value ?? 'readme'
+		TABS.find((t) => t.value === page.url.searchParams.get('tab'))?.value ?? 'about'
 	);
 	const tab = $derived(tabOverride ?? urlTab);
 
@@ -58,7 +57,7 @@
 	function setTab(t: Tab) {
 		if (t === tab) return;
 		tabOverride = t;
-		let to = withParam(page.url, 'tab', t === 'readme' ? null : t);
+		let to = withParam(page.url, 'tab', t === 'about' ? null : t);
 		to = withParam(new URL(to, page.url.origin), 'offset', null);
 		void goto(to, { replace: true, reset: false }).finally(() => (tabOverride = null));
 	}
@@ -103,38 +102,28 @@
 	{/if}
 </div>
 
-<div class="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2">
-	{#if info}
-		<dl class="flex flex-wrap gap-x-6 gap-y-1 text-[13px]" aria-label="This version">
-			<div class="flex gap-1.5">
-				<dt class="text-muted-foreground">Rows</dt>
-				<dd class="tabular-nums">{info.rows.toLocaleString('en-US')}</dd>
-			</div>
-			<div class="flex gap-1.5">
-				<dt class="text-muted-foreground">Columns</dt>
-				<dd class="tabular-nums">{info.columns.toLocaleString('en-US')}</dd>
-			</div>
-			<div class="flex gap-1.5">
-				<dt class="text-muted-foreground">Fragments</dt>
-				<dd class="tabular-nums">{info.fragments.toLocaleString('en-US')}</dd>
-			</div>
-			<div class="flex gap-1.5">
-				<dt class="text-muted-foreground">Data size</dt>
-				<dd class="tabular-nums">{bytes(info.data_size)}</dd>
-			</div>
-			<div class="flex gap-1.5">
-				<dt class="text-muted-foreground">Written</dt>
-				<dd class="tabular-nums">{dateTime(info.timestamp)}</dd>
-			</div>
-			{#if tags.length}
-				<div class="flex gap-1.5">
-					<dt class="text-muted-foreground">{tags.length === 1 ? 'Tag' : 'Tags'}</dt>
-					<dd>{tags.map((t) => t.name).join(', ')}</dd>
-				</div>
-			{/if}
-		</dl>
-	{/if}
-	<div class="ml-auto flex items-center gap-1">
+{#if newer !== null}
+	<p class="mt-3 text-[13px] text-muted-foreground" role="status">
+		New version available.
+		<a class="text-link underline-offset-3 hover:underline" href={versionHref(String(newer))}>
+			View version {newer}
+		</a>
+	</p>
+{/if}
+
+<div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
+	<Tabs.Root value={tab} onValueChange={(v) => setTab(v as Tab)}>
+		<Tabs.List aria-label="Dataset">
+			{#each TABS as t (t.value)}
+				<Tabs.Trigger value={t.value}>{t.label}</Tabs.Trigger>
+			{/each}
+		</Tabs.List>
+	</Tabs.Root>
+	<div class="ml-auto flex flex-wrap items-center gap-1">
+		{#if tab === 'rows' && info}
+			<ColumnsPicker names={info.schema.map((f) => f.name)} {hidden} />
+			<span class="mx-1 h-5 w-px bg-border" aria-hidden="true"></span>
+		{/if}
 		<Button
 			variant="ghost"
 			size="sm"
@@ -170,31 +159,9 @@
 	</div>
 </div>
 
-{#if newer !== null}
-	<p class="mt-3 text-[13px] text-muted-foreground" role="status">
-		New version available.
-		<a class="text-link underline-offset-3 hover:underline" href={versionHref(String(newer))}>
-			View version {newer}
-		</a>
-	</p>
-{/if}
-
-<div class="mt-6 flex items-center justify-between gap-3">
-	<Tabs.Root value={tab} onValueChange={(v) => setTab(v as Tab)}>
-		<Tabs.List aria-label="Dataset">
-			{#each TABS as t (t.value)}
-				<Tabs.Trigger value={t.value}>{t.label}</Tabs.Trigger>
-			{/each}
-		</Tabs.List>
-	</Tabs.Root>
-	{#if tab === 'rows' && info}
-		<ColumnsPicker names={info.schema.map((f) => f.name)} {hidden} />
-	{/if}
-</div>
-
-<div class="mt-4">
-	{#if tab === 'readme'}
-		<ReadmeTab {org} {path} />
+<div class="mt-6">
+	{#if tab === 'about'}
+		<AboutTab {org} {path} {info} tags={tags.map((t) => t.name)} />
 	{:else if failed || !info}
 		<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">
 			{failed ?? 'This dataset couldn’t be read.'}

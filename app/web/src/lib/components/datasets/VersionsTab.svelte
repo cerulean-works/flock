@@ -72,44 +72,50 @@
 	<table class="w-full border-collapse text-[13px]">
 		<thead>
 			<tr class="h-9 border-b text-left text-xs text-muted-foreground">
-				<th class="w-40 px-2 font-medium">Version</th>
-				<th class="w-32 px-2 font-medium">Written</th>
+				<th class="w-px px-2 font-medium">Version</th>
+				<th class="w-px px-2 font-medium">Written</th>
 				<th class="px-2 font-medium">Change</th>
-				<th class="w-44"><span class="sr-only">Actions</span></th>
+				<th class="w-px"><span class="sr-only">Actions</span></th>
 			</tr>
 		</thead>
 		<tbody>
 			{#each versions as v (v.version)}
 				<tr
-					class={['border-b border-divider align-middle', v.version === shown && 'bg-muted']}
+					class={['border-b border-divider align-top', v.version === shown && 'bg-muted']}
 					aria-current={v.version === shown ? 'true' : undefined}
 				>
 					<td class="px-2 py-2">
-						<span class="tabular-nums">{v.version}</span>
-						{#if v.tags.length}
-							<ul class="mt-1 flex flex-wrap gap-1" aria-label="Tags of version {v.version}">
-								{#each v.tags as tag (tag)}
-									<li
-										class="inline-flex h-6 items-center gap-1 rounded-full bg-secondary pr-1 pl-2 text-xs"
-									>
-										{tag}
-										<button
-											class="grid size-4 place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
-											aria-label="Remove the tag {tag}"
-											onclick={() => (removing = { tag, version: v.version })}
+						<!-- Tags sit beside the number, so a tagged row keeps the height of the others. -->
+						<div class="flex min-h-7 items-center gap-2 whitespace-nowrap">
+							<span class="tabular-nums">{v.version}</span>
+							{#if v.tags.length}
+								<ul class="contents" aria-label="Tags of version {v.version}">
+									{#each v.tags as tag (tag)}
+										<li
+											class="inline-flex h-6 max-w-56 min-w-0 items-center gap-1 rounded-full bg-secondary pr-1 pl-2 text-xs"
 										>
-											<XIcon class="size-3" />
-										</button>
-									</li>
-								{/each}
-							</ul>
-						{/if}
+											<span class="truncate" title={tag}>{tag}</span>
+											<button
+												class="grid size-4 flex-none place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
+												aria-label="Remove the tag {tag}"
+												onclick={() => (removing = { tag, version: v.version })}
+											>
+												<XIcon class="size-3" />
+											</button>
+										</li>
+									{/each}
+								</ul>
+							{/if}
+						</div>
 					</td>
-					<td class="px-2 py-2 text-muted-foreground tabular-nums" title={dateTime(v.timestamp)}>
+					<td
+						class="px-2 py-2 leading-7 whitespace-nowrap text-muted-foreground tabular-nums"
+						title={dateTime(v.timestamp)}
+					>
 						{relativeTime(v.timestamp, now)}
 					</td>
 					<td class="px-2 py-2">
-						<span>{v.operation ?? 'Unknown'}</span>
+						<span class="leading-7">{v.operation ?? 'Unknown'}</span>
 						{#if v.rows_delta}
 							<span class="ml-1 text-muted-foreground tabular-nums">{rowsChange(v.rows_delta)}</span
 							>
@@ -121,7 +127,7 @@
 							</p>
 						{/each}
 					</td>
-					<td class="px-2 py-1.5 text-right whitespace-nowrap">
+					<td class="px-2 py-2 text-right whitespace-nowrap">
 						<Button
 							variant="ghost"
 							size="sm"

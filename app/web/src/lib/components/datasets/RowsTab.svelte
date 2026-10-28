@@ -5,7 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { cellCut, datasetCall, datasetsApi, pageNumbers } from '#lib/datasets.ts';
+	import { cellCut, cellText, datasetCall, datasetsApi, pageNumbers } from '#lib/datasets.ts';
 	import type { Cell, DatasetInfo, FullCell, RowsPage } from '#lib/types.ts';
 	import { withParam } from '#lib/workspace/url.ts';
 	import CellView from './CellView.svelte';
@@ -72,6 +72,65 @@
 	const wraps = $derived(rows?.columns.map((_, j) => rows!.rows.some((row) => long(row[j]))) ?? []);
 	const filled = $derived(wraps.some(Boolean));
 
+	// When every column fits at that width, none is capped. When they don't, each column gets
+	// at most CAP_SHORT (one that would sit on one line) or CAP_LONG (one that wraps), and the
+	// table scrolls sideways.
+	const CAP_SHORT = 320;
+	const CAP_LONG = 448;
+	const MIN_LONG = 256;
+	// Cell padding, and a little more so text measured to fit doesn't wrap after rounding.
+	const PAD = 20;
+	let width = $state(0);
+	let canvas: CanvasRenderingContext2D | null = null;
+	function measure(text: string, font: string) {
+		canvas ??= document.createElement('canvas').getContext('2d');
+		if (!canvas) return text.length * 7;
+		canvas.font = font;
+		return canvas.measureText(text).width;
+	}
+	/** The widest line of a cell, as it shows on one line. */
+	function cellWidth(cell: Cell, sans: string, mono: string) {
+		if (cell.k === 'image') return 128;
+		if (cell.k === 'vec') return CAP_LONG;
+		const text =
+			cell.k === 'str' || cell.k === 'json'
+				? cell.v
+				: cell.k === 'num' && typeof cell.v === 'number' && Number.isInteger(cell.v)
+					? cellText({ ...cell, v: cell.v.toLocaleString('en-US') })
+					: cellText(cell);
+		const font = cell.k === 'json' ? `12px ${mono}` : `13px ${sans}`;
+		return Math.max(0, ...text.split('\n', 8).map((line) => measure(line, font)));
+	}
+	let table = $state<HTMLElement | null>(null);
+	/** Each column's width on one line, header included; null before the page is laid out. */
+	const natural = $derived.by(() => {
+		if (!rows || !width || !table) return null;
+		const style = getComputedStyle(table);
+		const sans = style.fontFamily;
+		const mono = style.getPropertyValue('--font-mono') || 'monospace';
+		return rows.columns.map((column, j) =>
+			Math.max(
+				measure(column.name, `500 12px ${sans}`) + measure(column.type, `11px ${mono}`) + 4,
+				...rows!.rows.map((row) => (row[j] ? cellWidth(row[j], sans, mono) : 0))
+			)
+		);
+	});
+	const capped = $derived.by(() => {
+		if (!natural || !rows) return false;
+		const numbers = measure(
+			(rows.offset + rows.rows.length).toLocaleString('en-US'),
+			'13px sans-serif'
+		);
+		const need = natural.reduce(
+			(sum, w, j) => sum + (wraps[j] ? MIN_LONG : w) + PAD,
+			numbers + PAD
+		);
+		return need > width;
+	});
+	/** A capped column's width, or null when columns take their own. */
+	const capOf = (j: number) =>
+		capped && natural ? Math.ceil(Math.min(natural[j], wraps[j] ? CAP_LONG : CAP_SHORT)) : null;
+
 	const total = $derived(rows?.total ?? info.rows);
 	const last = $derived(Math.min(offset + (rows?.rows.length ?? 0), total));
 	const current = $derived(Math.floor(offset / size) + 1);
@@ -136,20 +195,27 @@
 			{rows.total ? 'No rows on this page.' : 'This version has no rows.'}
 		</p>
 	{:else}
-		<div class={['overflow-x-auto', loading && 'opacity-60']}>
+		<div class={['overflow-x-auto', loading && 'opacity-60']} bind:clientWidth={width}>
 			<!-- Short columns are pinned to their content (w-px), so the width left over goes to
 			     the columns that wrap, or to a filler when none do. -->
-			<table class="w-full border-collapse text-[13px]">
+			<table class="w-full border-collapse text-[13px]" bind:this={table}>
 				<thead>
 					<tr class="h-9 border-b text-left text-xs text-muted-foreground">
 						<th class="w-px px-2 font-medium">#</th>
 						{#each rows.columns as column, j (column.name)}
-							<th class={['px-2 font-medium whitespace-nowrap', !wraps[j] && 'w-px']}>
+							<th
+								class={[
+									'px-2 font-medium',
+									capped ? 'w-px align-bottom' : 'whitespace-nowrap',
+									!wraps[j] && 'w-px'
+								]}
+								style:min-width={capOf(j) === null ? undefined : `${capOf(j)! + PAD}px`}
+							>
 								<span class="text-foreground">{column.name}</span>
 								<span class="ml-1 font-mono text-[11px] font-normal">{column.type}</span>
 							</th>
 						{/each}
-						{#if !filled}<th></th>{/if}
+						{#if !filled || capped}<th></th>{/if}
 					</tr>
 				</thead>
 				<tbody>
@@ -175,11 +241,23 @@
 							</td>
 							{#each row as cell, j (j)}
 								{@const got = open ? full.get(`${n}:${rows.columns[j].name}`) : undefined}
-								<td class={['px-2 py-1.5', wraps[j] ? 'min-w-64' : 'w-px whitespace-nowrap']}>
+								{@const cap = capOf(j)}
+								<td
+									class={[
+										'px-2 py-1.5',
+										cap !== null
+											? 'w-px wrap-anywhere'
+											: wraps[j]
+												? 'min-w-64'
+												: 'w-px whitespace-nowrap'
+									]}
+									style:min-width={cap === null ? undefined : `${cap + PAD}px`}
+									style:max-width={cap === null ? undefined : `${cap + PAD}px`}
+								>
 									<CellView
 										cell={got && !(got instanceof Error) ? got : cell}
 										full={open}
-										wrap={wraps[j]}
+										wrap={wraps[j] || cap !== null}
 										onopen={() => {
 											if (cell.k === 'image')
 												image = { cell, row: n, column: rows!.columns[j].name };
@@ -190,7 +268,7 @@
 									{/if}
 								</td>
 							{/each}
-							{#if !filled}<td></td>{/if}
+							{#if !filled || capped}<td></td>{/if}
 						</tr>
 					{/each}
 				</tbody>
