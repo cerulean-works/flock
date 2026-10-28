@@ -201,18 +201,23 @@
 			<table class="w-full border-collapse text-[13px]" bind:this={table}>
 				<thead>
 					<tr class="border-b text-left text-xs text-muted-foreground">
-						<th class="w-px px-2 pt-1 pb-2 align-bottom font-medium">#</th>
+						<th class="w-px px-2 py-2 font-medium">#</th>
 						{#each rows.columns as column, j (column.name)}
+							{@const cap = capOf(j)}
+							<!-- Headers stay on one line: one that wrapped would make the whole row taller.
+							     A capped column cuts its header short instead. -->
 							<th
 								class={[
-									'px-2 pt-1 pb-2 align-bottom font-medium',
-									capped ? 'w-px' : 'whitespace-nowrap',
-									!wraps[j] && 'w-px'
+									'px-2 py-2 font-medium whitespace-nowrap',
+									(cap !== null || !wraps[j]) && 'w-px'
 								]}
-								style:min-width={capOf(j) === null ? undefined : `${capOf(j)! + PAD}px`}
+								style:min-width={cap === null ? undefined : `${cap + PAD}px`}
+								style:max-width={cap === null ? undefined : `${cap + PAD}px`}
 							>
-								<span class="text-foreground">{column.name}</span>
-								<span class="ml-1 font-mono text-[11px] font-normal">{column.type}</span>
+								<div class="truncate" title="{column.name} {column.type}">
+									<span class="text-foreground">{column.name}</span>
+									<span class="ml-1 font-mono text-[11px] font-normal">{column.type}</span>
+								</div>
 							</th>
 						{/each}
 						{#if !filled || capped}<th></th>{/if}
