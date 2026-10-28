@@ -275,7 +275,7 @@ issues an ephemeral key and prints it.
 ### D61. The proxy service
 
 The proxy is a new ASGI app in `app/api/src/s3_proxy/`, run with `uvicorn
-src.s3_proxy.app:app`. It ships in the API's image and is its own compose service, `s3`, under
+src.s3_proxy.app:app`. It ships in the API's image and is its own compose service, `flock-s3`, under
 the compose profile `s3`. It takes no server lock, so it can run as many replicas as needed.
 
 - **Reused from the hub branch** (`feat/introduce-hub`, `app/api/src/hub_proxy/`), trimmed of
