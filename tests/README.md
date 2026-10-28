@@ -75,6 +75,46 @@ their asynchronous behavior. Ordinary API tests retain real sockets, application
 lifespans, and isolated databases; an ASGI transport migration is deferred until
 profiling justifies it.
 
+## Reliability on isolated main, 2026-10-29
+
+The test changes were ported to a separate worktree based on main at `e217433`
+(including PR #49). Fetching main confirmed that base was current. The worktree
+has its own `.venv`, CLI executable and editable package; no hub or training work
+from the feature checkout is included. Production source is identical to main.
+
+The initial ten-run batch found one failure: simulating one second produced
+`0.9999997615814209` seconds after PostgreSQL rounded a stored heartbeat timestamp.
+The billing assertion now checks one simulated second with a one-microsecond
+absolute tolerance. A controlled fractional timestamp reproduced the failure
+before the fix and passed 20 consecutive checks afterward.
+
+A fresh ten-run batch on test commit `fd67953` passed **all 6,490 test executions**:
+
+| Workers | Full-suite runs | Median wall time | Range |
+| --- | ---: | ---: | ---: |
+| 4 (local default) | 8 | 54.81 s | 54.08–57.73 s |
+| 2 (CI configuration) | 2 | 102.67 s | 102.44–102.90 s |
+
+Each run used a fresh pytest process and throwaway services. All 649 selected test
+identities matched exactly, with no failures, errors, skips or retries. The 13
+latency benchmarks remained excluded, and tracked source stayed unchanged for
+the entire batch. These are local macOS ARM64 measurements with dependencies
+and the PostgreSQL image already available.
+
+Reports are retained locally under the ignored directories
+`test-results/reliability-2026-10-29/` (initial batch and failure evidence) and
+`test-results/reliability-2026-10-29-fixed/` (final batch). Each contains a manifest,
+per-run logs, JUnit XML and summary JSON; the final batch also has the controlled
+precision regression log.
+
+CI receives the parallelism and waiting improvements when these changes are
+merged. It uses two workers, so the local four-worker runtime is not a hosted CI
+promise. The existing [PR #49 CI job](https://github.com/cerulean-works/flock/actions/runs/40737159565/job/122988684283)
+reported 649 passed in 292.73 seconds. The updated workflow's hosted runtime
+remains unmeasured. Its CPU-only Linux dependency export was checked to contain
+PyTorch `2.14.1+cpu` with no CUDA or Triton dependencies; the default GPU dependency
+configuration is preserved.
+
 ## Earlier measurements on 2026-10-29
 
 These measurements were taken in the earlier feature checkout, before isolating
