@@ -3,8 +3,10 @@
 import asyncio
 import itertools
 import secrets
+import threading
 import time
 from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -181,6 +183,38 @@ def make_module_flock(
 def env(make_module_flock: Flocks, s3_server: S3Server) -> S3Env:
     """One S3 flock per module; tests make buckets of their own."""
     return make_env(make_module_flock, s3_server)
+
+
+@pytest.fixture
+def invalidates(env: S3Env):
+    """Wait for the proxy to receive the mutation's real database notification."""
+    bus = env.flock.proxy.app.state.proxy._directory.bus
+
+    def on_proxy(coro):
+        return asyncio.run_coroutine_threadsafe(coro, env.flock.proxy.loop).result(timeout=10)
+
+    @contextmanager
+    def watch(table: str):
+        received = threading.Event()
+
+        def notified(payload: str) -> None:
+            if payload == table:
+                received.set()
+
+        async def listen():
+            bus.listen("s3_invalidate", notified)
+
+        async def unlisten():
+            bus._channels["s3_invalidate"].remove(notified)
+
+        on_proxy(listen())
+        try:
+            yield
+            assert received.wait(10), f"proxy received no invalidation for {table}"
+        finally:
+            on_proxy(unlisten())
+
+    return watch
 
 
 @pytest.fixture

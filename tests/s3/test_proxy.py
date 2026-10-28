@@ -305,7 +305,7 @@ def test_an_expired_key_is_refused(env: S3Env, clock):
     assert code(error.value) == "ExpiredToken"
 
 
-def test_lowering_the_maximum_refuses_older_keys_at_once(env: S3Env):
+def test_lowering_the_maximum_refuses_older_keys_at_once(env: S3Env, invalidates):
     bucket = env.bucket(org="lab")
     old, new = env.key("olga"), env.key("olga")
     env.s3(old).put_object(Bucket=bucket, Key="x", Body=b"x")
@@ -314,7 +314,8 @@ def test_lowering_the_maximum_refuses_older_keys_at_once(env: S3Env):
     env.s3(old).get_object(Bucket=bucket, Key="x")  # still within 30 days
     lab = env.api("admin")
     try:
-        assert lab.patch("/api/v1/orgs/lab", {"s3_key_max_ttl": 86400}).status == 200
+        with invalidates("orgs"):
+            assert lab.patch("/api/v1/orgs/lab", {"s3_key_max_ttl": 86400}).status == 200
         with pytest.raises(ClientError) as error:
             env.s3(old).get_object(Bucket=bucket, Key="x")
         assert code(error.value) == "ExpiredToken"
@@ -323,7 +324,7 @@ def test_lowering_the_maximum_refuses_older_keys_at_once(env: S3Env):
         lab.patch("/api/v1/orgs/lab", {"s3_key_max_ttl": 30 * 86400})
 
 
-def test_a_revoked_key_is_cut_off_at_once(env: S3Env):
+def test_a_revoked_key_is_cut_off_at_once(env: S3Env, invalidates):
     bucket = env.bucket()
     creds = env.key("alice")
     s3 = env.s3(creds)
@@ -335,13 +336,14 @@ def test_a_revoked_key_is_cut_off_at_once(env: S3Env):
         for k in alice.get("/api/v1/me/s3-keys").json()["keys"]
         if k["access_key_id"] == creds.access_key_id
     )
-    assert alice.delete(f"/api/v1/me/s3-keys/{key_id}").status == 204
+    with invalidates("s3_keys"):
+        assert alice.delete(f"/api/v1/me/s3-keys/{key_id}").status == 204
     with pytest.raises(ClientError) as error:
         s3.get_object(Bucket=bucket, Key="x")
     assert code(error.value) == "InvalidAccessKeyId"
 
 
-def test_a_removed_member_is_cut_off_at_once(env: S3Env):
+def test_a_removed_member_is_cut_off_at_once(env: S3Env, invalidates):
     user = env.flock.add_user(f"{env.name('leaver')}@flock.test")
     bucket = env.bucket()
     creds = Creds(**{
@@ -350,7 +352,8 @@ def test_a_removed_member_is_cut_off_at_once(env: S3Env):
     })  # fmt: skip
     s3 = env.s3(creds)
     s3.put_object(Bucket=bucket, Key="x", Body=b"x")
-    removed = env.api("admin").delete(f"/api/v1/orgs/flock/members/{user.id}")
+    with invalidates("memberships"):
+        removed = env.api("admin").delete(f"/api/v1/orgs/flock/members/{user.id}")
     assert removed.status == 204
     with pytest.raises(ClientError) as error:
         s3.get_object(Bucket=bucket, Key="x")
