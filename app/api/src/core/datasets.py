@@ -363,7 +363,7 @@ class Datasets:
     BINARY_ROW_PAGE: ClassVar[int] = 10
     MAX_ROW_PAGE: ClassVar[int] = 100
     CELL_TEXT: ClassVar[int] = 500  # characters of a string or JSON cell in a page
-    CELL_FULL: ClassVar[int] = MIB  # of a cell opened in the side sheet
+    CELL_FULL: ClassVar[int] = MIB  # of a cell in an opened row
     IMAGE_LIMIT: ClassVar[int] = MIB  # images larger than this show their size
     PAGE_BYTES: ClassVar[int] = 64 * MIB  # binary cell data per page
     VECTOR_HEAD: ClassVar[int] = 8
@@ -795,7 +795,7 @@ class Datasets:
     async def cell(
         self, org: Org, path: str, version: str | None, row: int, column: str
     ) -> dict[str, Any]:
-        """One cell in full, up to 1 MiB, for the side sheet."""
+        """One cell in full, up to 1 MiB, for an opened row."""
         bucket = await self.bucket(org)
         name = bucket.upstream_name
         check_path(path)

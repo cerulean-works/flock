@@ -2,17 +2,17 @@
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import Columns3Icon from '@lucide/svelte/icons/columns-3';
-	import { SvelteSet } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import * as Popover from '#lib/components/ui/popover/index.js';
-	import { datasetCall, datasetsApi } from '#lib/datasets.ts';
-	import type { Cell, DatasetInfo, RowsPage } from '#lib/types.ts';
+	import { cellCut, datasetCall, datasetsApi, pageNumbers } from '#lib/datasets.ts';
+	import type { Cell, DatasetInfo, FullCell, RowsPage } from '#lib/types.ts';
 	import { withParam } from '#lib/workspace/url.ts';
-	import CellSheet from './CellSheet.svelte';
 	import CellView from './CellView.svelte';
+	import ImageDialog from './ImageDialog.svelte';
 
 	interface Props {
 		org: string;
@@ -71,12 +71,59 @@
 	const RIGHT = new Set(['num', 'bool']);
 	const right = (cell: Cell | undefined) => !!cell && RIGHT.has(cell.k);
 
-	let sheet = $state<{ row: number; column: string } | null>(null);
 	const total = $derived(rows?.total ?? info.rows);
 	const last = $derived(Math.min(offset + (rows?.rows.length ?? 0), total));
+	const current = $derived(Math.floor(offset / size) + 1);
+	const pages = $derived(Math.max(1, Math.ceil(total / size)));
+
+	// Rows opened in place, by number. Their cut cells are read in full when they open, keyed
+	// `row:column`, and kept for when the row opens again.
+	const opened = new SvelteSet<number>();
+	const full = new SvelteMap<string, Cell | Error>();
+
+	const isCut = (cell: Cell) => cellCut(cell) || (cell.k === 'vec' && cell.head.length < cell.len);
+
+	function toggle(row: number, cells: Cell[]) {
+		if (opened.delete(row)) return;
+		opened.add(row);
+		rows?.columns.forEach((column, j) => {
+			const cell = cells[j];
+			const key = `${row}:${column.name}`;
+			if (!cell || !isCut(cell) || full.has(key)) return;
+			datasetCall<FullCell>(
+				datasetsApi(org, 'cell', { path, version: info.version, row, column: column.name })
+			)
+				.then((got) => full.set(key, cell.k === 'vec' ? asVector(cell, got.cell) : got.cell))
+				.catch((e: Error) => full.set(key, e));
+		});
+	}
+
+	/** The API sends a whole vector as JSON: back to a vector, with every value. */
+	function asVector(cell: Extract<Cell, { k: 'vec' }>, got: Cell): Cell {
+		if (got.k !== 'json' || got.len) return got;
+		try {
+			return { ...cell, head: JSON.parse(got.v) };
+		} catch {
+			return got;
+		}
+	}
+
+	function onrowclick(e: MouseEvent, row: number, cells: Cell[]) {
+		const target = e.target as Element;
+		// Buttons act on their own, and selecting text doesn't open or close the row.
+		if (target.closest('button, a')) return;
+		const selection = getSelection();
+		if (selection && !selection.isCollapsed && target.closest('tr')?.contains(selection.anchorNode))
+			return;
+		toggle(row, cells);
+	}
+
+	let image = $state<{ cell: Extract<Cell, { k: 'image' }>; row: number; column: string } | null>(
+		null
+	);
 </script>
 
-<div class="grid gap-3">
+<div class="bleed grid gap-3">
 	<div class="flex flex-wrap items-center gap-2">
 		<Popover.Root>
 			<Popover.Trigger>
@@ -110,31 +157,6 @@
 				{/each}
 			</Popover.Content>
 		</Popover.Root>
-
-		<nav class="ml-auto flex items-center gap-1 text-[13px] tabular-nums" aria-label="Row pages">
-			{#if total}
-				<span>{(offset + 1).toLocaleString('en-US')}–{last.toLocaleString('en-US')}</span>
-				<span class="mr-1 text-muted-foreground">of {total.toLocaleString('en-US')}</span>
-			{/if}
-			<Button
-				variant="ghost"
-				size="icon-sm"
-				aria-label="Previous page"
-				disabled={offset <= 0}
-				onclick={() => go(Math.max(0, offset - size))}
-			>
-				<ChevronLeftIcon />
-			</Button>
-			<Button
-				variant="ghost"
-				size="icon-sm"
-				aria-label="Next page"
-				disabled={offset + size >= total}
-				onclick={() => go(offset + size)}
-			>
-				<ChevronRightIcon />
-			</Button>
-		</nav>
 	</div>
 
 	{#if !shown.length}
@@ -167,18 +189,40 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each rows.rows as row, i (offset + i)}
-						<tr class="border-b border-divider align-top">
+					{#each rows.rows as row, i (rows.offset + i)}
+						{@const n = rows.offset + i}
+						{@const open = opened.has(n)}
+						<tr
+							class={[
+								'cursor-pointer border-b border-divider align-top',
+								open ? 'bg-muted/60' : 'hover:bg-muted/60'
+							]}
+							onclick={(e) => onrowclick(e, n, row)}
+						>
 							<td class="px-2 py-1.5 text-right text-muted-foreground tabular-nums">
-								{(rows.offset + i).toLocaleString('en-US')}
+								<button
+									class="rounded-sm outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+									aria-expanded={open}
+									aria-label="{open ? 'Close' : 'Open'} row {n}"
+									onclick={() => toggle(n, row)}
+								>
+									{n.toLocaleString('en-US')}
+								</button>
 							</td>
 							{#each row as cell, j (j)}
+								{@const got = open ? full.get(`${n}:${rows.columns[j].name}`) : undefined}
 								<td class={['max-w-96 px-2 py-1.5', right(cell) && 'text-right']}>
 									<CellView
-										{cell}
-										onopen={() =>
-											(sheet = { row: rows!.offset + i, column: rows!.columns[j].name })}
+										cell={got && !(got instanceof Error) ? got : cell}
+										full={open}
+										onopen={() => {
+											if (cell.k === 'image')
+												image = { cell, row: n, column: rows!.columns[j].name };
+										}}
 									/>
+									{#if got instanceof Error}
+										<p class="mt-1 text-[12px] text-destructive">{got.message}</p>
+									{/if}
 								</td>
 							{/each}
 						</tr>
@@ -186,14 +230,57 @@
 				</tbody>
 			</table>
 		</div>
+		<nav
+			class="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] tabular-nums"
+			aria-label="Row pages"
+		>
+			<p>
+				{(offset + 1).toLocaleString('en-US')}–{last.toLocaleString('en-US')}
+				<span class="text-muted-foreground">of {total.toLocaleString('en-US')}</span>
+			</p>
+			<div class="ml-auto flex items-center gap-1">
+				<Button
+					variant="ghost"
+					size="sm"
+					aria-label="Previous page"
+					disabled={current <= 1}
+					onclick={() => go(Math.max(0, offset - size))}
+				>
+					<ChevronLeftIcon /> Previous
+				</Button>
+				{#each pageNumbers(current, pages) as p, i (p ?? `gap${i}`)}
+					{#if p === null}
+						<span class="w-7 text-center text-muted-foreground" aria-hidden="true">…</span>
+					{:else}
+						<Button
+							variant={p === current ? 'secondary' : 'ghost'}
+							size="sm"
+							class="min-w-7 px-1.5"
+							aria-label="Page {p}"
+							aria-current={p === current ? 'page' : undefined}
+							onclick={() => go((p - 1) * size)}
+						>
+							{p.toLocaleString('en-US')}
+						</Button>
+					{/if}
+				{/each}
+				<Button
+					variant="ghost"
+					size="sm"
+					aria-label="Next page"
+					disabled={current >= pages}
+					onclick={() => go(offset + size)}
+				>
+					Next <ChevronRightIcon />
+				</Button>
+			</div>
+		</nav>
 	{/if}
 </div>
 
-<CellSheet
-	bind:open={() => sheet !== null, (o) => (sheet = o ? sheet : null)}
-	{org}
-	{path}
-	version={info.version}
-	row={sheet?.row ?? 0}
-	column={sheet?.column ?? ''}
+<ImageDialog
+	bind:open={() => image !== null, (o) => (image = o ? image : null)}
+	cell={image?.cell ?? null}
+	column={image?.column ?? ''}
+	row={image?.row ?? 0}
 />

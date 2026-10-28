@@ -2,7 +2,6 @@
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FileIcon from '@lucide/svelte/icons/file';
 	import FolderIcon from '@lucide/svelte/icons/folder';
-	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import { resolve } from '$app/paths';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import {
@@ -13,7 +12,6 @@
 		fileHref,
 		writeSnippet
 	} from '#lib/datasets.ts';
-	import { objectHref } from '#lib/storage.ts';
 	import type { DatasetFolder } from '#lib/types.ts';
 	import { bytes, dateTime, relativeTime } from '#lib/utils.ts';
 	import CopyBlock from '../CopyBlock.svelte';
@@ -58,20 +56,6 @@
 </script>
 
 <div class="grid gap-3">
-	<div class="flex items-center gap-2">
-		<p class="min-w-0 truncate font-mono text-[13px] text-muted-foreground">
-			s3://{DATASETS_BUCKET}/{path ? `${path}/` : ''}
-		</p>
-		<Button
-			variant="ghost"
-			size="sm"
-			class="ml-auto text-muted-foreground"
-			href={objectHref(org, DATASETS_BUCKET, path ? `${path}/` : '')}
-		>
-			<FolderOpenIcon /> Browse files
-		</Button>
-	</div>
-
 	{#if empty && !path}
 		<div class="max-w-[68ch]">
 			<p class="text-[15px]">No datasets yet.</p>
@@ -95,8 +79,8 @@
 			<thead>
 				<tr class="h-10 border-b text-left text-xs font-medium text-muted-foreground">
 					<th class="px-2 font-medium">Name</th>
-					<th class="hidden w-28 px-2 font-medium sm:table-cell">Version</th>
-					<th class="hidden w-28 px-2 text-right font-medium sm:table-cell">Size</th>
+					<th class="hidden w-36 px-2 font-medium sm:table-cell">Version</th>
+					<th class="hidden w-36 px-2 font-medium sm:table-cell">Size</th>
 					<th class="w-36 px-2 font-medium">Updated</th>
 				</tr>
 			</thead>
@@ -115,7 +99,7 @@
 						<td class="hidden px-2 text-muted-foreground tabular-nums sm:table-cell">
 							{d.version === null ? 'Unknown' : `v${d.version}`}
 						</td>
-						<td class="hidden px-2 text-right text-muted-foreground sm:table-cell">—</td>
+						<td class="hidden px-2 text-muted-foreground sm:table-cell">—</td>
 						<td
 							class="px-2 text-muted-foreground tabular-nums"
 							title={d.updated_at ? dateTime(d.updated_at) : undefined}
@@ -136,7 +120,7 @@
 							</a>
 						</td>
 						<td class="hidden px-2 text-muted-foreground sm:table-cell">—</td>
-						<td class="hidden px-2 text-right text-muted-foreground sm:table-cell">—</td>
+						<td class="hidden px-2 text-muted-foreground sm:table-cell">—</td>
 						<td class="px-2 text-muted-foreground">—</td>
 					</tr>
 				{/each}
@@ -152,7 +136,7 @@
 							</a>
 						</td>
 						<td class="hidden px-2 text-muted-foreground sm:table-cell">—</td>
-						<td class="hidden px-2 text-right text-muted-foreground tabular-nums sm:table-cell">
+						<td class="hidden px-2 text-muted-foreground tabular-nums sm:table-cell">
 							{bytes(file.size)}
 						</td>
 						<td

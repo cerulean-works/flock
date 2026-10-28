@@ -270,7 +270,7 @@ export interface RowsPage {
 	rows: Cell[][];
 }
 
-/** One cell in full, for the side sheet (`GET …/datasets/cell`). */
+/** One cell in full, for an opened row (`GET …/datasets/cell`). */
 export interface FullCell {
 	row: number;
 	column: string;

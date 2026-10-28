@@ -9,8 +9,10 @@ import {
 	daysLeft,
 	fileHref,
 	nameOf,
+	pageNumbers,
 	parentOf,
 	pathError,
+	readSnippet,
 	tagError,
 	writeSnippet
 } from './datasets.ts';
@@ -94,5 +96,28 @@ describe('display', () => {
 	it('writes the snippet for the org', () => {
 		expect(writeSnippet('acme')).toContain('s3.credentials("acme")');
 		expect(writeSnippet('acme')).toContain('creds.uri("flock-datasets", "eval", "mmlu")');
+	});
+});
+
+describe('pageNumbers', () => {
+	it('keeps the ends and the pages around the current one, with gaps between', () => {
+		expect(pageNumbers(1, 1)).toEqual([1]);
+		expect(pageNumbers(1, 10)).toEqual([1, 2, null, 10]);
+		expect(pageNumbers(5, 10)).toEqual([1, null, 4, 5, 6, null, 10]);
+		expect(pageNumbers(10, 10)).toEqual([1, null, 9, 10]);
+		// A gap of one page shows the page.
+		expect(pageNumbers(4, 10)).toEqual([1, 2, 3, 4, 5, null, 10]);
+		expect(pageNumbers(2, 5)).toEqual([1, 2, 3, 4, 5]);
+	});
+});
+
+describe('readSnippet', () => {
+	it('opens the dataset through the endpoint, allowing plain HTTP only when it is', () => {
+		const https = readSnippet('eval/mmlu', 'https://s3.flock.test', 'us-east-1');
+		expect(https).toContain('"s3://flock-datasets/eval/mmlu",');
+		expect(https).toContain('"aws_endpoint": "https://s3.flock.test",');
+		expect(https).toContain('"aws_region": "us-east-1",');
+		expect(https).not.toContain('allow_http');
+		expect(readSnippet('x', 'http://localhost:9000', 'auto')).toContain('"allow_http": "true",');
 	});
 });

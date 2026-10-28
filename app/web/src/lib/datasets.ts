@@ -161,7 +161,7 @@ export function cellText(cell: Cell): string {
 	}
 }
 
-/** Whether a cell was cut short, so the side sheet has more of it. */
+/** Whether a cell was cut short, so an opened row reads it in full. */
 export const cellCut = (cell: Cell) => (cell.k === 'str' || cell.k === 'json') && !!cell.len;
 
 /** The snippet that writes a dataset into the org's flock-datasets (section 1 of 013). */
@@ -175,3 +175,39 @@ export const writeSnippet = (org: string) =>
 		`    table, creds.uri("${DATASETS_BUCKET}", "eval", "mmlu"), storage_options=creds.storage_options()`,
 		')'
 	].join('\n');
+
+/** The snippet that opens a dataset with Lance, with a long-lived key filled in by hand. */
+export function readSnippet(path: string, endpoint: string, region: string): string {
+	const options: [string, string][] = [
+		['aws_endpoint', endpoint],
+		['aws_access_key_id', 'YOUR_ACCESS_KEY_ID'],
+		['aws_secret_access_key', 'YOUR_SECRET_ACCESS_KEY'],
+		['aws_region', region],
+		['aws_virtual_hosted_style_request', 'false'],
+		...(endpoint.startsWith('http://') ? ([['allow_http', 'true']] as [string, string][]) : [])
+	];
+	return [
+		'import lance',
+		'',
+		'ds = lance.dataset(',
+		`    "${datasetUri(path)}",`,
+		'    storage_options={',
+		...options.map(([k, v]) => `        "${k}": "${v}",`),
+		'    },',
+		')'
+	].join('\n');
+}
+
+/**
+ * The pages a pager links to: the first, the last, and the current one with its neighbours,
+ * `null` where pages are left out. A gap of one page shows that page instead.
+ */
+export function pageNumbers(current: number, count: number): (number | null)[] {
+	const keep = new Set([1, count, current - 1, current, current + 1]);
+	const out: (number | null)[] = [];
+	for (let n = 1; n <= count; n++) {
+		if (keep.has(n) || (keep.has(n - 1) && keep.has(n + 1))) out.push(n);
+		else if (out.at(-1) !== null) out.push(null);
+	}
+	return out;
+}

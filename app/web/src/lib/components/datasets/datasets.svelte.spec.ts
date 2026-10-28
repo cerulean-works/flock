@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { page as screen, userEvent } from 'vitest/browser';
+import { page as screen } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../routes/layout.css';
 import { goto, invalidateAll, resetApp } from '#lib/testing/app.svelte.ts';
@@ -85,12 +85,18 @@ describe('FolderView', () => {
 		expect(calls[0].url).toBe('/api/datasets/acme/at?path=eval&cursor=next');
 		await expect.element(screen.getByText('Unknown')).toBeInTheDocument();
 		await expect.element(screen.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+		// A folder isn't a dataset: no S3 path to copy, and no file browser link.
+		await expect.element(screen.getByText(/s3:\/\//)).not.toBeInTheDocument();
+		await expect
+			.element(screen.getByRole('link', { name: 'Browse files' }))
+			.not.toBeInTheDocument();
 	});
 
 	it('shows how to write a dataset when the bucket is empty', async () => {
 		const empty = { ...folder, path: '', datasets: [], folders: [], files: [], cursor: null };
 		render(FolderView, { org: 'acme', path: '', folder: empty, now: 0 });
 		await expect.element(screen.getByText('No datasets yet.')).toBeVisible();
+		await expect.element(screen.getByText('s3://flock-datasets/')).not.toBeInTheDocument();
 		await expect.element(screen.getByText(/s3\.credentials\("acme"\)/)).toBeVisible();
 		await expect.element(screen.getByRole('link', { name: 'account page' })).toBeVisible();
 	});
@@ -155,6 +161,8 @@ const versions: VersionsPage = {
 	}))
 };
 
+const s3 = { endpoint: 'http://s3.flock.test', region: 'us-east-1' };
+
 describe('DatasetView', () => {
 	const view = (url = 'http://flock.test/datasets/acme/eval/mmlu?version=3') => {
 		resetApp(url);
@@ -164,6 +172,7 @@ describe('DatasetView', () => {
 			info,
 			failed: null,
 			requested: '3',
+			s3,
 			now: 1_790_000_100
 		});
 	};
@@ -174,8 +183,7 @@ describe('DatasetView', () => {
 		await expect.element(screen.getByRole('heading', { name: 'mmlu', level: 1 })).toBeVisible();
 		await expect.element(screen.getByText('1,234')).toBeVisible();
 		await expect.element(screen.getByText('5.0 MB')).toBeVisible();
-		await expect.element(screen.getByText('s3://flock-datasets/eval/mmlu')).toBeVisible();
-		await expect.element(screen.getByRole('button', { name: 'Copy S3 URI' })).toBeVisible();
+		await expect.element(screen.getByText('s3://flock-datasets/eval/mmlu')).not.toBeInTheDocument();
 		expect(screen.getByRole('link', { name: 'Browse files' }).element().getAttribute('href')).toBe(
 			'/storage/acme/flock-datasets/eval/mmlu/'
 		);
@@ -185,6 +193,27 @@ describe('DatasetView', () => {
 		).toBe('/datasets/acme/eval/mmlu?version=5');
 		// The README is the default tab.
 		await expect.element(screen.getByRole('heading', { name: 'MMLU' })).toBeVisible();
+		await expect.element(screen.getByRole('tab', { name: 'Viewer' })).toBeVisible();
+	});
+
+	it('shows how to reach the dataset in S3', async () => {
+		serve({ '/api/datasets/acme/readme': () => ({ text: '', truncated: false }) });
+		view();
+		await screen.getByRole('button', { name: 'Access in S3' }).click();
+		const dialog = screen.getByRole('dialog');
+		await expect
+			.element(dialog.getByText('s3://flock-datasets/eval/mmlu', { exact: true }))
+			.toBeVisible();
+		await expect.element(dialog.getByRole('button', { name: 'Copy S3 URI' })).toBeVisible();
+		await expect.element(dialog.getByText('http://s3.flock.test', { exact: true })).toBeVisible();
+		const code = dialog.getByRole('code').element().textContent!;
+		expect(code).toContain('lance.dataset(\n    "s3://flock-datasets/eval/mmlu",');
+		expect(code).toContain('"aws_endpoint": "http://s3.flock.test",');
+		expect(code).toContain('"aws_access_key_id": "YOUR_ACCESS_KEY_ID",');
+		expect(code).toContain('"allow_http": "true",');
+		expect(dialog.getByRole('link', { name: 'account page' }).element().getAttribute('href')).toBe(
+			'/account#s3-keys'
+		);
 	});
 
 	it('says when there is no README', async () => {
@@ -230,45 +259,136 @@ describe('DatasetView', () => {
 			rows: [
 				[
 					{ k: 'num', v: 50 },
-					{ k: 'json', v: '{"a":1' + '0'.repeat(494), len: 900 }
+					{ k: 'json', v: '{"a":1}' }
 				]
 			]
 		};
-		const calls = serve({
-			'/api/datasets/acme/rows': () => rows,
-			'/api/datasets/acme/cell': () => ({
-				row: 50,
-				column: 'meta',
-				type: 'struct<a: int32>',
-				cell: { k: 'json', v: '{"a":1}' }
-			})
-		});
+		const calls = serve({ '/api/datasets/acme/rows': () => rows });
 		view('http://flock.test/datasets/acme/eval/mmlu?version=3&tab=rows&offset=50');
 		await expect.element(screen.getByText('51–51')).toBeVisible();
+		await expect.element(screen.getByText('of 1,234')).toBeVisible();
 		expect(calls[0].url).toBe(
 			'/api/datasets/acme/rows?path=eval%2Fmmlu&version=3&offset=50&limit=50'
 		);
+		// Pages 1, 2 (this one) and 3, then the last.
+		const pages = screen.getByRole('navigation', { name: 'Row pages' }).getByRole('button');
+		expect(pages.all().map((b) => b.element().textContent!.trim())).toEqual([
+			'Previous',
+			'1',
+			'2',
+			'3',
+			'25',
+			'Next'
+		]);
+		await expect
+			.element(screen.getByRole('button', { name: 'Page 2', exact: true }))
+			.toHaveAttribute('aria-current', 'page');
 		await screen.getByRole('button', { name: 'Next page' }).click();
 		expect(goto).toHaveBeenLastCalledWith(
 			'/datasets/acme/eval/mmlu?version=3&tab=rows&offset=100',
 			{ reset: false }
 		);
-		// A cut cell opens in full in the side sheet.
-		await screen.getByRole('button', { name: '900 characters' }).click();
-		await vi.waitFor(() =>
-			expect(calls.some((c) => c.url.startsWith('/api/datasets/acme/cell?'))).toBe(true)
+		await screen.getByRole('button', { name: 'Page 25' }).click();
+		expect(goto).toHaveBeenLastCalledWith(
+			'/datasets/acme/eval/mmlu?version=3&tab=rows&offset=1200',
+			{ reset: false }
 		);
-		await expect.element(screen.getByRole('dialog').getByText('"a": 1')).toBeVisible();
-		await userEvent.keyboard('{Escape}');
+		await screen.getByRole('button', { name: 'Page 1', exact: true }).click();
+		expect(goto).toHaveBeenLastCalledWith('/datasets/acme/eval/mmlu?version=3&tab=rows', {
+			reset: false
+		});
 
 		// The page moved on (the URL is the page's), and a hidden column isn't asked for.
 		await screen.getByRole('button', { name: 'Columns' }).click();
 		await screen.getByRole('checkbox').nth(1).click();
 		await vi.waitFor(() =>
 			expect(calls.at(-1)!.url).toBe(
-				'/api/datasets/acme/rows?path=eval%2Fmmlu&version=3&offset=100&limit=50&columns=id'
+				'/api/datasets/acme/rows?path=eval%2Fmmlu&version=3&offset=0&limit=50&columns=id'
 			)
 		);
+	});
+
+	it('opens a row in place with its cells in full, and closes it again', async () => {
+		const rows: RowsPage = {
+			version: 3,
+			offset: 0,
+			limit: 50,
+			total: 2,
+			columns: [
+				{ name: 'text', type: 'string' },
+				{ name: 'emb', type: 'fixed_size_list<float>[4]' },
+				{ name: 'meta', type: 'struct<a: int32>' }
+			],
+			rows: [
+				[
+					{ k: 'str', v: 'a'.repeat(500), len: 900 },
+					{ k: 'vec', dtype: 'float', len: 4, head: [0.123456, 1] },
+					{ k: 'json', v: '{"a":1}' }
+				],
+				[{ k: 'str', v: 'short' }, { k: 'null' }, { k: 'null' }]
+			]
+		};
+		const full: Record<string, Cell> = {
+			text: { k: 'str', v: 'a'.repeat(899) + 'z' },
+			emb: { k: 'json', v: '[0.123456,1,2,3]' }
+		};
+		const calls = serve({
+			'/api/datasets/acme/rows': () => rows,
+			'/api/datasets/acme/cell': (_, url) => {
+				const column = new URL(url!, 'http://flock.test').searchParams.get('column')!;
+				return { row: 0, column, type: 'x', cell: full[column] };
+			}
+		});
+		view('http://flock.test/datasets/acme/eval/mmlu?version=3&tab=rows');
+		await expect.element(screen.getByText('900 characters')).toBeVisible();
+		await expect.element(screen.getByText(/0\.1235, 1, …/)).toBeVisible();
+
+		// Clicking anywhere on the row opens it, reading only the cells that were cut.
+		await screen.getByText('900 characters').click();
+		await expect.element(screen.getByText(/a+z/)).toBeVisible();
+		await expect.element(screen.getByText(/0\.123456, 1, 2, 3/)).toBeVisible();
+		await expect.element(screen.getByText(/"a": 1/)).toBeVisible();
+		const cells = calls.filter((c) => c.url.startsWith('/api/datasets/acme/cell?'));
+		expect(cells.map((c) => c.url)).toEqual([
+			'/api/datasets/acme/cell?path=eval%2Fmmlu&version=3&row=0&column=text',
+			'/api/datasets/acme/cell?path=eval%2Fmmlu&version=3&row=0&column=emb'
+		]);
+		await expect
+			.element(screen.getByRole('button', { name: 'Close row 0' }))
+			.toHaveAttribute('aria-expanded', 'true');
+
+		// And again closes it, back to the cut cells.
+		await screen.getByRole('button', { name: 'Close row 0' }).click();
+		await expect.element(screen.getByText(/a+z/)).not.toBeInTheDocument();
+		await expect.element(screen.getByText('900 characters')).toBeVisible();
+		await expect
+			.element(screen.getByRole('button', { name: 'Open row 0' }))
+			.toHaveAttribute('aria-expanded', 'false');
+	});
+
+	it('opens images in a dialog with their size and format', async () => {
+		// A 2 × 1 PNG.
+		const png =
+			'iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAADUlEQVR4nGP4zwAE/wEHAAH/4iOeWQAAAABJRU5ErkJggg==';
+		serve({
+			'/api/datasets/acme/rows': () => ({
+				version: 3,
+				offset: 0,
+				limit: 10,
+				total: 1,
+				columns: [{ name: 'image', type: 'binary' }],
+				rows: [[{ k: 'image', mime: 'image/png', size: 2048, data: png }]]
+			})
+		});
+		view('http://flock.test/datasets/acme/eval/mmlu?version=3&tab=rows');
+		await screen.getByRole('button', { name: 'PNG image, 2.0 KB' }).click();
+		const dialog = screen.getByRole('dialog');
+		await expect.element(dialog.getByRole('img', { name: 'image, row 0' })).toBeVisible();
+		await expect.element(dialog.getByText('2 × 1 pixels')).toBeVisible();
+		await expect.element(dialog.getByText('2.0 KB')).toBeVisible();
+		await expect.element(dialog.getByText('PNG', { exact: true })).toBeVisible();
+		// The click opened the image, not the row.
+		await expect.element(screen.getByRole('button', { name: 'Open row 0' })).toBeInTheDocument();
 	});
 
 	it('picks versions and tags from the picker, kept in the URL', async () => {
@@ -314,6 +434,7 @@ describe('DatasetView', () => {
 			info: null,
 			failed: 'Lance couldn’t read the dataset: missing data file',
 			requested: null,
+			s3,
 			now: 0
 		});
 		await expect
@@ -358,10 +479,14 @@ describe('CellView', () => {
 	});
 
 	it('cuts long text and says how long it is', async () => {
-		const onopen = vi.fn();
-		render(CellView, { cell: { k: 'str', v: 'a'.repeat(500), len: 1200 }, onopen });
-		await screen.getByRole('button', { name: '1,200 characters' }).click();
-		expect(onopen).toHaveBeenCalled();
+		render(CellView, { cell: { k: 'str', v: 'a'.repeat(500), len: 1200 } });
+		await expect.element(screen.getByText('1,200 characters')).toBeVisible();
+		await expect.element(screen.getByText(/^a+…$/)).toHaveClass('line-clamp-4');
+	});
+
+	it('shows all of a cell in an opened row', async () => {
+		render(CellView, { cell: { k: 'json', v: '{"a":[1,2]}' }, full: true });
+		await expect.element(screen.getByText(/"a": \[/)).not.toHaveClass('line-clamp-4');
 	});
 });
 

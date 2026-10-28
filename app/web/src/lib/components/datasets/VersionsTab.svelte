@@ -81,7 +81,7 @@
 		<tbody>
 			{#each versions as v (v.version)}
 				<tr
-					class={['border-b border-divider align-top', v.version === shown && 'bg-muted']}
+					class={['border-b border-divider align-middle', v.version === shown && 'bg-muted']}
 					aria-current={v.version === shown ? 'true' : undefined}
 				>
 					<td class="px-2 py-2">

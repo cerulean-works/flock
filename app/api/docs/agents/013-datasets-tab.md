@@ -134,14 +134,15 @@ folder's path is the dataset's name, such as `eval/mmlu`. Folders nest to any de
 
 - **Header:** the dataset's path, the version picker (D89), and these numbers for the version
   shown: rows, columns, fragments and data size (the sum of its data files, from the manifest).
-  Actions: Copy S3 URI (`s3://flock-datasets/{path}`), Browse files, Rename (D95) and Delete
-  (D93).
+  Actions, on the same row as the numbers: Access in S3 (a dialog with the S3 URI
+  `s3://flock-datasets/{path}`, the endpoint and a Lance snippet), Browse files, Rename (D95)
+  and Delete (D93).
 - **Tabs:**
 
   | Tab | Shows |
   | --- | --- |
   | README (default) | `README.md` from the dataset's folder (D92) |
-  | Rows | the row viewer (D90) |
+  | Viewer (`?tab=rows`) | the row viewer (D90) |
   | Schema | the columns and dataset details (D91) |
   | Versions | the version history (D89) |
 
@@ -170,7 +171,8 @@ Lance makes a new version for every write, so the history comes from Lance and n
 
 - **Paging** by offset, 50 rows a page, or 10 when the schema has binary columns (below). Lance
   skips whole fragments by their row counts, so a page deep in a large dataset is still fast.
-  The URL keeps `offset`.
+  The URL keeps `offset`. A pager under the table has Previous, the page numbers (the first, the
+  last and those around the current one) and Next. The table spans the whole page.
 - **Columns:** all of them by default, with a picker that hides some. Hidden columns aren't read.
 - **Cells** are rendered by the API from Arrow types, so the browser gets plain JSON:
 
@@ -178,14 +180,17 @@ Lance makes a new version for every write, so the history comes from Lance and n
   | --- | --- |
   | null | a muted `null` |
   | numbers, booleans | as is, right-aligned |
-  | strings | the first 500 characters. Longer cells show their length and open in full (up to 1 MiB) in a side sheet. |
+  | strings | the first 500 characters. Longer cells show their length and show in full (up to 1 MiB) when the row is opened. |
   | timestamps, dates | ISO 8601, in the column's time zone if it has one |
-  | binary | a thumbnail if the bytes are a PNG, JPEG, GIF or WebP image under 1 MiB, otherwise its size |
+  | binary | a thumbnail if the bytes are a PNG, JPEG, GIF or WebP image under 1 MiB, otherwise its size. A thumbnail opens the image in a dialog with its dimensions, size and format. |
   | struct `{bytes, path}` | as an image, the way HF `datasets` stores its `Image` feature |
   | fixed-size list of floats | `float32[768]` with the first few values, for embeddings |
-  | other lists and structs | JSON, cut at 500 characters, opening in the side sheet |
+  | other lists and structs | JSON, cut at 500 characters, in full when the row is opened |
   | Lance blob columns | their size only. Lance reads blob columns as descriptions, so the bytes aren't fetched (to confirm in Step 3). |
 
+- **Opening a row.** Clicking a row opens it in place: every cell unclamped, JSON laid out,
+  vectors with all their values. Cells that were cut are read in full with `GET cell`. Clicking
+  again closes it.
 - **HF features.** When the schema's metadata holds HF `datasets` features (the `huggingface`
   key, which HF writes when it saves Arrow), `ClassLabel` columns show their label names next to
   the integer.
@@ -280,7 +285,7 @@ its delete is removed.
   | `GET at?path&cursor` | a folder's listing (D87), or `{kind: "dataset", …}` when the path is a dataset |
   | `GET info?path&version` | the header numbers, schema and details (D88, D91), with the resolved version |
   | `GET rows?path&version&offset&limit&columns` | one page of rendered cells (D90) |
-  | `GET cell?path&version&row&column` | one full cell for the side sheet, up to 1 MiB |
+  | `GET cell?path&version&row&column` | one full cell for an opened row, up to 1 MiB |
   | `GET versions?path&cursor` | the history (D89) |
   | `GET readme?path` | the README's text, or 404 |
   | `POST delete {path}` | moves it to the trash (D93) |
@@ -532,7 +537,7 @@ to them.
   After a delete, the page goes to the nearest folder that still exists, since a folder that held
   only the dataset is gone with it. Tag chips sit under the version number rather than in a
   column of their own, so they show on narrow screens. The Storage tab's Markdown rendering moved
-  to `Markdown.svelte`, shared with the README tab. Folder pages also have "Browse files".
+  to `Markdown.svelte`, shared with the README tab.
 - **Formatting.** Prettier reformatted `routes/device/+page.svelte`, which `pnpm lint` failed on
   before.
 - **Docs.** A Datasets section in the S3 guide, an API page (`api/datasets`), and a Datasets

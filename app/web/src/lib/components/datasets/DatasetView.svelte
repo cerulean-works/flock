@@ -1,21 +1,22 @@
 <script lang="ts">
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import PlugIcon from '@lucide/svelte/icons/plug';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
-	import { DATASETS_BUCKET, datasetCall, datasetUri, datasetsApi, nameOf } from '#lib/datasets.ts';
+	import { DATASETS_BUCKET, datasetCall, datasetsApi, nameOf } from '#lib/datasets.ts';
 	import { objectHref } from '#lib/storage.ts';
-	import type { DatasetInfo } from '#lib/types.ts';
+	import type { DatasetInfo, S3Config } from '#lib/types.ts';
 	import { bytes, dateTime } from '#lib/utils.ts';
 	import { withParam } from '#lib/workspace/url.ts';
-	import CopyButton from '../CopyButton.svelte';
 	import DeleteDatasetDialog from './DeleteDatasetDialog.svelte';
 	import ReadmeTab from './ReadmeTab.svelte';
 	import RenameDialog from './RenameDialog.svelte';
 	import RowsTab from './RowsTab.svelte';
+	import S3AccessDialog from './S3AccessDialog.svelte';
 	import SchemaTab from './SchemaTab.svelte';
 	import VersionPicker from './VersionPicker.svelte';
 	import VersionsTab from './VersionsTab.svelte';
@@ -28,15 +29,17 @@
 		failed: string | null;
 		/** The `?version=` asked for (a number or a tag), null for the latest. */
 		requested: string | null;
+		/** The S3 proxy, for the Access in S3 dialog. */
+		s3: S3Config;
 		now: number;
 	}
 
-	let { org, path, info, failed, requested, now }: Props = $props();
+	let { org, path, info, failed, requested, s3, now }: Props = $props();
 
 	type Tab = 'readme' | 'rows' | 'schema' | 'versions';
 	const TABS: { value: Tab; label: string }[] = [
 		{ value: 'readme', label: 'README' },
-		{ value: 'rows', label: 'Rows' },
+		{ value: 'rows', label: 'Viewer' },
 		{ value: 'schema', label: 'Schema' },
 		{ value: 'versions', label: 'Versions' }
 	];
@@ -81,11 +84,12 @@
 		}
 	}
 
+	let accessing = $state(false);
 	let renaming = $state(false);
 	let deleting = $state(false);
 </script>
 
-<div class="flex flex-wrap items-baseline gap-x-3 gap-y-2 pt-3">
+<div class="flex flex-wrap items-center gap-x-3 gap-y-2 pt-3">
 	<h1 class="min-w-0 truncate text-[34px] leading-[1.15] tracking-[-0.025em]" title={path}>
 		{nameOf(path)}
 	</h1>
@@ -94,12 +98,46 @@
 	{/if}
 </div>
 
-<div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
-	<p class="flex min-w-0 items-center gap-1 font-mono text-[13px] text-muted-foreground">
-		<span class="truncate">{datasetUri(path)}</span>
-		<CopyButton text={datasetUri(path)} label="Copy S3 URI" />
-	</p>
+<div class="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2">
+	{#if info}
+		<dl class="flex flex-wrap gap-x-6 gap-y-1 text-[13px]" aria-label="This version">
+			<div class="flex gap-1.5">
+				<dt class="text-muted-foreground">Rows</dt>
+				<dd class="tabular-nums">{info.rows.toLocaleString('en-US')}</dd>
+			</div>
+			<div class="flex gap-1.5">
+				<dt class="text-muted-foreground">Columns</dt>
+				<dd class="tabular-nums">{info.columns.toLocaleString('en-US')}</dd>
+			</div>
+			<div class="flex gap-1.5">
+				<dt class="text-muted-foreground">Fragments</dt>
+				<dd class="tabular-nums">{info.fragments.toLocaleString('en-US')}</dd>
+			</div>
+			<div class="flex gap-1.5">
+				<dt class="text-muted-foreground">Data size</dt>
+				<dd class="tabular-nums">{bytes(info.data_size)}</dd>
+			</div>
+			<div class="flex gap-1.5">
+				<dt class="text-muted-foreground">Written</dt>
+				<dd class="tabular-nums">{dateTime(info.timestamp)}</dd>
+			</div>
+			{#if tags.length}
+				<div class="flex gap-1.5">
+					<dt class="text-muted-foreground">{tags.length === 1 ? 'Tag' : 'Tags'}</dt>
+					<dd>{tags.map((t) => t.name).join(', ')}</dd>
+				</div>
+			{/if}
+		</dl>
+	{/if}
 	<div class="ml-auto flex items-center gap-1">
+		<Button
+			variant="ghost"
+			size="sm"
+			class="text-muted-foreground"
+			onclick={() => (accessing = true)}
+		>
+			<PlugIcon /> Access in S3
+		</Button>
 		<Button
 			variant="ghost"
 			size="sm"
@@ -127,43 +165,13 @@
 	</div>
 </div>
 
-{#if info}
-	<dl class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[13px]" aria-label="This version">
-		<div class="flex gap-1.5">
-			<dt class="text-muted-foreground">Rows</dt>
-			<dd class="tabular-nums">{info.rows.toLocaleString('en-US')}</dd>
-		</div>
-		<div class="flex gap-1.5">
-			<dt class="text-muted-foreground">Columns</dt>
-			<dd class="tabular-nums">{info.columns.toLocaleString('en-US')}</dd>
-		</div>
-		<div class="flex gap-1.5">
-			<dt class="text-muted-foreground">Fragments</dt>
-			<dd class="tabular-nums">{info.fragments.toLocaleString('en-US')}</dd>
-		</div>
-		<div class="flex gap-1.5">
-			<dt class="text-muted-foreground">Data size</dt>
-			<dd class="tabular-nums">{bytes(info.data_size)}</dd>
-		</div>
-		<div class="flex gap-1.5">
-			<dt class="text-muted-foreground">Written</dt>
-			<dd class="tabular-nums">{dateTime(info.timestamp)}</dd>
-		</div>
-		{#if tags.length}
-			<div class="flex gap-1.5">
-				<dt class="text-muted-foreground">{tags.length === 1 ? 'Tag' : 'Tags'}</dt>
-				<dd>{tags.map((t) => t.name).join(', ')}</dd>
-			</div>
-		{/if}
-	</dl>
-	{#if newer !== null}
-		<p class="mt-3 text-[13px] text-muted-foreground" role="status">
-			New version available.
-			<a class="text-link underline-offset-3 hover:underline" href={versionHref(String(newer))}>
-				View version {newer}
-			</a>
-		</p>
-	{/if}
+{#if newer !== null}
+	<p class="mt-3 text-[13px] text-muted-foreground" role="status">
+		New version available.
+		<a class="text-link underline-offset-3 hover:underline" href={versionHref(String(newer))}>
+			View version {newer}
+		</a>
+	</p>
 {/if}
 
 <div class="mt-6">
@@ -194,5 +202,6 @@
 	{/if}
 </div>
 
+<S3AccessDialog bind:open={accessing} {path} {s3} />
 <RenameDialog bind:open={renaming} {org} {path} />
 <DeleteDatasetDialog bind:open={deleting} {org} {path} />

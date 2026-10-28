@@ -25,12 +25,20 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	const query = new URLSearchParams({ path, ...(requested ? { version: requested } : {}) });
 	try {
 		const info = (await flock(`${base}/info?${query}`).then((r) => r.json())) as DatasetInfo;
-		return { kind: 'dataset' as const, path, info, failed: null, requested, now };
+		return { kind: 'dataset' as const, path, info, failed: null, requested, s3, now };
 	} catch (e) {
 		// Lance couldn't read it (a corrupt manifest, a missing file): the page says so in
 		// place of the tabs, and keeps its actions.
 		if (isHttpError(e) && e.status === 502) {
-			return { kind: 'dataset' as const, path, info: null, failed: e.body.message, requested, now };
+			return {
+				kind: 'dataset' as const,
+				path,
+				info: null,
+				failed: e.body.message,
+				requested,
+				s3,
+				now
+			};
 		}
 		throw e;
 	}
