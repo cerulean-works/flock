@@ -97,7 +97,7 @@ def run(
 @click.argument("banked", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.argument("new", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 def compare_command(banked: Path, new: Path) -> None:
-    """Compare a new results.json with a banked one. Exits 1 if any score differs, 2 if the runs are different instruments."""
+    """Compare a new results.json with a banked one. Exits 1 if any score moved past its tolerance, 2 if the runs are different instruments."""
     try:
         comparison = compare(banked, new)
     except ValueError as error:

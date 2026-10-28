@@ -36,7 +36,9 @@ ARC = TaskResult(
     seconds=10.0,
     truncation=Truncation(requests=0, docs=0, max_tokens_cut=0),
 )
-PIQA = dataclasses.replace(ARC, task="piqa", task_hash="0f1e", metrics={"acc_raw": 0.6})
+PIQA = dataclasses.replace(
+    ARC, task="piqa", task_hash="0f1e", primary_metric="acc_raw", metrics={"acc_raw": 0.6}
+)
 SUITE = SuiteResult("toy:rc", ["arc_easy", "piqa"], None, 0.675)
 BANK = Results(PROVENANCE, [ARC, PIQA], [SUITE])
 
@@ -61,25 +63,59 @@ def test_a_rerun_with_equal_scores_passes_whatever_its_timing(write):
 def test_every_changed_score_is_a_breach(write):
     arc = dataclasses.replace(
         ARC,
-        metrics={"acc_raw": 0.7, "acc_per_char": 0.7500001},
+        metrics={"acc_raw": 0.7, "acc_per_char": 0.752},
         truncation=Truncation(requests=1, docs=1, max_tokens_cut=3),
     )
     piqa = dataclasses.replace(PIQA, metrics={"acc_raw": 0.6, "bpb": 1.2}, num_docs=1837)
-    suite = dataclasses.replace(SUITE, score=0.6750001)
+    suite = dataclasses.replace(SUITE, score=0.677)
     rerun = Results(dataclasses.replace(PROVENANCE, flock_commit="def456"), [arc, piqa], [suite])
 
     comparison = compare(write("bank", BANK), write("new", rerun))
 
     assert comparison.breaches == [
-        Breach("arc_easy", "metrics.acc_per_char", 0.75, 0.7500001),
+        Breach("arc_easy", "metrics.acc_per_char", 0.75, 0.752),
         Breach("arc_easy", "truncation.docs", 0, 1),
         Breach("arc_easy", "truncation.max_tokens_cut", 0, 3),
         Breach("arc_easy", "truncation.requests", 0, 1),
         Breach("piqa", "num_docs", 2376, 1837),
         Breach("piqa", "metrics.bpb", None, 1.2),  # a metric added is a breach too
-        Breach("toy:rc", "score", 0.675, 0.6750001),
+        Breach("toy:rc", "score", 0.675, 0.677),
     ]
     assert comparison.provenance == {"flock_commit": ("abc123", "def456")}
+
+
+def test_an_accuracy_may_move_by_two_docs_and_bpb_by_a_relative_1e_4(write):
+    arc = dataclasses.replace(ARC, metrics={"acc_raw": 0.7, "acc_per_char": 0.75, "bpb": 1.0})
+    bank = write("bank", dataclasses.replace(BANK, tasks=[arc, PIQA]))
+
+    def rerun(acc_per_char, bpb):
+        moved = dataclasses.replace(
+            arc, metrics={"acc_raw": 0.7, "acc_per_char": acc_per_char, "bpb": bpb}
+        )
+        return write(f"new-{acc_per_char}-{bpb}", dataclasses.replace(BANK, tasks=[moved, PIQA]))
+
+    assert compare(bank, rerun(0.75 + 2 / 2376, 1.0 + 0.9e-4)).breaches == []
+    assert compare(bank, rerun(0.75 + 3 / 2376, 1.0 + 1.1e-4)).breaches == [
+        Breach("arc_easy", "metrics.acc_per_char", 0.75, 0.75 + 3 / 2376),
+        Breach("arc_easy", "metrics.bpb", 1.0, 1.0 + 1.1e-4),
+    ]
+
+
+def test_a_suite_may_move_by_the_mean_of_its_members_tolerances(write):
+    # 2.5 docs (2 flips and half a step of slack) of 2000 and of 1000: 0.00125 and 0.0025, so
+    # 0.001875 for the suite and for a suite holding it. Each member is read under its primary
+    # metric.
+    arc = dataclasses.replace(ARC, num_docs=2000)
+    piqa = dataclasses.replace(PIQA, num_docs=1000)
+    outer = SuiteResult("toy", ["toy:rc"], None, 0.675)
+    bank = write("bank", Results(PROVENANCE, [arc, piqa], [SUITE, outer]))
+
+    def rerun(score):
+        suites = [dataclasses.replace(SUITE, score=score), dataclasses.replace(outer, score=score)]
+        return write(f"new-{score}", Results(PROVENANCE, [arc, piqa], suites))
+
+    assert compare(bank, rerun(0.6768)).breaches == []
+    assert [breach.name for breach in compare(bank, rerun(0.6770)).breaches] == ["toy:rc", "toy"]
 
 
 @pytest.mark.parametrize(

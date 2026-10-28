@@ -16,7 +16,7 @@ uv run flock-eval run \
 
 Its [provenance](results#provenance) records the flock commit, the GPU and the library versions that wrote it.
 
-The bank is float32 because float32 scores repeat exactly when you rerun the same code on the same GPU type with the same library versions. So any difference is a real change, and the check allows none. bfloat16 scores can differ between two reruns on one GPU, because the attention kernel is chosen at run time, so there is no bfloat16 bank.
+The bank is float32 because float32 scores repeat exactly when you rerun the same code on the same GPU type with the same library versions. Another GPU type or library version can move them slightly, so the check allows a small tolerance (see [Tolerances](#tolerances)). bfloat16 scores can differ between two reruns on one GPU, because the attention kernel is chosen at run time, so there is no bfloat16 bank.
 
 ## Running the check
 
@@ -30,13 +30,24 @@ The bank is float32 because float32 scores repeat exactly when you rerun the sam
 
 | Code | Meaning |
 |---|---|
-| `0` | Every compared value is equal. |
-| `1` | At least one value differs (a breach). Each one is printed. |
+| `0` | Every compared value is within its tolerance. |
+| `1` | At least one value moved past its tolerance (a breach). Each one is printed. |
 | `2` | The runs are different instruments, so nothing was compared. |
 
 ## What is compared
 
 For each task in both files, `compare` checks `num_docs` and every entry of `metrics` and `truncation`. For each suite in both files, it checks `members` and `score`. Timing isn't compared. A metric that is in one file only is a breach.
+
+### Tolerances
+
+| Value | May move by |
+|---|---|
+| An accuracy (`acc_*`) | 2 docs flipping: 2 divided by the task's `num_docs`, plus half a doc for rounding |
+| Any other metric, such as `bpb` | 1e-4 of its banked value |
+| A suite's `score` | The mean of its members' tolerances, since the score is their mean |
+| `num_docs`, truncation counts, `members` | Nothing: they must be equal |
+
+These values are a reasoned estimate, not a measurement. A real regression, such as a tokenization or truncation bug, flips far more than 2 docs and moves `bpb` by much more than 1e-4. Run-to-run drift on another stack should stay well inside both. They live in `flock/eval/compare.py` as `FLIPPED_DOCS` and `RELATIVE_TOLERANCE`. A suite of many small tasks gets a looser bound than its tasks' sizes suggest: each MMLU subject has about 100 docs, so the `mmlu` score may move by about 0.012.
 
 A task or suite in one file only is listed and is not a breach. So you can compare a rerun of a few tasks (without `--limit`) against the full bank. A task added to `base_easy` after the bank was written shows as only in the new run, and each suite that holds it is a breach on `members` and `score` until the bank is refreshed.
 
@@ -68,7 +79,7 @@ The message names the field and both values. Two runs that differ in a setting o
 
 ## Refreshing the bank
 
-You refresh the bank when a change is meant to move scores: a task added to `base_easy`, a deliberate change to scoring or to a task's requests, or a library upgrade that moves float32 numbers.
+You refresh the bank when a change is meant to move scores: a task added to `base_easy`, a deliberate change to scoring or to a task's requests, or a library upgrade that moves float32 numbers past the tolerances.
 
 1. Run the command in [The bank](#the-bank) at the new commit.
 2. Run `compare` from the old bank to the new `results.json`.

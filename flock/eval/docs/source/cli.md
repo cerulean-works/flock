@@ -38,7 +38,7 @@ uv run flock-eval run \
 
 ## `flock-eval compare`
 
-Compares a new `results.json` with a banked one and exits non-zero if any score differs or the runs used different settings. See [Checking scores against the bank](regression).
+Compares a new `results.json` with a banked one and exits non-zero if any score moved past its tolerance or the runs used different settings. See [Checking scores against the bank](regression).
 
 ```bash
 uv run flock-eval compare tests/eval/regression/olmo-2-0425-1b-float32.json results/regression/results.json
