@@ -36,6 +36,7 @@ class Snapshot:
         "name",
         "created_at",
         "updated_at",
+        "owner",
         "tags",
         "group",
         "job_type",
@@ -92,9 +93,11 @@ class Snapshot:
                 )
             else:
                 text[i] = values[name]
-            # Display type: state, time, duration, num, str, bool or json.
+            # Display type: state, time, duration, user, num, str, bool or json.
             if name == "state":
                 kinds.append("state")
+            elif name == "owner":
+                kinds.append("user")
             elif name in cls.TIME_COLUMNS:
                 kinds.append("time")
             elif name in cls.DURATION_COLUMNS:
