@@ -201,4 +201,6 @@ class Avatars:
     async def flush(self) -> None:
         """Wait for background Gravatar fetches (tests, and shutdown)."""
         while self._tasks:
-            await asyncio.gather(*list(self._tasks), return_exceptions=True)
+            tasks = list(self._tasks)
+            await asyncio.gather(*tasks, return_exceptions=True)
+            self._tasks.difference_update(tasks)

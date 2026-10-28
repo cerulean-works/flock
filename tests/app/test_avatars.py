@@ -1,4 +1,7 @@
 import hashlib
+import subprocess
+import sys
+import textwrap
 import threading
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -65,6 +68,32 @@ def gravatar() -> Iterator[FakeGravatar]:
 def settled(server) -> None:
     """Wait for the background Gravatar fetches of new accounts."""
     server.call(server.store.avatars.flush())
+
+
+def test_flush_finishes_when_a_completed_fetch_still_has_a_pending_callback():
+    # A timeout outside the event loop also catches a loop that spins without yielding.
+    code = """
+        import asyncio
+        import uvloop
+        from app.api.src.core.avatars import Avatars
+
+        async def check():
+            avatars = Avatars(None)
+            task = asyncio.create_task(asyncio.sleep(0))
+            await task
+            avatars._tasks.add(task)
+            task.add_done_callback(avatars._tasks.discard)
+            await avatars.flush()
+            assert not avatars._tasks
+
+        asyncio.run(check(), loop_factory=uvloop.new_event_loop)
+    """
+    subprocess.run(
+        [sys.executable, "-c", textwrap.dedent(code)],
+        check=True,
+        capture_output=True,
+        timeout=10,
+    )
 
 
 def put_image(client, path: str, data: bytes):
