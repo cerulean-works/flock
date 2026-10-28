@@ -13,7 +13,7 @@ be running. No external database or S3 service is needed. Existing
 `FLOCK_TEST_DATABASE_URL` and `FLOCK_TEST_S3_*` overrides still work; only point
 them at services you are authorized to use.
 
-Use `-n 0` for serial debugging or `-n 2` to match CI's worker count. Set
+Use `-n 0` for serial debugging or `-n 4` to match CI's worker count. Set
 `PYTEST_XDIST_AUTO_NUM_WORKERS=2` to lower the automatic local limit. An explicit
 `-n N` overrides automatic detection. Tests sharing `make_module_flock` stay on
 one worker per module; independent tests can run on different workers. New
@@ -35,7 +35,7 @@ exclusive; choose the CPU group explicitly for a test environment:
 
 ```sh
 uv sync --all-packages --no-group gpu --group cpu-tests --locked
-uv run --no-sync python -m pytest -q tests -n 2
+uv run --no-sync python -m pytest -q tests -n 4
 ```
 
 Use `--no-sync` after that installation so `uv run` does not restore the default
@@ -92,8 +92,8 @@ A fresh ten-run batch on test commit `fd67953` passed **all 6,490 test execution
 
 | Workers | Full-suite runs | Median wall time | Range |
 | --- | ---: | ---: | ---: |
-| 4 (local default) | 8 | 54.81 s | 54.08–57.73 s |
-| 2 (CI configuration) | 2 | 102.67 s | 102.44–102.90 s |
+| 4 (local default and current CI configuration) | 8 | 54.81 s | 54.08–57.73 s |
+| 2 (comparison) | 2 | 102.67 s | 102.44–102.90 s |
 
 Each run used a fresh pytest process and throwaway services. All 649 selected test
 identities matched exactly, with no failures, errors, skips or retries. The 13
@@ -108,7 +108,9 @@ per-run logs, JUnit XML and summary JSON; the final batch also has the controlle
 precision regression log.
 
 CI receives the parallelism and waiting improvements when these changes are
-merged. It uses two workers, so the local four-worker runtime is not a hosted CI
+merged. It uses four workers on `ubuntu-latest`: Flock is public, so the standard
+runner provides [4 CPUs and 16 GB RAM](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories).
+The local four-worker runtime remains a measurement on macOS, not a hosted CI
 promise. The existing [PR #49 CI job](https://github.com/cerulean-works/flock/actions/runs/40737159565/job/122988684283)
 reported 649 passed in 292.73 seconds. The updated workflow's hosted runtime
 remains unmeasured. Its CPU-only Linux dependency export was checked to contain

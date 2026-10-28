@@ -64,7 +64,7 @@ jobs:
         run: |
           mkdir -p test-results
           set -o pipefail
-          uv run --no-sync python -m pytest -q tests -n 2 --durations=0 --durations-min=0.01 --junitxml=test-results/pytest.xml 2>&1 | tee test-results/pytest.log
+          uv run --no-sync python -m pytest -q tests -n 4 --durations=0 --durations-min=0.01 --junitxml=test-results/pytest.xml 2>&1 | tee test-results/pytest.log
 
       - name: Save test results and phase durations
         if: always()
