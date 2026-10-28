@@ -8,11 +8,13 @@
 		cell: Cell;
 		/** In an opened row: all of it, unclamped, JSON laid out and vectors in full precision. */
 		full?: boolean;
+		/** Wrap text; short columns keep theirs on one line. */
+		wrap?: boolean;
 		/** Open an image in the image dialog. */
 		onopen?: () => void;
 	}
 
-	let { cell, full = false, onopen }: Props = $props();
+	let { cell, full = false, wrap = true, onopen }: Props = $props();
 
 	const formatNumber = (v: number | string) =>
 		typeof v === 'number' && Number.isInteger(v) ? v.toLocaleString('en-US') : String(v);
@@ -67,7 +69,12 @@
 	{/if}
 {:else}
 	<!-- Up to four lines in the table: the rest shows once the row is opened. -->
-	<span class={['line-clamp-4 whitespace-pre-wrap', cell.k === 'json' && 'font-mono text-[12px]']}
+	<span
+		class={[
+			'line-clamp-4',
+			wrap ? 'whitespace-pre-wrap' : 'whitespace-pre',
+			cell.k === 'json' && 'font-mono text-[12px]'
+		]}
 		>{cell.v}{#if cellCut(cell)}…{/if}</span
 	>
 	{#if cellCut(cell)}

@@ -68,8 +68,10 @@
 		void goto(withParam(page.url, 'offset', to > 0 ? String(to) : null), { reset: false });
 	}
 
-	const RIGHT = new Set(['num', 'bool']);
-	const right = (cell: Cell | undefined) => !!cell && RIGHT.has(cell.k);
+	// Columns with long text or vectors wrap at a readable width; the rest stay on one line.
+	const long = (cell: Cell | undefined) =>
+		!!cell && (cell.k === 'vec' || ((cell.k === 'str' || cell.k === 'json') && cell.v.length > 40));
+	const wraps = $derived(rows?.columns.map((_, j) => rows!.rows.some((row) => long(row[j]))) ?? []);
 
 	const total = $derived(rows?.total ?? info.rows);
 	const last = $derived(Math.min(offset + (rows?.rows.length ?? 0), total));
@@ -174,18 +176,15 @@
 			<table class="w-max min-w-full border-collapse text-[13px]">
 				<thead>
 					<tr class="h-9 border-b text-left text-xs text-muted-foreground">
-						<th class="w-14 px-2 text-right font-medium">#</th>
+						<th class="w-14 px-2 font-medium">#</th>
 						{#each rows.columns as column (column.name)}
-							<th
-								class={[
-									'px-2 font-medium',
-									right(rows.rows[0]?.[rows.columns.indexOf(column)]) && 'text-right'
-								]}
-							>
+							<th class="px-2 font-medium whitespace-nowrap">
 								<span class="text-foreground">{column.name}</span>
 								<span class="ml-1 font-mono text-[11px] font-normal">{column.type}</span>
 							</th>
 						{/each}
+						<!-- Takes the width left over, so the columns keep their own widths. -->
+						<th class="w-full"></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -199,7 +198,7 @@
 							]}
 							onclick={(e) => onrowclick(e, n, row)}
 						>
-							<td class="px-2 py-1.5 text-right text-muted-foreground tabular-nums">
+							<td class="px-2 py-1.5 text-muted-foreground tabular-nums">
 								<button
 									class="rounded-sm outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
 									aria-expanded={open}
@@ -211,10 +210,11 @@
 							</td>
 							{#each row as cell, j (j)}
 								{@const got = open ? full.get(`${n}:${rows.columns[j].name}`) : undefined}
-								<td class={['max-w-96 px-2 py-1.5', right(cell) && 'text-right']}>
+								<td class={['px-2 py-1.5', wraps[j] ? 'max-w-96 min-w-64' : 'whitespace-nowrap']}>
 									<CellView
 										cell={got && !(got instanceof Error) ? got : cell}
 										full={open}
+										wrap={wraps[j]}
 										onopen={() => {
 											if (cell.k === 'image')
 												image = { cell, row: n, column: rows!.columns[j].name };
@@ -225,6 +225,7 @@
 									{/if}
 								</td>
 							{/each}
+							<td></td>
 						</tr>
 					{/each}
 				</tbody>
