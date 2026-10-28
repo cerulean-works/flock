@@ -14,6 +14,7 @@
 	import { pollFeed } from '#lib/data/feed.svelte.ts';
 	import { count } from '#lib/utils.ts';
 	import { orgHref, withParam } from '#lib/workspace/url.ts';
+	import Page from '#lib/components/Page.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, params }: PageProps = $props();
@@ -52,71 +53,73 @@
 	/>
 {/snippet}
 
-<PageHeader title={data.org.display_name} toolbar={fresh ? undefined : feedToolbar}>
-	{#snippet subtitle()}
-		{count(data.org.project_count, 'project')} · {count(data.org.member_count, 'member')}
-		{#if running}
-			· <span class="text-state-running">{count(running, 'run')} running</span>
-		{/if}
-	{/snippet}
-	{#snippet actions()}
-		<Button variant="ghost" href={orgHref(params.entity)}>
-			<SettingsIcon /> <span class="max-sm:sr-only">Settings</span>
-		</Button>
-		<Button variant="outline" onclick={() => (creating = true)}>
-			<PlusIcon /> <span class="max-sm:sr-only">New project</span>
-		</Button>
-	{/snippet}
-</PageHeader>
+<Page width="full">
+	<PageHeader title={data.org.display_name} toolbar={fresh ? undefined : feedToolbar}>
+		{#snippet subtitle()}
+			{count(data.org.project_count, 'project')} · {count(data.org.member_count, 'member')}
+			{#if running}
+				· <span class="text-state-running">{count(running, 'run')} running</span>
+			{/if}
+		{/snippet}
+		{#snippet actions()}
+			<Button variant="ghost" href={orgHref(params.entity)}>
+				<SettingsIcon /> <span class="max-sm:sr-only">Settings</span>
+			</Button>
+			<Button variant="outline" onclick={() => (creating = true)}>
+				<PlusIcon /> <span class="max-sm:sr-only">New project</span>
+			</Button>
+		{/snippet}
+	</PageHeader>
 
-{#if fresh}
-	<main class="relative min-h-0 flex-1 overflow-y-auto">
-		<EmptyState variant="onboarding" title="Log your first run">
-			{#snippet lead()}Runs appear here once they’re logged.{/snippet}
-			<ol class="mt-8 grid gap-8">
-				<li class="grid gap-3">
-					<p><span class="mr-2 text-muted-foreground">1</span>Install the SDK</p>
-					<CopyBlock code="pip install wandb" />
-				</li>
-				<li class="grid gap-3">
-					<p>
-						<span class="mr-2 text-muted-foreground">2</span>Log in to
-						<span class="font-mono text-[0.9em]">{data.flockUrl}</span> with this key
-					</p>
-					<WandbKeyCreator />
-				</li>
-				<li class="grid gap-3">
-					<p>
-						<span class="mr-2 text-muted-foreground">3</span>Log a run to {data.org.display_name}
-					</p>
-					<CopyBlock
-						code={`import wandb\n\nrun = wandb.init(entity="${params.entity}", project="my-project")\nfor step in range(100):\n    run.log({"loss": 1 / (step + 1)})\nrun.finish()`}
-					/>
-				</li>
-			</ol>
-			<p class="mt-10 text-[13px] text-muted-foreground">
-				Or
-				<Button variant="link" class="h-auto p-0 text-[13px]" onclick={() => (creating = true)}>
-					create an empty project
-				</Button>.
-			</p>
-		</EmptyState>
-	</main>
-{:else}
-	<main class="relative min-h-0 flex-1 overflow-y-auto pb-10">
-		{#key JSON.stringify(data.query)}
-			<LatestRuns
-				first={() => data.feed}
-				query={data.query}
-				now={data.now}
-				empty={data.project
-					? `No runs in ${data.project}${data.mine ? ' by you' : ''} yet.`
-					: data.mine
-						? 'You haven’t logged any runs here yet.'
-						: 'No runs yet.'}
-			/>
-		{/key}
-	</main>
-{/if}
+	{#if fresh}
+		<main class="relative min-h-0 flex-1 overflow-y-auto">
+			<EmptyState variant="onboarding" title="Log your first run">
+				{#snippet lead()}Runs appear here once they’re logged.{/snippet}
+				<ol class="mt-8 grid gap-8">
+					<li class="grid gap-3">
+						<p><span class="mr-2 text-muted-foreground">1</span>Install the SDK</p>
+						<CopyBlock code="pip install wandb" />
+					</li>
+					<li class="grid gap-3">
+						<p>
+							<span class="mr-2 text-muted-foreground">2</span>Log in to
+							<span class="font-mono text-[0.9em]">{data.flockUrl}</span> with this key
+						</p>
+						<WandbKeyCreator />
+					</li>
+					<li class="grid gap-3">
+						<p>
+							<span class="mr-2 text-muted-foreground">3</span>Log a run to {data.org.display_name}
+						</p>
+						<CopyBlock
+							code={`import wandb\n\nrun = wandb.init(entity="${params.entity}", project="my-project")\nfor step in range(100):\n    run.log({"loss": 1 / (step + 1)})\nrun.finish()`}
+						/>
+					</li>
+				</ol>
+				<p class="mt-10 text-[13px] text-muted-foreground">
+					Or
+					<Button variant="link" class="h-auto p-0 text-[13px]" onclick={() => (creating = true)}>
+						create an empty project
+					</Button>.
+				</p>
+			</EmptyState>
+		</main>
+	{:else}
+		<main class="relative min-h-0 flex-1 overflow-y-auto pb-10">
+			{#key JSON.stringify(data.query)}
+				<LatestRuns
+					first={() => data.feed}
+					query={data.query}
+					now={data.now}
+					empty={data.project
+						? `No runs in ${data.project}${data.mine ? ' by you' : ''} yet.`
+						: data.mine
+							? 'You haven’t logged any runs here yet.'
+							: 'No runs yet.'}
+				/>
+			{/key}
+		</main>
+	{/if}
+</Page>
 
 <ProjectDialog bind:open={creating} entity={params.entity} />

@@ -180,6 +180,12 @@
 	}
 }
 
+/* Spans the whole of a `home` page (Page.svelte) from inside its centred column. */
+@utility bleed {
+	width: 100cqw;
+	margin-inline: calc(50% - 50cqw);
+}
+
 @keyframes enter {
 	from {
 		opacity: 0;
