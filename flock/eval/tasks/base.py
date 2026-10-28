@@ -62,7 +62,7 @@ class Dataset:
 @dataclass(frozen=True, slots=True)
 class Fewshot:
     """
-    Fixed few-shot examples: dataset rows picked by id, or rows written out in the task's module. Either way they are shown in the order given.
+    Fixed few-shot examples: dataset rows picked by id, or rows written out in the task's module. Either way they are shown in the order given, except that a doc is never shown a row of another split that shows the doc's own question and answer, that is, the text the doc would show as an example.
 
     Args:
         split (`str`, *optional*):
@@ -120,11 +120,25 @@ class Choice:
     continuation: str
 
 
+# The Traditional Chinese cloze format, `問題：<question>\n答案：<answer>` with no space before the
+# answer, which every Chinese task shares. The prefixes are the TMMLU+ paper's (Tam et al. 2024,
+# figs. 8 and 9) and C-Eval's, and AGIEval's Chinese template in Simplified characters.
+CHINESE_QUESTION_PREFIX = "問題："
+CHINESE_ANSWER_PREFIX = "答案："
+
+
 def cloze(
-    question: str, answers: Sequence[str], question_prefix: str = "Question: "
+    question: str,
+    answers: Sequence[str],
+    *,
+    question_prefix: str = "Question: ",
+    answer_prefix: str = "Answer:",
+    separator: str = " ",
 ) -> tuple[Choice, ...]:
     """
-    Returns OLMES's cloze choices: each answer is the continuation `" <answer>"` of `"<question_prefix><question>\\nAnswer:"` (OLMES, sec. 3.1).
+    Returns cloze choices: each answer is the continuation `"<separator><answer>"` of `"<question_prefix><question>\\n<answer_prefix>"`. The defaults are OLMES's format, `"Question: <question>\\nAnswer:"` and `" <answer>"` (OLMES, sec. 3.1).
+
+    Chinese tasks pass `CHINESE_QUESTION_PREFIX`, `CHINESE_ANSWER_PREFIX` and `separator=""`. Chinese text has no spaces between words, and a space before the answer often merges into the tokens of its first character and would count in `acc_per_char`.
 
     Raises:
         `TypeError`: if `answers` is one string. A doc with one answer passes `(answer,)`.
@@ -132,9 +146,9 @@ def cloze(
     # A string is a sequence of its characters, which would render one choice per character.
     if isinstance(answers, str):
         raise TypeError("answers must be a sequence of strings; pass (answer,) for one answer")
-    context = f"{question_prefix}{question}\nAnswer:"
+    context = f"{question_prefix}{question}\n{answer_prefix}"
 
-    return tuple(Choice(context, f" {answer}") for answer in answers)
+    return tuple(Choice(context, f"{separator}{answer}") for answer in answers)
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,7 +167,7 @@ class MCDoc:
             The doc's text when another doc shows it as a few-shot example. Its gold choice's context and continuation if not set. Only for tasks whose examples read differently from the scored text, such as HumanEval's.
 
     Raises:
-        `ValueError`: naming the doc, if `choices` is empty, `gold` isn't an index into it, or `example` is an empty string.
+        `ValueError`: naming the doc, if `choices` is empty, a choice's continuation is empty, `gold` isn't an index into it, or `example` is an empty string.
     """
 
     id: str
@@ -166,10 +180,23 @@ class MCDoc:
             raise ValueError(f"doc {self.id}: no choices")
         if self.example == "":
             raise ValueError(f"doc {self.id}: an empty example would render as a blank shot")
+        # Caught when the doc is built rather than mid-run, where it can't be tokenized. Chinese
+        # choices have no leading space, so a blank answer stripped to "" would reach scoring.
+        if any(choice.continuation == "" for choice in self.choices):
+            raise ValueError(f"doc {self.id}: a choice has an empty continuation, nothing to score")
         if not 0 <= self.gold < len(self.choices):
             raise ValueError(
                 f"doc {self.id}: gold {self.gold} is not one of {len(self.choices)} choices"
             )
+
+    @property
+    def example_text(self) -> str:
+        """The text another doc is shown when this doc is its few-shot example: `example`, or the gold choice's context and continuation."""
+        if self.example is not None:
+            return self.example
+        gold = self.choices[self.gold]
+
+        return gold.context + gold.continuation
 
 
 @dataclass(frozen=True, slots=True)
@@ -340,7 +367,7 @@ class MultipleChoiceTask:
         primary_metric (`str`):
             The metric reported first, one of `metrics`.
         fewshot (`Fewshot`, *optional*):
-            The few-shot examples, from the same dataset or written out. Zero-shot if not set.
+            The few-shot examples, from the same dataset or written out. Zero-shot if not set. A doc isn't shown an example from another split that shows its own text, and with `num_shots` not one with its id, so some docs may see fewer examples than others (see [`Fewshot`]).
         description (`str`, *optional*, defaults to `""`):
             Text before the first few-shot example, such as a subject header.
         unconditional_context (`str`, *optional*, defaults to `"Answer:"`):
@@ -390,7 +417,7 @@ class MultipleChoiceTask:
         if self.fewshot.num_shots is None:
             return
         # Ids are unique within a split only. Across splits, a doc that shares an id with an
-        # example would lose that example, and a doc that is itself an example would keep it.
+        # example would lose that example.
         if self.fewshot.split != self.dataset.split:
             raise ValueError(
                 f"{self.name}: num_shots needs examples from the scored split "
@@ -480,20 +507,31 @@ class MultipleChoiceTask:
         """Renders `description`, then each example followed by a blank line."""
         head = self.description
         for shot in shots:
-            example = shot.example
-            if example is None:
-                gold = shot.choices[shot.gold]
-                example = gold.context + gold.continuation
-            head += f"{example}\n\n"
+            head += f"{shot.example_text}\n\n"
 
         return head
 
     def _shots_for(self, doc: MCDoc, shots: Sequence[MCDoc]) -> Sequence[MCDoc]:
-        """Returns the examples `doc` is shown: all of them, or with `num_shots` the first that aren't `doc` (OLMES samples one extra and drops the scored doc, `fewshot_context` in `oe_eval/tasks/base_task.py`)."""
-        if self.fewshot is None or self.fewshot.num_shots is None:
+        """
+        Returns the examples `doc` is shown: those that aren't `doc` itself, and with `num_shots` only the first that many.
+
+        An example from another split is `doc` itself if it shows the text `doc` would show as an example. lm-evaluation-harness drops an example only if its whole dataset row equals the doc's (`lm_eval/api/samplers.py`, v0.4.3), which misses a repeat with its choices reordered. An example from the scored split is `doc` itself only with `num_shots`, if it has the doc's id: OLMES samples one example extra and drops the scored doc (`fewshot_context` in `oe_eval/tasks/base_task.py`).
+        """
+        if self.fewshot is None:
             return shots
 
-        return [shot for shot in shots if shot.id != doc.id][: self.fewshot.num_shots]
+        # A dataset may repeat a doc's question and answer in another split, possibly with the
+        # choices reordered, which would show the doc its own answer. Ids aren't compared there:
+        # they are unique within a split only.
+        if self.fewshot.split is not None and self.fewshot.split != self.dataset.split:
+            own = doc.example_text
+            shots = [shot for shot in shots if shot.example_text != own]
+        # Examples from the scored split are dropped only by `num_shots`: OLMES shows a curated
+        # example even to its own doc.
+        if self.fewshot.num_shots is not None:
+            shots = [shot for shot in shots if shot.id != doc.id][: self.fewshot.num_shots]
+
+        return shots
 
     def _hash(self, docs: Sequence[MCDoc], requests: Sequence[Request]) -> str:
         """Returns the sha256 of the definition's data fields, every request and every gold index."""

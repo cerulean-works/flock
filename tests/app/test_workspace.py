@@ -1,3 +1,5 @@
+import asyncio
+
 import numpy as np
 import pytest
 
@@ -7,6 +9,31 @@ from app.api.src.core.metric_defs import parse_metric_defs
 from tests.app.utils import history_rows, system_samples
 
 # ---------------------------------------------------------------------- snapshot
+
+
+def test_snapshot_with_chunks_appended_after_run_selection(api, flock, monkeypatch):
+    api.create_run("p", "r")
+    api.stream("p", "r", history_rows(1, loss=float))
+    histories = flock.store.histories
+
+    def append():
+        writer = flock.client()
+        try:
+            writer.stream(
+                "p", "r", [{"_step": 1, "_runtime": 1}, {"_step": 2, "_runtime": 2}], offset=1
+            )
+        finally:
+            writer.close()
+
+    async def histories_after_append(runs, keys=None, stream="history"):
+        assert runs[0].history_line_count == 1
+        await asyncio.to_thread(append)
+        return await histories(runs, keys, stream)
+
+    monkeypatch.setattr(flock.store, "histories", histories_after_append)
+    snap = api.workspace()
+    assert snap["curves"][("r", "loss")] == ([0], [0.0])
+    assert snap["mappings"][("r", "_runtime")] == ([0, 2], [0, 2])
 
 
 def test_snapshot_has_table_cells_and_curves(api):
@@ -288,24 +315,26 @@ def test_crashed_runs_are_announced(make_flock, events):
     api.close()
 
 
-def test_slow_subscribers_are_disconnected(api, flock, monkeypatch):
+def test_slow_subscribers_are_disconnected(api, flock, monkeypatch, wait_for):
     monkeypatch.setattr(Subscriber, "QUEUE_SIZE", 2)
     api.create_run("p", "r1")
 
     async def subscribe():
-        return flock.store.live.subscribe(flock.store.project("flock", "p").pk, ["r1"])
+        project = await flock.store.project("flock", "p")
+        return flock.store.live.subscribe(project.pk, ["r1"])
 
     sub = flock.call(subscribe())
     for i in range(5):
         api.stream("p", "r1", history_rows(1, start=i, loss=float), offset=i)
-    assert sub.closed
+    wait_for(lambda: sub.closed)  # events reach the hub through notifications (D79)
     items = []
     while not sub.queue.empty():
         items.append(sub.queue.get_nowait())
     assert items[-1] is None  # end-of-stream marker made it into the full queue
 
     async def unsubscribe():
-        flock.store.live.unsubscribe(flock.store.project("flock", "p").pk, sub)
+        project = await flock.store.project("flock", "p")
+        flock.store.live.unsubscribe(project.pk, sub)
 
     flock.call(unsubscribe())
 

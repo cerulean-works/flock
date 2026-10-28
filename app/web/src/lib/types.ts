@@ -35,6 +35,282 @@ export interface OrgInfo {
 	avatar_url: string | null;
 	/** Super admins are admins of every organization, member or not. */
 	role: Role | null;
+	/** Seconds S3 keys from `flock s3 credentials` and Python live. */
+	s3_ephemeral_ttl: number;
+	/** The longest any of its S3 keys may live, in seconds; null when keys may never expire. */
+	s3_key_max_ttl: number | null;
+}
+
+/**
+ * One of the user's wandb keys, for the wandb SDK. Older keys (`flock-…`) are listed with the
+ * rest. Flock keeps only a hash, so the key itself is never listed.
+ */
+export interface WandbKey {
+	id: number;
+	name: string;
+	/** The key's first characters, to tell keys apart. Shown as given, never parsed. */
+	prefix: string;
+	created_at: number;
+}
+
+/** A wandb key just created: the only time its secret is shown. */
+export interface WandbKeyCreated extends WandbKey {
+	key: string;
+}
+
+/** Which of the account page's key tabs is shown (`?keys=`). */
+export type KeysTab = 'wandb' | 's3';
+
+/** The S3 proxy, from `auth/config`; null when the server has no S3. */
+export interface S3Config {
+	endpoint: string;
+	region: string;
+}
+
+/** One of the user's S3 keys. Ephemeral ones were issued for a CLI sign-in or an API key. */
+export interface S3Key {
+	id: number;
+	name: string;
+	access_key_id: string;
+	org: string | null;
+	read_only: boolean;
+	ephemeral: boolean;
+	/** The CLI sign-in or API key an ephemeral key went to. */
+	session_id: number | null;
+	api_key_id: number | null;
+	/** That sign-in's machine, or that API key's name. */
+	source: string | null;
+	created_at: number;
+	/** When the proxy stops taking it (sooner if the org lowered its maximum); null: never. */
+	expires_at: number | null;
+	last_used_at: number | null;
+}
+
+/** A key just created: its secret is shown this once. */
+export interface S3KeyCreated extends S3Key {
+	secret_access_key: string;
+	endpoint: string;
+	region: string;
+}
+
+/** An organization's S3 bucket. */
+export interface Bucket {
+	name: string;
+	/** Its name on the S3 server: `{org pk, 5 digits}-{name}`. */
+	upstream_name: string;
+	created_at: number;
+	created_by: Person | null;
+	/** Set while a deleted bucket is still being emptied (listed with `deleting`). */
+	deleted_at?: number;
+	/** `datasets` for the org's flock-datasets, which Flock creates and owns; null otherwise. */
+	managed?: 'datasets' | null;
+}
+
+/** An object in a folder's listing (`GET …/buckets/{bucket}/objects`). */
+export interface StorageObject {
+	key: string;
+	size: number;
+	last_modified: number;
+	etag: string;
+}
+
+/** One page of one level of a bucket: subfolders (ending in `/`), then objects. */
+export interface Listing {
+	prefix: string;
+	folders: string[];
+	objects: StorageObject[];
+	/** The next page's, null on the last. */
+	cursor: string | null;
+}
+
+/** An object's details, from a HEAD (`GET …/buckets/{bucket}/object?key=`). */
+export interface ObjectDetails {
+	key: string;
+	size: number;
+	last_modified: number | null;
+	etag: string;
+	content_type: string | null;
+	/** Its `x-amz-meta-*` headers, without the prefix. */
+	metadata: Record<string, string>;
+}
+
+/** What the dashboard asks `POST …/presign` for (D69). */
+export type PresignRequest =
+	| {
+			method: 'get';
+			key: string;
+			disposition?: 'inline' | 'attachment';
+			link?: boolean;
+			content_type?: string;
+	  }
+	| { method: 'put'; key: string; size: number }
+	| { method: 'multipart'; key: string; size: number; content_type?: string }
+	| { method: 'parts'; key: string; upload_id: string; parts: number[] }
+	| { method: 'complete' | 'abort'; key: string; upload_id: string };
+
+/** Its answer: a presigned `url`, an upload started, or URLs of parts by number. */
+export interface Presigned {
+	url?: string;
+	expires_at?: number;
+	upload_id?: string;
+	part_size?: number;
+	part_count?: number;
+	parts?: Record<string, string>;
+}
+
+/** Something that happened to a bucket, and how it was asked for (`detail.via`). */
+export interface BucketEvent {
+	kind: 'created' | 'deleted' | 'purged';
+	user: Person | null;
+	at: number;
+	detail: {
+		via?: 'ui' | 'cli' | 'api' | 'purge' | 'org' | 'flock';
+		machine?: string;
+		key_name?: string;
+		objects?: number;
+	};
+}
+
+export interface BucketDetail extends Bucket {
+	events: BucketEvent[];
+}
+
+// ----------------------------------------------------------------------------------------------
+// Datasets (013): the Lance datasets in an org's flock-datasets bucket.
+
+/** A dataset in a folder's listing; `version` is null when its manifests use Lance's old naming. */
+export interface DatasetEntry {
+	name: string;
+	path: string;
+	version: number | null;
+	updated_at: number | null;
+}
+
+/** A file in a folder's listing of flock-datasets. */
+export interface DatasetFile {
+	name: string;
+	key: string;
+	size: number;
+	last_modified: number;
+}
+
+/** One page of a folder of flock-datasets (`GET …/datasets/at`). */
+export interface DatasetFolder {
+	kind: 'folder';
+	path: string;
+	datasets: DatasetEntry[];
+	folders: { name: string; path: string }[];
+	files: DatasetFile[];
+	cursor: string | null;
+}
+
+/** What `GET …/datasets/at` says of a path that is a dataset. */
+export interface DatasetAt {
+	kind: 'dataset';
+	path: string;
+	version: number | null;
+	updated_at: number | null;
+}
+
+/** A field of the schema, with its children (struct fields, a list's items). */
+export interface SchemaField {
+	name: string;
+	/** Arrow's name for its type, or `blob` for a Lance blob column. */
+	type: string;
+	nullable: boolean;
+	metadata: Record<string, string>;
+	children: SchemaField[];
+}
+
+/** The dataset at one version (`GET …/datasets/info`). */
+export interface DatasetInfo {
+	path: string;
+	version: number;
+	/** When that version was written. */
+	timestamp: number;
+	/** The latest version now; null when Lance's old naming hides it. */
+	latest_version: number | null;
+	rows: number;
+	columns: number;
+	fragments: number;
+	data_size: number;
+	schema: SchemaField[];
+	metadata: Record<string, string>;
+	/** Some column holds binary data, so the row viewer shows fewer rows a page. */
+	binary: boolean;
+	details: {
+		data_storage_version: string;
+		stable_row_ids: boolean;
+		fragments: number;
+		indices: { name: string; type: string; columns: string[] }[];
+	};
+	tags: { name: string; version: number }[];
+}
+
+/** A cell, rendered by the API for display (D90). */
+export type Cell =
+	| { k: 'null' }
+	| { k: 'num'; v: number | string; label?: string }
+	| { k: 'bool'; v: boolean }
+	| { k: 'str'; v: string; len?: number }
+	| { k: 'time'; v: string }
+	| { k: 'image'; mime: string; size: number; data: string }
+	| { k: 'bin'; size: number }
+	| { k: 'blob'; size: number | null }
+	| { k: 'vec'; dtype: string; len: number; head: (number | string | null)[] }
+	| { k: 'json'; v: string; len?: number };
+
+/** A page of rows (`GET …/datasets/rows`). */
+export interface RowsPage {
+	version: number;
+	offset: number;
+	limit: number;
+	total: number;
+	columns: { name: string; type: string; feature?: string }[];
+	rows: Cell[][];
+}
+
+/** One cell in full, for an opened row (`GET …/datasets/cell`). */
+export interface FullCell {
+	row: number;
+	column: string;
+	type: string;
+	cell: Cell;
+}
+
+/** A version in the history (`GET …/datasets/versions`). */
+export interface DatasetVersion {
+	version: number;
+	timestamp: number;
+	tags: string[];
+	/** Lance's operation (Append, Overwrite, Delete…), null without a transaction file. */
+	operation: string | null;
+	rows: number;
+	/** Rows added (or removed, below zero) since the version before, when that one exists. */
+	rows_delta: number | null;
+	/** `transaction_properties` the writer set, such as a message. */
+	properties: Record<string, string>;
+}
+
+export interface VersionsPage {
+	versions: DatasetVersion[];
+	latest: number;
+	cursor: number | null;
+}
+
+/** A deleted dataset in the trash (`GET …/datasets/trash`), for org admins. */
+export interface TrashEntry {
+	id: number;
+	path: string;
+	deleted_by: Person | null;
+	deleted_at: number;
+	/** Null while the move to the trash is unfinished. */
+	moved_at: number | null;
+	/** When the sweep removes it for good. */
+	expires_at: number;
+	latest_version: number | null;
+	objects: number;
+	bytes: number;
 }
 
 /** Where an organization's W&B import is: `interrupted` means Flock restarted during it. */
@@ -75,6 +351,29 @@ export interface UserInfo {
 	avatar_url: string | null;
 	/** Where the picture came from (only `/me` says). */
 	avatar_source?: 'gravatar' | 'upload' | null;
+}
+
+/** A command-line sign-in (`flock login`), one per machine. Times are seconds since the epoch. */
+export interface CliSession {
+	id: number;
+	/** The machine's hostname. */
+	name: string | null;
+	created_at: number;
+	/** Null until the machine first uses it. Flock records it within the hour. */
+	last_used_at: number | null;
+	/** Pushed back by each use. */
+	expires_at: number;
+}
+
+/** A machine asking to sign in with `flock login`, as the approval page shows it. */
+export interface DeviceRequest {
+	/** As the terminal shows it: `WDJB-MJHT`. */
+	user_code: string;
+	hostname: string;
+	platform: string;
+	ip: string | null;
+	created_at: number;
+	expires_at: number;
 }
 
 /** An organization as the sidebar's switcher lists it. */
@@ -160,8 +459,10 @@ export interface Budget {
 	/** Null without a budget; negative once it is overspent. */
 	remaining: number | null;
 	gpu_hours: number;
-	/** By cost; a null project collects deleted projects. */
+	/** By cost, runs with GPU hours only; a null project collects deleted projects. */
 	projects: { project: string | null; cost: number; gpu_hours: number; runs: number }[];
+	/** Spend of deleted projects an admin left out of the budget: not in `spent`. */
+	excluded: { projects: number; cost: number; gpu_hours: number };
 	top_runs: {
 		entity: string;
 		project: string;
@@ -174,10 +475,52 @@ export interface Budget {
 		gpu_hours: number;
 		cost: number;
 	}[];
-	/** GPU types with no price: they cost nothing until one is set. */
-	unpriced: { gpu_type: string; gpu_hours: number }[];
-	/** Runs whose GPUs aren't known, and their wall-clock hours. */
-	unknown_gpu: { runs: number; hours: number };
+	/** Admins only: GPU types with no price, which cost nothing until one is set. */
+	unpriced?: { gpu_type: string; gpu_hours: number }[];
+	/** Admins only: runs whose GPUs aren't known, and their wall-clock hours. */
+	unknown_gpu?: { runs: number; hours: number };
+}
+
+interface WarningBase {
+	/** `{kind}:{month}`. */
+	id: string;
+	/** `YYYY-MM`. */
+	month: string;
+	/** Changes with what the warning is about; dismissing sends the one that was shown. */
+	fingerprint: string;
+	/** Dismissed by an admin for everyone, until it is about something new. */
+	dismissed: boolean;
+	dismissed_by: Person | null;
+	dismissed_at: number | null;
+}
+
+export type BudgetWarning =
+	| (WarningBase & { kind: 'unpriced'; gpu_types: { gpu_type: string; gpu_hours: number }[] })
+	| (WarningBase & { kind: 'unknown_gpu'; runs: number; hours: number });
+
+/** An org's budget warnings (admins only): only what amounts to a tenth of an hour or more. */
+export interface BudgetWarnings {
+	month: string;
+	/** The month's warnings nobody dismissed. */
+	warnings: BudgetWarning[];
+	/** Dismissed warnings of every month that are still about nothing new, newest first. */
+	dismissed: BudgetWarning[];
+}
+
+/** A deleted project whose runs used GPU hours (admins only). */
+export interface DeletedProject {
+	id: number;
+	/** Null for projects deleted before Flock kept their names. */
+	name: string | null;
+	deleted_at: number | null;
+	cost: number;
+	gpu_hours: number;
+	runs: number;
+	months: { month: string; cost: number; gpu_hours: number }[];
+	/** Its spend is left out of the budget. */
+	excluded: boolean;
+	excluded_at: number | null;
+	excluded_by: Person | null;
 }
 
 /** An org's prices and budget settings. */

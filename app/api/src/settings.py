@@ -14,7 +14,24 @@ class Settings:
         default="postgresql://flock:flock@127.0.0.1:5432/flock",
         doc="PostgreSQL connection URL",
     )
-    files_dir: Path = field(default=Path("flock-files"), doc="where uploaded run files go")
+    listen_database_url: str | None = field(
+        default=None,
+        doc="PostgreSQL URL of the connection that listens for notifications, which must "
+        "bypass a pooler such as PgBouncer (default: database_url)",
+    )
+    files_dir: Path = field(
+        default=Path("flock-files"),
+        doc="where uploaded run files go with the local backend (and are read from until "
+        "migrated, with the s3 backend)",
+    )
+    files_backend: str = field(
+        default="local",
+        doc="where run files are kept: local (files_dir, which every replica must mount) or "
+        "s3 (files_bucket on the S3 upstream)",
+    )
+    files_bucket: str | None = field(
+        default=None, doc="the bucket on the S3 upstream that the s3 files backend uses"
+    )
     migrate_on_startup: bool = field(
         default=True,
         doc="apply pending migrations on startup; when off, refuse to start on an old schema",
@@ -35,6 +52,12 @@ class Settings:
     )
     invite_ttl: float = field(default=7 * 86400.0, doc="seconds an invite link is valid")
     reset_ttl: float = field(default=86400.0, doc="seconds a password reset link is valid")
+    device_code_ttl: float = field(
+        default=900.0, doc="seconds a `flock login` code waits to be approved"
+    )
+    cli_session_ttl: float = field(
+        default=90 * 86400.0, doc="seconds a command-line sign-in lasts without being used"
+    )
     google_client_id: str | None = field(
         default=None, doc="OAuth client id enabling Sign in with Google"
     )
@@ -55,12 +78,28 @@ class Settings:
         default="https://api.wandb.ai",
         doc="W&B API that organization imports read from, unless the import names another",
     )
-    history_cache_points: int = field(
-        default=20_000_000,
-        doc="history points cached in memory for finished runs (active runs are always kept)",
-    )
     crash_timeout: float = field(
         default=600.0, doc="seconds without heartbeats before a running run is marked crashed"
+    )
+    s3_upstream_endpoint: str | None = field(
+        default=None,
+        doc="the S3 server (e.g. Ceph RGW) the S3 proxy fronts; S3 features are off when unset",
+    )
+    s3_upstream_region: str = field(default="us-east-1", doc="that S3 server's region")
+    s3_upstream_access_key_id: str | None = field(
+        default=None, doc="the S3 server's access key id, which the proxy signs requests with"
+    )
+    s3_upstream_secret_access_key: str | None = field(default=None, doc="that key's secret")
+    s3_bucket_prefix: str = field(
+        default="",
+        doc="put in front of every bucket name on the S3 server (shortening the names allowed)",
+    )
+    s3_public_url: str | None = field(
+        default=None, doc="the S3 proxy's URL as clients reach it, handed out with S3 keys"
+    )
+    s3_trash_bucket: str | None = field(
+        default=None,
+        doc="the bucket on the S3 server deleted datasets wait in (default: <prefix>flock-trash)",
     )
     pool_size: int = field(default=16, doc="maximum number of database connections")
     cors_origins: list[str] = field(

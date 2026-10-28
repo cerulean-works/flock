@@ -25,8 +25,8 @@ directory. It publishes the API on port 8080 and defaults the dashboard URL to `
 for `pnpm dev`. Data lives in two named volumes: `postgres-data` for the database and `files`
 for uploaded run files.
 
-Run exactly one Flock server per database. The server keeps its working set in memory and holds a
-database lock, so a second instance refuses to start.
+PostgreSQL is the only state: any number of Flock replicas can serve one database, given run
+files on a volume they all mount or in an S3 bucket (`FLOCK_FILES_BACKEND=s3`).
 
 The image installs this directory's `pyproject.toml` dependencies at the versions locked in the
 workspace's `uv.lock`. Build with the repository root as the context so Docker can read both
@@ -56,15 +56,20 @@ and description.
 ### Pointing clients at it
 
 Every request needs credentials (see [Accounts and organizations](#accounts-and-organizations)).
-The SDK uses a personal API key, created with `POST /api/v1/me/api-keys`:
+The SDK uses a personal wandb key (`flock-wandb-…`), created on the dashboard's account page
+or with `POST /api/v1/me/wandb-keys`:
 
 ```sh
-wandb login --host http://flock.internal:8080 <your API key>
+wandb login --host http://flock.internal:8080 <your wandb key>
 # or, per process:
-export WANDB_BASE_URL=http://flock.internal:8080 WANDB_API_KEY=<your API key>
+export WANDB_BASE_URL=http://flock.internal:8080 WANDB_API_KEY=<your wandb key>
 ```
 
 `wandb.init` logs to your default organization unless you pass `entity=`.
+
+`flock login --host http://flock.internal:8080` signs a machine in from a terminal instead:
+you approve a code in the dashboard, and the machine gets a CLI token. It can also log the
+wandb SDK in for you, with a new wandb key. See [the `flock` command](../../flock/cli/).
 
 ## Code layout
 
@@ -147,9 +152,21 @@ admin) creates a one-time link with `POST /api/v1/users/{id}/password-reset`.
 **Credentials.** The dashboard signs in with `POST /api/v1/auth/login` and sends
 `Authorization: Bearer <access_token>`. Access tokens are JWTs valid for 15 minutes; refresh
 them with `POST /api/v1/auth/refresh` (each refresh token works once). Logging out, changing
-your password or a password reset end sessions at once, not when their tokens expire. The wandb
-SDK and scripts use API keys, sent as the SDK does (basic auth), as `Bearer <key>` or as
-`x-api-key`. Keys are stored hashed and shown only when created.
+your password or a password reset end sessions at once, not when their tokens expire. `flock
+login` gets a CLI token (`Bearer flock_cli_...`) through the device grant
+(`POST /api/v1/auth/device`, approved on the dashboard's `/device` page): a session that never
+rotates, lasts 90 idle days, and is listed and revocable at `/api/v1/me/cli-sessions`. Scripts
+and CI use one too (`FLOCK_TOKEN=$(flock token)`). The wandb SDK uses wandb keys
+(`flock-wandb-...`), sent as the SDK does (basic auth), as `Bearer <key>` or as `x-api-key`.
+They're stored hashed, shown only when created, and work only on the wandb protocol: the REST
+API refuses them with 401. Each credential has one job:
+
+| Credential | Looks like | Accepted by |
+| --- | --- | --- |
+| browser session | a JWT | the REST API, from the dashboard |
+| CLI token | `flock_cli_...` | the REST API and `POST /api/v1/s3/credentials` |
+| wandb key | `flock-wandb-...` (older keys: `flock-` + 48 hex) | the wandb protocol only |
+| S3 key | `FLK...` + derived secret | the S3 proxy only |
 
 **Sign in with Google** runs the OAuth code flow in Flock. Register
 `<FLOCK_WEB_URL>/api/v1/auth/google/callback` with Google: flock-ui proxies
@@ -165,7 +182,7 @@ Google accounts are matched to existing accounts by verified email.
 | `GET /api/v1/auth/config` | whether signup is open and Google is enabled (public) |
 | `POST /api/v1/auth/signup`, `login`, `refresh`, `logout` | sessions |
 | `GET`/`PATCH /api/v1/me`, `POST /api/v1/me/password` | your profile (`name`, `default_org`) and password |
-| `GET`/`POST /api/v1/me/api-keys`, `DELETE .../{id}` | your API keys |
+| `GET`/`POST /api/v1/me/wandb-keys`, `DELETE .../{id}` | your wandb keys (also at their old path, `me/api-keys`) |
 | `PUT`/`DELETE /api/v1/me/avatar`, `POST /api/v1/me/avatar/gravatar` | your avatar: upload an image, remove it, or fetch your Gravatar |
 | `PUT`/`DELETE /api/v1/orgs/{org}/avatar` | an org's avatar (admins) |
 | `GET /api/v1/avatars/{sha256}` | an avatar image (public: the digest is the secret; cached for good) |
@@ -190,6 +207,13 @@ so an `<img>` can load it, and cacheable for good because a new image gets a new
 dashboard on another origin forwards `/api/v1/avatars/*` to Flock (as flock-ui does for
 `/api/v1/auth/google/*`), or prefixes Flock's address. See
 [`docs/agents/005-avatars.md`](docs/agents/005-avatars.md).
+
+**S3.** With the `FLOCK_S3_*` settings, an S3 proxy (`uvicorn app.api.src.s3_proxy.app:app`, the
+Compose service `flock-s3` under the profile `s3`) fronts our Ceph: orgs create buckets in Flock
+(`/api/v1/orgs/{org}/buckets`, stored upstream as `{org pk:05}-{name}`), and people reach them
+with per-user S3 keys scoped to one org (`POST /api/v1/s3/credentials` for ephemeral ones,
+`/api/v1/me/s3-keys` for long-lived ones). See [`docs/source/s3.md`](docs/source/s3.md) and
+[`docs/agents/009-s3-proxy.md`](docs/agents/009-s3-proxy.md).
 
 ## Read API
 
@@ -285,15 +309,22 @@ correct them with `PATCH .../runs/{run}` (multi-node runs report one node, and N
 GPUs hidden by `CUDA_VISIBLE_DEVICES`). Each heartbeat adds the time since the previous one to
 a ledger of seconds per run and UTC month, unless the run was silent longer than
 `FLOCK_CRASH_TIMEOUT` (preemption gaps aren't billed). Ledger rows outlive their runs and
-projects, so deleting never gives budget back. Org admins set prices per GPU hour and a
-monthly budget; cost is GPU hours × the current price.
+projects, so deleting never gives budget back, unless an admin leaves a deleted project's
+spend out. Org admins set prices per GPU hour and a monthly budget; cost is GPU hours × the
+current price. Runs with no GPU hours count towards nothing. Budget warnings (unpriced GPU
+types, runs with unknown GPUs) are raised from 0.05 hours, shown to admins only, in the org's
+settings, and admins can dismiss them for the whole org until they're about something new.
 
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/v1/feed?org=&project=&owner=me&kinds=&cursor=&limit=` | home feed, newest first: `run_started`, `run_finished`/`run_failed`/`run_crashed`, `project_created` |
 | `GET /api/v1/orgs/{org}/billing` | currency, budgets, prices, and every GPU type the org's runs used |
 | `PATCH /api/v1/orgs/{org}/billing` `{monthly_budget?, currency?, rates?: {"H200": 60, "A100": null}}` | admins: set the budget from this month on, and merge prices (`null` removes one) |
-| `GET /api/v1/orgs/{org}/budget[?month=YYYY-MM]` | spent, remaining, cost per project (`null`: deleted projects), top 5 runs, unpriced GPU hours |
+| `GET /api/v1/orgs/{org}/budget[?month=YYYY-MM]` | spent, remaining, cost per project (`null`: deleted projects), excluded spend, top 5 runs; admins also get unpriced GPU hours and unknown-GPU runs |
+| `GET /api/v1/orgs/{org}/budget/warnings[?month=YYYY-MM]` | admins: the month's active warnings, and every dismissed one |
+| `PUT`/`DELETE /api/v1/orgs/{org}/budget/warnings/{kind}:{YYYY-MM}/dismissal` `{fingerprint}` | admins: dismiss a warning for everyone, or show it again |
+| `GET /api/v1/orgs/{org}/budget/deleted-projects` | admins: deleted projects that used GPU hours, with their spend |
+| `PATCH /api/v1/orgs/{org}/budget/deleted-projects/{id}` `{excluded}` | admins: leave a deleted project's spend out of the budget, or count it again |
 
 ```bash
 curl -s -X PATCH --json '{"monthly_budget": 20000, "rates": {"H200": 60}}' \
@@ -303,7 +334,8 @@ curl -s -H "Authorization: Bearer $TOKEN" $FLOCK/api/v1/orgs/flock/budget
 
 The feed is derived from runs and projects as they are (no activity log), so it has no
 deletes, renames or membership changes, and isn't pushed live. See
-[`docs/agents/004-home-and-budgets.md`](docs/agents/004-home-and-budgets.md).
+[`docs/agents/004-home-and-budgets.md`](docs/agents/004-home-and-budgets.md) and
+[`docs/agents/007-budget-management.md`](docs/agents/007-budget-management.md).
 
 ### System metrics
 
@@ -382,32 +414,31 @@ limit; it reconnects with its latest line counts.
   data-modifying CTEs to upsert history, event and console lines and update the run. A
   request is acknowledged only after it commits, and re-sent chunks are idempotent because
   lines are keyed by `(run, line number)`.
-- **Run table**: each project keeps every run's attributes, config and summary in memory as
-  columns. Each column has a float64 array, an object array for non-numeric values and a
-  presence mask, so a filter compiles to vectorized numpy operations over all runs at once
-  and never touches the database.
-- **History**: a run has two series streams, its logged history and its system metrics. Both
-  are handled the same way. Running runs and recently read runs are kept in memory as
-  columnar `(row, value)` arrays per metric, in an LRU bounded by the history cache size. When
-  a run finishes, each stream is compacted into one `bytea` blob per metric. These blobs are stored
-  uncompressed and out of line, so reads skip decompression. Curves of cold runs load in a
-  single batched query per request (`run_pk = ANY(...) AND key = ANY(...)`), whatever the
-  number of runs.
-- **Changes**: deleting or moving runs rebuilds the affected projects' run tables, keeping rows
-  in creation order (tens of ms for 10k runs × 1.5k columns). Mutations take a lock per
-  project and per run, always in the same order, and writes from a run's client hold its
-  lock, so a run is never deleted halfway through a write.
-- **Auth**: users, memberships, API key digests and sessions are loaded into memory, so
-  authenticating a request costs a sha256 (API key) or an HMAC (JWT) and a dict lookup, never a
-  database round trip. Roles aren't put in tokens: they're looked up per request, so changes
-  apply at once. Passwords are hashed with argon2id in a worker thread.
-- **Spend**: the usage ledger (`gpu_usage`), prices and budgets are in memory too. Accruing
-  is one more CTE in the `file_stream` statement; the budget panel reads only the month's
-  ledger entries of one org, and the feed takes the latest rows of each project's run table
-  with `argpartition`.
-- **Startup** loads every run's metadata, config and summary into memory. A 10k-run ×
-  1.5k-column project takes a few seconds. Objects loaded at startup are frozen out of the
-  cyclic GC so its collections don't pause requests.
+- **Run table**: one row per run and column in `run_values` (numbers, strings and other
+  values apart, each indexed by project, column and value), and per-column counts in
+  `project_keys`. A filter compiles to `INTERSECT`/`UNION`/`EXCEPT` over run pks, one index
+  range scan per clause; `$regex` is PostgreSQL's, and refuses Python constructs it reads
+  differently. Writers append count changes to `project_key_changes`, folded in the
+  background, so new runs don't queue on shared rows.
+- **History**: a run has two series streams, its logged history and its system metrics. Each
+  `file_stream` request appends one chunk per metric (`series_chunks`, `(row, value)` arrays
+  in `bytea`, uncompressed and out of line) in its transaction. Chunks are merged into one
+  per metric when the run finishes, and every 64 requests while it runs. Curves load in a
+  single batched query per request, whatever the number of runs. There's no cache in Flock.
+- **Changes**: deletes mark rows deleted and return; a background purge removes them. Writes
+  lock rows in PostgreSQL, always org, then projects, then runs in pk order, and a run's
+  writes lock its row, so a run is never deleted halfway through a write.
+- **Live**: writers `NOTIFY` when they commit; every replica listens on one connection and
+  feeds its own dashboards' event streams.
+- **Auth**: lookups (key or token digest, session, roles) are cached 30 s per replica and
+  dropped on every replica when accounts change (`NOTIFY flock_auth`). Roles aren't put in
+  tokens, so changes apply at once. Passwords are hashed with argon2id in a worker thread.
+- **Spend**: the usage ledger (`gpu_usage`), prices and budgets are SQL aggregates. Accruing
+  is one more CTE in the `file_stream` statement.
+- **Background work** (compaction, the purge, crash detection, expired rows, S3 purges and
+  imports) runs on every replica, each piece either idempotent or claimed with
+  `FOR UPDATE SKIP LOCKED`.
+- **Startup** connects, checks the schema and listens: under a second, whatever the data.
 - Responses are encoded with orjson, which serializes numpy arrays directly.
 
 ## Performance
@@ -418,16 +449,18 @@ Apple Silicon laptop, with PostgreSQL running in Docker:
 
 | Scenario | p50 | Budget |
 | --- | --- | --- |
-| `loss` curves, newest 50 runs × 500 points (5k steps, logged every 10) | ~2 ms | 10–20 ms |
-| same, cold (all loaded from PostgreSQL) | ~4 ms | 10–20 ms |
-| `loss,val_loss,lr` for the newest 50 runs | ~4.5 ms | 10–20 ms |
-| ongoing runs' curves while those runs stream history | ~1 ms | 10–20 ms |
-| 6-clause filter + sort over 10k runs × 1.5k columns | ~2.5 ms | 20–50 ms |
-| `$or` + regex + string `$in` over 10k runs × 1.5k columns | ~3 ms | 20–50 ms |
-| deleting ~950 runs from 10k runs × 1.5k columns | ~90 ms | 200 ms |
-| moving 500 of those runs to another project | ~50 ms | 200 ms |
-| home feed, first page and a filtered later page, over 10k runs | ~0.6 ms | 20–50 ms |
-| budget panel over 10k runs' ledger entries | ~3 ms | 20–50 ms |
+| `loss` curves, newest 50 runs × 500 points (5k steps, logged every 10) | ~5 ms | 10–20 ms |
+| same, every read from PostgreSQL | ~5 ms | 10–20 ms |
+| `loss,val_loss,lr` for the newest 50 runs | ~12 ms | 10–20 ms |
+| ongoing runs' curves while those runs stream history | ~5 ms | 10–20 ms |
+| 6-clause filter + sort over 10k runs × 1.5k columns | ~13 ms | 20–50 ms |
+| `$or` + regex + string `$in` over 10k runs × 1.5k columns | ~19 ms | 20–50 ms |
+| deleting ~950 runs from 10k runs × 1.5k columns | ~20 ms | 200 ms |
+| moving 500 of those runs to another project | ~3 s | 1–2 s |
+| home feed, first page and a filtered later page, over 10k runs | ~5–11 ms | 20–50 ms |
+| budget panel over 10k runs' ledger entries | ~12 ms | 20–50 ms |
+
+The sweep's `run_values` table is 15.1M rows, 3.8 GB with its indexes.
 
 ## Simulating a month
 
@@ -440,9 +473,9 @@ something realistic to show:
 - avatars and pending invites.
 
 It writes straight to PostgreSQL in about 25 s (about 1.5 GB), because writing through the API
-would stamp everything "now". Stop Flock, or don't use it, while the script runs, and
-restart it afterwards so it loads the data. Every simulated user's password is
-`flock-demo-password`. The script prints a super admin API key.
+would stamp everything "now". It then backfills the run table and curves, as a migration
+would, so a running Flock serves the data as soon as the script ends. Every simulated user's password is
+`flock-demo-password`. The script prints a super admin wandb key.
 
 ```sh
 cd app/api
@@ -465,7 +498,8 @@ docker compose -f ../compose.yaml restart api
 The tests need PostgreSQL. They use the admin URL in `FLOCK_TEST_DATABASE_URL` if it is set.
 Otherwise they start a throwaway `postgres:18.4` container, which requires Docker. Migrations
 are applied once to a template database, and each test server gets a fresh copy of it, with a
-super admin signed up and an API key for it (`FlockServer.bootstrap`).
+super admin signed up, with a CLI token for REST calls and a wandb key for the wandb SDK
+(`FlockServer.bootstrap`).
 
 ```sh
 uv run --all-packages python -m pytest tests/app

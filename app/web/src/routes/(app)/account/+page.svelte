@@ -1,27 +1,19 @@
 <script lang="ts">
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { enhance } from '$app/forms';
-	import ApiKeyCreator from '#lib/components/ApiKeyCreator.svelte';
-	import AvatarField from '#lib/components/AvatarField.svelte';
+	import KeysSection from '#lib/components/KeysSection.svelte';
+	import ProfileHeader from '#lib/components/ProfileHeader.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { Input } from '#lib/components/ui/input/index.js';
-	import { Label } from '#lib/components/ui/label/index.js';
-	import FormError from '#lib/components/FormError.svelte';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
 	import { dateTime, relativeTime } from '#lib/utils.ts';
 	import { entityHref } from '#lib/workspace/url.ts';
+	import Page from '#lib/components/Page.svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 
-	const removal = new Mutation({ success: () => 'API key deleted', toastErrors: true });
-	const profile = new Mutation({ success: () => 'Name saved' });
-	let passwordForm = $state<HTMLFormElement>();
-	const password = new Mutation({
-		success: () => (data.profile.has_password ? 'Password changed' : 'Password set'),
-		done: () => passwordForm?.reset()
-	});
+	const revocation = new Mutation({ success: () => 'Machine signed out', toastErrors: true });
 	const defaultOrg = new Mutation<{ org: string }>({
 		success: ({ org }) => {
 			const name = data.profile.orgs.find((o) => o.name === org)?.display_name ?? org;
@@ -35,216 +27,109 @@
 	<title>Account · Flock</title>
 </svelte:head>
 
-<div class="flex min-h-0 flex-1 flex-col">
-	<main class="min-h-0 flex-1 overflow-y-auto px-5 pb-16">
-		<div class="mx-auto max-w-180">
-			<h1 class="pt-8 font-serif text-[34px] leading-[1.15] tracking-[-0.02em]">
-				{data.profile.name}
-			</h1>
-			<p class="mt-1 text-muted-foreground">
-				{data.profile.email}
-				{#if data.profile.is_superadmin}<span>· Super admin</span>{/if}
-			</p>
+<Page width="home">
+	<ProfileHeader profile={data.profile} />
 
-			<section class="mt-10">
-				<h2 class="font-serif text-2xl tracking-[-0.01em]">Picture</h2>
-				<div class="mt-4">
-					<AvatarField
-						kind="user"
-						name={data.profile.name}
-						src={data.profile.avatar_url}
-						gravatar={data.profile.avatar_source !== 'gravatar'}
-					/>
-				</div>
-			</section>
-
-			<section class="mt-10">
-				<h2 class="font-serif text-2xl tracking-[-0.01em]">Name</h2>
-				<p class="mt-2 max-w-[62ch] text-muted-foreground">
-					What others see on your runs and in member lists.
-				</p>
-				<form
-					method="POST"
-					action="?/profile"
-					class="mt-4 grid max-w-100 gap-3"
-					use:enhance={profile.enhance}
-				>
-					<div class="flex gap-2">
-						<Input
-							name="name"
-							value={data.profile.name}
-							aria-label="Name"
-							autocomplete="name"
-							maxlength={128}
-							required
-						/>
-						<Button type="submit" variant="outline" disabled={profile.pending}>
-							{profile.pending ? 'Saving…' : 'Save'}
-						</Button>
-					</div>
-					<FormError error={profile.error} />
-				</form>
-			</section>
-
-			<section class="mt-10">
-				<h2 class="font-serif text-2xl tracking-[-0.01em]">Password</h2>
-				<p class="mt-2 max-w-[62ch] text-muted-foreground">
-					{#if data.profile.has_password}
-						Changing it signs you out everywhere else.
-					{:else if data.profile.google}
-						You sign in with Google. Set a password to sign in with your email too.
-					{:else}
-						Set a password to sign in with your email.
-					{/if}
-				</p>
-				<form
-					bind:this={passwordForm}
-					method="POST"
-					action="?/password"
-					class="mt-4 grid max-w-100 gap-4"
-					use:enhance={password.enhance}
-				>
-					<!-- For password managers: the account the password belongs to. -->
-					<input
-						type="email"
-						name="email"
-						value={data.profile.email}
-						autocomplete="username"
-						hidden
-						readonly
-					/>
-					{#if data.profile.has_password}
-						<div class="grid gap-2">
-							<Label for="current-password">Current password</Label>
-							<Input
-								id="current-password"
-								name="current"
-								type="password"
-								autocomplete="current-password"
-								required
-							/>
-						</div>
-					{/if}
-					<div class="grid gap-2">
-						<Label for="new-password">New password</Label>
-						<Input
-							id="new-password"
-							name="new"
-							type="password"
-							autocomplete="new-password"
-							minlength={8}
-							required
-						/>
-						<p class="text-xs text-muted-foreground">At least 8 characters.</p>
-					</div>
-					<div class="grid gap-2">
-						<Label for="confirm-password">Confirm new password</Label>
-						<Input
-							id="confirm-password"
-							name="confirm"
-							type="password"
-							autocomplete="new-password"
-							required
-						/>
-					</div>
-					<FormError error={password.error} />
-					<div>
-						<Button type="submit" variant="outline" disabled={password.pending}>
-							{password.pending
-								? 'Saving…'
-								: data.profile.has_password
-									? 'Change password'
-									: 'Set password'}
-						</Button>
-					</div>
-				</form>
-			</section>
-
-			<section class="mt-10">
-				<h2 class="font-serif text-2xl tracking-[-0.01em]">Organizations</h2>
-				{#if data.profile.orgs.length}
-					<ul class="mt-3 border-t border-divider">
-						{#each data.profile.orgs as org (org.name)}
-							<li class="flex h-12 items-center gap-3 border-b border-divider">
-								<a
-									class="min-w-0 truncate font-medium hover:text-link"
-									href={entityHref(org.name)}
-									title={org.name}>{org.display_name}</a
+	<section class="mt-10">
+		<h2 class="text-2xl tracking-[-0.01em]">Organizations</h2>
+		{#if data.profile.orgs.length}
+			<ul class="mt-3 border-t border-divider">
+				{#each data.profile.orgs as org (org.name)}
+					<li class="flex h-12 items-center gap-3 border-b border-divider">
+						<a
+							class="min-w-0 truncate font-medium hover:text-link"
+							href={entityHref(org.name)}
+							title={org.name}>{org.display_name}</a
+						>
+						<Badge variant="secondary" class="text-muted-foreground">
+							{org.role === 'admin' ? 'Admin' : 'Member'}
+						</Badge>
+						{#if org.name === data.profile.default_org}
+							<span class="text-xs text-muted-foreground">
+								default for <code class="font-mono">wandb.init</code>
+							</span>
+						{:else}
+							<form
+								method="POST"
+								action="?/defaultOrg"
+								class="ml-auto"
+								use:enhance={defaultOrg.enhance}
+							>
+								<input type="hidden" name="org" value={org.name} />
+								<Button
+									type="submit"
+									variant="ghost"
+									size="sm"
+									class="text-muted-foreground"
+									disabled={defaultOrg.pending}
+									title="Log runs here when wandb.init names no entity"
 								>
-								<Badge variant="secondary" class="text-muted-foreground">
-									{org.role === 'admin' ? 'Admin' : 'Member'}
-								</Badge>
-								{#if org.name === data.profile.default_org}
-									<span class="text-xs text-muted-foreground">
-										default for <code class="font-mono">wandb.init</code>
-									</span>
-								{:else}
-									<form
-										method="POST"
-										action="?/defaultOrg"
-										class="ml-auto"
-										use:enhance={defaultOrg.enhance}
-									>
-										<input type="hidden" name="org" value={org.name} />
-										<Button
-											type="submit"
-											variant="ghost"
-											size="sm"
-											class="text-muted-foreground"
-											disabled={defaultOrg.pending}
-											title="Log runs here when wandb.init names no entity"
-										>
-											Make default
-										</Button>
-									</form>
-								{/if}
-							</li>
-						{/each}
-					</ul>
+									Make default
+								</Button>
+							</form>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{:else}
+			<p class="mt-3 text-muted-foreground">None yet.</p>
+		{/if}
+	</section>
+
+	<KeysSection keys={data.keys} s3={data.s3} defaultOrg={data.profile.default_org} now={data.now} />
+
+	<section class="mt-10">
+		<h2 class="text-2xl tracking-[-0.01em]">Command line sign-ins</h2>
+		<p class="mt-2 max-w-[62ch] text-muted-foreground">
+			Machines signed in with <code class="font-mono text-[0.9em]">flock login</code>.
+		</p>
+		<table class="mt-4 w-full table-fixed border-collapse text-[13.5px]">
+			<thead>
+				<tr class="h-10 border-b text-left text-xs font-medium text-muted-foreground">
+					<th class="pr-2 font-medium">Machine</th>
+					<th class="hidden w-40 px-2 font-medium sm:table-cell">Signed in</th>
+					<th class="w-40 px-2 font-medium">Last used</th>
+					<th class="w-12"><span class="sr-only">Revoke</span></th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each data.cliSessions as session (session.id)}
+					{@const name = session.name || 'Unnamed machine'}
+					<tr class="h-12 border-b border-divider">
+						<td class="truncate pr-2 font-medium">{name}</td>
+						<td class="hidden px-2 text-muted-foreground sm:table-cell">
+							{dateTime(session.created_at)}
+						</td>
+						<td class="px-2 text-muted-foreground">
+							{session.last_used_at === null
+								? 'Not used yet'
+								: relativeTime(session.last_used_at, data.now)}
+						</td>
+						<td class="text-right">
+							<form method="POST" action="?/revokeCli" use:enhance={revocation.enhance}>
+								<input type="hidden" name="id" value={session.id} />
+								<Button
+									type="submit"
+									variant="ghost"
+									size="icon-sm"
+									class="text-muted-foreground hover:text-destructive"
+									aria-label="Revoke the sign-in of {name}"
+									title="Sign this machine out"
+								>
+									<Trash2Icon />
+								</Button>
+							</form>
+						</td>
+					</tr>
 				{:else}
-					<p class="mt-3 text-muted-foreground">None yet.</p>
-				{/if}
-			</section>
-
-			<section class="mt-10">
-				<h2 class="font-serif text-2xl tracking-[-0.01em]">API keys</h2>
-				<p class="mt-2 max-w-[62ch] text-muted-foreground">Keys work until deleted.</p>
-				{#if data.keys.length}
-					<ul class="mt-4 border-t border-divider">
-						{#each data.keys as key (key.id)}
-							<li class="flex h-12 items-center gap-4 border-b border-divider">
-								<span class="min-w-0 flex-1 truncate font-medium">{key.name}</span>
-								<span class="font-mono text-[12.5px] text-muted-foreground">{key.prefix}…</span>
-								<span class="w-24 text-muted-foreground" title={dateTime(key.created_at)}>
-									{relativeTime(key.created_at, data.now)}
-								</span>
-								<form method="POST" action="?/deleteKey" use:enhance={removal.enhance}>
-									<input type="hidden" name="id" value={key.id} />
-									<Button
-										type="submit"
-										variant="ghost"
-										size="icon-sm"
-										class="text-muted-foreground hover:text-destructive"
-										aria-label="Delete key {key.name}"
-										title="Delete: scripts using it stop working"
-									>
-										<Trash2Icon />
-									</Button>
-								</form>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-				<div class="mt-4">
-					<ApiKeyCreator named />
-				</div>
-			</section>
-
-			<section class="mt-10">
-				<form method="POST" action="/logout">
-					<Button type="submit" variant="outline">Sign out</Button>
-				</form>
-			</section>
-		</div>
-	</main>
-</div>
+					<tr class="h-12 border-b border-divider">
+						<td colspan="4" class="pr-2 text-muted-foreground">
+							None yet. Run <code class="font-mono text-[0.9em]">flock login</code> to sign in from a
+							terminal.
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</section>
+</Page>

@@ -7,16 +7,26 @@ from typing import Any, ClassVar
 from urllib.parse import quote
 
 import orjson
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 
-from app.api.src.api.deps import APIError, JSONResponse, StoreDep, UserDep, visible_org
+from app.api.src.api.deps import (
+    APIError,
+    JSONResponse,
+    StoreDep,
+    WandbUser,
+    visible_org,
+    wandb_user,
+)
 from app.api.src.core.accounts import User
 from app.api.src.core.errors import Discarded, Forbidden, NotFound
 from app.api.src.core.store import DEFAULT_PROJECT, Org, Store
 from app.api.src.utils import encode_id, loads_lenient
 
-router = APIRouter(include_in_schema=False)
+# The calls the wandb SDK makes with its key, which take any credential (D72). Uploads to
+# signed URLs and the SDK's telemetry come without one.
+router = APIRouter(include_in_schema=False, dependencies=[Depends(wandb_user)])
+public = APIRouter(include_in_schema=False)
 
 
 class GraphQLError(Exception):
@@ -94,10 +104,10 @@ class GraphQL:
             return {"data": None, "errors": [{"message": str(exc)}]}
         return {"data": data}
 
-    def org(self, name: str | None) -> tuple[Org, str]:
+    async def org(self, name: str | None) -> tuple[Org, str]:
         """The org a request names (by default the user's default org) and the user's role."""
         accounts = self.store.accounts
-        org = self.store.orgs.get(name) if name else accounts.default_org(self.user)
+        org = await self.store.find_org(name) if name else await accounts.default_org(self.user)
         role = accounts.role(self.user, org) if org is not None else None
         if org is None or role is None:
             raise GraphQLError(
@@ -107,8 +117,8 @@ class GraphQL:
 
     async def viewer(self, variables: dict) -> dict:
         user = self.user
-        default = self.store.accounts.default_org(user)
-        orgs = self.store.orgs_by_pk
+        default = await self.store.accounts.default_org(user)
+        orgs = {org.pk: org for org in await self.store.orgs(user.roles)}
         return {
             "viewer": {
                 "id": encode_id("User", str(user.pk)),
@@ -117,7 +127,7 @@ class GraphQL:
                 "email": user.email,
                 "flags": "{}",
                 "admin": user.is_superadmin,
-                "teams": {"edges": [{"node": {"name": orgs[pk].name}} for pk in user.roles]},
+                "teams": {"edges": [{"node": {"name": org.name}} for org in orgs.values()]},
             }
         }
 
@@ -135,7 +145,7 @@ class GraphQL:
                 kind = None
             if kind != "Run":
                 raise GraphQLError(f"invalid run id {variables['id']!r}")
-        org, role = self.org(entity)
+        org, role = await self.org(entity)
         entity = org.name
         fields: dict[str, Any] = {
             "display_name": variables.get("displayName"),
@@ -215,12 +225,12 @@ class GraphQL:
 
     async def run_resume_status(self, variables: dict) -> dict:
         store = self.store
-        entity = self.org(variables.get("entity"))[0].name
+        entity = (await self.org(variables.get("entity")))[0].name
         project_name = variables.get("project") or DEFAULT_PROJECT
-        project = store.project(entity, project_name)
+        project = await store.project(entity, project_name)
         if project is None:
             return {"model": None}
-        run = project.by_name.get(variables.get("name") or "")
+        run = await store.project_run(project, variables.get("name") or "")
         bucket = None
         if run is not None:
             config = await store.read_config(run)
@@ -254,15 +264,15 @@ class GraphQL:
 
     async def create_run_files(self, variables: dict) -> dict:
         store = self.store
-        org, role = self.org(variables.get("entity"))
+        org, role = await self.org(variables.get("entity"))
         entity = org.name
         project = variables.get("project") or DEFAULT_PROJECT
         run_name = variables.get("run") or ""
-        run = store.get_run(entity, project, run_name)
+        run = await store.get_run(entity, project, run_name)
         if run is not None and role != "admin" and run.owner != self.user.pk:
             raise GraphQLError(f"run {run.path} belongs to another user")
         # The client of a run deleted while it was running gets URLs whose uploads are dropped.
-        discarded = run is None and store.discarding(entity, project, run_name)
+        discarded = run is None and await store.discarding(entity, project, run_name)
         if run is None and not discarded:
             raise GraphQLError("run not found")
         base = (store.settings.api_public_url or str(self.request.base_url)).rstrip("/")
@@ -282,8 +292,8 @@ class GraphQL:
         return {"createRunFiles": {"runID": run_id, "uploadHeaders": [], "files": files}}
 
     async def run_state(self, variables: dict) -> dict:
-        run = self.store.get_run(
-            self.org(variables.get("entity"))[0].name,
+        run = await self.store.get_run(
+            (await self.org(variables.get("entity")))[0].name,
             variables.get("project") or DEFAULT_PROJECT,
             variables.get("run") or "",
         )
@@ -296,7 +306,7 @@ class GraphQL:
 
 
 @router.post("/graphql")
-async def graphql(request: Request, store: StoreDep, user: UserDep) -> Response:
+async def graphql(request: Request, store: StoreDep, user: WandbUser) -> Response:
     body = await request.body()
     try:
         if request.headers.get("content-encoding", "").lower() == "gzip":  # the SDK may gzip
@@ -312,7 +322,7 @@ async def graphql(request: Request, store: StoreDep, user: UserDep) -> Response:
 
 @router.post("/files/{entity}/{project}/{run}/file_stream")
 async def file_stream(
-    entity: str, project: str, run: str, request: Request, store: StoreDep, user: UserDep
+    entity: str, project: str, run: str, request: Request, store: StoreDep, user: WandbUser
 ) -> Response:
     body = await request.body()
     try:
@@ -321,7 +331,7 @@ async def file_stream(
         payload = orjson.loads(body)
     except (orjson.JSONDecodeError, OSError) as exc:  # OSError: corrupt gzip
         raise APIError(400, "invalid request body") from exc
-    org = visible_org(entity, store, user)
+    org = await visible_org(entity, store, user)
     admin = store.accounts.role(user, org) == "admin"
     try:
         await store.file_stream(entity, project, run, payload, owner=user.pk, admin=admin)
@@ -330,7 +340,7 @@ async def file_stream(
     return JSONResponse({"exitcode": None, "limits": {}})
 
 
-@router.put("/storage/{entity}/{project}/{run}/{name:path}")
+@public.put("/storage/{entity}/{project}/{run}/{name:path}")
 async def upload(
     entity: str,
     project: str,
@@ -342,13 +352,13 @@ async def upload(
 ) -> Response:
     if not hmac.compare_digest(sig, GraphQL.sign(store, entity, project, run, name)):
         raise APIError(403, "invalid upload signature")
-    target = store.get_run(entity, project, run)
+    target = await store.get_run(entity, project, run)
     try:
         if target is None:
             raise NotFound("run not found")
         await store.save_file(target, name, await request.body())
     except NotFound as exc:
-        if store.discarding(entity, project, run):
+        if await store.discarding(entity, project, run):
             return Response(status_code=200)  # from the client of a deleted run: dropped
         raise APIError(404, str(exc)) from exc
     except ValueError as exc:
@@ -356,7 +366,7 @@ async def upload(
     return Response(status_code=200)
 
 
-@router.post("/sdk/otel/{path:path}")
+@public.post("/sdk/otel/{path:path}")
 async def discard_telemetry(path: str, request: Request) -> Response:
     """wandb-core exports its own OpenTelemetry metrics/logs to the server; drop them."""
     await request.body()

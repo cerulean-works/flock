@@ -73,11 +73,25 @@ describe('computeDomain x padding', () => {
 		expect(d.x1).toBeCloseTo(1010, 9);
 	});
 
-	it('starts a step axis at zero when the data starts near it', () => {
+	it('starts a step axis at zero when the data starts near it, never left of it', () => {
 		const d = computeDomain([plot([5, 50, 100], [1, 2, 3])], opts());
-		expect(d.x0).toBeLessThan(0);
-		expect(d.x0).toBeGreaterThan(-5);
+		expect(d.x0).toBe(0);
 		expect(d.xTicks.values[0]).toBe(0);
+		expect(computeDomain([plot([0, 2000], [1, 2])], opts()).x0).toBe(0);
+		for (const xKind of ['step', 'number', 'duration'] as const)
+			expect(computeDomain([plot([0, 2000], [1, 2])], opts({ xKind })).x0).toBe(0);
+	});
+
+	it('keeps a zoom from reaching below zero on non-negative data', () => {
+		const d = computeDomain([plot([0, 100, 2000], [1, 2, 3])], opts({ zoom: [-40, 500] }));
+		expect([d.x0, d.x1]).toEqual([0, 500]);
+		expect(computeDomain([plot([0, 2000], [1, 2])], opts({ zoom: [100, 500] })).x0).toBe(100);
+	});
+
+	it('leaves negative data and wall times their padding', () => {
+		expect(computeDomain([plot([-100, 100], [1, 2])], opts()).x0).toBeLessThan(-100);
+		const wall = computeDomain([plot([0, 1000], [1, 2])], opts({ xKind: 'time' }));
+		expect(wall.x0).toBeLessThan(0);
 	});
 
 	it('centres a single point', () => {

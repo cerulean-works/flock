@@ -1,5 +1,7 @@
 <script lang="ts">
+	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FolderIcon from '@lucide/svelte/icons/folder';
+	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
 	import HouseIcon from '@lucide/svelte/icons/house';
 	import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close';
 	import PlusIcon from '@lucide/svelte/icons/plus';
@@ -11,6 +13,8 @@
 	import ProjectDialog from '#lib/components/ProjectDialog.svelte';
 	import ProjectMenu from '#lib/components/ProjectMenu.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import { datasetsHref } from '#lib/datasets.ts';
+	import { storageHref } from '#lib/storage.ts';
 	import type { OrgEntry, ProjectInfo } from '#lib/types.ts';
 	import { entityHref, projectHref } from '#lib/workspace/url.ts';
 	import WorkspaceSwitcher from './WorkspaceSwitcher.svelte';
@@ -20,15 +24,21 @@
 		org: string | null;
 		orgs: OrgEntry[];
 		projects: ProjectInfo[];
+		/** Whether the server has S3 storage: the Datasets and Storage items show only then. */
+		s3?: boolean;
 		/** Hide the sidebar (wide windows only: the drawer closes by itself). */
 		oncollapse?: () => void;
 	}
 
-	let { org, orgs, projects, oncollapse }: Props = $props();
+	let { org, orgs, projects, s3 = false, oncollapse }: Props = $props();
 
-	/** Inside an org (its runs, a project, its members), where switching orgs leaves the page. */
+	/** Inside an org (its runs, a project, its members, its datasets and storage), where switching
+	 * orgs leaves the page. */
 	const inOrg = $derived(
-		!!page.route.id?.startsWith('/(app)/[entity]') || !!page.route.id?.startsWith('/(app)/orgs/')
+		!!page.route.id?.startsWith('/(app)/[entity]') ||
+			!!page.route.id?.startsWith('/(app)/orgs/') ||
+			!!page.route.id?.startsWith('/(app)/datasets/') ||
+			!!page.route.id?.startsWith('/(app)/storage/')
 	);
 	const route = $derived(page.route.id);
 
@@ -54,12 +64,10 @@
 	<div class="flex h-12 flex-none items-center gap-2 border-b border-divider pr-2 pl-4">
 		<a
 			href={resolve('/(app)')}
-			class="flex items-center gap-2 rounded-md font-serif text-[19px] tracking-[-0.01em] outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+			class="flex items-center gap-2 rounded-md text-[19px] font-medium tracking-[-0.025em] outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
 		>
 			<LogoMark class="size-6" />
-			<!-- Newsreader's line box leaves room for descenders "Flock" doesn't have: centered as
-			     is, the letters sit high of the disc. This moves their ink to its middle. -->
-			<span class="translate-y-[0.13em]">Flock</span>
+			<span>Flock</span>
 		</a>
 		{#if oncollapse}
 			<Button
@@ -76,18 +84,40 @@
 	</div>
 
 	<nav class="min-h-0 flex-1 overflow-y-auto px-2 py-3" aria-label="Main">
-		<a class={ITEM} href={resolve('/(app)')} aria-current={route === '/(app)' ? 'page' : undefined}>
-			<HouseIcon /> Home
-		</a>
-		{#if org}
+		<div class="grid gap-0.5">
 			<a
 				class={ITEM}
-				href={entityHref(org)}
-				aria-current={route === '/(app)/[entity]' ? 'page' : undefined}
+				href={resolve('/(app)')}
+				aria-current={route === '/(app)' ? 'page' : undefined}
 			>
-				<ActivityIcon /> Runs
+				<HouseIcon /> Home
 			</a>
-		{/if}
+			{#if org}
+				<a
+					class={ITEM}
+					href={entityHref(org)}
+					aria-current={route === '/(app)/[entity]' ? 'page' : undefined}
+				>
+					<ActivityIcon /> Runs
+				</a>
+				{#if s3}
+					<a
+						class={ITEM}
+						href={datasetsHref(org)}
+						aria-current={route?.startsWith('/(app)/datasets/') ? 'page' : undefined}
+					>
+						<DatabaseIcon /> Datasets
+					</a>
+					<a
+						class={ITEM}
+						href={storageHref(org)}
+						aria-current={route?.startsWith('/(app)/storage/') ? 'page' : undefined}
+					>
+						<HardDriveIcon /> Storage
+					</a>
+				{/if}
+			{/if}
+		</div>
 
 		{#if org}
 			<div class="mx-2 mt-4 border-t border-divider pt-3">
@@ -135,7 +165,7 @@
 					}}
 				/>
 			{/if}
-			<ul class="mt-2">
+			<ul class="mt-2 grid gap-0.5">
 				{#each shown as p (p.name)}
 					{@const here = page.params.project === p.name}
 					<!-- The project's menu shows over the row's end while it's hovered, focused or

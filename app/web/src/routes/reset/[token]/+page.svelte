@@ -18,13 +18,11 @@
 
 <AuthShell>
 	{#if !data.email}
-		<h1 class="font-serif text-[34px] leading-[1.15] tracking-[-0.02em]">
-			This link can’t be used
-		</h1>
+		<h1 class="text-[34px] leading-[1.15] tracking-[-0.025em]">This link can’t be used</h1>
 		<p class="mt-3 leading-relaxed text-muted-foreground">It was used or has expired.</p>
 		<Button variant="outline" class="mt-8 h-10 w-full text-sm" href="/login">Sign in</Button>
 	{:else}
-		<h1 class="font-serif text-[34px] leading-[1.15] tracking-[-0.02em]">Choose a new password</h1>
+		<h1 class="text-[34px] leading-[1.15] tracking-[-0.025em]">Choose a new password</h1>
 		<p class="mt-3 leading-relaxed text-muted-foreground">
 			For <span class="text-foreground">{data.email}</span>. Other sessions are signed out.
 		</p>

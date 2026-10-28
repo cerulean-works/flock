@@ -12,7 +12,7 @@
 		budget: Budget;
 		/** The current UTC month: there's nothing to show after it. */
 		thisMonth: string;
-		/** Admins set the budget and prices. */
+		/** Admins set the budget and prices, and manage deleted projects. */
 		admin: boolean;
 	}
 
@@ -34,10 +34,10 @@
 		withParam(page.url, 'month', month === thisMonth ? null : month);
 </script>
 
-<section aria-labelledby="budget-title" class="grid gap-6">
+<section aria-labelledby="budget-title" class="grid grid-cols-1 gap-6">
 	<!-- The same 40px band as the activity's heading beside it. -->
 	<div class="flex h-10 items-center gap-1">
-		<h2 id="budget-title" class="flex-1 font-serif text-[22px] tracking-[-0.01em]">Budget</h2>
+		<h2 id="budget-title" class="flex-1 text-[22px] tracking-[-0.01em]">Budget</h2>
 		<Button
 			variant="ghost"
 			size="icon-sm"
@@ -72,7 +72,7 @@
 			<p class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
 				<span
 					class={[
-						'font-serif text-[34px] leading-none tracking-[-0.02em]',
+						'text-[34px] leading-none tracking-[-0.025em] tabular-nums',
 						over && 'text-destructive'
 					]}
 				>
@@ -97,7 +97,7 @@
 			</p>
 		{:else}
 			<p class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-				<span class="font-serif text-[34px] leading-none tracking-[-0.02em]">
+				<span class="text-[34px] leading-none tracking-[-0.025em] tabular-nums">
 					{fmt(budget.spent)}
 				</span>
 				<span class="text-muted-foreground">spent</span>
@@ -111,24 +111,16 @@
 		{/if}
 	</div>
 
-	{#if budget.unpriced.length || budget.unknown_gpu.runs}
-		<div class="grid gap-1.5 border-l-2 border-state-preempting pl-3 text-[13px]">
-			{#if budget.unpriced.length}
-				<p>
-					No price for {budget.unpriced
-						.map((u) => `${u.gpu_type} (${hours(u.gpu_hours)} h)`)
-						.join(', ')}: counted as free.
-					{#if admin}<a class="text-link hover:underline" href={orgHref(budget.org, 'budget')}
-							>Set prices</a
-						>{/if}
-				</p>
-			{/if}
-			{#if budget.unknown_gpu.runs}
-				<p class="text-muted-foreground">
-					{count(budget.unknown_gpu.runs, 'run')} ({hours(budget.unknown_gpu.hours)} h) with unknown GPUs.
-				</p>
-			{/if}
-		</div>
+	{#if budget.excluded.projects}
+		<p class="-mt-4 text-[13px] text-muted-foreground">
+			Leaves out {fmt(budget.excluded.cost)} of {count(
+				budget.excluded.projects,
+				'deleted project'
+			)}.
+			{#if admin}<a class="text-link hover:underline" href={orgHref(budget.org, 'deleted-projects')}
+					>Manage</a
+				>{/if}
+		</p>
 	{/if}
 
 	<!-- Narrow windows show the totals first, and the breakdown on request. -->
@@ -141,7 +133,7 @@
 	>
 		{expanded ? 'Hide breakdown' : 'Show breakdown'}
 	</Button>
-	<div class={['grid gap-6', !expanded && 'hidden xl:grid']}>
+	<div class={['grid grid-cols-1 gap-6', !expanded && 'hidden xl:grid']}>
 		<div>
 			<h3 class="text-xs font-medium text-muted-foreground">By project</h3>
 			<ul class="mt-2">
@@ -154,6 +146,14 @@
 									href={projectHref(budget.org, p.project)}
 								>
 									{p.project}
+								</a>
+							{:else if admin}
+								<a
+									class="min-w-0 flex-1 truncate text-muted-foreground hover:text-link"
+									href={orgHref(budget.org, 'deleted-projects')}
+									title="Manage the spend of deleted projects"
+								>
+									Deleted projects
 								</a>
 							{:else}
 								<span class="min-w-0 flex-1 truncate text-muted-foreground">Deleted projects</span>

@@ -3,8 +3,8 @@
 The dashboard for [Flock](../api): a home feed of each
 organization's activity beside its GPU budget, and a W&B-style workspace per project where the runs table and the charts share a single run list,
 with running runs updating live. It follows
-the "Paper" prototype in `mockup/`, restyled with the Cerulean Daylight tokens from `design.md`
-(Newsreader + DM Sans, warm paper, square surfaces).
+the "Paper" prototype in `mockup/`, restyled to match cerulean.works as described in `design.md`
+(Host Grotesk throughout, a pure white canvas, flat cool panels).
 
 ```sh
 # from this directory: start the API and PostgreSQL
@@ -20,7 +20,7 @@ pnpm test                # unit tests
 **First start.** A fresh Flock instance has no accounts, and refuses everything until one exists
 (its log says so). Open the dashboard: it shows **Set up Flock**, where the first account is
 created. That account is the super admin. The second screen asks them to name and create
-their organization; leaving setup and signing in later resumes at that screen. Its **Runs** page (in the sidebar) walks you through creating an API key
+their organization; leaving setup and signing in later resumes at that screen. Its **Runs** page (in the sidebar) walks you through creating a wandb key
 and logging a first run with the wandb SDK. After that the page is closed;
 everyone else signs in, and joins from an invitation an admin gives them: open an
 organization's **Settings** (in the sidebar's organization menu) and create an invite link. Flock sends
@@ -29,10 +29,10 @@ no email, so you pass the link on. More organizations are created on the **Super
 
 The SvelteKit server talks to Flock; the browser only talks to SvelteKit. Configure it with:
 
-| Variable             | Default                 | Purpose                                                                                                     |
-| -------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Variable               | Default                 | Purpose                                                                                               |
+| ---------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------- |
 | `FLOCK_API_URL`        | `http://127.0.0.1:8080` | Flock, as this server reaches it                                                                      |
-| `FLOCK_API_PUBLIC_URL` | `FLOCK_API_URL`           | Flock as the wandb SDK on your machines reaches it, for the `wandb login --host` line the setup shows |
+| `FLOCK_API_PUBLIC_URL` | `FLOCK_API_URL`         | Flock as the wandb SDK on your machines reaches it, for the `wandb login --host` line the setup shows |
 
 Set the API's `FLOCK_WEB_URL` to this dashboard's public origin for invitation, password reset
 and Google sign-in links. The development Compose file defaults it to `http://localhost:5173`.
@@ -41,6 +41,22 @@ For a production web build, supply the same `FLOCK_WEB_URL` at build time:
 ```sh
 FLOCK_WEB_URL=https://flock.example.com pnpm build
 ```
+
+### Against a hosted Flock
+
+To work on the dashboard with real data, point the dev server at a deployed API instead of a
+local one:
+
+```sh
+pnpm dev:remote          # http://localhost:5173, against https://flock-api.cerulean.works
+FLOCK_REMOTE_API_URL=https://api.flock.example.com pnpm dev:remote   # another deployment
+```
+
+It only sets `FLOCK_API_URL` for `vite dev`; plain `pnpm dev` still uses the local API. The
+browser still talks only to `localhost`, which keeps the session cookies, so sign in with an
+email and password of an account on that deployment. Google sign-in returns to the
+deployment's own dashboard (its `FLOCK_WEB_URL`), not to `localhost`. Everything you do
+changes that deployment's data.
 
 ## Docker
 
@@ -84,12 +100,12 @@ runtime versions still need verification on the deployment host.
 
 Components come from [shadcn-svelte](https://shadcn-svelte.com) (`src/lib/components/ui`), set
 up with the "nova" preset (`components.json`), whose padding and rounding are kept as generated
-(`--radius: 0.625rem`). Every color is Cerulean's instead: `src/routes/layout.css` maps the
-Daylight palette from `design.md` onto shadcn's semantic tokens (`background` = Paper,
-`foreground` = Ink, `muted-foreground` = Slate, `border` = Quiet rule, `ring` = Focus blue,
+(`--radius: 0.5rem`; cards are flat and square). Every color is Cerulean's instead:
+`src/routes/layout.css` maps the palette from `design.md` onto shadcn's semantic tokens
+(`background` = white, `card` = Panel, `foreground` = Ink, `muted-foreground` = Slate, `border` = Quiet rule, `ring` = Focus blue,
 `primary` = Reading blue for small functional emphasis) and adds the roles shadcn has no slot for
-(`faint`, `divider`, `selection`, `link`, `state-*`). Type is Newsreader (`font-serif`) and DM
-Sans (`font-sans`). All styling is Tailwind utilities; there are no component `<style>` blocks.
+(`faint`, `divider`, `selection`, `link`, `state-*`). Type is Host Grotesk (`font-sans`, linked from
+Google Fonts in `app.html`) everywhere; there is no serif. All styling is Tailwind utilities; there are no component `<style>` blocks.
 
 ```sh
 pnpm dlx shadcn-svelte@latest add <component>   # aliases already point at #lib
@@ -102,7 +118,7 @@ pnpm dlx shadcn-svelte@latest add <component>   # aliases already point at #lib
   an organization switcher at the bottom, which also sets your default organization. On home it
   links to the organization's runs; inside an organization it is **Home** and the projects,
   swiping in from the right. The organization menu at the bottom also opens its settings and
-  members, and holds your account: its page and API keys, super admin, and sign out. Pages
+  members, and holds your account: its page and wandb keys, super admin, and sign out. Pages
   have no header bar of their own. On wide windows the sidebar hides to a narrow rail (home and
   the same menu; remembered in a cookie); on phones a top bar opens it as a drawer.
 - **Home** (`/`): the activity of the organization in the sidebar (runs started, finished,
@@ -119,7 +135,7 @@ pnpm dlx shadcn-svelte@latest add <component>   # aliases already point at #lib
   path).
 - **Accounts**: first-run setup (`/setup`), sign in with email and password or Google
   (`/login`, shown when Flock has Google configured), sign out, and an account page
-  (`/account`) with your picture, your organizations and your API keys for the wandb SDK. See
+  (`/account`) with your profile, your organizations, and your wandb and S3 keys. See
   [Sessions](#sessions).
 - **Pictures**: people and organizations show their avatar wherever they appear (feed, runs,
   members, budget, menus, invitations), and their initials without one. Upload a PNG, JPEG, GIF
@@ -145,8 +161,8 @@ pnpm dlx shadcn-svelte@latest add <component>   # aliases already point at #lib
 - **Charts**: one panel per logged metric in collapsible, paginated sections (grouped by the
   prefix before `/`), each plotting every visible run on the page. System metrics (CPU, GPU,
   memory, ... as sampled by wandb) follow in a **system** section, plotted against runtime with
-  clock-friendly ticks; the crosshair syncs only between panels on the same kind of x axis. Synced crosshair across
-  panels, hover-to-focus the nearest run everywhere, click a line to pin its run, eye
+  clock-friendly ticks. Synced crosshair across
+  panels (see Chart tooltips), hover-to-focus the nearest run everywhere, click a line to pin its run, eye
   toggles to hide runs, drag to zoom (y auto-fits the zoomed window), double-click to reset.
   Drag a panel by its header to move it within its section (or use its grip and the arrow
   keys), and drag its bottom edge to resize the section's panels (double-click resets). The
@@ -168,9 +184,13 @@ pnpm dlx shadcn-svelte@latest add <component>   # aliases already point at #lib
   screen as they arrive, summary
   columns and run states update in the table, the header counts running runs, and runs created
   after the page loaded are offered as a refresh ("2 new runs · Show").
-- **Chart tooltips**: hovering one chart shows a tooltip in every chart on the same x axis, with
+- **Chart tooltips**: hovering one chart shows a tooltip in every chart that follows it, with
   each run's value at the crosshair step, sorted, windowed around the focused run, with raw values
-  shown next to smoothed ones.
+  shown next to smoothed ones. Charts of logged metrics follow each other whatever their x axis
+  (`_step`, a step metric, a time): the hovered x is turned into each run's history row, and
+  every other chart reads each run at that row's x on its own axis. System metric charts follow
+  charts on their own axis. The hovered chart's tooltip floats over the page beside the cursor,
+  so it never hides the lines being hovered in a small card; the others stay inside their chart.
 - **Full screen**: per panel, deep-linkable (`?panel=train%2Floss`), server-rendered on reload,
   ←/→ to move between panels, Esc or back to close, full run legend.
 - **Settings**: smoothing (debiased EMA), show original under smoothing, ignore outliers, panels per
@@ -185,8 +205,8 @@ Everything a page shows arrives in the server-rendered HTML, and no request ever
 
 | Step            | What happens                                                                                                                                                                                                                                                               |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Document        | `+page.ts` makes one request: Flock's workspace snapshot for the page (`GET /api/v1/projects/:entity/:project/workspace`), which carries the column schema, the runs and every metric's curves together. SvelteKit inlines the response into the HTML.               |
-| `<head>`        | Every JS chunk, both stylesheets and both self-hosted fonts are preloaded from the document, including SvelteKit's root error node, which its client start awaits but does not preload by default (`hooks.server.ts`).                                                     |
+| Document        | `+page.ts` makes one request: Flock's workspace snapshot for the page (`GET /api/v1/projects/:entity/:project/workspace`), which carries the column schema, the runs and every metric's curves together. SvelteKit inlines the response into the HTML.                     |
+| `<head>`        | Every JS chunk and both stylesheets are preloaded from the document (Host Grotesk comes from Google Fonts behind a preconnect), including SvelteKit's root error node, which its client start awaits but does not preload by default (`hooks.server.ts`).                  |
 | Hydration       | The load re-runs against the inlined response, so no data is fetched. The snapshot travels as base64 text for this one request and is decoded natively (`Uint8Array.fromBase64`); SvelteKit's generic binary path is a per-byte JS loop that cost ~300 ms with a cold JIT. |
 | After hydration | The live stream opens for the runs on the page; idle-time prefetch of the previous and next page; hover-intent prefetch on sort headers; SvelteKit hover preload on pager links.                                                                                           |
 | Navigation      | Paging and sorting fetch exactly one binary snapshot. View switches and full-screen panels only change URL params no load reads, so they fetch nothing.                                                                                                                    |

@@ -4,7 +4,7 @@ Runs are created only by the `wandb` SDK, and their config, summary, history and
 
 Members create projects and change the runs they logged. Updating or deleting projects, and changing other people's runs, takes an org admin. See [Permissions](permissions).
 
-The examples use `curl` with your API key or access token in `$TOKEN` and Flock's URL in `$FLOCK`. Every endpoint is described in [Projects and runs](api/projects).
+The examples use `curl` with your access token or CLI token (`flock token`) in `$TOKEN` and Flock's URL in `$FLOCK`. Every endpoint is described in [Projects and runs](api/projects).
 
 ## Projects
 

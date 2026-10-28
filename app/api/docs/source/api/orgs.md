@@ -7,7 +7,7 @@ Endpoints for organizations, their members and their invitations. Paths are rela
 An organization is returned as:
 
 ```json
-{"name": "flock", "display_name": "Flock Research", "created_at": 1792282194.3, "updated_at": 1792282194.3, "project_count": 2, "member_count": 2, "role": "admin", "avatar_url": null}
+{"name": "flock", "display_name": "Flock Research", "created_at": 1792282194.3, "updated_at": 1792282194.3, "project_count": 2, "member_count": 2, "role": "admin", "avatar_url": null, "s3_ephemeral_ttl": 28800, "s3_key_max_ttl": 2592000}
 ```
 
 | Field | Meaning |
@@ -16,18 +16,19 @@ An organization is returned as:
 | `display_name` | What people see it called. Org admins can change it. |
 | `role` | Your own role in it: `admin` or `member`. |
 | `avatar_url` | The path of its avatar image, or `null`. |
+| `s3_ephemeral_ttl`, `s3_key_max_ttl` | Its [S3 key lifetimes](../s3#key-lifetimes), in seconds. The maximum is `null` when keys may never expire. |
 
 | Endpoint | Who | Meaning |
 |---|---|---|
 | `GET /orgs` | anyone | Your organizations as `{"orgs": [...]}`, sorted by display name, then by ID. Super admins get every organization. |
 | `POST /orgs` | super admins | Creates an organization from `{"name": "vision", "display_name": "Vision Lab"}`, with you as its admin. `display_name` defaults to `name`. Answers 201, or 409 if the ID is taken. Add `wandb` to [import a W&B entity](#imports) into it. |
 | `GET /orgs/{org}` | members | One organization. |
-| `PATCH /orgs/{org}` | org admins | Changes its display name, with `{"display_name": "..."}`. Returns the organization. |
-| `DELETE /orgs/{org}` | org admins | Deletes it, with all its projects and runs. Answers 204. |
+| `PATCH /orgs/{org}` | org admins | Changes its display name, with `{"display_name": "..."}`, and its S3 key lifetimes, with `s3_ephemeral_ttl` and `s3_key_max_ttl` (seconds, at least 600; `null` for no maximum). An ephemeral lifetime longer than the maximum answers 422; lowering only the maximum below it lowers it too. Returns the organization. |
+| `DELETE /orgs/{org}` | org admins | Deletes it, with all its projects and runs. Its S3 buckets are deleted too, and emptied in the background. Answers 204. |
 | `PUT /orgs/{org}/avatar` | org admins | Sets its avatar. The body is the image, with the same rules as [`PUT /me/avatar`](auth#avatars). Returns the organization. |
 | `DELETE /orgs/{org}/avatar` | org admins | Removes its avatar. Returns the organization. |
 
-Organization IDs follow the rules of project names: 1 to 128 characters, with no spaces around them, no control characters and none of `/ \ # ? % :`. Other IDs answer 422.
+Organization IDs follow the rules of project names: 1 to 128 characters, with no spaces around them, no control characters and none of `/ \ # ? % :`. Other IDs answer 422. A server holds at most 99999 organizations, counting deleted ones, because S3 bucket names carry the organization's number in five digits. Past that, `POST /orgs` answers 409.
 
 Display names are free text: 1 to 128 characters after Flock trims the spaces around them, with no control characters. Other display names answer 422. Two organizations can have the same display name.
 
@@ -136,6 +137,6 @@ What the invitation is for:
 
 Accepts the invitation in one of two ways:
 - **As a new account**, with `{"name": "Ben Okafor", "password": "..."}` and no credentials. `password` is 8 to 256 characters, and `name` defaults to the email. It creates the account as a member of the organization, with the invitation's role, and answers 201 with [tokens](auth#tokens). If an account with the email exists, it answers 409: sign in and accept as the second way.
-- **As an existing account**, with `{}` and the credentials of the invited account, an access token or an API key. It adds the membership and answers 200 with `{"user": ...}`. Credentials of another account answer 403.
+- **As an existing account**, with `{}` and the credentials of the invited account, an access token or a CLI token. It adds the membership and answers 200 with `{"user": ...}`. Credentials of another account answer 403.
 
 Without a password and without credentials, it answers 401. An invalid, expired or used token answers 404. Once accepted, the invitation is used up.

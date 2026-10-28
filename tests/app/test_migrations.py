@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import re
 import shutil
 
@@ -8,6 +9,7 @@ import pytest
 
 from app.api.src.core.history import Series
 from app.api.src.core.store import Store
+from app.api.src.db import backfill as backfill_module
 from app.api.src.db.database import SchemaError
 from app.api.src.db.migrate import Migrations
 from app.api.src.settings import Settings
@@ -60,10 +62,18 @@ def test_boolean_settings_parse_words(raw, expected):
     assert Settings.load(environ=environ).migrate_on_startup is expected
 
 
-def test_only_one_server_per_database(flock, tmp_path):
-    second = Store(Settings(database_url=flock.database_url, files_dir=tmp_path))
-    with pytest.raises(SchemaError, match="already using this database"):
-        asyncio.run(second.open())
+def test_servers_share_a_database(flock, tmp_path):
+    """Any number of servers use one database (D83): there is no server lock any more."""
+
+    async def second() -> list[str]:
+        store = Store(Settings(database_url=flock.database_url, files_dir=tmp_path))
+        await store.open()
+        try:
+            return [org.name for org in await store.orgs()]
+        finally:
+            await store.close()
+
+    assert asyncio.run(second()) == ["flock"]
 
 
 def test_0002_upgrades_existing_data(postgres, make_flock, tmp_path):
@@ -115,11 +125,15 @@ def test_0002_upgrades_existing_data(postgres, make_flock, tmp_path):
         "0006_avatars",
         "0007_org_imports",
         "0008_org_display_names",
+        "0009_budget_management",
+        "0010_cli_sessions",
+        "0011_s3",
+        "0012_reserve_storage",
+        "0013_postgres_only",
+        "0014_datasets",
     ]
 
-    server = make_flock(database_url=url)  # rebuilds and compacts system metrics on startup
-    run = server.store.get_run("flock", "p", "r1")
-    assert run.compacted == {"history": 2, "system": 3}
+    server = make_flock(database_url=url)  # the backfill rebuilds system metrics' chunks
     api = server.client()
     assert api.run_history("p", "r1", keys="loss")["loss"] == {"x": [0, 1], "y": [1.0, 0.5]}
     system = api.run_history("p", "r1", stream="system", keys="system.cpu")["system.cpu"]
@@ -128,7 +142,7 @@ def test_0002_upgrades_existing_data(postgres, make_flock, tmp_path):
     async def streams() -> list[tuple[str, str]]:
         conn = await asyncpg.connect(url)
         try:
-            rows = await conn.fetch("SELECT stream, key FROM history_columns")
+            rows = await conn.fetch("SELECT stream, key FROM series_chunks")
             return sorted((r[0], r[1]) for r in rows)  # Python order; collations differ
         finally:
             await conn.close()
@@ -194,6 +208,12 @@ def test_0003_creates_projects_from_runs(postgres, make_flock, tmp_path):
         "0006_avatars",
         "0007_org_imports",
         "0008_org_display_names",
+        "0009_budget_management",
+        "0010_cli_sessions",
+        "0011_s3",
+        "0012_reserve_storage",
+        "0013_postgres_only",
+        "0014_datasets",
     ]
 
     api = make_flock(database_url=url).client()
@@ -237,6 +257,12 @@ def test_0004_creates_orgs_from_entities(postgres, make_flock, tmp_path):
         "0006_avatars",
         "0007_org_imports",
         "0008_org_display_names",
+        "0009_budget_management",
+        "0010_cli_sessions",
+        "0011_s3",
+        "0012_reserve_storage",
+        "0013_postgres_only",
+        "0014_datasets",
     ]
 
     async def rows() -> list:
@@ -306,6 +332,12 @@ def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(postgres, make_floc
         "0006_avatars",
         "0007_org_imports",
         "0008_org_display_names",
+        "0009_budget_management",
+        "0010_cli_sessions",
+        "0011_s3",
+        "0012_reserve_storage",
+        "0013_postgres_only",
+        "0014_datasets",
     ]
     # Flock's first files directory (see ``Flocks``) already holds the upload.
     metadata = tmp_path / "flock-files-0" / str(run_pk) / "wandb-metadata.json"
@@ -342,7 +374,15 @@ def test_0008_shows_existing_orgs_by_their_name(postgres, make_flock, tmp_path):
             await conn.close()
 
     asyncio.run(seed())
-    assert asyncio.run(Migrations().apply(url)) == ["0008_org_display_names"]
+    assert asyncio.run(Migrations().apply(url)) == [
+        "0008_org_display_names",
+        "0009_budget_management",
+        "0010_cli_sessions",
+        "0011_s3",
+        "0012_reserve_storage",
+        "0013_postgres_only",
+        "0014_datasets",
+    ]
 
     async def nullable() -> str:
         conn = await asyncpg.connect(url)
@@ -363,3 +403,253 @@ def test_0008_shows_existing_orgs_by_their_name(postgres, make_flock, tmp_path):
     ]
     renamed = api.patch("/api/v1/orgs/Cerulean%20Labs", {"display_name": "Cerulean"}).json()
     assert (renamed["name"], renamed["display_name"]) == ("Cerulean Labs", "Cerulean")
+
+
+def test_0009_keeps_the_spend_of_projects_deleted_before_it(postgres, make_flock, tmp_path):
+    """Spend of projects deleted before 0009 is one deleted project per org, without a name,
+    which admins can leave out of the budget like any other."""
+    url = postgres.create(migrated=False)
+    before = tmp_path / "before"
+    before.mkdir()
+    for path in Migrations().files()[:8]:
+        shutil.copy(path, before)
+    asyncio.run(Migrations(before).apply(url))
+
+    async def seed() -> None:
+        conn = await asyncpg.connect(url)
+        try:
+            org = await conn.fetchval(
+                "INSERT INTO orgs (name, display_name, created_at, updated_at) "
+                "VALUES ('flock', 'flock', now(), now()) RETURNING pk"
+            )
+            await conn.execute(
+                "INSERT INTO gpu_rates (org_pk, gpu_type, hourly_cost) VALUES ($1, 'H100', 10)",
+                org,
+            )
+            await conn.executemany(
+                "INSERT INTO gpu_usage (org_pk, run_name, month, seconds, gpu_type, gpu_count) "
+                "VALUES ($1, $2, date_trunc('month', now() AT TIME ZONE 'UTC'), 3600, 'H100', 1)",
+                [(org, "r1"), (org, "r2")],
+            )
+        finally:
+            await conn.close()
+
+    asyncio.run(seed())
+    assert asyncio.run(Migrations().apply(url)) == [
+        "0009_budget_management",
+        "0010_cli_sessions",
+        "0011_s3",
+        "0012_reserve_storage",
+        "0013_postgres_only",
+        "0014_datasets",
+    ]
+    api = make_flock(database_url=url).client()
+    (deleted,) = api.get("/api/v1/orgs/flock/budget/deleted-projects").json()["deleted_projects"]
+    assert (deleted["name"], deleted["deleted_at"], deleted["runs"]) == (None, None, 2)
+    assert (deleted["cost"], deleted["excluded"]) == (20.0, False)
+    assert api.get("/api/v1/orgs/flock/budget").json()["spent"] == 20.0
+    path = f"/api/v1/orgs/flock/budget/deleted-projects/{deleted['id']}"
+    assert api.patch(path, {"excluded": True}).status == 200
+    assert api.get("/api/v1/orgs/flock/budget").json()["spent"] == 0
+
+
+def test_0012_refuses_an_org_named_storage(postgres, tmp_path):
+    """The Storage tab takes `/storage/`: an org of that name stops the migration, with a
+    message saying what to do, and the migration runs once it's renamed."""
+    url = postgres.create(migrated=False)
+    before = tmp_path / "before"
+    before.mkdir()
+    for path in Migrations().files()[:11]:
+        shutil.copy(path, before)
+    asyncio.run(Migrations(before).apply(url))
+
+    async def execute(query: str) -> None:
+        conn = await asyncpg.connect(url)
+        try:
+            await conn.execute(query)
+        finally:
+            await conn.close()
+
+    asyncio.run(
+        execute(
+            "INSERT INTO orgs (name, display_name, created_at, updated_at) "
+            "VALUES ('Storage', 'Storage', now(), now())"
+        )
+    )
+    with pytest.raises(asyncpg.RaiseError, match='named "storage"'):
+        asyncio.run(Migrations().apply(url))
+    asyncio.run(execute("UPDATE orgs SET name = 'storage-team' WHERE name = 'Storage'"))
+    assert asyncio.run(Migrations().apply(url)) == [
+        "0012_reserve_storage",
+        "0013_postgres_only",
+        "0014_datasets",
+    ]
+
+
+def test_0013_moves_runs_into_the_run_table_and_series_chunks(postgres, make_flock, tmp_path):
+    """Runs from before 0013 get their values, columns, metrics and chunks: compacted series
+    are copied in SQL, uncompacted ones (an active run's) rebuilt from raw lines, and configs
+    and summaries holding NaN read leniently. An interrupted backfill resumes."""
+    url = postgres.create(migrated=False)
+    before = tmp_path / "before"
+    before.mkdir()
+    for path in Migrations().files()[:12]:
+        shutil.copy(path, before)
+    asyncio.run(Migrations(before).apply(url))
+    loss, step = Series(), Series()
+    loss.extend([0, 1, 2], [1.0, 0.5, 0.25])
+    step.extend([0, 1, 2], [0.0, 1.0, 2.0])
+
+    async def seed() -> tuple[int, int]:
+        conn = await asyncpg.connect(url)
+        try:
+            org = await conn.fetchval(
+                "INSERT INTO orgs (name, display_name, created_at, updated_at) "
+                "VALUES ('flock', 'flock', now(), now()) RETURNING pk"
+            )
+            project = await conn.fetchval(
+                "INSERT INTO projects (org_pk, name, created_at, updated_at) "
+                "VALUES ($1, 'p', now(), now()) RETURNING pk",
+                org,
+            )
+            done = await conn.fetchval(
+                "INSERT INTO runs (project_pk, name, state, created_at, updated_at, heartbeat_at, "
+                "config, summary, tags, history_line_count, history_compacted_line_count) "
+                "VALUES ($1, 'done', 'finished', now() - interval '1 hour', now(), now(), $2, $3, "
+                "'{base}', 3, 3) RETURNING pk",
+                project,
+                '{"lr": {"value": NaN}, "opt": {"value": "adam"}, "_wandb": {"value": {}}}',
+                '{"loss": NaN, "acc": 0.5, "nested": {"x": 1}, "_wandb": {"runtime": 3}}',
+            )
+            await conn.executemany(
+                "INSERT INTO history_columns (run_pk, stream, key, n, data) "
+                "VALUES ($1, 'history', $2, 3, $3)",
+                [(done, "loss", loss.encode()), (done, "_step", step.encode())],
+            )
+            live = await conn.fetchval(
+                "INSERT INTO runs (project_pk, name, state, created_at, updated_at, heartbeat_at, "
+                "history_line_count, events_line_count) "
+                "VALUES ($1, 'live', 'running', now(), now(), now(), 2, 2) RETURNING pk",
+                project,
+            )
+            await conn.executemany(
+                "INSERT INTO history (run_pk, line, data) VALUES ($1, $2, $3)",
+                [(live, i, json.dumps({"_step": i, "loss": 2.0 - i})) for i in range(2)],
+            )
+            await conn.executemany(
+                "INSERT INTO events (run_pk, line, data) VALUES ($1, $2, $3)",
+                [(live, i, json.dumps({"_runtime": i, "system.cpu": 10 * i})) for i in range(2)],
+            )
+            return done, live
+        finally:
+            await conn.close()
+
+    done, live = asyncio.run(seed())
+    assert asyncio.run(Migrations().apply(url)) == ["0013_postgres_only", "0014_datasets"]
+
+    reports = []
+
+    def interrupt(message: str) -> None:
+        reports.append(message)
+        if len(reports) == 2:  # after the first batch
+            raise RuntimeError("interrupted")
+
+    with pytest.raises(RuntimeError, match="interrupted"):
+        asyncio.run(backfill_module.backfill(url, interrupt, batch=1))
+    assert asyncio.run(backfill_module.backfill(url, lambda _: None)) == 1  # the rest
+
+    async def read() -> dict:
+        conn = await asyncpg.connect(url)
+        try:
+            return {
+                "values": {
+                    (r[0], r[1]): r[2:]
+                    for r in await conn.fetch(
+                        "SELECT run_pk, key, num, txt, obj::text FROM run_values"
+                    )
+                },
+                "keys": {
+                    r[0]: tuple(r[1:])
+                    for r in await conn.fetch(
+                        "SELECT key, int_only, runs, nums, strs, bools, lists, objects "
+                        "FROM project_keys"
+                    )
+                },
+                "chunks": sorted(
+                    tuple(r)
+                    for r in await conn.fetch(
+                        "SELECT run_pk, stream, key, first_line, n FROM series_chunks"
+                    )
+                ),
+                "metrics": sorted(tuple(r) for r in await conn.fetch("SELECT * FROM run_metrics")),
+                "left": await conn.fetchval("SELECT count(*) FROM backfill"),
+            }
+        finally:
+            await conn.close()
+
+    found = asyncio.run(read())
+    assert found["left"] == 0
+    stored = found["values"]
+    assert math.isnan(stored[(done, "config.lr")][0])
+    assert math.isnan(stored[(done, "summary.loss")][0])
+    assert stored[(done, "config.opt")] == (None, "adam", None)
+    assert stored[(done, "summary.acc")] == (0.5, None, None)
+    assert stored[(done, "summary.nested.x")] == (1.0, None, None)
+    assert stored[(done, "tags")] == (None, None, '["base"]')
+    assert stored[(live, "state")] == (None, "running", None)
+    assert (live, "tags") in stored and (live, "summary.acc") not in stored
+    assert not any(key.endswith("_wandb") or "._wandb" in key for _, key in stored)
+    keys = found["keys"]
+    assert keys["state"] == (True, 2, 0, 2, 0, 0, 0)
+    assert keys["summary.acc"] == (False, 1, 1, 0, 0, 0, 0)
+    assert keys["summary.nested.x"] == (True, 1, 1, 0, 0, 0, 0)
+    assert keys["tags"] == (True, 2, 0, 0, 0, 2, 0)
+    assert found["chunks"] == sorted(
+        [
+            (done, "history", "_step", 0, 3),
+            (done, "history", "loss", 0, 3),
+            (live, "history", "_step", 0, 2),
+            (live, "history", "loss", 0, 2),
+            (live, "system", "_runtime", 0, 2),
+            (live, "system", "system.cpu", 0, 2),
+        ]
+    )
+    assert (live, "system", "system.cpu") in found["metrics"]
+
+    api = make_flock(database_url=url).client()
+    assert api.run_history("p", "done", keys="loss")["loss"]["y"] == [1.0, 0.5, 0.25]
+    assert api.run_history("p", "live", keys="loss")["loss"] == {"x": [0, 1], "y": [2.0, 1.0]}
+    cpu = api.run_history("p", "live", stream="system", keys="system.cpu")["system.cpu"]
+    assert cpu == {"x": [0.0, 1.0], "y": [0.0, 10.0]}
+    assert api.runs("p", filter={"summary.acc": {"$gt": 0.4}})["ids"] == ["done"]
+    assert api.runs("p", filter={"config.opt": "adam"}, columns=["config.lr"])["data"] == {
+        "config.lr": [None]  # NaN, served as null
+    }
+
+
+def test_0014_refuses_an_org_named_datasets(postgres, tmp_path):
+    """The Datasets tab takes `/datasets/`, as Storage took `/storage/` (0012)."""
+    url = postgres.create(migrated=False)
+    before = tmp_path / "before"
+    before.mkdir()
+    for path in Migrations().files()[:13]:
+        shutil.copy(path, before)
+    asyncio.run(Migrations(before).apply(url))
+
+    async def execute(query: str) -> None:
+        conn = await asyncpg.connect(url)
+        try:
+            await conn.execute(query)
+        finally:
+            await conn.close()
+
+    asyncio.run(
+        execute(
+            "INSERT INTO orgs (name, display_name, created_at, updated_at) "
+            "VALUES ('datasets', 'Datasets', now(), now())"
+        )
+    )
+    with pytest.raises(asyncpg.RaiseError, match='named "datasets"'):
+        asyncio.run(Migrations().apply(url))
+    asyncio.run(execute("UPDATE orgs SET name = 'data-team' WHERE name = 'datasets'"))
+    assert asyncio.run(Migrations().apply(url)) == ["0014_datasets"]

@@ -5,17 +5,11 @@ This page covers running Flock for a team: deploying it with Docker Compose or o
 ## What you deploy
 
 A deployment has three parts:
-- **One Flock process.** It serves the wandb protocol and the HTTP API on one port.
+- **Flock replicas.** Each serves the wandb protocol and the HTTP API on one port. They keep no state of their own, so one is enough for a team, and you can run more behind a load balancer.
 - **A PostgreSQL database.** It holds everything except uploaded run files.
-- **A files directory.** It holds the files runs upload, such as `config.yaml` and `requirements.txt`.
+- **Run files.** The files runs upload, such as `config.yaml` and `requirements.txt`, go to a directory or to an S3 bucket. See [Run files](#run-files).
 
-Run exactly one Flock server per database. Flock keeps its working set in memory, so two processes writing one database would drift apart. To prevent that, it holds a PostgreSQL advisory lock while it runs, and a second Flock server on the same database refuses to start:
-
-```text
-another flock server is already using this database
-```
-
-So Flock doesn't scale out with replicas. It's built to answer a team's dashboards from one process: see [How it works](how-it-works).
+Replicas need no sticky sessions: a dashboard's event stream reconnects to any replica and replays what it missed, and upload URLs are signed with a key every replica reads from the database. See [How it works](how-it-works).
 
 ## With Docker Compose
 
@@ -34,7 +28,9 @@ docker compose up -d --build
 ```
 
 - **Routing:** this Compose file publishes no host ports. In Dokploy or your reverse proxy, route the dashboard domain to `ui:3000` and the SDK/API domain to `api:8080`. Both public URLs must be reachable by their clients. For local API development, `app/api/compose.dev.yaml` publishes port 8080; run `docker compose -f app/api/compose.dev.yaml up -d --build` from the repository root and `pnpm dev` from `app/web`. Its dashboard URL defaults to `http://localhost:5173`.
-- **Data:** two named volumes hold the data. `postgres-data` is the database, and `files` is the files directory, mounted at `/data/files`.
+- **Data:** two named volumes hold the data. `postgres-data` is the database, and `files` is the files directory, mounted at `/data/files`. With the `s3` files backend, the `files` volume only holds files not moved to the bucket yet.
+- **Replicas:** Compose runs one API replica. You can run more against the same database (for example with `docker compose up -d --scale api=2` behind a proxy that spreads requests), as long as they share the files volume or use the `s3` files backend.
+- **S3 proxy:** the optional `flock-s3` service, under the Compose profile `s3`, runs the [S3 proxy](s3) on port 8090 from the same image. Start it with `docker compose --profile s3 up -d` once the [S3 settings](configuration#s3-settings) are set. Route its public domain to `flock-s3:8090`; the Flock-specific service name avoids the generic `s3` DNS name on shared ingress networks. It keeps no state, so it can run as several replicas. Existing deployments must update their proxy target and remove the old `s3` container; see [S3 routing migration](s3#migrating-the-compose-service-name).
 - **Settings:** use the variables below. API tuning settings pass through to the API; empty values use the defaults in [Settings](configuration).
 
 The image installs Flock's dependencies at the versions locked in the repository's `uv.lock`. The build context is the repository root, so Docker can read the lockfile and API source together. Compose sets this for you. With plain Docker, run from the repository root:
@@ -57,7 +53,15 @@ Keep deployment values in `app/.env` (start with `app/.env.example`), or configu
 |---|---|---|
 | `FLOCK_WEB_URL` | `http://localhost:3000` | Public dashboard origin, such as `https://flock.example.com`, with no path. Compose supplies it to the web image build for redirects and form origin checks, and to the API at runtime for setup, invitation, password reset and Google sign-in links. Rebuild the web image when it changes. |
 | `FLOCK_API_PUBLIC_URL` | `http://localhost:8080` | Public API address that training machines reach. The API uses it for signed file upload URLs; the dashboard shows it in `wandb login --host` instructions. Set the same value for both services. Restart them when it changes. |
-| `FLOCK_API_URL` | `http://api:8080` | Internal API address used only by the web server. Keep the default on the Compose network. Outside Compose it defaults to `http://127.0.0.1:8080`. Browsers and training machines never use this address. |
+| `FLOCK_API_URL` | `http://flock-api:8080` | Internal API address used only by the web server. Keep the default on the Compose network. Outside Compose it defaults to `http://127.0.0.1:8080`. Browsers and training machines never use this address. |
+
+The API has the `flock-api` alias on the stack's default network. The dashboard uses this alias because a generic `api` hostname can resolve to another application's container when a deployment service attaches stacks to a shared ingress network. Keep the dashboard and API on their common default network. Dokploy's domain configuration still targets the Compose service `api` on port 8080.
+
+For an existing deployment, remove any `FLOCK_API_URL=http://api:8080` override or change it to `http://flock-api:8080`. After updating the Compose file and environment, recreate both services so the API gains the alias and the dashboard uses it:
+
+```bash
+docker compose up -d --build --force-recreate api ui
+```
 
 The SDK needs the API's wandb routes, including `/graphql`, `/files/...` and `/storage/...`. The dashboard does not proxy those routes. You can use one public origin only if your reverse proxy sends those routes to the API and dashboard routes to the web service. With two domains, route each domain to its service as shown above.
 
@@ -118,14 +122,26 @@ The database schema is defined by SQL migrations that ship with Flock. When Floc
 INFO src.db.migrate: applying migration 0004_orgs_and_users.sql
 ```
 
-To upgrade, back up the database and the files directory, update your checkout, and rebuild:
+Some migrations leave work to Python that SQL can't do, such as reading wandb's JSON with its `NaN` values. Flock does it right after migrating, in batches it can resume, and logs its progress:
+
+```text
+backfilling the run table and series of 10000 runs
+```
+
+Concurrent replicas starting at once are safe: they take turns on a migration lock, and the second finds nothing left to do. To upgrade, back up the database and the files, update your checkout, and rebuild:
 
 ```bash
 git pull
 docker compose up -d --build
 ```
 
-To apply migrations yourself instead, set `FLOCK_MIGRATE_ON_STARTUP=false`. Flock then applies nothing, and refuses to start while migrations are pending:
+To apply migrations yourself instead, set `FLOCK_MIGRATE_ON_STARTUP=false` and run them once per deploy, before the new replicas start:
+
+```bash
+uv run --package flock-app-api python -m app.api.src.db.migrate
+```
+
+This is what a Kubernetes migration Job runs (see [On Kubernetes](#on-kubernetes)). With the setting off, Flock applies nothing, and refuses to start while migrations or their backfill are pending:
 
 ```text
 database has unapplied migrations (0004_orgs_and_users) and FLOCK_MIGRATE_ON_STARTUP is off
@@ -144,23 +160,38 @@ settings if your installation uses other names.
 Access tokens now use the JWT issuer `flock`. Existing sessions can refresh their access
 tokens; sign in again if your client does not refresh automatically.
 
+## Run files
+
+Run files go to one of two backends, chosen with `FLOCK_FILES_BACKEND`:
+
+| Backend | Where | Replicas |
+|---|---|---|
+| `local` (default) | `FLOCK_FILES_DIR`, one folder per run named after its internal id | One, or several that mount the same volume, such as a `ReadWriteMany` volume on CephFS. Every write is a temporary file renamed into place. |
+| `s3` | The bucket `FLOCK_FILES_BUCKET` on the S3 server set by the [S3 settings](configuration#s3-settings), under `runs/<id>/` | Any number. Flock creates the bucket if it doesn't exist. |
+
+The SDK keeps uploading through Flock's signed URLs with either backend.
+
+To move existing files to the `s3` backend, switch the setting and restart, then copy the directory into the bucket. Flock reads files the bucket doesn't have yet from the directory, so it keeps serving them while the copy runs. The copy skips files already in the bucket, so you can stop it and run it again:
+
+```bash
+FLOCK_FILES_BACKEND=s3 FLOCK_FILES_BUCKET=flock-files uv run --package flock-app-api python -m app.api.scripts.migrate_files
+```
+
+Add `--remove` to delete each file from the directory once it's copied.
+
 ## Storage and backups
 
-- **PostgreSQL** holds organizations, users, projects and runs, with every history, system and console line, and a compact copy of finished runs' curves. Nothing is deleted except by a delete you make: there is no retention policy.
-- **The files directory** holds one folder per run, named after the run's internal id. When a run is deleted, its folder is removed. If Flock stops between deleting a run and removing its folder, it removes the folder at its next start.
+- **PostgreSQL** holds organizations, users, projects and runs, with every history, system and console line, every run's values by column, and its curves in compact chunks. Nothing is deleted except by a delete you make: there is no retention policy. The run table takes about 250 bytes per run and column with its indexes: 3.8 GB for 10,000 runs with 1,500 columns.
+- **Run files** live in one folder or prefix per run, named after the run's internal id. When a run is deleted, the background purge removes them.
 
-Back up both together. A database backup without the files directory loses the run files, and the other way round loses everything else.
+Back up both together. A database backup without the run files loses them, and the other way round loses everything else.
 
-## Memory and startup time
+## Memory and database load
 
-- **Run tables live in memory.** At startup, Flock loads every run's attributes, config and summary. That takes a few seconds for a project of 10,000 runs with 1,500 columns, and memory grows with runs × columns. Flock logs how long it took:
-
-  ```text
-  INFO src.core.store: loaded 10000 runs in 3 projects in 4.12s
-  ```
-
-- **Curves are cached.** The curves of active runs always stay in memory. Finished runs' curves are cached as they're read, up to `FLOCK_HISTORY_CACHE_POINTS` points in total (20,000,000 by default), and the least recently read ones are dropped first. Each cached point takes at least 12 bytes (a 4-byte line number and an 8-byte value), so the default allows at least 240 MB.
-- **Database connections:** Flock opens up to `FLOCK_POOL_SIZE` (16) connections. Compose gives PostgreSQL 1 GB of `shared_buffers` (`POSTGRES_SHARED_BUFFERS`) and an `effective_cache_size` of 3 GB (`POSTGRES_EFFECTIVE_CACHE_SIZE`).
+- **Replicas hold little memory**: their open event streams and a cache of credentials. Startup takes a second or less, whatever the data, because nothing is loaded.
+- **PostgreSQL's buffer cache does the caching.** Give it memory for the hot run tables and curves. Compose gives PostgreSQL 1 GB of `shared_buffers` (`POSTGRES_SHARED_BUFFERS`) and an `effective_cache_size` of 3 GB (`POSTGRES_EFFECTIVE_CACHE_SIZE`).
+- **Database connections:** each replica opens up to `FLOCK_POOL_SIZE` (16) connections, plus one that listens for notifications. With a pooler such as PgBouncer in transaction mode, which drops `LISTEN`, point `FLOCK_LISTEN_DATABASE_URL` at PostgreSQL directly.
+- **After a bulk load**, such as thousands of new runs, Flock vacuums and analyzes the run table itself rather than wait for autovacuum, so filters keep fast plans.
 
 [Performance](how-it-works#performance) lists the latencies to expect.
 
@@ -172,15 +203,26 @@ Each request in which a run's client streams its data (`file_stream`) counts as 
 INFO app: marked run flock/llm-pretrain/9fc2v9ee as crashed
 ```
 
-Flock checks every `FLOCK_CRASH_TIMEOUT / 4` seconds, and at least every 30 seconds, so it notices a crash within about 1.25 timeouts. A lower timeout notices crashes sooner. But a client that can't reach Flock for longer, for example during a network outage, gets marked crashed, and returns to `running` when it sends again. The same timeout also decides how long Flock drops data from the client of a [force-deleted run](managing-runs#deleting-runs).
+Every replica checks every `FLOCK_CRASH_TIMEOUT / 4` seconds, and at least every 30 seconds, so a crash is noticed within about 1.25 timeouts. Each stale run is marked by one replica only. A lower timeout notices crashes sooner. But a client that can't reach Flock for longer, for example during a network outage, gets marked crashed, and returns to `running` when it sends again. The same timeout also decides how long Flock drops data from the client of a [force-deleted run](managing-runs#deleting-runs).
+
+## On Kubernetes
+
+Flock has no Helm chart. A deployment needs:
+- **A Deployment of replicas** with `FLOCK_MIGRATE_ON_STARTUP=false`, and a Service in front of them. Any number of replicas works.
+- **A migration Job** (or init container) per release that runs `python -m app.api.src.db.migrate` with the same settings, before the new replicas start.
+- **Probes:** a liveness probe on `GET /healthz` and a readiness probe on `GET /readyz`.
+- **Run files** on a `ReadWriteMany` volume mounted at `/data/files` by every replica, or the `s3` files backend.
+- **`terminationGracePeriodSeconds`** of 30, so in-flight writes finish when a replica stops.
 
 ## Shutting down
 
-On `SIGTERM` or `SIGINT`, Flock first ends every open event stream, because otherwise the server would wait for them forever. Dashboards reconnect when it's back, and replay what they missed. Compose gives Flock 15 seconds to stop.
+On `SIGTERM` or `SIGINT`, a replica starts failing `/readyz`, so the load balancer stops sending it requests, and ends every open event stream, because otherwise the server would wait for them forever. Dashboards reconnect to another replica, or to this one when it's back, and replay what they missed. Requests in flight finish. Compose gives Flock 15 seconds to stop.
 
 ## Health checks and logs
 
-`GET /healthz` answers `{"ok":true}` without credentials. The image's Docker health check calls it.
+`GET /healthz` answers `{"ok":true}` without credentials and without touching the database: it says the process is alive. The image's Docker health check calls it.
+
+`GET /readyz` answers `{"ok":true}` when the replica should get traffic: its database pool answers and its connection listening for notifications is up. Otherwise, or while it shuts down, it answers 503 with `{"ok":false}`. A replica that can't listen would miss other replicas' writes, so it leaves the load balancer until it reconnects.
 
 Flock logs to standard output, at `FLOCK_LOG_LEVEL` (`info` by default). It doesn't log individual requests. Lines worth watching for:
 
@@ -188,7 +230,9 @@ Flock logs to standard output, at `FLOCK_LOG_LEVEL` (`info` by default). It does
 |---|---|
 | `no accounts yet: open … to create the first one` | Flock has no accounts. See [The first account](accounts#the-first-account). |
 | `applying migration …` | A migration is being applied at startup. |
-| `loaded … runs in … projects in …s` | Startup loaded the run tables. |
+| `backfilling the run table and series of … runs` | A migration's backfill is running. It resumes if interrupted. |
 | `marked run … as crashed` | Crash detection marked a run. |
 | `Google sign-in: code exchange failed: …` | Google refused a sign-in. See [Setting up Sign in with Google](google-sign-in#5-check-that-it-works). |
 | `crash detection failed` | The crash check raised an error. The traceback follows. |
+| `background work failed` | Compaction, the purge or another background task raised an error. It's retried a few seconds later. |
+| `listening on flock_live, … failed; retrying` | The connection listening for notifications dropped. The replica fails `/readyz` and ends its event streams until it reconnects. |

@@ -113,10 +113,10 @@ def test_delete_project_removes_everything(make_flock, events):
     samples = system_samples(2, {"system.cpu": float})
     api.stream("gone", "r1", history_rows(3, loss=float), events=samples, complete=0)
     api.create_run("gone", "r2")  # still running
-    run = store.get_run("flock", "gone", "r1")
+    run = server.call(store.get_run("flock", "gone", "r1"))
     server.call(store.save_file(run, "config.yaml", b"lr: 0.1\n"))
     server.call(store.flush())
-    pks = [run.pk, store.get_run("flock", "gone", "r2").pk]
+    pks = [run.pk, server.call(store.get_run("flock", "gone", "r2")).pk]
     assert (server.files_dir / str(run.pk) / "config.yaml").is_file()
     api.create_run("kept", "r1")
     live = events("gone", "r1", client=api)
@@ -129,8 +129,9 @@ def test_delete_project_removes_everything(make_flock, events):
     assert live.next_of("project") == {"deleted": True}
     assert api.get(f"{PROJECTS}/flock/gone").status == 404
     assert api.get(f"{PROJECTS}/flock/gone/runs/r1").status == 404
+    server.call(store.flush())  # the purge removes the rows and files in the background (D80)
     assert not (server.files_dir / str(run.pk)).exists()
-    for table in ("runs", "history", "events", "history_columns", "run_files"):
+    for table in ("runs", "history", "events", "series_chunks", "run_values", "run_files"):
         column = "pk" if table == "runs" else "run_pk"
         count = server.call(
             store.db.fetchval(f"SELECT count(*) FROM {table} WHERE {column} = ANY($1)", pks)

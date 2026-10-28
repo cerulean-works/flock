@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import dataclasses
 import gzip
 import http.client
 import itertools
@@ -16,7 +17,7 @@ from collections.abc import Coroutine, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import asyncpg
 import numpy as np
@@ -28,7 +29,9 @@ import uvloop
 from app.api.app import create_app
 from app.api.src.core.store import Store
 from app.api.src.db.migrate import Migrations
+from app.api.src.s3_proxy.app import create_app as create_proxy_app
 from app.api.src.settings import Settings
+from tests.conftest import S3Server
 
 
 class Response:
@@ -44,17 +47,23 @@ class Response:
 class Client:
     """Minimal keep-alive HTTP client (stdlib only) for talking to Flock in tests.
 
-    It authenticates with ``api_key`` (sent as the wandb SDK does) or an access ``token``.
+    It authenticates with a wandb key (``api_key``, sent as the wandb SDK does) and/or a
+    ``token`` (a CLI token or a browser's access token). With both, it sends each where it
+    belongs (D70): the token to the REST API (``/api/…``), the wandb key to the wandb protocol
+    (everything else). With one, it sends that one everywhere.
     """
 
     def __init__(self, port: int, api_key: str | None = None, token: str | None = None) -> None:
         self.port = port
-        self.headers: dict[str, str] = {}
+        self.headers: dict[str, str] = {}  # for the REST API
+        self.wandb_headers: dict[str, str] = {}  # for the wandb protocol
         if api_key:  # the wandb SDK's scheme: basic auth with user "api"
             basic = base64.b64encode(f"api:{api_key}".encode()).decode()
-            self.headers["Authorization"] = f"Basic {basic}"
-        elif token:
+            self.wandb_headers["Authorization"] = f"Basic {basic}"
+        if token:
             self.headers["Authorization"] = f"Bearer {token}"
+        self.headers = self.headers or self.wandb_headers
+        self.wandb_headers = self.wandb_headers or self.headers
         self._conn = http.client.HTTPConnection("127.0.0.1", port, timeout=60)
 
     def request(
@@ -67,7 +76,8 @@ class Client:
     ) -> Response:
         if params:
             path = f"{path}?{urlencode(params)}"
-        hdrs = {**self.headers, **(headers or {})}
+        sent = self.headers if path.startswith("/api/") else self.wandb_headers
+        hdrs = {**sent, **(headers or {})}
         data = None
         if body is not None:
             data = body if isinstance(body, bytes) else orjson.dumps(body)
@@ -402,12 +412,14 @@ class FlockServer:
         database_url: str,
         files_dir: Path,
         api_key: str | None = None,
+        token: str | None = None,
         bootstrap: bool = True,
         **settings: Any,
     ) -> None:
         self.database_url = database_url
         self.files_dir = files_dir
-        self.api_key = api_key
+        self.api_key = api_key  # the super admin's wandb key, for the wandb SDK
+        self.token = token  # and CLI token, for the REST API
         settings.setdefault("gravatar", False)  # tests needing it use a fake Gravatar
         self.store = Store(Settings(database_url=database_url, files_dir=files_dir, **settings))
         sock = socket.socket()
@@ -423,39 +435,51 @@ class FlockServer:
         )
         self._server = uvicorn.Server(config)
         self.loop = uvloop.new_event_loop()
-        self._thread = threading.Thread(
-            target=lambda: self.loop.run_until_complete(self._server.serve(sockets=[sock])),
-            daemon=True,
-        )
+        self.killed = False
+        self._thread = threading.Thread(target=self._serve, args=(sock,), daemon=True)
         self._thread.start()
         deadline = time.monotonic() + 30
         while not self._server.started:
             if time.monotonic() > deadline or not self._thread.is_alive():
                 raise RuntimeError("flock server failed to start")
             time.sleep(0.01)
-        if bootstrap and self.api_key is None:
-            self.api_key = self.call(self.bootstrap())
+        if bootstrap and (self.api_key is None or self.token is None):
+            self.call(self.bootstrap())
 
-    async def bootstrap(self) -> str:
-        """Complete setup with an explicit ``flock`` org on fresh databases;
-        returns a new API key of the super admin."""
+    def _serve(self, sock: socket.socket) -> None:
+        try:
+            self.loop.run_until_complete(self._server.serve(sockets=[sock]))
+        except RuntimeError:
+            if not self.killed:  # ``kill`` stops the loop under the server
+                raise
+
+    async def bootstrap(self) -> None:
+        """Complete setup with an explicit ``flock`` org on fresh databases, and give the super
+        admin a wandb key (``api_key``) and a CLI token (``token``), as ``flock login`` would,
+        unless they were given."""
         accounts = self.store.accounts
-        if accounts.signup_open:
+        if await accounts.signup_open():
             admin = await accounts.signup(self.ADMIN_EMAIL, "Admin")
-            if not self.store.orgs:
+            if not await self.store.orgs():
                 org = await self.store.create_org("flock")
                 await accounts.add_member(admin, org, "admin")
         else:
-            admin = next(u for u in accounts.users.values() if u.is_superadmin)
-        return (await accounts.create_api_key(admin, "tests"))[1]
+            admin = next(u for u in await accounts.users() if u.is_superadmin)
+        if self.api_key is None:
+            self.api_key = (await accounts.create_api_key(admin, "tests"))[1]
+        if self.token is None:
+            self.token = (await accounts.start_cli_session(admin, "tests"))[1]
 
     def call(self, coro: Coroutine) -> Any:
         """Run a coroutine on the server's event loop (where all store mutations happen)."""
         return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout=600)
 
     def client(self, api_key: str | None = None, token: str | None = None) -> Client:
-        """A client with ``api_key`` or ``token``, else the super admin's API key."""
-        return Client(self.port, api_key or (None if token else self.api_key), token)
+        """A client with the wandb key ``api_key`` and/or ``token`` (see ``Client``), else the
+        super admin's wandb key and CLI token."""
+        if api_key is None and token is None:
+            return Client(self.port, self.api_key, self.token)
+        return Client(self.port, api_key, token)
 
     def anonymous(self) -> Client:
         return Client(self.port)
@@ -464,7 +488,8 @@ class FlockServer:
         self, email: str, role: str = "member", org: str = "flock", password: str = "password1"
     ) -> User:
         """Invite ``email`` into ``org`` as the super admin, and accept as a new account through
-        the API; returns the user with an ``api`` client (on their new API key)."""
+        the API; returns the user with a new wandb key and CLI token, and an ``api`` client on
+        both."""
         admin = self.client()
         invite = admin.post(f"/api/v1/orgs/{org}/invites", {"email": email, "role": role})
         assert invite.status == 201, invite.body
@@ -475,26 +500,165 @@ class FlockServer:
         assert accepted.status == 201, accepted.body
         body = accepted.json()
         user_client = self.client(token=body["access_token"])
-        key = user_client.post("/api/v1/me/api-keys", {"name": "tests"}).json()["key"]
-        return User(body["user"]["id"], email, password, key, self.client(api_key=key), body)
+        key = user_client.post("/api/v1/me/wandb-keys", {"name": "tests"}).json()["key"]
+        user = self.call(self.store.accounts.user(body["user"]["id"]))
+        token = self.call(self.store.accounts.start_cli_session(user, "tests"))[1]
+        api = self.client(api_key=key, token=token)
+        return User(body["user"]["id"], email, password, key, api, body, token)
 
     def stop(self) -> None:
+        if self.killed:
+            return
         # As on SIGTERM in production: end dashboard streams, which never finish on their own.
-        self.loop.call_soon_threadsafe(self.store.live.close)
+        self.loop.call_soon_threadsafe(self.store.drain)
         self._server.should_exit = True
         self._thread.join(timeout=60)
+
+    def kill(self) -> None:
+        """Stop dead, as a replica whose process or node died: nothing it was doing finishes,
+        and PostgreSQL ends its connections (rolling back what they hadn't committed)."""
+        self.killed = True
+        self.loop.call_soon_threadsafe(self.loop.stop)
+        self._thread.join(timeout=60)
+        name = parse_qs(urlparse(self.database_url).query).get("application_name", [""])[0]
+        assert name, "only replicas (Flocks.replicas) can be killed"
+
+        async def terminate() -> None:
+            conn = await asyncpg.connect(self.database_url.partition("?")[0])
+            try:
+                await conn.execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE application_name = $1",
+                    name,
+                )
+            finally:
+                await conn.close()
+
+        asyncio.run(terminate())
+
+
+class SpreadClient(Client):
+    """A client whose requests go to each replica in turn, as a load balancer spreads them."""
+
+    def __init__(self, clients: list[Client]) -> None:
+        super().__init__(clients[0].port)
+        self.clients = clients
+        self.headers, self.wandb_headers = clients[0].headers, clients[0].wandb_headers
+        self._turn = itertools.cycle(clients)
+
+    def request(self, *args: Any, **kwargs: Any) -> Response:
+        return next(self._turn).request(*args, **kwargs)
+
+    def close(self) -> None:
+        for client in self.clients:
+            client.close()
+
+
+class Replicas:
+    """Several flocks on one database and one files directory (012's ``replicas=2``)."""
+
+    def __init__(self, replicas: list[FlockServer]) -> None:
+        self.replicas = replicas
+
+    def __getitem__(self, index: int) -> FlockServer:
+        return self.replicas[index]
+
+    def __iter__(self) -> Iterator[FlockServer]:
+        return iter(self.replicas)
+
+    def client(self, api_key: str | None = None, token: str | None = None) -> SpreadClient:
+        return SpreadClient([replica.client(api_key, token) for replica in self.replicas])
+
+
+def _listen() -> socket.socket:
+    sock = socket.socket()
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("127.0.0.1", 0))
+    return sock
+
+
+class ProxyServer:
+    """The S3 proxy served by uvicorn on ``sock`` in a background thread."""
+
+    def __init__(self, settings: Settings, sock: socket.socket | None = None) -> None:
+        sock = sock or _listen()
+        self.port = sock.getsockname()[1]
+        self.url = f"http://127.0.0.1:{self.port}"
+        config = uvicorn.Config(
+            create_proxy_app(settings),
+            log_level="warning",
+            access_log=False,
+            http="httptools",
+            lifespan="on",
+        )
+        self._server = uvicorn.Server(config)
+        self.loop = uvloop.new_event_loop()
+        self._thread = threading.Thread(
+            target=lambda: self.loop.run_until_complete(self._server.serve(sockets=[sock])),
+            daemon=True,
+        )
+        self._thread.start()
+        deadline = time.monotonic() + 30
+        while not self._server.started:
+            if time.monotonic() > deadline or not self._thread.is_alive():
+                raise RuntimeError("S3 proxy failed to start")
+            time.sleep(0.01)
+
+    def stop(self) -> None:
+        self._server.should_exit = True
+        self._thread.join(timeout=30)
+
+
+class S3Flock(FlockServer):
+    """A flock with S3 on: the proxy in front of ``s3`` (the test S3 server), on the flock's
+    database, its buckets named with a prefix of their own (see ``S3Server.bucket_prefix``)."""
+
+    def __init__(
+        self,
+        database_url: str,
+        files_dir: Path,
+        s3: S3Server,
+        bucket_prefix: str | None = None,
+        **settings: Any,
+    ) -> None:
+        self.s3 = s3
+        sock = _listen()
+        proxy_url = f"http://127.0.0.1:{sock.getsockname()[1]}"
+        self.bucket_prefix = bucket_prefix if bucket_prefix is not None else s3.bucket_prefix()
+        configured: dict[str, Any] = {
+            "s3_upstream_endpoint": s3.endpoint,
+            "s3_upstream_region": s3.region,
+            "s3_upstream_access_key_id": s3.access_key_id,
+            "s3_upstream_secret_access_key": s3.secret_access_key,
+            "s3_bucket_prefix": self.bucket_prefix,
+            "s3_public_url": proxy_url,
+        }
+        super().__init__(database_url, files_dir, **{**configured, **settings})
+        # The flock has applied the migrations the proxy reads.
+        self.proxy = ProxyServer(dataclasses.replace(self.store.settings, pool_size=8), sock)
+
+    def credentials(self, client: Client | None = None, **body: Any) -> dict:
+        """An ephemeral S3 key of ``client``'s user (the super admin by default)."""
+        got = (client or self.client()).post("/api/v1/s3/credentials", body)
+        assert got.status == 200, got.body
+        return got.json()
+
+    def stop(self) -> None:
+        self.proxy.stop()
+        super().stop()
 
 
 @dataclass
 class User:
-    """An account created through the API, with a client using its API key."""
+    """An account created through the API, with a client using its wandb key and CLI token."""
 
     id: int
     email: str
     password: str
-    api_key: str
+    api_key: str  # a wandb key
     api: Client
     signup: dict  # the tokens and profile its sign-up returned
+    token: str  # a CLI token
 
 
 class Flocks:
@@ -514,11 +678,42 @@ class Flocks:
         """A flock on a fresh database (or ``database_url``), or restarted like ``reuse``."""
         if reuse is not None:
             settings.setdefault("api_key", reuse.api_key)
+            settings.setdefault("token", reuse.token)
             server = FlockServer(reuse.database_url, reuse.files_dir, **settings)
         else:
             files_dir = self.base / f"flock-files-{len(self.servers)}"
             url = database_url or self.postgres.create()
             server = FlockServer(url, files_dir, **settings)
+        self.servers.append(server)
+        return server
+
+    def replicas(self, count: int = 2, **settings: Any) -> Replicas:
+        """``count`` flocks serving one fresh database, each named for ``kill``."""
+        url = self.postgres.create()
+        files_dir = self.base / f"flock-files-{len(self.servers)}"
+        first = FlockServer(f"{url}?application_name=flock-replica-0", files_dir, **settings)
+        self.servers.append(first)
+        replicas = [first]
+        for i in range(1, count):
+            settings.setdefault("api_key", first.api_key)
+            settings.setdefault("token", first.token)
+            name = f"{url}?application_name=flock-replica-{i}"
+            replica = FlockServer(name, files_dir, **settings)
+            self.servers.append(replica)
+            replicas.append(replica)
+        return Replicas(replicas)
+
+    def s3(self, s3: S3Server, reuse: S3Flock | None = None, **settings: Any) -> S3Flock:
+        """A flock with S3 on over ``s3`` (see ``S3Flock``), fresh or restarted like ``reuse``
+        (with its bucket prefix)."""
+        if reuse is not None:
+            settings.setdefault("api_key", reuse.api_key)
+            settings.setdefault("token", reuse.token)
+            settings.setdefault("bucket_prefix", reuse.bucket_prefix)
+            server = S3Flock(reuse.database_url, reuse.files_dir, s3, **settings)
+        else:
+            files_dir = self.base / f"flock-files-{len(self.servers)}"
+            server = S3Flock(self.postgres.create(), files_dir, s3, **settings)
         self.servers.append(server)
         return server
 
@@ -618,9 +813,9 @@ SETTINGS = wandb.Settings(x_file_stream_transmit_interval=0.1)
         return proc
 
 
-@pytest.fixture(scope="session")
-def postgres() -> Iterator[Postgres]:
-    """``FLOCK_TEST_DATABASE_URL`` (an admin URL) if set, else a PostgreSQL container."""
+def serve_postgres() -> Iterator[Postgres]:
+    """``FLOCK_TEST_DATABASE_URL`` (an admin URL) if set, else a PostgreSQL container. The
+    session's ``postgres`` fixture (in ``tests/conftest.py``, shared with the CLI tests)."""
     container = None
     url = os.environ.get("FLOCK_TEST_DATABASE_URL")
     if not url:
@@ -724,6 +919,6 @@ def wait_for():
 
 @pytest.fixture
 def api_key(flock: FlockServer) -> str:
-    """The ``flock`` super admin's API key."""
+    """The ``flock`` super admin's wandb key."""
     assert flock.api_key is not None
     return flock.api_key

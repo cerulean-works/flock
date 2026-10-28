@@ -3,11 +3,17 @@ name: flock-app
 services:
   api:
     image: flock-api:${FLOCK_VERSION:-latest}
+    networks:
+      default:
+        aliases: [flock-api]
     build:
       context: ../..
       dockerfile: app/api/Dockerfile
     environment:
       FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
+      FLOCK_LISTEN_DATABASE_URL: ${FLOCK_LISTEN_DATABASE_URL:-}
+      FLOCK_FILES_BACKEND: ${FLOCK_FILES_BACKEND:-}
+      FLOCK_FILES_BUCKET: ${FLOCK_FILES_BUCKET:-}
       FLOCK_WEB_URL: ${FLOCK_WEB_URL:-http://localhost:5173}
       FLOCK_API_PUBLIC_URL: ${FLOCK_API_PUBLIC_URL:-http://localhost:8080}
       FLOCK_MIGRATE_ON_STARTUP: ${FLOCK_MIGRATE_ON_STARTUP:-}
@@ -16,28 +22,71 @@ services:
       FLOCK_REFRESH_TOKEN_TTL: ${FLOCK_REFRESH_TOKEN_TTL:-}
       FLOCK_INVITE_TTL: ${FLOCK_INVITE_TTL:-}
       FLOCK_RESET_TTL: ${FLOCK_RESET_TTL:-}
+      FLOCK_DEVICE_CODE_TTL: ${FLOCK_DEVICE_CODE_TTL:-}
+      FLOCK_CLI_SESSION_TTL: ${FLOCK_CLI_SESSION_TTL:-}
       FLOCK_GOOGLE_CLIENT_ID: ${FLOCK_GOOGLE_CLIENT_ID:-}
       FLOCK_GOOGLE_CLIENT_SECRET: ${FLOCK_GOOGLE_CLIENT_SECRET:-}
       FLOCK_GOOGLE_REDIRECT_URL: ${FLOCK_GOOGLE_REDIRECT_URL:-}
       FLOCK_GRAVATAR: ${FLOCK_GRAVATAR:-}
       FLOCK_GRAVATAR_URL: ${FLOCK_GRAVATAR_URL:-}
       FLOCK_WANDB_BASE_URL: ${FLOCK_WANDB_BASE_URL:-}
-      FLOCK_HISTORY_CACHE_POINTS: ${FLOCK_HISTORY_CACHE_POINTS:-}
       FLOCK_CRASH_TIMEOUT: ${FLOCK_CRASH_TIMEOUT:-}
+      FLOCK_S3_UPSTREAM_ENDPOINT: ${FLOCK_S3_UPSTREAM_ENDPOINT:-}
+      FLOCK_S3_UPSTREAM_REGION: ${FLOCK_S3_UPSTREAM_REGION:-}
+      FLOCK_S3_UPSTREAM_ACCESS_KEY_ID: ${FLOCK_S3_UPSTREAM_ACCESS_KEY_ID:-}
+      FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY: ${FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY:-}
+      FLOCK_S3_BUCKET_PREFIX: ${FLOCK_S3_BUCKET_PREFIX:-}
+      FLOCK_S3_PUBLIC_URL: ${FLOCK_S3_PUBLIC_URL:-}
+      FLOCK_S3_TRASH_BUCKET: ${FLOCK_S3_TRASH_BUCKET:-}
       FLOCK_POOL_SIZE: ${FLOCK_POOL_SIZE:-}
       FLOCK_CORS_ORIGINS: ${FLOCK_CORS_ORIGINS:-}
       FLOCK_LOG_LEVEL: ${FLOCK_LOG_LEVEL:-}
     ports:
       - 8080:8080
+    # Run files, with the default local files backend. With FLOCK_FILES_BACKEND=s3 they go to
+    # FLOCK_FILES_BUCKET instead and the volume only holds files not migrated yet.
     volumes:
       - files:/data/files
     depends_on:
       postgres:
         condition: service_healthy
-    # Exactly one replica: the server keeps its working set in memory and holds a database
-    # lock, so a second instance would refuse to start.
+    # One replica by default. Replicas keep no state (012), so more can run against the same
+    # database, given a files volume they all mount or the s3 files backend.
     restart: unless-stopped
     stop_grace_period: 15s
+
+  # The S3 proxy (D61), off unless started with `--profile s3` and the FLOCK_S3_* settings.
+  # It keeps no state and takes no lock, so it can run as many replicas as needed.
+  # Use a Flock-specific service name for DNS on shared ingress networks.
+  flock-s3:
+    image: flock-api:${FLOCK_VERSION:-latest}
+    profiles: [s3]
+    command: ["uvicorn", "app.api.src.s3_proxy.app:app", "--host", "0.0.0.0", "--port", "8090"]
+    environment:
+      FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
+      FLOCK_LISTEN_DATABASE_URL: ${FLOCK_LISTEN_DATABASE_URL:-}
+      FLOCK_S3_UPSTREAM_ENDPOINT: ${FLOCK_S3_UPSTREAM_ENDPOINT:-}
+      FLOCK_S3_UPSTREAM_REGION: ${FLOCK_S3_UPSTREAM_REGION:-}
+      FLOCK_S3_UPSTREAM_ACCESS_KEY_ID: ${FLOCK_S3_UPSTREAM_ACCESS_KEY_ID:-}
+      FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY: ${FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY:-}
+      FLOCK_S3_BUCKET_PREFIX: ${FLOCK_S3_BUCKET_PREFIX:-}
+      FLOCK_S3_PUBLIC_URL: ${FLOCK_S3_PUBLIC_URL:-}
+      FLOCK_S3_TRASH_BUCKET: ${FLOCK_S3_TRASH_BUCKET:-}
+      FLOCK_WEB_URL: ${FLOCK_WEB_URL:-http://localhost:5173}
+      FLOCK_POOL_SIZE: ${FLOCK_POOL_SIZE:-}
+      FLOCK_LOG_LEVEL: ${FLOCK_LOG_LEVEL:-}
+    ports:
+      - 8090:8090
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+    depends_on:
+      # The API applies the migrations the proxy reads.
+      api:
+        condition: service_healthy
+    restart: unless-stopped
 
   postgres:
     image: postgres:18.4

@@ -12,9 +12,9 @@ def test_a_simulated_month_loads_into_the_flock(postgres, make_flock, tmp_path):
 
     server = make_flock(database_url=url, api_key=stats["api_key"])
     store = server.store
-    assert len(store.runs_by_pk) == stats["runs"]
-    stale = [r for r in store.runs_by_pk.values() if r.compacted["history"] < r.history_line_count]
-    assert stale == []  # stored compacted, as Flock keeps finished runs
+    assert server.call(store.db.fetchval("SELECT count(*) FROM runs")) == stats["runs"]
+    uncompacted = server.call(store.db.fetchval("SELECT count(*) FROM runs WHERE uncompacted > 0"))
+    assert uncompacted == 0  # one chunk per metric, as Flock keeps finished runs
     api = server.client()
     login = server.anonymous().post(
         "/api/v1/auth/login", {"email": ADMIN_EMAIL, "password": PASSWORD}
@@ -40,8 +40,14 @@ def test_a_simulated_month_loads_into_the_flock(postgres, make_flock, tmp_path):
     assert budget["top_runs"] and budget["projects"]
 
     # A finished training run reads back with its curves, GPUs and metadata file.
-    project = store.project("flock", "lr-sweep")
-    run = next(r for r in project.runs if r.state == "finished" and r.gpu_count)
+    name = server.call(
+        store.db.fetchval(
+            "SELECT r.name FROM runs r JOIN projects p ON p.pk = r.project_pk "
+            "WHERE p.name = 'lr-sweep' AND r.state = 'finished' AND r.gpu_count > 0 "
+            "ORDER BY r.created_at, r.pk LIMIT 1"
+        )
+    )
+    run = server.call(store.get_run("flock", "lr-sweep", name))
     path = f"/api/v1/projects/flock/lr-sweep/runs/{run.name}"
     detail = api.get(path).json()
     assert detail["gpu_detected"]["count"] == run.gpu_count_detected

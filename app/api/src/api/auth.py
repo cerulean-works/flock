@@ -11,7 +11,7 @@ from urllib.parse import quote, urlencode
 
 import jwt
 import orjson
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -21,21 +21,26 @@ from app.api.src.api.deps import (
     JSONResponse,
     Password,
     SessionDep,
+    SessionUserDep,
     StoreDep,
     SuperadminDep,
     UserDep,
     app_link,
     current_user,
+    rest_user,
     visible_org,
 )
-from app.api.src.core.accounts import User
+from app.api.src.core.accounts import DeviceGrant, User
 from app.api.src.core.errors import Conflict, Forbidden, NotFound
 from app.api.src.core.store import Store
 from app.api.src.settings import Settings
 
 log = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1", tags=["auth"])
+# Signing in, and the links that carry their own secret, take no credential. The rest is the
+# REST API, which wandb keys can't use (D72).
+public = APIRouter(prefix="/api/v1", tags=["auth"])
+router = APIRouter(prefix="/api/v1", tags=["auth"], dependencies=[Depends(rest_user)])
 
 DisplayName = Annotated[str, Field(min_length=1, max_length=128)]
 
@@ -61,6 +66,25 @@ class CodeBody(BaseModel):
     code: str
 
 
+class DeviceClient(BaseModel):
+    """The machine asking to sign in, as the approval page shows it."""
+
+    hostname: str = Field("", max_length=255)
+    platform: str = Field("", max_length=255)
+
+
+class DeviceStart(BaseModel):
+    client: DeviceClient = Field(default_factory=DeviceClient)
+
+
+class DeviceToken(BaseModel):
+    device_code: str = Field(max_length=256)
+
+
+class DeviceDecision(BaseModel):
+    approve: bool
+
+
 class MeUpdate(BaseModel):
     """Fields to change; ``default_org: null`` falls back to the first org joined."""
 
@@ -75,7 +99,7 @@ class PasswordChange(BaseModel):
     new: Password
 
 
-class ApiKeyCreate(BaseModel):
+class WandbKeyCreate(BaseModel):
     name: str = Field("default", min_length=1, max_length=128)
 
 
@@ -102,21 +126,27 @@ class UserUpdate(BaseModel):
 async def signed_in(store: Store, user: User, status_code: int = 200) -> Response:
     """Start a session: tokens plus the user's profile."""
     tokens = await store.accounts.start_session(user)
-    return JSONResponse({**tokens, "user": store.accounts.info(user)}, status_code=status_code)
+    info = await store.accounts.info(user)
+    return JSONResponse({**tokens, "user": info}, status_code=status_code)
 
 
 # ---------------------------------------------------------------------- sign in
 
 
-@router.get("/auth/config")
+@public.get("/auth/config")
 async def auth_config(store: StoreDep) -> Response:
-    """What a sign-in page should offer."""
+    """What a sign-in page should offer, and whether S3 is on (``s3``: the proxy's endpoint and
+    region, or null)."""
     return JSONResponse(
-        {"signup_open": store.accounts.signup_open, "google": Google.configured(store.settings)}
+        {
+            "signup_open": await store.accounts.signup_open(),
+            "google": Google.configured(store.settings),
+            "s3": store.s3.config(),
+        }
     )
 
 
-@router.post("/auth/signup", status_code=201)
+@public.post("/auth/signup", status_code=201)
 async def signup(body: SignupBody, store: StoreDep) -> Response:
     """Create the first account, which becomes the super admin. Everyone else joins through
     an invitation."""
@@ -124,7 +154,7 @@ async def signup(body: SignupBody, store: StoreDep) -> Response:
     return await signed_in(store, user, 201)
 
 
-@router.post("/auth/login")
+@public.post("/auth/login")
 async def login(body: LoginBody, store: StoreDep) -> Response:
     user = await store.accounts.login(body.email, body.password)
     if user is None:
@@ -132,7 +162,7 @@ async def login(body: LoginBody, store: StoreDep) -> Response:
     return await signed_in(store, user)
 
 
-@router.post("/auth/refresh")
+@public.post("/auth/refresh")
 async def refresh(body: RefreshBody, store: StoreDep) -> Response:
     """New tokens for a refresh token. Each refresh token works once: use the new one next."""
     tokens = await store.accounts.refresh(body.refresh_token)
@@ -143,10 +173,101 @@ async def refresh(body: RefreshBody, store: StoreDep) -> Response:
 
 @router.post("/auth/logout", status_code=204)
 async def logout(session: SessionDep, store: StoreDep) -> Response:
-    """End the session of the request's access token."""
-    if session is None:
-        raise APIError(400, "sign out with an access token, not an API key")
+    """End the session of the request's access token or CLI token (``flock logout``)."""
+    assert session is not None  # the router refuses wandb keys
     await store.accounts.end_session(session)
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------- device sign-in
+
+
+def device_error(code: str, description: str) -> APIError:
+    """An RFC 8628 error: the code goes in ``error``, which is what clients branch on."""
+    return APIError(400, code, error_description=description)
+
+
+DEVICE_ERRORS = {
+    "authorization_pending": "the sign-in hasn't been approved yet",
+    "slow_down": "polling too often: wait 5 seconds longer between polls",
+    "access_denied": "the sign-in was denied",
+    "expired_token": "the sign-in code expired: start again",
+}
+
+
+def shown_code(code: str) -> str:
+    return f"{code[:4]}-{code[4:]}"
+
+
+@public.post("/auth/device")
+async def device_start(body: DeviceStart, request: Request, store: StoreDep) -> Response:
+    """Start a command-line sign-in (RFC 8628). The user approves ``user_code`` at
+    ``verification_uri`` while the client polls ``auth/device/token`` with ``device_code``."""
+    ip = request.client.host if request.client is not None else None
+    started = await store.accounts.start_device(body.client.hostname, body.client.platform, ip)
+    if started is None:
+        raise APIError(503, "too many sign-ins are waiting for approval: try again later")
+    grant, device_code = started
+    uri = app_link(request, store, "device")
+    code = shown_code(grant.user_code)
+    return JSONResponse(
+        {
+            "device_code": device_code,
+            "user_code": code,
+            "verification_uri": uri,
+            "verification_uri_complete": f"{uri}?code={code}",
+            "expires_in": round(grant.expires_at - grant.created_at),
+            "interval": grant.interval,
+        }
+    )
+
+
+@public.post("/auth/device/token")
+async def device_token(body: DeviceToken, store: StoreDep) -> Response:
+    """Poll a sign-in: a 400 with an RFC 8628 ``error`` until it's decided, then the CLI token
+    (``access_token``) and the user, once."""
+    accounts = store.accounts
+    result = await accounts.poll_device(body.device_code)
+    if isinstance(result, str):
+        raise device_error(result, DEVICE_ERRORS[result])
+    user, token = result
+    return JSONResponse(
+        {"access_token": token, "token_type": "bearer", "user": await accounts.info(user)}
+    )
+
+
+def device_info(grant: DeviceGrant) -> dict[str, Any]:
+    return {
+        "user_code": shown_code(grant.user_code),
+        "hostname": grant.hostname,
+        "platform": grant.platform,
+        "ip": grant.ip,
+        "created_at": grant.created_at,
+        "expires_at": grant.expires_at,
+    }
+
+
+async def find_grant(store: Store, user: User, user_code: str) -> DeviceGrant:
+    grant = await store.accounts.device_grant(user, user_code)
+    if grant is None:
+        raise APIError(404, "this code is wrong, expired or already used")
+    return grant
+
+
+@router.get("/auth/device/{user_code}")
+async def device_request(user_code: str, user: SessionUserDep, store: StoreDep) -> Response:
+    """The machine asking to sign in with ``user_code``, for the approval page. Only a browser
+    session can look; each wrong code counts against the user (10 per 10 minutes)."""
+    return JSONResponse(device_info(await find_grant(store, user, user_code)))
+
+
+@router.post("/auth/device/{user_code}", status_code=204)
+async def device_decide(
+    user_code: str, body: DeviceDecision, user: SessionUserDep, store: StoreDep
+) -> Response:
+    """Approve the sign-in as the current user, or deny it. Only a browser session can."""
+    grant = await find_grant(store, user, user_code)
+    await store.accounts.decide_device(user, grant, body.approve)
     return Response(status_code=204)
 
 
@@ -205,7 +326,7 @@ class Google:
         return jwt.decode(tokens["id_token"], options={"verify_signature": False})
 
 
-@router.get("/auth/google/start")
+@public.get("/auth/google/start")
 async def google_start(request: Request, store: StoreDep, invite: str | None = None) -> Response:
     """Redirect to Google's sign-in; ``invite`` accepts an invitation on the way."""
     settings = store.settings
@@ -246,7 +367,7 @@ async def google_start(request: Request, store: StoreDep, invite: str | None = N
     return response
 
 
-@router.get("/auth/google/callback")
+@public.get("/auth/google/callback")
 async def google_callback(
     request: Request, store: StoreDep, code: str = "", state: str = "", error: str = ""
 ) -> Response:
@@ -306,13 +427,13 @@ async def google_callback(
         )
     except (Forbidden, Conflict, NotFound) as exc:
         return fail("forbidden", str(exc))
-    return redirect(f"auth/google?code={accounts.issue_code(user)}")
+    return redirect(f"auth/google?code={await accounts.issue_code(user)}")
 
 
-@router.post("/auth/google/exchange")
+@public.post("/auth/google/exchange")
 async def google_exchange(body: CodeBody, store: StoreDep) -> Response:
     """Tokens for the one-time code a Google sign-in ended with (valid for a minute)."""
-    user = store.accounts.redeem_code(body.code)
+    user = await store.accounts.redeem_code(body.code)
     if user is None:
         raise APIError(401, "invalid or expired sign-in code")
     return await signed_in(store, user)
@@ -323,7 +444,7 @@ async def google_exchange(body: CodeBody, store: StoreDep) -> Response:
 
 @router.get("/me")
 async def me(user: UserDep, store: StoreDep) -> Response:
-    return JSONResponse(store.accounts.info(user))
+    return JSONResponse(await store.accounts.info(user))
 
 
 @router.patch("/me")
@@ -332,9 +453,9 @@ async def update_me(body: MeUpdate, user: UserDep, store: StoreDep) -> Response:
     if fields.get("name") is None:
         fields.pop("name", None)
     if fields.get("default_org") is not None:
-        fields["default_org"] = visible_org(fields["default_org"], store, user)
+        fields["default_org"] = await visible_org(fields["default_org"], store, user)
     await store.accounts.update_user(user, fields)
-    return JSONResponse(store.accounts.info(user))
+    return JSONResponse(await store.accounts.info(user))
 
 
 @router.post("/me/password", status_code=204)
@@ -351,9 +472,14 @@ async def change_password(
     return Response(status_code=204)
 
 
-@router.get("/me/api-keys")
-async def list_api_keys(user: UserDep, store: StoreDep) -> Response:
-    keys = store.accounts.api_keys(user)
+# ``me/api-keys`` is what these routes were called before wandb keys were told apart (D71).
+
+
+@router.get("/me/wandb-keys")
+@router.get("/me/api-keys", deprecated=True)
+async def list_wandb_keys(user: UserDep, store: StoreDep) -> Response:
+    """Your wandb keys, older ``flock-`` ones included."""
+    keys = await store.accounts.api_keys(user)
     return JSONResponse(
         {
             "keys": [
@@ -364,9 +490,11 @@ async def list_api_keys(user: UserDep, store: StoreDep) -> Response:
     )
 
 
-@router.post("/me/api-keys", status_code=201)
-async def create_api_key(body: ApiKeyCreate, user: UserDep, store: StoreDep) -> Response:
-    """A new API key, for the wandb SDK (``WANDB_API_KEY``) or scripts. It is shown only once."""
+@router.post("/me/wandb-keys", status_code=201)
+@router.post("/me/api-keys", status_code=201, deprecated=True)
+async def create_wandb_key(body: WandbKeyCreate, user: UserDep, store: StoreDep) -> Response:
+    """A new wandb key (``flock-wandb-…``) for the wandb SDK: its ``WANDB_API_KEY``, or ``wandb
+    login``. It works only there, and is shown only once. A wandb key can't create one."""
     api_key, key = await store.accounts.create_api_key(user, body.name)
     return JSONResponse(
         {
@@ -380,17 +508,45 @@ async def create_api_key(body: ApiKeyCreate, user: UserDep, store: StoreDep) -> 
     )
 
 
-@router.delete("/me/api-keys/{key_id}", status_code=204)
-async def delete_api_key(key_id: int, user: UserDep, store: StoreDep) -> Response:
+@router.delete("/me/wandb-keys/{key_id}", status_code=204)
+@router.delete("/me/api-keys/{key_id}", status_code=204, deprecated=True)
+async def delete_wandb_key(key_id: int, user: UserDep, store: StoreDep) -> Response:
+    """Revoke a wandb key, and the S3 keys it was exchanged for before D72."""
     await store.accounts.delete_api_key(user, key_id)
+    return Response(status_code=204)
+
+
+@router.get("/me/cli-sessions")
+async def list_cli_sessions(user: UserDep, store: StoreDep) -> Response:
+    """Your command-line sign-ins (``flock login``), one per machine."""
+    return JSONResponse(
+        {
+            "sessions": [
+                {
+                    "id": s.pk,
+                    "name": s.name,
+                    "created_at": s.created_at,
+                    "last_used_at": s.last_used_at,
+                    "expires_at": s.expires_at,
+                }
+                for s in await store.accounts.cli_sessions(user)
+            ]
+        }
+    )
+
+
+@router.delete("/me/cli-sessions/{session_id}", status_code=204)
+async def delete_cli_session(session_id: int, user: UserDep, store: StoreDep) -> Response:
+    """Sign a machine out: its CLI token stops working on its next request."""
+    await store.accounts.end_cli_session(user, session_id)
     return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------- users
 
 
-def find_user(store: Store, user_id: int) -> User:
-    user = store.accounts.users.get(user_id)
+async def find_user(store: Store, user_id: int) -> User:
+    user = await store.accounts.user(user_id)
     if user is None:
         raise APIError(404, f"user {user_id} not found")
     return user
@@ -398,8 +554,8 @@ def find_user(store: Store, user_id: int) -> User:
 
 @router.get("/users")
 async def list_users(admin: SuperadminDep, store: StoreDep) -> Response:
-    users = sorted(store.accounts.users.values(), key=lambda u: u.pk)
-    return JSONResponse({"users": [store.accounts.info(u) for u in users]})
+    users = await store.accounts.users()
+    return JSONResponse({"users": [await store.accounts.info(u) for u in users]})
 
 
 @router.patch("/users/{user_id}")
@@ -407,15 +563,15 @@ async def update_user(
     user_id: int, body: UserUpdate, admin: SuperadminDep, store: StoreDep
 ) -> Response:
     """Make a user a super admin, or stop them being one (there is always one left)."""
-    user = find_user(store, user_id)
+    user = await find_user(store, user_id)
     await store.accounts.update_user(user, {"is_superadmin": body.is_superadmin})
-    return JSONResponse(store.accounts.info(user))
+    return JSONResponse(await store.accounts.info(user))
 
 
 @router.delete("/users/{user_id}", status_code=204)
 async def delete_user(user_id: int, admin: SuperadminDep, store: StoreDep) -> Response:
     """Delete an account. Its runs stay, without an owner."""
-    await store.accounts.delete_user(find_user(store, user_id))
+    await store.accounts.delete_user(await find_user(store, user_id))
     return Response(status_code=204)
 
 
@@ -428,7 +584,7 @@ async def create_password_reset(
     Super admins can reset anyone; org admins the members of their orgs, except super admins.
     """
     accounts = store.accounts
-    user = accounts.users.get(user_id)
+    user = await accounts.user(user_id)
     if user is None or not (actor.is_superadmin or set(user.roles) & set(actor.roles)):
         raise APIError(404, f"user {user_id} not found")
     if not accounts.can_reset_password(actor, user):
@@ -443,12 +599,12 @@ async def create_password_reset(
 # ---------------------------------------------------------------------- links
 
 
-@router.get("/invites/{token}")
+@public.get("/invites/{token}")
 async def get_invite(token: str, store: StoreDep) -> Response:
     """What an invitation link is for (no sign-in needed: the token is the secret)."""
     accounts = store.accounts
     invite = await accounts.find_invite(token)
-    org = store.orgs_by_pk.get(invite.org) if invite is not None else None
+    org = await store.org_by_pk(invite.org) if invite is not None else None
     if invite is None or org is None:
         raise APIError(404, "this invitation is invalid, expired or already used")
     return JSONResponse(
@@ -459,12 +615,12 @@ async def get_invite(token: str, store: StoreDep) -> Response:
             "email": invite.email,
             "role": invite.role,
             "expires_at": invite.expires_at,
-            "account_exists": invite.email in accounts.by_email,
+            "account_exists": await accounts.user_by_email(invite.email) is not None,
         }
     )
 
 
-@router.post("/invites/{token}/accept")
+@public.post("/invites/{token}/accept")
 async def accept_invite(
     token: str, body: InviteAccept, request: Request, store: StoreDep
 ) -> Response:
@@ -478,14 +634,14 @@ async def accept_invite(
         has_credentials = "authorization" in request.headers or "x-api-key" in request.headers
         if not has_credentials:
             raise APIError(401, "sign in as the invited user, or give a name and password")
-        user = current_user(request, store)
+        user = await rest_user(request, await current_user(request, store))
         await accounts.accept_invite(invite, user)
-        return JSONResponse({"user": accounts.info(user)})
+        return JSONResponse({"user": await accounts.info(user)})
     user = await accounts.register(invite, body.name or invite.email, body.password)
     return await signed_in(store, user, 201)
 
 
-@router.get("/password-resets/{token}")
+@public.get("/password-resets/{token}")
 async def get_password_reset(token: str, store: StoreDep) -> Response:
     user = await store.accounts.find_reset(token)
     if user is None:
@@ -493,7 +649,7 @@ async def get_password_reset(token: str, store: StoreDep) -> Response:
     return JSONResponse({"email": user.email})
 
 
-@router.post("/password-resets/{token}")
+@public.post("/password-resets/{token}")
 async def redeem_password_reset(token: str, body: PasswordReset, store: StoreDep) -> Response:
     """Set a new password from a reset link. Every other session of the user ends."""
     user = await store.accounts.redeem_reset(token, body.password)

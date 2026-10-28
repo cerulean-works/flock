@@ -273,7 +273,11 @@ describe('workspace snapshot decoding', () => {
 			metrics: ['debug', 'gs', 'loss'],
 			numeric: {},
 			text: {},
-			series: [null, null, null]
+			series: [
+				{ y: [1], x: [0] },
+				{ y: [1], x: [0] },
+				{ y: [1], x: [0] }
+			]
 		});
 		const { meta, page } = decodeWorkspace(buf, QUERY);
 		expect(page.runs[0].defs[0]).toEqual({ glob: '*', step: 'gs' });
@@ -281,6 +285,30 @@ describe('workspace snapshot decoding', () => {
 		expect(meta.panels.map((p) => p.id)).toEqual(['gs', 'loss']);
 		// Servers from before mappings send none: every run still gets (empty) axes.
 		expect(page.axes[0].history.size).toBe(0);
+	});
+
+	it('leaves a metric without a panel when no run on the page has points of it', () => {
+		const run = (id: string, ordinal: number) => ({
+			id,
+			name: id,
+			state: 'finished',
+			ordinal,
+			lines: 2,
+			system_lines: 0
+		});
+		// `val/loss` is listed (the runs logged it), but every curve of it came back empty.
+		const buf = encode({
+			runs: [run('a', 0), run('b', 1)],
+			columns: [],
+			metrics: ['val/loss', 'val/loss_ema'],
+			numeric: {},
+			text: {},
+			series: [null, { y: [1, 2], x: [0, 1] }, null, { y: [3], x: [1] }]
+		});
+		const { meta } = decodeWorkspace(buf, QUERY);
+		expect(meta.metrics.map((m) => m.key)).toEqual(['val/loss', 'val/loss_ema']);
+		expect(meta.panels.map((p) => p.id)).toEqual(['val/loss_ema']);
+		expect(meta.sections).toEqual([{ key: 'val', panels: [0] }]);
 	});
 
 	it('rejects foreign payloads', () => {

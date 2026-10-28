@@ -50,13 +50,15 @@ const RESERVED = [
 	'admin',
 	'api',
 	'auth',
+	'datasets',
 	'favicon.ico',
 	'invite',
 	'login',
 	'logout',
 	'orgs',
 	'reset',
-	'setup'
+	'setup',
+	'storage'
 ];
 
 /**

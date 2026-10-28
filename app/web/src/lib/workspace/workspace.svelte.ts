@@ -2,10 +2,12 @@ import { createContext } from 'svelte';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import {
 	DEFAULT_X_AXIS,
+	mapAt,
 	remapped,
 	resolveAxis,
 	sharedStepMetric,
 	type MapSource,
+	unmapAt,
 	type XAxis
 } from '#lib/chart/axes.ts';
 import { slotOf, type Series } from '#lib/chart/series.ts';
@@ -99,10 +101,21 @@ export interface Cursor {
 	surface: Surface;
 	/** Pointer height in that panel's plot, as a share of it from the top: tooltips follow it. */
 	fy: number;
+	/**
+	 * Pointer position across that panel's plot, as a share of it from the left: which side of
+	 * their crosshairs the grid's tooltips go (`tipSide`).
+	 */
+	fx: number;
 	/** Page row of the run nearest the pointer, if any. */
 	nearest: number | null;
 	/** Metric of the line nearest the pointer, if any. */
 	line: number | null;
+	/**
+	 * Per page row, the history row (`_step`) under the pointer, NaN where the run has none:
+	 * set when the pointer is in a panel of logged metrics, so panels of logged metrics on other
+	 * x axes (another step metric, `_step`, a time) follow it too, each run at its own x there.
+	 */
+	rows: Float64Array | null;
 }
 
 export type XRange = readonly [number, number];
@@ -275,17 +288,34 @@ export class Workspace {
 	// X axes (see #lib/chart/axes.ts)
 
 	/**
-	 * A logged metric's step metric, as the first of the page's runs to define the metric says
-	 * (`sharedStepMetric`). Memoised until the page or a run's definitions change.
+	 * A logged metric's step metric, as the first of the page's runs to log and define the metric
+	 * says (`sharedStepMetric`), provided every run that logged it logged that step metric too.
+	 * Memoised until the page, a run's definitions or the metric's points change.
 	 */
 	#steps = $derived.by(() => {
 		void this.defsVersion;
-		const defs = this.page.runs.map((r) => r.defs);
+		const page = this.page;
+		const defs = page.runs.map((r) => r.defs);
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a memo, never rendered
-		const memo = new Map<string, string | null>();
+		const memo = new Map<string, { version: number; step: string | null }>();
 		return (key: string) => {
-			let step = memo.get(key);
-			if (step === undefined) memo.set(key, (step = sharedStepMetric(defs, key)));
+			// Read on every call, so callers repaint when live points change who logged the metric.
+			const version = this.metricVersion.get(key) ?? 0;
+			const hit = memo.get(key);
+			if (hit?.version === version) return hit.step;
+			const m = this.metricOf('history', key);
+			const step = sharedStepMetric(defs, key, {
+				logged: (row) => m !== undefined && !!page.series[slotOf(page.metricCount, row, m)]?.n,
+				// The run's line has points on the step metric: a mapping that covers none of the
+				// rows the metric was logged on (an eval logged before or after the steps were)
+				// would leave the line off the chart as surely as no mapping.
+				maps: (row, step) => {
+					const s = m === undefined ? null : page.series[slotOf(page.metricCount, row, m)];
+					const map = this.#mapping(row, 'history', step);
+					return !!s?.n && !!map?.n && remapped(s, step, map).n > 0;
+				}
+			});
+			memo.set(key, { version, step });
 			return step;
 		};
 	});
@@ -332,6 +362,26 @@ export class Workspace {
 		const map = this.#mapping(row, this.meta.metrics[m].stream, axis.map);
 		if (!map) return null;
 		return remapped(s, axis.id, map, axis.relative ? -this.#startOf(row) : 0);
+	}
+
+	/**
+	 * Run `row`'s history row (`_step`) at `x` on a logged-metric `axis`, or NaN where the run
+	 * has no x values on it. What the crosshair of a panel tells panels on other x axes: a
+	 * row means the same to every axis, whatever its step metric is called.
+	 */
+	historyStepAt(row: number, axis: XAxis, x: number): number {
+		if (!axis.map) return x;
+		const map = this.#mapping(row, 'history', axis.map);
+		if (!map?.n) return NaN;
+		return unmapAt(map, x, axis.relative ? -this.#startOf(row) : 0);
+	}
+
+	/** Run `row`'s x on a logged-metric `axis` at history row `step` (`historyStepAt` back). */
+	xAtHistoryStep(row: number, axis: XAxis, step: number): number {
+		if (!axis.map) return step;
+		const map = this.#mapping(row, 'history', axis.map);
+		if (!map?.n) return NaN;
+		return mapAt(map, step, axis.relative ? -this.#startOf(row) : 0);
 	}
 
 	/** A run's current state; reactive to live updates. */

@@ -30,7 +30,7 @@
      the antialiased edge as a dark hairline. -->
 <span
 	class={cn(
-		'grid size-7 flex-none place-items-center rounded-full text-[11px] font-medium text-[#fffdf4]',
+		'grid size-7 flex-none place-items-center rounded-full text-[11px] font-medium text-white',
 		!shown && 'bg-deep dark:bg-selection',
 		className
 	)}

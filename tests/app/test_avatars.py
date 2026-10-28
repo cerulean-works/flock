@@ -174,7 +174,7 @@ def test_new_accounts_keep_an_avatar_set_before_their_gravatar_arrives(make_floc
     alice = server.add_user("alice@lab.test")
     settled(server)
     put_image(alice.api, "/api/v1/me/avatar", JPEG)
-    user = server.store.accounts.by_email["alice@lab.test"]
+    user = server.call(server.store.accounts.user_by_email("alice@lab.test"))
     gravatar.add("alice@lab.test", PNG)
     assert server.call(server.store.avatars.gravatar(user, keep_existing=True)) is True
     assert alice.api.get(ME).json()["avatar_source"] == "upload"
@@ -187,7 +187,7 @@ def test_avatars_survive_a_restart(make_flock):
     org_url = put_image(server.client(), "/api/v1/orgs/flock/avatar", JPEG).json()["avatar_url"]
     server.stop()
     restarted = make_flock(reuse=server)
-    me = restarted.client(api_key=alice.api_key).get(ME).json()
+    me = restarted.client(token=alice.token).get(ME).json()
     assert (me["avatar_url"], me["avatar_source"]) == (url, "upload")
     assert restarted.client().get("/api/v1/orgs/flock").json()["avatar_url"] == org_url
     assert restarted.anonymous().get(url).body == PNG

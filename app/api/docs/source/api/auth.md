@@ -1,6 +1,6 @@
 # Sign-in and accounts
 
-Endpoints for signing in, for your own account and API keys, and for managing users and password resets. Paths are relative to `/api/v1`. For how these fit together, see [Accounts, organizations and roles](../accounts).
+Endpoints for signing in, for your own account and wandb keys, and for managing users and password resets. Paths are relative to `/api/v1`. For how these fit together, see [Accounts, organizations and roles](../accounts).
 
 ## Token responses[[tokens]]
 
@@ -49,10 +49,10 @@ Signing up, signing in, refreshing, accepting an invitation as a new account, re
 Public. What a sign-in page should offer:
 
 ```json
-{"signup_open": false, "google": true}
+{"signup_open": false, "google": true, "s3": {"endpoint": "https://s3.flock.example.com", "region": "us-east-1"}}
 ```
 
-`signup_open` is `true` only while Flock has no accounts. `google` is `true` when Sign in with Google is configured.
+`signup_open` is `true` only while Flock has no accounts. `google` is `true` when Sign in with Google is configured. `s3` is where the [S3 proxy](../s3) is, or `null` when the server has no S3.
 
 ### `POST /auth/signup`[[signup]]
 
@@ -76,7 +76,7 @@ Public. Exchanges `{"refresh_token": "..."}` for new tokens, without the `user`.
 
 ### `POST /auth/logout`[[logout]]
 
-Ends the session of the access token that makes the request. Answers 204. Called with an API key, which has no session, it answers 400.
+Ends the session of the access token or CLI token that makes the request. Answers 204. `flock logout` calls it with its CLI token.
 
 ### Sign in with Google[[google]]
 
@@ -87,6 +87,37 @@ Ends the session of the access token that makes the request. Answers 204. Called
 | `POST /auth/google/exchange` | Public. Exchanges `{"code": "..."}` for [tokens](#tokens). The code works once, for 60 seconds. Otherwise it answers 401. |
 
 The start and callback answer 404 when Google sign-in isn't configured. [Setting up Sign in with Google](../google-sign-in) explains the flow and the error reasons.
+
+### Device sign-in[[device]]
+
+`flock login` signs a machine in with OAuth 2.0's device authorization grant (RFC 8628). The CLI starts a sign-in and polls for its result, while the user approves the code on the dashboard's `/device` page.
+
+| Endpoint | Meaning |
+|---|---|
+| `POST /auth/device` | Public. Starts a sign-in. The body is `{"client": {"hostname": "...", "platform": "..."}}`, both optional and at most 255 characters, shown on the approval page. |
+| `POST /auth/device/token` | Public. Polls with `{"device_code": "..."}`. Answers 400 with an RFC 8628 `error` until the sign-in is decided, then 200 with the CLI token, once. |
+| `GET /auth/device/{user_code}` | Browser sessions only. The pending sign-in: `user_code`, `hostname`, `platform`, `ip` (the address that started it), `created_at` and `expires_at`. |
+| `POST /auth/device/{user_code}` | Browser sessions only. `{"approve": true}` approves the sign-in as you, and `{"approve": false}` denies it. Answers 204. |
+
+Starting a sign-in answers:
+
+```json
+{
+  "device_code": "Jm3vPYc2f5kOq8ZbW0n6rJtXyH1uLs9aDgE4iQwTzRc",
+  "user_code": "WDJB-MJHT",
+  "verification_uri": "https://flock.example.com/device",
+  "verification_uri_complete": "https://flock.example.com/device?code=WDJB-MJHT",
+  "expires_in": 900,
+  "interval": 5
+}
+```
+
+- **Codes.** The user code is 8 letters without vowels, typed in any case, with or without the dash. Both codes are valid for `FLOCK_DEVICE_CODE_TTL` seconds (15 minutes). The verification URI is on `FLOCK_WEB_URL`.
+- **Polling.** Wait `interval` seconds between polls. Polling sooner answers `slow_down`, and the interval grows by 5 seconds each time.
+- **Errors.** `authorization_pending` (not decided yet), `slow_down`, `access_denied` (denied) and `expired_token` (expired, already used, or unknown). Each has an `error_description`.
+- **The token.** Once approved, the poll answers `{"access_token": "flock_cli_...", "token_type": "bearer", "user": {...}}` with the [user object](#user-object). The codes then stop working.
+- **Approving.** The two routes with a user code take an access token only: CLI tokens get 403, so a leaked one can't sign in new machines. A wrong or used code answers 404. After 10 wrong codes in 10 minutes, a user gets 429 for a while.
+- **Limits.** Pending sign-ins are stored in PostgreSQL, so they survive a restart and any replica answers their polls. At most 1000 can wait at once. Starting another answers 503.
 
 ## Your account[[me]]
 
@@ -109,7 +140,7 @@ Returns your updated user object.
 
 Changes your password with `{"current": "...", "new": "..."}`. `new` is 8 to 256 characters. Accounts without a password leave out `current`. Answers 204, or 403 if `current` is wrong.
 
-Your other sessions end. The session that made the request continues, and API keys keep working.
+Your other sessions end, command-line sign-ins included. The session that made the request continues, and wandb keys keep working.
 
 ## Avatars[[avatars]]
 
@@ -124,15 +155,28 @@ Images must be PNG, JPEG, GIF or WebP, of at most 1 MiB (1,048,576 bytes). Flock
 
 `{digest}` is the SHA-256 of the image, in hex. The bytes behind a URL never change, so responses can be cached for good (`Cache-Control: public, max-age=31536000, immutable`), and `If-None-Match` with the `ETag` answers 304. A new avatar has a new URL. An image nobody uses any more is deleted, and its URL answers 404.
 
-## API keys[[api-keys]]
+## wandb keys[[wandb-keys]]
+
+Keys for the `wandb` SDK. They work only with the [wandb protocol](../wandb-compatibility#protocol-endpoints): this API refuses them (see [Credentials](index#credentials)).
 
 | Endpoint | Meaning |
 |---|---|
-| `GET /me/api-keys` | Lists your keys as `{"keys": [...]}`, oldest first. Each has `id`, `name`, `prefix` (the key's first 12 characters) and `created_at`, but not the key. |
-| `POST /me/api-keys` | Creates a key. The body's `name` is 1 to 128 characters, `default` if left out. Answers 201 with the listing fields plus `key`, which is shown only this once. |
-| `DELETE /me/api-keys/{id}` | Revokes one of your keys at once. Answers 204, or 404 if you have no key with this id. |
+| `GET /me/wandb-keys` | Lists your keys as `{"keys": [...]}`, oldest first. Each has `id`, `name`, `prefix` (the key's first 12 characters) and `created_at`, but not the key. |
+| `POST /me/wandb-keys` | Creates a key. The body's `name` is 1 to 128 characters, `default` if left out. Answers 201 with the listing fields plus `key`, which is shown only this once. |
+| `DELETE /me/wandb-keys/{id}` | Revokes one of your keys at once. Answers 204, or 404 if you have no key with this id. |
 
-Keys look like `flock-` followed by 48 hexadecimal characters, the shape the `wandb` SDK accepts. They don't expire.
+Keys look like `flock-wandb-` followed by 40 letters and digits, a shape every `wandb` SDK accepts. They don't expire. Keys made before wandb keys had their own prefix look like `flock-` followed by 48 hexadecimal characters, and work the same way.
+
+Creating a key needs an access token or a CLI token, like the rest of this API, so a wandb key can't create another. The routes are also served under their old name, `/me/api-keys`, for one more release.
+
+## Command-line sign-ins[[cli-sessions]]
+
+| Endpoint | Meaning |
+|---|---|
+| `GET /me/cli-sessions` | Lists your [command-line sign-ins](#device) as `{"sessions": [...]}`, oldest first. Each has `id`, `name` (the machine's hostname), `created_at`, `last_used_at` (null until first used) and `expires_at`. |
+| `DELETE /me/cli-sessions/{id}` | Signs that machine out: its token answers 401 from its next request. Answers 204, or 404 if you have no command-line sign-in with this id. |
+
+CLI tokens look like `flock_cli_` followed by 43 URL-safe characters. Each use extends the sign-in to `FLOCK_CLI_SESSION_TTL` (90 days) from then. Flock records the use in its database at most once an hour, so `last_used_at` and `expires_at` read after a restart can be up to an hour behind.
 
 ## Users[[users]]
 
@@ -142,7 +186,7 @@ Super admins only. Others get 403.
 |---|---|
 | `GET /users` | Every account, as `{"users": [...]}` of [user objects](#user-object), oldest first. |
 | `PATCH /users/{id}` | `{"is_superadmin": true}` makes a user a super admin, and `false` stops them being one. Returns the updated user object. Demoting the last super admin answers 409. |
-| `DELETE /users/{id}` | Deletes an account, with its API keys and sessions. Its runs stay, with no owner. Answers 204. Deleting the last super admin answers 409. |
+| `DELETE /users/{id}` | Deletes an account, with its wandb keys and sessions. Its runs stay, with no owner. Answers 204. Deleting the last super admin answers 409. |
 
 An unknown `id` answers 404.
 

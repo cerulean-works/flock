@@ -28,12 +28,12 @@ Requests that fail validation (422) have FastAPI's body instead, which lists eac
 | Code | Meaning |
 |---|---|
 | 200 | Success, with a body. |
-| 201 | Created: a project, organization, invitation, API key, reset link, or an account from signing up or accepting an invitation. |
+| 201 | Created: a project, organization, invitation, wandb key, reset link, or an account from signing up or accepting an invitation. |
 | 202 | Accepted: a [W&B import](api/orgs#imports) started in the background. |
 | 204 | Success, with no body: deletes, signing out, changing your password. |
 | 302 | A redirect, in the Google sign-in flow. |
-| 400 | A request Flock can't apply: an invalid filter, a bulk operation that selects nothing, an empty `keys` list, signing out with an API key, a W&B API key that W&B rejects, a different `name` when updating an organization (its ID can't change), or a body that isn't JSON or valid gzip on the wandb protocol endpoints. |
-| 401 | Missing, invalid or expired credentials. Also a wrong email or password, an invalid refresh token or Google code, and accepting an invitation with neither a password nor credentials. |
+| 400 | A request Flock can't apply: an invalid filter, a bulk operation that selects nothing, an empty `keys` list, a W&B API key that W&B rejects, a different `name` when updating an organization (its ID can't change), or a body that isn't JSON or valid gzip on the wandb protocol endpoints. |
+| 401 | Missing, invalid or expired credentials, or a wandb key sent to the REST API. Also a wrong email or password, an invalid refresh token or Google code, and accepting an invitation with neither a password nor credentials. |
 | 403 | Not allowed: your role doesn't allow it, the runs aren't yours (with `ids`), signing up after the first account, a wrong current password, an invitation for another email, or an invalid upload signature. |
 | 404 | Not found, or in an organization you don't belong to. Also an invalid, expired or used invitation or reset link, and Google sign-in when it isn't configured. |
 | 409 | A conflict. See below. |
@@ -71,4 +71,4 @@ The SDK talks to Flock through GraphQL, which reports errors with HTTP 200 and a
 | `operation '<name>' is not supported by this server` | The SDK used a feature Flock doesn't implement, such as artifacts or `wandb.Api()`. See [wandb compatibility](wandb-compatibility). |
 | `invalid file name '<name>'` | The SDK asked to upload a file with an absolute path or `..` in its name. |
 
-An unknown API key fails `wandb login` and `wandb.init` with HTTP 401.
+An unknown wandb key fails `wandb login` and `wandb.init` with HTTP 401.

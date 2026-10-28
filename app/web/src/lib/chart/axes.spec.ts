@@ -5,11 +5,13 @@ import {
 	formatX,
 	formatXTick,
 	formatXValue,
+	mapAt,
 	remap,
 	remapped,
 	resolveAxis,
 	sharedStepMetric,
-	stepMetricOf
+	stepMetricOf,
+	unmapAt
 } from './axes.ts';
 import { Series } from './series.ts';
 
@@ -58,6 +60,29 @@ describe('remap', () => {
 	});
 });
 
+describe('mapAt and unmapAt', () => {
+	// An eval at the same global step (rows 3 and 4), then a stride change.
+	const map = new AxisCurve([0, 3, 4, 6], [16, 64, 64, 128]);
+
+	it('read a mapping and its inverse, interpolated', () => {
+		expect(mapAt(map, 1.5)).toBe(40);
+		expect(mapAt(map, 5)).toBe(96);
+		expect(mapAt(map, 0, -16)).toBe(0);
+		expect(unmapAt(map, 40)).toBe(1.5);
+		expect(unmapAt(map, 96)).toBe(5);
+		expect(unmapAt(map, 0, -16)).toBe(0);
+		// A value logged on several rows reads at the first.
+		expect(unmapAt(map, 64)).toBe(3);
+	});
+
+	it('read nothing past a mapping, but invert to its nearest end', () => {
+		expect(mapAt(map, 7)).toBeNaN();
+		expect(mapAt(new AxisCurve(), 0)).toBeNaN();
+		expect(unmapAt(map, 500)).toBe(6);
+		expect(unmapAt(new AxisCurve(), 1)).toBeNaN();
+	});
+});
+
 describe('AxisCurve', () => {
 	it('keeps only the knots of a fixed stride as it grows', () => {
 		const c = new AxisCurve();
@@ -86,6 +111,24 @@ describe('metric definitions', () => {
 		expect(sharedStepMetric([explicit, HF], 'plain')).toBeNull();
 		expect(sharedStepMetric([HF, explicit], 'plain')).toBe('train/global_step');
 		expect(sharedStepMetric([[]], 'plain')).toBeNull();
+	});
+
+	it('leave the decision to runs that logged the metric, and to a step metric they all have', () => {
+		/** Runs by index: which logged the metric, and which logged `train/global_step`. */
+		const data = (logged: number[], maps: number[]) => ({
+			logged: (i: number) => logged.includes(i),
+			maps: (i: number, step: string) => step === 'train/global_step' && maps.includes(i)
+		});
+		// HF's glob of a run that never logged `memory/peak` names no axis for it.
+		expect(sharedStepMetric([HF, []], 'memory/peak', data([1], [0]))).toBeNull();
+		expect(sharedStepMetric([HF, []], 'train/loss', data([0], [0]))).toBe('train/global_step');
+		// A run that logged it without the step metric would lose its line: `_step` then.
+		expect(sharedStepMetric([HF, []], 'train/loss', data([0, 1], [0]))).toBeNull();
+		expect(sharedStepMetric([HF, HF], 'train/loss', data([0, 1], [0, 1]))).toBe(
+			'train/global_step'
+		);
+		// Nobody logged it (yet): the definitions alone.
+		expect(sharedStepMetric([HF], 'new', data([], [0]))).toBe('train/global_step');
 	});
 });
 

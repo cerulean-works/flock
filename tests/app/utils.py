@@ -26,3 +26,23 @@ def system_samples(n: int, metrics: dict[str, Callable[[int], Any]], start: int 
 def sample_runtimes(indices: Iterable[int]) -> list[float]:
     """``_runtime`` of the ``system_samples`` with these indices: one sample every 1.5s."""
     return [0.25 + 1.5 * i for i in indices]
+
+
+def machines(user: Any) -> list[dict]:
+    """``user``'s command-line sign-ins, but for the one ``FlockServer.add_user`` made for
+    ``user.api`` (named ``tests``)."""
+    listed = user.api.get("/api/v1/me/cli-sessions").json()["sessions"]
+    return [s for s in listed if s["name"] != "tests"]
+
+
+def cli_login(server: Any, browser: Any, hostname: str = "laptop") -> str:
+    """Sign in as ``flock login`` does: start a device sign-in, approve it with ``browser`` (a
+    client on a browser session) and return the CLI token."""
+    anon = server.anonymous()
+    client = {"hostname": hostname, "platform": "Linux x86_64"}
+    started = anon.post("/api/v1/auth/device", {"client": client}).json()
+    approved = browser.post(f"/api/v1/auth/device/{started['user_code']}", {"approve": True})
+    assert approved.status == 204, approved.body
+    token = anon.post("/api/v1/auth/device/token", {"device_code": started["device_code"]})
+    assert token.status == 200, token.body
+    return token.json()["access_token"]

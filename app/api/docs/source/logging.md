@@ -4,12 +4,12 @@ Flock implements the server side of the wandb protocol, so your training code us
 
 ## Connect the SDK
 
-You need an API key for your account. Create one with `POST /api/v1/me/api-keys`, as in the [Quickstart](quickstart#create-an-api-key), or from your dashboard.
+You need a wandb key for your account. Create one on your account page, with `flock login`, or with `POST /api/v1/me/wandb-keys` as in the [Quickstart](quickstart#create-an-api-key).
 
 To set up a machine once, log in with the `wandb` command:
 
 ```bash
-wandb login --host https://flock.example.com flock-2223f1ca27679b9f6e53acdb6d5328d1b0cad61686c93995
+wandb login --host https://flock.example.com flock-wandb-q7Lm2XkP9vRt4WbN8sJc3YhF6dGz1aEu5oKiT0nB
 ```
 
 It stores the key in `~/.netrc` and the host in wandb's settings, so later runs on this machine use them. It prints the account and default organization the key belongs to: `Currently logged in as: ana@example.com (flock)`.
@@ -18,7 +18,7 @@ To configure a single process instead, set two environment variables:
 
 ```bash
 export WANDB_BASE_URL=https://flock.example.com
-export WANDB_API_KEY=flock-2223f1ca27679b9f6e53acdb6d5328d1b0cad61686c93995
+export WANDB_API_KEY=flock-wandb-q7Lm2XkP9vRt4WbN8sJc3YhF6dGz1aEu5oKiT0nB
 ```
 
 Every run is owned by the user whose key created it. On a shared machine or in CI, use a key of the account that should own the runs.
@@ -74,6 +74,8 @@ Flock reads these definitions from the run's config, where the SDK records them.
 - A metric without a step metric, such as `train/global_step` above, is plotted against `_step`.
 - A step metric still gets a chart of its own. Pass `hidden=True` to `define_metric` to leave a metric out of the charts.
 
+A chart of several runs has one x-axis. The first run on the page that logged the metric and defines it decides its step metric. Runs that never logged the metric don't decide, even if they have a `*` glob. If some run that logged the metric didn't log that step metric, the chart uses `_step` instead, so every run's line still shows.
+
 The [snapshot](api/dashboard#metric-definitions) and the [run detail](api/projects#get-run) carry each run's definitions, and the snapshot carries what a dashboard needs to switch the x-axis without fetching again. The [query endpoints](api/queries) still return curves against `_step` unless you pass `x`.
 
 ## System metrics
@@ -128,7 +130,7 @@ WANDB_MODE=offline python train.py
 wandb sync wandb/offline-run-20261018_081002-9fc2v9ee
 ```
 
-`wandb sync` needs the same host and API key as a live run. Syncing into a project that no longer exists creates it again.
+`wandb sync` needs the same host and wandb key as a live run. Syncing into a project that no longer exists creates it again.
 
 ## Unsupported features
 
