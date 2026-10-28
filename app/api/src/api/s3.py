@@ -112,6 +112,8 @@ async def bucket_info(store: Store, bucket: Bucket) -> dict[str, Any]:
         "upstream_name": bucket.upstream_name,
         "created_at": bucket.created_at,
         "created_by": store.accounts.brief(creator) if creator is not None else None,
+        # "datasets" for the org's flock-datasets, which Flock owns (D85); null for the rest.
+        "managed": bucket.managed,
     }
     if bucket.deleted_at is not None:  # still being emptied (listed with ``deleting``)
         info["deleted_at"] = bucket.deleted_at

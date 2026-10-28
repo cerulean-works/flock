@@ -102,6 +102,8 @@ export interface Bucket {
 	created_by: Person | null;
 	/** Set while a deleted bucket is still being emptied (listed with `deleting`). */
 	deleted_at?: number;
+	/** `datasets` for the org's flock-datasets, which Flock creates and owns; null otherwise. */
+	managed?: 'datasets' | null;
 }
 
 /** An object in a folder's listing (`GET …/buckets/{bucket}/objects`). */
@@ -162,7 +164,7 @@ export interface BucketEvent {
 	user: Person | null;
 	at: number;
 	detail: {
-		via?: 'ui' | 'cli' | 'api' | 'purge' | 'org';
+		via?: 'ui' | 'cli' | 'api' | 'purge' | 'org' | 'flock';
 		machine?: string;
 		key_name?: string;
 		objects?: number;
@@ -171,6 +173,144 @@ export interface BucketEvent {
 
 export interface BucketDetail extends Bucket {
 	events: BucketEvent[];
+}
+
+// ----------------------------------------------------------------------------------------------
+// Datasets (013): the Lance datasets in an org's flock-datasets bucket.
+
+/** A dataset in a folder's listing; `version` is null when its manifests use Lance's old naming. */
+export interface DatasetEntry {
+	name: string;
+	path: string;
+	version: number | null;
+	updated_at: number | null;
+}
+
+/** A file in a folder's listing of flock-datasets. */
+export interface DatasetFile {
+	name: string;
+	key: string;
+	size: number;
+	last_modified: number;
+}
+
+/** One page of a folder of flock-datasets (`GET …/datasets/at`). */
+export interface DatasetFolder {
+	kind: 'folder';
+	path: string;
+	datasets: DatasetEntry[];
+	folders: { name: string; path: string }[];
+	files: DatasetFile[];
+	cursor: string | null;
+}
+
+/** What `GET …/datasets/at` says of a path that is a dataset. */
+export interface DatasetAt {
+	kind: 'dataset';
+	path: string;
+	version: number | null;
+	updated_at: number | null;
+}
+
+/** A field of the schema, with its children (struct fields, a list's items). */
+export interface SchemaField {
+	name: string;
+	/** Arrow's name for its type, or `blob` for a Lance blob column. */
+	type: string;
+	nullable: boolean;
+	metadata: Record<string, string>;
+	children: SchemaField[];
+}
+
+/** The dataset at one version (`GET …/datasets/info`). */
+export interface DatasetInfo {
+	path: string;
+	version: number;
+	/** When that version was written. */
+	timestamp: number;
+	/** The latest version now; null when Lance's old naming hides it. */
+	latest_version: number | null;
+	rows: number;
+	columns: number;
+	fragments: number;
+	data_size: number;
+	schema: SchemaField[];
+	metadata: Record<string, string>;
+	/** Some column holds binary data, so the row viewer shows fewer rows a page. */
+	binary: boolean;
+	details: {
+		data_storage_version: string;
+		stable_row_ids: boolean;
+		fragments: number;
+		indices: { name: string; type: string; columns: string[] }[];
+	};
+	tags: { name: string; version: number }[];
+}
+
+/** A cell, rendered by the API for display (D90). */
+export type Cell =
+	| { k: 'null' }
+	| { k: 'num'; v: number | string; label?: string }
+	| { k: 'bool'; v: boolean }
+	| { k: 'str'; v: string; len?: number }
+	| { k: 'time'; v: string }
+	| { k: 'image'; mime: string; size: number; data: string }
+	| { k: 'bin'; size: number }
+	| { k: 'blob'; size: number | null }
+	| { k: 'vec'; dtype: string; len: number; head: (number | string | null)[] }
+	| { k: 'json'; v: string; len?: number };
+
+/** A page of rows (`GET …/datasets/rows`). */
+export interface RowsPage {
+	version: number;
+	offset: number;
+	limit: number;
+	total: number;
+	columns: { name: string; type: string; feature?: string }[];
+	rows: Cell[][];
+}
+
+/** One cell in full, for an opened row (`GET …/datasets/cell`). */
+export interface FullCell {
+	row: number;
+	column: string;
+	type: string;
+	cell: Cell;
+}
+
+/** A version in the history (`GET …/datasets/versions`). */
+export interface DatasetVersion {
+	version: number;
+	timestamp: number;
+	tags: string[];
+	/** Lance's operation (Append, Overwrite, Delete…), null without a transaction file. */
+	operation: string | null;
+	rows: number;
+	/** Rows added (or removed, below zero) since the version before, when that one exists. */
+	rows_delta: number | null;
+	/** `transaction_properties` the writer set, such as a message. */
+	properties: Record<string, string>;
+}
+
+export interface VersionsPage {
+	versions: DatasetVersion[];
+	latest: number;
+	cursor: number | null;
+}
+
+/** A deleted dataset in the trash (`GET …/datasets/trash`), for org admins. */
+export interface TrashEntry {
+	id: number;
+	path: string;
+	deleted_by: Person | null;
+	deleted_at: number;
+	/** Null while the move to the trash is unfinished. */
+	moved_at: number | null;
+	/** When the sweep removes it for good. */
+	expires_at: number;
+	latest_version: number | null;
+	objects: number;
+	bytes: number;
 }
 
 /** Where an organization's W&B import is: `interrupted` means Flock restarted during it. */

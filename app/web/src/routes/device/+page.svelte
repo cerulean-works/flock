@@ -96,9 +96,7 @@
 			</Button>
 		</form>
 	{:else}
-		<h1 class="text-[34px] leading-[1.15] tracking-[-0.025em]">
-			Sign in from the command line
-		</h1>
+		<h1 class="text-[34px] leading-[1.15] tracking-[-0.025em]">Sign in from the command line</h1>
 		<p class="mt-3 leading-relaxed text-muted-foreground">
 			Enter the code that <code class="font-mono text-foreground">flock login</code> shows in your terminal.
 		</p>

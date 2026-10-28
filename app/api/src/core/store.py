@@ -17,6 +17,7 @@ from app.api.src.core.accounts import Accounts
 from app.api.src.core.avatars import Avatars
 from app.api.src.core.budgets import Budgets
 from app.api.src.core.bus import Bus
+from app.api.src.core.datasets import Datasets
 from app.api.src.core.errors import Conflict, Discarded, Forbidden, NotFound
 from app.api.src.core.feed import Feed
 from app.api.src.core.files import file_store
@@ -362,6 +363,7 @@ class Store:
         self.feed = Feed(self)
         self.imports = Imports(self)
         self.s3 = S3(self)
+        self.datasets = Datasets(self)
 
     @staticmethod
     async def _prefixed(conn: asyncpg.Connection, pk: int, prefix: str) -> dict[str, Any]:
@@ -395,6 +397,7 @@ class Store:
             await self.accounts.load()
             await self.imports.load()
             await self.s3.load()
+            await self.datasets.load()
             self._background(self._detect_missing_gpus())
             self._worker = asyncio.get_running_loop().create_task(self._work_loop())
         except BaseException:
@@ -405,6 +408,7 @@ class Store:
             raise
 
     async def close(self) -> None:
+        await self.datasets.close()
         await self.s3.close()
         await self.imports.close()
         if self._worker is not None:
@@ -1612,7 +1616,14 @@ class Store:
             # S3 bucket names start with the org's pk in five digits (D53).
             if record[0] > self.MAX_ORG_PK:
                 raise Conflict("this server can't hold more organizations")
-        return Org(*record, display_name=display_name)
+        org = Org(*record, display_name=display_name)
+        # Its flock-datasets bucket (D85). A failure leaves the org be: startup and the Datasets
+        # tab try again.
+        try:
+            await self.s3.ensure_managed(org)
+        except Exception:
+            log.exception("could not create flock-datasets for %s", org.name)
+        return org
 
     async def set_org_display_name(self, org: Org, display_name: str) -> None:
         """Change what an organization is called. Its ID (``name``), which its projects, runs
@@ -1643,6 +1654,7 @@ class Store:
             # Its S3 buckets outlive it until the background purge removes them upstream, no
             # longer anyone's (as the org's row will be gone).
             await self.s3.delete_org_buckets(conn, org)
+            await self.datasets.delete_org(conn, org)
             await conn.execute("UPDATE s3_buckets SET org_pk = NULL WHERE org_pk = $1", org.pk)
             # Its avatar is released now: the row waits for the purge without it.
             await conn.execute(
@@ -1651,6 +1663,7 @@ class Store:
                 now,
             )
         self.s3.purge_later()
+        self.datasets.purge_org(org.pk)
         await self.avatars.release(org.avatar)
         self._work_wanted.set()
 

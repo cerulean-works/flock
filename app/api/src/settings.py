@@ -97,6 +97,10 @@ class Settings:
     s3_public_url: str | None = field(
         default=None, doc="the S3 proxy's URL as clients reach it, handed out with S3 keys"
     )
+    s3_trash_bucket: str | None = field(
+        default=None,
+        doc="the bucket on the S3 server deleted datasets wait in (default: <prefix>flock-trash)",
+    )
     pool_size: int = field(default=16, doc="maximum number of database connections")
     cors_origins: list[str] = field(
         default_factory=list, doc="origins allowed to call the API from browsers, comma separated"

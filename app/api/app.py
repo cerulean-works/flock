@@ -10,7 +10,18 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from app.api.src.api import auth, avatars, dashboard, home, orgs, projects, runs, s3, wandb_protocol
+from app.api.src.api import (
+    auth,
+    avatars,
+    dashboard,
+    datasets,
+    home,
+    orgs,
+    projects,
+    runs,
+    s3,
+    wandb_protocol,
+)
 from app.api.src.api.deps import APIError, JSONResponse
 from app.api.src.core.errors import (
     BadGateway,
@@ -164,6 +175,7 @@ def create_app(store: Store) -> FastAPI:
     app.include_router(avatars.public)
     app.include_router(avatars.router)
     app.include_router(s3.router)
+    app.include_router(datasets.router)
     return app
 
 

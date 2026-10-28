@@ -146,13 +146,19 @@ def test_set_profile_keeps_what_follows():
 
 
 def test_buckets_commands(flock, alice, signed_in, flock_cli):
-    empty = flock_cli("s3", "buckets", "list")
-    assert empty.exit_code == 0 and "No buckets yet" in empty.output
+    # Every org has flock-datasets, which Flock manages (013).
+    managed = flock_cli("s3", "buckets", "list")
+    assert managed.exit_code == 0
+    assert managed.output.startswith("flock-datasets\t") and "managed by Flock" in managed.output
     created = flock_cli("s3", "buckets", "create", "checkpoints", "shards")
     assert created.exit_code == 0, created.output
     assert "s3://checkpoints" in created.output
     listed = flock_cli("s3", "buckets", "list")
-    assert [line.split("\t")[0] for line in listed.output.splitlines()] == ["checkpoints", "shards"]
+    assert [line.split("\t")[0] for line in listed.output.splitlines()] == [
+        "checkpoints",
+        "flock-datasets",
+        "shards",
+    ]
     assert "by alice@lab.test" in listed.output
     as_json = json.loads(flock_cli("s3", "buckets", "list", "--json").output)
     assert as_json[0]["upstream_name"] == f"{flock.bucket_prefix}00001-checkpoints"
@@ -168,7 +174,7 @@ def test_buckets_commands(flock, alice, signed_in, flock_cli):
     credentials.save(flock.url, token, {})
     deleted = flock_cli("s3", "buckets", "delete", "shards", input="y\n")
     assert deleted.exit_code == 0, deleted.output
-    assert [b["name"] for b in s3.list_buckets()] == ["checkpoints"]
+    assert [b["name"] for b in s3.list_buckets()] == ["checkpoints", "flock-datasets"]
 
 
 def flock_admin_token(flock: S3Flock) -> str:
@@ -216,7 +222,7 @@ def test_boto3_clients_renew_their_key(flock, alice, signed_in):
     assert len({k["access_key_id"] for k in keys_of(flock, alice)} - used) == 1
     assert s3.create_bucket("more")["name"] == "more"
     names = [b["Name"] for b in client.list_buckets()["Buckets"]]
-    assert names == ["data", "more"]
+    assert names == ["data", "flock-datasets", "more"]
 
 
 def test_the_module_imports_no_s3_library():

@@ -44,6 +44,7 @@ These turn on [S3 storage](s3), and give the `s3` files backend its server. Set 
 | `FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY` | none | That key's secret. Required with the endpoint. |
 | `FLOCK_S3_BUCKET_PREFIX` | empty | Put in front of every bucket name on the S3 server. It shortens the names organizations can use, from 57 characters, by its length. Tests set it so they never touch other buckets. |
 | `FLOCK_S3_PUBLIC_URL` | none | The proxy's address as clients reach it, such as `https://s3.flock.example.com`. Required when S3 is on: Flock hands it out with keys. |
+| `FLOCK_S3_TRASH_BUCKET` | `FLOCK_S3_BUCKET_PREFIX` then `flock-trash` | The bucket on the S3 server where datasets deleted from the Datasets tab wait for 14 days. Flock creates it at startup if it's missing. No S3 key can reach it. |
 
 Values are read like this:
 - **Empty means unset.** A variable set to an empty string takes its default, as Compose does for optional variables.

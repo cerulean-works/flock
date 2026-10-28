@@ -181,6 +181,8 @@ export function eventVia(detail: {
 			return detail.key_name ? `with the API key ${detail.key_name}` : 'through the API';
 		case 'org':
 			return 'with its organization';
+		case 'flock':
+			return 'by Flock';
 		case 'purge':
 			return detail.objects === undefined
 				? 'emptied and removed'

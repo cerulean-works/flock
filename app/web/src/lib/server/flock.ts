@@ -64,6 +64,22 @@ export async function flock(path: string, init: RequestInit = {}): Promise<Respo
 	return res;
 }
 
+/**
+ * A call whose refusals the caller passes on as they are, with everything Flock said (a relay
+ * for the browser). Only an unreachable Flock (502) and an ended session are handled here.
+ */
+export async function flockAnswer(path: string, init: RequestInit = {}): Promise<Response> {
+	let res: Response;
+	try {
+		res = await fetch(`${FLOCK_API_URL}${path}`, authorized(init));
+	} catch (cause) {
+		console.error(`flock unreachable at ${FLOCK_API_URL}`, cause);
+		return Response.json({ error: `Flock at ${FLOCK_API_URL} is not reachable` }, { status: 502 });
+	}
+	if (res.status === 401 && !path.startsWith('/api/v1/auth/')) signedOut();
+	return res;
+}
+
 /** Why Flock refused a change, for the form that asked for it. */
 export interface Refusal {
 	error: string;

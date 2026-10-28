@@ -1,4 +1,5 @@
 <script lang="ts">
+	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
 	import HouseIcon from '@lucide/svelte/icons/house';
 	import MenuIcon from '@lucide/svelte/icons/menu';
@@ -12,6 +13,7 @@
 	import WorkspaceSwitcher from '#lib/components/shell/WorkspaceSwitcher.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Sheet from '#lib/components/ui/sheet/index.js';
+	import { datasetsHref } from '#lib/datasets.ts';
 	import { storageHref } from '#lib/storage.ts';
 	import { SIDEBAR_W, saveWidth } from '#lib/widths.ts';
 	import type { LayoutProps } from './$types';
@@ -35,6 +37,7 @@
 	const stay = $derived(
 		!page.route.id?.startsWith('/(app)/[entity]') &&
 			!page.route.id?.startsWith('/(app)/orgs/') &&
+			!page.route.id?.startsWith('/(app)/datasets/') &&
 			!page.route.id?.startsWith('/(app)/storage/')
 	);
 </script>
@@ -88,6 +91,19 @@
 				<HouseIcon />
 			</Button>
 			{#if data.shell.s3 && data.shell.org}
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					class={[
+						'mt-1 text-muted-foreground',
+						page.route.id?.startsWith('/(app)/datasets/') && 'bg-muted text-foreground'
+					]}
+					href={datasetsHref(data.shell.org)}
+					aria-label="Datasets"
+					title="Datasets"
+				>
+					<DatabaseIcon />
+				</Button>
 				<Button
 					variant="ghost"
 					size="icon-sm"

@@ -130,6 +130,7 @@ def test_0002_upgrades_existing_data(postgres, make_flock, tmp_path):
         "0011_s3",
         "0012_reserve_storage",
         "0013_postgres_only",
+        "0014_datasets",
     ]
 
     server = make_flock(database_url=url)  # the backfill rebuilds system metrics' chunks
@@ -212,6 +213,7 @@ def test_0003_creates_projects_from_runs(postgres, make_flock, tmp_path):
         "0011_s3",
         "0012_reserve_storage",
         "0013_postgres_only",
+        "0014_datasets",
     ]
 
     api = make_flock(database_url=url).client()
@@ -260,6 +262,7 @@ def test_0004_creates_orgs_from_entities(postgres, make_flock, tmp_path):
         "0011_s3",
         "0012_reserve_storage",
         "0013_postgres_only",
+        "0014_datasets",
     ]
 
     async def rows() -> list:
@@ -334,6 +337,7 @@ def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(postgres, make_floc
         "0011_s3",
         "0012_reserve_storage",
         "0013_postgres_only",
+        "0014_datasets",
     ]
     # Flock's first files directory (see ``Flocks``) already holds the upload.
     metadata = tmp_path / "flock-files-0" / str(run_pk) / "wandb-metadata.json"
@@ -377,6 +381,7 @@ def test_0008_shows_existing_orgs_by_their_name(postgres, make_flock, tmp_path):
         "0011_s3",
         "0012_reserve_storage",
         "0013_postgres_only",
+        "0014_datasets",
     ]
 
     async def nullable() -> str:
@@ -436,6 +441,7 @@ def test_0009_keeps_the_spend_of_projects_deleted_before_it(postgres, make_flock
         "0011_s3",
         "0012_reserve_storage",
         "0013_postgres_only",
+        "0014_datasets",
     ]
     api = make_flock(database_url=url).client()
     (deleted,) = api.get("/api/v1/orgs/flock/budget/deleted-projects").json()["deleted_projects"]
@@ -473,7 +479,11 @@ def test_0012_refuses_an_org_named_storage(postgres, tmp_path):
     with pytest.raises(asyncpg.RaiseError, match='named "storage"'):
         asyncio.run(Migrations().apply(url))
     asyncio.run(execute("UPDATE orgs SET name = 'storage-team' WHERE name = 'Storage'"))
-    assert asyncio.run(Migrations().apply(url)) == ["0012_reserve_storage", "0013_postgres_only"]
+    assert asyncio.run(Migrations().apply(url)) == [
+        "0012_reserve_storage",
+        "0013_postgres_only",
+        "0014_datasets",
+    ]
 
 
 def test_0013_moves_runs_into_the_run_table_and_series_chunks(postgres, make_flock, tmp_path):
@@ -535,7 +545,7 @@ def test_0013_moves_runs_into_the_run_table_and_series_chunks(postgres, make_flo
             await conn.close()
 
     done, live = asyncio.run(seed())
-    assert asyncio.run(Migrations().apply(url)) == ["0013_postgres_only"]
+    assert asyncio.run(Migrations().apply(url)) == ["0013_postgres_only", "0014_datasets"]
 
     reports = []
 
@@ -615,3 +625,31 @@ def test_0013_moves_runs_into_the_run_table_and_series_chunks(postgres, make_flo
     assert api.runs("p", filter={"config.opt": "adam"}, columns=["config.lr"])["data"] == {
         "config.lr": [None]  # NaN, served as null
     }
+
+
+def test_0014_refuses_an_org_named_datasets(postgres, tmp_path):
+    """The Datasets tab takes `/datasets/`, as Storage took `/storage/` (0012)."""
+    url = postgres.create(migrated=False)
+    before = tmp_path / "before"
+    before.mkdir()
+    for path in Migrations().files()[:13]:
+        shutil.copy(path, before)
+    asyncio.run(Migrations(before).apply(url))
+
+    async def execute(query: str) -> None:
+        conn = await asyncpg.connect(url)
+        try:
+            await conn.execute(query)
+        finally:
+            await conn.close()
+
+    asyncio.run(
+        execute(
+            "INSERT INTO orgs (name, display_name, created_at, updated_at) "
+            "VALUES ('datasets', 'Datasets', now(), now())"
+        )
+    )
+    with pytest.raises(asyncpg.RaiseError, match='named "datasets"'):
+        asyncio.run(Migrations().apply(url))
+    asyncio.run(execute("UPDATE orgs SET name = 'data-team' WHERE name = 'datasets'"))
+    assert asyncio.run(Migrations().apply(url)) == ["0014_datasets"]
