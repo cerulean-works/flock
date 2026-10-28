@@ -43,7 +43,8 @@
 
 	const ws = new Workspace(
 		() => data.meta,
-		() => data.runs
+		() => data.runs,
+		() => data.members
 	);
 	setWorkspace(ws);
 
@@ -237,7 +238,7 @@
 		const { search, filters } = ws.page.query;
 		if (!filters.length) return `No run’s name or id contains “${search}”.`;
 		const kindOf = (key: string) => ws.meta.columns.find((c) => c.key === key)?.kind;
-		const where = describeFilters(filters, kindOf);
+		const where = describeFilters(filters, kindOf, false, ws.people);
 		if (!search) return `No run matches ${where}.`;
 		return `No run matching “${search}” has ${where}.`;
 	});

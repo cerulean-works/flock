@@ -70,6 +70,7 @@ const WIDTHS: Record<ColumnKind, number> = {
 	num: 124,
 	time: 148,
 	duration: 104,
+	user: 160,
 	str: 160,
 	state: 116,
 	bool: 96,
