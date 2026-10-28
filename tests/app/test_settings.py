@@ -68,6 +68,7 @@ def test_compose_configuration(compose, configured):
         timeout=30,
     )
     services = json.loads(result.stdout)["services"]
+    assert "flock-api" in services["api"]["networks"]["default"]["aliases"]
     api_env = services["api"]["environment"]
     settings = Settings.load(environ=api_env)
     # Every API option is configurable; DB and files are provided by the stack/image.
@@ -99,7 +100,7 @@ def test_compose_configuration(compose, configured):
         assert ui["image"] == f"flock-ui:{version}"
         assert ui["build"]["args"] == {"FLOCK_WEB_URL": web_url}
         assert ui["environment"] == {
-            "FLOCK_API_URL": "http://private-api:8080" if configured else "http://api:8080",
+            "FLOCK_API_URL": "http://private-api:8080" if configured else "http://flock-api:8080",
             "FLOCK_API_PUBLIC_URL": settings.api_public_url,
         }
         assert all("ports" not in service for service in services.values())
@@ -125,9 +126,10 @@ def test_compose_s3_proxy_service(compose):
         )
         return json.loads(done.stdout)["services"]
 
-    assert "s3" not in services()
+    assert "flock-s3" not in services()
     profiled = services("--profile", "s3")
-    proxy = profiled["s3"]
+    assert "s3" not in profiled
+    proxy = profiled["flock-s3"]
     assert proxy["command"][:2] == ["uvicorn", "app.api.src.s3_proxy.app:app"]
     s3_settings = {
         f"FLOCK_{field.name.upper()}"

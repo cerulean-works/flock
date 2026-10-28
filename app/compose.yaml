@@ -70,7 +70,8 @@ services:
 
   # The S3 proxy (D61), off unless started with `--profile s3` and the FLOCK_S3_* settings.
   # It keeps no state and takes no lock, so it can run as many replicas as needed.
-  s3:
+  # Use a Flock-specific service name for DNS on shared ingress networks.
+  flock-s3:
     image: flock-api:${FLOCK_VERSION:-latest}
     profiles: [s3]
     command: ["uvicorn", "app.api.src.s3_proxy.app:app", "--host", "0.0.0.0", "--port", "8090"]
