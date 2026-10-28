@@ -19,3 +19,11 @@ The entry points for running evaluations, and the model wrapper they score with.
 [[autodoc]] eval.requests.Request
 
 [[autodoc]] eval.requests.Scores
+
+## Comparing
+
+[[autodoc]] eval.compare.compare
+
+[[autodoc]] eval.compare.Comparison
+
+[[autodoc]] eval.compare.Breach
