@@ -82,6 +82,20 @@ def test_snapshot_filters_runs(api):
     assert api.get("/api/v1/projects/flock/p/workspace", filter="{").status == 400
 
 
+def test_snapshot_has_and_filters_on_run_owners(flock, api):
+    alice = flock.add_user("alice@lab.test")
+    me = api.get("/api/v1/me").json()["id"]
+    api.create_run("p", "mine")
+    alice.api.create_run("p", "hers")
+    snap = api.workspace()
+    kinds = {c["key"]: c["kind"] for c in snap["columns"]}
+    assert kinds["owner"] == "user"
+    assert [r["id"] for r in snap["runs"]] == ["hers", "mine"]
+    assert snap["cells"]["owner"] == [alice.id, me]
+    snap = api.workspace(filter=f'{{"owner": {alice.id}}}')
+    assert [r["id"] for r in snap["runs"]] == ["hers"]
+
+
 def test_snapshot_lists_only_the_metrics_of_its_runs(api):
     # Old runs logged metrics newer ones don't: their pages would chart them empty.
     api.create_run("p", "old", config={"kind": "old"})
