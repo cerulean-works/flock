@@ -1,13 +1,10 @@
 <script lang="ts">
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
-	import Columns3Icon from '@lucide/svelte/icons/columns-3';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
-	import * as Popover from '#lib/components/ui/popover/index.js';
 	import { cellCut, datasetCall, datasetsApi, pageNumbers } from '#lib/datasets.ts';
 	import type { Cell, DatasetInfo, FullCell, RowsPage } from '#lib/types.ts';
 	import { withParam } from '#lib/workspace/url.ts';
@@ -19,9 +16,11 @@
 		path: string;
 		/** The dataset at the version shown: every read asks for that version. */
 		info: DatasetInfo;
+		/** Columns the viewer hid (the Columns picker beside the tabs); they aren't read. */
+		hidden: SvelteSet<string>;
 	}
 
-	let { org, path, info }: Props = $props();
+	let { org, path, info, hidden }: Props = $props();
 
 	// Pages by offset, kept in the URL (D90): 50 rows, or 10 with binary columns.
 	const size = $derived(info.binary ? 10 : 50);
@@ -29,8 +28,6 @@
 		Math.max(0, Math.floor(Number(page.url.searchParams.get('offset')) || 0))
 	);
 
-	/** Columns the viewer hid; they aren't read. */
-	const hidden = new SvelteSet<string>();
 	const names = $derived(info.schema.map((f) => f.name));
 	const shown = $derived(names.filter((n) => !hidden.has(n)));
 
@@ -68,10 +65,12 @@
 		void goto(withParam(page.url, 'offset', to > 0 ? String(to) : null), { reset: false });
 	}
 
-	// Columns with long text or vectors wrap at a readable width; the rest stay on one line.
+	// Columns with long text or vectors wrap and share the width left over; the rest stay on one
+	// line at their own width.
 	const long = (cell: Cell | undefined) =>
 		!!cell && (cell.k === 'vec' || ((cell.k === 'str' || cell.k === 'json') && cell.v.length > 40));
 	const wraps = $derived(rows?.columns.map((_, j) => rows!.rows.some((row) => long(row[j]))) ?? []);
+	const filled = $derived(wraps.some(Boolean));
 
 	const total = $derived(rows?.total ?? info.rows);
 	const last = $derived(Math.min(offset + (rows?.rows.length ?? 0), total));
@@ -126,41 +125,6 @@
 </script>
 
 <div class="bleed grid gap-3">
-	<div class="flex flex-wrap items-center gap-2">
-		<Popover.Root>
-			<Popover.Trigger>
-				{#snippet child({ props })}
-					<Button {...props} variant="outline" size="sm">
-						<Columns3Icon />
-						Columns
-						{#if hidden.size}<span class="text-muted-foreground"
-								>{shown.length} of {names.length}</span
-							>{/if}
-					</Button>
-				{/snippet}
-			</Popover.Trigger>
-			<Popover.Content align="start" class="max-h-96 w-64 gap-1 overflow-y-auto">
-				<div class="flex items-center justify-between pb-1">
-					<p class="text-xs text-muted-foreground">Columns shown</p>
-					{#if hidden.size}
-						<button class="text-xs text-link hover:underline" onclick={() => hidden.clear()}>
-							Show all
-						</button>
-					{/if}
-				</div>
-				{#each names as name (name)}
-					<label class="flex items-center gap-2 py-1 text-[13px]">
-						<Checkbox
-							checked={!hidden.has(name)}
-							onCheckedChange={(on) => (on ? hidden.delete(name) : hidden.add(name))}
-						/>
-						<span class="truncate font-mono text-[12.5px]">{name}</span>
-					</label>
-				{/each}
-			</Popover.Content>
-		</Popover.Root>
-	</div>
-
 	{#if !shown.length}
 		<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">Pick a column to show.</p>
 	{:else if failed}
@@ -173,18 +137,19 @@
 		</p>
 	{:else}
 		<div class={['overflow-x-auto', loading && 'opacity-60']}>
-			<table class="w-max min-w-full border-collapse text-[13px]">
+			<!-- Short columns are pinned to their content (w-px), so the width left over goes to
+			     the columns that wrap, or to a filler when none do. -->
+			<table class="w-full border-collapse text-[13px]">
 				<thead>
 					<tr class="h-9 border-b text-left text-xs text-muted-foreground">
-						<th class="w-14 px-2 font-medium">#</th>
-						{#each rows.columns as column (column.name)}
-							<th class="px-2 font-medium whitespace-nowrap">
+						<th class="w-px px-2 font-medium">#</th>
+						{#each rows.columns as column, j (column.name)}
+							<th class={['px-2 font-medium whitespace-nowrap', !wraps[j] && 'w-px']}>
 								<span class="text-foreground">{column.name}</span>
 								<span class="ml-1 font-mono text-[11px] font-normal">{column.type}</span>
 							</th>
 						{/each}
-						<!-- Takes the width left over, so the columns keep their own widths. -->
-						<th class="w-full"></th>
+						{#if !filled}<th></th>{/if}
 					</tr>
 				</thead>
 				<tbody>
@@ -210,7 +175,7 @@
 							</td>
 							{#each row as cell, j (j)}
 								{@const got = open ? full.get(`${n}:${rows.columns[j].name}`) : undefined}
-								<td class={['px-2 py-1.5', wraps[j] ? 'max-w-96 min-w-64' : 'whitespace-nowrap']}>
+								<td class={['px-2 py-1.5', wraps[j] ? 'min-w-64' : 'w-px whitespace-nowrap']}>
 									<CellView
 										cell={got && !(got instanceof Error) ? got : cell}
 										full={open}
@@ -225,7 +190,7 @@
 									{/if}
 								</td>
 							{/each}
-							<td></td>
+							{#if !filled}<td></td>{/if}
 						</tr>
 					{/each}
 				</tbody>

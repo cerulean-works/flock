@@ -3,6 +3,7 @@
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import PlugIcon from '@lucide/svelte/icons/plug';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -12,6 +13,7 @@
 	import type { DatasetInfo, S3Config } from '#lib/types.ts';
 	import { bytes, dateTime } from '#lib/utils.ts';
 	import { withParam } from '#lib/workspace/url.ts';
+	import ColumnsPicker from './ColumnsPicker.svelte';
 	import DeleteDatasetDialog from './DeleteDatasetDialog.svelte';
 	import ReadmeTab from './ReadmeTab.svelte';
 	import RenameDialog from './RenameDialog.svelte';
@@ -49,6 +51,9 @@
 		TABS.find((t) => t.value === page.url.searchParams.get('tab'))?.value ?? 'readme'
 	);
 	const tab = $derived(tabOverride ?? urlTab);
+
+	/** Columns the viewer hid, kept across versions; ones a version lacks are ignored. */
+	const hidden = new SvelteSet<string>();
 
 	function setTab(t: Tab) {
 		if (t === tab) return;
@@ -174,7 +179,7 @@
 	</p>
 {/if}
 
-<div class="mt-6">
+<div class="mt-6 flex items-center justify-between gap-3">
 	<Tabs.Root value={tab} onValueChange={(v) => setTab(v as Tab)}>
 		<Tabs.List aria-label="Dataset">
 			{#each TABS as t (t.value)}
@@ -182,6 +187,9 @@
 			{/each}
 		</Tabs.List>
 	</Tabs.Root>
+	{#if tab === 'rows' && info}
+		<ColumnsPicker names={info.schema.map((f) => f.name)} {hidden} />
+	{/if}
 </div>
 
 <div class="mt-4">
@@ -193,7 +201,7 @@
 		</p>
 	{:else if tab === 'rows'}
 		{#key info.version}
-			<RowsTab {org} {path} {info} />
+			<RowsTab {org} {path} {info} {hidden} />
 		{/key}
 	{:else if tab === 'schema'}
 		<SchemaTab {info} />
