@@ -2,7 +2,6 @@
 	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
 	import { enhance } from '$app/forms';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import * as Select from '#lib/components/ui/select/index.js';
@@ -43,6 +42,10 @@
 		success: ({ s3Key }) => `Created S3 key “${s3Key.name}”`,
 		done: (data) => (created = data.s3Key)
 	});
+	// Read and write unless the key is made read only.
+	let permissions = $state<'write' | 'read'>('write');
+	const PERMISSIONS = { write: 'Read & write', read: 'Read only' } as const;
+
 	const orgLabel = (name: string) => orgs.find((o) => o.name === name)?.display_name ?? name;
 </script>
 
@@ -117,16 +120,20 @@
 					</Select.Content>
 				</Select.Root>
 			</div>
-		</div>
-		{#if choices.some((c) => c.disabled)}
-			<p class="text-[13px] text-muted-foreground">
-				{choices.find((c) => c.disabled)?.disabled}. An admin can change this on the organization’s
-				page.
-			</p>
-		{/if}
-		<div class="flex items-center gap-2.5">
-			<Checkbox id="s3-key-read-only" name="read_only" />
-			<Label for="s3-key-read-only" class="font-normal">Read-only</Label>
+			<div class="grid gap-2">
+				<Label for="s3-key-permissions">Permissions</Label>
+				{#if permissions === 'read'}<input type="hidden" name="read_only" value="on" />{/if}
+				<Select.Root type="single" bind:value={permissions}>
+					<Select.Trigger id="s3-key-permissions" class="w-36"
+						>{PERMISSIONS[permissions]}</Select.Trigger
+					>
+					<Select.Content>
+						{#each Object.entries(PERMISSIONS) as [value, label] (value)}
+							<Select.Item {value} {label}>{label}</Select.Item>
+						{/each}
+					</Select.Content>
+				</Select.Root>
+			</div>
 		</div>
 		<FormError error={mutation.error} />
 		<div>
