@@ -40,9 +40,8 @@ uv run --no-sync python -m pytest -q tests -n 4
 
 Use `--no-sync` after that installation so `uv run` does not restore the default
 GPU dependency group. To restore the regular development environment, run
-`uv sync --all-packages --locked` again. CI verifies that PyTorch has no CUDA
-runtime, reports the uv cache hit, and uploads JUnit results and setup/call/teardown
-durations as the `pytest-results` artifact, including on test failure.
+`uv sync --all-packages --locked` again. CI uses the locked CPU dependency group
+and runs the full test suite with four workers.
 
 ## Timing and fixture conventions
 
