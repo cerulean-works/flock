@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from app.api.src.api.dashboard import Snapshot
-from app.api.src.core.live import Subscriber
+from app.api.src.core.live import Subscriber, points_message
 from app.api.src.core.metric_defs import parse_metric_defs
 from tests.app.utils import history_rows, system_samples
 
@@ -252,7 +252,7 @@ def test_stream_announces_new_metric_definitions(api, events):
 # ---------------------------------------------------------------------- live stream
 
 
-def test_stream_replays_missed_points_then_streams_new_ones(api, events):
+def test_stream_replays_missed_points_then_streams_new_ones(api, events, flock, monkeypatch):
     api.create_run("p", "r1")
     api.stream("p", "r1", history_rows(3, loss=float))
     lines = api.workspace()["runs"][0]["lines"]
@@ -261,6 +261,19 @@ def test_stream_replays_missed_points_then_streams_new_ones(api, events):
         "p", "r1", history_rows(2, start=3, loss=float), offset=3
     )  # logged after the snapshot
 
+    histories = flock.store.histories
+
+    async def histories_with_overlap(runs, keys=None, stream="history"):
+        result = await histories(runs, keys, stream)
+        # Deliver the write while subscribed but before its replay is sent. This
+        # overlap is part of the SSE contract; slower CI scheduling exposed it.
+        run = runs[0]
+        await flock.store.relay.deliver(
+            points_message(run.project.pk, run.pk, run.name, stream, lines, 5)
+        )
+        return result
+
+    monkeypatch.setattr(flock.store, "histories", histories_with_overlap)
     live = events("p", f"r1:{lines}")
     hello = live.next_of("hello")
     assert hello["runs"] == {"r1": {"state": "running", "lines": 5}}
@@ -271,6 +284,16 @@ def test_stream_replays_missed_points_then_streams_new_ones(api, events):
 
     api.stream("p", "r1", history_rows(1, start=5, loss=float, acc=lambda s: 0.5), offset=5)
     new = live.next_of("history")
+    overlaps = 0
+    while new["lines"] <= replay["lines"]:
+        assert new["run"] == "r1"
+        assert all(
+            row < replay["lines"] for series in new["series"].values() for row in series["rows"]
+        )
+        overlaps += 1
+        new = live.next_of("history")
+    assert overlaps >= 1  # the replay hook always exercises the overlap
+    assert new["run"] == "r1"
     assert new["lines"] == 6
     assert new["series"] == {
         "loss": {"rows": [5], "x": [5], "y": [5.0]},
