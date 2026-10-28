@@ -53,7 +53,15 @@ Keep deployment values in `app/.env` (start with `app/.env.example`), or configu
 |---|---|---|
 | `FLOCK_WEB_URL` | `http://localhost:3000` | Public dashboard origin, such as `https://flock.example.com`, with no path. Compose supplies it to the web image build for redirects and form origin checks, and to the API at runtime for setup, invitation, password reset and Google sign-in links. Rebuild the web image when it changes. |
 | `FLOCK_API_PUBLIC_URL` | `http://localhost:8080` | Public API address that training machines reach. The API uses it for signed file upload URLs; the dashboard shows it in `wandb login --host` instructions. Set the same value for both services. Restart them when it changes. |
-| `FLOCK_API_URL` | `http://api:8080` | Internal API address used only by the web server. Keep the default on the Compose network. Outside Compose it defaults to `http://127.0.0.1:8080`. Browsers and training machines never use this address. |
+| `FLOCK_API_URL` | `http://flock-api:8080` | Internal API address used only by the web server. Keep the default on the Compose network. Outside Compose it defaults to `http://127.0.0.1:8080`. Browsers and training machines never use this address. |
+
+The API has the `flock-api` alias on the stack's default network. The dashboard uses this alias because a generic `api` hostname can resolve to another application's container when a deployment service attaches stacks to a shared ingress network. Keep the dashboard and API on their common default network. Dokploy's domain configuration still targets the Compose service `api` on port 8080.
+
+For an existing deployment, remove any `FLOCK_API_URL=http://api:8080` override or change it to `http://flock-api:8080`. After updating the Compose file and environment, recreate both services so the API gains the alias and the dashboard uses it:
+
+```bash
+docker compose up -d --build --force-recreate api ui
+```
 
 The SDK needs the API's wandb routes, including `/graphql`, `/files/...` and `/storage/...`. The dashboard does not proxy those routes. You can use one public origin only if your reverse proxy sends those routes to the API and dashboard routes to the web service. With two domains, route each domain to its service as shown above.
 
