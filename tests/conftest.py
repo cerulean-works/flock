@@ -54,6 +54,40 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> Callable[[str], Clock]:
     return bind
 
 
+@pytest.fixture
+def notification():
+    """Observe a real bus notification before checking another process's cache."""
+    import asyncio
+    import threading
+    from contextlib import contextmanager
+
+    @contextmanager
+    def watch(bus, loop, channel: str, payload: str):
+        received = threading.Event()
+
+        def notified(value: str) -> None:
+            if value == payload:
+                received.set()
+
+        def on_loop(coro):
+            return asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=10)
+
+        async def listen():
+            bus.listen(channel, notified)
+
+        async def unlisten():
+            bus._channels[channel].remove(notified)
+
+        on_loop(listen())
+        try:
+            yield
+            assert received.wait(10), f"received no {channel} notification for {payload}"
+        finally:
+            on_loop(unlisten())
+
+    return watch
+
+
 @pytest.fixture(scope="session")
 def postgres() -> Iterator[Any]:
     """One PostgreSQL server for every flock the session starts (see ``serve_postgres``)."""
