@@ -42,9 +42,10 @@
 	<AlertDialog.Content class="sm:max-w-md">
 		<AlertDialog.Header>
 			<AlertDialog.Title>Remove the tag {tag}?</AlertDialog.Title>
-			<AlertDialog.Description
-				>Version {version} stays. Only the tag is removed.</AlertDialog.Description
-			>
+			<AlertDialog.Description>
+				Scripts and jobs that load this dataset by {tag} will stop working. Version {version} stays, and
+				only the tag is removed.
+			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<FormError {error} />
 		<AlertDialog.Footer>
