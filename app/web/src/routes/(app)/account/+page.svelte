@@ -86,7 +86,7 @@
 		<table class="mt-4 w-full table-fixed border-collapse text-[13.5px]">
 			<thead>
 				<tr class="h-10 border-b text-left text-xs font-medium text-muted-foreground">
-					<th class="px-2 font-medium">Machine</th>
+					<th class="pr-2 font-medium">Machine</th>
 					<th class="hidden w-40 px-2 font-medium sm:table-cell">Signed in</th>
 					<th class="w-40 px-2 font-medium">Last used</th>
 					<th class="w-12"><span class="sr-only">Revoke</span></th>
@@ -96,7 +96,7 @@
 				{#each data.cliSessions as session (session.id)}
 					{@const name = session.name || 'Unnamed machine'}
 					<tr class="h-12 border-b border-divider">
-						<td class="truncate px-2 font-medium">{name}</td>
+						<td class="truncate pr-2 font-medium">{name}</td>
 						<td class="hidden px-2 text-muted-foreground sm:table-cell">
 							{dateTime(session.created_at)}
 						</td>
@@ -123,7 +123,7 @@
 					</tr>
 				{:else}
 					<tr class="h-12 border-b border-divider">
-						<td colspan="4" class="px-2 text-muted-foreground">
+						<td colspan="4" class="pr-2 text-muted-foreground">
 							None yet. Run <code class="font-mono text-[0.9em]">flock login</code> to sign in from a
 							terminal.
 						</td>
