@@ -41,7 +41,7 @@ uv run flock-eval run \
 
 ## The prompt format
 
-Each [`~eval.tasks.Choice`] of a doc is one request: its `continuation` is scored after the task's `description`, the few-shot examples and its `context`. Each example is its gold choice's context and continuation (or the doc's `example`, below), followed by a blank line. With [`~eval.tasks.cloze`], every choice shares the context `Question: <question>\nAnswer:` and its continuation is `" <choice>"`:
+Each [`~eval.tasks.Choice`] of a doc is one request: its `continuation` is scored after the task's `description`, the few-shot examples and its `context`. Each example is its gold choice's context and continuation (or the doc's `example`, below), followed by a blank line. An example from another split that shows the same text as the scored doc would as an example is left out for that doc, so a dataset that repeats a question and its answer in its few-shot split, in any choice order, never shows a doc its own answer. Written-out `Fewshot.rows` are shown to every doc, and so are examples from the scored split, its own included, unless `Fewshot.num_shots` is set, as OLMES shows its curated examples. With [`~eval.tasks.cloze`], every choice shares the context `Question: <question>\nAnswer:` and its continuation is `" <choice>"`:
 
 ```text
 Question: <few-shot question 1>
@@ -57,6 +57,7 @@ For pointwise mutual information (PMI, `acc_uncond`), each choice is scored a se
 
 A task with another format writes its own choices in `to_doc`:
 - **Other prefixes:** `cloze(goal, answers, question_prefix="Goal: ")`.
+- **Traditional Chinese:** `cloze(question, answers, question_prefix=CHINESE_QUESTION_PREFIX, answer_prefix=CHINESE_ANSWER_PREFIX, separator="")` renders `問題：<question>\n答案：` with each choice right after it, with no space, as TMMLU+ does. Set the task's `unconditional_context` to `CHINESE_ANSWER_PREFIX` too. Chinese text has no spaces between words, so a leading space would split the first character into unusual tokens and count in `acc_per_char`.
 - **A context per choice:** give each `Choice` its own `context` and the same `continuation`, as WinoGrande does.
 - **A gold text only**, such as a math solution: one `Choice` with `gold=0`, and the task built as a [`~eval.tasks.GoldOnlyTask`], which reports `bpb` alone and skips PMI, since an accuracy over one choice is always 1.
 - **Examples that read differently from the scored text:** set the doc's `example`. HumanEval's examples put a space before the solution that the scored doc doesn't have, as OLMES does.
