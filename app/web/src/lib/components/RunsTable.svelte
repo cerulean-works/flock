@@ -22,6 +22,7 @@
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
+	import Avatar from './Avatar.svelte';
 	import RunEye from './RunEye.svelte';
 	import RunMenu from './RunMenu.svelte';
 	import StateBadge from './StateBadge.svelte';
@@ -144,6 +145,12 @@
 	}
 
 	const isNumeric = (col: ColumnDef) => col.kind === 'num' || col.kind === 'duration';
+
+	/** The user id in a `user` cell (a run's owner), or null for none. */
+	function userAt(c: number, r: number): number | null {
+		const v = ws.page.num[shown[c]]?.[r];
+		return v == null || Number.isNaN(v) ? null : v;
+	}
 
 	// ------------------------------------------------------------------------------------------
 	// Sorting: server-side, one request per (sort, order); prefetched on hover intent.
@@ -430,6 +437,18 @@
 					>
 						{#if col.kind === 'state'}
 							<StateBadge state={ws.stateOf(r)} />
+						{:else if col.kind === 'user'}
+							{@const id = userAt(c, r)}
+							{@const person = id == null ? undefined : ws.people.get(id)}
+							{#if person}
+								<Avatar name={person.name} src={person.avatar_url} class="mr-2 size-5 text-[9px]" />
+								<span class="truncate" title={person.email}>{person.name}</span>
+							{:else if id == null}
+								<span class="text-faint">–</span>
+							{:else}
+								<!-- Someone who has left the organization since. -->
+								<span class="truncate text-muted-foreground">user {id}</span>
+							{/if}
 						{:else}
 							{@const text = cellText(c, r)}
 							<span

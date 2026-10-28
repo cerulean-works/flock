@@ -1,15 +1,21 @@
-import { projectUrl } from '#lib/data/cache.ts';
-import type { ProjectInfo } from '#lib/types.ts';
+import { membersUrl, projectUrl } from '#lib/data/cache.ts';
+import type { Member, ProjectInfo } from '#lib/types.ts';
 import type { LayoutLoad } from './$types';
 
-// The project's own record (its description). A layout load, so it runs alongside the page's
-// snapshot rather than after it, and only again when the project changes: paging and sorting
-// re-run the page load alone.
+// The project's own record (its description), and the org's members (who logged its runs). A
+// layout load, so it runs alongside the page's snapshot rather than after it, and only again
+// when the project changes: paging and sorting re-run the page load alone.
 //
-// The workspace works without it, so a failure here isn't an error page: a missing project, or
-// an unreachable flock, is reported by the snapshot. (Flocks older than projects/CRUD don't
-// serve this endpoint at all.)
+// The workspace works without them, so a failure here isn't an error page: a missing project,
+// or an unreachable flock, is reported by the snapshot. (Flocks older than projects/CRUD don't
+// serve the project endpoint at all.)
 export const load: LayoutLoad = async ({ fetch, params }) => {
-	const res = await fetch(projectUrl(params.entity, params.project));
-	return { project: res.ok ? ((await res.json()) as ProjectInfo) : null };
+	const [project, members] = await Promise.all([
+		fetch(projectUrl(params.entity, params.project)),
+		fetch(membersUrl(params.entity))
+	]);
+	return {
+		project: project.ok ? ((await project.json()) as ProjectInfo) : null,
+		members: members.ok ? ((await members.json()) as { members: Member[] }).members : []
+	};
 };
