@@ -63,7 +63,8 @@ def test_spend_accrues_from_heartbeats_and_is_priced(flock, api, run_for):
     alice = flock.add_user("alice@lab.test")
     run_for(alice.api, "p", "r1", 1.0)
     run = detail(api, "p", "r1")
-    assert 1.0 <= run["runtime"] < 3.0
+    # PostgreSQL rounds stored heartbeat timestamps to microsecond precision.
+    assert run["runtime"] == pytest.approx(1.0, rel=0, abs=1e-6)
     assert run["gpu_hours"] == pytest.approx(run["runtime"] * 8 / 3600, rel=1e-3)
     assert run["cost"] == 0  # no price yet
 
