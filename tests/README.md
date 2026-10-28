@@ -13,7 +13,7 @@ be running. No external database or S3 service is needed. Existing
 `FLOCK_TEST_DATABASE_URL` and `FLOCK_TEST_S3_*` overrides still work; only point
 them at services you are authorized to use.
 
-Use `-n 0` for serial debugging or `-n 4` to match CI's worker count. Set
+Use `-n 0` for serial debugging or `-n 6` to match CI's worker count. Set
 `PYTEST_XDIST_AUTO_NUM_WORKERS=2` to lower the automatic local limit. An explicit
 `-n N` overrides automatic detection. Tests sharing `make_module_flock` stay on
 one worker per module; independent tests can run on different workers. New
@@ -35,13 +35,13 @@ exclusive; choose the CPU group explicitly for a test environment:
 
 ```sh
 uv sync --all-packages --no-group gpu --group cpu-tests --locked
-uv run --no-sync python -m pytest -q tests -n 4
+uv run --no-sync python -m pytest -q tests -n 6
 ```
 
 Use `--no-sync` after that installation so `uv run` does not restore the default
 GPU dependency group. To restore the regular development environment, run
 `uv sync --all-packages --locked` again. CI uses the locked CPU dependency group
-and runs the full test suite with four workers.
+and runs the full test suite with six workers.
 
 ## Timing and fixture conventions
 
@@ -91,7 +91,7 @@ A fresh ten-run batch on test commit `fd67953` passed **all 6,490 test execution
 
 | Workers | Full-suite runs | Median wall time | Range |
 | --- | ---: | ---: | ---: |
-| 4 (local default and current CI configuration) | 8 | 54.81 s | 54.08–57.73 s |
+| 4 (local default) | 8 | 54.81 s | 54.08–57.73 s |
 | 2 (comparison) | 2 | 102.67 s | 102.44–102.90 s |
 
 Each run used a fresh pytest process and throwaway services. All 649 selected test
@@ -107,12 +107,14 @@ per-run logs, JUnit XML and summary JSON; the final batch also has the controlle
 precision regression log.
 
 CI receives the parallelism and waiting improvements when these changes are
-merged. It uses four workers on `ubuntu-latest`: Flock is public, so the standard
+merged. It uses six workers on `ubuntu-latest`: Flock is public, so the standard
 runner provides [4 CPUs and 16 GB RAM](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories).
 The local four-worker runtime remains a measurement on macOS, not a hosted CI
 promise. The existing [PR #49 CI job](https://github.com/cerulean-works/flock/actions/runs/40737159565/job/122988684283)
-reported 649 passed in 292.73 seconds. The updated workflow's hosted runtime
-remains unmeasured. Its CPU-only Linux dependency export was checked to contain
+reported 649 passed in 292.73 seconds. An isolated
+[six-worker CI experiment](https://github.com/cerulean-works/flock/actions/runs/40750661588)
+passed all 649 tests in 127.82 seconds (2m30s for the full test job).
+This is one hosted measurement, not a runtime guarantee. The CPU-only Linux dependency export was checked to contain
 PyTorch `2.14.1+cpu` with no CUDA or Triton dependencies; the default GPU dependency
 configuration is preserved.
 
@@ -137,4 +139,4 @@ These results meet the speed target without replacing the HTTP transport.
 The two-worker measurement is local, not a hosted CI benchmark. The Linux CPU
 installation was checked using a frozen dry run with CI's exact uv version
 (0.12.17), and its dependency export contains CPU-only PyTorch without CUDA or
-Triton. Hosted CI timings and cache hits require a workflow run.
+Triton. The hosted CI measurement above was taken separately from these local runs.
