@@ -3,6 +3,9 @@ name: flock-app
 services:
   api:
     image: flock-api:${FLOCK_VERSION:-latest}
+    networks:
+      default:
+        aliases: [flock-api]
     build:
       context: ../..
       dockerfile: app/api/Dockerfile

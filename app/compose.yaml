@@ -8,7 +8,7 @@ services:
       args:
         FLOCK_WEB_URL: ${FLOCK_WEB_URL:-http://localhost:3000}
     environment:
-      FLOCK_API_URL: ${FLOCK_API_URL:-http://api:8080}
+      FLOCK_API_URL: ${FLOCK_API_URL:-http://flock-api:8080}
       FLOCK_API_PUBLIC_URL: ${FLOCK_API_PUBLIC_URL:-http://localhost:8080}
     depends_on:
       api:
@@ -17,6 +17,10 @@ services:
 
   api:
     image: flock-api:${FLOCK_VERSION:-latest}
+    networks:
+      default:
+        # Avoid the generic `api` DNS name on shared ingress networks.
+        aliases: [flock-api]
     build:
       context: ..
       dockerfile: app/api/Dockerfile
