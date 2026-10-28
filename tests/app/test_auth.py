@@ -114,15 +114,14 @@ def test_login_refresh_and_logout(flock):
 
 
 def test_access_tokens_expire_and_must_be_ours(make_flock):
-    # Expiry is whole seconds from a floored issue time, so a 3 s token is valid for at least
-    # 2 s: room for the requests below on a slow runner.
-    server = make_flock(access_token_ttl=3.0)
+    server = make_flock(access_token_ttl=120)
     alice = server.add_user("alice@lab.test")
     tokens = alice.signup
     header, payload, signature = tokens["access_token"].split(".")
     tampered = f"{header}.{payload}.{signature[::-1]}"
     assert server.client(token=tampered).get(ME).status == 401
     claims = jwt.decode(tokens["access_token"], options={"verify_signature": False})
+    assert claims["exp"] - claims["iat"] == 120
     forged = jwt.encode(
         claims | {"exp": time.time() + 3600}, "another secret that is long enough", "HS256"
     )
@@ -130,8 +129,8 @@ def test_access_tokens_expire_and_must_be_ours(make_flock):
 
     api = server.client(token=tokens["access_token"])
     assert api.get(ME).status == 200
-    time.sleep(max(0.0, claims["exp"] - time.time()) + 0.1)
-    assert api.get(ME).status == 401
+    expired = jwt.encode(claims | {"exp": time.time() - 1}, server.store.accounts.secret, "HS256")
+    assert server.client(token=expired).get(ME).status == 401
     refreshed = server.anonymous().post(
         "/api/v1/auth/refresh", {"refresh_token": tokens["refresh_token"]}
     )

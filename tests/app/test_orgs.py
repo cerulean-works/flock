@@ -1,5 +1,3 @@
-import time
-
 from tests.app.utils import history_rows
 
 ORGS = "/api/v1/orgs"
@@ -226,10 +224,12 @@ def test_invites(make_flock):
 
 
 def test_invites_expire(make_flock):
-    server = make_flock(invite_ttl=0.5)
+    server = make_flock(invite_ttl=60)
     token = server.client().post(f"{ORGS}/flock/invites", {"email": "x@lab.test"}).json()["token"]
     assert server.anonymous().get(f"/api/v1/invites/{token}").status == 200
-    time.sleep(1)
+    server.call(
+        server.store.db.execute("UPDATE invites SET expires_at = now() - interval '1 second'")
+    )
     assert server.anonymous().get(f"/api/v1/invites/{token}").status == 404
 
 

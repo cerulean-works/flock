@@ -35,6 +35,11 @@ uv add --package flock-app-api <dependency>
 uv add --package flock-tests <dependency>
 ```
 
+### Running tests
+
+For the full test suite, worker limits, CPU-only CI dependencies, and timing
+reports, see [Running Flock's tests](tests/README.md).
+
 ## Modules
 
 ### Training

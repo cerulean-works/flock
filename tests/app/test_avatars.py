@@ -42,7 +42,10 @@ class FakeGravatar:
                 pass
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.thread = threading.Thread(
+            target=lambda: self.server.serve_forever(poll_interval=0.01), daemon=True
+        )
+        self.thread.start()
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}/avatar/"
 
     def add(self, email: str, image: bytes) -> None:
@@ -54,6 +57,9 @@ def gravatar() -> Iterator[FakeGravatar]:
     fake = FakeGravatar()
     yield fake
     fake.server.shutdown()
+    fake.server.server_close()
+    fake.thread.join(timeout=5)
+    assert not fake.thread.is_alive()
 
 
 def settled(server) -> None:

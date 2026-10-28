@@ -160,7 +160,12 @@ def test_an_import_of_a_killed_replica_is_marked_interrupted_by_the_other(
     assert refused.status == 409  # claimed by the first replica, which still heartbeats
 
     first.kill()
-    second.call(asyncio.sleep(1.5))
+    second.call(
+        second.store.db.execute(
+            "UPDATE org_imports SET heartbeat_at = now() - interval '2 seconds' "
+            "WHERE state = 'running'"
+        )
+    )
     second.call(second.store.flush())  # background work, as every replica does every few seconds
     job = on_second.get("/api/v1/orgs/lab/import").json()
     assert job["state"] == "interrupted"

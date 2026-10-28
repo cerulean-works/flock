@@ -107,15 +107,16 @@ def test_deleting_the_user_ends_cli_sessions(flock):
     assert left == 0
 
 
-def test_cli_sessions_expire_when_idle(make_flock):
+def test_cli_sessions_expire_when_idle(make_flock, clock):
     server = make_flock(cli_session_ttl=1.0)
     alice = server.add_user("alice@lab.test")
     cli = server.client(token=cli_login(server, browser(server, alice)))
-    time.sleep(0.6)
+    wall = clock("app.api.src.core.accounts")
+    wall.advance(0.6)
     assert cli.get(ME).status == 200  # each use extends the session
-    time.sleep(0.6)
+    wall.advance(0.6)
     assert cli.get(ME).status == 200
-    time.sleep(1.1)
+    wall.advance(1.1)
     assert cli.get(ME).status == 401
     assert browser(server, alice).get(SESSIONS).json() == {"sessions": []}  # add_user's too
 
@@ -129,7 +130,7 @@ def test_use_is_written_at_most_once_an_interval(flock, wait_for):
     assert (created["kind"], created["name"], created["last_used_at"]) == ("cli", "laptop", None)
 
     assert cli.get(ME).status == 200
-    time.sleep(0.2)
+    flock.call(flock.store.accounts.flush())
     assert db_session(flock, pk)["last_used_at"] is None  # within the hour
 
     flock.store.accounts.CLI_WRITE_INTERVAL = 0.0

@@ -1,7 +1,6 @@
 """Device sign-in (RFC 8628), the flow behind ``flock login``."""
 
 import re
-import time
 
 from tests.app.utils import cli_login
 
@@ -91,7 +90,9 @@ def test_codes_expire(make_flock):
     alice = server.add_user("alice@lab.test")
     started = start(server)
     assert started["expires_in"] == 0  # rounded
-    time.sleep(0.6)
+    server.call(
+        server.store.db.execute("UPDATE device_grants SET expires_at = now() - interval '1 second'")
+    )
     assert browser(server, alice).get(f"{START}/{started['user_code']}").status == 404
     assert error(poll(server, started)) == "expired_token"
     assert error(server.anonymous().post(TOKEN, {"device_code": "unknown"})) == "expired_token"

@@ -120,7 +120,10 @@ class FakeWandb:
                 pass
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.thread = threading.Thread(
+            target=lambda: self.server.serve_forever(poll_interval=0.01), daemon=True
+        )
+        self.thread.start()
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
 
     def add(self, project: str, *runs: dict[str, Any], created: str = CREATED) -> None:
@@ -190,6 +193,9 @@ def wandb() -> Iterator[FakeWandb]:
     yield fake
     fake.gate.set()
     fake.server.shutdown()
+    fake.server.server_close()
+    fake.thread.join(timeout=5)
+    assert not fake.thread.is_alive()
 
 
 def source(fake: FakeWandb, **fields: Any) -> dict[str, Any]:
@@ -356,8 +362,14 @@ def test_running_imports_can_be_cancelled_or_stopped_by_deleting_the_org(
     assert api.get("/api/v1/orgs/lab/import").json()["state"] == "cancelled"
     assert api.runs("p", entity="lab")["total"] == 0
 
+    previous_history = wandb.queries.count("FlockHistory")
     assert api.post("/api/v1/orgs/lab/import", source(wandb)).status == 202
-    wait_for(lambda: wandb.queries.count("FlockHistory") >= 2)
+    wait_for(
+        lambda: (
+            any(job.current_project == "p" for job in flock.store.imports.jobs.values())
+            and wandb.queries.count("FlockHistory") > previous_history
+        )
+    )
     assert api.delete("/api/v1/orgs/lab").status == 204
     assert api.get("/api/v1/orgs/lab").status == 404
     wait_for(lambda: flock.store.imports.jobs == {})

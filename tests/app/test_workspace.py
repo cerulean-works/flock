@@ -304,14 +304,16 @@ def test_stream_reports_summary_state_and_new_runs(api, events):
     assert created["run"] == "fresh" and created["state"] == "running"
 
 
-def test_crashed_runs_are_announced(make_flock, events):
-    # Long enough that the stream is subscribed before the run goes quiet for that long: a
-    # crash before then would never reach it.
-    server = make_flock(crash_timeout=2.0)
+def test_crashed_runs_are_announced(make_flock, events, clock):
+    # Keep heartbeat age fixed until subscribed: a crash before then would be missed
+    # (PR #49). The real crash watcher still detects and publishes the stale run.
+    wall = clock("app.api.src.core.store")
+    server = make_flock(crash_timeout=0.3)
     api = server.client()
     api.create_run("p", "r1")
     live = events("p", "r1", client=api)
-    live.next_of("hello")
+    assert live.next_of("hello")["runs"]["r1"]["state"] == "running"
+    wall.advance(1)
     assert live.next_of("run")["state"] == "crashed"
     live.close()
     api.close()

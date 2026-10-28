@@ -4,7 +4,6 @@ import os
 import shutil
 import subprocess
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import unquote
 
@@ -295,11 +294,12 @@ def test_bad_credentials_are_refused(env: S3Env):
     assert unsigned.status_code == 403
 
 
-def test_an_expired_key_is_refused(env: S3Env):
+def test_an_expired_key_is_refused(env: S3Env, clock):
+    wall = clock("app.api.src.s3_proxy.app")
     bucket = env.bucket()
     creds = env.key("alice", ttl=1)
     env.s3(creds).put_object(Bucket=bucket, Key="x", Body=b"x")
-    time.sleep(1.2)
+    wall.advance(2)
     with pytest.raises(ClientError) as error:
         env.s3(creds).get_object(Bucket=bucket, Key="x")
     assert code(error.value) == "ExpiredToken"
@@ -390,7 +390,7 @@ def test_last_used_is_recorded_once_a_minute(env: S3Env, wait_for):
     s3.put_object(Bucket=bucket, Key="x", Body=b"x")
     first = wait_for(last_used)
     s3.get_object(Bucket=bucket, Key="x")
-    time.sleep(0.2)
+    env.flock.proxy.flush()
     assert last_used() == first
 
 

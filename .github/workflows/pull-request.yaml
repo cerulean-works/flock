@@ -12,24 +12,27 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       - name: Install uv
+        id: uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           version: "0.12.17"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Setup Python
         run: uv python install
 
       - name: Install Dependencies
-        run: uv sync --all-extras --all-packages --dev --frozen
+        run: uv sync --all-extras --all-packages --dev --no-group gpu --group cpu-tests --frozen
 
       - name: Run ruff's linter
-        run: uv run ruff check .
+        run: uv run --no-sync ruff check .
 
       - name: Run ruff's format checker
-        run: uv run ruff format --check .
+        run: uv run --no-sync ruff format --check .
 
       - name: Run ty
-        run: uv run ty check
+        run: uv run --no-sync ty check
 
   Tests:
     name: Run pytest suite
@@ -39,15 +42,34 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       - name: Install uv
+        id: uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           version: "0.12.17"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Setup Python
         run: uv python install
 
       - name: Install Dependencies
-        run: uv sync --all-extras --all-packages --dev --frozen
+        run: uv sync --all-extras --all-packages --dev --no-group gpu --group cpu-tests --frozen
+
+      - name: Verify CPU test environment
+        run: |
+          uv run --no-sync python -c 'import torch; assert torch.version.cuda is None, torch.__version__'
+          echo "uv cache hit: ${{ steps.uv.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run tests
-        run: uv run python -m pytest -q tests
+        run: |
+          mkdir -p test-results
+          set -o pipefail
+          uv run --no-sync python -m pytest -q tests -n 2 --durations=0 --durations-min=0.01 --junitxml=test-results/pytest.xml 2>&1 | tee test-results/pytest.log
+
+      - name: Save test results and phase durations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results
+          path: test-results/
+          retention-days: 14

@@ -8,14 +8,20 @@ BILLING = "/api/v1/orgs/flock/billing"
 BUDGET = "/api/v1/orgs/flock/budget"
 
 
-def run_for(api, project: str, name: str, seconds: float, metadata: bytes | None = H200x8):
-    """A run that sends heartbeats for about ``seconds`` and then finishes."""
-    api.create_run(project, name)
-    if metadata is not None:
-        api.upload(project, name, "wandb-metadata.json", metadata)
-    api.stream(project, name, [])
-    time.sleep(seconds)
-    api.stream(project, name, [], complete=0)
+@pytest.fixture
+def run_for(clock):
+    wall = clock("app.api.src.core.store")
+
+    def run(api, project: str, name: str, seconds: float, metadata: bytes | None = H200x8):
+        """Accrue elapsed time through real heartbeat requests, without waiting."""
+        api.create_run(project, name)
+        if metadata is not None:
+            api.upload(project, name, "wandb-metadata.json", metadata)
+        api.stream(project, name, [])
+        wall.advance(seconds)
+        api.stream(project, name, [], complete=0)
+
+    return run
 
 
 def detail(api, project: str, name: str) -> dict:
@@ -53,7 +59,7 @@ def test_gpus_are_detected_and_can_be_overridden(flock, api):
     assert data == {"gpu_type": ["H100", "H100"], "gpu_count": [1, 0]}
 
 
-def test_spend_accrues_from_heartbeats_and_is_priced(flock, api):
+def test_spend_accrues_from_heartbeats_and_is_priced(flock, api, run_for):
     alice = flock.add_user("alice@lab.test")
     run_for(alice.api, "p", "r1", 1.0)
     run = detail(api, "p", "r1")
@@ -104,23 +110,24 @@ def test_spend_accrues_from_heartbeats_and_is_priced(flock, api):
     assert api.get(BUDGET).json()["spent"] == 0
 
 
-def test_silences_longer_than_the_crash_timeout_are_not_billed(make_flock):
+def test_silences_longer_than_the_crash_timeout_are_not_billed(make_flock, clock):
+    wall = clock("app.api.src.core.store")
     api = make_flock(crash_timeout=0.5).client()
     api.create_run("p", "r1")
     api.stream("p", "r1", [])
-    time.sleep(1.0)  # e.g. preempted, then resumed
+    wall.advance(1.0)  # e.g. preempted, then resumed
     api.stream("p", "r1", [])
     assert detail(api, "p", "r1")["runtime"] < 0.5
 
 
-def test_runs_without_gpu_info_are_reported(api):
+def test_runs_without_gpu_info_are_reported(api, run_for):
     run_for(api, "p", "r1", 0.2, metadata=None)
     budget = api.get(BUDGET).json()
     assert budget["unknown_gpu"] == {"runs": 1, "hours": 0.0}  # a fraction of a second
     assert budget["top_runs"] == []  # no GPU hours, nothing to rank
 
 
-def test_top_runs_and_the_project_breakdown(api):
+def test_top_runs_and_the_project_breakdown(api, run_for):
     api.patch(BILLING, {"rates": {"H200": 60}})
     for i in range(6):
         run_for(api, "p" if i % 2 else "q", f"r{i}", 0.05 * (i + 1))
@@ -131,7 +138,7 @@ def test_top_runs_and_the_project_breakdown(api):
     assert sum(p["cost"] for p in budget["projects"]) == pytest.approx(budget["spent"], abs=0.02)
 
 
-def test_spend_survives_moves_deletes_and_restarts(make_flock):
+def test_spend_survives_moves_deletes_and_restarts(make_flock, run_for):
     server = make_flock()
     api = server.client()
     api.patch(BILLING, {"rates": {"H200": 3600}, "monthly_budget": 1000})
@@ -181,7 +188,7 @@ def dismissal(warning: dict) -> str:
     return f"{WARNINGS}/{warning['id']}/dismissal"
 
 
-def test_runs_without_gpu_time_count_for_nothing(api):
+def test_runs_without_gpu_time_count_for_nothing(api, run_for):
     cpu = json.dumps({"cpu_count": 4}).encode()
     run_for(api, "p", "gpu", 0.2)
     run_for(api, "p", "cpu", 0.2, metadata=cpu)
@@ -199,7 +206,7 @@ def test_runs_without_gpu_time_count_for_nothing(api):
     assert api.get(BUDGET).json()["unknown_gpu"] == {"runs": 0, "hours": 0}
 
 
-def test_warnings_can_be_dismissed_until_they_change(make_flock):
+def test_warnings_can_be_dismissed_until_they_change(make_flock, run_for):
     server = make_flock()
     api = server.client()
     alice = server.add_user("alice@lab.test")
@@ -262,7 +269,7 @@ def test_warnings_can_be_dismissed_until_they_change(make_flock):
     )
 
 
-def test_budget_carries_no_warnings_and_members_no_gpu_details(flock, api):
+def test_budget_carries_no_warnings_and_members_no_gpu_details(flock, api, run_for):
     alice = flock.add_user("alice@lab.test")
     flock.store.budgets.WARN_HOURS = 0
     run_for(api, "p", "r1", 0.1, metadata=None)
@@ -274,7 +281,7 @@ def test_budget_carries_no_warnings_and_members_no_gpu_details(flock, api):
     assert member == {k: v for k, v in admin.items() if k not in ("unpriced", "unknown_gpu")}
 
 
-def test_admins_can_exclude_the_spend_of_deleted_projects(make_flock):
+def test_admins_can_exclude_the_spend_of_deleted_projects(make_flock, run_for):
     server = make_flock()
     api = server.client()
     alice = server.add_user("alice@lab.test")
