@@ -53,7 +53,7 @@ def compare(banked: Path, new: Path) -> Comparison:
     """
     Compares two `results.json` files task by task and suite by suite, requiring every score to stay within its tolerance.
 
-    Each task in both files is compared on `num_docs` and every entry of `metrics` and `truncation`, and each suite in both on `members` and `score`. Timing is not compared. An accuracy may move by `FLIPPED_DOCS` docs out of `num_docs`, any other metric by `RELATIVE_TOLERANCE` of its banked value, and a suite's score by the mean of its members' tolerances. Counts and `members` must be equal.
+    Each task in both files is compared on `num_docs` and every entry of `metrics` and `truncation`, and each suite in both on `members` and `score`. Timing is not compared. An accuracy may move by `FLIPPED_DOCS` docs out of `num_docs`, any other metric by `RELATIVE_TOLERANCE` of its banked value, and a suite's score by its members' tolerances combined as independent errors. Counts and `members` must be equal.
 
     Raises:
         `ValueError`: if the runs are different instruments (another model, `dtype`, `batch_tokens`, `max_length` or `attention`, a common task with another `task_hash` or `limit`, or a common suite with another `metric`), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
@@ -135,9 +135,11 @@ def compare(banked: Path, new: Path) -> Comparison:
     breaches = []
     for name, field, x, y, tolerance in values:
         if _number(x) and _number(y):
-            # NaN never equals itself, but a NaN that repeats is reproduced, not a breach. A NaN
-            # on one side fails the comparison, so it is a breach.
-            moved = not (math.isnan(x) and math.isnan(y)) and not abs(x - y) <= tolerance
+            # NaN never equals itself, but a NaN that repeats is reproduced, not a breach. Only
+            # finite values move within a tolerance: an infinity must repeat exactly.
+            reproduced = x == y or (math.isnan(x) and math.isnan(y))
+            within = math.isfinite(x) and math.isfinite(y) and abs(x - y) <= tolerance
+            moved = not (reproduced or within)
         else:
             moved = x != y
         if moved:
@@ -159,13 +161,14 @@ def _tolerance(metric: str, banked: Any, num_docs: int) -> float:
     """Returns how far a task's `metric` may move from its `banked` value (013.D1)."""
     if scale(metric) == "accuracy":
         # An accuracy moves in steps of one doc, so half a step of slack keeps rounding in the
-        # difference from turning the last allowed flip into a breach.
-        return (FLIPPED_DOCS + 0.5) / num_docs
+        # difference from turning the last allowed flip into a breach. With no docs there is
+        # no accuracy to move.
+        return (FLIPPED_DOCS + 0.5) / num_docs if num_docs else 0
     return RELATIVE_TOLERANCE * abs(banked) if _number(banked) else 0
 
 
 def _suite_tolerance(name: str, tasks: dict[str, Any], suites: dict[str, Any]) -> float:
-    """Returns the mean of the tolerances of a scored suite's members in the bank, since its score is their mean."""
+    """Returns a scored suite's tolerance: its score is the mean of its members' scores, so their tolerances combine as independent errors, the root of their sum of squares over their count."""
     suite = suites[name]
     tolerances = []
     for member in suite["members"]:
@@ -177,4 +180,4 @@ def _suite_tolerance(name: str, tasks: dict[str, Any], suites: dict[str, Any]) -
             )
         else:
             tolerances.append(_suite_tolerance(member, tasks, suites))
-    return sum(tolerances) / len(tolerances)
+    return math.sqrt(sum(tolerance**2 for tolerance in tolerances)) / len(tolerances)

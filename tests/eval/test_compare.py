@@ -101,10 +101,10 @@ def test_an_accuracy_may_move_by_two_docs_and_bpb_by_a_relative_1e_4(write):
     ]
 
 
-def test_a_suite_may_move_by_the_mean_of_its_members_tolerances(write):
-    # 2.5 docs (2 flips and half a step of slack) of 2000 and of 1000: 0.00125 and 0.0025, so
-    # 0.001875 for the suite and for a suite holding it. Each member is read under its primary
-    # metric.
+def test_a_suite_may_move_by_its_members_tolerances_combined_as_independent_errors(write):
+    # 2.5 docs (2 flips and half a step of slack) of 2000 and of 1000 are 0.00125 and 0.0025,
+    # so sqrt(0.00125**2 + 0.0025**2) / 2 = 0.0013975 for the suite, and the same for a suite
+    # holding it alone. Each member is read under its primary metric.
     arc = dataclasses.replace(ARC, num_docs=2000)
     piqa = dataclasses.replace(PIQA, num_docs=1000)
     outer = SuiteResult("toy", ["toy:rc"], None, 0.675)
@@ -114,8 +114,34 @@ def test_a_suite_may_move_by_the_mean_of_its_members_tolerances(write):
         suites = [dataclasses.replace(SUITE, score=score), dataclasses.replace(outer, score=score)]
         return write(f"new-{score}", Results(PROVENANCE, [arc, piqa], suites))
 
-    assert compare(bank, rerun(0.6768)).breaches == []
-    assert [breach.name for breach in compare(bank, rerun(0.6770)).breaches] == ["toy:rc", "toy"]
+    assert compare(bank, rerun(0.6763)).breaches == []
+    assert [breach.name for breach in compare(bank, rerun(0.6765)).breaches] == ["toy:rc", "toy"]
+
+
+def test_a_bpb_suite_may_move_by_a_relative_1e_4_over_root_members(write):
+    # Two members with bpb 1.0 and a mean of 1.0: sqrt(2) * 1e-4 / 2, about 0.707e-4.
+    arc = dataclasses.replace(ARC, metrics={"bpb": 1.0}, primary_metric="bpb")
+    piqa = dataclasses.replace(PIQA, metrics={"bpb": 1.0}, primary_metric="bpb")
+    suite = SuiteResult("toy:bpb", ["arc_easy", "piqa"], "bpb", 1.0)
+    bank = write("bank", Results(PROVENANCE, [arc, piqa], [suite]))
+
+    def rerun(score):
+        moved = dataclasses.replace(suite, score=score)
+        return write(f"new-{score}", Results(PROVENANCE, [arc, piqa], [moved]))
+
+    assert compare(bank, rerun(1.00007)).breaches == []
+    assert compare(bank, rerun(1.00008)).breaches == [Breach("toy:bpb", "score", 1.0, 1.00008)]
+
+
+def test_an_infinity_must_repeat_exactly(write):
+    inf = dataclasses.replace(ARC, metrics={"acc_per_char": 0.75, "bpb": float("inf")})
+    bank = write("bank", dataclasses.replace(BANK, tasks=[inf, PIQA]))
+    finite = dataclasses.replace(ARC, metrics={"acc_per_char": 0.75, "bpb": 1.0})
+
+    assert compare(bank, bank).breaches == []
+    assert compare(
+        bank, write("new", dataclasses.replace(BANK, tasks=[finite, PIQA]))
+    ).breaches == [Breach("arc_easy", "metrics.bpb", float("inf"), 1.0)]
 
 
 @pytest.mark.parametrize(

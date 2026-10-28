@@ -42,12 +42,12 @@ For each task in both files, `compare` checks `num_docs` and every entry of `met
 
 | Value | May move by |
 |---|---|
-| An accuracy (`acc_*`) | 2 docs flipping: 2 divided by the task's `num_docs`, plus half a doc for rounding |
+| An accuracy (`acc_*`) | A net change of 2 docs: 2 divided by the task's `num_docs`, plus half a doc for rounding |
 | Any other metric, such as `bpb` | 1e-4 of its banked value |
-| A suite's `score` | The mean of its members' tolerances, since the score is their mean |
+| A suite's `score` | Its members' tolerances combined as independent errors: the root of their sum of squares, divided by the number of members |
 | `num_docs`, truncation counts, `members` | Nothing: they must be equal |
 
-These values are a reasoned estimate, not a measurement. A real regression, such as a tokenization or truncation bug, flips far more than 2 docs and moves `bpb` by much more than 1e-4. Run-to-run drift on another stack should stay well inside both. They live in `flock/eval/compare.py` as `FLIPPED_DOCS` and `RELATIVE_TOLERANCE`. A suite of many small tasks gets a looser bound than its tasks' sizes suggest: each MMLU subject has about 100 docs, so the `mmlu` score may move by about 0.012.
+These values are a reasoned estimate, not a measurement. A real regression, such as a tokenization or truncation bug, moves an accuracy by far more than 2 docs and `bpb` by much more than 1e-4. Run-to-run drift on another stack should stay well inside both. They live in `flock/eval/compare.py` as `FLIPPED_DOCS` and `RELATIVE_TOLERANCE`. A suite is held tighter than its members, because their drifts are independent and partly cancel: the `mmlu` score, over 57 subjects of about 100 docs each, may move by about 0.002.
 
 A task or suite in one file only is listed and is not a breach. So you can compare a rerun of a few tasks (without `--limit`) against the full bank. A task added to `base_easy` after the bank was written shows as only in the new run, and each suite that holds it is a breach on `members` and `score` until the bank is refreshed.
 
