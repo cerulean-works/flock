@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
 	import HouseIcon from '@lucide/svelte/icons/house';
@@ -14,6 +15,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Sheet from '#lib/components/ui/sheet/index.js';
 	import { datasetsHref } from '#lib/datasets.ts';
+	import { entityHref } from '#lib/workspace/url.ts';
 	import { storageHref } from '#lib/storage.ts';
 	import { SIDEBAR_W, saveWidth } from '#lib/widths.ts';
 	import type { LayoutProps } from './$types';
@@ -83,13 +85,31 @@
 			<Button
 				variant="ghost"
 				size="icon-sm"
-				class="mt-3 text-muted-foreground"
+				class={[
+					'mt-3 text-muted-foreground',
+					page.route.id === '/(app)' && 'bg-muted text-foreground'
+				]}
 				href={resolve('/(app)')}
 				aria-label="Home"
 				title="Home"
 			>
 				<HouseIcon />
 			</Button>
+			{#if data.shell.org}
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					class={[
+						'mt-1 text-muted-foreground',
+						page.route.id === '/(app)/[entity]' && 'bg-muted text-foreground'
+					]}
+					href={entityHref(data.shell.org)}
+					aria-label="Runs"
+					title="Runs"
+				>
+					<ActivityIcon />
+				</Button>
+			{/if}
 			{#if data.shell.s3 && data.shell.org}
 				<Button
 					variant="ghost"

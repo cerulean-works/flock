@@ -84,34 +84,40 @@
 	</div>
 
 	<nav class="min-h-0 flex-1 overflow-y-auto px-2 py-3" aria-label="Main">
-		<a class={ITEM} href={resolve('/(app)')} aria-current={route === '/(app)' ? 'page' : undefined}>
-			<HouseIcon /> Home
-		</a>
-		{#if org}
+		<div class="grid gap-0.5">
 			<a
 				class={ITEM}
-				href={entityHref(org)}
-				aria-current={route === '/(app)/[entity]' ? 'page' : undefined}
+				href={resolve('/(app)')}
+				aria-current={route === '/(app)' ? 'page' : undefined}
 			>
-				<ActivityIcon /> Runs
+				<HouseIcon /> Home
 			</a>
-			{#if s3}
+			{#if org}
 				<a
 					class={ITEM}
-					href={datasetsHref(org)}
-					aria-current={route?.startsWith('/(app)/datasets/') ? 'page' : undefined}
+					href={entityHref(org)}
+					aria-current={route === '/(app)/[entity]' ? 'page' : undefined}
 				>
-					<DatabaseIcon /> Datasets
+					<ActivityIcon /> Runs
 				</a>
-				<a
-					class={ITEM}
-					href={storageHref(org)}
-					aria-current={route?.startsWith('/(app)/storage/') ? 'page' : undefined}
-				>
-					<HardDriveIcon /> Storage
-				</a>
+				{#if s3}
+					<a
+						class={ITEM}
+						href={datasetsHref(org)}
+						aria-current={route?.startsWith('/(app)/datasets/') ? 'page' : undefined}
+					>
+						<DatabaseIcon /> Datasets
+					</a>
+					<a
+						class={ITEM}
+						href={storageHref(org)}
+						aria-current={route?.startsWith('/(app)/storage/') ? 'page' : undefined}
+					>
+						<HardDriveIcon /> Storage
+					</a>
+				{/if}
 			{/if}
-		{/if}
+		</div>
 
 		{#if org}
 			<div class="mx-2 mt-4 border-t border-divider pt-3">
@@ -159,7 +165,7 @@
 					}}
 				/>
 			{/if}
-			<ul class="mt-2">
+			<ul class="mt-2 grid gap-0.5">
 				{#each shown as p (p.name)}
 					{@const here = page.params.project === p.name}
 					<!-- The project's menu shows over the row's end while it's hovered, focused or
