@@ -57,7 +57,7 @@ For pointwise mutual information (PMI, `acc_uncond`), each choice is scored a se
 
 A task with another format writes its own choices in `to_doc`:
 - **Other prefixes:** `cloze(goal, answers, question_prefix="Goal: ")`.
-- **Traditional Chinese:** `cloze(question, answers, question_prefix=CHINESE_QUESTION_PREFIX, answer_prefix=CHINESE_ANSWER_PREFIX, separator="")` renders `問題：<question>\n答案：` with each choice right after it, with no space, as TMMLU+ does. Set the task's `unconditional_context` to `CHINESE_ANSWER_PREFIX` too. Chinese text has no spaces between words, so a leading space would split the first character into unusual tokens and count in `acc_per_char`.
+- **Traditional Chinese:** `cloze(question, answers, question_prefix=CHINESE_QUESTION_PREFIX, answer_prefix=CHINESE_ANSWER_PREFIX, separator="")` renders `問題：<question>\n答案：` with each choice right after it, with no space, as TMMLU+ does. Set the task's `unconditional_context` to `CHINESE_ANSWER_PREFIX` too, unless it is a [`~eval.tasks.GoldOnlyTask`], which has none (as DRCD's `drcd_bpb`). Chinese text has no spaces between words, so a leading space would split the first character into unusual tokens and count in `acc_per_char`.
 - **A context per choice:** give each `Choice` its own `context` and the same `continuation`, as WinoGrande does.
 - **A gold text only**, such as a math solution: one `Choice` with `gold=0`, and the task built as a [`~eval.tasks.GoldOnlyTask`], which reports `bpb` alone and skips PMI, since an accuracy over one choice is always 1.
 - **Examples that read differently from the scored text:** set the doc's `example`. HumanEval's examples put a space before the solution that the scored doc doesn't have, as OLMES does.
