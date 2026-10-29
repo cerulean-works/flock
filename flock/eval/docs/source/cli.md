@@ -4,7 +4,7 @@
 
 ## `flock-eval run`
 
-Scores one model on tasks and suites, writes the results, and prints a summary: one line per suite with its score, its metric (`primary` for each member's primary metric) and member count, each suite before its members and the suites you asked for first, then one line per task with its primary metric and doc count. `--verbose` prints every metric of every task and each suite's members instead. `results.json` holds all of it either way.
+Scores one model on tasks and suites, writes the results, and prints a summary: one line per suite with its score, its metric (`primary` for each member's primary metric) and member count, each suite before its members, starting from the suites no other suite holds in the order you gave them, then one line per task with its primary metric and doc count. `--verbose` prints every metric of every task and each suite's members instead. `results.json` holds all of it either way.
 
 ```bash
 uv run flock-eval run \
