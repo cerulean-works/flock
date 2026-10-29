@@ -7,7 +7,7 @@ import torch
 from flock.eval.requests import Scores
 from flock.eval.run import score_task
 from flock.eval.tasks import SUITES, TASKS, Choice, Dataset, Fewshot
-from flock.eval.tasks.tw_mock_exams import SUBJECTS, TW_MOCK_EXAMS, tw_mock_exams_doc
+from flock.eval.tasks.tw_mock_exams import SUBJECTS, TW_MOCK_EXAMS, chinese_doc, english_doc
 
 
 def row(id: str, stem: str, options: list[str], answer: str, **fields) -> dict:
@@ -41,6 +41,8 @@ TEST = [
     row("x2", "下列何者是錯別字？", ["再", "在"], "A", char_sensitive=True),
     row("x3", "如圖所示，何者正確？", ["甲", "乙"], "A", figure_ref=True),
     row("x4", "承上題，何者正確？", ["甲", "乙"], "A", follow_up=True),
+    row("x6", "What does the man mean?", ["Yes", "No"], "A", listening=True),
+    row("x7", "(21)", ["with", "by"], "A", cloze=True),
     row("x5", "下列哪一種農業活動？", ["", ""], "B"),
     # Repeats example s1 with its choices reordered, so it mustn't be shown s1.
     row("t3", "臺灣最高的山是哪一座？", ["玉山", "雪山"], "A"),
@@ -60,11 +62,22 @@ def history():
 def test_only_eligible_rows_are_scored_whatever_their_rights(history):
     docs, shots = history.load()
 
-    # Multi-answer, character-sensitive, figure, follow-up and empty-option rows are dropped.
+    # Multi-answer, character-sensitive, figure, follow-up, listening, cloze and empty-option
+    # rows are dropped.
     assert [doc.id for doc in docs] == ["t1", "t2", "t3"]
     assert [shot.id for shot in shots] == ["s1", "s2"]
     # The filter applies before the limit.
     assert [doc.id for doc in history.load(limit=3)[0]] == ["t1", "t2", "t3"]
+
+
+def test_an_answer_that_is_not_exactly_one_label_names_the_doc():
+    # As one English item's labels read A, B, C, B: the unique answer still finds its option.
+    repeated = row("r1", "Pick one.", ["a", "b", "c", "d"], "C")
+    repeated["options"][3]["label"] = "B"
+    assert english_doc(repeated).gold == 2
+
+    with pytest.raises(ValueError, match=r"doc r1: answer 'B' among labels"):
+        english_doc({**repeated, "answer": "B"})
 
 
 def test_chinese_request_is_header_then_shots_then_stripped_question(history):
@@ -83,7 +96,7 @@ def test_chinese_request_is_header_then_shots_then_stripped_question(history):
 
 
 def test_a_grouped_item_puts_its_passage_before_the_question():
-    doc = tw_mock_exams_doc(TEST[1])
+    doc = chinese_doc(TEST[1])
 
     assert doc.choices[1] == Choice("康熙皇帝在位六十一年。\n問題：這是哪一個朝代？\n答案：", "明")
     assert doc.gold == 1
@@ -96,7 +109,7 @@ def test_english_takes_olmes_format_with_a_spaced_answer():
     )  # fmt: skip
     task = TASKS["tw_mock_exams_english"]
 
-    assert tw_mock_exams_doc(english).choices == (
+    assert english_doc(english).choices == (
         Choice("Rivers shape the land.\nQuestion: What is the main idea?\nAnswer:", " Trees"),
         Choice("Rivers shape the land.\nQuestion: What is the main idea?\nAnswer:", " Rivers"),
     )
@@ -129,7 +142,7 @@ def test_lengths_count_characters_and_utf8_bytes(history):
     assert layout.num_bytes[0, 0].item() == 8
 
     english = TASKS["tw_mock_exams_english"]
-    doc = tw_mock_exams_doc(row("e1", "Pick one.", ["tea", "茶"], "A", doc_subject="英文"))
+    doc = english_doc(row("e1", "Pick one.", ["tea", "茶"], "A", doc_subject="英文"))
     layout = english.requests([doc], []).choice_scores(uniform_scores(4))
 
     # " tea" counts its leading space; " 茶" is a space and one 3-byte character.

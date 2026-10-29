@@ -372,7 +372,7 @@ class MultipleChoiceTask:
         metrics (`tuple[str, ...]`, *optional*):
             The metrics the task reports, from [`~eval.metrics.multiple_choice`]'s names. Every metric the task computes if not set, which leaves out `acc_uncond` when PMI is skipped. A task scored only on its gold text reports `("bpb",)`, since an accuracy over one choice is always 1.
         keep (`Callable[[dict], bool]`, *optional*):
-            Which rows of the scored split are scored, applied before `limit` and `to_doc`, as lm-evaluation-harness's `process_docs` (`lm_eval/api/task.py`, v0.4.3). Every row if not set. Few-shot examples aren't filtered. Like `to_doc`, it isn't in the task hash, but the docs it keeps are.
+            Which rows of the scored split are scored, applied before `limit` and `to_doc`, as lm-evaluation-harness's `process_docs` (`lm_eval/api/task.py`, v0.4.3). Every row if not set. Unlike `process_docs`, it doesn't filter the few-shot split: examples are picked by id, so a task lists only rows it wants shown. Like `to_doc`, it isn't in the task hash, but the docs it keeps are.
 
     Raises:
         `ValueError`: if `metrics` is empty or names a metric the task doesn't compute, `primary_metric` isn't reported, a written-out example lacks the `"index"` a `row_index` dataset reads, or `fewshot.num_shots` is set on examples from a split other than the scored one.

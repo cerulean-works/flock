@@ -24,7 +24,7 @@ class Subject:
         name (`str`):
             The dataset config, which names the task `tw_mock_exams_<name>`.
         chinese_name (`str`):
-            The subject in the task's header.
+            The subject in the Chinese header. 英文 takes MMLU's English header instead.
         shots (`tuple[str, ...]`):
             The ids of the subject's 5 `dev` rows, its few-shot examples: its shortest self-contained items, 009.D4 in the stage file.
     """
@@ -45,23 +45,29 @@ def scored(row: dict[str, Any]) -> bool:
         or row["follow_up"]
     )
     # One item's options were pictures, which the transcription left empty.
-    return row["type"] == "單選" and not flagged and all(o["text"].strip() for o in row["options"])
+    return (
+        row["type"] == "單選"
+        and not flagged
+        and all(option["text"].strip() for option in row["options"])
+    )
 
 
-def tw_mock_exams_doc(row: dict[str, Any]) -> MCDoc:
-    """A row as a cloze doc, identified by its item hash: 005.D1's Chinese format, or OLMES's English one for 英文, with a grouped item's passage on the line before the question as in OLMES's BoolQ (`oe_eval/tasks/oe_eval_tasks/boolq.py`)."""
-    if row["doc_subject"] == "英文":
-        question_prefix, answer_prefix, separator = "Question: ", "Answer:", " "
-    else:
-        question_prefix, answer_prefix, separator = (
-            CHINESE_QUESTION_PREFIX,
-            CHINESE_ANSWER_PREFIX,
-            "",
-        )
+def exam_doc(
+    row: dict[str, Any], *, question_prefix: str, answer_prefix: str, separator: str
+) -> MCDoc:
+    """
+    A row as a cloze doc, identified by its item hash, with a grouped item's passage on the line before the question as in OLMES's BoolQ (`oe_eval/tasks/oe_eval_tasks/boolq.py`).
+
+    Raises:
+        `ValueError`: naming the doc, if its answer isn't exactly one option's label.
+    """
     passage = row["passage"].strip()
     if passage:
         question_prefix = f"{passage}\n{question_prefix}"
+    # A transcription can repeat a label (one English item reads A, B, C, B) or miss the answer's.
     labels = [option["label"] for option in row["options"]]
+    if labels.count(row["answer"]) != 1:
+        raise ValueError(f"doc {row['hash']}: answer {row['answer']!r} among labels {labels}")
 
     return MCDoc(
         id=row["hash"],
@@ -76,16 +82,32 @@ def tw_mock_exams_doc(row: dict[str, Any]) -> MCDoc:
     )
 
 
+def chinese_doc(row: dict[str, Any]) -> MCDoc:
+    """A row in 005.D1's Chinese format: `問題：` and `答案：`, no space before the answer."""
+    return exam_doc(
+        row,
+        question_prefix=CHINESE_QUESTION_PREFIX,
+        answer_prefix=CHINESE_ANSWER_PREFIX,
+        separator="",
+    )
+
+
+def english_doc(row: dict[str, Any]) -> MCDoc:
+    """A row in OLMES's English format: `Question: ` and `Answer:`, a space before the answer."""
+    return exam_doc(row, question_prefix="Question: ", answer_prefix="Answer:", separator=" ")
+
+
 def subject_task(subject: Subject) -> MultipleChoiceTask:
     """The subject's task: a header, the subject's 5 examples, then the test question. 英文 takes OLMES's MMLU header and PMI context, the others TMMLU+'s (009.D3)."""
+    # The one place the format is chosen: the header, the prefixes and the PMI context together.
     if subject.name == "english":
         description = (
             "The following are multiple choice questions (with answers) about English.\n\n"
         )
-        unconditional_context = "Answer:"
+        to_doc, unconditional_context = english_doc, "Answer:"
     else:
         description = f"以下是關於{subject.chinese_name}考試單選題，請選出正確的答案。\n\n"
-        unconditional_context = CHINESE_ANSWER_PREFIX
+        to_doc, unconditional_context = chinese_doc, CHINESE_ANSWER_PREFIX
 
     return MultipleChoiceTask(
         name=f"tw_mock_exams_{subject.name}",
@@ -96,7 +118,7 @@ def subject_task(subject: Subject) -> MultipleChoiceTask:
             subset=subject.name,
             split="test",
         ),
-        to_doc=tw_mock_exams_doc,
+        to_doc=to_doc,
         # As TMMLU+ and OLMES's MMLU.
         primary_metric="acc_per_char",
         fewshot=Fewshot(split="dev", ids=subject.shots),

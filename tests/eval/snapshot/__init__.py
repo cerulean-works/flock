@@ -33,7 +33,8 @@ def definitions(
         # says how to pin it.
         for field in ("to_doc", "keep"):
             function = getattr(task, field)
-            if function is None:
+            # `keep` is optional, `to_doc` isn't.
+            if field == "keep" and function is None:
                 continue
             if not isinstance(function, FunctionType) or "<" in function.__qualname__:
                 raise TypeError(

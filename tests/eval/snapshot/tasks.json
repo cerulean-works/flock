@@ -5377,7 +5377,7 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
-      "to_doc": "flock.eval.tasks.tw_mock_exams.tw_mock_exams_doc",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
     },
@@ -5405,7 +5405,7 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
-      "to_doc": "flock.eval.tasks.tw_mock_exams.tw_mock_exams_doc",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
     },
@@ -5433,7 +5433,7 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
-      "to_doc": "flock.eval.tasks.tw_mock_exams.tw_mock_exams_doc",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
     },
@@ -5461,7 +5461,7 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
-      "to_doc": "flock.eval.tasks.tw_mock_exams.tw_mock_exams_doc",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
     },
@@ -5489,7 +5489,7 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
-      "to_doc": "flock.eval.tasks.tw_mock_exams.tw_mock_exams_doc",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.english_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
     },
@@ -5517,7 +5517,7 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
-      "to_doc": "flock.eval.tasks.tw_mock_exams.tw_mock_exams_doc",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
     },
@@ -5545,7 +5545,7 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
-      "to_doc": "flock.eval.tasks.tw_mock_exams.tw_mock_exams_doc",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
     },
@@ -5573,7 +5573,7 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
-      "to_doc": "flock.eval.tasks.tw_mock_exams.tw_mock_exams_doc",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
     },
@@ -5601,7 +5601,7 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
-      "to_doc": "flock.eval.tasks.tw_mock_exams.tw_mock_exams_doc",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
     },
@@ -5629,7 +5629,7 @@
       "keep": "flock.eval.tasks.tw_mock_exams.scored",
       "metrics": null,
       "primary_metric": "acc_per_char",
-      "to_doc": "flock.eval.tasks.tw_mock_exams.tw_mock_exams_doc",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
     },
