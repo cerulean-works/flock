@@ -322,6 +322,26 @@ describe('DatasetView', () => {
 		);
 	});
 
+	it('cuts a long column type short so it doesn’t widen the column', async () => {
+		const type =
+			'struct<label: string, simplified_evidence: int64, traditional_evidence: int64, ' +
+			'han_characters: int64, minority_fraction: double, reason: string, version: string>';
+		const rows: RowsPage = {
+			version: 3,
+			offset: 0,
+			limit: 50,
+			total: 1,
+			columns: [{ name: 'script', type }],
+			rows: [[{ k: 'json', v: '{"label":"simplified"}' }]]
+		};
+		serve({ '/api/datasets/acme/rows': () => rows });
+		view('http://flock.test/datasets/acme/eval/mmlu?version=3&tab=rows');
+		const label = screen.getByRole('table').getByText(type, { exact: true });
+		await expect.element(label).toBeVisible();
+		expect(label.element().getBoundingClientRect().width).toBeLessThanOrEqual(192);
+		expect(label.element().closest('th')!.clientWidth).toBeLessThan(300);
+	});
+
 	it('opens a row in place with its cells in full, and closes it again', async () => {
 		const rows: RowsPage = {
 			version: 3,
