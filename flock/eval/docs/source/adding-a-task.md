@@ -63,6 +63,7 @@ A task with another format writes its own choices in `to_doc`:
 - **Examples that read differently from the scored text:** set the doc's `example`. HumanEval's examples put a space before the solution that the scored doc doesn't have, as OLMES does.
 - **Text before the examples**, such as a subject header: the task's `description`.
 - **Many tasks of one kind**, such as MMLU's 57 subjects: build them in a loop over a list of names, and group them in a suite, as `flock/eval/tasks/mmlu.py` does.
+- **Only some rows scored**, such as single-answer items of a set that also has multi-answer ones: set the task's `keep` to a module-level function of a row that returns whether to score it. It runs before `limit` and `to_doc`, and doesn't filter few-shot examples.
 - **Examples from the scored split:** set `Fewshot.num_shots` and list one id more than it. Each doc is shown the first `num_shots` examples that aren't the doc itself. The ids must come from the split the task scores, since an id identifies a doc within one split; the task rejects any other.
 
 A changed prompt is a different task, and its numbers don't compare with the old ones, so give it a new name.
