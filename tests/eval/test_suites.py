@@ -38,7 +38,8 @@ def test_nested_suites_count_as_one_member_under_their_own_metric():
 
 
 def test_a_suite_may_share_a_name_with_a_task():
-    # Tasks and suites are separate namespaces in the registries and in results.json.
+    # The registries keep tasks and suites apart; `evaluate` refuses a run that reaches both
+    # under one name, since results look members up by name.
     assert Suite("toy", (TASK,)).tasks == (TASK,)
 
 
