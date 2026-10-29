@@ -60,8 +60,10 @@ def test_model_ref_parse():
     assert str(ref) == "allenai/OLMo-2-0425-1B@a1847dff"
 
 
-@pytest.mark.parametrize("model_id", ["allenai/OLMo-2-0425-1B", "allenai/OLMo-2-0425-1B@", "@abc"])
-def test_model_ref_requires_revision(model_id):
+@pytest.mark.parametrize(
+    "model_id", ["allenai/OLMo-2-0425-1B", "allenai/OLMo-2-0425-1B@", "@abc", "org/repo@a@b"]
+)
+def test_model_ref_requires_one_revision(model_id):
     with pytest.raises(ValueError, match="repo@revision"):
         ModelRef.parse(model_id)
 
@@ -95,6 +97,12 @@ def test_model_ref_resolve_requires_commit_hash(monkeypatch):
 def test_rejects_non_positive_batch_tokens(lm, tokenizer, batch_tokens):
     with pytest.raises(ValueError, match="batch_tokens must be at least 1"):
         ScoringModel(lm, tokenizer, name="tiny@0", batch_tokens=batch_tokens)
+
+
+def test_from_pretrained_rejects_batch_tokens_before_loading(monkeypatch):
+    monkeypatch.setattr(model, "AutoTokenizer", None)  # any load would fail on None
+    with pytest.raises(ValueError, match="batch_tokens must be at least 1"):
+        ScoringModel.from_pretrained("org/repo@" + "a" * 40, batch_tokens=0)
 
 
 def test_encode_splits_at_context_tokens(scorer, tokenizer):

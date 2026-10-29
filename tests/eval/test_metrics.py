@@ -50,6 +50,7 @@ def scores(**overrides) -> ChoiceScores:
         "valid": torch.tensor([[True, True]]),
         "is_greedy": torch.tensor([[False, True]]),
         "gold": torch.tensor([0]),
+        "tokens_cut": torch.tensor([[0, 0]]),
         "logprob_uncond": None,
     }
     return ChoiceScores(**(fields | overrides))

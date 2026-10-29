@@ -10,7 +10,7 @@ from flock.eval import cli
 from flock.eval.compare import Breach, compare
 from flock.eval.provenance import Provenance
 from flock.eval.results import Results, SuiteResult, TaskResult
-from flock.eval.tasks import Truncation
+from flock.eval.tasks import TASKS, Dataset, Truncation
 
 PROVENANCE = Provenance(
     model="allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf",
@@ -23,12 +23,15 @@ PROVENANCE = Provenance(
     attention="sdpa",
     torch="2.14.1",
     transformers="5.20.1",
+    tokenizers="0.23.3",
+    datasets="5.1.0",
     python="3.14.0",
     created_at="2026-10-27T00:00:00+00:00",
 )
 ARC = TaskResult(
     task="arc_easy",
     task_hash="ad683d6e",
+    dataset=Dataset("allenai/ai2_arc", "0" * 40, "ARC-Easy", "test"),
     primary_metric="acc_per_char",
     metrics={"acc_raw": 0.7, "acc_per_char": 0.75},
     num_docs=2376,
@@ -39,7 +42,7 @@ ARC = TaskResult(
 PIQA = dataclasses.replace(
     ARC, task="piqa", task_hash="0f1e", primary_metric="acc_raw", metrics={"acc_raw": 0.6}
 )
-SUITE = SuiteResult("toy:rc", ["arc_easy", "piqa"], None, 0.675)
+SUITE = SuiteResult("toy:rc", "hash-rc", ["arc_easy", "piqa"], None, 0.675)
 BANK = Results(PROVENANCE, [ARC, PIQA], [SUITE])
 
 
@@ -107,7 +110,7 @@ def test_a_suite_may_move_by_its_members_tolerances_combined_as_independent_erro
     # holding it alone. Each member is read under its primary metric.
     arc = dataclasses.replace(ARC, num_docs=2000)
     piqa = dataclasses.replace(PIQA, num_docs=1000)
-    outer = SuiteResult("toy", ["toy:rc"], None, 0.675)
+    outer = SuiteResult("toy", "hash-toy", ["toy:rc"], None, 0.675)
     bank = write("bank", Results(PROVENANCE, [arc, piqa], [SUITE, outer]))
 
     def rerun(score):
@@ -122,7 +125,7 @@ def test_a_bpb_suite_may_move_by_a_relative_1e_4_over_root_members(write):
     # Two members with bpb 1.0 and a mean of 1.0: sqrt(2) * 1e-4 / 2, about 0.707e-4.
     arc = dataclasses.replace(ARC, metrics={"bpb": 1.0}, primary_metric="bpb")
     piqa = dataclasses.replace(PIQA, metrics={"bpb": 1.0}, primary_metric="bpb")
-    suite = SuiteResult("toy:bpb", ["arc_easy", "piqa"], "bpb", 1.0)
+    suite = SuiteResult("toy:bpb", "hash-bpb", ["arc_easy", "piqa"], "bpb", 1.0)
     bank = write("bank", Results(PROVENANCE, [arc, piqa], [suite]))
 
     def rerun(score):
@@ -142,6 +145,17 @@ def test_an_infinity_must_repeat_exactly(write):
     assert compare(
         bank, write("new", dataclasses.replace(BANK, tasks=[finite, PIQA]))
     ).breaches == [Breach("arc_easy", "metrics.bpb", float("inf"), 1.0)]
+
+
+def test_a_task_with_no_docs_must_repeat_its_metrics_exactly(write):
+    # No docs means no accuracy to move, and no division by zero.
+    empty = dataclasses.replace(ARC, num_docs=0)
+    bank = write("bank", dataclasses.replace(BANK, tasks=[empty, PIQA]))
+    moved = dataclasses.replace(empty, metrics={"acc_raw": 0.7, "acc_per_char": 0.7501})
+    new = write("new", dataclasses.replace(BANK, tasks=[moved, PIQA]))
+
+    assert compare(bank, bank).breaches == []
+    assert compare(bank, new).breaches == [Breach("arc_easy", "metrics.acc_per_char", 0.75, 0.7501)]
 
 
 @pytest.mark.parametrize(
@@ -282,6 +296,19 @@ def test_cli_prints_causes_then_one_sided_names_then_breaches(write):
     ]
 
 
+def test_cli_prints_the_tokenizers_and_datasets_versions_when_they_differ(write):
+    provenance = dataclasses.replace(PROVENANCE, tokenizers="0.24.0", datasets="5.2.0")
+    new = write("new", dataclasses.replace(BANK, provenance=provenance))
+
+    result = CliRunner().invoke(cli.main, ["compare", str(write("bank", BANK)), str(new)])
+
+    assert result.exit_code == 0
+    assert result.output.splitlines()[:2] == [
+        "tokenizers  0.23.3  ->  0.24.0",
+        "datasets  5.1.0  ->  5.2.0",
+    ]
+
+
 def test_the_bank_compares_equal_to_itself_rewritten_in_the_current_layout(write):
     # Offline: a change to what `Results` writes, or to what `compare` reads, that the bank can
     # no longer pass fails here rather than after a GPU rerun.
@@ -292,12 +319,18 @@ def test_the_bank_compares_equal_to_itself_rewritten_in_the_current_layout(write
         fields: dict[str, Any] = dict(task)
         del fields["docs_per_second"]  # derived, not a field
         fields["truncation"] = Truncation(**fields["truncation"])
+        fields["dataset"] = TASKS[task["task"]].dataset
         tasks.append(TaskResult(**fields))
-    suites = [SuiteResult(**suite) for suite in data["suites"]]
-    rewritten = Results(Provenance(**data["provenance"]), tasks, suites, data["schema_version"])
+    # The bank predates schema 5's suite hashes and library versions. `compare` reads neither.
+    suites = [SuiteResult(suite_hash="unknown", **suite) for suite in data["suites"]]
+    provenance = Provenance(**data["provenance"], tokenizers="unknown", datasets="unknown")
+    rewritten = Results(provenance, tasks, suites)
 
     comparison = compare(bank, write("rewritten", rewritten))
 
     assert data["provenance"]["dtype"] == "float32"
     assert "base_easy" in comparison.suites
     assert comparison.breaches == []
+    # Only the layout differs: a bank from an older schema still passes, and the versions it
+    # lacks print as causes.
+    assert comparison.provenance.keys() <= {"schema_version", "tokenizers", "datasets"}

@@ -78,7 +78,15 @@ def compare(banked: Path, new: Path) -> Comparison:
         # The usual causes of a breach, printed beside it. Read with `get`: a file without one
         # of them is still comparable.
         provenance = {}
-        for key in ("flock_commit", "device", "torch", "transformers", "python"):
+        for key in (
+            "flock_commit",
+            "device",
+            "torch",
+            "transformers",
+            "tokenizers",
+            "datasets",
+            "python",
+        ):
             if bank["provenance"].get(key) != rerun["provenance"].get(key):
                 provenance[key] = (bank["provenance"].get(key), rerun["provenance"].get(key))
         # A new layout can add a metric or a count, which shows as breaches beside it.
