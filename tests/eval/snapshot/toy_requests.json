@@ -177,6 +177,23 @@
       }
     ]
   },
+  "toy:gold_only": {
+    "hash": "28453e9d8872ac73c558a42c6dcf508bf93eeb385ff8a6dd86ce70b5748383b1",
+    "requests": [
+      {
+        "context": "文章：玉山、雪山、合歡山\n問題：臺灣最高的山是哪一座？\n答案：玉山\n\n文章：honey、milk、silk\n問題：What do bees make?\n答案：",
+        "continuation": "honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "文章：玉山、雪山、合歡山\n問題：臺灣最高的山是哪一座？\n答案：玉山\n\n文章：石頭、蘋果、椅子、雲\n問題：哪一個是水果？\n答案：",
+        "continuation": "蘋果",
+        "doc": "q-2",
+        "gold": true
+      }
+    ]
+  },
   "toy:keep": {
     "hash": "c0ac2f73c7dde54b25eb33e88aa47ec717fb0e10853964c926db1d0ea5d7bae4",
     "requests": [

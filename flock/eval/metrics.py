@@ -46,8 +46,12 @@ class ChoiceScores:
             bool `[docs, max_choices]`, False in the padded cells past a doc's last choice.
         gold (`torch.Tensor`):
             int64 `[docs]`, the index of each doc's correct choice.
+        tokens_cut (`torch.Tensor`):
+            int64 `[docs, max_choices]`, the tokens cut from the left of each choice's context to fit the model, 0 if it fit.
         logprob_uncond (`torch.Tensor`, *optional*):
             float32 `[docs, max_choices]`, each choice's summed natural-log probability after the task's unconditional context instead of the question. Used for pointwise mutual information (PMI).
+        tokens_cut_uncond (`torch.Tensor`, *optional*):
+            int64 `[docs, max_choices]`, `tokens_cut` for the unconditional requests. Set with `logprob_uncond`.
     """
 
     logprob: torch.Tensor
@@ -56,7 +60,9 @@ class ChoiceScores:
     num_bytes: torch.Tensor
     valid: torch.Tensor
     gold: torch.Tensor
+    tokens_cut: torch.Tensor
     logprob_uncond: torch.Tensor | None = None
+    tokens_cut_uncond: torch.Tensor | None = None
 
 
 def bits_per_byte(logprob: torch.Tensor, num_bytes: torch.Tensor) -> torch.Tensor:
