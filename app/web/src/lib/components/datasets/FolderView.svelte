@@ -99,7 +99,9 @@
 						<td class="hidden px-2 text-muted-foreground tabular-nums sm:table-cell">
 							{d.version === null ? 'Unknown' : `v${d.version}`}
 						</td>
-						<td class="hidden px-2 text-muted-foreground sm:table-cell">—</td>
+						<td class="hidden px-2 text-muted-foreground tabular-nums sm:table-cell">
+							{d.size == null ? '—' : bytes(d.size)}
+						</td>
 						<td
 							class="px-2 text-muted-foreground tabular-nums"
 							title={d.updated_at ? dateTime(d.updated_at) : undefined}

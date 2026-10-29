@@ -1,6 +1,6 @@
 import { error, isHttpError } from '@sveltejs/kit';
 import { authConfig } from '#lib/server/auth.ts';
-import { datasetsPath } from '#lib/server/datasets.ts';
+import { datasetsPath, withDetails } from '#lib/server/datasets.ts';
 import { flock } from '#lib/server/flock.ts';
 import type { DatasetAt, DatasetFolder, DatasetInfo } from '#lib/types.ts';
 import type { PageServerLoad } from './$types';
@@ -19,7 +19,10 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	const at = (await flock(`${base}/at?${new URLSearchParams({ path })}`).then((r) => r.json())) as
 		DatasetFolder | DatasetAt;
 	const now = Date.now() / 1000;
-	if (at.kind === 'folder') return { kind: 'folder' as const, path, folder: at, now };
+	if (at.kind === 'folder') {
+		const folder = await withDetails(params.org, at);
+		return { kind: 'folder' as const, path, folder, now };
+	}
 
 	const requested = url.searchParams.get('version');
 	const query = new URLSearchParams({ path, ...(requested ? { version: requested } : {}) });

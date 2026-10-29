@@ -51,7 +51,15 @@ describe('FolderView', () => {
 	const folder: DatasetFolder = {
 		kind: 'folder',
 		path: 'eval',
-		datasets: [{ name: 'mmlu', path: 'eval/mmlu', version: 12, updated_at: 1_790_000_000 }],
+		datasets: [
+			{
+				name: 'mmlu',
+				path: 'eval/mmlu',
+				version: 12,
+				updated_at: 1_790_000_000,
+				size: 5 * 1024 * 1024
+			}
+		],
 		folders: [{ name: 'deep', path: 'eval/deep' }],
 		files: [{ name: 'notes.md', key: 'eval/notes.md', size: 2048, last_modified: 1_790_000_000 }],
 		cursor: 'next'
@@ -74,6 +82,7 @@ describe('FolderView', () => {
 		// (Version and size columns show on wider screens.)
 		await expect.element(screen.getByText('v12')).toBeInTheDocument();
 		await expect.element(screen.getByText('2.0 KB')).toBeInTheDocument();
+		await expect.element(screen.getByText('5.0 MB')).toBeInTheDocument();
 		expect(screen.getByRole('link', { name: 'mmlu' }).element().getAttribute('href')).toBe(
 			'/datasets/acme/eval/mmlu'
 		);
@@ -320,6 +329,26 @@ describe('DatasetView', () => {
 				'/api/datasets/acme/rows?path=eval%2Fmmlu&version=3&offset=0&limit=50&columns=id'
 			)
 		);
+	});
+
+	it('cuts a long column type short so it doesn’t widen the column', async () => {
+		const type =
+			'struct<label: string, simplified_evidence: int64, traditional_evidence: int64, ' +
+			'han_characters: int64, minority_fraction: double, reason: string, version: string>';
+		const rows: RowsPage = {
+			version: 3,
+			offset: 0,
+			limit: 50,
+			total: 1,
+			columns: [{ name: 'script', type }],
+			rows: [[{ k: 'json', v: '{"label":"simplified"}' }]]
+		};
+		serve({ '/api/datasets/acme/rows': () => rows });
+		view('http://flock.test/datasets/acme/eval/mmlu?version=3&tab=rows');
+		const label = screen.getByRole('table').getByText(type, { exact: true });
+		await expect.element(label).toBeVisible();
+		expect(label.element().getBoundingClientRect().width).toBeLessThanOrEqual(192);
+		expect(label.element().closest('th')!.clientWidth).toBeLessThan(300);
 	});
 
 	it('opens a row in place with its cells in full, and closes it again', async () => {
