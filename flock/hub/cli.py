@@ -1,5 +1,3 @@
-"""`flock s3`: S3 keys for the shell and the AWS tools, and an org's buckets."""
-
 import json
 import os
 import re
@@ -12,8 +10,8 @@ from typing import Any
 
 import click
 
-from flock.cli import s3
-from flock.cli.s3 import S3Error
+from flock.hub import s3
+from flock.hub.s3 import S3Error
 
 UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 

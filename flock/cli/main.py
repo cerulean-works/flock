@@ -4,8 +4,8 @@ import click
 
 from flock.cli.account import token, whoami
 from flock.cli.login import login, logout
-from flock.cli.s3_commands import s3_group
 from flock.eval.cli import main as eval_cli
+from flock.hub.cli import s3_group
 
 
 @click.group()
