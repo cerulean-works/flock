@@ -84,6 +84,11 @@ def chinese_doc(row: dict[str, Any]) -> MCDoc:
     )
 
 
+def not_about_bees(row: dict[str, Any]) -> bool:
+    """A `keep` predicate that drops q-1."""
+    return "bees" not in row["question"]
+
+
 def gold_doc(row: dict[str, Any]) -> MCDoc:
     """A toy row as a gold-only doc: its question, then only its correct answer."""
     gold = row["choices"]["label"].index(row["answerKey"])
@@ -119,6 +124,8 @@ PROMPT_PATHS = (
     dataclasses.replace(TASK, name="toy:zero_shot", fewshot=None, unconditional_context=None),
     # Examples from another split: q-1 isn't shown `dev-1`, which shows its own answer.
     dataclasses.replace(TASK, name="toy:repeat", fewshot=Fewshot("dev", ("dev-1", "dev-2"))),
+    # A row filter: only q-2 is scored, and the examples aren't filtered.
+    dataclasses.replace(TASK, name="toy:keep", keep=not_about_bees),
     # The Chinese prefixes, with PMI scored after `答案：`.
     dataclasses.replace(
         TASK,

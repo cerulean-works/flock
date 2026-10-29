@@ -69,12 +69,13 @@ services:
     stop_grace_period: 15s
 
   # The S3 proxy (D61), off unless started with `--profile s3` and the FLOCK_S3_* settings.
-  # It keeps no state and takes no lock, so it can run as many replicas as needed.
+  # It keeps no state and takes no lock, so it can run as many replicas as needed. Each worker is
+  # one event loop on one core, so FLOCK_S3_WORKERS sets how many cores it can use.
   # Use a Flock-specific service name for DNS on shared ingress networks.
   flock-s3:
     image: flock-api:${FLOCK_VERSION:-latest}
     profiles: [s3]
-    command: ["uvicorn", "app.api.src.s3_proxy.app:app", "--host", "0.0.0.0", "--port", "8090"]
+    command: ["uvicorn", "app.api.src.s3_proxy.app:app", "--host", "0.0.0.0", "--port", "8090", "--workers", "${FLOCK_S3_WORKERS:-4}"]
     environment:
       FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
       FLOCK_LISTEN_DATABASE_URL: ${FLOCK_LISTEN_DATABASE_URL:-}

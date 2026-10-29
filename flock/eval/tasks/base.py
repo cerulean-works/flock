@@ -375,6 +375,8 @@ class MultipleChoiceTask:
             The context for the unconditional scores of pointwise mutual information (PMI). PMI is skipped if `None`. On by default, as in OLMES, whose multiple-choice tasks score every choice after `"Answer:"` too unless a task overrides `unconditioned_prompt` with `None` (`oe_eval/tasks/base_task.py`). That doubles the requests, but the unconditional contexts are short.
         metrics (`tuple[str, ...]`, *optional*):
             The metrics the task reports, from [`~eval.metrics.multiple_choice`]'s names. Every metric the task computes if not set, which leaves out `acc_uncond` when PMI is skipped. `acc_greedy` is only for a [`GoldOnlyTask`].
+        keep (`Callable[[dict], bool]`, *optional*):
+            Which rows of the scored split are scored, applied before `limit` and `to_doc`, as lm-evaluation-harness's `process_docs` (`lm_eval/api/task.py`, v0.4.3). Every row if not set. Unlike `process_docs`, it doesn't filter the few-shot split: examples are picked by id, so a task lists only rows it wants shown. Like `to_doc`, it isn't in the task hash, but the docs it keeps are.
 
     Raises:
         `ValueError`: if `metrics` is empty or names a metric the task doesn't compute, `primary_metric` isn't reported, a written-out example lacks the `"index"` a `row_index` dataset reads, or `fewshot.num_shots` is set on examples from a split other than the scored one.
@@ -388,6 +390,7 @@ class MultipleChoiceTask:
     description: str = ""
     unconditional_context: str | None = "Answer:"
     metrics: tuple[str, ...] | None = None
+    keep: Callable[[dict[str, Any]], bool] | None = None
 
     def __post_init__(self) -> None:
         self._check_metrics()
@@ -444,7 +447,7 @@ class MultipleChoiceTask:
 
     def load(self, limit: int | None = None) -> tuple[list[MCDoc], list[MCDoc]]:
         """
-        Loads the scored split, keeping its first `limit` docs (all if `None`), and the few-shot examples.
+        Loads the scored split's rows that `keep` accepts, keeping the first `limit` (all if `None`), and the few-shot examples.
 
         Returns:
             `tuple[list[MCDoc], list[MCDoc]]`: the docs to score, then the few-shot examples.
@@ -456,7 +459,10 @@ class MultipleChoiceTask:
         if limit is not None and limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
 
-        docs = [self.to_doc(row) for row in self.dataset.load()[:limit]]
+        rows = self.dataset.load()
+        if self.keep is not None:
+            rows = [row for row in rows if self.keep(row)]
+        docs = [self.to_doc(row) for row in rows[:limit]]
 
         return docs, self._load_shots()
 
@@ -537,12 +543,12 @@ class MultipleChoiceTask:
 
     def _hash(self, docs: Sequence[MCDoc], requests: Sequence[Request]) -> str:
         """Returns the sha256 of the definition's data fields, every request and every gold index."""
-        # `to_doc` is a function and can't be serialized. What it produces is still covered: every
-        # request and gold index below comes from its docs.
+        # `to_doc` and `keep` are functions and can't be serialized. What they produce is still
+        # covered: every request and gold index below comes from the docs they make and keep.
         fields = {
             field.name: getattr(self, field.name)
             for field in dataclasses.fields(self)
-            if field.name != "to_doc"
+            if field.name not in ("to_doc", "keep")
         }
         # `default` turns the nested `Dataset` and `Fewshot` dataclasses into dicts for `json`.
         digest = hashlib.sha256(
