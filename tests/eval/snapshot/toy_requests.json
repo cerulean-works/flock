@@ -194,6 +194,59 @@
       }
     ]
   },
+  "toy:keep": {
+    "hash": "c0ac2f73c7dde54b25eb33e88aa47ec717fb0e10853964c926db1d0ea5d7bae4",
+    "requests": [
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "Answer:",
+        "continuation": " 雲",
+        "doc": "q-2",
+        "gold": false
+      }
+    ]
+  },
   "toy:num_shots": {
     "hash": "8ee9cd70e966bc67c461fc635a06af316c7c8cc153d7e2045f66eea49faf3a2b",
     "requests": [

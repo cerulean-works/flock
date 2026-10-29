@@ -487,6 +487,46 @@
       ],
       "metric": "bpb",
       "scored": true
+    },
+    "tw_mock_exams": {
+      "members": [
+        "tw_mock_exams_english",
+        "tw_mock_exams_social",
+        "tw_mock_exams_chinese",
+        "tw_mock_exams_science",
+        "tw_mock_exams_history",
+        "tw_mock_exams_civics",
+        "tw_mock_exams_biology",
+        "tw_mock_exams_geography",
+        "tw_mock_exams_physics",
+        "tw_mock_exams_chemistry"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "tw_mock_exams:all": {
+      "members": [
+        "tw_mock_exams",
+        "tw_mock_exams:bpb"
+      ],
+      "metric": null,
+      "scored": false
+    },
+    "tw_mock_exams:bpb": {
+      "members": [
+        "tw_mock_exams_english",
+        "tw_mock_exams_social",
+        "tw_mock_exams_chinese",
+        "tw_mock_exams_science",
+        "tw_mock_exams_history",
+        "tw_mock_exams_civics",
+        "tw_mock_exams_biology",
+        "tw_mock_exams_geography",
+        "tw_mock_exams_physics",
+        "tw_mock_exams_chemistry"
+      ],
+      "metric": "bpb",
+      "scored": true
     }
   },
   "tasks": {
@@ -511,6 +551,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_uncond",
       "to_doc": "flock.eval.tasks.arc.arc_doc",
@@ -538,6 +579,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.arc.arc_doc",
@@ -566,6 +608,7 @@
         "rows": [],
         "split": "validation"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_token",
       "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
@@ -594,6 +637,7 @@
         "rows": [],
         "split": "validation"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_token",
       "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
@@ -622,6 +666,7 @@
         "rows": [],
         "split": "validation"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_token",
       "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
@@ -650,6 +695,7 @@
         "rows": [],
         "split": "validation"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_token",
       "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
@@ -678,6 +724,7 @@
         "rows": [],
         "split": "validation"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_token",
       "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
@@ -706,6 +753,7 @@
         "rows": [],
         "split": "validation"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_token",
       "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
@@ -722,6 +770,7 @@
       },
       "description": "",
       "fewshot": null,
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.gen2mc.coqa_doc",
@@ -749,6 +798,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_uncond",
       "to_doc": "flock.eval.tasks.arc.arc_doc",
@@ -772,6 +822,7 @@
         "rows": [],
         "split": "validation"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -798,6 +849,7 @@
         },
         "split": null
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.gen2mc.drop_doc",
@@ -825,6 +877,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.hellaswag.hellaswag_doc",
@@ -851,6 +904,7 @@
         "rows": [],
         "split": "test"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -877,6 +931,7 @@
         },
         "split": null
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.gen2mc.jeopardy_doc",
@@ -902,6 +957,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.lab_bench.lab_bench_doc",
@@ -927,6 +983,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.lab_bench.lab_bench_doc",
@@ -943,6 +1000,7 @@
       },
       "description": "",
       "fewshot": null,
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -970,6 +1028,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -999,6 +1058,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.medical.medmcqa_doc",
@@ -1026,6 +1086,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.medical.medqa_doc",
@@ -1050,6 +1111,7 @@
         },
         "split": null
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -1076,6 +1138,7 @@
         },
         "split": null
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -1102,6 +1165,7 @@
         },
         "split": null
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -1128,6 +1192,7 @@
         },
         "split": null
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -1154,6 +1219,7 @@
         },
         "split": null
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -1180,6 +1246,7 @@
         },
         "split": null
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -1206,6 +1273,7 @@
         },
         "split": null
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -1235,6 +1303,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1262,6 +1331,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1289,6 +1359,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1316,6 +1387,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1343,6 +1415,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1370,6 +1443,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1397,6 +1471,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1424,6 +1499,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1451,6 +1527,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1478,6 +1555,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1505,6 +1583,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1532,6 +1611,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1559,6 +1639,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1586,6 +1667,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1613,6 +1695,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1640,6 +1723,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1667,6 +1751,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1694,6 +1779,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1721,6 +1807,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1748,6 +1835,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1775,6 +1863,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1802,6 +1891,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1829,6 +1919,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1856,6 +1947,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1883,6 +1975,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1910,6 +2003,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1937,6 +2031,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1964,6 +2059,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -1991,6 +2087,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2018,6 +2115,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2045,6 +2143,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2072,6 +2171,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2099,6 +2199,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2126,6 +2227,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2153,6 +2255,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2180,6 +2283,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2207,6 +2311,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2234,6 +2339,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2261,6 +2367,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2288,6 +2395,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2315,6 +2423,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2342,6 +2451,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2369,6 +2479,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2396,6 +2507,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2423,6 +2535,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2450,6 +2563,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2477,6 +2591,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2504,6 +2619,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2531,6 +2647,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2558,6 +2675,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2585,6 +2703,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2612,6 +2731,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2639,6 +2759,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2666,6 +2787,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2693,6 +2815,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2720,6 +2843,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2747,6 +2871,7 @@
         "rows": [],
         "split": "dev"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.mmlu.mmlu_doc",
@@ -2772,6 +2897,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -2799,6 +2925,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -2826,6 +2953,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -2853,6 +2981,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -2880,6 +3009,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -2907,6 +3037,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -2934,6 +3065,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -2961,6 +3093,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -2988,6 +3121,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -3015,6 +3149,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -3042,6 +3177,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -3069,6 +3205,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -3096,6 +3233,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -3123,6 +3261,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -3150,6 +3289,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -3177,6 +3317,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -3204,6 +3345,7 @@
         "rows": [],
         "split": "prompt"
       },
+      "keep": null,
       "metrics": [
         "bpb"
       ],
@@ -3230,6 +3372,7 @@
         },
         "split": null
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.gen2mc.naturalqs_doc",
@@ -3257,6 +3400,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.piqa.piqa_doc",
@@ -3284,6 +3428,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_raw",
       "to_doc": "flock.eval.tasks.yesno.qasper_doc",
@@ -3311,6 +3456,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.sciq.sciq_doc",
@@ -3338,6 +3484,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_raw",
       "to_doc": "flock.eval.tasks.yesno.sciriff_doc",
@@ -3365,6 +3512,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.socialiqa.socialiqa_doc",
@@ -3389,6 +3537,7 @@
         },
         "split": null
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.gen2mc.squad_doc",
@@ -3416,6 +3565,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3443,6 +3593,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3470,6 +3621,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3496,6 +3648,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3523,6 +3676,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3550,6 +3704,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3577,6 +3732,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3604,6 +3760,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3631,6 +3788,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3658,6 +3816,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3685,6 +3844,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3712,6 +3872,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3739,6 +3900,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3766,6 +3928,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3792,6 +3955,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3819,6 +3983,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3846,6 +4011,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3873,6 +4039,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3900,6 +4067,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3927,6 +4095,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3954,6 +4123,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -3981,6 +4151,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4008,6 +4179,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4035,6 +4207,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4061,6 +4234,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4088,6 +4262,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4115,6 +4290,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4142,6 +4318,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4169,6 +4346,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4195,6 +4373,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4222,6 +4401,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4248,6 +4428,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4275,6 +4456,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4302,6 +4484,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4329,6 +4512,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4356,6 +4540,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4383,6 +4568,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4410,6 +4596,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4437,6 +4624,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4464,6 +4652,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4491,6 +4680,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4517,6 +4707,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4544,6 +4735,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4569,6 +4761,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4595,6 +4788,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4621,6 +4815,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4648,6 +4843,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4675,6 +4871,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4702,6 +4899,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4729,6 +4927,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4756,6 +4955,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4783,6 +4983,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4810,6 +5011,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4837,6 +5039,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4864,6 +5067,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4891,6 +5095,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4917,6 +5122,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4944,6 +5150,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4970,6 +5177,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -4997,6 +5205,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -5024,6 +5233,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -5051,6 +5261,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -5077,6 +5288,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -5104,6 +5316,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -5131,6 +5344,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
@@ -5158,9 +5372,290 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_per_char",
       "to_doc": "flock.eval.tasks.tmmluplus.tmmluplus_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tw_mock_exams_biology": {
+      "dataset": {
+        "repo": "cerulean-works/tw-mock-exams",
+        "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
+        "row_index": false,
+        "split": "test",
+        "subset": "biology"
+      },
+      "description": "以下是關於生物考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "5aaf1f88d1d40eb9e0bbe88fa02355a6d01daf25",
+          "b5814fe35fe7f2ad58970109ea67d6e6ed9aa3b5",
+          "7314ee624aedf49caac11c220d1c37ed253328c0",
+          "c97e945adf6deb22fa02419d6030beb4c82cbf43",
+          "f2782470f27502d87e115551414f5241560f023c"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": "flock.eval.tasks.tw_mock_exams.scored",
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tw_mock_exams_chemistry": {
+      "dataset": {
+        "repo": "cerulean-works/tw-mock-exams",
+        "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
+        "row_index": false,
+        "split": "test",
+        "subset": "chemistry"
+      },
+      "description": "以下是關於化學考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0cacdb6f844b413c092322fbe65101fb6c2ed652",
+          "a4571f1888d156aed4e7f2169b5ed6cabce97732",
+          "1ae35eb8ed59ae0539be6b9b26c1fb789cd365ef",
+          "e4b4c22359daaeada5db785017bce9708ccaca7c",
+          "0c4ca7574fa4749a553cfea7f78af5a6550dd653"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": "flock.eval.tasks.tw_mock_exams.scored",
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tw_mock_exams_chinese": {
+      "dataset": {
+        "repo": "cerulean-works/tw-mock-exams",
+        "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
+        "row_index": false,
+        "split": "test",
+        "subset": "chinese"
+      },
+      "description": "以下是關於國文考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "fef593d1abd9e7cfb84798cf22586796e850cb50",
+          "ffa02cef4f86ae9a2a2bdb3b92a695b3d64661fb",
+          "0abc7225af6e278d65ed12e94edc7644bb44181f",
+          "22b37a1f07c565cd6b1b3c9224e1c858911b8189",
+          "c1059e62c381b099e026828e7f32c90df3cf8a42"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": "flock.eval.tasks.tw_mock_exams.scored",
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tw_mock_exams_civics": {
+      "dataset": {
+        "repo": "cerulean-works/tw-mock-exams",
+        "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
+        "row_index": false,
+        "split": "test",
+        "subset": "civics"
+      },
+      "description": "以下是關於公民與社會考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "b53a987ba53facf0f2e1d3a1f50c9c50f0b48840",
+          "e0185c8eb645296bf3a3164c3a348346c4553326",
+          "35cb837d56e530b68a27092942a596b377c0d9ad",
+          "28bd416d24a384564fc79489f7724f9843508124",
+          "7ea34b551c8cc0a30e9cd4fc7b1fa3cec6e8f1c6"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": "flock.eval.tasks.tw_mock_exams.scored",
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tw_mock_exams_english": {
+      "dataset": {
+        "repo": "cerulean-works/tw-mock-exams",
+        "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
+        "row_index": false,
+        "split": "test",
+        "subset": "english"
+      },
+      "description": "The following are multiple choice questions (with answers) about English.\n\n",
+      "fewshot": {
+        "ids": [
+          "289ff57fcd9d18a74e55e0f899e3d1f651fddfe0",
+          "d1fd2ea9289dca1488a6335c1233fccad7b82ed8",
+          "40d360663dcebef4a0a63b79076d4193ebdab431",
+          "64598a1655a4aa05f32cd00dc78a1946e0fdfa76",
+          "9db56e227177c6fa2165ddb8f6f664127ad7b26d"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": "flock.eval.tasks.tw_mock_exams.scored",
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.english_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "Answer:"
+    },
+    "tw_mock_exams_geography": {
+      "dataset": {
+        "repo": "cerulean-works/tw-mock-exams",
+        "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
+        "row_index": false,
+        "split": "test",
+        "subset": "geography"
+      },
+      "description": "以下是關於地理考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "3615095b6908e9222cfc256228b3db4e5f910493",
+          "d4445a818e2460330340001e33376212027b43f6",
+          "7e3958ff2500e8e9137598089514b9ed87793269",
+          "d31979155bb52b4959226ebd23ec8aab798e4274",
+          "e6fc1976a7549afa3d5d95a5b644ed66cccc525a"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": "flock.eval.tasks.tw_mock_exams.scored",
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tw_mock_exams_history": {
+      "dataset": {
+        "repo": "cerulean-works/tw-mock-exams",
+        "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
+        "row_index": false,
+        "split": "test",
+        "subset": "history"
+      },
+      "description": "以下是關於歷史考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "10945c083c03de5ab7faa69b5e7bbd5079682a2d",
+          "e46ae5d27fb3bca62d0585e843a2e9b37b1c0730",
+          "7a38724025450e08df9a1d0f0a75f3a9f46fafa1",
+          "7ad0371fd3f519cf2165b24f913d44f1d6f87625",
+          "c8ca058988fbab57e2c53dd36fab2cdea43e744d"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": "flock.eval.tasks.tw_mock_exams.scored",
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tw_mock_exams_physics": {
+      "dataset": {
+        "repo": "cerulean-works/tw-mock-exams",
+        "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
+        "row_index": false,
+        "split": "test",
+        "subset": "physics"
+      },
+      "description": "以下是關於物理考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "6af08f7da27d3680b34d1f2f113bd3193d702d0e",
+          "096805c9fe57414f6a82214863724aeddb99def6",
+          "5777a2b06f272390e125cfa4d4d1373f12aa7866",
+          "9c85a4ba130033bfdb2749f79b34b99a0a3735a3",
+          "282d8d6092d2f7fbff6a4e2aeba1cde7c101f28e"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": "flock.eval.tasks.tw_mock_exams.scored",
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tw_mock_exams_science": {
+      "dataset": {
+        "repo": "cerulean-works/tw-mock-exams",
+        "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
+        "row_index": false,
+        "split": "test",
+        "subset": "science"
+      },
+      "description": "以下是關於自然考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "ae1a7be761c13539c715eb5c14f7f6e3558e9ddc",
+          "19ad6509c5a2925668e2350634c4abb627564bc0",
+          "4dcf6784904682b1f70842cf9686628ebf3154a6",
+          "fbb47345030de77596714b949f6978f3f55c708f",
+          "c47082f0205cadd982b8dde1756429d80219c07e"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": "flock.eval.tasks.tw_mock_exams.scored",
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "tw_mock_exams_social": {
+      "dataset": {
+        "repo": "cerulean-works/tw-mock-exams",
+        "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
+        "row_index": false,
+        "split": "test",
+        "subset": "social"
+      },
+      "description": "以下是關於社會考試單選題，請選出正確的答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "2aa5699b6db62c82280661ce61c806dc3251b315",
+          "694199a43cc28dd3daaf1ad68f77507933bc646f",
+          "2e58cf6b63df690ce5b91ac91017d4b6b54da491",
+          "2ddc69fd921ac3024907ef2f6e7188ac1cf4375a",
+          "4fe007a5737b1fd9948fad3bd1020e16723f4949"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": "flock.eval.tasks.tw_mock_exams.scored",
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
     },
@@ -5185,6 +5680,7 @@
         "rows": [],
         "split": "train"
       },
+      "keep": null,
       "metrics": null,
       "primary_metric": "acc_raw",
       "to_doc": "flock.eval.tasks.winogrande.winogrande_doc",
