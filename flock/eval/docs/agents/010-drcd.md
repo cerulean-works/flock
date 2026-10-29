@@ -2,11 +2,11 @@
 
 | | |
 | --- | --- |
-| Status | designed; the build waits for the dataset mirror |
-| Date | 2026-10-27 (design) |
-| Builds on | [001](001-eval-core.md) (scoring core), [002](002-truncation-count.md) (truncation count), [003](003-base-easy.md) (SQuAD's passage format, D16, D17); 005 (the Chinese format, 005.D1, 005.D7) and 007 (`GoldOnlyTask`, 007.D2), both before this stage merges |
+| Status | built, at parity in float32 |
+| Date | 2026-10-27 (design), 2026-10-29 (built) |
+| Builds on | [001](001-eval-core.md) (scoring core), [002](002-truncation-count.md) (truncation count), [003](003-base-easy.md) (SQuAD's passage format, D16, D17), [005](005-tmmluplus.md) (the Chinese format, 005.D1, 005.D7), [007](007-fewshot-example.md) (`GoldOnlyTask`, 007.D2), [012](012-task-snapshot.md) (the task snapshot) |
 | Keeps | 001's scoring, batching, metrics and results file; 003's `Choice`, `MCDoc` and `Fewshot`; 005's `cloze` arguments and Chinese prefixes; 007's `GoldOnlyTask` |
-| Result | (design) one task, `drcd_bpb`, 3,493 docs; no core change |
+| Result | one task, `drcd_bpb`, 3,493 docs, no core change; requests identical to the reference, float32 scores equal to it |
 
 The file number and the decision numbers are provisional. The file takes the next free number when its PR is opened, and decisions `010.D1` to `010.D6` take the next free global numbers after every stage merged before it.
 
@@ -78,7 +78,7 @@ OLMo 3 shows SQuAD and DROP five examples. DRCD passages are long in tokens: OLM
 | 1 | 1,905 | 0 | 1,121 | 0 |
 | 5 | 3,929 | 3,493 | 2,196 | 96 |
 
-The project's own checkpoints train at a 2,048-token context, as OLMo 1B's recipe does. With five examples, such a model would see every doc cut from the left, and how much is cut depends on its tokenizer, so two models in one comparison would read different prompts. With one example, every request fits in 2,048 tokens under both tokenizers, and the shot still fixes the format for a base model. This departs from OLMo 3's five. 002's truncation count reports any model whose tokenizer still overflows.
+The project's own checkpoints train at a 2,048-token context (the project's training recipe; `allenai/OLMo-2-0425-1B`, the reference model here, has 4,096). With five examples, such a model would see every doc cut from the left, and how much is cut depends on its tokenizer, so two models in one comparison would read different prompts. With one example, every request fits in 2,048 tokens under both tokenizers, and the shot still fixes the format for a base model. This departs from OLMo 3's five. 002's truncation count reports any model whose tokenizer still overflows.
 
 ### 010.D4. The example: one dev question from an article test doesn't share
 
@@ -124,7 +124,7 @@ On CPU with tiny random models, as every eval test, with hand-written rows in th
 - **The first answer:** a row whose two answers differ scores the first.
 - **Multi-byte answers:** `bpb` divides by UTF-8 bytes on an all-CJK answer, a mixed answer such as `18世紀`, and an ASCII one.
 - **Long contexts:** a doc whose request is longer than the tiny model's `max_length` is cut from the left, counted by 002's truncation count, and keeps its full continuation; one that fits exactly is not counted.
-- **Batch invariance:** `bpb` is the same at two `batch_tokens` settings, with left and right padding in the mix.
+- **Batch invariance:** `bpb` is the same at two `batch_tokens` settings, with docs of different lengths left-padded in one batch.
 
 ---
 
@@ -132,3 +132,23 @@ On CPU with tiny random models, as every eval test, with hand-written rows in th
 
 - Whether a 5-shot variant earns a separate task name for models with a 4,096-token context or more (Principle 3: a different setting is a different task).
 - Whether DRCD's dev split, 3,524 questions disjoint in paragraphs from test, should be scored as a second, development-only task so that tuning never reads test.
+
+---
+
+## 7. How it was actually built
+
+As planned. No core code changed: the task is one `to_doc` and one `GoldOnlyTask` definition.
+
+- **Mirror (010.D1).** `cerulean-works/drcd` at `e409db6dd4090dcc390a05e660b1344b42b79e98` holds `data/{train,validation,test}-00000-of-00001.parquet` with 26,936, 3,524 and 3,493 rows, the counts of section 2. The three JSON files are under `original/` with their sha256 in the README, beside the source README, the CC-BY-SA 3.0 legal code as `LICENSE` and the conversion script `mirror.py`. The conversion checks that every DRCD answer id is the answer's 1-based position before dropping it. The parquet files were written by `datasets` 5.x and carry its `List` feature type in their schema metadata, which `datasets` 3.x can't read. flock reads them as they are.
+- **Task.** `tasks/drcd.py` holds `drcd_doc` and `DRCD_BPB`, registered as `drcd_bpb`. On the real mirror, every one of its 3,493 requests equals a rendering of 010.D2 and 010.D4 written straight from the original test and dev JSON. The longest request is 1,905 tokens under OLMo 2's tokenizer and 1,121 under Qwen 2.5's, as section 3 counted at the design.
+- **Toy task.** `toy:gold_only` in the task snapshot's prompt paths is the first toy task on `GoldOnlyTask`. It renders toy rows in this stage's format with its own `to_doc`, so the snapshot pins the `文章：` passage line and the absence of PMI requests, while `drcd_doc` itself is pinned by its own tests.
+- **Smoke.** In bfloat16, both models score 3,493 docs with no request truncated. `Qwen/Qwen2.5-0.5B` scores 0.2592 `bpb` and `allenai/OLMo-2-0425-1B` 0.4577, so Qwen is lower, as expected.
+- **The reference config.** lm-evaluation-harness's `description` is the rendered example plus one extra `\n`, since its Jinja drops one trailing newline (as for TMMLU+, 005). `doc_to_text` is `文章：{{context.strip()}}\n問題：{{question.strip()}}\n答案：`, `doc_to_target` is the stripped first answer, and `target_delimiter` is empty. The reference reads the mirror's test parquet at the pinned commit from a local copy whose schema metadata alone was removed, because the locked environment's `datasets` 3.6 can't read the `List` type. The rows are the same, which check 1 confirms string for string.
+- **Parity (010.D6).** Check 1 holds: all 3,493 requests are identical to the reference's, both when built without a model and in its logged `arguments`. Check 2 holds in float32 on `Qwen/Qwen2.5-0.5B`: the largest per-request gap is 1.5e-4 nats, so no request had to be scored alone to tell batching apart from a real difference, and `bpb` is 0.258135 on our side against 0.258134 from the reference's log-likelihoods, a gap of 1.3e-7. Our bfloat16 run is 1.0e-3 `bpb` above our float32 one. That is this task's noise floor, as 005.D6 reads its own bfloat16 drift: a difference between two bfloat16 checkpoints smaller than it is not a result.
+
+---
+
+## 8. Known gaps
+
+- **The mirror needs `datasets` 4 or later** to load directly (section 7). A re-upload without the feature metadata would lift that and move the pinned commit.
+- Section 6's two open questions stand: a 5-shot variant for models with a context of 4,096 tokens or more, and a development-only task on the dev split.
