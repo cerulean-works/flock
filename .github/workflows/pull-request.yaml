@@ -55,3 +55,26 @@ jobs:
 
       - name: Run tests
         run: uv run --no-sync python -m pytest -q tests -n 6
+
+  Snapshot:
+    name: Eval task snapshot
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.17"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Setup Python
+        run: uv python install
+
+      - name: Install Dependencies
+        run: uv sync --all-extras --all-packages --dev --no-group gpu --group cpu-tests --frozen
+
+      - name: Check every task definition and toy request against the snapshot
+        run: uv run --no-sync python -m pytest -q tests/eval/test_snapshot.py

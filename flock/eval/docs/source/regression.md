@@ -1,6 +1,6 @@
 # Checking scores against the bank
 
-A change to scoring code, a task's data or a library can move a model's numbers without failing any test. CI checks that every task's definition stays the same, but it has no GPU, so it can't score a model. This page shows how to check scores on a GPU: you rerun a reference model and compare its `results.json` with the one banked in the repository.
+A change to scoring code, a task's data or a library can move a model's numbers without failing any test. CI checks that every task's definition stays the same (the `Eval task snapshot` check on each pull request, see [Adding a task](adding-a-task)), but it has no GPU, so it can't score a model. This page shows how to check scores on a GPU: you rerun a reference model and compare its `results.json` with the one banked in the repository.
 
 ## The bank
 
