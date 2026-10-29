@@ -147,6 +147,17 @@ def test_an_infinity_must_repeat_exactly(write):
     ).breaches == [Breach("arc_easy", "metrics.bpb", float("inf"), 1.0)]
 
 
+def test_a_task_with_no_docs_must_repeat_its_metrics_exactly(write):
+    # No docs means no accuracy to move, and no division by zero.
+    empty = dataclasses.replace(ARC, num_docs=0)
+    bank = write("bank", dataclasses.replace(BANK, tasks=[empty, PIQA]))
+    moved = dataclasses.replace(empty, metrics={"acc_raw": 0.7, "acc_per_char": 0.7501})
+    new = write("new", dataclasses.replace(BANK, tasks=[moved, PIQA]))
+
+    assert compare(bank, bank).breaches == []
+    assert compare(bank, new).breaches == [Breach("arc_easy", "metrics.acc_per_char", 0.75, 0.7501)]
+
+
 @pytest.mark.parametrize(
     ("change", "match"),
     [
@@ -285,6 +296,19 @@ def test_cli_prints_causes_then_one_sided_names_then_breaches(write):
     ]
 
 
+def test_cli_prints_the_tokenizers_and_datasets_versions_when_they_differ(write):
+    provenance = dataclasses.replace(PROVENANCE, tokenizers="0.24.0", datasets="5.2.0")
+    new = write("new", dataclasses.replace(BANK, provenance=provenance))
+
+    result = CliRunner().invoke(cli.main, ["compare", str(write("bank", BANK)), str(new)])
+
+    assert result.exit_code == 0
+    assert result.output.splitlines()[:2] == [
+        "tokenizers  0.23.3  ->  0.24.0",
+        "datasets  5.1.0  ->  5.2.0",
+    ]
+
+
 def test_the_bank_compares_equal_to_itself_rewritten_in_the_current_layout(write):
     # Offline: a change to what `Results` writes, or to what `compare` reads, that the bank can
     # no longer pass fails here rather than after a GPU rerun.
@@ -307,5 +331,6 @@ def test_the_bank_compares_equal_to_itself_rewritten_in_the_current_layout(write
     assert data["provenance"]["dtype"] == "float32"
     assert "base_easy" in comparison.suites
     assert comparison.breaches == []
-    # Only the layout differs: a bank from an older schema still passes.
-    assert comparison.provenance.keys() <= {"schema_version"}
+    # Only the layout differs: a bank from an older schema still passes, and the versions it
+    # lacks print as causes.
+    assert comparison.provenance.keys() <= {"schema_version", "tokenizers", "datasets"}
