@@ -120,7 +120,7 @@ One task per subject, `tw_mock_exams_<subject>`, generated from a table of `(nam
 
 ### 009.D6. Pin and scope
 
-`harrychangtw/tw-mock-exams` at `bfad9046aa861979a2e95ca64a32a907f9baa6b7`, private, `test` split of all ten configs. Every item is in it: `dev` holds the 50 examples and `test` the other 27,694 rows, eligible or not, with the four flags. A move to a Cerulean organization or to object storage changes the task module's `repo` and `revision` lines only.
+`cerulean-works/tw-mock-exams` at `e62f9adf374da2e0fcd0095428f6339da980f020`, private to the organization, `test` split of all ten configs. Every item is in it: `dev` holds the 50 examples and `test` the other 27,694 rows, eligible or not, with the four flags. A move to a Cerulean organization or to object storage changes the task module's `repo` and `revision` lines only.
 
 ### 009.D7. Parity: no reference exists, so three self-checks
 
@@ -165,7 +165,7 @@ On CPU with tiny random models and rows written in the test:
 
 ## 7. How it was actually built
 
-- **The data.** `harrychangtw/tw-mock-exams` was built from the 27,744 items with the four flags and uploaded private at `bfad9046`. The 50 examples are the ones 009.D4 picked at design time: the build recomputes them and stops if they differ. `follow_up` marks 71 standalone items; 57 of them would otherwise be scored, all in `test`. `figure_ref` marks 497 items, 405 of them otherwise eligible, as the design counted.
+- **The data.** The repo was built from the 27,744 items with the four flags and first uploaded private under a personal account (`harrychangtw/tw-mock-exams@bfad9046`), which only its owner could read; before this PR opened it moved, byte for byte apart from two README sentences, to `cerulean-works/tw-mock-exams@e62f9adf`, readable by every organization member. The task hash changed once with the dataset id; every request string is unchanged. The 50 examples are the ones 009.D4 picked at design time: the build recomputes them and stops if they differ. `follow_up` marks 71 standalone items; 57 of them would otherwise be scored, all in `test`. `figure_ref` marks 497 items, 405 of them otherwise eligible, as the design counted.
 - **One rule the design didn't have.** One 地理 item's options were pictures, which the transcription left as four empty strings. It would stop the task with an empty-continuation error, so `keep` also requires every option to have text. That leaves 18,912 docs, not the 18,913 the design expected once follow-ups were dropped.
 - **Labels are checked.** One scored 英文 item's labels read A, B, C, B, a transcription slip; its answer C still names one option. `to_doc` raises an error naming the doc if an answer doesn't name exactly one option, so a rebuild with a worse slip fails at load instead of scoring a wrong gold.
 - **The format is chosen once.** `subject_task` picks the header, the PMI context and the `to_doc` (`chinese_doc` or `english_doc`) together, so the English task can't render a Chinese row's format or the reverse.

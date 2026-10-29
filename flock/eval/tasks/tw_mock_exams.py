@@ -111,10 +111,10 @@ def subject_task(subject: Subject) -> MultipleChoiceTask:
 
     return MultipleChoiceTask(
         name=f"tw_mock_exams_{subject.name}",
-        # Private: only accounts with read access can run these tasks (009.D1).
+        # Private: only members of the Cerulean organization can run these tasks (009.D1).
         dataset=Dataset(
-            repo="harrychangtw/tw-mock-exams",
-            revision="bfad9046aa861979a2e95ca64a32a907f9baa6b7",
+            repo="cerulean-works/tw-mock-exams",
+            revision="e62f9adf374da2e0fcd0095428f6339da980f020",
             subset=subject.name,
             split="test",
         ),
