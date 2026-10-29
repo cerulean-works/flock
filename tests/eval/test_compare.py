@@ -295,10 +295,10 @@ def test_the_bank_compares_equal_to_itself_rewritten_in_the_current_layout(write
         fields: dict[str, Any] = dict(task)
         del fields["docs_per_second"]  # derived, not a field
         fields["truncation"] = Truncation(**fields["truncation"])
-        # Schema 5 fields the bank predates. `compare` reads none of them.
         fields["dataset"] = TASKS[task["task"]].dataset
         tasks.append(TaskResult(**fields))
-    suites = [SuiteResult(suite_hash="", **suite) for suite in data["suites"]]
+    # The bank predates schema 5's suite hashes and library versions. `compare` reads neither.
+    suites = [SuiteResult(suite_hash="unknown", **suite) for suite in data["suites"]]
     provenance = Provenance(**data["provenance"], tokenizers="unknown", datasets="unknown")
     rewritten = Results(provenance, tasks, suites)
 
@@ -307,3 +307,5 @@ def test_the_bank_compares_equal_to_itself_rewritten_in_the_current_layout(write
     assert data["provenance"]["dtype"] == "float32"
     assert "base_easy" in comparison.suites
     assert comparison.breaches == []
+    # Only the layout differs: a bank from an older schema still passes.
+    assert comparison.provenance.keys() <= {"schema_version"}
