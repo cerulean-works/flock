@@ -373,6 +373,25 @@ def test_cli_runs_and_prints_primary_metric_first(offline_model, tmp_path, monke
     assert data["provenance"]["command"] == "flock-eval " + " ".join(argv)
 
 
+def test_run_loads_the_weights_in_the_dtype_asked_for(offline_model, scorer, monkeypatch, tmp_path):
+    loaded = []
+
+    def from_pretrained(*args, **kwargs):
+        loaded.append(kwargs["dtype"])
+        return scorer
+
+    monkeypatch.setattr(ScoringModel, "from_pretrained", from_pretrained)
+    monkeypatch.setitem(run.TASKS, "arc_easy", TASK)
+    argv = ["run", "--model", "tiny@0", "--task", "arc_easy", "--out", str(tmp_path)]
+
+    evaluate(EvalConfig(model="tiny@0", tasks=("arc_easy",)))
+    CliRunner().invoke(cli.main, [*argv, "--dtype", "float32"], catch_exceptions=False)
+
+    assert loaded == [torch.bfloat16, torch.float32]  # bfloat16 unless asked
+    with pytest.raises(ValueError, match="dtype must be bfloat16 or float32"):
+        EvalConfig(model="tiny@0", tasks=("arc_easy",), dtype="float16")  # ty: ignore[invalid-argument-type]
+
+
 def test_cli_needs_a_task_or_suite():
     result = CliRunner().invoke(cli.main, ["run", "--model", "m@0", "--out", "o"])
 

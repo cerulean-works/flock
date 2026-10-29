@@ -21,6 +21,7 @@ uv run flock-eval run \
 | `--out` | required | The directory for `results.json` and `predictions/`. It must be new or empty, so one directory holds one run. |
 | `--limit` | all docs | Score only each task's first N docs, for quick checks. Results with a limit aren't comparable to full runs. |
 | `--batch-tokens` | `32768` | The most padded tokens in one forward pass. Lower it if the GPU runs out of memory. Compare only runs with the same value. See [Batching and precision](how-scoring-works#batching-and-precision). |
+| `--dtype` | `bfloat16` | The weights' dtype, `bfloat16` or `float32`. Log-softmax runs in float32 either way. Compare only runs with the same value. |
 | `--device` | `cuda` if available, else `cpu` | The torch device. |
 | `--wandb-project` | off | Also log the run to this project through the `wandb` SDK. Run `wandb login --host <flock url>` first, so it goes to Flock. |
 
@@ -33,6 +34,14 @@ uv run flock-eval run \
   --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf \
   --suite base_easy \
   --out results/olmo2-1b-base-easy
+```
+
+## `flock-eval compare`
+
+Compares a new `results.json` with a banked one and exits non-zero if any score moved past its tolerance or the runs used different settings. See [Checking scores against the bank](regression).
+
+```bash
+uv run flock-eval compare tests/eval/regression/olmo-2-0425-1b-float32.json results/regression/results.json
 ```
 
 ## Tracker runs

@@ -1,5 +1,6 @@
 """`flock.cli.s3` and `flock s3` (D58, D59), against a flock with S3 on."""
 
+import datetime as dt
 import json
 import pickle
 import shlex
@@ -183,12 +184,13 @@ def flock_admin_token(flock: S3Flock) -> str:
     return flock.call(flock.store.accounts.start_session(admin))["access_token"]
 
 
-def test_credentials_renew_before_they_expire(flock, alice, signed_in):
-    creds = s3.credentials(ttl=2)
+def test_credentials_renew_before_they_expire(flock, alice, signed_in, clock):
+    wall = clock("flock.cli.s3")
+    creds = s3.credentials(ttl=120)
     first = creds.access_key_id
     assert creds.org == "flock"
     assert creds.access_key_id == first  # not yet due: half its lifetime is left
-    time.sleep(1.1)
+    wall.advance(61)
     second = creds.access_key_id
     assert second != first
     assert creds.uri("checkpoints", "run-1/", "model.pt") == "s3://checkpoints/run-1/model.pt"
@@ -211,13 +213,18 @@ def test_credentials_pickle_without_their_key(flock, alice, signed_in):
     assert len(keys_of(flock, alice)) == 2
 
 
-def test_boto3_clients_renew_their_key(flock, alice, signed_in):
+def test_boto3_clients_renew_their_key(flock, alice, signed_in, monkeypatch):
     alice.api.post("/api/v1/orgs/flock/buckets", {"name": "data"})
-    creds = s3.credentials(ttl=4)
+    creds = s3.credentials(ttl=240)
     client = creds.boto3_client()
     client.put_object(Bucket="data", Key="x", Body=b"x")
     used = {k["access_key_id"] for k in keys_of(flock, alice)}
-    time.sleep(2.5)  # past half the key's lifetime: botocore asks for a new one
+    # Exercise botocore's real refresh callback while the original server key stays valid.
+    monkeypatch.setattr(
+        client._request_signer._credentials,
+        "_time_fetcher",
+        lambda: dt.datetime.now(dt.UTC) + dt.timedelta(seconds=121),
+    )
     assert client.get_object(Bucket="data", Key="x")["Body"].read() == b"x"
     assert len({k["access_key_id"] for k in keys_of(flock, alice)} - used) == 1
     assert s3.create_bucket("more")["name"] == "more"

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from app.api.src.api.dashboard import Snapshot
-from app.api.src.core.live import Subscriber
+from app.api.src.core.live import Subscriber, points_message
 from app.api.src.core.metric_defs import parse_metric_defs
 from tests.app.utils import history_rows, system_samples
 
@@ -107,6 +107,20 @@ def test_snapshot_filters_runs(api):
     bad = api.get("/api/v1/projects/flock/p/workspace", filter='{"config.lr": {"$bogus": 1}}')
     assert bad.status == 400
     assert api.get("/api/v1/projects/flock/p/workspace", filter="{").status == 400
+
+
+def test_snapshot_has_and_filters_on_run_owners(flock, api):
+    alice = flock.add_user("alice@lab.test")
+    me = api.get("/api/v1/me").json()["id"]
+    api.create_run("p", "mine")
+    alice.api.create_run("p", "hers")
+    snap = api.workspace()
+    kinds = {c["key"]: c["kind"] for c in snap["columns"]}
+    assert kinds["owner"] == "user"
+    assert [r["id"] for r in snap["runs"]] == ["hers", "mine"]
+    assert snap["cells"]["owner"] == [alice.id, me]
+    snap = api.workspace(filter=f'{{"owner": {alice.id}}}')
+    assert [r["id"] for r in snap["runs"]] == ["hers"]
 
 
 def test_snapshot_lists_only_the_metrics_of_its_runs(api):
@@ -252,7 +266,7 @@ def test_stream_announces_new_metric_definitions(api, events):
 # ---------------------------------------------------------------------- live stream
 
 
-def test_stream_replays_missed_points_then_streams_new_ones(api, events):
+def test_stream_replays_missed_points_then_streams_new_ones(api, events, flock, monkeypatch):
     api.create_run("p", "r1")
     api.stream("p", "r1", history_rows(3, loss=float))
     lines = api.workspace()["runs"][0]["lines"]
@@ -261,6 +275,19 @@ def test_stream_replays_missed_points_then_streams_new_ones(api, events):
         "p", "r1", history_rows(2, start=3, loss=float), offset=3
     )  # logged after the snapshot
 
+    histories = flock.store.histories
+
+    async def histories_with_overlap(runs, keys=None, stream="history"):
+        result = await histories(runs, keys, stream)
+        # Deliver the write while subscribed but before its replay is sent. This
+        # overlap is part of the SSE contract; slower CI scheduling exposed it.
+        run = runs[0]
+        await flock.store.relay.deliver(
+            points_message(run.project.pk, run.pk, run.name, stream, lines, 5)
+        )
+        return result
+
+    monkeypatch.setattr(flock.store, "histories", histories_with_overlap)
     live = events("p", f"r1:{lines}")
     hello = live.next_of("hello")
     assert hello["runs"] == {"r1": {"state": "running", "lines": 5}}
@@ -271,6 +298,16 @@ def test_stream_replays_missed_points_then_streams_new_ones(api, events):
 
     api.stream("p", "r1", history_rows(1, start=5, loss=float, acc=lambda s: 0.5), offset=5)
     new = live.next_of("history")
+    overlaps = 0
+    while new["lines"] <= replay["lines"]:
+        assert new["run"] == "r1"
+        assert all(
+            row < replay["lines"] for series in new["series"].values() for row in series["rows"]
+        )
+        overlaps += 1
+        new = live.next_of("history")
+    assert overlaps >= 1  # the replay hook always exercises the overlap
+    assert new["run"] == "r1"
     assert new["lines"] == 6
     assert new["series"] == {
         "loss": {"rows": [5], "x": [5], "y": [5.0]},
@@ -304,12 +341,16 @@ def test_stream_reports_summary_state_and_new_runs(api, events):
     assert created["run"] == "fresh" and created["state"] == "running"
 
 
-def test_crashed_runs_are_announced(make_flock, events):
+def test_crashed_runs_are_announced(make_flock, events, clock):
+    # Keep heartbeat age fixed until subscribed: a crash before then would be missed
+    # (PR #49). The real crash watcher still detects and publishes the stale run.
+    wall = clock("app.api.src.core.store")
     server = make_flock(crash_timeout=0.3)
     api = server.client()
     api.create_run("p", "r1")
     live = events("p", "r1", client=api)
-    live.next_of("hello")
+    assert live.next_of("hello")["runs"]["r1"]["state"] == "running"
+    wall.advance(1)
     assert live.next_of("run")["state"] == "crashed"
     live.close()
     api.close()

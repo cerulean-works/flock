@@ -536,10 +536,10 @@ export interface Billing {
 export type ColumnGroup = 'info' | 'config' | 'summary';
 
 /**
- * How a column's values are stored and rendered. `num`, `time` and `duration` travel as
- * Float64 (times and durations in seconds); the others as JSON values.
+ * How a column's values are stored and rendered. `num`, `time`, `duration` and `user` travel
+ * as Float64 (times and durations in seconds, users as their ids); the others as JSON values.
  */
-export type ColumnKind = 'num' | 'time' | 'duration' | 'str' | 'state' | 'bool' | 'json';
+export type ColumnKind = 'num' | 'time' | 'duration' | 'user' | 'str' | 'state' | 'bool' | 'json';
 
 export interface ColumnDef {
 	/** Flock column name, e.g. `config.trainer.learning_rate`. Also the sort key. */

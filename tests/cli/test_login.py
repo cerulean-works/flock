@@ -161,8 +161,11 @@ def test_an_unreachable_server(flock_cli):
     assert result.stderr.startswith("Error: Couldn't reach http://127.0.0.1:9")
 
 
-def test_logout_ends_the_session_on_the_server(server, alice, signed_in, flock_cli, isolated):
-    result = flock_cli("logout")
+def test_logout_ends_the_session_on_the_server(
+    server, alice, signed_in, flock_cli, isolated, notification
+):
+    with notification(server.store.bus, server.loop, "flock_auth", "sessions"):
+        result = flock_cli("logout")
     assert result.exit_code == 0, result.output
     assert result.stdout == f"Logged out of {server.url}.\n"
     assert server.client(token=signed_in).get(ME).status == 401

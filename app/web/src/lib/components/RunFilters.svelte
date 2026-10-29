@@ -2,6 +2,7 @@
 	import BracketsIcon from '@lucide/svelte/icons/brackets';
 	import ListFilterIcon from '@lucide/svelte/icons/list-filter';
 	import PlusIcon from '@lucide/svelte/icons/plus';
+	import UserIcon from '@lucide/svelte/icons/user';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -16,7 +17,9 @@
 		isGroup,
 		opLabel,
 		opsFor,
+		ownedBy,
 		parseValue,
+		setOwner,
 		UNARY,
 		valueText,
 		type FilterMatch,
@@ -31,19 +34,24 @@
 	const ws = getWorkspace();
 	const applied = $derived(ws.page.query.filters);
 	const count = $derived(countConditions(applied));
+	/** Who is looking: "My runs" keeps the runs they logged. */
+	const me = $derived(page.data.shell?.me.id);
+	const mine = $derived(me != null && ownedBy(applied, me));
 
 	const STATES: RunState[] = ['running', 'preempting', 'finished', 'failed', 'crashed'];
 
-	/** Values offered for columns with few possible ones. */
-	const SUGGESTIONS: Partial<Record<ColumnKind, AutocompleteOption[]>> = {
+	/** Values offered for columns with few possible ones: users are the org's members. */
+	const suggestions = $derived<Partial<Record<ColumnKind, AutocompleteOption[]>>>({
 		state: STATES.map((value) => ({ value })),
-		bool: [{ value: 'true' }, { value: 'false' }]
-	};
+		bool: [{ value: 'true' }, { value: 'false' }],
+		user: [...ws.people.values()].map((p) => ({ value: p.email, hint: p.name }))
+	});
 
 	const KINDS: Record<ColumnKind, string> = {
 		num: 'number',
 		time: 'date',
 		duration: 'duration',
+		user: 'person',
 		str: 'text',
 		state: 'state',
 		bool: 'true/false',
@@ -77,7 +85,8 @@
 
 	function draft(f: RunFilter): DraftItem {
 		if (isGroup(f)) return { id: ++lastId, match: f.match, items: f.filters.map(draft) };
-		return { id: ++lastId, key: f.key, op: f.op, text: valueText(f.value, kindOf(f.key)) };
+		const text = valueText(f.value, kindOf(f.key), ws.people);
+		return { id: ++lastId, key: f.key, op: f.op, text };
 	}
 
 	let open = $state(false);
@@ -169,7 +178,7 @@
 				out.push({ key, op: d.op, value: null });
 				continue;
 			}
-			const parsed = parseValue(d.text, kindOf(key));
+			const parsed = parseValue(d.text, kindOf(key), ws.people);
 			if ('error' in parsed) {
 				error = `${key}: ${parsed.error}`;
 				return null;
@@ -237,7 +246,7 @@
 		</Select.Root>
 		<Autocomplete
 			bind:value={d.text}
-			options={(!unary && kind && SUGGESTIONS[kind]) || []}
+			options={(!unary && kind && suggestions[kind]) || []}
 			disabled={unary}
 			placeholder={unary
 				? ''
@@ -245,7 +254,9 @@
 					? 'YYYY-MM-DD'
 					: kind === 'num' || kind === 'duration'
 						? 'Number'
-						: 'Value'}
+						: kind === 'user'
+							? 'Email'
+							: 'Value'}
 			aria-label="Value"
 		/>
 		<Button
@@ -300,6 +311,17 @@
 	</div>
 {/snippet}
 
+{#if me != null}
+	<Button
+		variant={mine ? 'secondary' : 'outline'}
+		aria-pressed={mine}
+		title={mine ? 'Show everyone’s runs' : 'Show only the runs you logged'}
+		onclick={() => show(setOwner(applied, me, !mine))}
+	>
+		<UserIcon /> My runs
+	</Button>
+{/if}
+
 <div class="flex items-center">
 	<Popover.Root bind:open {onOpenChange}>
 		<Popover.Trigger>
@@ -308,7 +330,7 @@
 					{...props}
 					variant={count ? 'secondary' : 'outline'}
 					class={count ? 'rounded-r-none' : ''}
-					title={count ? describeFilters(applied, kindOf, true) : 'Filter runs'}
+					title={count ? describeFilters(applied, kindOf, true, ws.people) : 'Filter runs'}
 				>
 					<ListFilterIcon /> Filter
 					{#if count}

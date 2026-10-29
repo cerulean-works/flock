@@ -87,7 +87,7 @@ def test_setting_up_before_any_account_exists(make_flock):
     assert login(server, "root@x.io", "rootroot").status == 200
 
 
-def test_login_refresh_and_logout(flock):
+def test_login_refresh_and_logout(flock, notification):
     alice = flock.add_user("alice@lab.test")
     assert login(flock, alice.email, "wrong password").status == 401
     assert login(flock, "nobody@lab.test", alice.password).status == 401
@@ -106,7 +106,8 @@ def test_login_refresh_and_logout(flock):
     renewed = flock.client(token=fresh["access_token"])
     assert renewed.get(ME).status == 200
 
-    assert renewed.post("/api/v1/auth/logout", {}).status == 204
+    with notification(flock.store.bus, flock.loop, "flock_auth", "sessions"):
+        assert renewed.post("/api/v1/auth/logout", {}).status == 204
     assert renewed.get(ME).status == 401  # the session ended, not just when the token expires
     assert api.get(ME).status == 401  # same session
     gone = anon.post("/api/v1/auth/refresh", {"refresh_token": fresh["refresh_token"]})
@@ -114,13 +115,14 @@ def test_login_refresh_and_logout(flock):
 
 
 def test_access_tokens_expire_and_must_be_ours(make_flock):
-    server = make_flock(access_token_ttl=1.0)
+    server = make_flock(access_token_ttl=120)
     alice = server.add_user("alice@lab.test")
     tokens = alice.signup
     header, payload, signature = tokens["access_token"].split(".")
     tampered = f"{header}.{payload}.{signature[::-1]}"
     assert server.client(token=tampered).get(ME).status == 401
     claims = jwt.decode(tokens["access_token"], options={"verify_signature": False})
+    assert claims["exp"] - claims["iat"] == 120
     forged = jwt.encode(
         claims | {"exp": time.time() + 3600}, "another secret that is long enough", "HS256"
     )
@@ -128,8 +130,8 @@ def test_access_tokens_expire_and_must_be_ours(make_flock):
 
     api = server.client(token=tokens["access_token"])
     assert api.get(ME).status == 200
-    time.sleep(2.1)
-    assert api.get(ME).status == 401
+    expired = jwt.encode(claims | {"exp": time.time() - 1}, server.store.accounts.secret, "HS256")
+    assert server.client(token=expired).get(ME).status == 401
     refreshed = server.anonymous().post(
         "/api/v1/auth/refresh", {"refresh_token": tokens["refresh_token"]}
     )

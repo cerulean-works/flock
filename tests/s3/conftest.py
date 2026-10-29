@@ -184,6 +184,14 @@ def env(make_module_flock: Flocks, s3_server: S3Server) -> S3Env:
 
 
 @pytest.fixture
+def invalidates(env: S3Env, notification):
+    """Wait for the proxy to receive the mutation's real database notification."""
+    bus = env.flock.proxy.app.state.proxy._directory.bus
+
+    return lambda table: notification(bus, env.flock.proxy.loop, "s3_invalidate", table)
+
+
+@pytest.fixture
 def wait_for() -> Callable[..., Any]:
     def wait(predicate: Callable[[], Any], timeout: float = 30.0, interval: float = 0.05) -> Any:
         deadline = time.monotonic() + timeout

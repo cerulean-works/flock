@@ -63,6 +63,17 @@
 	--ansi-blue: #1768af;
 	--ansi-magenta: #8a3f8f;
 	--ansi-cyan: #18727a;
+	/* Code highlighting, the docs site's palette */
+	--hl-comment: #596b85;
+	--hl-keyword: #b31b8b;
+	--hl-string: #087a39;
+	--hl-number: #b94c00;
+	--hl-title: #0067c8;
+	--hl-type: #7229d6;
+	--hl-attr: #007a8a;
+	--hl-meta: #526b91;
+	--hl-deletion: #cf222e;
+	--hl-addition: #087a39;
 }
 
 .dark {
@@ -103,10 +114,21 @@
 	--ansi-blue: #a8d4ff;
 	--ansi-magenta: #d9a2dd;
 	--ansi-cyan: #85d1d6;
+	--hl-comment: #8195b8;
+	--hl-keyword: #f472d0;
+	--hl-string: #4ade80;
+	--hl-number: #fb923c;
+	--hl-title: #60a5fa;
+	--hl-type: #a78bfa;
+	--hl-attr: #22d3ee;
+	--hl-meta: #94a3b8;
+	--hl-deletion: #fb7185;
+	--hl-addition: #4ade80;
 }
 
 @theme inline {
 	--font-sans: 'Host Grotesk', Arial, sans-serif;
+	--font-reading: 'Geist', Arial, sans-serif;
 	--font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
 
 	--color-background: var(--background);

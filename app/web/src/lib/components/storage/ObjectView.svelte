@@ -53,9 +53,10 @@
 	]);
 </script>
 
-<div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+<!-- Tracks may shrink below their content, so a long key wraps instead of widening the page. -->
+<div class="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
 	<ObjectPreview {org} {bucket} {object} ondownload={download} />
-	<aside class="grid content-start gap-4">
+	<aside class="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-4">
 		<div class="flex flex-wrap gap-2">
 			<Button size="sm" onclick={download}><DownloadIcon /> Download</Button>
 			<Button
@@ -75,8 +76,10 @@
 				<Trash2Icon /> Delete
 			</Button>
 		</div>
-		<div class="flex items-center gap-1 text-[13px] text-muted-foreground">
-			<span class="min-w-0 truncate font-mono text-[12.5px]">{s3Uri(bucket, object.key)}</span>
+		<div class="flex items-start gap-1 text-[13px] text-muted-foreground">
+			<span class="min-w-0 pt-0.5 font-mono text-[12.5px] break-all"
+				>{s3Uri(bucket, object.key)}</span
+			>
 			<CopyButton text={s3Uri(bucket, object.key)} label="Copy S3 URI" />
 		</div>
 		<dl class="grid gap-2 text-[13px]">

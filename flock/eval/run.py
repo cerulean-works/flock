@@ -6,6 +6,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal, get_args
 
 import torch
 
@@ -21,6 +22,9 @@ _ONE_RUN = (
     "one directory holds one run, and a run that crashed leaves its predictions behind. "
     "Pass a new out directory or delete this one."
 )
+
+# The weights' dtypes `run` loads. Log-softmax always runs in float32.
+Dtype = Literal["bfloat16", "float32"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +43,8 @@ class EvalConfig:
             Score only each task's first `limit` docs, for quick checks.
         batch_tokens (`int`, *optional*):
             Passed to [`~eval.model.ScoringModel`].
+        dtype (`Dtype`, *optional*, defaults to `"bfloat16"`):
+            The weights' dtype, `"bfloat16"` or `"float32"`. Log-softmax always runs in float32.
         device (`str`, *optional*):
             Where to run. Defaults to CUDA when available.
         wandb_project (`str`, *optional*):
@@ -49,7 +55,7 @@ class EvalConfig:
             Registry names of the suites to run. Their tasks run after `tasks`, each task once, and each suite and the suites it holds are scored.
 
     Raises:
-        `ValueError`: if no task or suite is given, a task or suite repeats, or `limit` or `batch_tokens` is less than 1, before any model loads.
+        `ValueError`: if no task or suite is given, a task or suite repeats, or `limit` or `batch_tokens` is less than 1, or `dtype` is not `"bfloat16"` or `"float32"`, before any model loads.
     """
 
     model: str
@@ -57,6 +63,7 @@ class EvalConfig:
     out: Path | None = None
     limit: int | None = None
     batch_tokens: int = DEFAULT_BATCH_TOKENS
+    dtype: Dtype = "bfloat16"
     device: str | None = None
     wandb_project: str | None = None
     command: str | None = None
@@ -75,6 +82,8 @@ class EvalConfig:
             raise ValueError(f"limit must be at least 1, got {self.limit}")
         if self.batch_tokens < 1:
             raise ValueError(f"batch_tokens must be at least 1, got {self.batch_tokens}")
+        if self.dtype not in get_args(Dtype):
+            raise ValueError(f"dtype must be bfloat16 or float32, got {self.dtype}")
 
 
 def evaluate(config: EvalConfig) -> Results:
@@ -111,7 +120,10 @@ def evaluate(config: EvalConfig) -> Results:
         raise ValueError(f"a task and a suite share the names {clashes}")
 
     model = ScoringModel.from_pretrained(
-        config.model, device=config.device, batch_tokens=config.batch_tokens
+        config.model,
+        device=config.device,
+        dtype=getattr(torch, config.dtype),
+        batch_tokens=config.batch_tokens,
     )
     # Collected before scoring, so the commit's dirty flag describes the tree as scoring starts
     # and `created_at` is when scoring started, as lm-evaluation-harness records `start_date`.

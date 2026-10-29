@@ -68,7 +68,7 @@ Each entry of `runs` has:
 | `system_lines` | The number of system samples, the cursor for system metrics. |
 | `metric_defs` | The run's metric definitions. See [Metric definitions](#metric-definitions). |
 
-`columns` lists the run attributes `state`, `name`, `created_at`, `updated_at`, `tags`, `group`, `job_type`, `notes`, `host`, `program`, `commit`, `sweep` and `exitcode`, leaving out those no run has. Then come the `config.*` columns, then the `summary.*` columns, each sorted by name. `display_name` isn't a column, since it's each run's `name` in `runs`. Neither are `description`, `heartbeat_at` and `owner`: read them from the [run table](queries#the-run-table).
+`columns` lists the run attributes `state`, `name`, `created_at`, `updated_at`, `owner`, `tags`, `group`, `job_type`, `notes`, `host`, `program`, `commit`, `sweep` and `exitcode`, leaving out those no run has. Then come the `config.*` columns, then the `summary.*` columns, each sorted by name. `display_name` isn't a column, since it's each run's `name` in `runs`. Neither are `description` and `heartbeat_at`: read them from the [run table](queries#the-run-table).
 
 A column's `kind` tells you how to display it:
 
@@ -77,6 +77,7 @@ A column's `kind` tells you how to display it:
 | `state` | The `state` column. |
 | `time` | Unix timestamps: `created_at`, `updated_at` and `summary._timestamp`. |
 | `duration` | Seconds: `summary._runtime`. |
+| `user` | User ids: `owner`, who logged the run. `GET /api/v1/orgs/{org}/members` names them. |
 | `num` | Numbers. |
 | `str` | Strings. |
 | `bool` | Booleans. |

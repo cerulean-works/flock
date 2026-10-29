@@ -109,23 +109,28 @@ def test_a_run_deleted_on_one_replica_stays_deleted_while_its_client_logs_throug
         assert api.get("/api/v1/projects/flock/doomed").json()["run_count"] == 0
 
 
-def test_a_session_revoked_on_one_replica_is_refused_by_the_other_at_once(make_flock: Flocks):
+def test_a_session_revoked_on_one_replica_is_refused_by_the_other_at_once(
+    make_flock: Flocks, notification
+):
     first, second = make_flock.replicas(2)
     alice = first.add_user("alice@lab.test")
     on_second = second.client(token=alice.token)
     assert on_second.get("/api/v1/me").status == 200  # now cached on the second replica
     browser = first.client(token=alice.signup["access_token"])
     session = next(s for s in browser.get(SESSIONS).json()["sessions"] if s["name"] == "tests")
-    assert browser.delete(f"{SESSIONS}/{session['id']}").status == 204
+    with notification(second.store.bus, second.loop, "flock_auth", "sessions"):
+        assert browser.delete(f"{SESSIONS}/{session['id']}").status == 204
     assert on_second.get("/api/v1/me").status == 401
 
     # A role change too: alice stops being an admin of flock everywhere.
     admin = first.client()
     members = f"/api/v1/orgs/flock/members/{alice.id}"
-    assert admin.patch(members, {"role": "admin"}).status == 200
+    with notification(second.store.bus, second.loop, "flock_auth", "memberships"):
+        assert admin.patch(members, {"role": "admin"}).status == 200
     as_alice = second.client(token=alice.signup["access_token"])
     assert as_alice.get("/api/v1/orgs/flock").json()["role"] == "admin"
-    assert admin.patch(members, {"role": "member"}).status == 200
+    with notification(second.store.bus, second.loop, "flock_auth", "memberships"):
+        assert admin.patch(members, {"role": "member"}).status == 200
     assert as_alice.get("/api/v1/orgs/flock").json()["role"] == "member"
 
 
@@ -160,7 +165,12 @@ def test_an_import_of_a_killed_replica_is_marked_interrupted_by_the_other(
     assert refused.status == 409  # claimed by the first replica, which still heartbeats
 
     first.kill()
-    second.call(asyncio.sleep(1.5))
+    second.call(
+        second.store.db.execute(
+            "UPDATE org_imports SET heartbeat_at = now() - interval '2 seconds' "
+            "WHERE state = 'running'"
+        )
+    )
     second.call(second.store.flush())  # background work, as every replica does every few seconds
     job = on_second.get("/api/v1/orgs/lab/import").json()
     assert job["state"] == "interrupted"

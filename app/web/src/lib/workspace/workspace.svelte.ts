@@ -14,11 +14,13 @@ import { slotOf, type Series } from '#lib/chart/series.ts';
 import {
 	LIVE_STATES,
 	type MetricStream,
+	type Person,
 	type ProjectMeta,
 	type RunPage,
 	type SectionDef
 } from '#lib/types.ts';
 import { toggle } from '#lib/utils.ts';
+import type { People } from './filters.ts';
 import {
 	type ColumnGroup,
 	type ColumnPrefs,
@@ -160,9 +162,10 @@ export interface RunDialog {
 /**
  * Client state for one workspace.
  *
- * Server data (`meta`, `page`) is read through getters so it always reflects the latest load
- * result and is never proxied. Everything here is UI state layered on top; collections are
- * Svelte's reactive Set/Map, so toggling one run only notifies readers of that run's id.
+ * Server data (`meta`, `page`, `members`) is read through getters so it always reflects the
+ * latest load result and is never proxied. Everything here is UI state layered on top;
+ * collections are Svelte's reactive Set/Map, so toggling one run only notifies readers of that
+ * run's id.
  *
  * Live updates mutate the page in place and then bump a version: per metric for curves (so
  * only panels of metrics that received points repaint) and one for the table.
@@ -170,6 +173,7 @@ export interface RunDialog {
 export class Workspace {
 	#meta: () => ProjectMeta;
 	#page: () => RunPage;
+	#members: () => readonly Person[];
 
 	/** Run ids hidden from charts. Kept across pages so a hidden run stays hidden. */
 	readonly hidden = new SvelteSet<string>();
@@ -235,9 +239,14 @@ export class Workspace {
 	/** Live runs in the project (from the snapshot, then kept current by the stream). */
 	activeRuns = $state(0);
 
-	constructor(meta: () => ProjectMeta, page: () => RunPage) {
+	constructor(
+		meta: () => ProjectMeta,
+		page: () => RunPage,
+		members: () => readonly Person[] = () => []
+	) {
 		this.#meta = meta;
 		this.#page = page;
+		this.#members = members;
 		this.activeRuns = page().active;
 	}
 
@@ -248,6 +257,12 @@ export class Workspace {
 	get page() {
 		return this.#page();
 	}
+
+	/** The org's members by id: who logged the runs, as the `owner` column has them. */
+	people: People = $derived.by(
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- rebuilt, never mutated
+		() => new Map(this.#members().map((m) => [m.id, m]))
+	);
 
 	colors = $derived(this.page.runs.map((r) => runColor(r.ordinal)));
 

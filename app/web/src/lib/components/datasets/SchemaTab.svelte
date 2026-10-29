@@ -16,7 +16,7 @@
 		<div
 			class="mt-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_5rem] gap-3 border-b pb-1.5 text-xs text-muted-foreground"
 		>
-			<span class="pl-6">Name</span>
+			<span>Name</span>
 			<span>Type</span>
 			<span>Nulls</span>
 		</div>
