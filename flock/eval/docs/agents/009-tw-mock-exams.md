@@ -35,6 +35,8 @@ The source is a shared folder of 2,416 PDFs (29,848 pages). Each page was transc
 | `char_sensitive` | 245 items about 錯別字, 字音 or 字形, whose answer depends on characters an OCR model may silently correct |
 | `section` | the paper's section heading, e.g. 一、詞彙題, 二、綜合測驗 |
 
+The set is internal because Taiwan's Copyright Act art. 9 exempts exams held under law (the official and school papers) but not publisher practice tests, and quoted passages keep their own copyright, so a public version must filter on `rights` and still cannot publish the passages.
+
 Overlap with TMMLU+ (`ikala/tmmluplus` v1.1 at 005's pin `94d86f1d`, 21,483 questions) is small: no stem of 20 or more characters matches exactly, and 6 items share at least half their character 13-grams with it, the test GPT-3 used (Brown et al. 2020, app. C). Mock exams are often posted online, so contamination with web pretraining data is likely and is not measured here.
 
 ---
