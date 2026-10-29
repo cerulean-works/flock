@@ -61,7 +61,7 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `basic_skills` | the 6 `basic_skills_<skill>` tasks | each task's primary metric (`acc_per_token`) | `basic_skills:rc::olmes` |
 | `basic_skills:bpb` | the 6 `basic_skills_<skill>` tasks | `bpb` | `basic_skills:rc:bpb::olmes` |
 | `base_easy:qa_rc` | `arc_easy`, `arc_challenge`, `csqa`, `hellaswag`, `winogrande`, `socialiqa`, `piqa`, `sciq`, `qasper_yesno`, `sciriff_yesno`, `lab_bench_dbqa`, `lab_bench_protocolqa`, `medmcqa`, `medqa_en`, `coqa`, `drop`, `jeopardy`, `naturalqs`, `squad`, `mmlu`, `basic_skills`, `lambada` | each task's primary metric | `olmo3:base_easy:qa_rc` |
-| `base_easy:qa_bpb` | the same tasks, `mmlu:bpb`, `basic_skills:bpb` and `lambada` | `bpb` | `olmo3:base_easy:qa_bpb` |
+| `base_easy:qa_bpb` | the same tasks, with `mmlu:bpb` and `basic_skills:bpb` in place of `mmlu` and `basic_skills` | `bpb` | `olmo3:base_easy:qa_bpb` |
 | `base_easy:math_bpb` | the 7 `minerva_math_<subject>` tasks | `bpb` | `olmo3:base_easy:math_bpb` |
 | `mt_mbpp` | the 17 `mt_mbpp_<language>` tasks | `bpb` | `mt_mbpp_v2fix` |
 | `base_easy:code_bpb` | `humaneval`, `mbpp`, `mt_mbpp` | `bpb` | `olmo3:base_easy:code_bpb` |

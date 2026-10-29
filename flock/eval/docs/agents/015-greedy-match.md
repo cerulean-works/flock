@@ -40,15 +40,17 @@ Its request strings are unchanged. Its hash changes once, because `primary_metri
 
 ### 015.D4. Prediction rows record `is_greedy` per choice, and `results.json` goes to schema 6
 
-014.D1 says a prediction row holds every input of every number the task reports, and `acc_greedy` is read from `is_greedy`, which no other field gives. So each row gains `is_greedy` per choice, after `num_bytes`, and `acc_greedy` can be recomputed from the file alone. The rows changed, so `schema_version` goes from 5 to 6, as 014.D1's new fields took it from 4 to 5. Nothing in `results.json` itself changes. `compare` reads neither the rows nor the version beyond printing it, so the regression bank, at schema 4 until its refresh, still compares cleanly against a schema 6 run with only the layout fields printed as differing.
+014.D1 says a prediction row holds every input of every number the task reports, and `acc_greedy` is read from `is_greedy`, which no other field gives. So each row gains `is_greedy` per choice, after `num_bytes`, and `acc_greedy` can be recomputed from the file alone. The rows changed, so `schema_version` goes from 5 to 6, as 014.D1's new fields took it from 4 to 5 (014.D8). Nothing in `results.json` itself changes. `compare` reads neither the rows nor the version beyond printing it, so the version alone causes no breach: the regression bank, at schema 4 until its refresh, is refused only for LAMBADA's hash (015.D3).
 
 *Prior work:* OLMES (`5a51f50`) keeps `is_greedy` per choice in `predictions.jsonl` next to `sum_logits` (`oe_eval/models/eleuther_huggingface.py:507`, written per choice as `model_output` in `oe_eval/metrics/metric.py:106`), which is how its `greedy_acc` was checked against ours without a new run.
 
 ---
 
-## 3. Corrections to 007
+## 3. Corrections to 007 and 010
 
 **D2, `GoldOnlyTask`'s fixed fields.** 007.D2 says `primary_metric`, `metrics` and `unconditional_context` are set by the class and can't be passed. `primary_metric` and `metrics` can now be passed, with the old values as defaults, so LAMBADA can ask for `acc_greedy`. `unconditional_context` is still fixed to `None`, and what the task can report is fixed by the class (015.D2).
+
+**010, the toy task.** Section 5 of 010 says `toy:gold_only` renders toy rows in DRCD's format, so the task snapshot pins the `文章：` passage line. The snapshot keeps one toy task per prompt path, and `toy:gold_only` is now this stage's English gold-only task reporting `acc_greedy` and `bpb`. DRCD's rendering, passage line included, is pinned by `test_drcd.py` alone.
 
 ---
 
@@ -57,7 +59,7 @@ Its request strings are unchanged. Its hash changes once, because `primary_metri
 1. `requests.py`: `Scores.is_greedy`. `model.py`: `_target_logprobs` also returns whether each target is the argmax; `_score` reduces it per request; `loglikelihood` fills it.
 2. `metrics.py`: `ChoiceScores.is_greedy`, `acc_greedy` in `MULTIPLE_CHOICE_METRICS` and `multiple_choice`. `tasks/base.py`: `choice_scores` lays it out per doc; `MultipleChoiceTask` leaves it out of what it computes; `GoldOnlyTask` computes `acc_greedy` and `bpb`.
 3. `tasks/lambada.py`: LAMBADA as a `GoldOnlyTask`. `tasks/base_easy.py`: LAMBADA in `qa_rc`.
-4. Tests: `is_greedy` equals an unbatched argmax per request at every batch budget, on requests built from the model's own greedy tokens so both outcomes occur; argmax ties; `acc_greedy` reads the gold column; a gold-only toy task in `tests/eval/toy.py` and the snapshot regenerated.
+4. Tests: `is_greedy` equals an unbatched argmax per request at every batch budget, on requests built from the model's own greedy tokens so both outcomes occur; argmax ties; `acc_greedy` reads the gold column; `toy:gold_only` in `tests/eval/toy.py` reporting `acc_greedy`, and the snapshot regenerated.
 5. Docs: `tasks.md` and `adding-a-task.md`. `results.py`: `is_greedy` in `prediction_rows` and schema 6, with `results.md`'s predictions table (015.D4).
 6. Checks: every other score unchanged before and after; LAMBADA's `acc_greedy` against OLMES on OLMo 2 1B (stage 003, D22).
 

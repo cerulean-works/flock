@@ -30,7 +30,7 @@ A run with an output directory writes `results.json` and one predictions file pe
   ],
   "suites": [
     {"suite": "mmlu", "suite_hash": "<sha256>", "members": ["mmlu_abstract_algebra", ...], "metric": null, "score": ...},
-    {"suite": "base_easy:qa_rc", "suite_hash": "<sha256>", "members": ["arc_easy", ..., "mmlu", "lambada"], "metric": null, "score": ...},
+    {"suite": "base_easy:qa_rc", "suite_hash": "<sha256>", "members": ["arc_easy", ..., "basic_skills", "lambada"], "metric": null, "score": ...},
     {"suite": "mmlu:bpb", "suite_hash": "<sha256>", "members": ["mmlu_abstract_algebra", ...], "metric": "bpb", "score": ...},
     {"suite": "base_easy:qa_bpb", "suite_hash": "<sha256>", "members": ["arc_easy", ..., "mmlu:bpb"], "metric": "bpb", "score": ...},
     ...,
