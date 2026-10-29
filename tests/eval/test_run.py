@@ -33,7 +33,7 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
     results = evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path))
 
     data = json.loads((tmp_path / "results.json").read_text())
-    assert data["schema_version"] == 5
+    assert data["schema_version"] == 6
     assert data["provenance"]["model"] == "tiny@0"
     assert data["provenance"]["flock_commit"] == "abc123"
     assert data["provenance"]["command"] is None  # the Python API names no command
@@ -243,6 +243,7 @@ def test_prediction_rows_drop_padded_choices(tmp_path):
             "num_tokens": [1, 2],
             "num_chars": [11, 12],
             "num_bytes": [21, 22],
+            "is_greedy": [False, False],
             "tokens_cut": [31, 32],
         },
         {
@@ -252,6 +253,7 @@ def test_prediction_rows_drop_padded_choices(tmp_path):
             "num_tokens": [3, 4, 5],
             "num_chars": [13, 14, 15],
             "num_bytes": [23, 24, 25],
+            "is_greedy": [False, True, True],
             "tokens_cut": [33, 34, 35],
         },
     ]
@@ -291,7 +293,7 @@ def test_score_task_does_not_depend_on_batching(scorer):
     assert score_task(scorer, TASK).metrics == pytest.approx(one_batch.metrics, abs=1e-5)
 
 
-def test_score_task_averages_greedy_match_over_gold_only_docs(scorer, monkeypatch):
+def test_score_task_averages_greedy_match_over_gold_only_docs(scorer, monkeypatch, tmp_path):
     gold_only = next(task for task in PROMPT_PATHS if task.name == "toy:gold_only")
     loglikelihood = scorer.loglikelihood
 
@@ -300,10 +302,12 @@ def test_score_task_averages_greedy_match_over_gold_only_docs(scorer, monkeypatc
         return dataclasses.replace(scores, is_greedy=torch.tensor([False, True]))
 
     monkeypatch.setattr(scorer, "loglikelihood", second_doc_greedy)
-    result = score_task(scorer, gold_only)
+    result = score_task(scorer, gold_only, out=tmp_path)
 
     assert list(result.metrics) == ["acc_greedy", "bpb"]
     assert result.metrics["acc_greedy"] == 0.5  # one doc of two, read from its one request
+    lines = (tmp_path / "predictions" / "toy:gold_only.jsonl").read_text().splitlines()
+    assert [json.loads(line)["is_greedy"] for line in lines] == [[False], [True]]
 
 
 def test_score_task_reports_only_the_tasks_metrics(scorer):

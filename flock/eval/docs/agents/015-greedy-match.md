@@ -6,7 +6,7 @@
 | Date | 2026-10-29 |
 | Builds on | [003](003-base-easy.md) (D20: a greedy-match metric for LAMBADA), [007](007-fewshot-example.md) (D2: `GoldOnlyTask`) |
 | Keeps | every request string; every other task's scores, metrics and hash |
-| Result | `Scores.is_greedy`, the `acc_greedy` metric, LAMBADA as a `GoldOnlyTask` reporting `acc_greedy` and `bpb`, LAMBADA in `base_easy:qa_rc` |
+| Result | `Scores.is_greedy`, the `acc_greedy` metric, LAMBADA as a `GoldOnlyTask` reporting `acc_greedy` and `bpb`, LAMBADA in `base_easy:qa_rc`, `is_greedy` in prediction rows, `results.json` schema 6 |
 
 The file number and the decision numbers are provisional. The file takes the next free number when its PR is opened.
 
@@ -38,6 +38,12 @@ OLMES has two tasks on the same requests: `lambada` (primary `greedy_acc`) and `
 
 Its request strings are unchanged. Its hash changes once, because `primary_metric` and `metrics` are part of the definition, so a banked run's LAMBADA entry is refused by `compare` as another instrument, and `base_easy:qa_rc` shows a breach on `members` and `score`, until the bank is refreshed.
 
+### 015.D4. Prediction rows record `is_greedy` per choice, and `results.json` goes to schema 6
+
+014.D1 says a prediction row holds every input of every number the task reports, and `acc_greedy` is read from `is_greedy`, which no other field gives. So each row gains `is_greedy` per choice, after `num_bytes`, and `acc_greedy` can be recomputed from the file alone. The rows changed, so `schema_version` goes from 5 to 6, as 014.D1's new fields took it from 4 to 5. Nothing in `results.json` itself changes. `compare` reads neither the rows nor the version beyond printing it, so the regression bank, at schema 4 until its refresh, still compares cleanly against a schema 6 run with only the layout fields printed as differing.
+
+*Prior work:* OLMES (`5a51f50`) keeps `is_greedy` per choice in `predictions.jsonl` next to `sum_logits` (`oe_eval/models/eleuther_huggingface.py:507`, written per choice as `model_output` in `oe_eval/metrics/metric.py:106`), which is how its `greedy_acc` was checked against ours without a new run.
+
 ---
 
 ## 3. Corrections to 007
@@ -52,7 +58,7 @@ Its request strings are unchanged. Its hash changes once, because `primary_metri
 2. `metrics.py`: `ChoiceScores.is_greedy`, `acc_greedy` in `MULTIPLE_CHOICE_METRICS` and `multiple_choice`. `tasks/base.py`: `choice_scores` lays it out per doc; `MultipleChoiceTask` leaves it out of what it computes; `GoldOnlyTask` computes `acc_greedy` and `bpb`.
 3. `tasks/lambada.py`: LAMBADA as a `GoldOnlyTask`. `tasks/base_easy.py`: LAMBADA in `qa_rc`.
 4. Tests: `is_greedy` equals an unbatched argmax per request at every batch budget, on requests built from the model's own greedy tokens so both outcomes occur; argmax ties; `acc_greedy` reads the gold column; a gold-only toy task in `tests/eval/toy.py` and the snapshot regenerated.
-5. Docs: `tasks.md` and `adding-a-task.md`.
+5. Docs: `tasks.md` and `adding-a-task.md`. `results.py`: `is_greedy` in `prediction_rows` and schema 6, with `results.md`'s predictions table (015.D4).
 6. Checks: every other score unchanged before and after; LAMBADA's `acc_greedy` against OLMES on OLMo 2 1B (stage 003, D22).
 
 ---
@@ -71,5 +77,4 @@ All numbers are on `allenai/OLMo-2-0425-1B`, final checkpoint `a1847dff` unless 
 
 ## 6. Known gaps
 
-- The predictions file doesn't record `is_greedy` yet, so `acc_greedy` can't be recomputed from it. It joins the per-choice fields once the run-provenance stage's predictions change is on `main`.
 - The float32 bank in `tests/eval/regression/` predates LAMBADA's new hash and `qa_rc` member (015.D3) until its next refresh.
