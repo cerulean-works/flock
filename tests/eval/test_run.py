@@ -356,7 +356,7 @@ def test_cli_rejects_counts_below_one(flag):
     assert "x>=1" in result.output
 
 
-def test_cli_runs_and_prints_primary_metric_first(offline_model, tmp_path, monkeypatch):
+def test_cli_runs_and_prints_each_tasks_primary_metric(offline_model, tmp_path, monkeypatch):
     argv = ["run", "--model", "tiny@0", "--task", "arc_easy", "--out", str(tmp_path)]
     # `--task` only accepts registered names, fixed when the CLI is imported, so the toy task
     # runs under the name `arc_easy`.
@@ -408,33 +408,42 @@ def test_cli_prints_suite_scores(toy_suites, tmp_path, monkeypatch):
 
     result = CliRunner().invoke(cli.main, argv, catch_exceptions=False)
 
-    out = result.output.splitlines()
-    assert out[1:4] == [line for line in out if "members" in line]  # suites before tasks
-    assert out[1].split() == ["base_easy", "unscored", "members", "2"]
-    assert out[3].startswith("toy:rc     0.")
+    out = [line.split() for line in result.output.splitlines()]
+    assert out[1] == ["base_easy", "unscored", "primary", "members", "2"]
+    assert out[2][0] == "toy:rc" and out[2][2:] == ["primary", "members", "2"]
+    assert out[3][0] == "toy:bpb" and out[3][2:] == ["bpb", "members", "2"]
+    assert out[4][2:] == ["acc_per_char", "docs", "2"]
 
+    verbose = ["run", "--model", "tiny@0", "--suite", "base_easy", "--verbose"]
     result = CliRunner().invoke(
-        cli.main, [*argv[:-1], str(tmp_path / "verbose"), "--verbose"], catch_exceptions=False
+        cli.main, [*verbose, "--out", str(tmp_path / "verbose")], catch_exceptions=False
     )
 
     assert result.output.splitlines()[-1] == "base_easy  unscored  (toy:rc, toy:bpb)"
 
 
-def test_the_summary_prints_suites_outermost_first_then_each_tasks_primary_metric():
+def test_the_summary_prints_each_suite_before_its_members_then_each_tasks_primary_metric():
     arc = task_result("arc_easy", {"acc_per_char": 0.75, "acc_raw": 0.5, "bpb": 1.25})
     mbpp = task_result("mbpp:bpb", {"bpb": 0.5}, seconds=0.0)
+    # As `evaluate` orders them for `--suite base_easy --suite knowledge`: each after its members.
     suites = [
-        SuiteResult("base_easy:qa_rc", "hash-rc", ["arc_easy"], None, 0.75),
-        SuiteResult("base_easy", "hash-be", ["base_easy:qa_rc", "mbpp:bpb"], None, None),
+        SuiteResult("mmlu", "hash-mmlu", ["arc_easy"], None, 0.75),
+        SuiteResult("base_easy:qa_rc", "hash-rc", ["mmlu", "arc_easy"], None, 0.75),
+        SuiteResult("base_easy:qa_bpb", "hash-bpb", ["arc_easy", "mbpp:bpb"], "bpb", 0.875),
+        SuiteResult("base_easy", "hash-be", ["base_easy:qa_rc", "base_easy:qa_bpb"], None, None),
+        SuiteResult("knowledge", "hash-kn", ["mmlu"], None, 0.75),
     ]
     results = Results(PROVENANCE, [arc, mbpp], suites)
 
     assert cli.format_results(results).splitlines() == [
         "model tiny@0  flock abc123",
-        "base_easy        unscored  members 2",
-        "base_easy:qa_rc  0.7500    members 1",
-        "arc_easy         0.7500    acc_per_char  docs 2",
-        "mbpp:bpb         0.5000    bpb  docs 2",
+        "base_easy         unscored  primary  members 2",
+        "base_easy:qa_rc   0.7500    primary  members 2",
+        "mmlu              0.7500    primary  members 1",
+        "base_easy:qa_bpb  0.8750    bpb  members 2",
+        "knowledge         0.7500    primary  members 1",  # mmlu, held twice, prints once
+        "arc_easy          0.7500    acc_per_char  docs 2",
+        "mbpp:bpb          0.5000    bpb  docs 2",
     ]
 
     # Verbose is the full print: every metric, primary first, then the suites in results order.
@@ -446,9 +455,15 @@ def test_the_summary_prints_suites_outermost_first_then_each_tasks_primary_metri
         "  bpb           1.2500",
         "mbpp:bpb  docs 2  hash hash-mbpp:bp",
         "  bpb  0.5000",
-        "base_easy:qa_rc  0.7500  (arc_easy)",
-        "base_easy  unscored  (base_easy:qa_rc, mbpp:bpb)",
+        "mmlu  0.7500  (arc_easy)",
+        "base_easy:qa_rc  0.7500  (mmlu, arc_easy)",
+        "base_easy:qa_bpb  0.8750  (arc_easy, mbpp:bpb)",
+        "base_easy  unscored  (base_easy:qa_rc, base_easy:qa_bpb)",
+        "knowledge  0.7500  (mmlu)",
     ]
+
+    # Without tasks or suites only the header is left.
+    assert cli.format_results(Results(PROVENANCE, [])) == "model tiny@0  flock abc123"
 
     # A run of tasks only has no suite lines.
     assert cli.format_results(Results(PROVENANCE, [mbpp])).splitlines()[1:] == [

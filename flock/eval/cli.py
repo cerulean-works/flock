@@ -138,7 +138,7 @@ def format_comparison(comparison: Comparison) -> str:
 
 
 def format_results(results: Results, verbose: bool = False) -> str:
-    """Formats a header with the model and commit, then per suite, outermost first, its score and member count, then per task its primary metric and doc count. `verbose` prints instead per task a summary line and one line per metric, primary first, then one line per suite with its members."""
+    """Formats a header with the model and commit, then per suite, each before its members, its score, metric and member count, then per task its primary metric and doc count. `verbose` prints instead per task a summary line and one line per metric, primary first, then one line per suite with its members."""
     lines = [f"model {results.provenance.model}  flock {results.provenance.flock_commit}"]
 
     if verbose:
@@ -159,12 +159,24 @@ def format_results(results: Results, verbose: bool = False) -> str:
 
     # One name column for suites and tasks, so every score sits in one column.
     names = [suite.suite for suite in results.suites] + [task.task for task in results.tasks]
-    width = max(len(name) for name in names)
+    width = max((len(name) for name in names), default=0)
 
-    # Results hold each suite after its members, so reversed the suite that was asked for is first.
-    for suite in reversed(results.suites):
+    # Results hold each suite after its members. Printed the other way round, each suite before
+    # its members in declared order, the suites that were asked for come first.
+    by_name = {suite.suite: suite for suite in results.suites}
+    nested = {name for suite in results.suites for name in suite.members}
+    todo = [suite for suite in results.suites if suite.suite not in nested]
+    ordered = []
+    while todo:
+        suite = todo.pop(0)
+        if suite not in ordered:  # a suite held by two others prints once
+            ordered.append(suite)
+            todo = [by_name[name] for name in suite.members if name in by_name] + todo
+
+    for suite in ordered:
         score = "unscored" if suite.score is None else f"{suite.score:.4f}"
-        lines.append(f"{suite.suite:<{width}}  {score:<8}  members {len(suite.members)}")
+        metric = suite.metric or "primary"  # the members' primary metrics
+        lines.append(f"{suite.suite:<{width}}  {score:<8}  {metric}  members {len(suite.members)}")
 
     for task in results.tasks:
         score = f"{task.metrics[task.primary_metric]:.4f}"
