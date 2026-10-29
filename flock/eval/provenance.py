@@ -103,8 +103,17 @@ def flock_commit() -> str:
         # root. New files count only under `flock/`, where an uncommitted module may have run; a
         # scratch script or an output beside the code didn't. `:/` roots the path at the top.
         changed = _git(package, "status", "--porcelain", "--untracked-files=no")
+        # `--no-empty-directory`: a directory with nothing new in it, such as the `__pycache__`
+        # a deleted module leaves behind, is not a new file.
         new = _git(
-            package, "ls-files", "--others", "--exclude-standard", "--directory", "--", ":/flock"
+            package,
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "--directory",
+            "--no-empty-directory",
+            "--",
+            ":/flock",
         )
     # Both errors are caught (PEP 758 syntax): git is missing, or this is not a checkout.
     except OSError, subprocess.CalledProcessError:

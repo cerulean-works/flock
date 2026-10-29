@@ -41,6 +41,13 @@ def test_untracked_files_count_only_under_flock(checkout):
     (checkout / "scratch.py").write_text("")
     assert provenance.flock_commit() == head  # a scratch script beside the code didn't run
 
+    # A deleted module's leftover cache and an empty directory hold no new file.
+    (checkout / ".gitignore").write_text("__pycache__/\n")
+    (checkout / "flock" / "eval" / "gone" / "__pycache__").mkdir(parents=True)
+    (checkout / "flock" / "eval" / "gone" / "__pycache__" / "m.pyc").write_text("")
+    (checkout / "flock" / "eval" / "empty").mkdir()
+    assert provenance.flock_commit() == head
+
     # A user setting that hides untracked files from `git status` doesn't hide this one, and
     # neither does a name git would quote.
     git(checkout, "config", "status.showUntrackedFiles", "no")
