@@ -468,10 +468,8 @@ def test_the_summary_prints_each_suite_before_its_members_then_tasks_outside_sco
         "mbpp:bpb  0.5000    bpb  docs 2"
     ]
 
-    # An unscored suite has no score to stand for its tasks, so they print.
-    group = SuiteResult("group", "hash-group", ["arc_easy", "mbpp:bpb"], None, None)
-    assert cli.format_results(Results(PROVENANCE, [arc, mbpp], [group])).splitlines()[1:] == [
-        "group     unscored  primary  members 2",
-        "arc_easy  0.7500    acc_per_char  docs 2",
-        "mbpp:bpb  0.5000    bpb  docs 2",
-    ]
+    # A task given next to the suites, held by none of them, still prints.
+    piqa = task_result("piqa", {"acc_raw": 0.25})
+    assert cli.format_results(Results(PROVENANCE, [arc, mbpp, piqa], suites)).splitlines()[-1] == (
+        "piqa              0.2500    acc_raw  docs 2"
+    )
