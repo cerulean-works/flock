@@ -46,7 +46,7 @@ A run with an output directory writes `results.json` and one predictions file pe
 }
 ```
 
-The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.results.TaskResult`] plus its `docs_per_second`, which is `null` if the clock measured no time, each entry of `suites` is a [`~eval.results.SuiteResult`], and `provenance` is described below. The class docstrings at the end of this page define every field.
+`flock-eval run` prints only a summary of this file (each suite's score and each task's primary metric, or every metric with `--verbose`), so read the file for the rest. The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.results.TaskResult`] plus its `docs_per_second`, which is `null` if the clock measured no time, each entry of `suites` is a [`~eval.results.SuiteResult`], and `provenance` is described below. The class docstrings at the end of this page define every field.
 
 ### The task hash
 

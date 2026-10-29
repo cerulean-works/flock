@@ -23,7 +23,7 @@ uv run flock-eval run \
   --out results/olmo2-1b
 ```
 
-The command downloads the model and the dataset, scores every doc, and prints each metric with the task's primary metric first. Repeat `--task` to run several tasks with one model load. Every flag is in [Command line](cli).
+The command downloads the model and the dataset, scores every doc, and prints the task's primary metric. `--verbose` prints every metric. Repeat `--task` to run several tasks with one model load. Every flag is in [Command line](cli).
 
 ## Read the results
 

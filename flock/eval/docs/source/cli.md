@@ -4,7 +4,7 @@
 
 ## `flock-eval run`
 
-Scores one model on tasks and suites, writes the results, and prints each task's metrics with the primary metric first, then each suite's score.
+Scores one model on tasks and suites, writes the results, and prints a summary: one line per suite with its score and member count, the suite you asked for first, then one line per task with its primary metric and doc count. `--verbose` prints every metric of every task and each suite's members instead. `results.json` holds all of it either way.
 
 ```bash
 uv run flock-eval run \
@@ -24,6 +24,7 @@ uv run flock-eval run \
 | `--dtype` | `bfloat16` | The weights' dtype, `bfloat16` or `float32`. Log-softmax runs in float32 either way. Compare only runs with the same value. |
 | `--device` | `cuda` if available, else `cpu` | The torch device. |
 | `--wandb-project` | off | Also log the run to this project through the `wandb` SDK. Run `wandb login --host <flock url>` first, so it goes to Flock. |
+| `--verbose` | off | Print every metric of each task, primary first, with its speed and the start of its task hash, then each suite with its members. |
 
 Give at least one `--task` or `--suite`. The command runs [`~eval.run.evaluate`], and every flag maps to a field of [`~eval.run.EvalConfig`].
 
