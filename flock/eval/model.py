@@ -38,10 +38,10 @@ class ModelRef:
         Parses `repo@revision`.
 
         Raises:
-            `ValueError`: if the id has no revision, so an unpinned model can't be scored.
+            `ValueError`: if the id has no revision, so an unpinned model can't be scored, or more than one `@`.
         """
         repo, _, revision = model_id.partition("@")
-        if not repo or not revision:
+        if not repo or not revision or "@" in revision:
             raise ValueError(f"model id {model_id!r} must be repo@revision")
 
         return cls(repo, revision)
@@ -138,7 +138,13 @@ class ScoringModel:
                 The weights' dtype. Log-softmax always runs in float32.
             batch_tokens (`int`, *optional*):
                 Passed to [`ScoringModel`].
+
+        Raises:
+            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision`.
         """
+        # `__init__` checks it too, but only after the weights have loaded.
+        if batch_tokens < 1:
+            raise ValueError(f"batch_tokens must be at least 1, got {batch_tokens}")
         ref = ModelRef.parse(model_id).resolve()
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
