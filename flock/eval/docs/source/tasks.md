@@ -75,12 +75,16 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `tw_mock_exams` | the 10 `tw_mock_exams_<subject>` tasks | each task's primary metric (`acc_per_char`) | none |
 | `tw_mock_exams:bpb` | the 10 `tw_mock_exams_<subject>` tasks | `bpb` | none |
 | `tw_mock_exams:all` | `tw_mock_exams`, `tw_mock_exams:bpb` | unscored | none |
+| `zh_tw` | `tmmluplus`, `tw_mock_exams` | each member suite's score | none |
+| `zh_tw:bpb` | `tmmluplus:bpb`, `drcd_bpb`, `tw_mock_exams:bpb` | `bpb` | none |
 
 The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. OLMES groups ARC-Easy and ARC-Challenge into one suite with no metric of its own; here they are two members of `base_easy:qa_rc`. `basic_skills`, and so `base_easy:qa_rc`, averages our `acc_per_token`, which divides by the real token count. OLMES's equals its `acc_raw`, so these two scores differ from OLMES's by that member. See [Suites in results](results#suites) for when two suite scores compare.
 
 The `tmmluplus` score is the mean of the four category means, as the dataset card computes its total, so each category counts once however many subjects it has. `tmmluplus:taiwan` holds the three subjects behind the Taiwan columns of the Gemma-3-TAIDE model cards.
 
 The mock exam tasks read `cerulean-works/tw-mock-exams`, a private dataset: the papers are school and publisher mock exams whose rights don't allow a public copy, so only members of the organization can run them, with a Hugging Face token in the environment. The subjects are `english` (英文), `social` (社會), `chinese` (國文), `science` (自然), `history` (歷史), `civics` (公民與社會), `biology` (生物), `geography` (地理), `physics` (物理) and `chemistry` (化學). The items were transcribed from scanned papers, and each task scores only single-answer items a text-only model can answer: no multi-answer, character-sensitive (錯別字, 字音, 字形), listening, cloze, figure or follow-up items. A grouped item shows its passage on the line before the question. 英文 uses MMLU's English format, the others TMMLU+'s Chinese one. No reference implementation scores this data, so there are no reference numbers to compare with.
+
+`zh_tw` and `zh_tw:bpb` give one Traditional Chinese number of each kind, next to the Base Easy suites. No benchmark suite to follow exists: OLMo 3's Base Easy is English only, and TMMLU+'s card averages only its own categories. Each benchmark is one member through its own suite, so TMMLU+'s 66 subjects and the exam set's 10 weigh the same. `drcd_bpb` reports only `bpb`, so it is in `zh_tw:bpb` alone. Use `zh_tw:bpb` for small checkpoints, whose accuracy is still near chance, and `zh_tw` for larger models. Run both with `--suite zh_tw --suite zh_tw:bpb`; the tasks they share run once. Both read the private exam set, so they need the access described above.
 
 ## Classes
 
