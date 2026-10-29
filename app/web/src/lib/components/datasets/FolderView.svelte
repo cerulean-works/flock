@@ -3,6 +3,7 @@
 	import FileIcon from '@lucide/svelte/icons/file';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import { resolve } from '$app/paths';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import {
 		DATASETS_BUCKET,
@@ -12,7 +13,7 @@
 		fileHref,
 		writeSnippet
 	} from '#lib/datasets.ts';
-	import type { DatasetFolder } from '#lib/types.ts';
+	import type { DatasetFolder, DatasetInfo } from '#lib/types.ts';
 	import { bytes, dateTime, relativeTime } from '#lib/utils.ts';
 	import CopyBlock from '../CopyBlock.svelte';
 
@@ -36,6 +37,35 @@
 	let loading = $state(false);
 	let failed = $state<string | null>(null);
 	const empty = $derived(!datasets.length && !folders.length && !files.length);
+
+	// The listing has no sizes, and no version for manifests in Lance's old naming: each
+	// dataset's info fills them in, a few at a time. null: the info couldn't be read.
+	const DETAILS_AT_ONCE = 4;
+	const details = new SvelteMap<string, { version: number; size: number } | null>();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- bookkeeping, never rendered
+	const asked = new Set<string>();
+	let running = 0;
+	function next() {
+		while (running < DETAILS_AT_ONCE) {
+			const d = datasets.find((d) => !asked.has(d.path));
+			if (!d) return;
+			asked.add(d.path);
+			running++;
+			datasetCall<DatasetInfo>(datasetsApi(org, 'info', { path: d.path }))
+				.then(
+					(info) => details.set(d.path, { version: info.version, size: info.data_size }),
+					() => details.set(d.path, null)
+				)
+				.finally(() => {
+					running--;
+					next();
+				});
+		}
+	}
+	$effect(() => {
+		void datasets;
+		next();
+	});
 
 	async function more() {
 		if (!cursor) return;
@@ -86,6 +116,7 @@
 			</thead>
 			<tbody>
 				{#each datasets as d (`d:${d.path}`)}
+					{@const found = details.get(d.path)}
 					<tr class="h-10 border-b border-divider hover:bg-muted">
 						<td class="truncate px-2">
 							<a
@@ -97,9 +128,17 @@
 							</a>
 						</td>
 						<td class="hidden px-2 text-muted-foreground tabular-nums sm:table-cell">
-							{d.version === null ? 'Unknown' : `v${d.version}`}
+							{#if d.version !== null}
+								v{d.version}
+							{:else if found}
+								v{found.version}
+							{:else if found === null}
+								Unknown
+							{/if}
 						</td>
-						<td class="hidden px-2 text-muted-foreground sm:table-cell">—</td>
+						<td class="hidden px-2 text-muted-foreground tabular-nums sm:table-cell">
+							{#if found}{bytes(found.size)}{:else if found === null}—{/if}
+						</td>
 						<td
 							class="px-2 text-muted-foreground tabular-nums"
 							title={d.updated_at ? dateTime(d.updated_at) : undefined}
