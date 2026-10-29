@@ -62,6 +62,11 @@ def main() -> None:
 )
 @click.option("--device", help="Torch device (default: cuda if available).")
 @click.option("--wandb-project", help="Also log the summary to this tracker project.")
+@click.option(
+    "--verbose",
+    is_flag=True,
+    help="Print every metric of every task and each suite's members.",
+)
 def run(
     model: str,
     tasks: tuple[str, ...],
@@ -72,6 +77,7 @@ def run(
     dtype: Dtype,
     device: str | None,
     wandb_project: str | None,
+    verbose: bool,
 ) -> None:
     """Score a model on tasks and suites and write results.json."""
     try:
@@ -90,7 +96,7 @@ def run(
     except ValueError as error:
         raise click.UsageError(str(error)) from None
 
-    click.echo(format_results(evaluate(config)))
+    click.echo(format_results(evaluate(config), verbose=verbose))
 
 
 @main.command(name="compare")
@@ -131,21 +137,39 @@ def format_comparison(comparison: Comparison) -> str:
     return "\n".join(lines)
 
 
-def format_results(results: Results) -> str:
-    """Formats a header with the model and commit, then per task a summary line and one line per metric, primary first, then one line per suite."""
+def format_results(results: Results, verbose: bool = False) -> str:
+    """Formats a header with the model and commit, then per suite, outermost first, its score and member count, then per task its primary metric and doc count. `verbose` prints instead per task a summary line and one line per metric, primary first, then one line per suite with its members."""
     lines = [f"model {results.provenance.model}  flock {results.provenance.flock_commit}"]
 
-    for task in results.tasks:
-        speed = "" if task.docs_per_second is None else f"{task.docs_per_second:.1f} docs/s  "
-        lines.append(f"{task.task}  docs {task.num_docs}  {speed}hash {task.task_hash[:12]}")
-        names = [task.primary_metric] + [
-            name for name in task.metrics if name != task.primary_metric
-        ]
-        width = max(len(name) for name in names) + 1
-        lines += [f"  {name:<{width}} {task.metrics[name]:.4f}" for name in names]
+    if verbose:
+        for task in results.tasks:
+            speed = "" if task.docs_per_second is None else f"{task.docs_per_second:.1f} docs/s  "
+            lines.append(f"{task.task}  docs {task.num_docs}  {speed}hash {task.task_hash[:12]}")
+            names = [task.primary_metric] + [
+                name for name in task.metrics if name != task.primary_metric
+            ]
+            width = max(len(name) for name in names) + 1
+            lines += [f"  {name:<{width}} {task.metrics[name]:.4f}" for name in names]
 
-    for suite in results.suites:
+        for suite in results.suites:
+            score = "unscored" if suite.score is None else f"{suite.score:.4f}"
+            lines.append(f"{suite.suite}  {score}  ({', '.join(suite.members)})")
+
+        return "\n".join(lines)
+
+    # One name column for suites and tasks, so every score sits in one column.
+    names = [suite.suite for suite in results.suites] + [task.task for task in results.tasks]
+    width = max(len(name) for name in names)
+
+    # Results hold each suite after its members, so reversed the suite that was asked for is first.
+    for suite in reversed(results.suites):
         score = "unscored" if suite.score is None else f"{suite.score:.4f}"
-        lines.append(f"{suite.suite}  {score}  ({', '.join(suite.members)})")
+        lines.append(f"{suite.suite:<{width}}  {score:<8}  members {len(suite.members)}")
+
+    for task in results.tasks:
+        score = f"{task.metrics[task.primary_metric]:.4f}"
+        lines.append(
+            f"{task.task:<{width}}  {score:<8}  {task.primary_metric}  docs {task.num_docs}"
+        )
 
     return "\n".join(lines)
