@@ -423,7 +423,7 @@ def _target_logprobs(
     """
     The float32 log-softmax of `logits` `[rows, positions, vocab]` at `targets` `[rows, positions]`, and whether each target is its position's argmax, the first on a tie.
 
-    OLMES runs `log_softmax` in the model's dtype and takes the argmax of its output (`oe_eval/models/eleuther_huggingface.py`). float32 here is our choice, so bfloat16 rounding of the normalizer doesn't move scores, and the argmax is taken over the float32 logits, which the normalizer doesn't reorder. `logits` can hold `batch_tokens * vocab` values, so a float32 copy of all of it would double peak memory: rows are converted a few at a time.
+    OLMES runs `log_softmax` in the model's dtype and takes the argmax of its output (`oe_eval/models/eleuther_huggingface.py`). float32 here is our choice, so bfloat16 rounding of the normalizer doesn't move scores, and the argmax is taken over the float32 logits, which the normalizer doesn't reorder; in bfloat16 OLMES's rounded log-probabilities can tie where ours don't, so a near-tie can resolve differently. `logits` can hold `batch_tokens * vocab` values, so a float32 copy of all of it would double peak memory: rows are converted a few at a time.
 
     Args:
         logits (`torch.Tensor`):

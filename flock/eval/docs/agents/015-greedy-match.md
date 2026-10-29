@@ -36,7 +36,7 @@ Greedy match compares no choices, so on a multiple-choice task it would be a dif
 
 OLMES has two tasks on the same requests: `lambada` (primary `greedy_acc`) and `lambada:bpb` (primary `bits_per_byte_corr`, `oe_eval/configs/tasks.py`). We keep one task, `lambada`, with primary `acc_greedy` and metrics `("acc_greedy", "bpb")`, the way every QA task sits in both suites and `qa_bpb` reads its `bpb`. LAMBADA joins `base_easy:qa_rc` as its last member.
 
-Its request strings are unchanged. Its hash changes once, because `primary_metric` and `metrics` are part of the definition, so a banked run's LAMBADA entry is refused by `compare` as another instrument, and `base_easy:qa_rc` shows a breach on `members` and `score`, until the bank is refreshed.
+Its request strings are unchanged. Its hash changes once, because `primary_metric` and `metrics` are part of the definition, so `compare` refuses a banked run that holds LAMBADA as another instrument, before any score is read, until the bank is refreshed. A comparison that leaves LAMBADA out of both runs is unaffected.
 
 ### 015.D4. Prediction rows record `is_greedy` per choice, and `results.json` goes to schema 6
 
@@ -77,4 +77,4 @@ All numbers are on `allenai/OLMo-2-0425-1B`, final checkpoint `a1847dff` unless 
 
 ## 6. Known gaps
 
-- The float32 bank in `tests/eval/regression/` predates LAMBADA's new hash and `qa_rc` member (015.D3) until its next refresh.
+- The float32 bank in `tests/eval/regression/` predates LAMBADA's new hash and `qa_rc` member (015.D3), so `compare` refuses it against a new run of `base_easy` until its next refresh.
