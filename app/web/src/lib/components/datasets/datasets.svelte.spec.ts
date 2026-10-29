@@ -51,7 +51,15 @@ describe('FolderView', () => {
 	const folder: DatasetFolder = {
 		kind: 'folder',
 		path: 'eval',
-		datasets: [{ name: 'mmlu', path: 'eval/mmlu', version: 12, updated_at: 1_790_000_000 }],
+		datasets: [
+			{
+				name: 'mmlu',
+				path: 'eval/mmlu',
+				version: 12,
+				updated_at: 1_790_000_000,
+				size: 5 * 1024 * 1024
+			}
+		],
 		folders: [{ name: 'deep', path: 'eval/deep' }],
 		files: [{ name: 'notes.md', key: 'eval/notes.md', size: 2048, last_modified: 1_790_000_000 }],
 		cursor: 'next'
@@ -61,20 +69,11 @@ describe('FolderView', () => {
 		const calls = serve({
 			'/api/datasets/acme/at': () => ({
 				...folder,
-				datasets: [
-					{ name: 'old', path: 'eval/old', version: null, updated_at: null },
-					{ name: 'broken', path: 'eval/broken', version: null, updated_at: null }
-				],
+				datasets: [{ name: 'old', path: 'eval/old', version: null, updated_at: null }],
 				folders: [],
 				files: [],
 				cursor: null
-			}),
-			// Sizes, and versions the listing can't tell, come from each dataset's info.
-			'/api/datasets/acme/info': (_, url) => {
-				const path = new URL(url!, 'http://flock.test').searchParams.get('path');
-				if (path === 'eval/broken') return Response.json({ message: 'no' }, { status: 502 });
-				return { version: path === 'eval/old' ? 4 : 12, data_size: 5 * 1024 * 1024 };
-			}
+			})
 		});
 		render(FolderView, { org: 'acme', path: 'eval', folder, now: 1_790_000_100 });
 		const names = () =>
@@ -92,11 +91,9 @@ describe('FolderView', () => {
 			'/storage/acme/flock-datasets/eval/notes.md'
 		);
 		await screen.getByRole('button', { name: 'Load more' }).click();
-		await vi.waitFor(() => expect(names()).toEqual(['mmlu', 'old', 'broken', 'deep/', 'notes.md']));
-		expect(calls.map((c) => c.url)).toContain('/api/datasets/acme/at?path=eval&cursor=next');
-		await expect.element(screen.getByText('v4')).toBeInTheDocument();
+		await vi.waitFor(() => expect(names()).toEqual(['mmlu', 'old', 'deep/', 'notes.md']));
+		expect(calls[0].url).toBe('/api/datasets/acme/at?path=eval&cursor=next');
 		await expect.element(screen.getByText('Unknown')).toBeInTheDocument();
-		expect(screen.getByText('5.0 MB').all()).toHaveLength(2);
 		await expect.element(screen.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 		// A folder isn't a dataset: no S3 path to copy, and no file browser link.
 		await expect.element(screen.getByText(/s3:\/\//)).not.toBeInTheDocument();
