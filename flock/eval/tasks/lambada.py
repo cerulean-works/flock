@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from flock.eval.tasks.base import Choice, Dataset, MCDoc, MultipleChoiceTask
+from flock.eval.tasks.base import Choice, Dataset, GoldOnlyTask, MCDoc
 
 
 def lambada_doc(row: dict[str, Any]) -> MCDoc:
@@ -14,7 +14,7 @@ def lambada_doc(row: dict[str, Any]) -> MCDoc:
     )
 
 
-LAMBADA = MultipleChoiceTask(
+LAMBADA = GoldOnlyTask(
     name="lambada",
     dataset=Dataset(
         repo="EleutherAI/lambada_openai",
@@ -24,11 +24,8 @@ LAMBADA = MultipleChoiceTask(
         row_index=True,
     ),
     to_doc=lambada_doc,
-    # OLMES's `lambada:bpb`. Its `lambada` scores greedy match of the last word, which needs
-    # another scorer output and comes in its own change (stage file 003, D20), so only `bpb` is
-    # reported until then.
-    primary_metric="bpb",
-    metrics=("bpb",),
-    # One choice, so PMI has nothing to compare, and OLMES's LAMBADA has none.
-    unconditional_context=None,
+    # OLMES's `lambada` scores greedy match of the last word and `lambada:bpb` its `bpb`, on the
+    # same requests (`oe_eval/configs/tasks.py`), so one task reports both.
+    primary_metric="acc_greedy",
+    metrics=("acc_greedy", "bpb"),
 )
