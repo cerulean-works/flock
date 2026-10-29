@@ -7,9 +7,16 @@ from flock.eval.tasks.drcd import DRCD_BPB
 from flock.eval.tasks.suite import Suite, by_name
 from flock.eval.tasks.tmmluplus import TMMLUPLUS_ALL
 from flock.eval.tasks.tw_mock_exams import TW_MOCK_EXAMS_ALL
+from flock.eval.tasks.zh_tw import ZH_TW, ZH_TW_BPB
 
 SUITES: dict[str, Suite] = by_name(
-    (*BASE_EASY.suites, *TMMLUPLUS_ALL.suites, *TW_MOCK_EXAMS_ALL.suites)
+    (
+        *BASE_EASY.suites,
+        *TMMLUPLUS_ALL.suites,
+        *TW_MOCK_EXAMS_ALL.suites,
+        *ZH_TW.suites,
+        *ZH_TW_BPB.suites,
+    )
 )
 
 # Every task in a suite is registered, so `--task` runs what `--suite` does.

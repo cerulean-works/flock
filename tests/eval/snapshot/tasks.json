@@ -527,6 +527,23 @@
       ],
       "metric": "bpb",
       "scored": true
+    },
+    "zh_tw": {
+      "members": [
+        "tmmluplus",
+        "tw_mock_exams"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "zh_tw:bpb": {
+      "members": [
+        "tmmluplus:bpb",
+        "drcd_bpb",
+        "tw_mock_exams:bpb"
+      ],
+      "metric": "bpb",
+      "scored": true
     }
   },
   "tasks": {
