@@ -8,6 +8,7 @@ from flock.eval.tasks import (
     CHINESE_QUESTION_PREFIX,
     Dataset,
     Fewshot,
+    GoldOnlyTask,
     MCDoc,
     MultipleChoiceTask,
     cloze,
@@ -83,6 +84,15 @@ def chinese_doc(row: dict[str, Any]) -> MCDoc:
     )
 
 
+def gold_doc(row: dict[str, Any]) -> MCDoc:
+    """A toy row as a gold-only doc: its question, then only its correct answer."""
+    gold = row["choices"]["label"].index(row["answerKey"])
+
+    return MCDoc(
+        id=row["id"], choices=cloze(row["question"], (row["choices"]["text"][gold],)), gold=0
+    )
+
+
 TASK = MultipleChoiceTask(
     name="toy",
     dataset=Dataset("cerulean/toy", "0" * 40, None, "test"),
@@ -116,6 +126,15 @@ PROMPT_PATHS = (
         to_doc=chinese_doc,
         description="以下是關於常識考試單選題，請選出正確的答案。\n\n",
         unconditional_context=CHINESE_ANSWER_PREFIX,
+    ),
+    # One choice per doc and no unconditional requests, as math, code and LAMBADA are scored.
+    GoldOnlyTask(
+        name="toy:gold_only",
+        dataset=TASK.dataset,
+        to_doc=gold_doc,
+        primary_metric="acc_greedy",
+        metrics=("acc_greedy", "bpb"),
+        fewshot=TASK.fewshot,
     ),
 )
 

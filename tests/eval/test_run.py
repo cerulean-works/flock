@@ -7,13 +7,13 @@ import torch
 from click.testing import CliRunner
 
 from flock.eval import cli, run
-from flock.eval.metrics import MULTIPLE_CHOICE_METRICS, ChoiceScores
+from flock.eval.metrics import ChoiceScores
 from flock.eval.model import ScoringModel
 from flock.eval.results import prediction_rows
 from flock.eval.run import EvalConfig, evaluate, score_task
 from flock.eval.tasks import MCDoc, Suite, cloze
 
-from .toy import TASK
+from .toy import PROMPT_PATHS, TASK
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
     assert task["task"] == "toy"
     assert task["num_docs"] == 2
     assert task["task_hash"] == TASK.requests(*TASK.load()).hash
-    assert set(task["metrics"]) == set(MULTIPLE_CHOICE_METRICS)
+    assert list(task["metrics"]) == list(TASK.reported_metrics)
     assert all(0 <= task["metrics"][m] <= 1 for m in task["metrics"] if m.startswith("acc"))
     assert task["metrics"]["bpb"] > 0
     assert task["docs_per_second"] > 0
@@ -117,6 +117,7 @@ def test_prediction_rows_drop_padded_choices():
         num_chars=counts,
         num_bytes=counts,
         valid=counts > 0,
+        is_greedy=counts > 3,
         gold=torch.tensor([1, 0]),
     )
 
@@ -134,10 +135,25 @@ def test_score_task_does_not_depend_on_batching(scorer):
     assert score_task(scorer, TASK).metrics == pytest.approx(one_batch.metrics, abs=1e-5)
 
 
+def test_score_task_averages_greedy_match_over_gold_only_docs(scorer, monkeypatch):
+    gold_only = next(task for task in PROMPT_PATHS if task.name == "toy:gold_only")
+    loglikelihood = scorer.loglikelihood
+
+    def second_doc_greedy(requests):
+        scores = loglikelihood(requests)
+        return dataclasses.replace(scores, is_greedy=torch.tensor([False, True]))
+
+    monkeypatch.setattr(scorer, "loglikelihood", second_doc_greedy)
+    result = score_task(scorer, gold_only)
+
+    assert list(result.metrics) == ["acc_greedy", "bpb"]
+    assert result.metrics["acc_greedy"] == 0.5  # one doc of two, read from its one request
+
+
 def test_score_task_reports_only_the_tasks_metrics(scorer):
     gold_only = dataclasses.replace(TASK, metrics=("bpb",), primary_metric="bpb")
     assert list(score_task(scorer, gold_only).metrics) == ["bpb"]
-    assert list(score_task(scorer, TASK).metrics) == list(MULTIPLE_CHOICE_METRICS)
+    assert list(score_task(scorer, TASK).metrics) == list(TASK.reported_metrics)
 
 
 def test_score_task_records_truncation(lm, tokenizer):

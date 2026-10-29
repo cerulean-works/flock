@@ -10,13 +10,15 @@ logger = logging.getLogger(__name__)
 
 # Every name `multiple_choice` can return, in its order. Add a name here whenever it gains a
 # metric: tasks check their `primary_metric` against this. `acc_uncond` is only reported by
-# tasks that score pointwise mutual information (see `multiple_choice`).
+# tasks that score pointwise mutual information, and `acc_greedy` only by tasks scored on their
+# gold text alone (see `multiple_choice`).
 MULTIPLE_CHOICE_METRICS = (
     "acc_raw",
     "acc_per_token",
     "acc_per_char",
     "acc_per_byte",
     "acc_uncond",
+    "acc_greedy",
     "bpb",
 )
 
@@ -44,6 +46,8 @@ class ChoiceScores:
             int64 `[docs, max_choices]`, each choice's UTF-8 byte count, including its leading space.
         valid (`torch.Tensor`):
             bool `[docs, max_choices]`, False in the padded cells past a doc's last choice.
+        is_greedy (`torch.Tensor`):
+            bool `[docs, max_choices]`, whether greedy decoding would produce each choice's continuation.
         gold (`torch.Tensor`):
             int64 `[docs]`, the index of each doc's correct choice.
         logprob_uncond (`torch.Tensor`, *optional*):
@@ -55,6 +59,7 @@ class ChoiceScores:
     num_chars: torch.Tensor
     num_bytes: torch.Tensor
     valid: torch.Tensor
+    is_greedy: torch.Tensor
     gold: torch.Tensor
     logprob_uncond: torch.Tensor | None = None
 
@@ -119,6 +124,8 @@ def multiple_choice(scores: ChoiceScores) -> dict[str, torch.Tensor]:
     - `acc_per_byte`: the log-probability divided by the byte count, which ranks choices as the lowest bits per byte does.
     - `acc_uncond`: pointwise mutual information (PMI), the log-probability minus the log-probability after the unconditional context. This rewards choices the question makes more likely, not choices that are likely anyway. Only set when `logprob_uncond` is.
 
+    `acc_greedy` is 1 where greedy decoding would produce the gold continuation, OLMES's `greedy_acc` (`GreedyAccuracyMetric` in `oe_eval/metrics/metric.py`). It compares no choices, so it is only reported by tasks scored on their gold text alone, such as LAMBADA.
+
     `bpb` is the gold choice's bits per byte (see [`bits_per_byte`]), not an accuracy.
 
     Returns:
@@ -142,6 +149,8 @@ def multiple_choice(scores: ChoiceScores) -> dict[str, torch.Tensor]:
 
     # Each doc's gold column. Added last so the keys keep `MULTIPLE_CHOICE_METRICS`'s order,
     # which results.json follows.
-    metrics["bpb"] = bpb.gather(-1, scores.gold[:, None]).squeeze(-1)
+    gold = scores.gold[:, None]
+    metrics["acc_greedy"] = scores.is_greedy.gather(-1, gold).squeeze(-1).float()
+    metrics["bpb"] = bpb.gather(-1, gold).squeeze(-1)
 
     return metrics

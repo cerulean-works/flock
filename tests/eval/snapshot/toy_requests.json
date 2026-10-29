@@ -177,6 +177,23 @@
       }
     ]
   },
+  "toy:gold_only": {
+    "hash": "84a8a48c56252049c42b4d9881c54571d20327845448ea416b29f65b0f8411d7",
+    "requests": [
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 蘋果",
+        "doc": "q-2",
+        "gold": true
+      }
+    ]
+  },
   "toy:num_shots": {
     "hash": "8ee9cd70e966bc67c461fc635a06af316c7c8cc153d7e2045f66eea49faf3a2b",
     "requests": [

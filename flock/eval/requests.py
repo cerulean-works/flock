@@ -33,8 +33,11 @@ class Scores:
             int64 `[len(requests)]`, the number of tokens each continuation was scored over.
         tokens_cut (`torch.Tensor`):
             int64 `[len(requests)]`, the number of tokens cut from the left of each context to fit `max_length`, 0 if it fit.
+        is_greedy (`torch.Tensor`):
+            bool `[len(requests)]`, whether every continuation token is the model's most likely next token, so greedy decoding would produce the continuation.
     """
 
     logprob: torch.Tensor
     num_tokens: torch.Tensor
     tokens_cut: torch.Tensor
+    is_greedy: torch.Tensor

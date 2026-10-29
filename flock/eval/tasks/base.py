@@ -267,6 +267,7 @@ class MCRequests:
             num_chars=num_chars[gather_index],
             num_bytes=num_bytes[gather_index],
             valid=valid,
+            is_greedy=scores.is_greedy[gather_index],
             gold=gold,
             logprob_uncond=logprob_uncond,
         )
@@ -370,7 +371,7 @@ class MultipleChoiceTask:
         unconditional_context (`str`, *optional*, defaults to `"Answer:"`):
             The context for the unconditional scores of pointwise mutual information (PMI). PMI is skipped if `None`. On by default, as in OLMES, whose multiple-choice tasks score every choice after `"Answer:"` too unless a task overrides `unconditioned_prompt` with `None` (`oe_eval/tasks/base_task.py`). That doubles the requests, but the unconditional contexts are short.
         metrics (`tuple[str, ...]`, *optional*):
-            The metrics the task reports, from [`~eval.metrics.multiple_choice`]'s names. Every metric the task computes if not set, which leaves out `acc_uncond` when PMI is skipped. A task scored only on its gold text reports `("bpb",)`, since an accuracy over one choice is always 1.
+            The metrics the task reports, from [`~eval.metrics.multiple_choice`]'s names. Every metric the task computes if not set, which leaves out `acc_uncond` when PMI is skipped. `acc_greedy` is only for a [`GoldOnlyTask`].
 
     Raises:
         `ValueError`: if `metrics` is empty or names a metric the task doesn't compute, `primary_metric` isn't reported, a written-out example lacks the `"index"` a `row_index` dataset reads, or `fewshot.num_shots` is set on examples from a split other than the scored one.
@@ -431,11 +432,12 @@ class MultipleChoiceTask:
 
     @property
     def _computed_metrics(self) -> tuple[str, ...]:
-        """Every metric `multiple_choice` returns for this task: `acc_uncond` needs PMI."""
+        """Every metric this task can report: `acc_uncond` needs PMI, and `acc_greedy` compares no choices, so it is [`GoldOnlyTask`]'s."""
+        skipped = {"acc_greedy"}
         if self.unconditional_context is None:
-            return tuple(name for name in MULTIPLE_CHOICE_METRICS if name != "acc_uncond")
+            skipped.add("acc_uncond")
 
-        return MULTIPLE_CHOICE_METRICS
+        return tuple(name for name in MULTIPLE_CHOICE_METRICS if name not in skipped)
 
     def load(self, limit: int | None = None) -> tuple[list[MCDoc], list[MCDoc]]:
         """
@@ -554,11 +556,16 @@ class MultipleChoiceTask:
 @dataclass(frozen=True, slots=True)
 class GoldOnlyTask(MultipleChoiceTask):
     """
-    A task scored on each doc's gold text alone, by `bpb`, such as a math solution or a program (OLMES's `:bpb` tasks). It takes the same arguments as [`MultipleChoiceTask`] but `primary_metric`, `unconditional_context` and `metrics`, which it fixes.
+    A task scored on each doc's gold text alone, such as a math solution or a program (OLMES's `:bpb` tasks) or LAMBADA's last word. It takes the same arguments as [`MultipleChoiceTask`] but `unconditional_context`, which it fixes.
 
-    Each doc has one choice, so an accuracy is always 1 and pointwise mutual information (PMI) has nothing to compare: the task reports `bpb` only and has no unconditional context.
+    Each doc has one choice, so an accuracy over choices is always 1 and pointwise mutual information (PMI) has nothing to compare: the task has no unconditional context and can report only `acc_greedy`, whether greedy decoding would produce the gold text, and `bpb`. It reports `bpb` alone unless `metrics` says otherwise.
     """
 
-    primary_metric: str = dataclasses.field(default="bpb", init=False)
+    primary_metric: str = "bpb"
     unconditional_context: str | None = dataclasses.field(default=None, init=False)
-    metrics: tuple[str, ...] | None = dataclasses.field(default=("bpb",), init=False)
+    metrics: tuple[str, ...] | None = ("bpb",)
+
+    @property
+    def _computed_metrics(self) -> tuple[str, ...]:
+        """The metrics a gold-only doc gives: no accuracy over choices."""
+        return ("acc_greedy", "bpb")
