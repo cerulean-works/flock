@@ -158,3 +158,31 @@ On CPU with tiny random models and rows written in the test:
 
 - **學測 and 指考 apart.** Mock 學測 and mock 指考 differ in level; a split by `doc_exam` would give two suites. Not done until a decision needs it.
 - **A reading suite.** 英文 and 國文's grouped items are reading comprehension (515 and 716 groups). They are inside their subjects now.
+
+---
+
+## 7. How it was actually built
+
+- **The data.** `harrychangtw/tw-mock-exams` was built from the 27,744 items with the four flags and uploaded private at `bfad9046`. The 50 examples are the ones 009.D4 picked at design time: the build recomputes them and stops if they differ. `follow_up` marks 71 standalone items; 57 of them would otherwise be scored, all in `test`. `figure_ref` marks 497 items, 405 of them otherwise eligible, as the design counted.
+- **One rule the design didn't have.** One 地理 item's options were pictures, which the transcription left as four empty strings. It would stop the task with an empty-continuation error, so `keep` also requires every option to have text. That leaves 18,912 docs, not the 18,913 the design expected once follow-ups were dropped.
+- **Labels are checked.** One scored 英文 item's labels read A, B, C, B, a transcription slip; its answer C still names one option. `to_doc` raises an error naming the doc if an answer doesn't name exactly one option, so a rebuild with a worse slip fails at load instead of scoring a wrong gold.
+- **The format is chosen once.** `subject_task` picks the header, the PMI context and the `to_doc` (`chinese_doc` or `english_doc`) together, so the English task can't render a Chinese row's format or the reverse.
+- **TMMLU+ overlap at 005's pin.** Rerun against `ikala/tmmluplus@94d86f1d` (21,483 questions): no exact stem, 5,258 items sharing any 13-gram (3,613 of them 英文, where common phrases match), 6 sharing half, all in 國文. Identical to the first run at `639a64db`, whose data files are the same.
+- **Check 1 holds.** lm-evaluation-harness v0.4.3, configured from this module's pins with `process_docs` restating 009.D2 and Jinja templates restating both formats, renders every one of the 78,537 conditional requests of the 18,912 docs identically, in doc order. Its `datasets` 3.6 can't read the `List` type `datasets` 5 writes into the parquet schema, so the comparison maps that type to 3.6's list feature when decoding the schema; the rows are unchanged.
+- **Check 2 holds.** `Qwen/Qwen2.5-0.5B` (`060db649`) in float32, batched and one request per forward pass: over 157,074 requests the largest difference is 7.2e-4 nats, none over 1e-3.
+- **Check 3, the smoke.** No request is truncated: both models take 4,096 tokens. The 2,048-token counts of 009.D4 matter only for shorter models.
+
+| | OLMo 2 1B `acc_per_char` | `bpb` | Qwen 2.5 0.5B `acc_per_char` | `bpb` |
+| --- | --- | --- | --- | --- |
+| `tw_mock_exams` (float32) | 0.276 | 2.042 | 0.290 | 1.461 |
+| `tw_mock_exams_english` | 0.666 | 0.697 | 0.615 | 0.804 |
+| other nine subjects | 0.172 to 0.283 | 1.858 to 2.484 | 0.179 to 0.307 | 1.361 to 1.787 |
+| largest bfloat16-to-float32 drift of a subject | 0.0042 (物理) | 0.0019 | 0.0070 (化學, 4 of 571 docs) | 0.0034 |
+
+Both models are at or below chance on the nine Chinese subjects (0.25 for 4 options, 0.20 for 5), and above it only on 英文. At this size the accuracy separates nothing; `tw_mock_exams:bpb` is the number to compare small models on, as 009.D5 expected. A subject accuracy difference smaller than its drift above is noise.
+
+## 8. Known gaps
+
+- **Six scored items have two identical options,** transcription repeats of one option's text (for example 9d027847, whose A and D read the same). An accuracy can tie on them. They are left in: deciding which copy is the slip needs the paper.
+- **The examples are easier than the docs.** They are the shortest items, chosen to keep prompts short (009.D4); the cost is that they show the format, not the difficulty.
+- **No reference numbers.** The checks show the task renders and scores as specified, not that the specification measures what a real exam measures.
