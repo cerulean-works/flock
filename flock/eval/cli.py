@@ -138,7 +138,7 @@ def format_comparison(comparison: Comparison) -> str:
 
 
 def format_results(results: Results, verbose: bool = False) -> str:
-    """Formats a header with the model and commit, then per suite, each before its members, its score, metric and member count, then per task its primary metric and doc count. `verbose` prints instead per task a summary line and one line per metric, primary first, then one line per suite with its members."""
+    """Formats a header with the model and commit, then per suite, each before its members, its score, metric and member count, then per task outside every scored suite its primary metric and doc count. `verbose` prints instead per task a summary line and one line per metric, primary first, then one line per suite with its members."""
     lines = [f"model {results.provenance.model}  flock {results.provenance.flock_commit}"]
 
     if verbose:
@@ -157,8 +157,15 @@ def format_results(results: Results, verbose: bool = False) -> str:
 
         return "\n".join(lines)
 
+    # A scored suite's line stands for its member tasks, so they print only with `verbose`.
+    in_scored = set()
+    for suite in results.suites:
+        if suite.score is not None:
+            in_scored.update(suite.members)
+    tasks = [task for task in results.tasks if task.task not in in_scored]
+
     # One name column for suites and tasks, so every score sits in one column.
-    names = [suite.suite for suite in results.suites] + [task.task for task in results.tasks]
+    names = [suite.suite for suite in results.suites] + [task.task for task in tasks]
     width = max((len(name) for name in names), default=0)
 
     # Results hold each suite after its members. Printed the other way round, each suite before
@@ -178,7 +185,7 @@ def format_results(results: Results, verbose: bool = False) -> str:
         metric = suite.metric or "primary"  # the members' primary metrics
         lines.append(f"{suite.suite:<{width}}  {score:<8}  {metric}  members {len(suite.members)}")
 
-    for task in results.tasks:
+    for task in tasks:
         score = f"{task.metrics[task.primary_metric]:.4f}"
         lines.append(
             f"{task.task:<{width}}  {score:<8}  {task.primary_metric}  docs {task.num_docs}"

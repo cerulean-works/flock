@@ -412,7 +412,7 @@ def test_cli_prints_suite_scores(toy_suites, tmp_path, monkeypatch):
     assert out[1] == ["base_easy", "unscored", "primary", "members", "2"]
     assert out[2][0] == "toy:rc" and out[2][2:] == ["primary", "members", "2"]
     assert out[3][0] == "toy:bpb" and out[3][2:] == ["bpb", "members", "2"]
-    assert out[4][2:] == ["acc_per_char", "docs", "2"]
+    assert len(out) == 4  # every task is in a scored suite
 
     verbose = ["run", "--model", "tiny@0", "--suite", "base_easy", "--verbose"]
     result = CliRunner().invoke(
@@ -422,7 +422,7 @@ def test_cli_prints_suite_scores(toy_suites, tmp_path, monkeypatch):
     assert result.output.splitlines()[-1] == "base_easy  unscored  (toy:rc, toy:bpb)"
 
 
-def test_the_summary_prints_each_suite_before_its_members_then_each_tasks_primary_metric():
+def test_the_summary_prints_each_suite_before_its_members_then_tasks_outside_scored_suites():
     arc = task_result("arc_easy", {"acc_per_char": 0.75, "acc_raw": 0.5, "bpb": 1.25})
     mbpp = task_result("mbpp:bpb", {"bpb": 0.5}, seconds=0.0)
     # As `evaluate` orders them for `--suite base_easy --suite knowledge`: each after its members.
@@ -442,8 +442,6 @@ def test_the_summary_prints_each_suite_before_its_members_then_each_tasks_primar
         "mmlu              0.7500    primary  members 1",
         "base_easy:qa_bpb  0.8750    bpb  members 2",
         "knowledge         0.7500    primary  members 1",  # mmlu, held twice, prints once
-        "arc_easy          0.7500    acc_per_char  docs 2",
-        "mbpp:bpb          0.5000    bpb  docs 2",
     ]
 
     # Verbose is the full print: every metric, primary first, then the suites in results order.
@@ -468,4 +466,12 @@ def test_the_summary_prints_each_suite_before_its_members_then_each_tasks_primar
     # A run of tasks only has no suite lines.
     assert cli.format_results(Results(PROVENANCE, [mbpp])).splitlines()[1:] == [
         "mbpp:bpb  0.5000    bpb  docs 2"
+    ]
+
+    # An unscored suite has no score to stand for its tasks, so they print.
+    group = SuiteResult("group", "hash-group", ["arc_easy", "mbpp:bpb"], None, None)
+    assert cli.format_results(Results(PROVENANCE, [arc, mbpp], [group])).splitlines()[1:] == [
+        "group     unscored  primary  members 2",
+        "arc_easy  0.7500    acc_per_char  docs 2",
+        "mbpp:bpb  0.5000    bpb  docs 2",
     ]
