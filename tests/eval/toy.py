@@ -8,6 +8,7 @@ from flock.eval.tasks import (
     CHINESE_QUESTION_PREFIX,
     Dataset,
     Fewshot,
+    GoldOnlyTask,
     MCDoc,
     MultipleChoiceTask,
     cloze,
@@ -83,6 +84,24 @@ def chinese_doc(row: dict[str, Any]) -> MCDoc:
     )
 
 
+def passage_doc(row: dict[str, Any]) -> MCDoc:
+    """A toy row as DRCD renders it, scored on the gold answer alone after a `文章：` passage line: the choices joined stand in for the passage."""
+    texts = row["choices"]["text"]
+    gold = texts[row["choices"]["label"].index(row["answerKey"])]
+
+    return MCDoc(
+        id=row["id"],
+        choices=cloze(
+            row["question"],
+            (gold,),
+            question_prefix=f"文章：{'、'.join(texts)}\n{CHINESE_QUESTION_PREFIX}",
+            answer_prefix=CHINESE_ANSWER_PREFIX,
+            separator="",
+        ),
+        gold=0,
+    )
+
+
 TASK = MultipleChoiceTask(
     name="toy",
     dataset=Dataset("cerulean/toy", "0" * 40, None, "test"),
@@ -116,6 +135,13 @@ PROMPT_PATHS = (
         to_doc=chinese_doc,
         description="以下是關於常識考試單選題，請選出正確的答案。\n\n",
         unconditional_context=CHINESE_ANSWER_PREFIX,
+    ),
+    # Scored on the gold text alone, with no PMI, after a passage in the Chinese format.
+    GoldOnlyTask(
+        name="toy:gold_only",
+        dataset=TASK.dataset,
+        to_doc=passage_doc,
+        fewshot=Fewshot("train", ("shot-2",)),
     ),
 )
 
