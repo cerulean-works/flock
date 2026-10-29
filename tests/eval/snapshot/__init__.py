@@ -31,10 +31,15 @@ def definitions(
         # A module-level function is pinned by where it is defined. A lambda, a closure or a
         # `partial` has no name that changes with what it does, so it fails here until this code
         # says how to pin it.
-        to_doc = task.to_doc
-        if not isinstance(to_doc, FunctionType) or "<" in to_doc.__qualname__:
-            raise TypeError(f"{name}: to_doc must be a module-level function, got {to_doc!r}")
-        definition["to_doc"] = f"{to_doc.__module__}.{to_doc.__qualname__}"
+        for field in ("to_doc", "keep"):
+            function = getattr(task, field)
+            if function is None:
+                continue
+            if not isinstance(function, FunctionType) or "<" in function.__qualname__:
+                raise TypeError(
+                    f"{name}: {field} must be a module-level function, got {function!r}"
+                )
+            definition[field] = f"{function.__module__}.{function.__qualname__}"
         # Rows written out in a task's module are long and reviewed where they are written.
         if task.fewshot is not None and task.fewshot.rows:
             rows = json.dumps(task.fewshot.rows, sort_keys=True).encode()

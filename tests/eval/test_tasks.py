@@ -9,7 +9,7 @@ from flock.eval.requests import Scores
 from flock.eval.tasks import TASKS, Choice, Dataset, Fewshot, MCDoc, Truncation, cloze
 from flock.eval.tasks.arc import ARC_EASY, arc_doc
 
-from .toy import ROWS, TASK
+from .toy import ROWS, TASK, not_about_bees
 
 
 @pytest.mark.parametrize(
@@ -37,6 +37,18 @@ def test_load_keeps_fewshot_order_and_limit():
     docs, shots = TASK.load(limit=1)
     assert [d.id for d in docs] == ["q-1"]
     assert [s.id for s in shots] == ["shot-2", "shot-1"]
+
+
+def test_keep_filters_scored_rows_before_limit_and_leaves_examples_and_hash_alone():
+    task = dataclasses.replace(TASK, keep=not_about_bees)
+
+    docs, shots = task.load(limit=1)
+    assert [d.id for d in docs] == ["q-2"]  # q-1 is dropped before the limit takes the first
+    assert [s.id for s in shots] == ["shot-2", "shot-1"]
+
+    # The predicate isn't hashed, but the docs it keeps are.
+    assert task.requests(docs, shots).hash == TASK.requests(docs, shots).hash
+    assert task.requests(*task.load()).hash != TASK.requests(*TASK.load()).hash
 
 
 @pytest.mark.parametrize("limit", [0, -1])
