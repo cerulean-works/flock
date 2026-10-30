@@ -317,7 +317,13 @@ describe('ModelView', () => {
 		});
 		view('http://flock.test/models/acme/olmo2-1b?tab=versions');
 		await expect.element(screen.getByRole('link', { name: '12', exact: true })).toBeVisible();
-		await screen.getByRole('switch', { name: 'Checkpoints' }).click();
+		const toggle = screen.getByRole('switch', { name: 'Checkpoints' });
+		await expect
+			.element(toggle)
+			.toHaveAccessibleDescription(
+				'Shows only versions with a checkpoint tag, such as checkpoint-12000.'
+			);
+		await toggle.click();
 		await expect
 			.element(screen.getByRole('link', { name: '12', exact: true }))
 			.not.toBeInTheDocument();

@@ -78,9 +78,16 @@
 	let deleting = $state<ModelVersion | null>(null);
 </script>
 
-<div class="mb-3 flex items-center gap-2">
-	<Switch id="checkpoints-only" bind:checked={checkpoints} />
+<div class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+	<Switch
+		id="checkpoints-only"
+		bind:checked={checkpoints}
+		aria-describedby="checkpoints-only-hint"
+	/>
 	<Label for="checkpoints-only" class="font-normal">Checkpoints</Label>
+	<span id="checkpoints-only-hint" class="text-[13px] text-muted-foreground">
+		Shows only versions with a checkpoint tag, such as checkpoint-12000.
+	</span>
 </div>
 
 {#if failed && !loaded}
