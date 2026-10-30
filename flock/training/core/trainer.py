@@ -1,37 +1,52 @@
+import logging
 import math
 import random
-from dataclasses import asdict
-from typing import cast, overload
+from dataclasses import asdict, dataclass
+from typing import Literal, cast, overload
 
 import torch
 import torch.nn.functional as F
-import wandb
 from lance.torch.data import SafeLanceDataset
 from torch.nn import Module
 from torch.optim import AdamW, Muon, Optimizer
 from torch.utils.data import DataLoader
 from transformers import TokenizersBackend
 
-from flock.training.data_utils import Batch, LanceBatchCollator
-from flock.training.lr_scheduler import LRSchedulerConfig, StepLRScheduler
-from flock.training.optimization import AdamWConfig, MuonConfig, OptimizerConfig
+import wandb
+from flock.training.core.data_utils import Batch, LanceBatchCollator
+from flock.training.core.lr_scheduler import LRSchedulerConfig, StepLRScheduler
+from flock.training.core.optimization import AdamWConfig, MuonConfig, OptimizerConfig
+
+
+@dataclass(frozen=True, kw_only=True)
+class TrainerConfig:
+    input_column: str
+    batch_size: int
+
+    optimizer_config: OptimizerConfig
+    lr_scheduler_config: LRSchedulerConfig
+
+    dataloader_prefetch_factor: int = 4
+    dataloader_num_workers: int = 4
+
+    wandb_project: str
+    wandb_mode: Literal["online", "offline", "disabled", "shared"] = "online"
+
+    max_norm: float = 1.0
+    logging_steps: int = 10
+    seed = 42
 
 
 class Trainer:
     def __init__(
         self,
+        *,
+        config: TrainerConfig,
         model: Module,
         tokenizer: TokenizersBackend,
         dataset: SafeLanceDataset,
-        input_column: str,
-        batch_size: int,
-        optimizer_config: OptimizerConfig,
-        lr_scheduler_config: LRSchedulerConfig,
-        max_norm: float = 1.0,
-        logging_steps: int = 10,
-        seed=42,
     ):
-        self.seed = seed
+        self.seed = config.seed
         self.device = (
             torch.device("cuda:0")
             if torch.cuda.is_available()
@@ -43,15 +58,23 @@ class Trainer:
         self.model = model.to(self.device)
         self.tokenizer = tokenizer
         self.dataset = dataset
-        self.ds_input_column = input_column
-        self.batch_size = batch_size
+        self.ds_input_column = config.input_column
+        self.batch_size = config.batch_size
 
-        self.max_norm = max_norm
-        self.logging_steps = logging_steps
+        self.dataloader_prefetch_factor = config.dataloader_prefetch_factor
+        self.dataloader_num_workers = config.dataloader_num_workers
+
+        self.max_norm = config.max_norm
+        self.logging_steps = config.logging_steps
 
         self.total_steps = math.ceil(len(self.dataset) / self.batch_size)
-        self.optimizer = self._get_optimizer(optimizer_config)
-        self.lr_scheduler = self._get_lr_scheduler(lr_scheduler_config, self.total_steps)
+        self.optimizer = self._get_optimizer(config.optimizer_config)
+        self.lr_scheduler = self._get_lr_scheduler(config.lr_scheduler_config, self.total_steps)
+
+        self.logger = logging.getLogger(__name__)
+        self.run = wandb.init(project=config.wandb_project, mode=config.wandb_mode)
+        self.run.define_metric("global_step")
+        self.run.define_metric("train/*", step_metric="global_step")
 
     def _get_training_dataloader(self) -> DataLoader:
         collator = LanceBatchCollator(self.tokenizer, self.ds_input_column)
@@ -60,13 +83,13 @@ class Trainer:
             self.dataset,
             batch_size=self.batch_size,
             shuffle=True,
-            num_workers=4,
+            num_workers=self.dataloader_num_workers,
             collate_fn=collator.collate_fn,
             # lance multi-threads internally, so its best we not use fork
             multiprocessing_context="spawn",
             # accelerate batch host to device transfers
             pin_memory=True,
-            prefetch_factor=8,
+            prefetch_factor=self.dataloader_prefetch_factor,
             persistent_workers=True,
         )
 
@@ -109,6 +132,8 @@ class Trainer:
         torch.manual_seed(self.seed)
 
     def train(self):
+        self.logger.info("Setting up trainer...")
+
         # Set random state at beginning of training to ensure reproducibility
         self._set_seed()
 
@@ -120,10 +145,13 @@ class Trainer:
         window_tokens = torch.zeros((), dtype=torch.int64, device=self.device)
         window_steps = torch.zeros((), dtype=torch.int64, device=self.device)
 
+        self.logger.info("Initializing training dataloader")
         dataloader = self._get_training_dataloader()
+        self.logger.info(f"Dataloader with {len(dataloader)} steps loaded")
         self.model.train()
         total_tokens = torch.zeros((), dtype=torch.int64, device=self.device)
 
+        self.logger.info("Starting training")
         for idx, batch in enumerate(dataloader):
             self.optimizer.zero_grad()
 
@@ -161,15 +189,16 @@ class Trainer:
                     )
                 ).tolist()
 
-                wandb.log(
-                    {
-                        "train/step": idx + 1,
-                        "train/loss_mean": mean_loss,
-                        "train/loss_window_max": max_loss,
-                        "train/grad_norm_mean": mean_grad,
-                        "train/grad_norm_window_max": max_grad,
-                    }
-                )
+                metrics_dict = {
+                    "global_step": idx + 1,
+                    "train/loss_mean": mean_loss,
+                    "train/loss_window_max": max_loss,
+                    "train/grad_norm_mean": mean_grad,
+                    "train/grad_norm_window_max": max_grad,
+                }
+
+                self.logger.info(metrics_dict)
+                self.run.log(metrics_dict)
 
                 loss_sum.zero_()
                 loss_max.zero_()
@@ -190,7 +219,7 @@ class Trainer:
 
             wandb.log(
                 {
-                    "train/step": idx + 1,
+                    "global_step": idx + 1,
                     "train/loss_mean": mean_loss,
                     "train/loss_window_max": max_loss,
                     "train/grad_norm_mean": mean_grad,

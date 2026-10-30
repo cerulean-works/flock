@@ -50,10 +50,10 @@ class LanceBatchCollator:
         }
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True)
 class DatasetConfig:
     uri: str
-    version: str = field(doc="Flock hub's version number or tag")
+    version: str | int = field(doc="Flock hub's version number or tag")
 
 
 def get_dataset(config: DatasetConfig) -> SafeLanceDataset:

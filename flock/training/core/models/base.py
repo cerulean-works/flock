@@ -6,7 +6,7 @@ import torch
 from torch import nn
 from transformers import AutoTokenizer, TokenizersBackend
 
-from flock.training.data_utils import Batch
+from flock.training.core.data_utils import Batch
 
 
 class BaseModel(nn.Module, ABC):
