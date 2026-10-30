@@ -76,7 +76,7 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `tw_mock_exams:bpb` | the 10 `tw_mock_exams_<subject>` tasks | `bpb` | none |
 | `tw_mock_exams:all` | `tw_mock_exams`, `tw_mock_exams:bpb` | unscored | none |
 
-The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. OLMES groups ARC-Easy and ARC-Challenge into one suite with no metric of its own; here they are two members of `base_easy:qa_rc`. `basic_skills`, and so `base_easy:qa_rc`, averages our `acc_per_token`, which divides by the real token count. OLMES's equals its `acc_raw`, so these two scores differ from OLMES's by that member. See [Suites in results](results#suites) for when two suite scores compare.
+The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. OLMES groups ARC-Easy and ARC-Challenge into one suite with no metric of its own; here they are two members of `base_easy:qa_rc`. `basic_skills`, and so `base_easy:qa_rc`, averages our `acc_per_token`, which divides by the real token count. OLMES's equals its `acc_raw`, so these two scores differ from OLMES's by that member. In BF16, `lambada`'s `acc_greedy` can also differ by a few near-tie docs, since our argmax is taken over FP32 logits and OLMES's over its BF16 log-probabilities. See [Suites in results](results#suites) for when two suite scores compare.
 
 The `tmmluplus` score is the mean of the four category means, as the dataset card computes its total, so each category counts once however many subjects it has. `tmmluplus:taiwan` holds the three subjects behind the Taiwan columns of the Gemma-3-TAIDE model cards.
 

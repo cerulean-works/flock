@@ -40,7 +40,7 @@ Its request strings are unchanged. Its hash changes once, because `primary_metri
 
 ### 015.D4. Prediction rows record `is_greedy` per choice, and `results.json` goes to schema 6
 
-014.D1 says a prediction row holds every input of every number the task reports, and `acc_greedy` is read from `is_greedy`, which no other field gives. So each row gains `is_greedy` per choice, after `num_bytes`, and `acc_greedy` can be recomputed from the file alone. The rows changed, so `schema_version` goes from 5 to 6, as 014.D1's new fields took it from 4 to 5 (014.D8). Nothing in `results.json` itself changes. `compare` reads neither the rows nor the version beyond printing it, so the version alone causes no breach: the regression bank, at schema 4 until its refresh, is refused only for LAMBADA's hash (015.D3).
+014.D1 says a prediction row holds every input of every number the task reports, and `acc_greedy` is read from `is_greedy`, which no other field gives. So each row gains `is_greedy` per choice, after `num_bytes`, and `acc_greedy` can be recomputed from the file alone. The rows changed, so `schema_version` goes from 5 to 6, as 014.D1's new fields took it from 4 to 5 (014.D8). Apart from the version, `results.json` changes only as 015.D3 says: LAMBADA's hash and `base_easy:qa_rc`'s members and score. `compare` reads neither the rows nor the version beyond printing it, so the version alone causes no breach: the regression bank, at schema 4 until its refresh, is refused only for LAMBADA's hash (015.D3).
 
 *Prior work:* OLMES (`5a51f50`) keeps `is_greedy` per choice in `predictions.jsonl` next to `sum_logits` (`oe_eval/models/eleuther_huggingface.py:507`, written per choice as `model_output` in `oe_eval/metrics/metric.py:106`), which is how its `greedy_acc` was checked against ours without a new run.
 
@@ -50,7 +50,7 @@ Its request strings are unchanged. Its hash changes once, because `primary_metri
 
 **D2, `GoldOnlyTask`'s fixed fields.** 007.D2 says `primary_metric`, `metrics` and `unconditional_context` are set by the class and can't be passed. `primary_metric` and `metrics` can now be passed, with the old values as defaults, so LAMBADA can ask for `acc_greedy`. `unconditional_context` is still fixed to `None`, and what the task can report is fixed by the class (015.D2).
 
-**010, the toy task.** Section 5 of 010 says `toy:gold_only` renders toy rows in DRCD's format, so the task snapshot pins the `文章：` passage line. The snapshot keeps one toy task per prompt path, and `toy:gold_only` is now this stage's English gold-only task reporting `acc_greedy` and `bpb`. DRCD's rendering, passage line included, is pinned by `test_drcd.py` alone.
+**010, the toy task.** Section 7 of 010 says `toy:gold_only` renders toy rows in DRCD's format, so the task snapshot pins the `文章：` passage line. The snapshot keeps one toy task per prompt path, and `toy:gold_only` is now this stage's English gold-only task reporting `acc_greedy` and `bpb`. DRCD's rendering, passage line included, is pinned by `test_drcd.py` alone.
 
 ---
 
@@ -60,7 +60,7 @@ Its request strings are unchanged. Its hash changes once, because `primary_metri
 2. `metrics.py`: `ChoiceScores.is_greedy`, `acc_greedy` in `MULTIPLE_CHOICE_METRICS` and `multiple_choice`. `tasks/base.py`: `choice_scores` lays it out per doc; `MultipleChoiceTask` leaves it out of what it computes; `GoldOnlyTask` computes `acc_greedy` and `bpb`.
 3. `tasks/lambada.py`: LAMBADA as a `GoldOnlyTask`. `tasks/base_easy.py`: LAMBADA in `qa_rc`.
 4. Tests: `is_greedy` equals an unbatched argmax per request at every batch budget, on requests built from the model's own greedy tokens so both outcomes occur; argmax ties; `acc_greedy` reads the gold column; `toy:gold_only` in `tests/eval/toy.py` reporting `acc_greedy`, and the snapshot regenerated.
-5. Docs: `docs/source/evals/task-definitions.md` and `tasks.md`. `results.py`: `is_greedy` in `prediction_rows` and schema 6, with `results.md`'s predictions table (015.D4).
+5. Docs in `docs/source/evals/`: `task-definitions.md`, `tasks.md`, `metrics.md` and `comparison.md`. `results.py`: `is_greedy` in `prediction_rows` and schema 6, with `results.md`'s predictions table (015.D4).
 6. Checks: every other score unchanged before and after; LAMBADA's `acc_greedy` against OLMES on OLMo 2 1B (stage 003, D22).
 
 ---
@@ -69,9 +69,9 @@ Its request strings are unchanged. Its hash changes once, because `primary_metri
 
 All numbers are on `allenai/OLMo-2-0425-1B`, final checkpoint `a1847dff` unless named, on one H200, against OLMES at `5a51f50`. OLMES needed no new run: its `lambada:bpb` predictions already record `is_greedy` per doc, which is what its `greedy_acc` averages.
 
-- **Nothing else moved.** On the tiny test model every log-probability, token count, truncation count and metric is byte-equal before and after, and so are `results.json` and the predictions. ARC-Easy's 19,002 requests and hash are unchanged, and its FP32 log-probabilities and metrics are byte-equal on the GPU. LAMBADA's FP32 log-probabilities are byte-equal and its `bpb` is 0.4381838 on both sides, as banked. In BF16, two runs before against two after differ by at most one doc on any accuracy and by at most 4.8e-5 `bpb`. Two runs of one commit differ by one doc and up to 4.1e-5, since cuDNN attention is not deterministic run to run, and earlier ARC-Easy runs measured that noise at up to 5e-5.
+- **Nothing else moved.** On the tiny test model, for every task this stage does not change, every log-probability, token count, truncation count and metric is byte-equal before and after, and so are `results.json` and the predictions once the new `is_greedy` field and `schema_version` are set aside. ARC-Easy's 19,002 requests and hash are unchanged, and its FP32 log-probabilities and metrics are byte-equal on the GPU. LAMBADA's FP32 log-probabilities are byte-equal and its `bpb` is 0.4381838 on both sides, as banked. In BF16, two runs before against two after differ by at most one doc on any accuracy and by at most 4.8e-5 `bpb`. Two runs of one commit differ by one doc and up to 4.1e-5, so BF16 scoring is not deterministic run to run, and earlier ARC-Easy runs measured that noise at up to 5e-5.
 - **FP32 parity.** `acc_greedy` is 0.60198 on both sides, and all 5,153 docs agree on `is_greedy`. The largest request gap is 2.3e-4 nats.
-- **BF16 parity.** `acc_greedy` 0.60101 against OLMES's 0.60043, 99.4% of docs agree, inside 003's D22 tolerance (0.2 pt, 99%). LAMBADA's BF16 `bpb` gap is 4.2e-4, over D22's 3e-4, as it was when the task was added: the gap was never in `acc_greedy`. From OLMES's FP32 answer, 27 docs change their greedy match in our BF16 run and 36 in OLMES's. At step 50000 (`5d0cce11`): 0.54609 against 0.54628, 99.6% agree, inside the tolerance. Both sides rank the two checkpoints the same way.
+- **BF16 parity.** `acc_greedy` 0.60101 against OLMES's 0.60043, 99.4% of docs agree, inside 003's D22 tolerance (0.2 pt, 99%). LAMBADA's BF16 `bpb` gap is 4.2e-4, over D22's 3e-4, the same gap measured when LAMBADA's `bpb` was added; `base_easy:qa_rc` reads `acc_greedy`, which passes. From OLMES's FP32 answer, 27 docs change their greedy match in our BF16 run and 36 in OLMES's. At step 50000 (`5d0cce11`): 0.54609 against 0.54628, 99.6% agree, inside the tolerance. Both sides rank the two checkpoints the same way.
 - **Cost.** None measurable: ARC-Easy takes 85.3 s against 85.5 s in FP32, and LAMBADA 20.2 s against 20.1 s.
 - **The tests' greedy requests.** A random tiny model is almost never greedy on fixed text, so a test of only fixed requests would check one outcome. The test adds requests built from the model's own next one and two greedy tokens after each context, and asserts that both outcomes occur.
 
