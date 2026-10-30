@@ -60,7 +60,7 @@ Its request strings are unchanged. Its hash changes once, because `primary_metri
 2. `metrics.py`: `ChoiceScores.is_greedy`, `acc_greedy` in `MULTIPLE_CHOICE_METRICS` and `multiple_choice`. `tasks/base.py`: `choice_scores` lays it out per doc; `MultipleChoiceTask` leaves it out of what it computes; `GoldOnlyTask` computes `acc_greedy` and `bpb`.
 3. `tasks/lambada.py`: LAMBADA as a `GoldOnlyTask`. `tasks/base_easy.py`: LAMBADA in `qa_rc`.
 4. Tests: `is_greedy` equals an unbatched argmax per request at every batch budget, on requests built from the model's own greedy tokens so both outcomes occur; argmax ties; `acc_greedy` reads the gold column; `toy:gold_only` in `tests/eval/toy.py` reporting `acc_greedy`, and the snapshot regenerated.
-5. Docs: `tasks.md` and `adding-a-task.md`. `results.py`: `is_greedy` in `prediction_rows` and schema 6, with `results.md`'s predictions table (015.D4).
+5. Docs: `docs/source/evals/task-definitions.md` and `tasks.md`. `results.py`: `is_greedy` in `prediction_rows` and schema 6, with `results.md`'s predictions table (015.D4).
 6. Checks: every other score unchanged before and after; LAMBADA's `acc_greedy` against OLMES on OLMo 2 1B (stage 003, D22).
 
 ---
