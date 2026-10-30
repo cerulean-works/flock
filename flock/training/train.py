@@ -1,7 +1,7 @@
 import math
 import random
 from dataclasses import asdict
-from typing import overload
+from typing import cast, overload
 
 import torch
 import torch.nn.functional as F
@@ -11,7 +11,7 @@ from torch.optim import AdamW, Muon, Optimizer
 from torch.utils.data import DataLoader
 from transformers import TokenizersBackend
 
-from flock.training.data_utils import LanceBatchCollator
+from flock.training.data_utils import Batch, LanceBatchCollator
 from flock.training.lr_scheduler import LRSchedulerConfig, StepLRScheduler
 from flock.training.optimization import AdamWConfig, MuonConfig, OptimizerConfig
 
@@ -29,7 +29,16 @@ class Trainer:
         logging_steps: int = 10,
         seed=42,
     ):
-        self.model = model
+        self.seed = seed
+        self.device = (
+            torch.device("cuda:0")
+            if torch.cuda.is_available()
+            else torch.device("mps:0")
+            if torch.mps.is_available()
+            else torch.device("cpu")
+        )
+
+        self.model = model.to(self.device)
         self.tokenizer = tokenizer
         self.dataset = dataset
         self.ds_input_column = input_column
@@ -39,8 +48,6 @@ class Trainer:
         self.total_steps = math.ceil(len(self.dataset) / self.batch_size)
         self.optimizer = self._get_optimizer(optimizer_config)
         self.lr_scheduler = self._get_lr_scheduler(lr_scheduler_config, self.total_steps)
-
-        self.seed = seed
 
     def _get_training_dataloader(self) -> DataLoader:
         collator = LanceBatchCollator(self.tokenizer, self.ds_input_column)
@@ -67,6 +74,7 @@ class Trainer:
         if isinstance(config, AdamWConfig):
             return AdamW(self.model.parameters(), **asdict(config))
         if isinstance(config, MuonConfig):
+            raise NotImplementedError("Muon supported is not added yet")
             return Muon(self.model.parameters(), **asdict(config))
         raise TypeError(
             f"Unsupported OptimizerConfig type {type(OptimizerConfig)}, supported types are: {OptimizerConfig.evaluate_value()}"
@@ -109,6 +117,9 @@ class Trainer:
 
         for idx, batch in enumerate(dataloader):
             self.optimizer.zero_grad()
+
+            batch = cast(Batch, batch)
+            batch = {k: v.to(self.device) for k, v in batch.items()}
 
             output: torch.Tensor = self.model(batch)
             loss, num_tokens = self._calc_batch_loss(output, batch["labels"])

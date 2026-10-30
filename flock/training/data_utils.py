@@ -1,14 +1,15 @@
 from dataclasses import dataclass, field
-from typing import Any, TypedDict
+from typing import Any
 
 import torch
 from lance.torch.data import SafeLanceDataset
 from transformers import TokenizersBackend
+from typing_extensions import TypedDict
 
 from flock.hub import s3
 
 
-class Batch(TypedDict):
+class Batch(TypedDict, closed=True):
     input_ids: torch.Tensor
     attention_mask: torch.Tensor
     labels: torch.Tensor
