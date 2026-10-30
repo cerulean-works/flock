@@ -39,6 +39,8 @@ export interface OrgInfo {
 	s3_ephemeral_ttl: number;
 	/** The longest any of its S3 keys may live, in seconds; null when keys may never expire. */
 	s3_key_max_ttl: number | null;
+	/** Keep the newest N untagged versions of each model (D109); null keeps every version. */
+	model_retention?: number | null;
 }
 
 /**
@@ -93,6 +95,9 @@ export interface S3KeyCreated extends S3Key {
 	region: string;
 }
 
+/** The buckets Flock creates and owns in each org (D85, D97). */
+export type ManagedKind = 'datasets' | 'models';
+
 /** An organization's S3 bucket. */
 export interface Bucket {
 	name: string;
@@ -102,8 +107,11 @@ export interface Bucket {
 	created_by: Person | null;
 	/** Set while a deleted bucket is still being emptied (listed with `deleting`). */
 	deleted_at?: number;
-	/** `datasets` for the org's flock-datasets, which Flock creates and owns; null otherwise. */
-	managed?: 'datasets' | null;
+	/**
+	 * The kind of a bucket Flock creates and owns: `datasets` for the org's flock-datasets,
+	 * `models` for its flock-models. Null otherwise.
+	 */
+	managed?: ManagedKind | null;
 }
 
 /** An object in a folder's listing (`GET …/buckets/{bucket}/objects`). */
@@ -316,6 +324,138 @@ export interface TrashEntry {
 	latest_version: number | null;
 	objects: number;
 	bytes: number;
+}
+
+// ----------------------------------------------------------------------------------------------
+// Models (014): the model registry, in an org's flock-models bucket.
+
+/** A model in the org's list (`GET …/models`). */
+export interface ModelEntry {
+	name: string;
+	/** `org/name`. */
+	model: string;
+	created_at: number;
+	created_by: Person | null;
+	/** Live versions. */
+	versions: number;
+	/** The newest version's number; null before the first one is committed. */
+	latest: number | null;
+	primary: number | null;
+	/** The primary version's size in bytes. */
+	size: number | null;
+	updated_at: number;
+}
+
+/** A tag of a model, with the version it's on. */
+export interface ModelTag {
+	name: string;
+	version: number;
+	moved_by: Person | null;
+	moved_at: number;
+}
+
+/** A model (`GET …/models/{name}`). */
+export interface ModelInfo {
+	name: string;
+	model: string;
+	created_at: number;
+	created_by: Person | null;
+	versions: number;
+	latest: number | null;
+	primary: number | null;
+	/** Who made the primary version primary, and when (D107). */
+	primary_set_by: Person | null;
+	primary_set_at: number | null;
+	tags: ModelTag[];
+}
+
+/** A version as the listings show it (`GET …/models/{name}/versions`). */
+export interface ModelVersion {
+	model: string;
+	name: string;
+	number: number;
+	digest: string;
+	total_bytes: number;
+	metadata: Record<string, unknown>;
+	tags: string[];
+	primary: boolean;
+	step: number | null;
+	/** The run that made it, `entity/project/id`. */
+	run: string | null;
+	created_by: Person | null;
+	created_at: number;
+	/** Eval runs that scored it, deleted runs left out. */
+	eval_runs: number;
+	bucket: string;
+	/** Its folder in flock-models, ending in `/`. */
+	prefix: string;
+}
+
+export interface ModelFile {
+	path: string;
+	size: number;
+	sha256: string;
+}
+
+/** A version with its files and eval runs (`GET …/versions/{number}`, `…/resolve`). */
+export interface ModelVersionDetail extends ModelVersion {
+	files: ModelFile[];
+	/** The eval runs that scored it, as `entity/project/id`. */
+	evals: string[];
+}
+
+export interface ModelVersionsPage {
+	versions: ModelVersion[];
+	cursor: number | null;
+}
+
+/** An eval run of a version, with its numeric summary (the dashboard's `…/evals`). */
+export interface ModelEvalRun {
+	/** `entity/project/id`. */
+	path: string;
+	entity: string;
+	project: string;
+	id: string;
+	display_name: string | null;
+	state: string;
+	created_at: number;
+	/** Numeric summary values by key, such as `mmlu/acc`. */
+	metrics: Record<string, number>;
+}
+
+/** A deleted model or version in the trash (`GET …/models/-/trash`), for org admins. */
+interface ModelTrashBase {
+	id: number;
+	name: string;
+	model: string;
+	deleted_by: Person | null;
+	deleted_at: number;
+	expires_at: number;
+	/** False while its files are still moving to the trash. */
+	moved: boolean;
+	bytes: number;
+}
+
+export interface ModelTrashModel extends ModelTrashBase {
+	kind: 'model';
+	/** The versions deleted with it. */
+	versions: number;
+}
+
+export interface ModelTrashVersion extends ModelTrashBase {
+	kind: 'version';
+	number: number;
+	/** The checkpoint tags that went with it. */
+	tags: string[];
+	eval_runs: number;
+}
+
+export type ModelTrashEntry = ModelTrashModel | ModelTrashVersion;
+
+/** The versions a run made and those it scored (`GET …/runs/{run}/models`). */
+export interface RunModels {
+	made: (ModelVersion & { evals: string[] })[];
+	scored: (ModelVersion & { evals: string[] })[];
 }
 
 /** Where an organization's W&B import is: `interrupted` means Flock restarted during it. */

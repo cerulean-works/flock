@@ -21,7 +21,11 @@ const bucket = (name: string, managed: Bucket['managed'] = null): Bucket => ({
 const data = {
 	shell: { admin: true, orgName: 'Acme' },
 	s3: { endpoint: 'https://s3.flock.test', region: 'us-east-1' },
-	buckets: [bucket('checkpoints'), bucket('flock-datasets', 'datasets')],
+	buckets: [
+		bucket('checkpoints'),
+		bucket('flock-datasets', 'datasets'),
+		bucket('flock-models', 'models')
+	],
 	nameLimit: 57,
 	now: 1_790_000_100
 };
@@ -42,6 +46,23 @@ describe('the Storage overview', () => {
 		await expect.element(open).toBeVisible();
 		expect(open.element().getAttribute('href')).toBe('/datasets/acme');
 		await expect.element(page.getByRole('menuitem', { name: 'History' })).toBeVisible();
+		await expect
+			.element(page.getByRole('menuitem', { name: 'Delete bucket…' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('marks flock-models as managed, opening it in Models', async () => {
+		// @ts-expect-error -- a page's props: only what the overview reads
+		render(Page, { data, params: { org: 'acme' } });
+		const managed = page.getByRole('row').filter({ hasText: 'flock-models' });
+		await expect.element(managed.getByText('Managed by Flock')).toBeVisible();
+		await page.getByRole('button', { name: 'Actions for flock-models' }).click();
+		const open = page.getByRole('menuitem', { name: 'Open in Models' });
+		await expect.element(open).toBeVisible();
+		expect(open.element().getAttribute('href')).toBe('/models/acme');
+		await expect
+			.element(page.getByRole('menuitem', { name: 'Open in Datasets' }))
+			.not.toBeInTheDocument();
 		await expect
 			.element(page.getByRole('menuitem', { name: 'Delete bucket…' }))
 			.not.toBeInTheDocument();

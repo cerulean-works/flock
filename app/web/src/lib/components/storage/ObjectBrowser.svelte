@@ -27,6 +27,7 @@
 		pickedFiles,
 		type Picked
 	} from '#lib/uploads.svelte.ts';
+	import { MODELS_BUCKET, modelsHref } from '#lib/models.ts';
 	import { bytes, count, dateTime, relativeTime } from '#lib/utils.ts';
 	import CopyButton from '../CopyButton.svelte';
 	import CreateFolderDialog from './CreateFolderDialog.svelte';
@@ -44,6 +45,9 @@
 	}
 
 	let { org, bucket, prefix, listing, now }: Props = $props();
+
+	/** flock-models changes only through `flock models push` and the Models tab (D97). */
+	const readOnly = $derived(bucket === MODELS_BUCKET);
 
 	// The listing: the server's first page, then pages loaded here ("Load more", the filter,
 	// a refresh). A new folder starts over from its own first page.
@@ -141,10 +145,12 @@
 				<span class="max-w-60 truncate font-mono text-[12.5px]">{s3Uri(bucket, prefix)}</span>
 				<CopyButton text={s3Uri(bucket, prefix)} label="Copy S3 URI" />
 			</span>
-			<Button variant="outline" size="sm" onclick={() => (creatingFolder = true)}>
-				<FolderPlusIcon /> Create folder
-			</Button>
-			<Button size="sm" onclick={() => picker?.click()}><UploadIcon /> Upload</Button>
+			{#if !readOnly}
+				<Button variant="outline" size="sm" onclick={() => (creatingFolder = true)}>
+					<FolderPlusIcon /> Create folder
+				</Button>
+				<Button size="sm" onclick={() => picker?.click()}><UploadIcon /> Upload</Button>
+			{/if}
 			<input
 				bind:this={picker}
 				type="file"
@@ -159,6 +165,13 @@
 		</div>
 	</div>
 
+	{#if readOnly}
+		<p class="text-[13px] text-muted-foreground">
+			Versions are added with <code class="font-mono text-[0.9em]">flock models push</code> and
+			deleted in
+			<a class="text-link underline-offset-3 hover:underline" href={modelsHref(org)}>Models</a>.
+		</p>
+	{/if}
 	<UploadList {queue} />
 
 	{#if selected.size}
@@ -182,14 +195,16 @@
 						<DownloadIcon /> Download
 					</Button>
 				{/if}
-				<Button
-					variant="outline"
-					size="sm"
-					class="text-destructive"
-					onclick={() => (deleting = true)}
-				>
-					<Trash2Icon /> Delete
-				</Button>
+				{#if !readOnly}
+					<Button
+						variant="outline"
+						size="sm"
+						class="text-destructive"
+						onclick={() => (deleting = true)}
+					>
+						<Trash2Icon /> Delete
+					</Button>
+				{/if}
 			</div>
 		</div>
 	{/if}
@@ -200,18 +215,18 @@
 		role="region"
 		aria-label="Objects in {s3Uri(bucket, prefix)}"
 		ondragenter={(e) => {
-			if (!e.dataTransfer?.types.includes('Files')) return;
+			if (readOnly || !e.dataTransfer?.types.includes('Files')) return;
 			e.preventDefault();
 			dragging++;
 		}}
 		ondragover={(e) => {
-			if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
+			if (!readOnly && e.dataTransfer?.types.includes('Files')) e.preventDefault();
 		}}
 		ondragleave={() => (dragging = Math.max(0, dragging - 1))}
 		ondrop={async (e) => {
 			e.preventDefault();
 			dragging = 0;
-			if (e.dataTransfer) upload(await droppedFiles(e.dataTransfer));
+			if (e.dataTransfer && !readOnly) upload(await droppedFiles(e.dataTransfer));
 		}}
 	>
 		<table class="w-full table-fixed border-collapse text-[13.5px]">
