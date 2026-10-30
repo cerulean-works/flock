@@ -188,13 +188,19 @@ RUN_PATH = (
     "JOIN projects p ON p.pk = r.project_pk JOIN orgs o ON o.pk = p.org_pk "
     "WHERE r.pk = {column} AND r.deleted_at IS NULL)"
 )
+# The eval runs of the version in ``{column}`` that aren't deleted: what ``evals`` lists, what
+# ``eval_runs`` counts and what keeps a version from retention (D106, D109).
+LIVE_EVALS = (
+    "model_version_runs e JOIN runs r ON r.pk = e.run_pk AND r.deleted_at IS NULL "
+    "WHERE e.version_pk = {column} AND e.kind = 'eval'"
+)
 VERSION_COLUMNS = (
     "v.pk, v.number, v.digest, v.total_bytes, v.metadata::text, v.step, v.created_by, "
     "extract(epoch FROM v.created_at)::float8, u.ulid, "
     f"{RUN_PATH.format(column='v.run_pk')}, "
     "coalesce((SELECT array_agg(t.name ORDER BY t.name) FROM model_tags t "
     "WHERE t.version_pk = v.pk), '{}'), "
-    "(SELECT count(*) FROM model_version_runs e WHERE e.version_pk = v.pk)::int"
+    f"(SELECT count(*) FROM {LIVE_EVALS.format(column='v.pk')})::int"
 )
 VERSION_FROM = "model_versions v JOIN model_uploads u ON u.pk = v.upload_pk"
 UPLOAD_COLUMNS = (
@@ -1328,7 +1334,7 @@ class Models:
         records = await self.store.db.fetch(
             "SELECT v.pk, m.name, v.number, v.deleted_by, extract(epoch FROM v.deleted_at)::float8, "
             "v.trashed_at IS NOT NULL, v.total_bytes, v.deleted_tags, "
-            "(SELECT count(*) FROM model_version_runs e WHERE e.version_pk = v.pk)::int "
+            f"(SELECT count(*) FROM {LIVE_EVALS.format(column='v.pk')})::int "
             "FROM model_versions v JOIN models m ON m.pk = v.model_pk "
             "WHERE m.org_pk = $1 AND v.deleted_at IS NOT NULL "
             "AND ($2::bigint[] IS NULL OR v.pk = ANY($2)) "
@@ -1661,7 +1667,8 @@ class Models:
     async def _retain(self) -> int:
         """Retention (D109): in orgs that set it, delete the versions older than the newest N
         untagged ones of each model (untagged: no tag but checkpoint ones, not the primary),
-        unless they have eval runs. They go to the trash like any deleted version."""
+        unless they have eval runs that aren't deleted. They go to the trash like any deleted
+        version."""
         candidates = await self.store.db.fetch(
             "SELECT c.pk, c.model_pk FROM ("
             "SELECT v.pk, v.model_pk, o.model_retention AS keep, row_number() OVER "
@@ -1672,7 +1679,7 @@ class Models:
             "AND v.pk IS DISTINCT FROM m.primary_version_pk AND NOT EXISTS (SELECT 1 FROM "
             "model_tags t WHERE t.version_pk = v.pk AND t.name !~ '^checkpoint-[0-9]+$')"
             ") c WHERE c.rank > c.keep AND NOT EXISTS "
-            "(SELECT 1 FROM model_version_runs e WHERE e.version_pk = c.pk) ORDER BY c.pk"
+            f"(SELECT 1 FROM {LIVE_EVALS.format(column='c.pk')}) ORDER BY c.pk"
         )
         deleted = 0
         for pk, model_pk in candidates:
@@ -1690,7 +1697,7 @@ class Models:
                     "SELECT 1 FROM model_versions WHERE pk = $1 AND deleted_at IS NULL", pk
                 )
                 evaluated = await conn.fetchval(
-                    "SELECT 1 FROM model_version_runs WHERE version_pk = $1 LIMIT 1", pk
+                    f"SELECT 1 FROM {LIVE_EVALS.format(column='$1')} LIMIT 1", pk
                 )
                 if not live or evaluated or await self._refusal(conn, model, pk, "it"):
                     continue

@@ -979,6 +979,33 @@ def test_retention(flock: S3Flock, pusher: Pusher, wait_for):
     )
 
 
+def test_deleted_eval_runs_dont_count(flock: S3Flock, pusher: Pusher):
+    """``eval_runs`` counts the runs ``evals`` lists, so a deleted run counts nowhere, and
+    retention no longer keeps a version for it."""
+    api = flock.client()
+    for step in (1, 2, 3):
+        pusher.push("m", tags=[f"checkpoint-{step}"])
+    api.create_run("evals", "e1", config={"model": "flock:flock/m@2"})
+    api.create_run("evals", "e2", config={"model": "flock:flock/m@2"})
+    version = api.get(f"{MODELS}/m/versions/2").json()
+    assert version["eval_runs"] == 2 and len(version["evals"]) == 2
+
+    assert api.delete("/api/v1/projects/flock/evals/runs/e1", force="true").status == 204
+    version = api.get(f"{MODELS}/m/versions/2").json()
+    assert version["evals"] == ["flock/evals/e2"] and version["eval_runs"] == 1
+    listed = api.get(f"{MODELS}/m/versions").json()["versions"]
+    assert [v["eval_runs"] for v in listed] == [0, 1, 0]
+    # With e2 alive, retention keeps version 2 (1 is the primary, 3 the newest untagged).
+    assert api.patch("/api/v1/orgs/flock", {"model_retention": 1}).status == 200
+    assert flock.call(models(flock).sweep())["retained"] == 0
+
+    assert api.delete("/api/v1/projects/flock/evals/runs/e2", force="true").status == 204
+    assert api.get(f"{MODELS}/m/versions/2").json()["eval_runs"] == 0
+    assert flock.call(models(flock).sweep())["retained"] == 1
+    (entry,) = api.get(f"{MODELS}/-/trash").json()["entries"]
+    assert entry["number"] == 2 and entry["eval_runs"] == 0
+
+
 def test_a_non_member_gets_404(flock: S3Flock, pusher: Pusher):
     pusher.push("m")
     api = flock.client()
