@@ -308,7 +308,7 @@ safetensors), so installing `flock-hub` for datasets stays light.
 ```python
 def save_to_hub(
     model: BaseModel | str | os.PathLike,  # a model, or a folder that already has the files
-    name: str,                             # "org/name"
+    name: str,  # "org/name"
     *,
     tags: Sequence[str] = (),
     primary: bool = False,
@@ -323,16 +323,19 @@ def save_to_hub(
     keep_local: bool = False,
 ) -> ModelVersion | PendingUpload: ...
 
+
 def load_from_hub(
-    ref: str,                               # "org/name@12", "org/name@primary" or "org/name"
+    ref: str,  # "org/name@12", "org/name@primary" or "org/name"
     *,
     device: str | torch.device | None = None,
     dtype: torch.dtype | None = None,
 ) -> BaseModel: ...
 
+
 def download(ref: str, *, allow=None, ignore=None, include_training_state=False) -> Path: ...
 
-def set_primary(ref: str) -> ModelVersion: ...       # "org/name@12" or "org/name@checkpoint-12000"
+
+def set_primary(ref: str) -> ModelVersion: ...  # "org/name@12" or "org/name@checkpoint-12000"
 def tag(ref: str, tag: str, *, move: bool = False) -> ModelVersion: ...
 def untag(name: str, tag: str) -> None: ...
 def versions(name: str) -> list[ModelVersion]: ...
@@ -602,3 +605,120 @@ branches from `feat/scaffold-training-loop`, and each next one from the one befo
 3. **Retention off by default** (D109), with the primary, versions with evals and versions with
    tags other than `checkpoint-{step}` always kept?
 4. **7 days** before an idle upload expires. Should this be an org setting too?
+
+## 7. How it was actually built (PR 1)
+
+PR 1 (`feat/model-registry-api`) holds the registry, the upload sessions, the proxy's rule for
+`flock-models` and the sweep, in three commits: the API with the migration, the proxy, and the
+tests. The status stays `proposed` until the later PRs land. These are the places where the code
+differs from the decisions above, or adds to them.
+
+- **Tables (D98).** Beyond D98's columns: `models.last_number` hands out numbers, since
+  `max(number) + 1` would reuse a number once the trash removes the newest version for good.
+  `models.deleted_by` and `model_versions.deleted_by` say who deleted them for the "Deleted
+  models" section. `model_versions.trashed_at` is set once a deleted version's files are all in
+  the trash, `deleted_tags` keeps the checkpoint tags that went with it, and `manifest_at` is set
+  once `manifest.json` is written. `upload_pk` is unique. The dedupe key is unique among live
+  versions only (a partial index), so a deleted version doesn't block saving that step again.
+  Retention is `orgs.model_retention` (null is off), next to the S3 key lifetimes, and is set
+  with `PATCH orgs/{org}` by admins and read in the org's answer.
+- **The managed bucket (D97).** `ensure_managed` takes a kind (`datasets` or `models`).
+  Creating an org, the startup pass and the Models routes (listing models, opening an upload)
+  ensure `flock-models` as D85 does `flock-datasets`. Every test org now has both, so the tests
+  that count an org's buckets were updated again.
+- **The proxy (D97, D101).** A write to `flock-models` passes only if its key is
+  `{model}/u/{ulid}/{path}` of an open upload whose opener is the caller, in the caller's org,
+  for that model. PUT, UploadPart, CreateMultipartUpload, CompleteMultipartUpload and
+  AbortMultipartUpload pass. Deletes, DeleteObjects and copies into the bucket are refused even
+  inside an upload, since a copy isn't a PUT. ListParts is a read. Only open uploads are cached
+  (as keys are, never as missing), and a trigger on `model_uploads` notifies
+  `flock_model_uploads` with the ULID whenever an upload's state changes, which drops it from
+  every worker's cache. Each write that passes touches `last_activity_at`, at most once a minute
+  per upload and worker.
+- **Opening (D100).** The required files (D99) and the path rules are checked when the upload
+  is opened as well as at the commit, so a push without `config.json` fails before any bytes are
+  sent. Paths are relative, without `.`, `..`, empty segments, control characters or
+  backslashes, at most 800 bytes, and `manifest.json` is refused since Flock writes it. An upload
+  holds at most 10,000 files of at most 625 GiB each (10,000 parts of 64 MiB), and at most
+  256 KiB of metadata. A `checkpoint-{step}` tag already on a version is refused when the upload
+  is opened (409 with `version`), not only at the commit. `run` is `entity/project/id` and links
+  only to a run of the same org; anything else is ignored, as D106 says for unknown runs.
+- **Tags at upload.** D100 moves the upload's tags from other versions, and D107 refuses a
+  second `checkpoint-12000`. Both hold: tags move at upload, except checkpoint tags, which answer
+  409. A checkpoint tag also never moves through `PUT tags/{tag}`, even with `move`. `primary` is
+  refused as a tag in any case.
+- **Committing (D100).** The upload's row is locked for the whole commit, so two commits of one
+  upload wait for each other and the sweep doesn't expire it meanwhile, and the model's row is
+  locked only to number it. A 409 carries the paths as `missing`, `extra`, `resized`,
+  `uploading` and `mismatched`, and files in the commit that aren't the declared ones are 422.
+  The safetensors check reads every shard named by the index and `model.safetensors` if present,
+  not `training_state/`, and checks each header's length and each tensor's dtype, shape and
+  offsets. Only the opener can commit (403 for anyone else). The commit answers 200, again 200
+  when repeated. If a live version got the upload's dedupe key while it was open, the commit
+  answers that version and aborts its own upload, removing its folder. If the model was deleted
+  while the upload was open, the upload is aborted and the commit answers 409.
+- **The digest** sorts paths by bytes (`COLLATE "C"` in Postgres, as Python's `sorted`).
+  `manifest.json` holds `format`, `model`, `number`, `digest`, `files` and `metadata`. Missing
+  manifests are written by the startup pass and by every sweep.
+- **Uploads.** `GET uploads?state=` lists the caller's uploads in any state, `open` by default.
+  `GET uploads/{ulid}` shows any member the upload's state. The opener or an admin can abort an
+  upload, and aborting one that's already aborted or expired answers 204. ULIDs are made by Flock
+  (48 bits of milliseconds and 80 random bits), without a dependency.
+- **Routes beyond D100 and D103.** `GET orgs/{org}/models` lists the models with their latest
+  and primary numbers. `GET models/{name}` shows the primary with who set it and the tags.
+  `GET models/{name}/versions` pages newest first, 100 at a time, with `before` as the cursor and
+  `checkpoints=true` for D107's filter. `GET` and `DELETE models/{name}/versions/{number}`,
+  `DELETE models/{name}`, `PUT` and `DELETE models/{name}/tags/{tag}` with `{version, move}`
+  (as 013's tags), and `PUT models/{name}/primary` (which answers `previous`, the number it
+  replaced, for D107's confirmation). Users come back as their briefs.
+- **The trash routes** are under `orgs/{org}/models/-/trash`, since `trash` is a valid model name
+  and no model name starts with `-`. The listing holds `model` entries (with the versions deleted
+  with them) and `version` entries (deleted versions of live models). Admins restore and delete
+  for good with `POST -/trash/{models,versions}/{pk}/restore` and `DELETE -/trash/{models,
+  versions}/{pk}`.
+- **Deleting (D109).** A deleted version or model is gone from every route at once, and its
+  files move to `{org pk:05}/models/{version pk}/` of the trash in the background, copying every
+  object before deleting any, so a move cut short is finished by the sweep. A version can be
+  tens of GiB, which doesn't fit in a request. Restoring and deleting for good answer 409 until
+  the move is done. Objects over 5 GiB are copied in parts with the source's `x-amz-meta-*` set on
+  the copy. A deleted version's checkpoint tags go with it, and come back on restore when nobody
+  has taken them since. Its dedupe key is dropped on restore if a live version has it now.
+- **Deleting a model** has no checks, since its primary would always refuse. Its tags and
+  primary stay on its row for a restore. Its live versions get the model's `deleted_at`, which is
+  how a restore finds exactly those; versions deleted on their own before stay deleted. Its open
+  uploads are aborted after the deletion commits, so a commit in flight sees the model deleted
+  instead of waiting on it. A restore answers 409 with `taken` when a live model has the name
+  now. A version of a deleted model can't be restored on its own.
+- **Restoring is synchronous.** It copies the files back in the request, so restoring a very
+  large model can outlast a proxy's timeout. The trash copies are removed after the restore
+  commits, and the orphan pass removes them if that fails.
+- **Retention (D109).** The newest N untagged versions are counted among those that aren't
+  primary and have no tag but checkpoint ones, newest first, and versions with eval runs count
+  towards N but are never deleted. Retention runs in the sweep, with the model's row locked and
+  the checks made again, and its deletions have no `deleted_by`.
+- **The sweep (D102)** runs every 10 minutes on every replica: expiry, then stray folders,
+  retention, unfinished moves to the trash, the 14-day purge, the trash's orphans and missing
+  manifests. Expiry commits the `expired` state before cleaning up, so the proxy stops taking
+  writes first. The stray pass removes the folders of aborted and expired uploads whose cleanup
+  failed at once, folders with no upload row after a day, and multipart uploads that aren't an
+  open upload's (a row-less one after a day). The model trash's orphans are
+  `{org}/models/{pk}/` prefixes whose version isn't deleted, older than a day. The dataset trash's
+  own orphan pass now leaves `{org}/models/` alone; it would have removed the model trash after a
+  day.
+- **Deleting an org** deletes its models' rows in the org's transaction. The objects go with its
+  buckets' purge, and the trash with the dataset trash's `purge_org`, which already empties
+  `{org pk:05}/`.
+- **Formatting.** `ruff format --check .` formats Python blocks in Markdown and failed on D104's
+  block, so that block is in ruff's layout now.
+- **Ceph RGW** (checked with a throwaway bucket named like the tests' own, then removed, since
+  `flock-hub-test` doesn't exist on the server, and by `tests/app/test_models.py` through the
+  proxy with `FLOCK_TEST_S3_*`): ListParts gives each part's ETag as the MD5 of its bytes, and a
+  part with a wrong `Content-MD5` is refused with `BadDigest`. A completed multipart object
+  keeps the `x-amz-meta-sha256` set on CreateMultipartUpload, and CopyObject keeps it too. D102's
+  resume can rely on both, and the journal doesn't need to store part MD5s.
+
+Not in PR 1: the eval links of D106 (PR 3, though `model_version_runs` is in the migration and
+the version routes and retention read it), a route listing the versions a run made (the run
+page's Checkpoints section, PR 4), the API reference page for the routes, the client and CLI
+(PR 2) and the web app (PR 4). The web app's types still name only `datasets` as a managed kind;
+the Storage tab shows `flock-models` as managed without a Datasets link.
