@@ -26,7 +26,7 @@ class TrainerConfig:
     optimizer_config: OptimizerConfig
     lr_scheduler_config: LRSchedulerConfig
 
-    dataloader_prefetch_factor: int = 4
+    dataloader_prefetch_factor: int | None = 4
     dataloader_num_workers: int = 4
 
     wandb_project: str
@@ -79,6 +79,15 @@ class Trainer:
     def _get_training_dataloader(self) -> DataLoader:
         collator = LanceBatchCollator(self.tokenizer, self.ds_input_column)
 
+        if self.dataloader_num_workers < 0:
+            raise ValueError("dataloader_num_workers must be non-negative")
+        if self.dataloader_num_workers == 0 and self.dataloader_prefetch_factor is not None:
+            raise ValueError(
+                "dataloader_prefetch_factor must be None when dataloader_num_workers is 0"
+            )
+        elif self.dataloader_prefetch_factor is not None and self.dataloader_prefetch_factor < 1:
+            raise ValueError("dataloader_prefetch_factor must be >= 1")
+
         return DataLoader(
             self.dataset,
             batch_size=self.batch_size,
@@ -86,11 +95,11 @@ class Trainer:
             num_workers=self.dataloader_num_workers,
             collate_fn=collator.collate_fn,
             # lance multi-threads internally, so its best we not use fork
-            multiprocessing_context="spawn",
+            multiprocessing_context="spawn" if self.dataloader_num_workers > 0 else None,
             # accelerate batch host to device transfers
             pin_memory=True,
             prefetch_factor=self.dataloader_prefetch_factor,
-            persistent_workers=True,
+            persistent_workers=self.dataloader_num_workers > 0,
         )
 
     @overload
@@ -118,13 +127,15 @@ class Trainer:
         # output is [B, T, V], labels is [B, T]
         num_tokens = (labels != -100).sum()
 
-        loss = F.cross_entropy(
-            output.reshape(-1, output.shape[-1]),
+        loss_sum = F.cross_entropy(
+            output.float().reshape(-1, output.shape[-1]),
             labels.reshape(-1),
             ignore_index=-100,
-            reduction="mean",
+            reduction="sum",
         )
 
+        # Keep normalization on-device; an all-ignored batch has zero loss/gradient.
+        loss = loss_sum / num_tokens.clamp_min(1)
         return loss, num_tokens
 
     def _set_seed(self):
@@ -182,7 +193,7 @@ class Trainer:
             if (idx + 1) % self.logging_steps == 0:
                 mean_loss, max_loss, mean_grad, max_grad = torch.stack(
                     (
-                        loss_sum / window_tokens,
+                        loss_sum / window_tokens.clamp_min(1),
                         loss_max,
                         grad_norm_sum / window_steps,
                         grad_norm_max,
@@ -210,14 +221,14 @@ class Trainer:
         if self.total_steps % self.logging_steps:
             mean_loss, max_loss, mean_grad, max_grad = torch.stack(
                 (
-                    loss_sum / window_tokens,
+                    loss_sum / window_tokens.clamp_min(1),
                     loss_max,
                     grad_norm_sum / window_steps,
                     grad_norm_max,
                 )
             ).tolist()
 
-            wandb.log(
+            self.run.log(
                 {
                     "global_step": idx + 1,
                     "train/loss_mean": mean_loss,

@@ -1,14 +1,12 @@
-from dataclasses import asdict, replace
+from dataclasses import replace
 
 import pytest
 import torch
-from tokenizers import Tokenizer, models, pre_tokenizers
 from torch.nn import functional as F
-from transformers import Olmo2Config as HFConfig
-from transformers import Olmo2ForCausalLM, TokenizersBackend
 
 from flock.training.core.data_utils import Batch, LanceBatchCollator
-from flock.training.core.models.olmo2 import OLMO2_1B_CONFIG, OLMO2_7B_CONFIG, Olmo2, Olmo2Config
+from flock.training.core.models.olmo2 import OLMO2_1B_CONFIG, OLMO2_7B_CONFIG, Olmo2
+from tests.training._reference import olmo2_training_parity
 
 
 def make_batch(input_ids: torch.Tensor, attention_mask: torch.Tensor | None = None) -> Batch:
@@ -19,67 +17,15 @@ def make_batch(input_ids: torch.Tensor, attention_mask: torch.Tensor | None = No
     }
 
 
-@pytest.fixture(autouse=True, scope="module")
-def one_thread():
-    threads = torch.get_num_threads()
-    torch.set_num_threads(1)
-    yield
-    torch.set_num_threads(threads)
-
-
-@pytest.fixture
-def config():
-    return Olmo2Config(
-        vocab_size=32,
-        hidden_size=32,
-        intermediate_size=48,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=4,
-        max_position_embeddings=16,
+@pytest.mark.parametrize("kv_heads", [4, 2, 1], ids=["mha", "gqa", "mqa"])
+@pytest.mark.parametrize("padding", ["none", "left", "right"])
+def test_huggingface_training_parity(config, kv_heads, padding):
+    olmo2_training_parity(
+        replace(config, num_key_value_heads=kv_heads),
+        padding,
+        torch.device("cpu"),
+        torch.float32,
     )
-
-
-@pytest.fixture
-def tokenizer():
-    backend = Tokenizer(
-        models.WordLevel({"[UNK]": 0, "[EOS]": 1, "a": 2, "b": 3, "c": 4}, unk_token="[UNK]")
-    )
-    backend.pre_tokenizer = pre_tokenizers.Whitespace()
-    return TokenizersBackend(tokenizer_object=backend, eos_token="[EOS]")
-
-
-@pytest.mark.parametrize("kv_heads", [4, 2])
-@pytest.mark.parametrize("padded", [False, True])
-def test_huggingface_forward_and_gradient_parity(config, kv_heads, padded):
-    config = replace(config, num_key_value_heads=kv_heads)
-    torch.manual_seed(0)
-    model = Olmo2(config)
-    hf_config = HFConfig(**asdict(config), pad_token_id=None, use_cache=False)
-    hf_config._attn_implementation = "eager"
-    reference = Olmo2ForCausalLM(hf_config)
-    # Strict loading also verifies checkpoint names and all parameter shapes.
-    reference.load_state_dict(model.state_dict(), strict=True)
-
-    ids = torch.tensor([[0, 0, 2, 3, 4], [5, 6, 7, 8, 9]])
-    mask = torch.tensor([[0, 0, 1, 1, 1], [1, 1, 1, 1, 1]]) if padded else None
-    positions = (mask.cumsum(-1) - 1).clamp_min(0) if padded else None
-    actual = model(make_batch(ids, mask))
-    expected = reference(ids, attention_mask=mask, position_ids=positions).logits
-    valid = mask.bool() if padded else torch.ones_like(ids, dtype=torch.bool)
-    torch.testing.assert_close(actual[valid], expected[valid], atol=1e-6, rtol=1e-5)
-
-    targets = torch.randint(config.vocab_size, ids.shape)
-    F.cross_entropy(actual[valid], targets[valid]).backward()
-    F.cross_entropy(expected[valid], targets[valid]).backward()
-    for name, parameter in model.named_parameters():
-        torch.testing.assert_close(
-            parameter.grad,
-            reference.get_parameter(name).grad,
-            atol=2e-5,
-            rtol=2e-4,
-            msg=lambda error, name=name: f"{name}: {error}",
-        )
 
 
 def test_causality_and_padding_invariance(config):
@@ -104,6 +50,7 @@ def test_collated_training_batch(config, tokenizer, monkeypatch):
     )
     model = Olmo2(replace(config, hf_repo="offline"))
     tokenizer = model.get_hf_tokenizer()
+    assert tokenizer is not None
     tokenizer.padding_side = "left"
     batch = LanceBatchCollator(tokenizer, "text").collate_fn([{"text": "a b c"}, {"text": "b c"}])
     assert batch["input_ids"].shape == batch["attention_mask"].shape == batch["labels"].shape
@@ -123,7 +70,7 @@ def test_fully_masked_rows_are_finite(config, dtype):
     assert logits.dtype == dtype
     assert logits.isfinite().all()
     logits.float().square().mean().backward()
-    assert all(p.grad.isfinite().all() for p in model.parameters())
+    assert all(p.grad is not None and p.grad.isfinite().all() for p in model.parameters())
 
 
 @pytest.mark.parametrize(
@@ -170,6 +117,7 @@ def test_invalid_input_shapes(config):
 
 def test_tokenizer_config(config, tokenizer, monkeypatch):
     calls = []
+    tokenizer.pad_token = None
 
     def load(repo, **kwargs):
         calls.append((repo, kwargs))
@@ -193,8 +141,8 @@ def test_initialization_is_independent_of_global_rng(config):
         assert torch.equal(weight, second.state_dict()[name]), name
     # A single stream gives distinct weights to different layers/projections.
     assert not torch.equal(
-        first.model.layers[0].self_attn.q_proj.weight,
-        first.model.layers[1].self_attn.q_proj.weight,
+        first.get_parameter("model.layers.0.self_attn.q_proj.weight"),
+        first.get_parameter("model.layers.1.self_attn.q_proj.weight"),
     )
     assert not torch.equal(first.model.embed_tokens.weight, first.lm_head.weight)
 

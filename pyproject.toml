@@ -56,8 +56,9 @@ known-third-party = ["wandb"]
 testpaths = ["tests"]
 markers = [
     "latency: tests that measure app response latency",
+    "gpu: CUDA training parity tests (run explicitly on a GPU machine)",
 ]
-addopts = ["--import-mode=importlib", "--strict-markers", "-m", "not latency", "-n", "auto", "--dist=loadgroup"]
+addopts = ["--import-mode=importlib", "--strict-markers", "-m", "not latency and not gpu", "-n", "auto", "--dist=loadgroup"]
 
 [dependency-groups]
 components = [
