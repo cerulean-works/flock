@@ -16,6 +16,10 @@ guide:
     title: Use storage from Python
   - local: cli/authenticate-jobs
     title: Authenticate an unattended job
+- title: Training
+  sections:
+  - local: training/trainer
+    title: Train with Flock
 - title: Evals
   sections:
   - local: evals/run-evaluation

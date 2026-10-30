@@ -9,8 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from flock.cli import credentials, s3
-from flock.cli.s3_commands import parse_duration, set_profile
+from flock.cli import credentials
+from flock.hub import s3
+from flock.hub.cli import parse_duration, set_profile
 from tests.app.conftest import Flocks, S3Flock, User
 from tests.app.utils import cli_login
 from tests.conftest import S3Server
@@ -185,7 +186,7 @@ def flock_admin_token(flock: S3Flock) -> str:
 
 
 def test_credentials_renew_before_they_expire(flock, alice, signed_in, clock):
-    wall = clock("flock.cli.s3")
+    wall = clock("flock.hub.s3.client")
     creds = s3.credentials(ttl=120)
     first = creds.access_key_id
     assert creds.org == "flock"

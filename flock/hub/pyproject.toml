@@ -1,0 +1,13 @@
+[project]
+name = "flock-hub"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "datasets>=5.1.0",
+    "flock",
+    "pyarrow>=26.0.0",
+    "pylance>=14.0.0",
+]
+
+[tool.uv]
+package = false

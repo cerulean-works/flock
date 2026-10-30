@@ -1,6 +1,6 @@
 # Python S3 API
 
-`flock.cli.s3` exchanges a Flock sign-in for storage access to one organization. Start with [Access storage from Python](use-python-storage) or [Write a Lance dataset](use-python-storage#write-a-lance-dataset).
+`flock.hub.s3` exchanges a Flock sign-in for storage access to one organization. Start with [Access storage from Python](use-python-storage) or [Write a Lance dataset](use-python-storage#write-a-lance-dataset).
 
 ## Renewal and client lifetimes
 
@@ -17,18 +17,18 @@ The helper needs httpx. boto3 and other client libraries are imported only when 
 
 ## Credentials
 
-[[autodoc]] cli.s3.credentials
+[[autodoc]] hub.s3.credentials
 
-[[autodoc]] cli.s3.S3Credentials
+[[autodoc]] hub.s3.S3Credentials
 
-[[autodoc]] cli.s3.S3Error
+[[autodoc]] hub.s3.S3Error
 
 ## Endpoint and buckets
 
-[[autodoc]] cli.s3.endpoint
+[[autodoc]] hub.s3.endpoint
 
-[[autodoc]] cli.s3.list_buckets
+[[autodoc]] hub.s3.list_buckets
 
-[[autodoc]] cli.s3.create_bucket
+[[autodoc]] hub.s3.create_bucket
 
-[[autodoc]] cli.s3.delete_bucket
+[[autodoc]] hub.s3.delete_bucket

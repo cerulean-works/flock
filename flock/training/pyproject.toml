@@ -4,7 +4,11 @@ version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
     "flock",
+    "huggingface-hub>=2.2.0",
+    "tokenizers>=0.23.3",
     "torch>=2.14.1",
+    "tqdm>=4.70.1",
+    "transformers>=5.20.1",
 ]
 
 [tool.uv]
