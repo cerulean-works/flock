@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Generator
 from contextlib import contextmanager
+from typing import Any
 
 import torch
 from torch import nn
@@ -10,7 +11,14 @@ from flock.training.core.data_utils import Batch
 
 
 class BaseModel(nn.Module, ABC):
-    """Shared initialization, input preparation and tokenizer loading for causal models."""
+    """Shared initialization, input preparation and tokenizer loading for causal models.
+
+    Subclasses set ``config`` and take it as their only constructor argument, so a saved model
+    can be rebuilt from its ``config.json``.
+    """
+
+    config: Any
+    """The model's settings: a frozen dataclass (``Olmo2Config`` for ``Olmo2``)."""
 
     def __init__(
         self,
