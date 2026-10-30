@@ -33,7 +33,7 @@ There are two ways to get one:
 
 | | Ephemeral keys | Long-lived keys |
 |---|---|---|
-| Made by | `flock s3 credentials`, `flock.cli.s3`, `POST /s3/credentials` | the account page, `POST /me/s3-keys` |
+| Made by | `flock s3 credentials`, `flock.hub.s3`, `POST /s3/credentials` | the account page, `POST /me/s3-keys` |
 | In exchange for | a CLI token | a browser session only |
 | Lifetime | the organization's ephemeral lifetime, or less if asked | anything up to the organization's maximum, including never if it allows |
 | Ends with | the CLI sign-in it was made for (`flock logout`, revoking the machine, a password change or reset) | revoking it on the account page; it survives password changes, as wandb keys do |
@@ -68,7 +68,7 @@ The proxy checks memberships on every request (through its cache), so removing s
 
 ## The Storage tab
 
-The dashboard's sidebar has a **Storage** item for the organization in view, at `/storage/{org}`. It lists the organization's buckets, with who created them, and creates and deletes them. A deleted bucket stays listed as "being deleted" until the S3 server has emptied it. Its Connect panel shows the endpoint and region, with snippets for `flock s3 configure`, `flock s3 credentials` and `flock.cli.s3`.
+The dashboard's sidebar has a **Storage** item for the organization in view, at `/storage/{org}`. It lists the organization's buckets, with who created them, and creates and deletes them. A deleted bucket stays listed as "being deleted" until the S3 server has emptied it. Its Connect panel shows the endpoint and region, with snippets for `flock s3 configure`, `flock s3 credentials` and `flock.hub.s3`.
 
 Each bucket opens a file browser, one folder level at a time:
 
@@ -87,11 +87,11 @@ Bucket and folder sizes aren't shown: the S3 server reports them only through Ce
 
 Every organization has a bucket named `flock-datasets`, which Flock creates and manages. Flock makes it when the organization is created, when the API starts (for organizations without one), and when the Datasets tab opens and finds none. If the organization already had a bucket of that name, Flock takes it over with its objects. The bucket can't be deleted, and the Storage tab marks it **Managed by Flock**.
 
-To S3 clients it's an ordinary bucket. Write Lance datasets into it with any client, for example with [`flock.cli.s3`](../cli/use-python-storage#write-a-lance-dataset):
+To S3 clients it's an ordinary bucket. Write Lance datasets into it with any client, for example with [`flock.hub.s3`](../cli/use-python-storage#write-a-lance-dataset):
 
 ```python
 import lance
-from flock.cli import s3
+from flock.hub import s3
 
 creds = s3.credentials("flock")
 lance.write_dataset(
@@ -113,7 +113,7 @@ Lance reads go straight from the API to the S3 server with the global key. Who w
 
 ## What the proxy supports
 
-Clients address buckets path-style: `<endpoint>/<bucket>/<key>`. boto3, the AWS CLI, Lance, s3fs and DuckDB all support it; `flock.cli.s3` and `flock s3 configure` set it for you.
+Clients address buckets path-style: `<endpoint>/<bucket>/<key>`. boto3, the AWS CLI, Lance, s3fs and DuckDB all support it; `flock.hub.s3` and `flock s3 configure` set it for you.
 
 | Supported | Operations |
 |---|---|

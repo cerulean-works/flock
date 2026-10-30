@@ -21,7 +21,7 @@ uv pip install boto3
 Use an existing bucket or [create one](s3-access#work-with-buckets). This example uses `checkpoints` and a small test object:
 
 ```python
-from flock.cli import s3
+from flock.hub import s3
 
 creds = s3.credentials()
 client = creds.boto3_client()
@@ -52,7 +52,7 @@ Choose an unused dataset path. This writes a one-row dataset, then checks that i
 ```python
 import lance
 import pyarrow as pa
-from flock.cli import s3
+from flock.hub import s3
 
 creds = s3.credentials()
 uri = creds.uri("flock-datasets", "examples", "questions")
