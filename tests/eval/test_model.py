@@ -28,6 +28,32 @@ def reference(scorer: ScoringModel, request: Request) -> float:
     return sum(logprobs[start + i, t].item() for i, t in enumerate(continuation))
 
 
+def greedy_reference(scorer: ScoringModel, request: Request) -> bool:
+    """Whether one unbatched, unpadded forward pass predicts every continuation token as its argmax."""
+    context, continuation = scorer.encode(request)
+    ids = (context + continuation)[-(scorer.max_length + 1) :]
+    with torch.no_grad():
+        logits = scorer.model(torch.tensor([ids[:-1]])).logits[0]
+    start = len(ids) - 1 - len(continuation)
+    return all(logits[start + i].argmax().item() == t for i, t in enumerate(continuation))
+
+
+def greedy_requests(scorer: ScoringModel) -> list[Request]:
+    """`REQUESTS`, and after each non-empty context the text of the model's next one and two greedy tokens."""
+    requests = list(REQUESTS)
+    for context in dict.fromkeys(request.context for request in REQUESTS if request.context):
+        ids = scorer.tokenizer.encode(context, add_special_tokens=False)
+        start = len(ids)
+        with torch.no_grad():
+            for _ in range(2):
+                ids.append(scorer.model(torch.tensor([ids])).logits[0, -1].argmax().item())
+                generated = ids[start:]
+                text = scorer.tokenizer.decode(generated)
+                assert isinstance(text, str)  # one sequence of ids decodes to one string
+                requests.append(Request(context, text))
+    return requests
+
+
 def test_model_ref_parse():
     ref = ModelRef.parse("allenai/OLMo-2-0425-1B@a1847dff")
     assert (ref.repo, ref.revision) == ("allenai/OLMo-2-0425-1B", "a1847dff")
@@ -140,6 +166,16 @@ def test_loglikelihood_is_batch_size_and_padding_invariant(scorer, batch_tokens)
     )
 
 
+@pytest.mark.parametrize("batch_tokens", [1, 40, 100, 10_000])
+def test_is_greedy_matches_an_unbatched_argmax_at_every_batch_budget(scorer, batch_tokens):
+    requests = greedy_requests(scorer)
+    expected = [greedy_reference(scorer, request) for request in requests]
+    assert any(expected) and not all(expected)  # both outcomes are checked
+
+    scorer.batch_tokens = batch_tokens
+    assert scorer.loglikelihood(requests).is_greedy.tolist() == expected
+
+
 def test_loglikelihood_keeps_request_order(scorer):
     forward = scorer.loglikelihood(REQUESTS).logprob
     backward = scorer.loglikelihood(REQUESTS[::-1]).logprob
@@ -221,13 +257,27 @@ def test_target_logprobs_is_the_same_in_any_chunks(chunk_positions):
     torch.manual_seed(0)
     logits = torch.randn(3, 5, 7, dtype=torch.bfloat16)
     targets = torch.randint(7, (3, 5))
+    targets[0, 0] = logits[0, 0].argmax()
 
-    chunked = model._target_logprobs(logits, targets, chunk_positions)
+    chunked, is_argmax = model._target_logprobs(logits, targets, chunk_positions)
 
     whole = logits.float().log_softmax(-1).gather(-1, targets[..., None]).squeeze(-1)
     assert chunked.dtype == torch.float32
     torch.testing.assert_close(chunked, whole)
-    assert torch.equal(chunked, model._target_logprobs(logits, targets, 15))
+    assert torch.equal(is_argmax, logits.argmax(-1) == targets)
+    assert is_argmax[0, 0]
+    whole_chunk, whole_is_argmax = model._target_logprobs(logits, targets, 15)
+    assert torch.equal(chunked, whole_chunk)
+    assert torch.equal(is_argmax, whole_is_argmax)
+
+
+def test_target_logprobs_breaks_argmax_ties_to_the_first_token():
+    # As `torch.argmax` in OLMES: a target tied with an earlier token is not the argmax.
+    logits = torch.tensor([[[1.0, 3.0, 3.0]]])
+    _, is_argmax = model._target_logprobs(logits, torch.tensor([[2]]))
+    assert not is_argmax.item()
+    _, is_argmax = model._target_logprobs(logits, torch.tensor([[1]]))
+    assert is_argmax.item()
 
 
 def test_batched_rows_do_not_see_each_other(scorer, monkeypatch):
@@ -243,7 +293,7 @@ def test_batched_rows_do_not_see_each_other(scorer, monkeypatch):
 
     monkeypatch.setattr(scorer.model, "forward", embedded_forward)
     # `_score` runs one forward pass over all the requests, so there is exactly one input.
-    logprob = scorer._score(scorer._encode(REQUESTS))
+    logprob, _ = scorer._score(scorer._encode(REQUESTS))
     [(embedded, attention_mask)] = inputs
 
     for i in range(len(REQUESTS)):

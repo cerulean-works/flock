@@ -46,9 +46,9 @@ _QA_TASKS = (
     SQUAD,
 )
 
-# LAMBADA's `qa_rc` member is greedy match, which isn't scored yet (stage file 003, D20), so it
-# is only in `qa_bpb` for now.
-QA_RC = Suite("base_easy:qa_rc", (*_QA_TASKS, MMLU, BASIC_SKILLS))
+# LAMBADA is read by `acc_greedy` in `qa_rc` and by `bpb` in `qa_bpb`, as OLMES's `lambada` and
+# `lambada:bpb`.
+QA_RC = Suite("base_easy:qa_rc", (*_QA_TASKS, MMLU, BASIC_SKILLS, LAMBADA))
 QA_BPB = Suite("base_easy:qa_bpb", (*_QA_TASKS, MMLU_BPB, BASIC_SKILLS_BPB, LAMBADA), metric="bpb")
 
 # OLMES's `olmo3:base_easy:math_bpb` and `olmo3:base_easy:code_bpb`. Every task in them reports

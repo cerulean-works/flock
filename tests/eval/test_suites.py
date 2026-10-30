@@ -140,9 +140,10 @@ def test_registry_suites_hold_registered_tasks():
     code = tuple(task.name for task in SUITES["base_easy:code_bpb"].tasks)
     members = [*qa, *mmlu, *skills, "lambada", *math, *code]
     assert [task.name for task in SUITES["base_easy"].tasks] == members
-    # The two suites read one list of tasks, MMLU and basic skills through a suite of each kind.
+    # The two suites read one list of tasks, MMLU and basic skills through a suite of each kind,
+    # LAMBADA by `acc_greedy` and by `bpb`.
     rc, bpb = SUITES["base_easy:qa_rc"].members, SUITES["base_easy:qa_bpb"].members
-    assert [member.name for member in rc] == [*qa, "mmlu", "basic_skills"]
+    assert [member.name for member in rc] == [*qa, "mmlu", "basic_skills", "lambada"]
     assert [member.name for member in bpb] == [*qa, "mmlu:bpb", "basic_skills:bpb", "lambada"]
     assert SUITES["base_easy:qa_bpb"].metric == "bpb"
     for suite in SUITES.values():

@@ -212,12 +212,13 @@ class ScoringModel:
         order = sorted(range(len(encoded)), key=lambda i: -input_lengths[i])
 
         logprob = torch.zeros(len(encoded), dtype=torch.float32, device=self.device)
+        is_greedy = torch.zeros(len(encoded), dtype=torch.bool, device=self.device)
         with _eval_mode(self.model):
             for batch in self._batches(order, input_lengths):
                 # `non_blocking` on these small CPU tensors: the copy is staged at once and the
                 # host never waits for GPU work already queued.
                 index = torch.tensor(batch).to(self.device, non_blocking=True)
-                logprob[index] = self._score([encoded[i] for i in batch])
+                logprob[index], is_greedy[index] = self._score([encoded[i] for i in batch])
 
         num_tokens = torch.tensor(
             [len(continuation) for _, continuation in encoded], dtype=torch.int64
@@ -226,6 +227,7 @@ class ScoringModel:
             logprob,
             num_tokens.to(self.device, non_blocking=True),
             torch.tensor(tokens_cut, dtype=torch.int64).to(self.device, non_blocking=True),
+            is_greedy,
         )
 
     def _encode(self, requests: Sequence[Request]) -> list[_Encoded]:
@@ -313,8 +315,8 @@ class ScoringModel:
         if batch:
             yield batch
 
-    def _score(self, encoded: list[_Encoded]) -> torch.Tensor:
-        """Summed continuation log-probabilities of one batch."""
+    def _score(self, encoded: list[_Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
+        """One batch's summed continuation log-probabilities, and whether each continuation is the greedy one."""
         batch = _pad_batch(encoded, self.max_length)
         device = self.device
 
@@ -336,10 +338,15 @@ class ScoringModel:
         # With weights on several devices, the logits come out on the last one.
         targets = batch.targets.to(logits.device, non_blocking=True)
         scored = batch.scored.to(logits.device, non_blocking=True)
-        token_logprob = _target_logprobs(logits, targets)
+        token_logprob, token_is_argmax = _target_logprobs(logits, targets)
 
         # `where`, not a product: logits at padding positions may not be finite.
-        return token_logprob.where(scored, 0.0).sum(-1).to(device, non_blocking=True)
+        logprob = token_logprob.where(scored, 0.0).sum(-1)
+        # Greedy only if every continuation token is the argmax, as OLMES's `is_greedy`
+        # (`oe_eval/models/eleuther_huggingface.py`). Positions before the continuation don't count.
+        is_greedy = (token_is_argmax | ~scored).all(-1)
+
+        return logprob.to(device, non_blocking=True), is_greedy.to(device, non_blocking=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -412,11 +419,11 @@ def _pad_batch(encoded: list[_Encoded], max_length: int) -> _PaddedBatch:
 
 def _target_logprobs(
     logits: torch.Tensor, targets: torch.Tensor, chunk_positions: int = 4096
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    The float32 log-softmax of `logits` `[rows, positions, vocab]` at `targets` `[rows, positions]`.
+    The FP32 log-softmax of `logits` `[rows, positions, vocab]` at `targets` `[rows, positions]`, and whether each target is its position's argmax, the first on a tie.
 
-    OLMES runs `log_softmax` in the model's dtype (`oe_eval/models/eleuther_huggingface.py`). float32 here is our choice, so bfloat16 rounding of the normalizer doesn't move scores. `logits` can hold `batch_tokens * vocab` values, so a float32 copy of all of it would double peak memory: rows are converted a few at a time.
+    OLMES runs `log_softmax` in the model's dtype and takes the argmax of its output (`oe_eval/models/eleuther_huggingface.py`). FP32 here is our choice, so BF16 rounding of the normalizer doesn't move scores, and the argmax is taken over the FP32 logits, which the normalizer doesn't reorder; in BF16 OLMES's rounded log-probabilities can tie where ours don't, so a near-tie can resolve differently. `logits` can hold `batch_tokens * vocab` values, so an FP32 copy of all of it would double peak memory: rows are converted a few at a time.
 
     Args:
         logits (`torch.Tensor`):
@@ -428,14 +435,16 @@ def _target_logprobs(
     """
     rows_per_chunk = max(1, chunk_positions // logits.shape[1])
     token_logprob = torch.empty(targets.shape, dtype=torch.float32, device=logits.device)
+    token_is_argmax = torch.empty(targets.shape, dtype=torch.bool, device=logits.device)
 
     for start in range(0, len(logits), rows_per_chunk):
         rows = slice(start, start + rows_per_chunk)
         chunk = logits[rows].float()
         target_logits = chunk.gather(-1, targets[rows, :, None]).squeeze(-1)
         token_logprob[rows] = target_logits - chunk.logsumexp(-1)
+        token_is_argmax[rows] = chunk.argmax(-1) == targets[rows]
 
-    return token_logprob
+    return token_logprob, token_is_argmax
 
 
 def _window_length(encoded: _Encoded) -> int:

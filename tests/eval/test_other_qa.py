@@ -83,7 +83,11 @@ def test_lambada_scores_the_last_word_after_single_spaces():
     doc = lambada_doc({"index": 9, "text": "He said  hello\nto  Sacha"})
 
     assert doc == MCDoc("9", (Choice("He said hello to", " Sacha"),), 0)
-    assert LAMBADA.reported_metrics == ("bpb",)
+    # OLMES's `lambada` and `lambada:bpb` in one task.
+    assert (LAMBADA.primary_metric, LAMBADA.reported_metrics) == (
+        "acc_greedy",
+        ("acc_greedy", "bpb"),
+    )
 
 
 def test_basic_skills_suites_list_the_six_skills():

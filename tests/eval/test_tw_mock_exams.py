@@ -129,7 +129,10 @@ def test_a_doc_repeating_an_example_is_not_shown_it(history):
 
 def uniform_scores(n: int) -> Scores:
     return Scores(
-        torch.zeros(n), torch.ones(n, dtype=torch.int64), torch.zeros(n, dtype=torch.int64)
+        torch.zeros(n),
+        torch.ones(n, dtype=torch.int64),
+        torch.zeros(n, dtype=torch.int64),
+        torch.zeros(n, dtype=torch.bool),
     )
 
 

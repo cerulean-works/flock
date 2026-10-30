@@ -6,7 +6,16 @@ import torch
 
 from flock.eval.metrics import MULTIPLE_CHOICE_METRICS
 from flock.eval.requests import Scores
-from flock.eval.tasks import TASKS, Choice, Dataset, Fewshot, MCDoc, Truncation, cloze
+from flock.eval.tasks import (
+    TASKS,
+    Choice,
+    Dataset,
+    Fewshot,
+    GoldOnlyTask,
+    MCDoc,
+    Truncation,
+    cloze,
+)
 from flock.eval.tasks.arc import ARC_EASY, arc_doc
 
 from .toy import ROWS, TASK, not_about_bees
@@ -119,19 +128,23 @@ def test_requests_cover_every_choice_then_the_unconditional_ones():
 
 
 def uniform_scores(n: int, tokens_cut: list[int] | None = None) -> Scores:
-    """Scores for `n` requests: log-probability 0, one token each, and `tokens_cut` (default none)."""
+    """Scores for `n` requests: log-probability 0, one token each, not greedy, and `tokens_cut` (default none)."""
     cut = torch.tensor(tokens_cut) if tokens_cut is not None else torch.zeros(n, dtype=torch.int64)
-    return Scores(torch.zeros(n), torch.ones(n, dtype=torch.int64), cut)
+    return Scores(
+        torch.zeros(n), torch.ones(n, dtype=torch.int64), cut, torch.zeros(n, dtype=torch.bool)
+    )
 
 
 def test_choice_scores_lays_requests_out_per_doc():
     built = TASK.requests(*TASK.load())
     n = len(built.requests)
-    # Request i scores -i with i + 1 tokens, so each cell shows which request it came from.
+    # Request i scores -i with i + 1 tokens, and only odd requests are greedy, so each cell shows
+    # which request it came from.
     scores = Scores(
         -torch.arange(n, dtype=torch.float32),
         torch.arange(n) + 1,
         torch.zeros_like(torch.arange(n)),
+        torch.arange(n) % 2 == 1,
     )
     layout = built.choice_scores(scores)
 
@@ -140,6 +153,7 @@ def test_choice_scores_lays_requests_out_per_doc():
     assert layout.logprob[:, :3].tolist() == [[0, -1, -2], [-3, -4, -5]]
     assert layout.logprob[1, 3].item() == -6
     assert layout.num_tokens[0, :3].tolist() == [1, 2, 3]
+    assert layout.is_greedy[1].tolist() == [True, False, True, False]
     assert layout.gold.tolist() == [0, 1]
 
     # The unconditional requests follow the 7 conditional ones, so doc 1's are 7 + 3 to 7 + 6.
@@ -441,17 +455,32 @@ def test_requests_are_immutable():
 
 
 def test_reported_metrics_follow_pmi_and_the_metrics_field():
-    assert TASK.reported_metrics == MULTIPLE_CHOICE_METRICS
+    # `acc_greedy` compares no choices, so only a gold-only task reports it.
+    assert TASK.reported_metrics == tuple(m for m in MULTIPLE_CHOICE_METRICS if m != "acc_greedy")
     no_pmi = dataclasses.replace(TASK, unconditional_context=None)
     assert "acc_uncond" not in no_pmi.reported_metrics
-    gold_only = dataclasses.replace(TASK, metrics=("bpb",), primary_metric="bpb")
-    assert gold_only.reported_metrics == ("bpb",)
+    bpb_only = dataclasses.replace(TASK, metrics=("bpb",), primary_metric="bpb")
+    assert bpb_only.reported_metrics == ("bpb",)
+
+
+def test_gold_only_tasks_report_bpb_unless_asked_for_greedy_match():
+    gold_only = GoldOnlyTask(name="toy:gold", dataset=TASK.dataset, to_doc=arc_doc)
+    assert (gold_only.primary_metric, gold_only.reported_metrics) == ("bpb", ("bpb",))
+    assert gold_only.unconditional_context is None
+
+    greedy = dataclasses.replace(
+        gold_only, primary_metric="acc_greedy", metrics=("bpb", "acc_greedy")
+    )
+    assert greedy.reported_metrics == ("acc_greedy", "bpb")  # in `multiple_choice`'s order
+    with pytest.raises(ValueError, match="metrics must be among"):
+        dataclasses.replace(gold_only, metrics=("acc_raw",))
 
 
 @pytest.mark.parametrize(
     ("kwargs", "match"),
     [
         pytest.param({"metrics": ("acc_nope",)}, "metrics must be among", id="unknown"),
+        pytest.param({"metrics": ("acc_greedy",)}, "metrics must be among", id="greedy"),
         pytest.param(
             {
                 "metrics": ("acc_uncond",),
