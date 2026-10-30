@@ -4,13 +4,18 @@ import re
 import shlex
 import shutil
 import sys
+import threading
 import time
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 import click
 
-from flock.hub import s3
+from flock.hub import models, s3
+from flock.hub.models import cache, upload
+from flock.hub.models._common import Ref, human
 from flock.hub.s3 import S3Error
 
 UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
@@ -214,3 +219,222 @@ def delete_command(names: tuple[str, ...], org: str | None, host: str | None, ye
         except S3Error as error:
             raise click.ClickException(f"Couldn't delete {name}: {error}") from None
         click.echo(f"✓ Deleted {name}; it's being emptied and removed in the background.")
+
+
+# ---------------------------------------------------------------------- flock models (D105)
+
+
+@contextmanager
+def _failing() -> Generator[None]:
+    """Refusals and failures as the command's error (exit code 1)."""
+    try:
+        yield
+    except S3Error as error:
+        raise click.ClickException(str(error)) from None
+
+
+def _ref(text: str, version: bool = True) -> Ref:
+    try:
+        return Ref.parse(text, version)
+    except ValueError as error:
+        raise click.BadParameter(str(error)) from None
+
+
+class _Progress:
+    """Bytes moved and the rate, on one line of stderr that's redrawn while it's a terminal,
+    then a summary."""
+
+    def __init__(self, verb: str) -> None:
+        self.verb = verb
+        self.moved = 0
+        self.started = time.monotonic()
+        self._drawn = 0.0
+        self._lock = threading.Lock()
+        self._live = sys.stderr.isatty()
+
+    def __call__(self, size: int) -> None:
+        with self._lock:
+            self.moved += size
+            now = time.monotonic()
+            if self._live and now - self._drawn > 0.2:
+                self._drawn = now
+                click.echo(f"\r{self.line()}\033[K", nl=False, err=True)
+
+    def line(self) -> str:
+        elapsed = max(time.monotonic() - self.started, 1e-6)
+        return f"{self.verb} {human(self.moved)} ({human(self.moved / elapsed)}/s)"
+
+    def end(self) -> None:
+        if self._live:
+            click.echo("\r\033[K", nl=False, err=True)
+        if self.moved:
+            click.echo(f"{self.line()} in {time.monotonic() - self.started:.1f}s", err=True)
+
+
+@click.group("models")
+def models_group() -> None:
+    """Push, pull, tag and list models stored in Flock."""
+
+
+@models_group.command("push")
+@click.argument("folder", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.argument("name")
+@click.option("--tag", "tags", multiple=True, help="Tag the new version (repeat for more).")
+@click.option("--primary", is_flag=True, help="Make the new version primary once it's committed.")
+def push_command(folder: Path, name: str, tags: tuple[str, ...], primary: bool) -> None:
+    """Push FOLDER as a new version of NAME (org/name).
+
+    FOLDER holds config.json, flock.json and model.safetensors (or shards with
+    model.safetensors.index.json). Hidden files are skipped. Running the same push again
+    after it stopped resumes it.
+    """
+    ref = _ref(name, version=False)
+    options = {"metadata": {}, "tags": list(tags), "primary": primary}
+    progress = _Progress("Sent")
+    with _failing():
+        version = upload.push(folder.resolve(), ref, options, progress=progress)
+    progress.end()
+    click.echo(str(version))
+
+
+@models_group.command("pull")
+@click.argument("ref")
+@click.option(
+    "--to", type=click.Path(file_okay=False, path_type=Path), help="Copy the files here too."
+)
+@click.option("--include-training-state", is_flag=True, help="Also download training_state/.")
+def pull_command(ref: str, to: Path | None, include_training_state: bool) -> None:
+    """Download a version (ORG/NAME[@REF], default the primary) into the cache.
+
+    Prints the folder the files are in: the cache's, or --to's.
+    """
+    _ref(ref)
+    progress = _Progress("Received")
+    with _failing():
+        version = cache.resolve(ref)
+        assert version.files is not None
+        files = cache.select(version.files, None, None, include_training_state)
+        folder = cache.fetch(version, files, progress)
+    progress.end()
+    if to is not None:
+        cache.copy(folder, files, to)
+        folder = to
+    click.echo(f"✓ {version}: {folder}")
+
+
+@models_group.command("list")
+@click.option("--org", help="The org (default: your default org).")
+def list_models_command(org: str | None) -> None:
+    """List an org's models, with their latest and primary versions."""
+    with _failing():
+        found = models.list_models(org)
+    if not found:
+        click.echo("No models yet. Push one with: flock models push DIR ORG/NAME")
+    for model in found:
+        if model["latest"] is None:
+            click.echo(f"{model['model']}\tno versions")
+            continue
+        size = human(model["size"] or 0)
+        click.echo(
+            f"{model['model']}\tlatest {model['latest']}, primary {model['primary']} ({size})"
+        )
+
+
+@models_group.command("versions")
+@click.argument("name")
+def versions_command(name: str) -> None:
+    """List the versions of NAME (org/name), newest first."""
+    _ref(name, version=False)
+    with _failing():
+        found = models.versions(name)
+    if not found:
+        click.echo(f"{name} has no versions.")
+    for version in found:
+        created = time.strftime("%Y-%m-%d %H:%M", time.localtime(version.created_at))
+        cells = [
+            f"@{version.number}",
+            "primary" if version.primary else "",
+            ", ".join(version.tags),
+            f"step {version.step}" if version.step is not None else "",
+            human(version.size),
+            created,
+        ]
+        click.echo("\t".join(cells))
+
+
+@models_group.command("primary")
+@click.argument("ref")
+def primary_command(ref: str) -> None:
+    """Make the version REF (org/name@number or @tag) primary."""
+    if _ref(ref).version is None:
+        raise click.BadParameter(f"name the version, such as {ref}@12")
+    with _failing():
+        version = models.set_primary(ref)
+    click.echo(f"✓ {version} is the primary version of {version.org}/{version.name}.")
+
+
+@models_group.command("tag")
+@click.argument("ref")
+@click.argument("tag")
+@click.option("--move", is_flag=True, help="Move the tag if it's on another version.")
+def tag_command(ref: str, tag: str, move: bool) -> None:
+    """Tag the version REF (org/name@number, @tag, or the primary without @)."""
+    _ref(ref)
+    with _failing():
+        version = models.tag(ref, tag, move=move)
+    click.echo(f"✓ Tagged {version} {tag}.")
+
+
+@models_group.command("untag")
+@click.argument("name")
+@click.argument("tag")
+def untag_command(name: str, tag: str) -> None:
+    """Remove TAG from NAME (org/name). The version stays."""
+    _ref(name, version=False)
+    with _failing():
+        models.untag(name, tag)
+    click.echo(f"✓ Removed the tag {tag} from {name}.")
+
+
+@models_group.group("uploads")
+def uploads_group() -> None:
+    """Interrupted uploads on this machine."""
+
+
+@uploads_group.command("list")
+def uploads_list_command() -> None:
+    """List interrupted uploads, with how much of each was sent."""
+    with _failing():
+        found = [
+            (j, state) for j, state in upload.states(upload.journals()) if state != "committed"
+        ]
+    if not found:
+        click.echo("No interrupted uploads on this machine.")
+    for journal, state in found:
+        files = journal.files.values()
+        done = sum(1 for f in files if f["done"])
+        sent = f"{done} of {len(files)} files, {human(journal.sent())} of {human(journal.total())}"
+        click.echo(f"{journal.ulid}\t{journal.model}\t{state}\t{sent}\t{journal.source}")
+
+
+@uploads_group.command("resume")
+@click.argument("ulid")
+def uploads_resume_command(ulid: str) -> None:
+    """Resume the upload ULID (or a unique start of it) from its local files."""
+    progress = _Progress("Sent")
+    with _failing():
+        version = upload.resume_journal(upload.find_journal(ulid), progress)
+    progress.end()
+    click.echo(str(version))
+
+
+@uploads_group.command("abort")
+@click.argument("ulid")
+@click.option("--model", help="The model (org/name), for an upload started on another machine.")
+def uploads_abort_command(ulid: str, model: str | None) -> None:
+    """Abort the upload ULID, deleting what it sent and its local folder."""
+    if model is not None:
+        _ref(model, version=False)
+    with _failing():
+        upload.abort(ulid, model)
+    click.echo(f"✓ Aborted the upload {ulid}.")
