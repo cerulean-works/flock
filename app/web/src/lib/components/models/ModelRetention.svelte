@@ -21,8 +21,8 @@
 </script>
 
 <p class="mt-2 max-w-[62ch] text-muted-foreground">
-	When this is on, Flock deletes older versions that aren’t primary, have no tag other than a
-	checkpoint tag and have no eval runs. They wait in Deleted models for {TRASH_DAYS} days.
+	When this is on, Flock deletes older versions that aren’t primary and have no tag other than a
+	checkpoint tag. They wait in Deleted models for {TRASH_DAYS} days.
 </p>
 <form
 	method="POST"

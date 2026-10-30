@@ -4,7 +4,7 @@ import { resolve } from '$app/paths';
 import type { ResolvedPathname } from '$app/types';
 import { tagError as datasetTagError } from './datasets.ts';
 import { PREVIEW_BYTES, bucketCall, objectHref } from './storage.ts';
-import type { ModelEvalRun, Presigned } from './types.ts';
+import type { Presigned } from './types.ts';
 import { unreachable } from './uploads.svelte.ts';
 
 /** The org's managed bucket, as S3 clients name it. */
@@ -137,15 +137,3 @@ export const loadSnippet = (ref: string) =>
 
 /** The command that downloads the version shown. */
 export const pullSnippet = (ref: string) => `flock models pull ${ref}`;
-
-/**
- * The rows of the Evals tab: every numeric summary key the runs have, except wandb's own and
- * throughput, sorted by name so a task's metrics sit together.
- */
-export function evalMetrics(runs: ModelEvalRun[]): string[] {
-	const keys = new Set<string>();
-	for (const run of runs)
-		for (const key of Object.keys(run.metrics))
-			if (!key.startsWith('_') && !key.endsWith('/docs_per_second')) keys.add(key);
-	return [...keys].sort((a, b) => a.localeCompare(b));
-}

@@ -38,7 +38,7 @@ export const load: PageServerLoad = async ({ params }) => {
 				(res) => res.json() as Promise<Billing>
 			)
 		),
-		// The model versions it made and those it scored (D108), for the Checkpoints section.
+		// The model versions it made (D108), for the Checkpoints section.
 		optional(flock(`${path}/models`).then((res) => res.json() as Promise<RunModels>))
 	]);
 	const run = (await (await flock(path)).json()) as RunDetail;

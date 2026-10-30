@@ -384,8 +384,6 @@ export interface ModelVersion {
 	run: string | null;
 	created_by: Person | null;
 	created_at: number;
-	/** Eval runs that scored it, deleted runs left out. */
-	eval_runs: number;
 	bucket: string;
 	/** Its folder in flock-models, ending in `/`. */
 	prefix: string;
@@ -397,30 +395,14 @@ export interface ModelFile {
 	sha256: string;
 }
 
-/** A version with its files and eval runs (`GET …/versions/{number}`, `…/resolve`). */
+/** A version with its files (`GET …/versions/{number}`, `…/resolve`). */
 export interface ModelVersionDetail extends ModelVersion {
 	files: ModelFile[];
-	/** The eval runs that scored it, as `entity/project/id`. */
-	evals: string[];
 }
 
 export interface ModelVersionsPage {
 	versions: ModelVersion[];
 	cursor: number | null;
-}
-
-/** An eval run of a version, with its numeric summary (the dashboard's `…/evals`). */
-export interface ModelEvalRun {
-	/** `entity/project/id`. */
-	path: string;
-	entity: string;
-	project: string;
-	id: string;
-	display_name: string | null;
-	state: string;
-	created_at: number;
-	/** Numeric summary values by key, such as `mmlu/acc`. */
-	metrics: Record<string, number>;
 }
 
 /** A deleted model or version in the trash (`GET …/models/-/trash`), for org admins. */
@@ -447,15 +429,13 @@ export interface ModelTrashVersion extends ModelTrashBase {
 	number: number;
 	/** The checkpoint tags that went with it. */
 	tags: string[];
-	eval_runs: number;
 }
 
 export type ModelTrashEntry = ModelTrashModel | ModelTrashVersion;
 
-/** The versions a run made and those it scored (`GET …/runs/{run}/models`). */
+/** The versions a run made (`GET …/runs/{run}/models`). */
 export interface RunModels {
-	made: (ModelVersion & { evals: string[] })[];
-	scored: (ModelVersion & { evals: string[] })[];
+	made: ModelVersion[];
 }
 
 /** Where an organization's W&B import is: `interrupted` means Flock restarted during it. */

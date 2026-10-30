@@ -17,7 +17,7 @@
 		runState: string;
 		owner: { name: string; avatar_url: string | null } | null;
 		currency: string | null;
-		/** The model versions it made and scored; null when they can't be read. */
+		/** The model versions it made; null when they can't be read. */
 		models?: RunModels | null;
 		now: number;
 	}
@@ -196,10 +196,7 @@
 	</dl>
 
 	{#if models?.made.length}
-		<RunModelsList title="Checkpoints" versions={models.made} />
-	{/if}
-	{#if models?.scored.length}
-		<RunModelsList title="Models scored" versions={models.scored} />
+		<RunModelsList versions={models.made} />
 	{/if}
 
 	{#if run.notes || run.description}

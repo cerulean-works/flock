@@ -12,7 +12,6 @@
 	import { bytes, dateTime, relativeTime } from '#lib/utils.ts';
 	import { withParam } from '#lib/workspace/url.ts';
 	import DeleteModelDialog from './DeleteModelDialog.svelte';
-	import EvalsTab from './EvalsTab.svelte';
 	import FilesTab from './FilesTab.svelte';
 	import LoadDialog from './LoadDialog.svelte';
 	import OverviewTab from './OverviewTab.svelte';
@@ -31,11 +30,10 @@
 
 	let { org, info, version, requested, now }: Props = $props();
 
-	type Tab = 'overview' | 'versions' | 'evals' | 'files';
+	type Tab = 'overview' | 'versions' | 'files';
 	const TABS: { value: Tab; label: string }[] = [
 		{ value: 'overview', label: 'Overview' },
 		{ value: 'versions', label: 'Versions' },
-		{ value: 'evals', label: 'Evals' },
 		{ value: 'files', label: 'Files' }
 	];
 	// In the URL, so a tab can be linked to; switching never re-runs the page's load.
@@ -164,10 +162,6 @@
 	{:else if tab === 'overview'}
 		{#key version.number}
 			<OverviewTab {org} {version} />
-		{/key}
-	{:else if tab === 'evals'}
-		{#key version.number}
-			<EvalsTab {org} {version} />
 		{/key}
 	{:else}
 		<FilesTab {org} {version} />

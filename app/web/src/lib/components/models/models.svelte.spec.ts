@@ -68,7 +68,6 @@ const version = (number: number, extra: Partial<ModelVersion> = {}): ModelVersio
 	run: null,
 	created_by: alice,
 	created_at: NOW - number * 3600,
-	eval_runs: 0,
 	bucket: 'flock-models',
 	prefix: `olmo2-1b/u/ULID${number}/`,
 	...extra
@@ -82,14 +81,13 @@ const detail = (v: ModelVersion, extra: Partial<ModelVersionDetail> = {}): Model
 		{ path: 'flock.json', size: 80, sha256: 'd'.repeat(64) },
 		{ path: 'model.safetensors', size: 3 * 1024 ** 3, sha256: 'e'.repeat(64) }
 	],
-	evals: [],
 	...extra
 });
 
 const versions: ModelVersion[] = [
 	version(14, { tags: ['checkpoint-12000'], step: 12000, run: 'acme/pretrain/3k9x2' }),
 	version(13, { tags: ['checkpoint-900', 'release'], step: 900 }),
-	version(12, { primary: true, eval_runs: 2 })
+	version(12, { primary: true })
 ];
 
 const info: ModelInfo = {
@@ -369,66 +367,6 @@ describe('ModelView', () => {
 		await expect.element(screen.getByRole('button', { name: 'Load' })).not.toBeInTheDocument();
 		await expect.element(screen.getByRole('button', { name: 'Delete' })).toBeVisible();
 	});
-
-	it('shows each eval run’s metrics side by side', async () => {
-		const scored = detail(versions[2], { evals: ['acme/evals/e1', 'acme/evals/e2'] });
-		const calls = serve({
-			[`${API}/olmo2-1b/versions/12/evals`]: () => ({
-				runs: [
-					{
-						path: 'acme/evals/e1',
-						entity: 'acme',
-						project: 'evals',
-						id: 'e1',
-						display_name: 'mmlu run',
-						state: 'finished',
-						created_at: NOW,
-						metrics: { 'mmlu/acc': 0.5, 'mmlu/docs_per_second': 30, _runtime: 4 }
-					},
-					{
-						path: 'acme/evals/e2',
-						entity: 'acme',
-						project: 'evals',
-						id: 'e2',
-						display_name: null,
-						state: 'finished',
-						created_at: NOW,
-						metrics: { 'mmlu/acc': 0.625, 'hellaswag/acc_norm': 0.25 }
-					}
-				]
-			})
-		});
-		resetApp('http://flock.test/models/acme/olmo2-1b?tab=evals');
-		render(ModelView, { org: 'acme', info, version: scored, requested: null, now: NOW });
-		await expect.element(screen.getByRole('link', { name: 'mmlu run' })).toBeVisible();
-		expect(screen.getByRole('link', { name: 'e2' }).element().getAttribute('href')).toBe(
-			'/acme/evals/runs/e2'
-		);
-		const rows = screen
-			.getByRole('rowheader')
-			.all()
-			.map((r) => r.element().textContent!.trim());
-		expect(rows).toEqual(['hellaswag/acc_norm', 'mmlu/acc']);
-		const mmlu = screen.getByRole('row').filter({ hasText: 'mmlu/acc' });
-		expect(
-			mmlu
-				.getByRole('cell')
-				.all()
-				.map((c) => c.element().textContent!.trim())
-		).toEqual(['0.5', '0.625']);
-		expect(calls[0].url).toBe(`${API}/olmo2-1b/versions/12/evals`);
-	});
-
-	it('says how to evaluate a version no run has scored', async () => {
-		serve({});
-		view('http://flock.test/models/acme/olmo2-1b?tab=evals');
-		await expect
-			.element(screen.getByText('No eval runs have scored this version yet.'))
-			.toBeVisible();
-		await expect
-			.element(screen.getByText('flock eval run --model flock:acme/olmo2-1b@12'))
-			.toBeVisible();
-	});
 });
 
 describe('the tag dialogs', () => {
@@ -523,24 +461,17 @@ describe('the tag dialogs', () => {
 });
 
 describe('the delete dialogs', () => {
-	it('deletes a version after its name is typed, warning about its eval runs', async () => {
+	it('deletes a version after its name is typed', async () => {
 		const calls = serve({ [`${API}/olmo2-1b/versions/11`]: () => ({ kind: 'version', id: 1 }) });
 		const ondeleted = vi.fn();
 		render(DeleteVersionDialog, {
 			open: true,
 			org: 'acme',
-			version: version(11, { eval_runs: 2, tags: ['checkpoint-100'] }),
+			version: version(11, { tags: ['checkpoint-100'] }),
 			shown: false,
 			ondeleted
 		});
 		await expect.element(screen.getByText('Org admins can restore it for 14 days.')).toBeVisible();
-		await expect
-			.element(
-				screen.getByText(
-					'2 eval runs scored this version. Their results stay, but the version they name can’t be loaded after it’s deleted.'
-				)
-			)
-			.toBeVisible();
 		const confirm = screen.getByRole('button', { name: 'Delete version' });
 		await expect.element(confirm).toBeDisabled();
 		await screen.getByLabelText('Type acme/olmo2-1b@11 to confirm').fill('acme/olmo2-1b@11');
@@ -667,8 +598,7 @@ describe('DeletedModels', () => {
 		expires_at: NOW + 86_400 - 60,
 		moved: true,
 		bytes: 1024,
-		tags: ['checkpoint-700'],
-		eval_runs: 0
+		tags: ['checkpoint-700']
 	};
 
 	it('lists deleted models and versions with the days they have left', async () => {
@@ -774,7 +704,6 @@ describe('ModelRetention', () => {
 describe('RunModels', () => {
 	it('lists the versions a run made, linked to each one, with steps and tags', async () => {
 		render(RunModels, {
-			title: 'Checkpoints',
 			versions: [version(13, { step: 900, tags: ['release', 'checkpoint-900'], primary: true })]
 		});
 		await expect.element(screen.getByRole('heading', { name: /Checkpoints/ })).toBeVisible();

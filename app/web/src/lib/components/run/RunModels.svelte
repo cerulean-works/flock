@@ -3,15 +3,15 @@
 	import { sortTags, versionHref } from '#lib/models.ts';
 	import type { ModelVersion } from '#lib/types.ts';
 
-	/** Model versions of a run (D108): those it made, or those it scored as an eval run. */
-	let { title, versions }: { title: string; versions: ModelVersion[] } = $props();
+	/** The model versions a run made (D108), its Checkpoints. */
+	let { versions }: { versions: ModelVersion[] } = $props();
 
 	const orgOf = (v: ModelVersion) => v.model.slice(0, v.model.indexOf('/'));
 </script>
 
-<section class="border-t border-divider px-4 py-3" aria-label={title}>
+<section class="border-t border-divider px-4 py-3" aria-label="Checkpoints">
 	<h3 class="flex items-center justify-between font-medium">
-		{title}
+		Checkpoints
 		<span class="text-xs font-normal text-muted-foreground tabular-nums">{versions.length}</span>
 	</h3>
 	<ul class="mt-1.5 grid gap-1">

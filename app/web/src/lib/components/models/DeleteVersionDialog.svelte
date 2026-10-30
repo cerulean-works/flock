@@ -7,7 +7,6 @@
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { TRASH_DAYS, isCheckpoint, modelApi, modelCall, modelsHref } from '#lib/models.ts';
 	import type { ModelVersion } from '#lib/types.ts';
-	import { count } from '#lib/utils.ts';
 	import FormError from '../FormError.svelte';
 
 	interface Props {
@@ -85,12 +84,6 @@
 					if (typed === ref) void remove();
 				}}
 			>
-				{#if version?.eval_runs}
-					<p class="bg-card px-3 py-2.5 text-[13px]" role="status">
-						{count(version.eval_runs, 'eval run')} scored this version. Their results stay, but the version
-						they name can’t be loaded after it’s deleted.
-					</p>
-				{/if}
 				<div class="grid gap-2">
 					<Label for="delete-version-ref">
 						Type <span class="font-mono text-[12.5px]">{ref}</span> to confirm

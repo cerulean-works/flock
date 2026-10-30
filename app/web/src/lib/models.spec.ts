@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-	evalMetrics,
 	folderHref,
 	isCheckpoint,
 	loadSnippet,
@@ -14,7 +13,6 @@ import {
 	versionHref,
 	versionRef
 } from './models.ts';
-import type { ModelEvalRun } from './types.ts';
 
 describe('model URLs', () => {
 	it('links the list, a model, a version and its folder', () => {
@@ -77,15 +75,5 @@ describe('display', () => {
 			'from flock.hub import models\n\nmodel = models.load_from_hub("acme/olmo2-1b@12", device="cuda")'
 		);
 		expect(pullSnippet(ref)).toBe('flock models pull acme/olmo2-1b@12');
-	});
-
-	it('takes the eval metrics from every run, leaving out throughput and wandb’s own', () => {
-		const run = (metrics: Record<string, number>) => ({ metrics }) as ModelEvalRun;
-		expect(
-			evalMetrics([
-				run({ 'mmlu/acc': 1, 'mmlu/docs_per_second': 2, _runtime: 3 }),
-				run({ 'arc/acc': 1, 'suites/core': 0.5 })
-			])
-		).toEqual(['arc/acc', 'mmlu/acc', 'suites/core']);
 	});
 });
