@@ -34,7 +34,7 @@ class EvalConfig:
 
     Args:
         model (`str`):
-            The model as `repo@revision`.
+            The model as `repo@revision`, or a version in the Flock registry as `flock:org/name`, `flock:org/name@{number}`, `flock:org/name@{tag}` or `flock:org/name@primary`.
         tasks (`tuple[str, ...]`, *optional*):
             Registry names of the tasks to run, in order.
         out (`Path`, *optional*):
@@ -129,6 +129,7 @@ def evaluate(config: EvalConfig) -> Results:
     # and `created_at` is when scoring started, as lm-evaluation-harness records `start_date`.
     provenance = Provenance.collect(
         model=model.name,
+        model_digest=model.digest,
         command=config.command,
         device=model.device,
         dtype=model.dtype,

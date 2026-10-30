@@ -56,7 +56,7 @@ def compare(banked: Path, new: Path) -> Comparison:
     Each task in both files is compared on `num_docs` and every entry of `metrics` and `truncation`, and each suite in both on `members` and `score`. Timing is not compared. An accuracy may move by `FLIPPED_DOCS` docs out of `num_docs`, any other metric by `RELATIVE_TOLERANCE` of its banked value, and a suite's score by its members' tolerances combined as independent errors. Counts and `members` must be equal.
 
     Raises:
-        `ValueError`: if the runs are different instruments (another model, `dtype`, `batch_tokens`, `max_length` or `attention`, a common task with another `task_hash` or `limit`, or a common suite with another `metric`), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
+        `ValueError`: if the runs are different instruments (another model or `model_digest`, `dtype`, `batch_tokens`, `max_length` or `attention`, a common task with another `task_hash` or `limit`, or a common suite with another `metric`), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
     """
     files = {}
     for path in (banked, new):
@@ -75,6 +75,14 @@ def compare(banked: Path, new: Path) -> Comparison:
                     f"different instrument: provenance.{key} is {bank['provenance'][key]!r} "
                     f"in {banked}, {rerun['provenance'][key]!r} in {new}"
                 )
+        # Two Flock servers can each have a `flock:acme/olmo2-1b@12`, so the digest refuses
+        # too. Read with `get`: Hugging Face models and files older than the field have none.
+        digests = bank["provenance"].get("model_digest"), rerun["provenance"].get("model_digest")
+        if digests[0] != digests[1]:
+            raise ValueError(
+                f"different instrument: provenance.model_digest is {digests[0]!r} in {banked}, "
+                f"{digests[1]!r} in {new}"
+            )
         # The usual causes of a breach, printed beside it. Read with `get`: a file without one
         # of them is still comparable.
         provenance = {}

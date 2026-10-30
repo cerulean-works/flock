@@ -33,8 +33,9 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
     results = evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path))
 
     data = json.loads((tmp_path / "results.json").read_text())
-    assert data["schema_version"] == 5
+    assert data["schema_version"] == 6
     assert data["provenance"]["model"] == "tiny@0"
+    assert data["provenance"]["model_digest"] is None  # only a Flock version has one
     assert data["provenance"]["flock_commit"] == "abc123"
     assert data["provenance"]["command"] is None  # the Python API names no command
     assert data["provenance"]["dtype"] == "float32"

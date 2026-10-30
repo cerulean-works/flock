@@ -166,6 +166,7 @@ def test_a_task_with_no_docs_must_repeat_its_metrics_exactly(write):
         ({"batch_tokens": 8192}, "provenance.batch_tokens"),
         ({"max_length": 2048}, "provenance.max_length"),
         ({"attention": "eager"}, "provenance.attention"),
+        ({"model_digest": "f" * 64}, "provenance.model_digest"),
     ],
 )
 def test_runs_with_other_settings_are_refused(write, change, match):
@@ -334,3 +335,14 @@ def test_the_bank_compares_equal_to_itself_rewritten_in_the_current_layout(write
     # Only the layout differs: a bank from an older schema still passes, and the versions it
     # lacks print as causes.
     assert comparison.provenance.keys() <= {"schema_version", "tokenizers", "datasets"}
+
+
+def test_a_file_without_model_digest_compares_with_one_whose_digest_is_none(write):
+    # Results written before `model_digest` was added lack the key; a Hugging Face model's is
+    # None, so the two compare.
+    bank = write("bank", BANK)
+    data = json.loads(bank.read_text())
+    del data["provenance"]["model_digest"]
+    bank.write_text(json.dumps(data))
+
+    assert compare(bank, write("new", BANK)).breaches == []

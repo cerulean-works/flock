@@ -1,11 +1,13 @@
 import copy
+from types import SimpleNamespace
 
 import pytest
 import torch
 
 from flock.eval import model
-from flock.eval.model import ModelRef, ScoringModel
+from flock.eval.model import FlockCausalLM, ModelRef, ScoringModel
 from flock.eval.requests import Request
+from flock.training.core.models import Olmo2, Olmo2Config
 
 REQUESTS = [
     Request("Question: Which gas do plants take in?\nAnswer:", " carbon dioxide"),
@@ -40,6 +42,93 @@ def test_model_ref_parse():
 def test_model_ref_requires_one_revision(model_id):
     with pytest.raises(ValueError, match="repo@revision"):
         ModelRef.parse(model_id)
+
+
+@pytest.mark.parametrize(
+    ("model_id", "repo", "revision"),
+    [
+        ("flock:acme/olmo2-1b", "acme/olmo2-1b", "primary"),
+        ("flock:acme/olmo2-1b@12", "acme/olmo2-1b", "12"),
+        ("flock:acme/olmo2-1b@primary", "acme/olmo2-1b", "primary"),
+        ("flock:acme/olmo2-1b@checkpoint-12000", "acme/olmo2-1b", "checkpoint-12000"),
+    ],
+)
+def test_model_ref_parses_flock_models(model_id, repo, revision):
+    ref = ModelRef.parse(model_id)
+    assert (ref.repo, ref.revision, ref.kind, ref.digest) == (repo, revision, "flock", None)
+    assert str(ref) == f"flock:{repo}@{revision}"
+
+
+@pytest.mark.parametrize(
+    "model_id",
+    [
+        "flock:",
+        "flock:acme",
+        "flock:acme/",
+        "flock:/m",
+        "flock:a/b/c",
+        "flock:a/b@",
+        "flock:a/b@1@2",
+    ],
+)
+def test_model_ref_refuses_malformed_flock_models(model_id):
+    with pytest.raises(ValueError, match=r"flock:org/name\[@version\]"):
+        ModelRef.parse(model_id)
+
+
+def test_model_ref_resolves_a_flock_version_to_its_number_and_digest(monkeypatch):
+    asked = []
+
+    def resolve(ref):
+        asked.append(ref)
+        return SimpleNamespace(org="acme", name="olmo2-1b", number=12, digest="d" * 64)
+
+    monkeypatch.setattr(model, "_flock_hub", lambda: SimpleNamespace(resolve=resolve))
+    resolved = ModelRef.parse("flock:acme/olmo2-1b@checkpoint-12000").resolve()
+    assert asked == ["acme/olmo2-1b@checkpoint-12000"]
+    assert resolved == ModelRef("acme/olmo2-1b", "12", "flock", "d" * 64)
+    assert str(resolved) == "flock:acme/olmo2-1b@12"
+
+
+def test_from_pretrained_refuses_a_flock_model_without_a_tokenizer(monkeypatch):
+    version = SimpleNamespace(org="acme", name="m", number=1, digest="d" * 64)
+    loaded = SimpleNamespace(get_hf_tokenizer=lambda: None)
+    hub = SimpleNamespace(resolve=lambda ref: version, load_from_hub=lambda ref, **kw: loaded)
+    monkeypatch.setattr(model, "_flock_hub", lambda: hub)
+    with pytest.raises(ValueError, match="flock:acme/m@1: config has no hf_repo"):
+        ScoringModel.from_pretrained("flock:acme/m", device="cpu")
+
+
+def test_a_wrapped_flock_model_scores_as_its_own_forward_pass(tokenizer):
+    flock_model = Olmo2(
+        Olmo2Config(
+            vocab_size=len(tokenizer),
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            max_position_embeddings=128,
+        )
+    )
+    scorer = ScoringModel(FlockCausalLM(flock_model), tokenizer, name="flock:acme/m@1")
+    assert (scorer.max_length, scorer.attention, scorer.dtype) == (128, "sdpa", torch.float32)
+    assert scorer.device == torch.device("cpu")
+    scores = scorer.loglikelihood(REQUESTS)
+
+    for i, request in enumerate(REQUESTS):
+        context, continuation = scorer.encode(request)
+        ids = torch.tensor([context + continuation])
+        mask = torch.ones_like(ids)
+        with torch.no_grad():
+            logits = flock_model(
+                {"input_ids": ids[:, :-1], "attention_mask": mask[:, :-1], "labels": ids}
+            )
+        logprobs = logits[0].float().log_softmax(-1)
+        start = len(context) - 1
+        expected = sum(logprobs[start + j, t].item() for j, t in enumerate(continuation))
+        assert scores.logprob[i].item() == pytest.approx(expected, abs=1e-4)
+    assert flock_model.training  # given back the mode it had
 
 
 class FakeHub:

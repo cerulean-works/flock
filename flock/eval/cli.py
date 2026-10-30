@@ -20,7 +20,7 @@ def main() -> None:
 
 
 @main.command()
-@click.option("--model", required=True, help="Model as repo@revision.")
+@click.option("--model", required=True, help="Model as repo@revision or flock:org/name[@version].")
 @click.option(
     "--task",
     "tasks",
