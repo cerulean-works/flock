@@ -2,6 +2,7 @@
 	import Breadcrumbs from '#lib/components/storage/Breadcrumbs.svelte';
 	import DatasetView from '#lib/components/datasets/DatasetView.svelte';
 	import FolderView from '#lib/components/datasets/FolderView.svelte';
+	import NewFolderButton from '#lib/components/datasets/NewFolderButton.svelte';
 	import { crumbs, nameOf } from '#lib/datasets.ts';
 	import Page from '#lib/components/Page.svelte';
 	import type { PageProps } from './$types';
@@ -21,15 +22,12 @@
 		<div class="pt-5"><Breadcrumbs crumbs={trail} /></div>
 	{/if}
 	{#if data.kind === 'folder'}
-		<h1
-			class={[
-				'truncate pb-5 text-[34px] leading-[1.15] tracking-[-0.025em]',
-				trail.length ? 'pt-3' : 'pt-8'
-			]}
-			{title}
-		>
-			{title}
-		</h1>
+		<div class={['flex items-center gap-3 pb-5', trail.length ? 'pt-3' : 'pt-8']}>
+			<h1 class="min-w-0 flex-1 truncate text-[34px] leading-[1.15] tracking-[-0.025em]" {title}>
+				{title}
+			</h1>
+			<NewFolderButton org={params.org} path={data.path} />
+		</div>
 		{#key data.path}
 			<FolderView org={params.org} path={data.path} folder={data.folder} now={data.now} />
 		{/key}

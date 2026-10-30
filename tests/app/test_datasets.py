@@ -314,6 +314,21 @@ def test_listing_finds_datasets_at_any_depth(
     assert get(api, f"{DATASETS}/at", path="/eval").status == 422
 
 
+def test_the_datasets_tab_creates_folders(flock: S3Flock, writer: Writer):
+    """The Datasets tab's New folder writes the folder's marker through the Storage tab's
+    route, and the empty folder lists."""
+    writer.write("eval/mmlu", table(0, 1))
+    api = flock.client()
+    folders = "/api/v1/orgs/flock/buckets/flock-datasets/folders"
+    assert api.post(folders, {"prefix": "eval/new/"}).status == 201
+    assert api.post(folders, {"prefix": "fresh/"}).status == 201
+    assert [f["path"] for f in get(api, f"{DATASETS}/at").json()["folders"]] == ["eval", "fresh"]
+    inside = get(api, f"{DATASETS}/at", path="eval").json()
+    assert [f["path"] for f in inside["folders"]] == ["eval/new"]
+    empty = get(api, f"{DATASETS}/at", path="eval/new").json()
+    assert (empty["datasets"], empty["folders"], empty["files"]) == ([], [], [])
+
+
 def test_listing_pages(flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch):
     tune(monkeypatch, flock, PAGE=3)
     writer.write("d1", table(0, 1))
