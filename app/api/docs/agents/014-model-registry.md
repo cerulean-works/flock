@@ -2,11 +2,12 @@
 
 | | |
 | --- | --- |
-| Status | proposed |
+| Status | applied |
 | Date | 2026-10-30 |
 | Builds on | [009](009-s3-proxy.md), [013](013-datasets-tab.md) |
 | Amends | D54 (writes to `flock-models` go only through upload sessions), D85 (a second managed bucket kind, `'models'`) |
 | Keeps | D53, D55–D62, D86–D96 |
+| Result | 872 tests in `tests` pass on moto (2 new in `tests/app/test_models.py` with the web app), and 499 in `app/web` (44 new); see [section 7](#7-how-it-was-actually-built) |
 
 ## 1. Goal
 
@@ -490,10 +491,12 @@ is the optimizer step it was saved after, for example `checkpoint-12000`:
 
 ## 3. Plan
 
-Four stacked PRs. The first branches from `feat/model-registry`, which holds this doc and
-branches from `feat/scaffold-training-loop`, and each next one from the one before.
+It shipped as one PR on `feat/model-registry-api`, which branches from `feat/model-registry`
+(this doc) and holds the whole feature in four parts of a few commits each: the API, the client,
+eval and the web app. It was first planned as four stacked PRs, one per part, in the order below.
+The branch plan changed while eval was built. Section 7 records what each part ended up as.
 
-### PR 1. Registry and uploads (`feat/model-registry-api`)
+### Part 1. Registry and uploads
 
 - Migration `0015_models.sql`: `s3_buckets.managed` accepts `'models'`, the tables of D98, the
   retention setting, and the `models` org name refused.
@@ -505,7 +508,7 @@ branches from `feat/scaffold-training-loop`, and each next one from the one befo
 - The sweep: expiry, stray prefixes, the trash and retention (D102, D109). The startup pass for
   missing `manifest.json` files.
 
-### PR 2. Client (`feat/model-registry-client`)
+### Part 2. Client
 
 - `flock.hub.models`: uploading with the journal and resuming (D101, D102), downloading and the
   cache (D103), `save_to_hub`, `load_from_hub`, `download`, `set_primary`, `tag`, `untag`,
@@ -515,11 +518,11 @@ branches from `feat/scaffold-training-loop`, and each next one from the one befo
 - The guide and reference pages already written with this doc (`docs/source/hub/`), updated to
   whatever the code ends up doing, with `[[autodoc]]` for the docstrings.
 
-### PR 3. Eval (`feat/model-registry-eval`)
+### Part 3. Eval
 
 - `flock:` refs in eval, `model_digest` in the provenance, and the API's eval links (D106).
 
-### PR 4. Web (`feat/models-tab`)
+### Part 4. Web
 
 - The sidebar item, the list and model pages, the run page's Checkpoints section, the row menu
   with Make primary, the tag and delete dialogs, the Checkpoints filter, and the "Deleted models"
@@ -570,7 +573,7 @@ branches from `feat/scaffold-training-loop`, and each next one from the one befo
 
 - The guide, `docs/source/hub/store-models.md`, and the reference, `docs/source/hub/models.md`,
   are written with this doc, ahead of the code, so they describe what it should do. Check them
-  against the code in PR 2 and swap the hand-written tables for `[[autodoc]]` where the
+  against the code with the client and swap the hand-written tables for `[[autodoc]]` where the
   docstrings cover them.
 - An API reference page for the model routes.
 - Mark this file `applied`, with a "How it was actually built" section.
@@ -606,12 +609,16 @@ branches from `feat/scaffold-training-loop`, and each next one from the one befo
    tags other than `checkpoint-{step}` always kept?
 4. **7 days** before an idle upload expires. Should this be an org setting too?
 
-## 7. How it was actually built (PR 1)
+## 7. How it was actually built
 
-PR 1 (`feat/model-registry-api`) holds the registry, the upload sessions, the proxy's rule for
-`flock-models` and the sweep, in three commits: the API with the migration, the proxy, and the
-tests. The status stays `proposed` until the later PRs land. These are the places where the code
+The whole feature is one PR on `feat/model-registry-api`. The subsections below follow its
+parts: the API, the client, eval and the web app. Each records the places where the code
 differs from the decisions above, or adds to them.
+
+### 7.1. The API
+
+The registry, the upload sessions, the proxy's rule for `flock-models` and the sweep came first,
+in three commits: the API with the migration, the proxy, and the tests.
 
 - **Tables (D98).** Beyond D98's columns: `models.last_number` hands out numbers, since
   `max(number) + 1` would reuse a number once the trash removes the newest version for good.
@@ -717,17 +724,14 @@ differs from the decisions above, or adds to them.
   keeps the `x-amz-meta-sha256` set on CreateMultipartUpload, and CopyObject keeps it too. D102's
   resume can rely on both, and the journal doesn't need to store part MD5s.
 
-Not in PR 1: the eval links of D106 (PR 3, though `model_version_runs` is in the migration and
-the version routes and retention read it), a route listing the versions a run made (the run
-page's Checkpoints section, PR 4), the API reference page for the routes, the client and CLI
-(PR 2) and the web app (PR 4). The web app's types still name only `datasets` as a managed kind;
-the Storage tab shows `flock-models` as managed without a Datasets link.
+The eval links of D106 and the route listing a run's versions came with eval (7.3), though
+`model_version_runs` is in the migration and the version routes and retention read it. The API
+reference page came with the web app (7.4).
 
-## 8. How it was actually built (PR 2)
+### 7.2. The client
 
-PR 2 (`feat/model-registry-client`) holds `flock.hub.models`, `BaseModel.config`, the
-`flock models` CLI and the docs, in a few commits. PR 1's API needed no change. These are the
-places where the code differs from the decisions above, or adds to them.
+`flock.hub.models`, `BaseModel.config`, the `flock models` CLI and the docs came next, in a few
+commits. The API needed no change for them.
 
 - **Layout.** `flock/hub/models/` is a package: `_common.py` (references, `ModelVersion`, the
   registry client, the request pool), `files.py` (writing a model as a version's files and
@@ -822,8 +826,8 @@ places where the code differs from the decisions above, or adds to them.
 - **Docs.** `docs/source/hub/models.md` uses `[[autodoc]]` for the functions and classes, and
   keeps the tables for references, names, the primary, tags, local files, environment
   variables, the CLI and interrupted uploads. `safetensors` joined the docs builds'
-  `mock_deps`. The parts of both pages about the Models tab (PR 4) and `flock eval flock:`
-  (PR 3) were left as written. The signatures name torch, wandb and `BaseModel` through lazy
+  `mock_deps`. The parts of both pages about the Models tab (7.4) and `flock eval flock:`
+  (7.3) were left as written. The signatures name torch, wandb and `BaseModel` through lazy
   `type` aliases, since autodoc evaluates annotations and the modules don't import them.
 - **Tests** are in `tests/cli/test_models.py`, beside `tests/cli/test_s3.py`, which tests
   `flock.hub.s3` the same way (a signed-in CLI against a flock with S3 on); `tests/s3/` tests
@@ -832,13 +836,12 @@ places where the code differs from the decisions above, or adds to them.
   request at a time and 5 MiB parts. Against Ceph, the round trips, every resume that relies on
   ListParts' MD5 ETags or a HEAD's `x-amz-meta-sha256`, and the download tests pass.
 
-## 9. How it was actually built (PR 3)
+### 7.3. Eval
 
-PR 3 holds D106's eval half: `flock:` refs in `flock eval`, `model_digest` in the provenance, the
-API's eval links and the route listing a run's versions. The branch plan changed while it was
-built: the registry is now one branch, `feat/model-registry-api`, and PR 3's commits sit on top
-of PR 2's there. PR 1's and PR 2's code needed no change. These are the places where the code
-differs from the decisions above, or adds to them.
+D106's eval half came third: `flock:` refs in `flock eval`, `model_digest` in the provenance,
+the API's eval links and the route listing a run's versions. The branch plan changed while it
+was built, from stacked branches to the one branch, `feat/model-registry-api`. The API's and the
+client's code needed no change.
 
 - **`ModelRef` (D106).** The second kind is a `kind` field (`"hf"` by default, or `"flock"`), so
   `ModelRef(repo, revision)` still builds a Hugging Face ref. For a Flock ref, `repo` is
@@ -847,14 +850,14 @@ differs from the decisions above, or adds to them.
   registry every time, even for a number, since the digest comes from there, and returns
   `flock:org/name@{number}` with a `digest` field set. Parsing is eval's own and checks only the
   shape (`org/name`, one `@`), so `flock.eval.model` imports nothing from `flock.hub` until a
-  Flock model is resolved. Resolving uses `flock.hub.models.cache.resolve`, which PR 2 didn't
-  export; it wasn't worth a public function for one caller.
+  Flock model is resolved. Resolving uses `flock.hub.models.cache.resolve`, which the client
+  doesn't export; it wasn't worth a public function for one caller.
 - **Loading.** `ScoringModel.from_pretrained` resolves once, then loads the number through
   `load_from_hub`, so a tag moved between the two can't load other weights. `load_from_hub`
   resolves again, by number, which costs one request. `dtype` and `device` go to
   `load_from_hub`. The tokenizer is `get_hf_tokenizer()`, and a model with no `hf_repo` is a
   `ValueError` after the weights load (nothing says what `hf_repo` is before then). Eval's
-  dependencies don't add `flock-hub[models]` or `flock-training`, as PR 2's extra doesn't add
+  dependencies don't add `flock-hub[models]` or `flock-training`, as the client's extra doesn't add
   `flock-training`; a missing `flock.hub` is an `ImportError` naming both.
 - **`FlockCausalLM`.** `ScoringModel` calls a transformers model with `input_ids`,
   `attention_mask`, `position_ids`, `use_cache` and `logits_to_keep`, and reads `.logits`,
@@ -892,10 +895,10 @@ differs from the decisions above, or adds to them.
   on an update would also drop one whose version was deleted and later restored. Links aren't
   gated on `job_type = 'eval'`, as D106 doesn't ask for it; a training run whose config has a
   `flock:` `model` would be linked as an eval. Imported runs (`import_run`) aren't linked.
-- **Querying (D106).** PR 1's `GET versions/{number}` and `resolve` already list `evals`, the
+- **Querying (D106).** The API's `GET versions/{number}` and `resolve` already list `evals`, the
   live eval runs as `entity/project/id`, and the listings carry `eval_runs`, a count. That count
-  includes deleted runs, which `evals` leaves out; retention counts them too. It's left as PR 1
-  built it.
+  included deleted runs, which `evals` leaves out, and retention counted them too. The web app's
+  part fixed it (7.4).
 - **The run route.** `GET /projects/{entity}/{project}/runs/{run}/models`, beside the run's other
   routes and behind the same `RunDep` (a non-member gets the project's 404). It answers `made`,
   the live versions with `run_pk` the run (D108's Checkpoints section), and `scored`, the live
@@ -914,4 +917,81 @@ differs from the decisions above, or adds to them.
   configs, configs sent again, every ref that links nothing, another org's run, and the run
   route.
 
-The status stays `proposed` until PR 4 (the web app) lands.
+
+### 7.4. The web app
+
+The Models tab, the run page's section, the org settings' sections, two API fixes and the docs
+came last. These are the places where the code differs from the decisions above, or adds to
+them.
+
+- **Routes (D108).** `/models/{org}` and `/models/{org}/{name}`, one SvelteKit route each, beside
+  `/datasets/{org}/[...path]`. The model page's load reads the model and resolves `?version=`
+  (no version: the primary) once, and the tabs read the rest from the browser at the number
+  resolved, as the Datasets tab does. A model whose first upload hasn't finished has no version,
+  and the page says so in place of the tabs. The browser reaches Flock through
+  `/api/models/{org}/[...op]`, which allows only the model routes the pages use and answers
+  refusals as `{message, …}`, as the dataset relay does (the relay is now one function for
+  both).
+- **The sidebar** has **Models** (lucide `box`) between Datasets and Storage, also in the
+  collapsed rail, and switching orgs on a Models page goes to the other org's models. `models`
+  is in `RESERVED`.
+- **The header** shows the version picker, a **Primary** badge, the size, who pushed the version
+  and, when it's the primary, who made it primary and when. The picker's tags list `primary`
+  first, then other tags by name, then checkpoint tags by step. The same order is used for the
+  tags in the Versions tab and the Overview. **Load** shows `load_from_hub` and `flock models
+  pull` with the version's number, not the tag it was opened by, since a tag can move. **Browse
+  files** opens the version's `u/{ulid}/` folder in Storage.
+- **Overview** reads `README.md`, `config.json` and `flock.json` from the S3 proxy by presigned
+  URLs, the first MiB of each, as the Storage tab's previews do. There's no API route for a
+  version's file contents, and none was added. `config.json` and `flock.json` are flattened to
+  dotted keys.
+- **Versions** uses `checkpoints=true` for the **Checkpoints** switch. The **⋯** menu has View,
+  Make primary (disabled on the primary), Add tag and Delete. The version number links to the
+  version too. After any change in the tab the page is read again with `?version=` pinned to the
+  number shown, so a moved tag or primary doesn't change what the page shows.
+- **Evals.** Each eval run's summary isn't in the version's answer, so the dashboard's server
+  reads every run in `evals` (eight at a time) and passes on its numeric summary values, at
+  `/api/models/{org}/{name}/versions/{n}/evals`. The tab is a table of metrics by run, leaving out
+  `docs_per_second` and wandb's `_` keys. A run that can't be read is left out.
+- **Dialogs.** The tag dialog checks D96's rules and `primary` as you type. A 409 for a tag on
+  another version offers to move it, except for a checkpoint tag, where the dialog says the tag
+  doesn't move. The delete dialog for a version says the API's refusal (the primary, or a tag other
+  than a checkpoint one) before anything is typed, in the API's words, and shows any refusal the
+  API still gives. A version with eval runs shows the count before the type-the-name field.
+  Restoring a model whose name is taken shows the API's message, since the API has no way to
+  restore under another name.
+- **The run page** lists the versions from `GET …/runs/{run}/models` in its Overview sidebar:
+  **Checkpoints** for `made` and **Models scored** for `scored`, each linked to the version.
+- **Org settings.** **Model retention** sits after the S3 key lifetimes, for admins, as a switch
+  and a number: "Keep the newest N untagged versions of each model". **Deleted models** follows
+  **Deleted datasets**, with restore and delete-for-good dialogs; deleting for good asks for
+  `org/name` or `org/name@N`.
+- **Storage.** `flock-models` gets the managed badge and **Open in Models**. The managed kind is
+  `ManagedKind = 'datasets' | 'models'` in the web types. The Storage tab hides upload, new folder
+  and delete in `flock-models`, with a line saying where versions change.
+- **API fix: deleted eval runs.** `eval_runs` counted every link, deleted runs included, while
+  `evals` left them out, and retention kept a version for a deleted run. All three now read one
+  definition, eval links whose run isn't deleted (`LIVE_EVALS` in `core/models.py`). Retention
+  therefore deletes a version whose only eval runs are deleted: deleted runs can't be restored
+  and show nowhere, so they no longer say anything about the version, and keeping it would hold
+  space for a reason no page shows. Its `eval_runs` in the trash is 0 then too.
+- **API fix: the Storage tab's writes.** The dashboard's object delete and folder routes write
+  upstream with the global key, so they skipped the proxy's rule and could delete a version's
+  files. They now answer 403 in `flock-models`.
+- **Docs.** `docs/source/app/api/models.md` documents the routes, listed in the HTTP API group and
+  the overview's index (which also gained the dataset routes it lacked). The Models tab got its
+  own guide page, `docs/source/app/browse-models.md`, beside `storage-and-datasets.md`, rather
+  than a section of it: that page is about objects and Lance datasets, and the Models tab has
+  enough of its own (primary, tags, trash, retention) for one topic. `s3-behavior.md` has a Models
+  section, and `store-models.md` and `hub/models.md` now name **Deleted models** and **Model
+  retention** as the UI does.
+- **Tests.** `tests/app/test_models.py` covers deleted eval runs (the count, `evals`, retention and
+  the trash entry) and the Storage tab's refused writes. The web specs cover every page and dialog:
+  `src/lib/components/models/models.svelte.spec.ts`, `src/lib/models.spec.ts`,
+  `src/lib/server/models.spec.ts`, the Storage overview's spec and the Storage spec.
+- **Checked by hand** against a local API, the S3 proxy and moto: pushing with `flock models push`
+  and `save_to_hub` (with a run and a step), then the list, the Overview's README and JSON tables,
+  the picker, the Versions tab, Make primary, the tag dialog's move and checkpoint refusal, the
+  delete refusals and a delete, the Evals table, a run's Checkpoints and Models scored, retention
+  and restoring from Deleted models in org settings, the Storage overview and a read-only
+  `flock-models` folder, and deleting a model.
