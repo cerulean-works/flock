@@ -251,8 +251,9 @@ def test_deleting_buckets_are_listed_until_purged(flock):
     # Keep the purge from finishing, so the bucket stays "being deleted".
     flock.store.s3.purge_later = lambda: None
     assert api.delete(f"{BUCKETS}/data").status == 204
-    # Only flock-datasets (013) is left.
-    assert [b["name"] for b in api.get(BUCKETS).json()["buckets"]] == ["flock-datasets"]
+    # Only the buckets Flock manages (013, 014) are left.
+    names = [b["name"] for b in api.get(BUCKETS).json()["buckets"]]
+    assert names == ["flock-datasets", "flock-models"]
     (listed,) = [
         b for b in api.get(BUCKETS, deleting="true").json()["buckets"] if b["name"] == "data"
     ]

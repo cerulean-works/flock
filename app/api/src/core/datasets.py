@@ -422,7 +422,7 @@ class Datasets:
         task.add_done_callback(self._tasks.discard)
 
     async def _startup(self) -> None:
-        """The trash bucket and every org's managed bucket, if missing (D85, D93)."""
+        """The trash bucket and every org's managed buckets, if missing (D85, D93, D97)."""
         try:
             await self._ensure_trash()
         except Exception:
@@ -1301,7 +1301,8 @@ class Datasets:
                 entries = await self._call(upstream.list_objects(trash, org_prefix, "/", token))
                 for entry in entries.prefixes:
                     pk = entry.removeprefix(org_prefix).removesuffix("/")
-                    if pk.isdigit() and int(pk) in rows:
+                    # models/ holds the model trash (D109), which Models sweeps.
+                    if (pk.isdigit() and int(pk) in rows) or pk == "models":
                         continue
                     objects = await self._call(upstream.list_all(trash, entry))
                     if objects and all(o.last_modified <= cutoff for o in objects):
