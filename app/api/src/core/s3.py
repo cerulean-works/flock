@@ -22,7 +22,7 @@ import httpx
 import orjson
 
 from app.api.src import s3_credentials
-from app.api.src.core.errors import BadGateway, Conflict, Invalid, NotFound
+from app.api.src.core.errors import BadGateway, Conflict, Forbidden, Invalid, NotFound
 from app.api.src.s3_proxy import sigv4
 from app.api.src.s3_proxy.upstream import DELETE_BATCH, Upstream, UpstreamError, configured
 
@@ -682,11 +682,22 @@ class S3:
             },
         }
 
+    @staticmethod
+    def _check_writable(bucket: Bucket) -> None:
+        """flock-models is written only through upload sessions and emptied only through the
+        model routes (D97, D109), so the dashboard's own writes are refused there, as the proxy
+        refuses every other client's."""
+        if bucket.managed == "models":
+            raise Forbidden(
+                "Files in flock-models change only through flock models push and the Models tab."
+            )
+
     async def create_folder(self, org: Org, name: str, prefix: str) -> None:
         """The empty ``prefix`` object (ending in ``/``) that makes a folder show up."""
         upstream = self.require()
         self.check_key(prefix, folder=True)
         bucket = await self.bucket(org, name)
+        self._check_writable(bucket)
         await self._call(upstream.put_empty(bucket.upstream_name, prefix))
 
     async def delete_objects(
@@ -701,6 +712,7 @@ class S3:
         for prefix in prefixes:
             self.check_key(prefix, folder=True)
         bucket = await self.bucket(org, name)
+        self._check_writable(bucket)
         limit = self.FOLDER_DELETE_LIMIT
         doomed = dict.fromkeys(keys)
         for prefix in prefixes:

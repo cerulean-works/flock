@@ -979,6 +979,25 @@ def test_retention(flock: S3Flock, pusher: Pusher, wait_for):
     )
 
 
+def test_the_dashboard_cant_write_files_into_flock_models(flock: S3Flock, pusher: Pusher):
+    """The Storage tab's own writes go upstream with the global key, so the API refuses them in
+    flock-models as the proxy refuses other clients' (D97)."""
+    version = pusher.push("m")
+    api = flock.client()
+    path = "/api/v1/orgs/flock/buckets/flock-models"
+    deleted = api.post(f"{path}/objects/delete", {"prefixes": [version["prefix"]]})
+    assert deleted.status == 403, deleted.body
+    assert "Models tab" in deleted.json()["error"]
+    assert (
+        api.post(f"{path}/objects/delete", {"keys": [version["prefix"] + "config.json"]}).status
+        == 403
+    )
+    assert api.post(f"{path}/folders", {"prefix": "m/u/new/"}).status == 403
+    assert keys(flock, upstream_name(flock), version["prefix"]) != []
+    # Reading it is still fine.
+    assert api.get(f"{path}/objects", prefix=version["prefix"]).status == 200
+
+
 def test_deleted_eval_runs_dont_count(flock: S3Flock, pusher: Pusher):
     """``eval_runs`` counts the runs ``evals`` lists, so a deleted run counts nowhere, and
     retention no longer keeps a version for it."""
