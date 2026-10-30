@@ -1013,13 +1013,25 @@ dependencies = [
     { name = "pylance" },
 ]
 
+[package.optional-dependencies]
+models = [
+    { name = "boto3" },
+    { name = "safetensors" },
+    { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux' or extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-gpu'" },
+    { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
+]
+
 [package.metadata]
 requires-dist = [
+    { name = "boto3", marker = "extra == 'models'", specifier = ">=1.43.118" },
     { name = "datasets", specifier = ">=5.1.0" },
     { name = "flock", editable = "." },
     { name = "pyarrow", specifier = ">=26.0.0" },
     { name = "pylance", specifier = ">=14.0.0" },
+    { name = "safetensors", marker = "extra == 'models'", specifier = ">=0.8.0" },
+    { name = "torch", marker = "extra == 'models'", specifier = ">=2.14.1" },
 ]
+provides-extras = ["models"]
 
 [[package]]
 name = "flock-tests"
