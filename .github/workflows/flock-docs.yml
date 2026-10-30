@@ -1,6 +1,6 @@
 name: Flock docs
 
-# Builds Flock's docs (app/api/docs/source) with doc-builder and publishes them to
+# Builds Flock's docs (docs/source) with doc-builder and publishes them to
 # docs.cerulean.works/flock/. See
 # https://docs.cerulean.works/doc-builder/latest/guide/publishing/
 
@@ -26,8 +26,9 @@ jobs:
     with:
       project: flock
       # The build checks the repository out into a folder named after it.
-      path_to_docs: flock/app/api/docs/source
+      path_to_docs: flock/docs/source
       python_version: "3.14"
+      mock_deps: torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx
 
   publish:
     needs: build

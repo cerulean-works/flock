@@ -71,7 +71,7 @@ Without Compose, build with `docker build --build-arg FLOCK_WEB_URL=https://floc
 3000 and sets `BODY_SIZE_LIMIT=4M` for avatar uploads. Changing `FLOCK_WEB_URL` requires a
 rebuild; the API addresses are read at runtime. The dashboard always requires a signed-in account.
 
-See [Environment variables](../api/docs/source/deploying.md#environment-variables) for all
+See [Environment variables](../../docs/source/app/operations.md#environment-variables) for all
 variables, their consumers and migration from previous names.
 
 ## Node.js security updates
