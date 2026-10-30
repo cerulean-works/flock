@@ -46,6 +46,8 @@ guide:
       title: Explore and organize experiments
     - local: app/storage-and-datasets
       title: Browse storage and datasets
+    - local: app/browse-models
+      title: Browse and manage models
     - local: app/import-wandb
       title: Import W&B runs
     - local: app/configure-budgets
@@ -143,3 +145,5 @@ reference:
       title: S3 keys and buckets
     - local: app/api/datasets
       title: Datasets
+    - local: app/api/models
+      title: Models

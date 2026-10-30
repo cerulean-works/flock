@@ -44,7 +44,7 @@ A reference is resolved once, when it's used. Everything after uses the version 
 | Adding a tag already on another version | Refused, unless you pass `move=True` (`--move` on the CLI). |
 | Checkpoint tags in the dashboard | Sorted by their number, and shown alone by the **Checkpoints** filter. |
 | Deleting a tagged version | Refused while it has a tag other than a checkpoint tag. Checkpoint tags are deleted with their version. |
-| Retention | Checkpoint tags count as no tag, so retention can remove old checkpoints. The primary version, versions with other tags and versions with evaluations are always kept. |
+| Retention | **Model retention** in the organization settings, off by default. Checkpoint tags count as no tag, so retention can remove old checkpoints. The primary version, versions with other tags and versions with eval runs are always kept. Deleted eval runs don't count. |
 
 ## What a version holds
 

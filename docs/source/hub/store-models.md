@@ -106,7 +106,7 @@ Flock doesn't add this tag for you: pass it in `tags`, with the same number as `
 
 - the version picker and the **Versions** tab sort checkpoint tags by their number, not alphabetically;
 - the **Checkpoints** filter in the **Versions** tab shows only versions with a checkpoint tag;
-- retention, if your organization turns it on, treats checkpoint tags as no tag at all, so old checkpoints can still be cleaned up.
+- retention, if your organization turns on **Model retention** in its settings, treats checkpoint tags as no tag at all, so old checkpoints can still be cleaned up.
 
 Here is a training loop that saves a checkpoint every 1,000 steps:
 
@@ -180,13 +180,15 @@ Downloads resume too. If `load_from_hub` or `download` stops partway, the next c
 
 ## Delete versions
 
-Delete a version from the **⋯** menu in the **Versions** tab. You type the version's full name, such as `acme/olmo2-1b@12`, to confirm. Deleted versions wait 14 days in a trash that organization admins restore from in the organization settings. A deleted version's number is never reused.
+Delete a version from the **⋯** menu in the **Versions** tab. You type the version's full name, such as `acme/olmo2-1b@12`, to confirm. Deleted versions wait 14 days in a trash that organization admins restore from, under **Deleted models** in the organization settings. A deleted version's number is never reused.
 
 Some versions can't be deleted until you change them:
 
 - **The primary version:** make another version primary first.
 - **A version with a tag** other than a checkpoint tag, such as `release`: move or remove the tag first. Checkpoint tags are deleted with their version.
 
-A version that has been evaluated can be deleted, after a warning that says how many evaluations used it.
+A version that has been evaluated can be deleted, after a warning that says how many eval runs scored it.
+
+[Browse and manage models](../app/browse-models) covers the rest of the Models tab: the version picker, the tabs and the trash.
 
 The [models reference](models) lists every function, command and naming rule.
