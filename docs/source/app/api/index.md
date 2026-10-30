@@ -67,6 +67,7 @@ All paths are relative to `/api/v1`. In paths, `{entity}` is an organization's I
 | `POST .../runs/update`, `POST .../runs/delete`, `POST .../runs/move` | Change many runs. | [Projects](projects#bulk-operations) |
 | `GET .../runs/{run}/logs` | A run's console output. | [Projects](projects#run-logs) |
 | `GET .../runs/{run}/files`, `GET .../runs/{run}/files/{name}` | A run's files. | [Projects](projects#run-files) |
+| `GET .../runs/{run}/models` | The model versions a run made and evaluated. | [Projects](projects#run-models) |
 | `GET .../columns` | The run table's columns. | [Queries](queries#get-columns) |
 | `GET .../runs`, `POST .../runs/query` | Filter, sort and page the run table. | [Queries](queries#the-run-table) |
 | `GET .../history`, `POST .../history/query` | Curves of many runs. | [Queries](queries#curves) |

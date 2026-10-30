@@ -70,7 +70,7 @@ path = models.download("acme/olmo2-1b@12")
 
 From the shell, `flock models pull acme/olmo2-1b` downloads the primary version, and `--to DIR` copies it to a folder of your choice.
 
-To evaluate a stored model, give `flock eval` the model with a `flock:` prefix, such as `flock:acme/olmo2-1b`. The results record the version number it resolved to.
+To evaluate a stored model, give `flock eval run --model` the model with a `flock:` prefix, such as `flock:acme/olmo2-1b` or `flock:acme/olmo2-1b@checkpoint-12000`. The results record the version number it resolved to and the version's digest. See [Score a model stored in Flock](../evals/run-evaluation#score-a-model-stored-in-flock).
 
 ## Choose the primary version
 

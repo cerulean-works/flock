@@ -15,7 +15,7 @@ uv run flock eval run \
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--model` | required | The model as `repo@revision`. A branch or tag is resolved to its commit through the Hub, and the results record the commit. A full commit hash needs no Hub access, so it works offline. |
+| `--model` | required | The model as `repo@revision`. A branch or tag is resolved to its commit through the Hub, and the results record the commit. A full commit hash needs no Hub access, so it works offline. A model stored in Flock is `flock:org/name`, `flock:org/name@{number}`, `flock:org/name@{tag}` or `flock:org/name@primary`, and no version means the primary. It's resolved to its number through Flock, and the results record `flock:org/name@{number}` and the version's `model_digest`. See [Score a model stored in Flock](run-evaluation#score-a-model-stored-in-flock). |
 | `--task` | none | A task name from [Tasks](tasks#available-tasks). Repeat it for several tasks with one model load. |
 | `--suite` | none | A suite name from [Suites](tasks#suites). It runs the suite's tasks and scores the suite and every suite it holds. Repeat it for several suites. A task in several suites, or also given with `--task`, runs once. |
 | `--out` | required | The directory for `results.json` and `predictions/`. It must be new or empty, so one directory holds one run. |
@@ -52,5 +52,7 @@ With `--wandb-project`, each `flock eval run` logs one run with job type `eval`:
 |---|---|
 | config | The [provenance](results#provenance), plus `task_hashes` (each task's hash by name), `suite_members` (each suite's members by name) and `suite_hashes` (each suite's hash by name). |
 | summary | `<task>/<metric>` for each metric, `<task>/docs_per_second` unless the clock measured no time, and `suites/<suite>` for each scored suite's score. |
+
+When the config's `model` is a version stored in Flock (`flock:org/name@{number}`) of the run's own organization, Flock lists the run among that version's eval runs. See [Score a model stored in Flock](run-evaluation#score-a-model-stored-in-flock).
 
 `results.json` is written either way.

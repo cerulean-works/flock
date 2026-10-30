@@ -831,3 +831,87 @@ places where the code differs from the decisions above, or adds to them.
   arrived, `after-call` for one that arrived unrecorded) and by wrapping the commit, with one
   request at a time and 5 MiB parts. Against Ceph, the round trips, every resume that relies on
   ListParts' MD5 ETags or a HEAD's `x-amz-meta-sha256`, and the download tests pass.
+
+## 9. How it was actually built (PR 3)
+
+PR 3 holds D106's eval half: `flock:` refs in `flock eval`, `model_digest` in the provenance, the
+API's eval links and the route listing a run's versions. The branch plan changed while it was
+built: the registry is now one branch, `feat/model-registry-api`, and PR 3's commits sit on top
+of PR 2's there. PR 1's and PR 2's code needed no change. These are the places where the code
+differs from the decisions above, or adds to them.
+
+- **`ModelRef` (D106).** The second kind is a `kind` field (`"hf"` by default, or `"flock"`), so
+  `ModelRef(repo, revision)` still builds a Hugging Face ref. For a Flock ref, `repo` is
+  `org/name` and `revision` the version as given. `flock:org/name` with no `@` parses as
+  `@primary`, as every function of `flock.hub.models` reads no version. `resolve()` asks the
+  registry every time, even for a number, since the digest comes from there, and returns
+  `flock:org/name@{number}` with a `digest` field set. Parsing is eval's own and checks only the
+  shape (`org/name`, one `@`), so `flock.eval.model` imports nothing from `flock.hub` until a
+  Flock model is resolved. Resolving uses `flock.hub.models.cache.resolve`, which PR 2 didn't
+  export; it wasn't worth a public function for one caller.
+- **Loading.** `ScoringModel.from_pretrained` resolves once, then loads the number through
+  `load_from_hub`, so a tag moved between the two can't load other weights. `load_from_hub`
+  resolves again, by number, which costs one request. `dtype` and `device` go to
+  `load_from_hub`. The tokenizer is `get_hf_tokenizer()`, and a model with no `hf_repo` is a
+  `ValueError` after the weights load (nothing says what `hf_repo` is before then). Eval's
+  dependencies don't add `flock-hub[models]` or `flock-training`, as PR 2's extra doesn't add
+  `flock-training`; a missing `flock.hub` is an `ImportError` naming both.
+- **`FlockCausalLM`.** `ScoringModel` calls a transformers model with `input_ids`,
+  `attention_mask`, `position_ids`, `use_cache` and `logits_to_keep`, and reads `.logits`,
+  `.config.max_position_embeddings`, `.config._attn_implementation`, `.device` and `.dtype`.
+  `BaseModel` takes a `Batch` dict and returns every position's logits. A thin `nn.Module`
+  wrapper does the calling convention, and `ScoringModel`'s `model` is now
+  `PreTrainedModel | FlockCausalLM`; the scoring code is unchanged. The model is a submodule,
+  so `_eval_mode` restores its modes. `BaseModel` computes its own position ids from the mask,
+  which equal `ScoringModel`'s for its left-padded batches. `attention` is recorded as `sdpa`,
+  since Flock's attention calls `scaled_dot_product_attention` with an explicit mask. The
+  in-memory path (`evaluate-checkpoint.md`) is the same constructor, so that page now shows
+  wrapping an `Olmo2` too. The trainer and `flock/training` are unchanged.
+- **Memory.** `BaseModel` can't keep only the last positions' logits, so a batch's full logits
+  exist for a moment, `batch_tokens × vocab` values in the model's dtype (about 6.6 GB for
+  OLMo 2's vocabulary at the default 32768 in bfloat16). The wrapper's docstring says to lower
+  `batch_tokens` if that doesn't fit. Fixing it needs a `logits_to_keep` on `BaseModel`, which is
+  a training change.
+- **`model_digest`.** A keyword-only field with a default of `None`, declared right after
+  `model`, so it sits beside it in `results.json` and `Provenance(**old)` still loads files
+  without it (the regression bank test does exactly that). It's `None` for Hugging Face models:
+  their commit, already in `model`, names the bytes, and repeating it would make one field mean
+  two things. `schema_version` is 6, since the layout gained a field. `compare` refuses a
+  different `model_digest` as another instrument, read with `get`, so a file without the field
+  compares with a Hugging Face run's `None`. Two Flock servers can each have
+  `flock:acme/olmo2-1b@12` with different bytes, which `model` alone wouldn't catch.
+- **Eval links (D106).** `Store.upsert_run` calls `Models.link_eval` in the run's transaction
+  whenever an upsert carries a config, for new runs and updates alike. The config's `model` is
+  read wrapped (`{"value": ...}`, as the SDK sends it) or bare. It links only
+  `flock:{org}/{name}@{number}` (a number with no leading zero, up to nine digits, fitting
+  `integer`) where `org` is the run's own org and the model and version are live. A tag,
+  `primary`, no version or anything else links nothing, and the run is stored as usual. The
+  insert is `ON CONFLICT DO NOTHING`, so a config sent again changes nothing. A config that
+  later names another version adds a second link rather than replacing the first: an eval run
+  scores one model, so this happens only if someone changes `model` by hand, and dropping links
+  on an update would also drop one whose version was deleted and later restored. Links aren't
+  gated on `job_type = 'eval'`, as D106 doesn't ask for it; a training run whose config has a
+  `flock:` `model` would be linked as an eval. Imported runs (`import_run`) aren't linked.
+- **Querying (D106).** PR 1's `GET versions/{number}` and `resolve` already list `evals`, the
+  live eval runs as `entity/project/id`, and the listings carry `eval_runs`, a count. That count
+  includes deleted runs, which `evals` leaves out; retention counts them too. It's left as PR 1
+  built it.
+- **The run route.** `GET /projects/{entity}/{project}/runs/{run}/models`, beside the run's other
+  routes and behind the same `RunDep` (a non-member gets the project's 404). It answers `made`,
+  the live versions with `run_pk` the run (D108's Checkpoints section), and `scored`, the live
+  versions it's linked to as an eval, both by model name and number, in the version routes'
+  shape with `evals` added and users as briefs. It doesn't need S3 on, and answers empty lists
+  when nothing is linked. `scored` isn't in D106, but the run page needs it to say what an eval
+  run scored, and it costs one query.
+- **Docs.** The eval pages list `flock:` refs and `model_digest`, `evaluate-checkpoint.md` shows
+  `FlockCausalLM`, the comparison page lists the new refusal, the HTTP reference documents the
+  run route under Projects, and `store-models.md`'s line about `flock eval` now names the command
+  and links to the eval guide. The API reference page for the model routes is still not written.
+- **Tests.** `tests/eval/test_registry.py` saves a tiny `Olmo2` with `save_to_hub` to a flock with
+  S3 on (moto), evaluates `flock:flock/tiny` and `flock:flock/tiny@release` (the second through
+  the CLI) and checks the provenance and that the scores equal the in-memory model's. The toy
+  tokenizer stands in for `get_hf_tokenizer`. `tests/app/test_models.py` covers links from
+  configs, configs sent again, every ref that links nothing, another org's run, and the run
+  route.
+
+The status stays `proposed` until PR 4 (the web app) lands.
