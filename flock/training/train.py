@@ -4,6 +4,7 @@ from dataclasses import asdict
 from typing import overload
 
 import torch
+import torch.nn.functional as F
 from lance.torch.data import SafeLanceDataset
 from torch.nn import Module
 from torch.optim import AdamW, Muon, Optimizer
@@ -75,9 +76,21 @@ class Trainer:
         return StepLRScheduler(self.optimizer, config, total_steps)
 
     def _calc_batch_loss(
-        self, output: torch.Tensor, ground_truth: torch.Tensor
+        self, output: torch.Tensor, labels: torch.Tensor
     ) -> tuple[torch.Tensor, int]:
-        raise NotImplementedError
+        # output is [B, T, V], labels is [B, T]
+        num_tokens: int = int((labels != -100).sum().item())
+        if num_tokens == 0:
+            raise ValueError("Batch contains no valid next-token targets")
+
+        loss = F.cross_entropy(
+            output.reshape(-1, output.shape[-1]),
+            labels.reshape(-1),
+            ignore_index=-100,
+            reduction="mean",
+        )
+
+        return loss, num_tokens
 
     def _set_seed(self):
         random.seed(self.seed)

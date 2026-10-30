@@ -1,5 +1,6 @@
-from torch import nn
+from .base import BaseModel
+from .olmo2 import OLMO2_1B_CONFIG, OLMO2_7B_CONFIG, Olmo2, Olmo2Config
 
-from .olmo2 import Olmo2_1B
+__all__ = ["OLMO2_1B_CONFIG", "OLMO2_7B_CONFIG", "BaseModel", "Olmo2", "Olmo2Config", "registry"]
 
-registry: dict[str, type[nn.Module]] = {"olmo2_1b": Olmo2_1B}
+registry: dict[str, type[BaseModel]] = {"olmo2": Olmo2}

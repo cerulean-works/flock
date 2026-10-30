@@ -44,7 +44,7 @@ class LanceBatchCollator:
 
         return {
             "input_ids": input_ids[:, :-1],
-            "attention_mask": mask,
+            "attention_mask": mask[:, :-1],
             "labels": labels,
         }
 
