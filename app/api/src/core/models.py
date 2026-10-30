@@ -9,6 +9,7 @@ expires idle uploads, removes stray folders, empties the trash and applies reten
 
 import asyncio
 import contextlib
+import dataclasses
 import hashlib
 import logging
 import re
@@ -30,7 +31,7 @@ if TYPE_CHECKING:
 
     from app.api.src.core.accounts import User
     from app.api.src.core.s3 import Bucket
-    from app.api.src.core.store import Org, Store
+    from app.api.src.core.store import Org, Run, Store
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +40,9 @@ GIB = 1024 * MIB
 # Model names (D98): one segment of lowercase letters, digits, `.`, `-` and `_`.
 NAME = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}")
 CHECKPOINT = re.compile(r"checkpoint-\d+")
+# The model an eval run's config names (D106), as eval's provenance writes it: a number, never a
+# tag, which a later move would make name another version.
+EVAL_MODEL = re.compile(r"flock:([^/@]+)/([^/@]+)@([1-9][0-9]{0,8})")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 # A ULID's alphabet (Crockford's base32), and the folder of an upload under flock-models.
 CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -507,6 +511,71 @@ class Models:
             model = await self._model(conn, org, name)
             pk = await self._version_pk(conn, org, model, ref)
             return await self._detail(conn, org, model, pk)
+
+    # ------------------------------------------------------------------ runs (D106)
+
+    @staticmethod
+    async def link_eval(
+        conn: asyncpg.Connection, org: Org, run_pk: int, config: dict[str, Any]
+    ) -> None:
+        """Links the run to the version its config's ``model`` names as an eval run, when that's
+        ``flock:{org}/{name}@{number}`` of a live version of a live model in the run's org.
+        Anything else, a tag included, links nothing, and the run is stored as usual. A link
+        stays when the config changes again."""
+        value = config.get("model")
+        if isinstance(value, dict):  # how the wandb SDK sends config: {"value": ..., "desc": ...}
+            value = value.get("value")
+        if not isinstance(value, str):
+            return
+        ref = EVAL_MODEL.fullmatch(value)
+        if ref is None or ref[1] != org.name:
+            return
+        await conn.execute(
+            "INSERT INTO model_version_runs (version_pk, run_pk, kind) "
+            "SELECT v.pk, $4, 'eval' FROM model_versions v JOIN models m ON m.pk = v.model_pk "
+            "WHERE m.org_pk = $1 AND m.name = $2 AND m.deleted_at IS NULL AND v.number = $3 "
+            "AND v.deleted_at IS NULL ON CONFLICT DO NOTHING",
+            org.pk,
+            ref[2],
+            int(ref[3]),
+            run_pk,
+        )
+
+    async def run_versions(self, run: Run) -> dict[str, Any]:
+        """The live versions ``run`` made (``made``, D108's Checkpoints section) and those it
+        scored as an eval run (``scored``), each with the runs that scored it, by model name and
+        number."""
+        org = run.project.org
+        width = len(dataclasses.fields(Model))
+        found: dict[str, list[tuple[Model, Version]]] = {}
+        async with self.store.db.pool.acquire() as conn:
+            scored = (
+                "v.pk IN (SELECT e.version_pk FROM model_version_runs e "
+                "WHERE e.run_pk = $2 AND e.kind = 'eval')"
+            )
+            for key, which in (("made", "v.run_pk = $2"), ("scored", scored)):
+                records = await conn.fetch(
+                    f"SELECT {MODEL_COLUMNS}, {VERSION_COLUMNS} FROM {VERSION_FROM} "
+                    "JOIN models m ON m.pk = v.model_pk "
+                    "WHERE m.org_pk = $1 AND m.deleted_at IS NULL AND v.deleted_at IS NULL "
+                    f"AND {which} ORDER BY m.name, v.number",
+                    org.pk,
+                    run.pk,
+                )
+                found[key] = [(Model(*r[:width]), Version(*r[width:])) for r in records]
+            evals: dict[int, list[str]] = {v.pk: [] for pairs in found.values() for _, v in pairs}
+            for pk, path in await conn.fetch(
+                f"SELECT e.version_pk, {RUN_PATH.format(column='e.run_pk')} "
+                "FROM model_version_runs e WHERE e.version_pk = ANY($1) AND e.kind = 'eval' "
+                "ORDER BY e.run_pk",
+                list(evals),
+            ):
+                if path is not None:  # a deleted run
+                    evals[pk].append(path)
+        return {
+            key: [{**self._info(org, m, v), "evals": evals[v.pk]} for m, v in pairs]
+            for key, pairs in found.items()
+        }
 
     # ------------------------------------------------------------------ uploads (D99, D100)
 

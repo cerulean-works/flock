@@ -745,6 +745,9 @@ class Store:
                             name,
                         )
                         await self._update_run(conn, project, pk, name, fields, owner, admin)
+                    if fields.get("config") is not None:
+                        # An eval of a version in the registry links to it (014, D106).
+                        await self.models.link_eval(conn, project.org, pk, fields["config"])
             except NotFound:
                 continue  # deleted or renamed meanwhile: resolve the name again
             run = await self.project_run(project, name)

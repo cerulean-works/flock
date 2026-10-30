@@ -1,6 +1,7 @@
 """The model registry (014): the managed flock-models bucket (D97), upload sessions and their
 commits (D99, D100), the proxy's write rule (D97, D101), resolving (D103), tags and the
-primary version (D107), deleting, the trash and retention (D109), and the sweep (D102).
+primary version (D107), deleting, the trash and retention (D109), the sweep (D102), and the
+links to training and eval runs (D106).
 Files are written through the S3 proxy with boto3, as the client will write them."""
 
 import asyncio
@@ -530,6 +531,128 @@ def test_training_runs_are_linked(flock: S3Flock, pusher: Pusher):
     # An unknown run, or another org's, is stored nowhere, and the version is still made.
     unknown = pusher.push("m", run="other/pretrain/3k9x2", step=1)
     assert unknown["run"] is None and unknown["number"] == 2
+
+
+def eval_links(flock: S3Flock) -> list[tuple[str, int]]:
+    """Every eval link, as (run, version number)."""
+    rows = sql(
+        flock,
+        "SELECT r.name, v.number FROM model_version_runs e JOIN runs r ON r.pk = e.run_pk "
+        "JOIN model_versions v ON v.pk = e.version_pk WHERE e.kind = 'eval' "
+        "ORDER BY r.name, v.number",
+    )
+    return [(name, number) for name, number in rows]
+
+
+def test_eval_runs_are_linked_from_their_config(flock: S3Flock, pusher: Pusher):
+    api = flock.client()
+    pusher.push("m")
+    pusher.push("m", tags=["release"])
+    # As eval's log_to_tracker sends it: the provenance's fields, `model` among them.
+    config = {"model": "flock:flock/m@2", "model_digest": "d", "flock_commit": "abc"}
+    created = api.create_run("evals", "e1", config=config)
+    assert created["inserted"]
+    assert eval_links(flock) == [("e1", 2)]
+    version = api.get(f"{MODELS}/m/versions/2").json()
+    assert version["evals"] == ["flock/evals/e1"] and version["eval_runs"] == 1
+    assert api.get(f"{MODELS}/m/resolve", ref="release").json()["evals"] == ["flock/evals/e1"]
+    # The SDK sends the config again as it changes: the link is made once, and stays when
+    # another version is named.
+    api.create_run("evals", "e1", config={**config, "limit": 10})
+    assert eval_links(flock) == [("e1", 2)]
+    api.create_run("evals", "e1", config={**config, "model": "flock:flock/m@1"})
+    assert eval_links(flock) == [("e1", 1), ("e1", 2)]
+    # A bare value, as a client that doesn't wrap config entries sends it.
+    query = (
+        "mutation U($name: String, $project: String, $config: JSONString) { upsertBucket("
+        "input: {name: $name, modelName: $project, config: $config}) { inserted } }"
+    )
+    bare = {"name": "e2", "project": "evals", "config": json.dumps({"model": "flock:flock/m@1"})}
+    assert "errors" not in api.graphql(query, bare).json()
+    assert eval_links(flock) == [("e1", 1), ("e1", 2), ("e2", 1)]
+
+
+def test_eval_configs_that_name_no_live_version_link_nothing(
+    flock: S3Flock, pusher: Pusher, wait_for
+):
+    api = flock.client()
+    pusher.push("m", tags=["release"])
+    pusher.push("m")
+    pusher.push("gone")
+    api.delete(f"{MODELS}/m/versions/2")
+    api.delete(f"{MODELS}/gone")
+    refused = [
+        "flock:flock/m",  # no version
+        "flock:flock/m@primary",
+        "flock:flock/m@release",  # a tag, which provenance never writes
+        "flock:flock/m@01",
+        "flock:flock/m@3",  # no such version
+        "flock:flock/m@99999999999999999999",
+        "flock:flock/m@2",  # deleted
+        "flock:flock/gone@1",  # a deleted model
+        "flock:flock/missing@1",
+        "flock:flock/m@1 ",
+        "flock:flock/a/m@1",
+        "allenai/OLMo-2-0425-1B@main",
+        12,
+        {"nested": "flock:flock/m@1"},
+    ]
+    for i, model in enumerate(refused):
+        created = api.create_run("evals", f"e{i}", config={"model": model})
+        assert created["inserted"], model
+    api.create_run("evals", "no-model", config={"lr": 0.1})
+    # Another org's run naming this org's version.
+    assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
+    olga = flock.add_user("olga@lab.test", org="lab")
+    other = olga.api.create_run("evals", "theirs", config={"model": "flock:flock/m@1"})
+    assert other["bucket"]["project"]["entity"]["name"] == "lab"
+    assert eval_links(flock) == []
+    # Every run was stored as usual.
+    assert api.get("/api/v1/projects/flock/evals/runs").json()["total"] == len(refused) + 1
+
+
+def test_a_runs_versions(flock: S3Flock, pusher: Pusher):
+    api = flock.client()
+    api.create_run("train", "t1")
+    pusher.push("m", run="flock/train/t1", step=100, tags=["checkpoint-100"])
+    pusher.push("m", run="flock/train/t1", step=200, tags=["checkpoint-200"])
+    pusher.push("a", run="flock/train/t1", step=200)
+    pusher.push("m")  # made by no run
+    api.create_run("evals", "e1", config={"model": "flock:flock/m@2"})
+    api.create_run("evals", "e2", config={"model": "flock:flock/m@2"})
+    api.create_run("evals", "e3", config={"model": "flock:flock/m@3"})
+    runs = "/api/v1/projects/flock/{}/runs/{}/models"
+
+    made = api.get(runs.format("train", "t1"))
+    assert made.status == 200, made.body
+    body = made.json()
+    assert body["scored"] == []
+    assert [(v["model"], v["number"], v["step"], v["tags"]) for v in body["made"]] == [
+        ("flock/a", 1, 200, []),
+        ("flock/m", 1, 100, ["checkpoint-100"]),
+        ("flock/m", 2, 200, ["checkpoint-200"]),
+    ]
+    assert [v["evals"] for v in body["made"]] == [[], [], ["flock/evals/e1", "flock/evals/e2"]]
+    assert body["made"][0]["run"] == "flock/train/t1"
+    assert body["made"][0]["created_by"]["email"] == flock.ADMIN_EMAIL
+
+    scored = api.get(runs.format("evals", "e1")).json()
+    assert scored["made"] == []
+    assert [(v["model"], v["number"]) for v in scored["scored"]] == [("flock/m", 2)]
+    assert scored["scored"][0]["evals"] == ["flock/evals/e1", "flock/evals/e2"]
+
+    # A deleted eval run drops out of `evals`, and a deleted version out of both lists.
+    assert api.delete("/api/v1/projects/flock/evals/runs/e2", force="true").status == 204
+    assert api.get(runs.format("evals", "e1")).json()["scored"][0]["evals"] == ["flock/evals/e1"]
+    assert api.delete(f"{MODELS}/m/versions/2").status == 200
+    assert api.get(runs.format("evals", "e1")).json()["scored"] == []
+    assert [v["number"] for v in api.get(runs.format("train", "t1")).json()["made"]] == [1, 1]
+
+    assert api.get(runs.format("train", "nope")).status == 404
+    assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
+    olga = flock.add_user("olga@lab.test", org="lab")
+    assert olga.api.get(runs.format("train", "t1")).status == 404
+    assert olga.api.get("/api/v1/projects/flock/train/runs/t1").status == 404
 
 
 # ---------------------------------------------------------------------- aborting and the sweep
