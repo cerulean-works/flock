@@ -1,8 +1,8 @@
 import pytest
 import torch
 
-from flock.training.data_utils import Batch
-from flock.training.models import BaseModel
+from flock.training.core.data_utils import Batch
+from flock.training.core.models import BaseModel
 
 
 class EchoModel(BaseModel):

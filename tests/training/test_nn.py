@@ -2,7 +2,7 @@ import pytest
 import torch
 from torch import nn
 
-from flock.training.nn import GroupedAttentionWithRoPE
+from flock.training.core.nn import GroupedAttentionWithRoPE
 
 
 @pytest.mark.parametrize("mask_type", ["none", "causal", "padding", "additive"])

@@ -6,13 +6,13 @@ from typing import Literal, cast, overload
 
 import torch
 import torch.nn.functional as F
+import wandb
 from lance.torch.data import SafeLanceDataset
 from torch.nn import Module
 from torch.optim import AdamW, Muon, Optimizer
 from torch.utils.data import DataLoader
 from transformers import TokenizersBackend
 
-import wandb
 from flock.training.core.data_utils import Batch, LanceBatchCollator
 from flock.training.core.lr_scheduler import LRSchedulerConfig, StepLRScheduler
 from flock.training.core.optimization import AdamWConfig, MuonConfig, OptimizerConfig

@@ -7,8 +7,8 @@ from torch.nn import functional as F
 from transformers import Olmo2Config as HFConfig
 from transformers import Olmo2ForCausalLM, TokenizersBackend
 
-from flock.training.data_utils import Batch, LanceBatchCollator
-from flock.training.models.olmo2 import OLMO2_1B_CONFIG, OLMO2_7B_CONFIG, Olmo2, Olmo2Config
+from flock.training.core.data_utils import Batch, LanceBatchCollator
+from flock.training.core.models.olmo2 import OLMO2_1B_CONFIG, OLMO2_7B_CONFIG, Olmo2, Olmo2Config
 
 
 def make_batch(input_ids: torch.Tensor, attention_mask: torch.Tensor | None = None) -> Batch:
@@ -99,7 +99,7 @@ def test_causality_and_padding_invariance(config):
 
 def test_collated_training_batch(config, tokenizer, monkeypatch):
     monkeypatch.setattr(
-        "flock.training.models.base.AutoTokenizer.from_pretrained",
+        "flock.training.core.models.base.AutoTokenizer.from_pretrained",
         lambda repo, **kwargs: tokenizer,
     )
     model = Olmo2(replace(config, hf_repo="offline"))
@@ -175,7 +175,7 @@ def test_tokenizer_config(config, tokenizer, monkeypatch):
         calls.append((repo, kwargs))
         return tokenizer
 
-    monkeypatch.setattr("flock.training.models.base.AutoTokenizer.from_pretrained", load)
+    monkeypatch.setattr("flock.training.core.models.base.AutoTokenizer.from_pretrained", load)
     assert Olmo2(config).get_hf_tokenizer() is None
     model = Olmo2(replace(config, hf_repo="offline"))
     assert model.get_hf_tokenizer() is tokenizer
