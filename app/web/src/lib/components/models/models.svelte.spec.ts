@@ -213,16 +213,31 @@ describe('ModelView', () => {
 			.toBeVisible();
 	});
 
-	it('gives load_from_hub and flock models pull for the version shown', async () => {
+	it('gives load_from_hub and flock models pull for the primary and the version shown', async () => {
 		serve(storage());
 		view();
 		await screen.getByRole('button', { name: 'Load' }).click();
 		const dialog = screen.getByRole('dialog');
 		await expect.element(dialog.getByText('Load version 12')).toBeVisible();
+		const python = dialog.getByRole('region', { name: 'In Python' });
+		const shell = dialog.getByRole('region', { name: 'From the shell' });
+		for (const section of [python, shell])
+			expect(
+				section
+					.getByRole('paragraph')
+					.all()
+					.map((p) => p.element().textContent)
+			).toEqual(['The primary version', 'Version 12']);
 		await expect
-			.element(dialog.getByText(/models\.load_from_hub\("acme\/olmo2-1b@12", device="cuda"\)/))
+			.element(python.getByText(/models\.load_from_hub\("acme\/olmo2-1b", device="cuda"\)/))
 			.toBeVisible();
-		await expect.element(dialog.getByText('flock models pull acme/olmo2-1b@12')).toBeVisible();
+		await expect
+			.element(python.getByText(/models\.load_from_hub\("acme\/olmo2-1b@12", device="cuda"\)/))
+			.toBeVisible();
+		await expect
+			.element(shell.getByText('flock models pull acme/olmo2-1b', { exact: true }))
+			.toBeVisible();
+		await expect.element(shell.getByText('flock models pull acme/olmo2-1b@12')).toBeVisible();
 	});
 
 	it('picks versions and tags, with checkpoint tags in step order and the primary first', async () => {

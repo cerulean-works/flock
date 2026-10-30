@@ -9,7 +9,7 @@ Use the dashboard's **Models** tab to see your organization's stored models, cho
 Open a model to see its primary version. The header shows the version, a **Primary** badge when it's the primary one, its size, who pushed it, and who made it primary and when.
 
 - **The version picker** opens any version by number or tag. Checkpoint tags are sorted by their step, so `checkpoint-900` comes before `checkpoint-12000`. The choice is kept in the URL as `?version=`, so you can share a link to it.
-- **Load** shows the Python and shell commands that load the version shown, such as `models.load_from_hub("acme/olmo2-1b@12")` and `flock models pull acme/olmo2-1b@12`.
+- **Load** shows the Python and shell commands that load the primary version, such as `models.load_from_hub("acme/olmo2-1b")` and `flock models pull acme/olmo2-1b`, and those that load the version shown, such as `models.load_from_hub("acme/olmo2-1b@12")`.
 - **Browse files** opens the version's folder in **Storage**.
 
 The tabs show the version in more detail. The tab is kept in the URL as `?tab=`.
