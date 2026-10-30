@@ -1,5 +1,5 @@
--- The model registry (014): each org's flock-models bucket, and the tables that number, tag and
--- link the versions stored in it.
+-- The model registry (014): each org's flock-models bucket, and the tables that number and tag
+-- the versions stored in it.
 
 -- A second kind of bucket Flock creates and owns (D97): 'models' for the org's flock-models.
 ALTER TABLE s3_buckets DROP CONSTRAINT s3_buckets_managed_check;
@@ -101,15 +101,6 @@ CREATE TABLE model_tags (
     PRIMARY KEY (model_pk, name)
 );
 CREATE INDEX model_tags_version ON model_tags (version_pk);
-
--- Eval runs that scored a version (D106).
-CREATE TABLE model_version_runs (
-    version_pk bigint NOT NULL REFERENCES model_versions ON DELETE CASCADE,
-    run_pk bigint NOT NULL REFERENCES runs ON DELETE CASCADE,
-    kind text NOT NULL CHECK (kind IN ('eval')),
-    PRIMARY KEY (version_pk, run_pk)
-);
-CREATE INDEX model_version_runs_run ON model_version_runs (run_pk);
 
 -- The S3 proxy caches open uploads (D97, D101) and drops one when its state changes.
 CREATE FUNCTION model_upload_changed() RETURNS trigger LANGUAGE plpgsql AS $$

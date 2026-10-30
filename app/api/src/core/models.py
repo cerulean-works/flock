@@ -40,9 +40,6 @@ GIB = 1024 * MIB
 # Model names (D98): one segment of lowercase letters, digits, `.`, `-` and `_`.
 NAME = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}")
 CHECKPOINT = re.compile(r"checkpoint-\d+")
-# The model an eval run's config names (D106), as eval's provenance writes it: a number, never a
-# tag, which a later move would make name another version.
-EVAL_MODEL = re.compile(r"flock:([^/@]+)/([^/@]+)@([1-9][0-9]{0,8})")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 # A ULID's alphabet (Crockford's base32), and the folder of an upload under flock-models.
 CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -156,7 +153,6 @@ class Version:
     ulid: str
     run: str | None  # entity/project/id of the run that made it
     tags: list[str]
-    eval_runs: int
 
 
 @dataclass(frozen=True)
@@ -188,19 +184,12 @@ RUN_PATH = (
     "JOIN projects p ON p.pk = r.project_pk JOIN orgs o ON o.pk = p.org_pk "
     "WHERE r.pk = {column} AND r.deleted_at IS NULL)"
 )
-# The eval runs of the version in ``{column}`` that aren't deleted: what ``evals`` lists, what
-# ``eval_runs`` counts and what keeps a version from retention (D106, D109).
-LIVE_EVALS = (
-    "model_version_runs e JOIN runs r ON r.pk = e.run_pk AND r.deleted_at IS NULL "
-    "WHERE e.version_pk = {column} AND e.kind = 'eval'"
-)
 VERSION_COLUMNS = (
     "v.pk, v.number, v.digest, v.total_bytes, v.metadata::text, v.step, v.created_by, "
     "extract(epoch FROM v.created_at)::float8, u.ulid, "
     f"{RUN_PATH.format(column='v.run_pk')}, "
     "coalesce((SELECT array_agg(t.name ORDER BY t.name) FROM model_tags t "
-    "WHERE t.version_pk = v.pk), '{}'), "
-    f"(SELECT count(*) FROM {LIVE_EVALS.format(column='v.pk')})::int"
+    "WHERE t.version_pk = v.pk), '{}')"
 )
 VERSION_FROM = "model_versions v JOIN model_uploads u ON u.pk = v.upload_pk"
 UPLOAD_COLUMNS = (
@@ -380,7 +369,6 @@ class Models:
             "run": version.run,
             "created_by": version.created_by,
             "created_at": version.created_at,
-            "eval_runs": version.eval_runs,
             "bucket": "flock-models",
             "prefix": Models._folder(model.name, version.ulid),
         }
@@ -388,19 +376,13 @@ class Models:
     async def _detail(
         self, conn: asyncpg.Connection, org: Org, model: Model, pk: int
     ) -> dict[str, Any]:
-        """A version with its files and the runs that scored it (D103, D106)."""
+        """A version with its files (D103)."""
         info = self._info(org, model, await self._version(conn, pk))
         files = await conn.fetch(
             'SELECT path, size, sha256 FROM model_files WHERE version_pk = $1 ORDER BY path COLLATE "C"',
             pk,
         )
-        runs = await conn.fetch(
-            f"SELECT {RUN_PATH.format(column='e.run_pk')} FROM model_version_runs e "
-            "WHERE e.version_pk = $1 AND e.kind = 'eval' ORDER BY e.run_pk",
-            pk,
-        )
         info["files"] = [{"path": p, "size": s, "sha256": h} for p, s, h in files]
-        info["evals"] = [run for (run,) in runs if run is not None]
         return info
 
     async def _run_pk(self, org: Org, run: str | None) -> int | None:
@@ -520,68 +502,20 @@ class Models:
 
     # ------------------------------------------------------------------ runs (D106)
 
-    @staticmethod
-    async def link_eval(
-        conn: asyncpg.Connection, org: Org, run_pk: int, config: dict[str, Any]
-    ) -> None:
-        """Links the run to the version its config's ``model`` names as an eval run, when that's
-        ``flock:{org}/{name}@{number}`` of a live version of a live model in the run's org.
-        Anything else, a tag included, links nothing, and the run is stored as usual. A link
-        stays when the config changes again."""
-        value = config.get("model")
-        if isinstance(value, dict):  # how the wandb SDK sends config: {"value": ..., "desc": ...}
-            value = value.get("value")
-        if not isinstance(value, str):
-            return
-        ref = EVAL_MODEL.fullmatch(value)
-        if ref is None or ref[1] != org.name:
-            return
-        await conn.execute(
-            "INSERT INTO model_version_runs (version_pk, run_pk, kind) "
-            "SELECT v.pk, $4, 'eval' FROM model_versions v JOIN models m ON m.pk = v.model_pk "
-            "WHERE m.org_pk = $1 AND m.name = $2 AND m.deleted_at IS NULL AND v.number = $3 "
-            "AND v.deleted_at IS NULL ON CONFLICT DO NOTHING",
-            org.pk,
-            ref[2],
-            int(ref[3]),
-            run_pk,
-        )
-
     async def run_versions(self, run: Run) -> dict[str, Any]:
-        """The live versions ``run`` made (``made``, D108's Checkpoints section) and those it
-        scored as an eval run (``scored``), each with the runs that scored it, by model name and
-        number."""
+        """The live versions ``run`` made (``made``, D108's Checkpoints section), by model name
+        and number."""
         org = run.project.org
         width = len(dataclasses.fields(Model))
-        found: dict[str, list[tuple[Model, Version]]] = {}
-        async with self.store.db.pool.acquire() as conn:
-            scored = (
-                "v.pk IN (SELECT e.version_pk FROM model_version_runs e "
-                "WHERE e.run_pk = $2 AND e.kind = 'eval')"
-            )
-            for key, which in (("made", "v.run_pk = $2"), ("scored", scored)):
-                records = await conn.fetch(
-                    f"SELECT {MODEL_COLUMNS}, {VERSION_COLUMNS} FROM {VERSION_FROM} "
-                    "JOIN models m ON m.pk = v.model_pk "
-                    "WHERE m.org_pk = $1 AND m.deleted_at IS NULL AND v.deleted_at IS NULL "
-                    f"AND {which} ORDER BY m.name, v.number",
-                    org.pk,
-                    run.pk,
-                )
-                found[key] = [(Model(*r[:width]), Version(*r[width:])) for r in records]
-            evals: dict[int, list[str]] = {v.pk: [] for pairs in found.values() for _, v in pairs}
-            for pk, path in await conn.fetch(
-                f"SELECT e.version_pk, {RUN_PATH.format(column='e.run_pk')} "
-                "FROM model_version_runs e WHERE e.version_pk = ANY($1) AND e.kind = 'eval' "
-                "ORDER BY e.run_pk",
-                list(evals),
-            ):
-                if path is not None:  # a deleted run
-                    evals[pk].append(path)
-        return {
-            key: [{**self._info(org, m, v), "evals": evals[v.pk]} for m, v in pairs]
-            for key, pairs in found.items()
-        }
+        records = await self.store.db.fetch(
+            f"SELECT {MODEL_COLUMNS}, {VERSION_COLUMNS} FROM {VERSION_FROM} "
+            "JOIN models m ON m.pk = v.model_pk "
+            "WHERE m.org_pk = $1 AND m.deleted_at IS NULL AND v.deleted_at IS NULL "
+            "AND v.run_pk = $2 ORDER BY m.name, v.number",
+            org.pk,
+            run.pk,
+        )
+        return {"made": [self._info(org, Model(*r[:width]), Version(*r[width:])) for r in records]}
 
     # ------------------------------------------------------------------ uploads (D99, D100)
 
@@ -1333,8 +1267,7 @@ class Models:
         """Deleted versions of live models (or those of ``pks``), newest first."""
         records = await self.store.db.fetch(
             "SELECT v.pk, m.name, v.number, v.deleted_by, extract(epoch FROM v.deleted_at)::float8, "
-            "v.trashed_at IS NOT NULL, v.total_bytes, v.deleted_tags, "
-            f"(SELECT count(*) FROM {LIVE_EVALS.format(column='v.pk')})::int "
+            "v.trashed_at IS NOT NULL, v.total_bytes, v.deleted_tags "
             "FROM model_versions v JOIN models m ON m.pk = v.model_pk "
             "WHERE m.org_pk = $1 AND v.deleted_at IS NOT NULL "
             "AND ($2::bigint[] IS NULL OR v.pk = ANY($2)) "
@@ -1356,9 +1289,8 @@ class Models:
                 "moved": moved,
                 "bytes": size,
                 "tags": tags,
-                "eval_runs": evals,
             }
-            for pk, name, number, deleted_by, deleted_at, moved, size, tags, evals in records
+            for pk, name, number, deleted_by, deleted_at, moved, size, tags in records
         ]
 
     async def _model_entries(self, org: Org, pks: list[int] | None = None) -> list[dict[str, Any]]:
@@ -1666,9 +1598,8 @@ class Models:
 
     async def _retain(self) -> int:
         """Retention (D109): in orgs that set it, delete the versions older than the newest N
-        untagged ones of each model (untagged: no tag but checkpoint ones, not the primary),
-        unless they have eval runs that aren't deleted. They go to the trash like any deleted
-        version."""
+        untagged ones of each model (untagged: no tag but checkpoint ones, not the primary).
+        They go to the trash like any deleted version."""
         candidates = await self.store.db.fetch(
             "SELECT c.pk, c.model_pk FROM ("
             "SELECT v.pk, v.model_pk, o.model_retention AS keep, row_number() OVER "
@@ -1678,8 +1609,7 @@ class Models:
             "AND m.deleted_at IS NULL AND v.deleted_at IS NULL "
             "AND v.pk IS DISTINCT FROM m.primary_version_pk AND NOT EXISTS (SELECT 1 FROM "
             "model_tags t WHERE t.version_pk = v.pk AND t.name !~ '^checkpoint-[0-9]+$')"
-            ") c WHERE c.rank > c.keep AND NOT EXISTS "
-            f"(SELECT 1 FROM {LIVE_EVALS.format(column='c.pk')}) ORDER BY c.pk"
+            ") c WHERE c.rank > c.keep ORDER BY c.pk"
         )
         deleted = 0
         for pk, model_pk in candidates:
@@ -1696,10 +1626,7 @@ class Models:
                 live = await conn.fetchval(
                     "SELECT 1 FROM model_versions WHERE pk = $1 AND deleted_at IS NULL", pk
                 )
-                evaluated = await conn.fetchval(
-                    f"SELECT 1 FROM {LIVE_EVALS.format(column='$1')} LIMIT 1", pk
-                )
-                if not live or evaluated or await self._refusal(conn, model, pk, "it"):
+                if not live or await self._refusal(conn, model, pk, "it"):
                     continue
                 await self._mark_deleted(conn, pk, None)
             deleted += 1

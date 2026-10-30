@@ -112,7 +112,7 @@ def test_a_failed_summary_update_finishes_the_run_as_failed(monkeypatch):
 
 
 def test_log_to_tracker_sends_a_flock_model_and_its_digest_in_the_config(logged):
-    # What the API reads to link the run to the version it scored (014, D106).
+    # The run's config names the exact version scored, by number and digest.
     provenance = dataclasses.replace(
         PROVENANCE, model="flock:acme/olmo2-1b@12", model_digest="d" * 64
     )
