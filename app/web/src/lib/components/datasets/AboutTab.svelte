@@ -3,6 +3,7 @@
 	import type { DatasetInfo } from '#lib/types.ts';
 	import { bytes, dateTime } from '#lib/utils.ts';
 	import Markdown from '../Markdown.svelte';
+	import TagChip from '../TagChip.svelte';
 
 	interface Props {
 		org: string;
@@ -92,7 +93,13 @@
 							>
 								{tags.length === 1 ? 'Tag' : 'Tags'}
 							</th>
-							<td class="py-2 text-right break-all">{tags.join(', ')}</td>
+							<td class="py-2">
+								<ul class="flex flex-wrap justify-end gap-1" aria-label="Tags">
+									{#each tags as tag (tag)}
+										<TagChip as="li" {tag} />
+									{/each}
+								</ul>
+							</td>
 						</tr>
 					{/if}
 				</tbody>

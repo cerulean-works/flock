@@ -1,13 +1,13 @@
 <script lang="ts">
 	import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
 	import TagIcon from '@lucide/svelte/icons/tag';
-	import XIcon from '@lucide/svelte/icons/x';
 	import type { ResolvedPathname } from '$app/types';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { datasetCall, datasetsApi } from '#lib/datasets.ts';
 	import type { DatasetVersion, VersionsPage } from '#lib/types.ts';
 	import { dateTime, relativeTime } from '#lib/utils.ts';
+	import TagChip from '../TagChip.svelte';
 	import RemoveTagDialog from './RemoveTagDialog.svelte';
 	import TagDialog from './TagDialog.svelte';
 
@@ -102,18 +102,11 @@
 								aria-label="Tags of version {v.version}"
 							>
 								{#each v.tags as tag (tag)}
-									<li
-										class="inline-flex h-6 max-w-full min-w-0 items-center gap-1 rounded-full bg-secondary pr-1 pl-2 text-xs"
-									>
-										<span class="truncate" title={tag}>{tag}</span>
-										<button
-											class="grid size-4 flex-none place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
-											aria-label="Remove the tag {tag}"
-											onclick={() => (removing = { tag, version: v.version })}
-										>
-											<XIcon class="size-3" />
-										</button>
-									</li>
+									<TagChip
+										as="li"
+										{tag}
+										onremove={() => (removing = { tag, version: v.version })}
+									/>
 								{/each}
 							</ul>
 						{:else}

@@ -4,7 +4,6 @@
 	import StarIcon from '@lucide/svelte/icons/star';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import XIcon from '@lucide/svelte/icons/x';
 	import type { ResolvedPathname } from '$app/types';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -14,6 +13,7 @@
 	import { modelApi, modelCall, runPathHref, sortTags } from '#lib/models.ts';
 	import type { ModelInfo, ModelVersion, ModelVersionsPage } from '#lib/types.ts';
 	import { bytes, dateTime, relativeTime } from '#lib/utils.ts';
+	import TagChip from '../TagChip.svelte';
 	import DeleteVersionDialog from './DeleteVersionDialog.svelte';
 	import MakePrimaryDialog from './MakePrimaryDialog.svelte';
 	import RemoveTagDialog from './RemoveTagDialog.svelte';
@@ -123,24 +123,14 @@
 							class="underline-offset-3 hover:text-link hover:underline"
 							href={versionHref(String(v.number))}>{v.number}</a
 						>
-						{#if v.primary}<Badge variant="secondary" class="ml-1.5">Primary</Badge>{/if}
+						<!-- Outlined: the muted row of the version shown would hide a tinted one. -->
+						{#if v.primary}<Badge variant="outline" class="ml-1.5">Primary</Badge>{/if}
 					</td>
 					<td class="px-3 py-3">
 						{#if v.tags.length}
 							<ul class="flex flex-wrap gap-1" aria-label="Tags of version {v.number}">
 								{#each sortTags(v.tags) as tag (tag)}
-									<li
-										class="inline-flex h-6 max-w-full min-w-0 items-center gap-1 rounded-full bg-secondary pr-1 pl-2 text-xs"
-									>
-										<span class="truncate" title={tag}>{tag}</span>
-										<button
-											class="grid size-4 flex-none place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
-											aria-label="Remove the tag {tag}"
-											onclick={() => (removing = { tag, version: v.number })}
-										>
-											<XIcon class="size-3" />
-										</button>
-									</li>
+									<TagChip as="li" {tag} onremove={() => (removing = { tag, version: v.number })} />
 								{/each}
 							</ul>
 						{:else}

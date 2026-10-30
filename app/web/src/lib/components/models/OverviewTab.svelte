@@ -4,6 +4,7 @@
 	import type { ModelVersionDetail } from '#lib/types.ts';
 	import { bytes, dateTime, formatValue } from '#lib/utils.ts';
 	import Markdown from '../Markdown.svelte';
+	import TagChip from '../TagChip.svelte';
 
 	interface Props {
 		org: string;
@@ -138,7 +139,13 @@
 						<th scope="row" class="py-2 pr-4 text-left align-top font-normal text-muted-foreground">
 							{version.tags.length === 1 ? 'Tag' : 'Tags'}
 						</th>
-						<td class="py-2 text-right break-all">{sortTags(version.tags).join(', ')}</td>
+						<td class="py-2">
+							<ul class="flex flex-wrap justify-end gap-1" aria-label="Tags">
+								{#each sortTags(version.tags) as tag (tag)}
+									<TagChip as="li" {tag} />
+								{/each}
+							</ul>
+						</td>
 					</tr>
 				{/if}
 				<tr class="border-b border-divider">
