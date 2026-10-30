@@ -11,6 +11,7 @@ Run `uv run flock COMMAND` from the repository root, or `flock COMMAND` in the a
 | `flock s3 credentials` | Issue temporary S3 keys | [S3 commands](commands/s3) |
 | `flock s3 configure` | Write an AWS profile | [S3 commands](commands/s3#flock-s3-configure) |
 | `flock s3 buckets` | List, create and delete buckets | [S3 commands](commands/s3#flock-s3-buckets) |
+| `flock models` | Push, pull, tag and list stored models | [Models API](../hub/models#flock-models) |
 | `flock eval run`, `flock eval compare` | Score models and compare results | [Evals commands](../evals/commands) |
 
 For account and storage commands, see [Credential resolution](credentials). Local evaluations need no Flock sign-in unless they log to the tracker.

@@ -722,3 +722,112 @@ the version routes and retention read it), a route listing the versions a run ma
 page's Checkpoints section, PR 4), the API reference page for the routes, the client and CLI
 (PR 2) and the web app (PR 4). The web app's types still name only `datasets` as a managed kind;
 the Storage tab shows `flock-models` as managed without a Datasets link.
+
+## 8. How it was actually built (PR 2)
+
+PR 2 (`feat/model-registry-client`) holds `flock.hub.models`, `BaseModel.config`, the
+`flock models` CLI and the docs, in a few commits. PR 1's API needed no change. These are the
+places where the code differs from the decisions above, or adds to them.
+
+- **Layout.** `flock/hub/models/` is a package: `_common.py` (references, `ModelVersion`, the
+  registry client, the request pool), `files.py` (writing a model as a version's files and
+  building it again, the only module that imports torch and safetensors), `upload.py` (the
+  journal, pushing, resuming, `save_to_hub`), `cache.py` (downloads, `load_from_hub`) and
+  `registry.py` (versions, tags, the primary). The download module is `cache.py` because a
+  submodule named `download` is hidden by the `download` function. The CLI is in
+  `flock/hub/cli.py` beside `flock s3`. Importing `flock.hub.models` imports neither torch nor
+  boto3.
+- **The API client.** `flock.hub.s3`'s `_Api.call` now takes several accepted statuses and
+  query `params`, and `S3Error` carries the answer's `status` and `body`, so a 409's `missing`,
+  `version` and the rest reach the caller. `ModelError` subclasses `S3Error`, and every model
+  function raises it for refusals.
+- **The extra.** `flock-hub[models]` adds boto3 as well as torch and safetensors, since every
+  upload and download needs it. Loading a model also needs `flock-training`, where the classes
+  are; the extra doesn't add it.
+- **`BaseModel.config`** is a class-level annotation with a docstring, and `save_to_hub`
+  raises `TypeError` unless it's a frozen dataclass. A subclass takes its config as its only
+  constructor argument, as `Olmo2` does, and the config must rebuild from
+  `config_class(**config.json)`, so nested dataclasses don't round-trip yet.
+- **The cache root** is `FLOCK_CACHE`, else `~/.cache/flock`, for downloads and uploads alike,
+  so tests use temp folders.
+- **Staging (D102).** The ULID is known only once the upload is open, and opening needs the
+  sizes, so `save_to_hub` writes the model to `uploads/.staging-{random}/`, hashes it, opens
+  the upload, then moves the folder to `uploads/{ulid}/model/` and writes
+  `uploads/{ulid}/journal.json`. A pushed folder stays where it is, with only the journal in
+  `uploads/{ulid}/`. Staging folders a crash left are removed a day later, the next time the
+  client lists journals. Hidden files and folders in a pushed folder are skipped.
+- **Hashing (D101).** Every file's sha256 is computed before the upload opens, since the
+  journal holds them before any byte is sent. That's the one extra local read D101 describes,
+  for every file rather than multipart files only. Each request reads its part again and sends
+  its `Content-MD5`.
+- **Sending.** One pool of `FLOCK_MODELS_CONCURRENCY` (default 32) threads runs every request
+  of a push, and the first failure stops the rest. Files up to the API's `part_size` are one
+  PUT, larger ones multipart. The journal is rewritten (atomically) when a multipart upload is
+  created and when each file is done. A fresh push asks S3 nothing. A resume HEADs every file
+  that isn't done first, since a CompleteMultipartUpload that landed before the crash leaves a
+  whole object and no multipart upload.
+- **Which journal resumes (D102).** `save_to_hub` with a folder (and `flock models push`)
+  resumes a journal for the same model and folder with the same files, sizes and modified
+  times. `save_to_hub` with a model resumes a journal for the same model and `dedupe_key`, so
+  a restarted job saving the same step finishes the earlier upload without writing the model
+  again; without a dedupe key it always starts a new push. A folder that changed starts a new
+  push, and the old journal stays until it's aborted or expires.
+- **Resuming (D102).** The upload's state comes first. `committed` commits again, which
+  answers the version. `expired`, `aborted` or unknown (404) open a new upload with the
+  journal's options and push every file, moving the folder to the new ULID. The local files
+  are checked before anything is opened or sent. An open upload whose file changed is refused,
+  naming the file. `resume_uploads` forgets (removes) the journal of an upload that isn't open
+  when its files changed or are gone, which is D102's "removed the next time the client
+  looks"; `flock models uploads list` removes journals of committed uploads.
+- **Cleanup.** The upload's folder goes once the commit answers. `keep_local=True` keeps
+  `model/` and removes only the journal, so nothing tries to resume it.
+- **Weights (D104).** safetensors' `save_model` doesn't shard, so `files.py` does what it does
+  itself and calls `save_file`: names that alias another's exact tensor are dropped, partial
+  overlaps are copied, and the state dict is split in order into shards of at most
+  `shard_size`, named `model-00001-of-00003.safetensors` with Hugging Face's index. Loading
+  fills dropped aliases from the module's tied parameters before `load_state_dict(assign=True,
+  strict=True)`. `dtype`, when given, converts the floating-point tensors before they're
+  assigned.
+- **`flock.json`** records `format`, `architecture`, `config_class`, `dtype` (of the first
+  floating-point parameter), `flock_commit`, `run` and `step`. D99's `datasets` has no
+  parameter to come from, so it isn't written. `flock_commit` follows eval's provenance
+  (`FLOCK_COMMIT`, else git's HEAD with `-dirty`), reimplemented because
+  `flock.eval.provenance` imports datasets and transformers.
+- **Refusing classes.** `architecture` and `config_class` must be in `flock.training` before
+  anything is imported, and the architecture must subclass `BaseModel`.
+- **`training_state`** values that aren't flat dicts of tensors (an optimizer's state dict)
+  are flattened, with their structure as JSON in the file's safetensors metadata.
+  `models.load_training_state(ref)` reads them back, which D104 didn't list but resuming
+  training needs.
+- **`run`** is a wandb run or its `entity/project/id`. The dedupe key defaults to
+  `{run.id}:{step}`.
+- **Downloads (D103).** Each file is fetched in 64 MiB ranges from one pool and appended in
+  order, so `.partial` never has a hole and resuming from its size is safe. Its sha256 is read
+  from disk once it's complete. `.complete` is a JSON list of the paths checked, since
+  `allow`, `ignore` and `training_state/` make "every file" depend on the call; a call whose
+  files are all listed asks the server only to resolve the ref. The lock is `fcntl.flock` on
+  `{digest}/.lock` (Linux and macOS). Downloads ask for read-only keys. `manifest.json` isn't
+  downloaded.
+- **`ModelVersion`** adds `run`, `size` and `created_at` to D104's attributes. `files` is
+  `None` in `versions()`, whose route doesn't list them. `versions()` pages through every
+  version and takes `checkpoints=True`. `list_models(org)` serves `flock models list`.
+- **`PendingUpload`** runs in a thread that isn't a daemon, so a script that ends without
+  calling `result()` still finishes the upload.
+- **The CLI (D105).** No `--host` flags (`FLOCK_HOST` works). `pull` takes
+  `--include-training-state`. `tag` without `@REF` tags the primary. `uploads list` shows this
+  machine's journals with their state and progress. `uploads resume` and `abort` take the start
+  of a ULID, and `abort --model ORG/NAME` aborts an upload with no local journal. `push` and
+  `pull` redraw bytes and the rate on stderr while it's a terminal and print a summary.
+  Refusals exit 1, malformed references 2. The Python functions log rather than draw progress.
+- **Docs.** `docs/source/hub/models.md` uses `[[autodoc]]` for the functions and classes, and
+  keeps the tables for references, names, the primary, tags, local files, environment
+  variables, the CLI and interrupted uploads. `safetensors` joined the docs builds'
+  `mock_deps`. The parts of both pages about the Models tab (PR 4) and `flock eval flock:`
+  (PR 3) were left as written. The signatures name torch, wandb and `BaseModel` through lazy
+  `type` aliases, since autodoc evaluates annotations and the modules don't import them.
+- **Tests** are in `tests/cli/test_models.py`, beside `tests/cli/test_s3.py`, which tests
+  `flock.hub.s3` the same way (a signed-in CLI against a flock with S3 on); `tests/s3/` tests
+  the proxy. Crashes are injected with botocore events (`before-send` for a part that never
+  arrived, `after-call` for one that arrived unrecorded) and by wrapping the commit, with one
+  request at a time and 5 MiB parts. Against Ceph, the round trips, every resume that relies on
+  ListParts' MD5 ETags or a HEAD's `x-amz-meta-sha256`, and the download tests pass.

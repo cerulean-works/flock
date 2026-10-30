@@ -20,7 +20,7 @@ Every load records the version number it resolved to, so moving the primary or a
 
 ## Save a model
 
-[Sign in](../cli/sign-in) first. The workspace install includes everything `flock.hub.models` needs. Outside the workspace, install the `models` extra of `flock-hub`, which adds torch and safetensors.
+[Sign in](../cli/sign-in) first. The workspace install includes everything `flock.hub.models` needs. Outside the workspace, install the `models` extra of `flock-hub`, which adds torch, safetensors and boto3. Loading a model also needs `flock-training`, where the model classes are.
 
 Save any Flock model, such as `Olmo2`:
 
@@ -35,9 +35,9 @@ print(version)  # acme/olmo2-1b@1
 
 `save_to_hub` writes the weights to a local folder, uploads them, and returns once the version exists. The model is created if it's new. A version holds:
 
-- the weights, as `model.safetensors` or shards of up to 5 GB with `model.safetensors.index.json`;
-- `config.json`, the model's config;
-- `flock.json`, which records the model class, the flock commit and, if you passed them, the run and step.
+- the weights, as `model.safetensors` or shards of up to 5 GiB with `model.safetensors.index.json`;
+- `config.json`, the model's `config`, which must be a frozen dataclass such as `Olmo2Config`;
+- `flock.json`, which records the model class, the config class, the dtype, the flock commit and, if you passed them, the run and step.
 
 To push a folder that already holds these files, pass its path instead of a model, or use the CLI:
 
@@ -62,7 +62,7 @@ model = models.load_from_hub("acme/olmo2-1b@12")
 model = models.load_from_hub("acme/olmo2-1b@checkpoint-12000")
 ```
 
-`load_from_hub` downloads the version into `~/.cache/flock/models/`, checks every file's sha256, and builds the model with the weights in place. A second load of the same version reads from the cache. To get the files without building the model, use `models.download`, which returns the folder:
+`load_from_hub` downloads the version into `~/.cache/flock/models/`, checks every file's sha256, and builds the model with the weights in place. A second load of the same version reads from the cache. Set `FLOCK_CACHE` to keep the cache somewhere else, such as a shared scratch disk. Jobs that only load models need only a read-only key, which `load_from_hub` asks for itself. To get the files without building the model, use `models.download`, which returns the folder:
 
 ```python
 path = models.download("acme/olmo2-1b@12")
@@ -152,8 +152,8 @@ What each part does:
 
 - **`blocking=False`** returns as soon as the weights are on local disk, and uploads in a background thread. Training waits only for the disk write. `result()` waits for the version.
 - **`run` and `step`** link the version to the run, so the run's page lists its checkpoints and the model's page shows which run and step each version came from.
-- **`training_state`** stores the optimizer next to the weights, in `training_state/`. `load_from_hub` and `download` skip it unless you pass `include_training_state=True`, so loading a model for eval stays fast.
-- **Restarts are safe.** With a `run` and a `step`, saving the same step of the same run again returns the version already saved instead of making another. A checkpoint tag that's already on a version is refused rather than moved, so a tag always names the step it says.
+- **`training_state`** stores the optimizer next to the weights, in `training_state/`. `load_from_hub` and `download` skip it unless you pass `include_training_state=True`, so loading a model for eval stays fast. To resume training, `models.load_training_state("acme/olmo2-1b@checkpoint-12000")` returns `{"optimizer": ...}`, ready for `optimizer.load_state_dict`.
+- **Restarts are safe.** With a `run` and a `step`, saving the same step of the same run again returns the version already saved instead of making another, or finishes that step's upload if it was interrupted. A checkpoint tag that's already on a version is refused rather than moved, so a tag always names the step it says.
 
 When the run is done, make the checkpoint you want others to use primary, from the **⋯** menu or with `set_primary`.
 
@@ -161,10 +161,10 @@ When the run is done, make the checkpoint you want others to use primary, from t
 
 An upload that stops partway, because the process was killed, the machine went down or the network dropped, is kept for 7 days. What already reached storage stays there, and resuming sends only what's missing. A version appears only when the whole upload has finished, so nobody can load a partial one.
 
-Resuming needs the local files the upload started from. `save_to_hub` keeps them in `~/.cache/flock/uploads/` until the version exists.
+Resuming needs the local files the upload started from. `save_to_hub` keeps them in `~/.cache/flock/uploads/` until the version exists, with a journal of what's been sent.
 
-- **In Python,** calling `save_to_hub` again with the same model and folder resumes, and so does `models.resume_uploads("acme/olmo2-1b")` for every upload of a model.
-- **From the shell,** running the same `flock models push` again resumes. To see what's waiting and act on one upload:
+- **In Python,** `models.resume_uploads("acme/olmo2-1b")` finishes every upload of a model that this machine started. Calling `save_to_hub` again resumes too: with the same folder, or with a model and the same `run` and `step`.
+- **From the shell,** running the same `flock models push` again resumes. To see what's waiting and act on one upload, by its ID or the start of it:
 
   ```bash
   flock models uploads list
@@ -172,9 +172,9 @@ Resuming needs the local files the upload started from. `save_to_hub` keeps them
   flock models uploads abort 01JD3KQ8XW
   ```
 
-If a file changed on disk since the upload started, resuming stops and names the file, since the bytes already uploaded no longer match it. Start a new push instead.
+If a file changed on disk since the upload started, resuming stops and names the file, since the bytes already uploaded no longer match it. Abort that upload and push again. Pushing the changed folder starts a new upload by itself.
 
-An upload nobody resumes expires after 7 days of no activity, and what it uploaded is deleted.
+An upload nobody resumes expires after 7 days of no activity, and what it uploaded is deleted. Resuming it later starts it again from the local files, if they haven't changed.
 
 Downloads resume too. If `load_from_hub` or `download` stops partway, the next call continues each file from where it stopped.
 

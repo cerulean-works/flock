@@ -51,98 +51,68 @@ A reference is resolved once, when it's used. Everything after uses the version 
 ```text
 model.safetensors                     or shards, with model.safetensors.index.json
 config.json                           the model's config
-flock.json                            model class, flock commit, run, step
+flock.json                            model class, config class, dtype, flock commit, run, step
 training_state/optimizer.safetensors  only if saved with training_state
 manifest.json                         every file's path, size and sha256, written by Flock
 ```
 
-The version's digest is the sha256 of its file list, so two versions with the same digest hold the same bytes.
+The version's digest is the sha256 of its file list, so two versions with the same digest hold the same bytes. `manifest.json` stays in the version's folder in `flock-models`. Downloads don't fetch it, since the registry answers the same list.
 
-## Python functions
+`training_state` values that aren't flat state dicts, such as an optimizer's, keep their structure in the safetensors file's metadata, so `load_training_state` returns them as they were saved.
 
-### save_to_hub
+## Local files
 
-```python
-models.save_to_hub(model, name, *, tags=(), primary=False, metadata=None, run=None, step=None,
-                   dedupe_key=None, training_state=None, shard_size=5 * 2**30, blocking=True,
-                   resume=True, keep_local=False)
-```
-
-Saves `model` as a new version of `name` and returns a `ModelVersion`, or a `PendingUpload` when `blocking=False`.
-
-| Argument | Default | Meaning |
-|---|---|---|
-| `model` | | A Flock model such as `Olmo2`, or the path of a folder that already holds a version's files. |
-| `name` | | The model, as `org/name`. Created if it doesn't exist. |
-| `tags` | none | Tags to add to the new version. |
-| `primary` | `False` | Make the new version primary when the upload finishes. |
-| `metadata` | none | Extra JSON values stored with the version. |
-| `run` | none | The wandb run that produced the model. Links the version to the run. |
-| `step` | none | The training step. Shown with the version and stored in `flock.json`. |
-| `dedupe_key` | `{run id}:{step}` when `run` and `step` are given | If a version of the model already has this key, it's returned and nothing uploads. |
-| `training_state` | none | A mapping of names to state dicts, each saved as `training_state/{name}.safetensors`. |
-| `shard_size` | 5 GiB | The largest weights file. Bigger models are split into shards. |
-| `blocking` | `True` | Wait for the version. With `False`, return once the files are on local disk and upload in the background. |
-| `resume` | `True` | Finish an interrupted upload of the same model and folder instead of starting again. |
-| `keep_local` | `False` | Keep the local copy in `~/.cache/flock/uploads/` after the upload finishes. |
-
-`PendingUpload.result()` waits for the version and returns it. `PendingUpload.done()` says whether it's finished.
-
-### load_from_hub
-
-```python
-models.load_from_hub(ref, *, device=None, dtype=None)
-```
-
-Downloads the version `ref` names and returns the model with its weights loaded.
-
-| Argument | Default | Meaning |
-|---|---|---|
-| `ref` | | A [model reference](#model-references). With no `@`, the primary version. |
-| `device` | CUDA when available, else the CPU | Where to put the weights. |
-| `dtype` | the version's | The weights' dtype. |
-
-Only model classes from `flock.training` are loaded, so a version's files can't make the loader import other code.
-
-### download
-
-```python
-models.download(ref, *, allow=None, ignore=None, include_training_state=False)
-```
-
-Downloads the version's files into the cache and returns the folder's path.
-
-| Argument | Default | Meaning |
-|---|---|---|
-| `ref` | | A [model reference](#model-references). |
-| `allow` | every file | Glob patterns of files to download. |
-| `ignore` | none | Glob patterns of files to skip. |
-| `include_training_state` | `False` | Also download `training_state/`. |
-
-### Other functions
-
-| Function | Does |
+| Path | Holds |
 |---|---|
-| `set_primary(ref)` | Makes the version `ref` names primary, and returns it. |
-| `tag(ref, tag, *, move=False)` | Adds `tag` to the version `ref` names. With `move=True`, moves it from another version. |
-| `untag(name, tag)` | Removes `tag` from the model `name`. |
-| `versions(name)` | The model's versions, newest first. |
-| `resume_uploads(name)` | Finishes every interrupted upload of the model that has its local files, and returns the versions made. |
+| `~/.cache/flock/models/{org}/{name}/{digest}/` | Downloaded versions, by digest. A file is renamed into place only after its sha256 matches. |
+| `…/{digest}/{path}.partial` | A file being downloaded. The next download continues from its size. |
+| `…/{digest}/.complete` | The files already checked, which later loads don't ask the server for. |
+| `…/{digest}/.lock` | The lock that processes downloading the same version share. |
+| `~/.cache/flock/uploads/{ulid}/journal.json` | An upload's journal, written before any byte is sent. |
+| `~/.cache/flock/uploads/{ulid}/model/` | The files `save_to_hub` wrote from a model. A pushed folder stays where it is. |
 
-### ModelVersion
+The upload's folder is deleted once the version exists, unless `keep_local=True`, which keeps `model/` and deletes the journal.
 
-| Attribute | Meaning |
-|---|---|
-| `org`, `name` | The organization and model. |
-| `number` | The version number. |
-| `digest` | The sha256 of the version's file list. |
-| `primary` | Whether it's the primary version. |
-| `tags` | Its tags. |
-| `step` | The training step, if one was given. |
-| `files` | Each file's path, size and sha256. |
-| `metadata` | The `metadata` it was saved with. |
+## Environment variables
 
-`str(version)` is `org/name@number`, such as `acme/olmo2-1b@12`.
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOCK_CACHE` | `~/.cache/flock` | Where downloads and upload journals are kept. |
+| `FLOCK_MODELS_CONCURRENCY` | `32` | Requests in flight at once, for every file of an upload or a download together. |
+
+Uploads send files of up to 64 MiB in one request and larger files in 64 MiB parts, each with `Content-MD5`. Downloads fetch 64 MiB ranges. Failed requests are retried by botocore's standard retry mode. Signing in works as [Credential resolution](../cli/credentials) describes, and downloads use read-only keys.
+
+## Saving and loading
+
+[[autodoc]] hub.models.save_to_hub
+
+[[autodoc]] hub.models.PendingUpload
+
+[[autodoc]] hub.models.resume_uploads
+
+[[autodoc]] hub.models.load_from_hub
+
+[[autodoc]] hub.models.download
+
+[[autodoc]] hub.models.load_training_state
+
+## Versions, tags and the primary
+
+[[autodoc]] hub.models.versions
+
+[[autodoc]] hub.models.set_primary
+
+[[autodoc]] hub.models.tag
+
+[[autodoc]] hub.models.untag
+
+[[autodoc]] hub.models.list_models
+
+[[autodoc]] hub.models.ModelVersion
+
+[[autodoc]] hub.models.ModelFile
+
+[[autodoc]] hub.models.ModelError
 
 ## flock models
 
@@ -152,24 +122,29 @@ flock models COMMAND [ARGS]
 
 | Command | Does |
 |---|---|
-| `flock models push DIR ORG/NAME [--tag TAG]… [--primary]` | Pushes a folder as a new version. Resumes if an earlier push of the same folder stopped partway. |
-| `flock models pull ORG/NAME[@REF] [--to DIR]` | Downloads a version into the cache, or copies it to `DIR`. With no `@REF`, the primary version. |
-| `flock models list [--org ORG]` | Lists models, with their latest and primary versions. |
+| `flock models push DIR ORG/NAME [--tag TAG]… [--primary]` | Pushes a folder as a new version and prints it, such as `acme/olmo2-1b@12`. Hidden files are skipped. Resumes if an earlier push of the same folder stopped partway and no file changed since. |
+| `flock models pull ORG/NAME[@REF] [--to DIR] [--include-training-state]` | Downloads a version into the cache, or also copies it to `DIR`, and prints the folder. With no `@REF`, the primary version. `training_state/` is skipped unless asked for. |
+| `flock models list [--org ORG]` | Lists models, with their latest and primary versions and the primary's size. |
 | `flock models versions ORG/NAME` | Lists versions, newest first, with tags, steps, sizes and which is primary. |
 | `flock models primary ORG/NAME@REF` | Makes a version primary. |
-| `flock models tag ORG/NAME@REF TAG [--move]` | Adds a tag, or moves it from another version with `--move`. |
+| `flock models tag ORG/NAME[@REF] TAG [--move]` | Adds a tag, or moves it from another version with `--move`. With no `@REF`, tags the primary version. |
 | `flock models untag ORG/NAME TAG` | Removes a tag. |
-| `flock models uploads list` | Lists your interrupted uploads, with how much of each has been sent. |
-| `flock models uploads resume ID` | Resumes an upload from its local files. |
-| `flock models uploads abort ID` | Abandons an upload and deletes what it sent. |
+| `flock models uploads list` | Lists the interrupted uploads on this machine, with how many files and bytes of each have been sent. |
+| `flock models uploads resume ULID` | Resumes an upload from its local files. The start of the ULID is enough when no other upload shares it. |
+| `flock models uploads abort ULID [--model ORG/NAME]` | Abandons an upload, deletes what it sent and its local folder. `--model` aborts an upload that has no journal on this machine. |
+
+`push` and `pull` show the bytes moved and the rate while they run. Every command exits with code `1` when the server refuses, saying why, and `2` when a reference isn't `org/name[@version]`.
 
 ## Interrupted uploads
 
 | Behavior | Rule |
 |---|---|
-| When a version appears | Only once every file has finished uploading. |
-| What resuming sends | Only the files and parts not already in storage. |
-| What resuming needs | The local files the upload started from, unchanged. A changed file stops the resume and is named. |
+| When a version appears | Only once every file has finished uploading and the commit succeeded. |
+| What resuming sends | Only the files and parts not already in storage. A part whose bytes differ from the local file is sent again. |
+| What resuming needs | The local files the upload started from, unchanged in size and modified time. A changed file stops the resume and is named. |
+| Which uploads `save_to_hub` resumes | An upload of the same folder with unchanged files, or for a model, one with the same `dedupe_key`. Otherwise it starts a new upload. |
+| A crash after the commit was sent | Resuming commits again, which answers the same version. |
+| An expired or aborted upload | Resuming opens a new upload and sends every file again. `resume_uploads` forgets one whose local files changed or are gone. |
 | Local copy | Kept in `~/.cache/flock/uploads/` until the version exists, then deleted unless `keep_local=True`. |
 | Expiry | 7 days after the upload's last activity. What it sent is then deleted. |
-| Downloads | Resume each file from where it stopped, and check its sha256 before using it. |
+| Downloads | Resume each file from where it stopped, and check its sha256 before using it. A file that doesn't match is deleted and the download fails with its path. |
