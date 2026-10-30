@@ -5,6 +5,7 @@ from typing import cast, overload
 
 import torch
 import torch.nn.functional as F
+import wandb
 from lance.torch.data import SafeLanceDataset
 from torch.nn import Module
 from torch.optim import AdamW, Muon, Optimizer
@@ -26,6 +27,7 @@ class Trainer:
         batch_size: int,
         optimizer_config: OptimizerConfig,
         lr_scheduler_config: LRSchedulerConfig,
+        max_norm: float = 1.0,
         logging_steps: int = 10,
         seed=42,
     ):
@@ -43,6 +45,8 @@ class Trainer:
         self.dataset = dataset
         self.ds_input_column = input_column
         self.batch_size = batch_size
+
+        self.max_norm = max_norm
         self.logging_steps = logging_steps
 
         self.total_steps = math.ceil(len(self.dataset) / self.batch_size)
@@ -60,6 +64,8 @@ class Trainer:
             collate_fn=collator.collate_fn,
             # lance multi-threads internally, so its best we not use fork
             multiprocessing_context="spawn",
+            # accelerate batch host to device transfers
+            pin_memory=True,
             prefetch_factor=8,
             persistent_workers=True,
         )
@@ -85,11 +91,9 @@ class Trainer:
 
     def _calc_batch_loss(
         self, output: torch.Tensor, labels: torch.Tensor
-    ) -> tuple[torch.Tensor, int]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # output is [B, T, V], labels is [B, T]
-        num_tokens: int = int((labels != -100).sum().item())
-        if num_tokens == 0:
-            raise ValueError("Batch contains no valid next-token targets")
+        num_tokens = (labels != -100).sum()
 
         loss = F.cross_entropy(
             output.reshape(-1, output.shape[-1]),
@@ -108,29 +112,88 @@ class Trainer:
         # Set random state at beginning of training to ensure reproducibility
         self._set_seed()
 
-        total_loss = 0
-        total_tokens = 0
-        log_period_losses: list[float] = []
+        loss_sum = torch.zeros((), dtype=torch.float, device=self.device)
+        loss_max = torch.zeros((), dtype=torch.float, device=self.device)
+        grad_norm_sum = torch.zeros((), dtype=torch.float, device=self.device)
+        grad_norm_max = torch.zeros((), dtype=torch.float, device=self.device)
+
+        window_tokens = torch.zeros((), dtype=torch.int64, device=self.device)
+        window_steps = torch.zeros((), dtype=torch.int64, device=self.device)
 
         dataloader = self._get_training_dataloader()
         self.model.train()
+        total_tokens = torch.zeros((), dtype=torch.int64, device=self.device)
 
         for idx, batch in enumerate(dataloader):
             self.optimizer.zero_grad()
 
             batch = cast(Batch, batch)
-            batch = {k: v.to(self.device) for k, v in batch.items()}
+            batch = {k: v.to(self.device, non_blocking=True) for k, v in batch.items()}
 
             output: torch.Tensor = self.model(batch)
             loss, num_tokens = self._calc_batch_loss(output, batch["labels"])
             loss.backward()
+
+            grad_norm = torch.nn.utils.clip_grad_norm_(
+                self.model.parameters(),
+                max_norm=self.max_norm,
+            )
+
             self.optimizer.step()
             self.lr_scheduler.step()
 
-            total_loss += loss.item() * num_tokens
-            total_tokens += num_tokens
-            log_period_losses.append(total_loss)
+            loss_sum += loss.detach() * num_tokens
+            loss_max = torch.maximum(loss_max, loss.detach())
+            grad_norm_sum += grad_norm.detach()
+            grad_norm_max = torch.maximum(grad_norm_max, grad_norm.detach())
 
-            if idx % self.logging_steps == 0:
-                print({"loss": sum(log_period_losses) / self.logging_steps})
-                log_period_losses.clear()
+            total_tokens += num_tokens
+            window_tokens += num_tokens
+            window_steps += 1
+
+            if (idx + 1) % self.logging_steps == 0:
+                mean_loss, max_loss, mean_grad, max_grad = torch.stack(
+                    (
+                        loss_sum / window_tokens,
+                        loss_max,
+                        grad_norm_sum / window_steps,
+                        grad_norm_max,
+                    )
+                ).tolist()
+
+                wandb.log(
+                    {
+                        "train/step": idx + 1,
+                        "train/loss_mean": mean_loss,
+                        "train/loss_window_max": max_loss,
+                        "train/grad_norm_mean": mean_grad,
+                        "train/grad_norm_window_max": max_grad,
+                    }
+                )
+
+                loss_sum.zero_()
+                loss_max.zero_()
+                grad_norm_sum.zero_()
+                grad_norm_max.zero_()
+                window_tokens.zero_()
+                window_steps.zero_()
+
+        if self.total_steps % self.logging_steps:
+            mean_loss, max_loss, mean_grad, max_grad = torch.stack(
+                (
+                    loss_sum / window_tokens,
+                    loss_max,
+                    grad_norm_sum / window_steps,
+                    grad_norm_max,
+                )
+            ).tolist()
+
+            wandb.log(
+                {
+                    "train/step": idx + 1,
+                    "train/loss_mean": mean_loss,
+                    "train/loss_window_max": max_loss,
+                    "train/grad_norm_mean": mean_grad,
+                    "train/grad_norm_window_max": max_grad,
+                }
+            )
