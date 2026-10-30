@@ -59,8 +59,6 @@ uv run flock eval run \
 
 [Sign in](../cli/sign-in) first. The version is resolved to its number before anything loads, and the results record it as `flock:acme/olmo2-1b@12`, with the version's digest in `model_digest`. Moving the tag or the primary later doesn't change what the results say was scored. The tokenizer is the Hugging Face one that the model's config names in `hf_repo`, so a model saved without `hf_repo` can't be scored.
 
-With `--wandb-project`, the run also appears in the version's evals in Flock, because its config holds `flock:acme/olmo2-1b@12`.
-
 ## Read the results
 
 `results.json` holds the task metrics and **provenance**: the model commit, Flock commit, numerical settings and machine that produced them. Prediction files hold one row per question, including its gold choice and the per-choice scores.

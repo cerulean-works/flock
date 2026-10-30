@@ -187,8 +187,6 @@ Some versions can't be deleted until you change them:
 - **The primary version:** make another version primary first.
 - **A version with a tag** other than a checkpoint tag, such as `release`: move or remove the tag first. Checkpoint tags are deleted with their version.
 
-A version that has been evaluated can be deleted, after a warning that says how many eval runs scored it.
-
 [Browse and manage models](../app/browse-models) covers the rest of the Models tab: the version picker, the tabs and the trash.
 
 The [models reference](models) lists every function, command and naming rule.

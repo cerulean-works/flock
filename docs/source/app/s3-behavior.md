@@ -118,7 +118,7 @@ Every organization also has a bucket named `flock-models`, which holds the versi
 - **Anyone in the organization reads it** with any key, through the proxy, the Storage tab or an S3 client.
 - **Only uploads write to it.** The proxy refuses every write and delete in the bucket with `AccessDenied` ("flock-models is written through flock models push"), except the writes of an open upload into its own folder by the user who opened it. Copies into the bucket are refused even inside an upload.
 - **The Storage tab only reads it.** It has no upload, folder or delete actions there, and the API's object delete and folder endpoints answer 403 for it.
-- **Versions are deleted through the registry,** from the Models tab or the [model endpoints](api/models#deleting), so a version can't change under an eval that scored it. Deleted versions wait 14 days in the trash.
+- **Versions are deleted through the registry,** from the Models tab or the [model endpoints](api/models#deleting), so a version's files never change once it's saved. Deleted versions wait 14 days in the trash.
 
 The dashboard's **Models** item, at `/models/{org}`, lists the models. [Browse and manage models](browse-models) shows how to use it.
 

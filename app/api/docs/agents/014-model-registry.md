@@ -105,6 +105,8 @@ model_version_runs(version_pk → model_versions CASCADE, run_pk → runs CASCAD
                    kind CHECK (kind IN ('eval')), PRIMARY KEY (version_pk, run_pk))
 ```
 
+`model_version_runs` was removed after review, with the eval links (7.5).
+
 - **Model names** are one segment: lowercase ASCII letters, digits, `.`, `-` and `_`, starting
   with a letter or digit, at most 100 characters. A model is written `org/name`.
 - **Version numbers** start at 1, go up by one per commit, and are never reused, even after a
@@ -399,9 +401,10 @@ version, for example `acme/olmo2-1b@12`.
 - **Linking.** When the API receives a run's config, as `log_to_tracker` sends it, and the
   config's `model` starts with `flock:`, it inserts a `model_version_runs` row with kind `eval`.
   A ref that doesn't resolve (another org's model, a deleted version) is ignored, and the run is
-  stored as usual.
+  stored as usual. *No longer applies: removed after review (7.5).*
 - **Queries both ways:** a version lists its training run and its eval runs, and a run's page
-  lists the versions it made.
+  lists the versions it made. *The eval runs no longer apply (7.5): a version lists its training
+  run only.*
 
 ### D107. The primary version and checkpoint tags
 
@@ -466,6 +469,8 @@ is the optimizer step it was saved after, for example `checkpoint-12000`:
   | Evals | the version's eval runs, each task's metrics side by side, linked to the runs |
   | Files | each file's path, size and sha256 |
 
+  *The Evals tab no longer applies: removed after review (7.5).*
+
 - **The run page** gets a Checkpoints section listing the versions the run made, with their
   steps and tags.
 - **Tags** are added, moved and removed as D96 does for datasets, by members and admins.
@@ -476,7 +481,7 @@ is the optimizer step it was saved after, for example `checkpoint-12000`:
   dialog asking for `acme/olmo2-1b@12`. The primary version can't be deleted until another is
   made primary. A version with a tag other than `checkpoint-{step}` can't be deleted until the
   tag is moved or removed, and a checkpoint tag goes with its version. A version with eval runs
-  can be deleted, after a warning that says how many.
+  can be deleted, after a warning that says how many. *The warning no longer applies (7.5).*
 - **What deleting does:** the row gets `deleted_at` and its files move to the trash bucket
   (D93's, at `{org pk:05}/models/{version pk}/`). Admins restore or delete it for good from a
   "Deleted models" section in org settings, and the sweep removes it after 14 days. A restored
@@ -485,7 +490,7 @@ is the optimizer step it was saved after, for example `checkpoint-12000`:
 - **Retention** is an org setting, on the org settings page: "Keep the newest N untagged versions
   of each model", off by default. When on, the sweep deletes older versions that aren't primary,
   have no tag other than `checkpoint-{step}`, and have no eval runs, as above, so they wait 14
-  days in the trash.
+  days in the trash. *Eval runs no longer keep a version (7.5).*
 
 ---
 
@@ -995,3 +1000,15 @@ them.
   delete refusals and a delete, the Evals table, a run's Checkpoints and Models scored, retention
   and restoring from Deleted models in org settings, the Storage overview and a read-only
   `flock-models` folder, and deleting a model.
+
+### 7.5. After review
+
+The eval links and the Evals tab were removed after review, as nobody will use them for now. The
+API no longer links a run to the version its config's `model` names: `Models.link_eval`, its call
+in `Store.upsert_run`, `model_version_runs` (taken out of 0015, which wasn't merged anywhere),
+`evals` and `eval_runs` on versions and trash entries, and `scored` in `GET …/runs/{run}/models`
+are gone, and retention no longer keeps a version for its eval runs. The web app lost the Evals
+tab and its server route, the run page's **Models scored** and the delete dialog's eval-run
+count. `flock eval` still scores `flock:` refs and records `model_digest` (7.3), which is
+separate tooling. A database that applied the old 0015 keeps an empty `model_version_runs`,
+since the runner tracks migrations by name only.

@@ -26,10 +26,8 @@ A version has these fields:
 | `tags`, `primary` | Its tags, and whether it's the primary version. |
 | `run`, `step` | The run that made it, as `entity/project/id`, and the step. `null` when it wasn't saved from a run of the organization. |
 | `created_by`, `created_at` | Who pushed it, and when. |
-| `eval_runs` | How many eval runs scored it. Deleted runs aren't counted. |
 | `bucket`, `prefix` | `flock-models`, and the version's folder in it, such as `olmo2-1b/u/01JD3KQ8…/`. |
 | `files` | `[{"path", "size", "sha256"}]`, sorted by path. Only in `resolve` and `versions/{number}`. |
-| `evals` | The eval runs that scored it, as `entity/project/id`, leaving out deleted runs. Only in `resolve` and `versions/{number}`. |
 
 ## Tags and the primary version[[tags-and-primary]]
 
@@ -82,7 +80,7 @@ Only organization admins can use these. Members get 403. The paths start with `-
 
 | Endpoint | Meaning |
 |---|---|
-| `GET -/trash` | `{"entries": [...]}`, newest first: deleted models, and deleted versions of live models. Every entry has `kind` (`model` or `version`), `id`, `name`, `model`, `deleted_by` (`null` for versions retention deleted), `deleted_at`, `expires_at`, `moved` (`false` while its files are still moving) and `bytes`. A model has `versions`, the number deleted with it. A version has `number`, `tags` (the checkpoint tags that went with it) and `eval_runs`. |
+| `GET -/trash` | `{"entries": [...]}`, newest first: deleted models, and deleted versions of live models. Every entry has `kind` (`model` or `version`), `id`, `name`, `model`, `deleted_by` (`null` for versions retention deleted), `deleted_at`, `expires_at`, `moved` (`false` while its files are still moving) and `bytes`. A model has `versions`, the number deleted with it. A version has `number` and `tags` (the checkpoint tags that went with it). |
 | `POST -/trash/versions/{id}/restore` | Restores the version with its number, and its checkpoint tags if nobody has taken them since. A version of a deleted model answers 409. |
 | `POST -/trash/models/{id}/restore` | Restores the model with the versions deleted with it. A live model with its name answers 409 with `"taken": true`. |
 | `DELETE -/trash/versions/{id}`, `DELETE -/trash/models/{id}` | Deletes it for good. Answers 204. |
@@ -91,4 +89,4 @@ Restoring and deleting for good answer 409 while the files are still moving to t
 
 ## Retention[[retention]]
 
-An organization's `model_retention` keeps the newest N untagged versions of each model. Admins set it with [`PATCH /orgs/{org}`](orgs#organizations), and `null`, the default, keeps every version. When it's set, the sweep deletes older versions that aren't primary, have no tag other than `checkpoint-{step}` and have no eval runs that aren't deleted. They go to the trash like any deleted version.
+An organization's `model_retention` keeps the newest N untagged versions of each model. Admins set it with [`PATCH /orgs/{org}`](orgs#organizations), and `null`, the default, keeps every version. When it's set, the sweep deletes older versions that aren't primary and have no tag other than `checkpoint-{step}`. They go to the trash like any deleted version.

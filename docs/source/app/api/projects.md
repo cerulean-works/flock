@@ -154,20 +154,12 @@ The SDK uploads files such as `config.yaml`, `requirements.txt`, `wandb-metadata
 
 ## Run models[[run-models]]
 
-`GET .../runs/{run}/models` returns the model versions the run is linked to, in its own organization:
+`GET .../runs/{run}/models` returns the model versions the run saved, in its own organization, as `save_to_hub` with `run` records them:
 
 ```json
 {
-  "made": [{"model": "flock/olmo2-1b", "number": 2, "step": 12000, "tags": ["checkpoint-12000"], "run": "flock/llm-pretrain/3k9x2", "evals": ["flock/evals/8f2kq1zr"], ...}],
-  "scored": []
+  "made": [{"model": "flock/olmo2-1b", "number": 2, "step": 12000, "tags": ["checkpoint-12000"], "run": "flock/llm-pretrain/3k9x2", ...}]
 }
 ```
 
-| Field | Meaning |
-|---|---|
-| `made` | The versions the run saved, as `save_to_hub` with `run` records them. |
-| `scored` | The versions the run evaluated. A run is linked as an eval when its config's `model` is `flock:{org}/{name}@{number}`, as `flock eval run --wandb-project` logs it. |
-
-Each list is sorted by model name, then number. A version has the fields of a version in the model routes (`model`, `number`, `digest`, `tags`, `primary`, `step`, `run`, `total_bytes`, `created_by`, `created_at` and the rest), plus `evals`, the runs that evaluated it as `entity/project/id`. Deleted versions and models aren't listed, and deleted runs aren't in `evals`.
-
-The eval link is made when the SDK sends the run's config. A `model` that names a tag, `primary`, no version, another organization's model, or a version that doesn't exist or is deleted links nothing, and the run is stored as usual. A link stays if the config later names another version.
+`made` is sorted by model name, then number. A version has the fields of a version in the model routes (`model`, `number`, `digest`, `tags`, `primary`, `step`, `run`, `total_bytes`, `created_by`, `created_at` and the rest). Deleted versions and models aren't listed.

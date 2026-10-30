@@ -53,6 +53,4 @@ With `--wandb-project`, each `flock eval run` logs one run with job type `eval`:
 | config | The [provenance](results#provenance), plus `task_hashes` (each task's hash by name), `suite_members` (each suite's members by name) and `suite_hashes` (each suite's hash by name). |
 | summary | `<task>/<metric>` for each metric, `<task>/docs_per_second` unless the clock measured no time, and `suites/<suite>` for each scored suite's score. |
 
-When the config's `model` is a version stored in Flock (`flock:org/name@{number}`) of the run's own organization, Flock lists the run among that version's eval runs. See [Score a model stored in Flock](run-evaluation#score-a-model-stored-in-flock).
-
 `results.json` is written either way.
