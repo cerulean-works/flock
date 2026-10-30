@@ -10,6 +10,7 @@
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { Switch } from '#lib/components/ui/switch/index.js';
+	import { DialogSubject } from '#lib/data/dialog-subject.svelte.ts';
 	import { modelApi, modelCall, runPathHref, sortTags } from '#lib/models.ts';
 	import type { ModelInfo, ModelVersion, ModelVersionsPage } from '#lib/types.ts';
 	import { bytes, dateTime, relativeTime } from '#lib/utils.ts';
@@ -72,10 +73,11 @@
 		void onchange?.();
 	}
 
-	let tagging = $state<number | null>(null);
-	let removing = $state<{ tag: string; version: number } | null>(null);
-	let promoting = $state<number | null>(null);
-	let deleting = $state<ModelVersion | null>(null);
+	const tagging = new DialogSubject<number>();
+	const removing = new DialogSubject<{ tag: string; version: number }>();
+	// The primary is kept from when the dialog opened: the page reads it again after the change.
+	const promoting = new DialogSubject<{ number: number; current: number | null }>();
+	const deleting = new DialogSubject<ModelVersion>();
 </script>
 
 <div class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -130,7 +132,11 @@
 						{#if v.tags.length}
 							<ul class="flex flex-wrap gap-1" aria-label="Tags of version {v.number}">
 								{#each sortTags(v.tags) as tag (tag)}
-									<TagChip as="li" {tag} onremove={() => (removing = { tag, version: v.number })} />
+									<TagChip
+										as="li"
+										{tag}
+										onremove={() => removing.show({ tag, version: v.number })}
+									/>
 								{/each}
 							</ul>
 						{:else}
@@ -187,14 +193,17 @@
 										</a>
 									{/snippet}
 								</DropdownMenu.Item>
-								<DropdownMenu.Item disabled={v.primary} onSelect={() => (promoting = v.number)}>
+								<DropdownMenu.Item
+									disabled={v.primary}
+									onSelect={() => promoting.show({ number: v.number, current: info.primary })}
+								>
 									<StarIcon /> Make primary
 								</DropdownMenu.Item>
-								<DropdownMenu.Item onSelect={() => (tagging = v.number)}>
+								<DropdownMenu.Item onSelect={() => tagging.show(v.number)}>
 									<TagIcon /> Add tag…
 								</DropdownMenu.Item>
 								<DropdownMenu.Separator />
-								<DropdownMenu.Item variant="destructive" onSelect={() => (deleting = v)}>
+								<DropdownMenu.Item variant="destructive" onSelect={() => deleting.show(v)}>
 									<Trash2Icon /> Delete…
 								</DropdownMenu.Item>
 							</DropdownMenu.Content>
@@ -217,32 +226,26 @@
 {/if}
 
 <MakePrimaryDialog
-	bind:open={() => promoting !== null, (o) => (promoting = o ? promoting : null)}
+	bind:open={promoting.open}
 	{org}
 	{name}
-	number={promoting ?? 0}
-	current={info.primary}
+	number={promoting.value?.number ?? 0}
+	current={promoting.value?.current ?? null}
 	onchanged={changed}
 />
-<TagDialog
-	bind:open={() => tagging !== null, (o) => (tagging = o ? tagging : null)}
-	{org}
-	{name}
-	version={tagging ?? 0}
-	ontagged={changed}
-/>
+<TagDialog bind:open={tagging.open} {org} {name} version={tagging.value ?? 0} ontagged={changed} />
 <RemoveTagDialog
-	bind:open={() => removing !== null, (o) => (removing = o ? removing : null)}
+	bind:open={removing.open}
 	{org}
 	{name}
-	tag={removing?.tag ?? ''}
-	version={removing?.version ?? 0}
+	tag={removing.value?.tag ?? ''}
+	version={removing.value?.version ?? 0}
 	onremoved={changed}
 />
 <DeleteVersionDialog
-	bind:open={() => deleting !== null, (o) => (deleting = o ? deleting : null)}
+	bind:open={deleting.open}
 	{org}
-	version={deleting}
-	shown={deleting !== null && deleting.number === shown}
+	version={deleting.value}
+	shown={deleting.value?.number === shown}
 	ondeleted={changed}
 />

@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import { DialogSubject } from '#lib/data/dialog-subject.svelte.ts';
 	import { cellCut, cellText, datasetCall, datasetsApi, pageNumbers } from '#lib/datasets.ts';
 	import type { Cell, DatasetInfo, FullCell, RowsPage } from '#lib/types.ts';
 	import { withParam } from '#lib/workspace/url.ts';
@@ -182,9 +183,11 @@
 		toggle(row, cells);
 	}
 
-	let image = $state<{ cell: Extract<Cell, { k: 'image' }>; row: number; column: string } | null>(
-		null
-	);
+	const image = new DialogSubject<{
+		cell: Extract<Cell, { k: 'image' }>;
+		row: number;
+		column: string;
+	}>();
 </script>
 
 <div class="bleed grid gap-3">
@@ -272,7 +275,7 @@
 										wrap={wraps[j] || cap !== null}
 										onopen={() => {
 											if (cell.k === 'image')
-												image = { cell, row: n, column: rows!.columns[j].name };
+												image.show({ cell, row: n, column: rows!.columns[j].name });
 										}}
 									/>
 									{#if got instanceof Error}
@@ -335,8 +338,8 @@
 </div>
 
 <ImageDialog
-	bind:open={() => image !== null, (o) => (image = o ? image : null)}
-	cell={image?.cell ?? null}
-	column={image?.column ?? ''}
-	row={image?.row ?? 0}
+	bind:open={image.open}
+	cell={image.value?.cell ?? null}
+	column={image.value?.column ?? ''}
+	row={image.value?.row ?? 0}
 />

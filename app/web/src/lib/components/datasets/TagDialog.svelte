@@ -19,21 +19,18 @@
 
 	let { open = $bindable(), org, path, version, ontagged }: Props = $props();
 
-	// Reset whenever the dialog opens.
-	let name = $derived.by(() => {
-		void open;
-		return '';
-	});
-	let error = $derived.by((): string | null => {
-		void open;
-		return null;
-	});
+	// Reset once the dialog has closed, so its text stays put while it animates closed.
+	let name = $state('');
+	let error = $state<string | null>(null);
 	let pending = $state(false);
 	/** The version the name is already on, when it is: the dialog then offers to move it. */
-	let taken = $derived.by((): number | null => {
-		void open;
-		return null;
-	});
+	let taken = $state<number | null>(null);
+
+	function reset() {
+		name = '';
+		error = null;
+		taken = null;
+	}
 
 	async function submit(move: boolean) {
 		const invalid = tagError(name);
@@ -61,7 +58,7 @@
 	}
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root bind:open onOpenChangeComplete={(o) => o || reset()}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
 			<Dialog.Title>Tag version {version}</Dialog.Title>

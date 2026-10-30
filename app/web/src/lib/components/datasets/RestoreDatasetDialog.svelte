@@ -18,19 +18,18 @@
 
 	let { open = $bindable(), org, entry }: Props = $props();
 
+	// Reset once the dialog has closed, so its text stays put while it animates closed.
 	/** Something now exists at the old path: the dialog asks for another one. */
-	let taken = $derived.by(() => {
-		void open;
-		return false;
-	});
-	let to = $derived.by(() => {
-		void open;
-		return entry ? `${entry.path}-restored` : '';
-	});
-	let error = $derived.by((): string | null => {
-		void open;
-		return null;
-	});
+	let taken = $state(false);
+	const suggested = () => (entry ? `${entry.path}-restored` : '');
+	let to = $derived(suggested());
+	let error = $state<string | null>(null);
+
+	function reset() {
+		taken = false;
+		to = suggested();
+		error = null;
+	}
 	let pending = $state(false);
 
 	async function restore() {
@@ -62,7 +61,10 @@
 	}
 </script>
 
-<Dialog.Root bind:open={() => open, (o) => (open = pending ? true : o)}>
+<Dialog.Root
+	bind:open={() => open, (o) => (open = pending ? true : o)}
+	onOpenChangeComplete={(o) => o || reset()}
+>
 	<Dialog.Content
 		class="sm:max-w-lg"
 		showCloseButton={!pending}

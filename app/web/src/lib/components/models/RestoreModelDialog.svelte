@@ -17,10 +17,8 @@
 
 	let { open = $bindable(), org, entry }: Props = $props();
 
-	let error = $derived.by((): string | null => {
-		void open;
-		return null;
-	});
+	// Reset once the dialog has closed, so its text stays put while it animates closed.
+	let error = $state<string | null>(null);
 	let pending = $state(false);
 
 	const label = $derived(
@@ -48,7 +46,10 @@
 	}
 </script>
 
-<Dialog.Root bind:open={() => open, (o) => (open = pending ? true : o)}>
+<Dialog.Root
+	bind:open={() => open, (o) => (open = pending ? true : o)}
+	onOpenChangeComplete={(o) => o || (error = null)}
+>
 	<Dialog.Content
 		class="sm:max-w-lg"
 		showCloseButton={!pending}

@@ -19,11 +19,9 @@
 		!entry ? '' : entry.kind === 'model' ? entry.model : `${entry.model}@${entry.number}`
 	);
 
-	// Typing the name is the confirmation; reset whenever the dialog opens.
-	let typed = $derived.by(() => {
-		void open;
-		return '';
-	});
+	// Typing the name is the confirmation. Reset once the dialog has closed, so its text stays
+	// put while it animates closed.
+	let typed = $state('');
 	let error = $state<string | null>(null);
 	let pending = $state(false);
 
@@ -45,7 +43,14 @@
 	}
 </script>
 
-<AlertDialog.Root bind:open onOpenChange={(o) => o || (error = null)}>
+<AlertDialog.Root
+	bind:open
+	onOpenChangeComplete={(o) => {
+		if (o) return;
+		typed = '';
+		error = null;
+	}}
+>
 	<AlertDialog.Content class="sm:max-w-md">
 		<AlertDialog.Header>
 			<AlertDialog.Title>Delete {label} for good?</AlertDialog.Title>

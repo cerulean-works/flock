@@ -4,6 +4,7 @@
 	import type { ResolvedPathname } from '$app/types';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
+	import { DialogSubject } from '#lib/data/dialog-subject.svelte.ts';
 	import { datasetCall, datasetsApi } from '#lib/datasets.ts';
 	import type { DatasetVersion, VersionsPage } from '#lib/types.ts';
 	import { dateTime, relativeTime } from '#lib/utils.ts';
@@ -59,8 +60,8 @@
 		ontags?.();
 	}
 
-	let tagging = $state<number | null>(null);
-	let removing = $state<{ tag: string; version: number } | null>(null);
+	const tagging = new DialogSubject<number>();
+	const removing = new DialogSubject<{ tag: string; version: number }>();
 
 	/** The message a writer gave Lance's commit; it reads as the change's description. */
 	const MESSAGE = '__lance_commit_message';
@@ -105,7 +106,7 @@
 									<TagChip
 										as="li"
 										{tag}
-										onremove={() => (removing = { tag, version: v.version })}
+										onremove={() => removing.show({ tag, version: v.version })}
 									/>
 								{/each}
 							</ul>
@@ -164,7 +165,7 @@
 									{/snippet}
 								</DropdownMenu.Trigger>
 								<DropdownMenu.Content align="end" class="w-40">
-									<DropdownMenu.Item onSelect={() => (tagging = v.version)}>
+									<DropdownMenu.Item onSelect={() => tagging.show(v.version)}>
 										<TagIcon /> Add tag…
 									</DropdownMenu.Item>
 								</DropdownMenu.Content>
@@ -187,18 +188,12 @@
 	{/if}
 {/if}
 
-<TagDialog
-	bind:open={() => tagging !== null, (o) => (tagging = o ? tagging : null)}
-	{org}
-	{path}
-	version={tagging ?? 0}
-	ontagged={changed}
-/>
+<TagDialog bind:open={tagging.open} {org} {path} version={tagging.value ?? 0} ontagged={changed} />
 <RemoveTagDialog
-	bind:open={() => removing !== null, (o) => (removing = o ? removing : null)}
+	bind:open={removing.open}
 	{org}
 	{path}
-	tag={removing?.tag ?? ''}
-	version={removing?.version ?? 0}
+	tag={removing.value?.tag ?? ''}
+	version={removing.value?.version ?? 0}
 	onremoved={changed}
 />

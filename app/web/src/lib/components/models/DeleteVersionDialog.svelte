@@ -33,15 +33,10 @@
 					: null
 	);
 
-	// Typing the name is the confirmation; reset whenever the dialog opens.
-	let typed = $derived.by(() => {
-		void open;
-		return '';
-	});
-	let error = $derived.by((): string | null => {
-		void open;
-		return null;
-	});
+	// Typing the name is the confirmation. Reset once the dialog has closed, so its text stays
+	// put while it animates closed.
+	let typed = $state('');
+	let error = $state<string | null>(null);
 	let pending = $state(false);
 
 	async function remove() {
@@ -64,7 +59,14 @@
 	}
 </script>
 
-<AlertDialog.Root bind:open={() => open, (o) => (open = pending ? true : o)}>
+<AlertDialog.Root
+	bind:open={() => open, (o) => (open = pending ? true : o)}
+	onOpenChangeComplete={(o) => {
+		if (o) return;
+		typed = '';
+		error = null;
+	}}
+>
 	<AlertDialog.Content class="sm:max-w-md">
 		<AlertDialog.Header>
 			<AlertDialog.Title>Delete version {version?.number}?</AlertDialog.Title>

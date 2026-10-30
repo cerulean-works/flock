@@ -19,26 +19,20 @@
 
 	let { open = $bindable(), org, name, version, ontagged }: Props = $props();
 
-	// Reset whenever the dialog opens.
-	let tag = $derived.by(() => {
-		void open;
-		return '';
-	});
-	let error = $derived.by((): string | null => {
-		void open;
-		return null;
-	});
+	// Reset once the dialog has closed, so its text stays put while it animates closed.
+	let tag = $state('');
+	let error = $state<string | null>(null);
 	let pending = $state(false);
 	/** The version the tag is already on, when it can move: the dialog then offers to. */
-	let taken = $derived.by((): number | null => {
-		void open;
-		return null;
-	});
+	let taken = $state<number | null>(null);
 	/** The version a checkpoint tag is already on. It never moves (D107). */
-	let fixed = $derived.by((): number | null => {
-		void open;
-		return null;
-	});
+	let fixed = $state<number | null>(null);
+
+	function reset() {
+		tag = '';
+		error = null;
+		taken = fixed = null;
+	}
 
 	async function submit(move: boolean) {
 		const invalid = tagError(tag);
@@ -67,7 +61,7 @@
 	}
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root bind:open onOpenChangeComplete={(o) => o || reset()}>
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
 			<Dialog.Title>Tag version {version}</Dialog.Title>

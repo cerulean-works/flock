@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '#lib/components/ui/button/index.js';
+	import { DialogSubject } from '#lib/data/dialog-subject.svelte.ts';
 	import { daysLeft } from '#lib/datasets.ts';
 	import { TRASH_DAYS } from '#lib/models.ts';
 	import type { ModelTrashEntry } from '#lib/types.ts';
@@ -10,8 +11,8 @@
 	/** Admins only: models and versions deleted from the Models tab, waiting in the trash (D109). */
 	let { org, entries, now }: { org: string; entries: ModelTrashEntry[]; now: number } = $props();
 
-	let restoring = $state<ModelTrashEntry | null>(null);
-	let purging = $state<ModelTrashEntry | null>(null);
+	const restoring = new DialogSubject<ModelTrashEntry>();
+	const purging = new DialogSubject<ModelTrashEntry>();
 
 	const left = (entry: ModelTrashEntry) => {
 		const days = daysLeft(entry.expires_at, now);
@@ -45,12 +46,14 @@
 				{:else}
 					<span class="text-[13px] text-muted-foreground tabular-nums">{left(entry)}</span>
 					<div class="flex gap-1">
-						<Button variant="outline" size="sm" onclick={() => (restoring = entry)}>Restore</Button>
+						<Button variant="outline" size="sm" onclick={() => restoring.show(entry)}
+							>Restore</Button
+						>
 						<Button
 							variant="ghost"
 							size="sm"
 							class="text-muted-foreground hover:text-destructive"
-							onclick={() => (purging = entry)}
+							onclick={() => purging.show(entry)}
 						>
 							Delete now
 						</Button>
@@ -63,13 +66,5 @@
 	<p class="mt-4 text-[13px] text-muted-foreground">No deleted models.</p>
 {/if}
 
-<RestoreModelDialog
-	bind:open={() => restoring !== null, (o) => (restoring = o ? restoring : null)}
-	{org}
-	entry={restoring}
-/>
-<PurgeModelDialog
-	bind:open={() => purging !== null, (o) => (purging = o ? purging : null)}
-	{org}
-	entry={purging}
-/>
+<RestoreModelDialog bind:open={restoring.open} {org} entry={restoring.value} />
+<PurgeModelDialog bind:open={purging.open} {org} entry={purging.value} />

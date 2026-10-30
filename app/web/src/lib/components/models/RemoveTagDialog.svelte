@@ -38,7 +38,7 @@
 	}
 </script>
 
-<AlertDialog.Root bind:open onOpenChange={(o) => o || (error = null)}>
+<AlertDialog.Root bind:open onOpenChangeComplete={(o) => o || (error = null)}>
 	<AlertDialog.Content class="sm:max-w-md">
 		<AlertDialog.Header>
 			<AlertDialog.Title>Remove the tag {tag}?</AlertDialog.Title>
