@@ -7,6 +7,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { bucketCall, objectHref, parentOf, s3Uri } from '#lib/storage.ts';
 	import type { ObjectDetails, Presigned } from '#lib/types.ts';
+	import { MODELS_BUCKET } from '#lib/models.ts';
 	import { bytes, dateTime } from '#lib/utils.ts';
 	import CopyButton from '../CopyButton.svelte';
 	import DeleteObjectsDialog from './DeleteObjectsDialog.svelte';
@@ -67,14 +68,16 @@
 			>
 				<LinkIcon /> Copy link
 			</Button>
-			<Button
-				variant="outline"
-				size="sm"
-				class="text-destructive"
-				onclick={() => (deleting = true)}
-			>
-				<Trash2Icon /> Delete
-			</Button>
+			{#if bucket !== MODELS_BUCKET}
+				<Button
+					variant="outline"
+					size="sm"
+					class="text-destructive"
+					onclick={() => (deleting = true)}
+				>
+					<Trash2Icon /> Delete
+				</Button>
+			{/if}
 		</div>
 		<div class="flex items-start gap-1 text-[13px] text-muted-foreground">
 			<span class="min-w-0 pt-0.5 font-mono text-[12.5px] break-all"

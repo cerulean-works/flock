@@ -25,6 +25,7 @@ from app.api.src.core.history import History, Series, write_chunks
 from app.api.src.core.imports import Imports
 from app.api.src.core.live import Hub
 from app.api.src.core.metric_defs import parse_metric_defs
+from app.api.src.core.models import Models
 from app.api.src.core.names import ADJECTIVES, NOUNS
 from app.api.src.core.s3 import S3
 from app.api.src.db.database import Database
@@ -42,7 +43,7 @@ ACTIVE_STATES = ("running", "preempting")
 ORG_COLUMNS = """
     o.pk, o.name, extract(epoch FROM o.created_at)::float8,
     extract(epoch FROM o.updated_at)::float8, o.currency, o.avatar, o.display_name,
-    o.s3_ephemeral_ttl, o.s3_key_max_ttl
+    o.s3_ephemeral_ttl, o.s3_key_max_ttl, o.model_retention
 """
 # The columns ``Project.load`` reads, of ``projects`` aliased ``p`` (and its org's).
 PROJECT_COLUMNS = f"""
@@ -226,6 +227,7 @@ class Org:
         display_name: str | None = None,
         s3_ephemeral_ttl: int = 8 * 3600,
         s3_key_max_ttl: int | None = 30 * 86400,
+        model_retention: int | None = None,
     ):
         self.pk = pk
         self.name = name
@@ -238,13 +240,16 @@ class Org:
         # any key may live (None: no limit).
         self.s3_ephemeral_ttl = s3_ephemeral_ttl
         self.s3_key_max_ttl = s3_key_max_ttl
+        # How many untagged versions of each model the sweep keeps (D109); None: all of them.
+        self.model_retention = model_retention
 
     @classmethod
     def load(cls, record: Any, offset: int = 0) -> Self:
         """An org from ``ORG_COLUMNS`` at ``offset`` in ``record``."""
-        pk, name, created_at, updated_at, currency, avatar, display_name, ephemeral, max_ttl = (
-            record[offset : offset + 9]
-        )
+        (
+            pk, name, created_at, updated_at, currency, avatar, display_name, ephemeral, max_ttl,
+            retention,
+        ) = record[offset : offset + 10]  # fmt: skip
         return cls(
             pk,
             name,
@@ -255,6 +260,7 @@ class Org:
             display_name,
             ephemeral,
             max_ttl,
+            retention,
         )
 
 
@@ -364,6 +370,7 @@ class Store:
         self.imports = Imports(self)
         self.s3 = S3(self)
         self.datasets = Datasets(self)
+        self.models = Models(self)
 
     @staticmethod
     async def _prefixed(conn: asyncpg.Connection, pk: int, prefix: str) -> dict[str, Any]:
@@ -398,6 +405,7 @@ class Store:
             await self.imports.load()
             await self.s3.load()
             await self.datasets.load()
+            await self.models.load()
             self._background(self._detect_missing_gpus())
             self._worker = asyncio.get_running_loop().create_task(self._work_loop())
         except BaseException:
@@ -408,6 +416,7 @@ class Store:
             raise
 
     async def close(self) -> None:
+        await self.models.close()
         await self.datasets.close()
         await self.s3.close()
         await self.imports.close()
@@ -736,6 +745,9 @@ class Store:
                             name,
                         )
                         await self._update_run(conn, project, pk, name, fields, owner, admin)
+                    if fields.get("config") is not None:
+                        # An eval of a version in the registry links to it (014, D106).
+                        await self.models.link_eval(conn, project.org, pk, fields["config"])
             except NotFound:
                 continue  # deleted or renamed meanwhile: resolve the name again
             run = await self.project_run(project, name)
@@ -1619,12 +1631,8 @@ class Store:
             if record[0] > self.MAX_ORG_PK:
                 raise Conflict("this server can't hold more organizations")
         org = Org(*record, display_name=display_name)
-        # Its flock-datasets bucket (D85). A failure leaves the org be: startup and the Datasets
-        # tab try again.
-        try:
-            await self.s3.ensure_managed(org)
-        except Exception:
-            log.exception("could not create flock-datasets for %s", org.name)
+        # Its flock-datasets and flock-models buckets (D85, D97).
+        await self.s3.ensure_every_managed(org)
         return org
 
     async def set_org_display_name(self, org: Org, display_name: str) -> None:
@@ -1642,6 +1650,12 @@ class Store:
             raise NotFound(f"organization {org.name} not found")
         org.display_name = display_name
 
+    async def set_model_retention(self, org: Org, keep: int | None) -> None:
+        """Keep the newest ``keep`` untagged versions of each of the org's models (D109); None
+        keeps them all. The sweep applies it."""
+        await self.db.execute("UPDATE orgs SET model_retention = $2 WHERE pk = $1", org.pk, keep)
+        org.model_retention = keep
+
     async def delete_org(self, org: Org, force: bool = False) -> None:
         """Delete an organization with all its projects and runs; refused while runs are
         active unless ``force``. A background purge removes the rows and files (D80)."""
@@ -1657,6 +1671,7 @@ class Store:
             # longer anyone's (as the org's row will be gone).
             await self.s3.delete_org_buckets(conn, org)
             await self.datasets.delete_org(conn, org)
+            await self.models.delete_org(conn, org)
             await conn.execute("UPDATE s3_buckets SET org_pk = NULL WHERE org_pk = $1", org.pk)
             # Its avatar is released now: the row waits for the purge without it.
             await conn.execute(

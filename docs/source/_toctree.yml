@@ -16,6 +16,10 @@ guide:
     title: Use storage from Python
   - local: cli/authenticate-jobs
     title: Authenticate an unattended job
+- title: Hub
+  sections:
+  - local: hub/store-models
+    title: Store and load models
 - title: Training
   sections:
   - local: training/trainer
@@ -42,6 +46,8 @@ guide:
       title: Explore and organize experiments
     - local: app/storage-and-datasets
       title: Browse storage and datasets
+    - local: app/browse-models
+      title: Browse and manage models
     - local: app/import-wandb
       title: Import W&B runs
     - local: app/configure-budgets
@@ -67,6 +73,10 @@ reference:
     title: Credential resolution and Python API
   - local: cli/python-s3
     title: Python S3 API
+- title: Hub
+  sections:
+  - local: hub/models
+    title: Models API
 - title: Evals
   sections:
   - local: evals/commands
@@ -135,3 +145,5 @@ reference:
       title: S3 keys and buckets
     - local: app/api/datasets
       title: Datasets
+    - local: app/api/models
+      title: Models

@@ -35,15 +35,21 @@ export async function withDetails(org: string, folder: DatasetFolder): Promise<D
 
 /**
  * Pass a request from the browser on to one of the org's dataset routes (`op`, with the
- * request's query), as the signed-in user. Flock's answer comes back with its status, and a
- * refusal as `{message, …}` with whatever else Flock said (`taken`, `version`, `command`), which
- * the dialogs need.
+ * request's query), as the signed-in user.
  */
-export async function relayDatasets(org: string, op: string, request: Request): Promise<Response> {
+export const relayDatasets = (org: string, op: string, request: Request) =>
+	relayAnswer(`${datasetsPath(org)}/${op}`, request);
+
+/**
+ * Pass a request from the browser on to Flock at `path` (with the request's query), as the
+ * signed-in user. Flock's answer comes back with its status, and a refusal as `{message, …}`
+ * with whatever else Flock said (`taken`, `version`, `command`), which the dialogs need.
+ */
+export async function relayAnswer(path: string, request: Request): Promise<Response> {
 	const url = new URL(request.url);
 	const method = request.method;
 	const body = method === 'POST' || method === 'PUT' ? await request.text() : undefined;
-	const res = await flockAnswer(`${datasetsPath(org)}/${op}${url.search}`, {
+	const res = await flockAnswer(`${path}${url.search}`, {
 		method,
 		headers: body === undefined ? {} : { 'content-type': 'application/json' },
 		body

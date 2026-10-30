@@ -16,6 +16,8 @@ The entry points for running evaluations, and the model wrapper they score with.
 
 [[autodoc]] eval.model.ModelRef
 
+[[autodoc]] eval.model.FlockCausalLM
+
 [[autodoc]] eval.requests.Request
 
 [[autodoc]] eval.requests.Scores

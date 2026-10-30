@@ -3,7 +3,7 @@
 import os
 import platform
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -20,7 +20,9 @@ class Provenance:
 
     Args:
         model (`str`):
-            The scored model as `repo@commit`.
+            The scored model as `repo@commit`, or as `flock:org/name@number` for a version in the Flock registry.
+        model_digest (`str`, *optional*):
+            The Flock version's digest, which names its exact files, or `None` for a Hugging Face model, whose commit in `model` already does. Results files written before it was added have no `model_digest`, and read as `None`.
         flock_commit (`str`):
             The flock commit that ran, from `FLOCK_COMMIT` or git, or `"unknown"`. A `-dirty` suffix means the checkout had uncommitted changes or new files under `flock/`.
         command (`str`, *optional*):
@@ -42,6 +44,9 @@ class Provenance:
     """
 
     model: str
+    # Keyword-only with a default, so it sits beside `model` in the file and older results that
+    # lack it still load.
+    model_digest: str | None = field(default=None, kw_only=True)
     flock_commit: str
     command: str | None
     device: str
@@ -67,10 +72,12 @@ class Provenance:
         batch_tokens: int,
         max_length: int,
         attention: str,
+        model_digest: str | None = None,
     ) -> Provenance:
         """Collects provenance for a run on this machine, now."""
         return cls(
             model=model,
+            model_digest=model_digest,
             flock_commit=flock_commit(),
             command=command,
             device=torch.cuda.get_device_name(device) if device.type == "cuda" else device.type,

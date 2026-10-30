@@ -28,6 +28,8 @@ A score describes both the model and the evaluation setup. Changing prompts, dat
 
    The `repo@revision` form pins which weights are scored. A model name without a revision is refused.
 
+   To score a model stored in Flock, give it with a `flock:` prefix instead, as in the next section.
+
 3. Check the printed task metrics and these output files:
 
    ```text
@@ -37,6 +39,27 @@ A score describes both the model and the evaluation setup. Changing prompts, dat
    ```
 
 For a smoke check, add `--limit 20` and use a different output directory. Limited scores do not represent the full benchmark. To reduce evaluation-batch memory, lower `--batch-tokens`; keep it consistent between runs you compare. CPU scoring can be selected with `--device cpu`. See [Commands](commands) for complete options.
+
+## Score a model stored in Flock
+
+A model saved with `save_to_hub` or `flock models push` (see [Store and load models](../hub/store-models)) is scored by its name with a `flock:` prefix:
+
+```bash
+uv run flock eval run \
+  --model flock:acme/olmo2-1b@checkpoint-12000 \
+  --task arc_easy \
+  --out results/olmo2-1b-ckpt-12000
+```
+
+| `--model` | Scores |
+|---|---|
+| `flock:acme/olmo2-1b` or `flock:acme/olmo2-1b@primary` | the primary version |
+| `flock:acme/olmo2-1b@12` | version 12 |
+| `flock:acme/olmo2-1b@checkpoint-12000` | the version with that tag |
+
+[Sign in](../cli/sign-in) first. The version is resolved to its number before anything loads, and the results record it as `flock:acme/olmo2-1b@12`, with the version's digest in `model_digest`. Moving the tag or the primary later doesn't change what the results say was scored. The tokenizer is the Hugging Face one that the model's config names in `hf_repo`, so a model saved without `hf_repo` can't be scored.
+
+With `--wandb-project`, the run also appears in the version's evals in Flock, because its config holds `flock:acme/olmo2-1b@12`.
 
 ## Read the results
 

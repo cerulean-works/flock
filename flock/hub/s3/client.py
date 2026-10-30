@@ -15,6 +15,7 @@ all a job needs. This module only needs httpx: boto3 and the rest are imported w
 import datetime as dt
 import threading
 import time
+from collections.abc import Collection
 from typing import Any, Self
 
 import httpx
@@ -27,7 +28,20 @@ keys shorter than 10 minutes)."""
 
 
 class S3Error(RuntimeError):
-    """Flock couldn't hand out S3 access: no sign-in, no S3 on the server, or a refusal."""
+    """
+    Flock couldn't hand out S3 access: no sign-in, no S3 on the server, or a refusal.
+
+    Attributes:
+        status (`int`, *optional*):
+            The HTTP status Flock answered, when it answered.
+        body (`Any`, *optional*):
+            The answer's JSON, such as the paths a model commit refused.
+    """
+
+    def __init__(self, message: str, status: int | None = None, body: Any = None) -> None:
+        super().__init__(message)
+        self.status = status
+        self.body = body
 
 
 def _missing(package: str, extra: str = "") -> ImportError:
@@ -51,19 +65,31 @@ class _Api:
     def __exit__(self, *_: object) -> None:
         self.client.close()
 
-    def call(self, method: str, path: str, body: Any = None, ok: int = 200) -> Any:
+    def call(
+        self,
+        method: str,
+        path: str,
+        body: Any = None,
+        ok: int | Collection[int] = 200,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
         try:
-            response = self.client.request(method, f"/api/v1/{path}", json=body)
+            response = self.client.request(method, f"/api/v1/{path}", json=body, params=params)
         except httpx.HTTPError as error:
             raise S3Error(f"Couldn't reach {self.host}: {error}") from None
-        if response.status_code != ok:
+        if response.status_code not in ((ok,) if isinstance(ok, int) else ok):
             try:
-                reason = response.json().get("error")
-            except ValueError, AttributeError:
-                reason = None
+                answer = response.json()
+            except ValueError:
+                answer = None
+            reason = answer.get("error") if isinstance(answer, dict) else None
             if response.status_code == 401:
                 reason = f"{self.host} refused your credential ({reason}): run flock login"
-            raise S3Error(reason or f"{self.host} answered {response.status_code}")
+            raise S3Error(
+                reason or f"{self.host} answered {response.status_code}",
+                response.status_code,
+                answer,
+            )
         return response.json() if response.content else None
 
     def default_org(self, org: str | None) -> str:

@@ -29,6 +29,15 @@ class ListedObject:
 
 
 @dataclass(frozen=True)
+class Upload:
+    """An unfinished multipart upload."""
+
+    key: str
+    upload_id: str
+    initiated: float
+
+
+@dataclass(frozen=True)
 class Listing:
     objects: list[ListedObject]
     prefixes: list[str]
@@ -202,8 +211,12 @@ class Upstream:
             raise UpstreamError("InternalError", f"HEAD answered {response.status_code}", 502)
         return response
 
-    async def put_object(self, bucket: str, key: str, data: bytes) -> None:
+    async def put_object(
+        self, bucket: str, key: str, data: bytes, content_type: str | None = None
+    ) -> None:
         headers = {"content-length": str(len(data))}
+        if content_type:
+            headers["content-type"] = content_type
         payload_hash = hashlib.sha256(data).hexdigest()
         self._raise(await self.send("PUT", bucket, key, None, headers, data, payload_hash))
 
@@ -243,9 +256,16 @@ class Upstream:
         if any(s3xml.local(element.tag) == "Error" for element in result):
             raise UpstreamError("InternalError", f"some objects of {bucket} weren't deleted", 500)
 
-    async def create_upload(self, bucket: str, key: str, content_type: str | None) -> str:
-        """CreateMultipartUpload; returns the upload id."""
+    async def create_upload(
+        self,
+        bucket: str,
+        key: str,
+        content_type: str | None,
+        metadata: Mapping[str, str] | None = None,
+    ) -> str:
+        """CreateMultipartUpload, with ``metadata`` as ``x-amz-meta-*``; returns the upload id."""
         headers = {"content-type": content_type} if content_type else {}
+        headers.update({f"x-amz-meta-{name}": value for name, value in (metadata or {}).items()})
         response = await self.send("POST", bucket, key, {"uploads": ""}, headers)
         self._raise(response)
         root = ET.fromstring(response.content)
@@ -283,11 +303,19 @@ class Upstream:
         self._copy_result(await self.send("PUT", bucket, key, headers=headers))
 
     async def copy_large(
-        self, source_bucket: str, source_key: str, size: int, bucket: str, key: str, part: int
+        self,
+        source_bucket: str,
+        source_key: str,
+        size: int,
+        bucket: str,
+        key: str,
+        part: int,
+        metadata: Mapping[str, str] | None = None,
     ) -> None:
         """A multipart copy (UploadPartCopy) of an object of ``size`` bytes, in parts of
-        ``part`` bytes, for objects too large for one CopyObject. Aborted if a part fails."""
-        upload_id = await self.create_upload(bucket, key, None)
+        ``part`` bytes, for objects too large for one CopyObject. Parts carry no metadata, so
+        the source's is given as ``metadata``. Aborted if a part fails."""
+        upload_id = await self.create_upload(bucket, key, None, metadata)
         try:
             etags = []
             for number, start in enumerate(range(0, size, part), start=1):
@@ -327,9 +355,11 @@ class Upstream:
         if (failed := s3xml.parse_error(response.content)) is not None:
             raise UpstreamError(*failed, 500)
 
-    async def get_range(self, bucket: str, key: str, length: int) -> bytes | None:
-        """The first ``length`` bytes of an object, or None if there's no such object."""
-        response = await self.send("GET", bucket, key, headers={"range": f"bytes=0-{length - 1}"})
+    async def get_range(self, bucket: str, key: str, length: int, start: int = 0) -> bytes | None:
+        """``length`` bytes of an object from ``start`` (fewer at its end), or None if there's
+        no such object."""
+        headers = {"range": f"bytes={start}-{start + length - 1}"}
+        response = await self.send("GET", bucket, key, headers=headers)
         if response.status_code == 404:
             return None
         if response.status_code == 416:  # an empty object
@@ -350,6 +380,30 @@ class Upstream:
             token = page.cursor
             if token is None or (limit is not None and len(objects) > limit):
                 return objects
+
+    async def list_uploads(self, bucket: str, prefix: str = "") -> list[Upload]:
+        """Every unfinished multipart upload under ``prefix`` (ListMultipartUploads)."""
+        uploads: list[Upload] = []
+        markers: dict[str, str] = {}
+        while True:
+            params = {"uploads": "", **({"prefix": prefix} if prefix else {}), **markers}
+            response = await self.send("GET", bucket, params=params)
+            self._raise(response)
+            root = ET.fromstring(response.content)
+            top = {s3xml.local(child.tag): child.text or "" for child in root}
+            for upload in root:
+                if s3xml.local(upload.tag) != "Upload":
+                    continue
+                fields = {s3xml.local(child.tag): child.text or "" for child in upload}
+                uploads.append(
+                    Upload(fields["Key"], fields["UploadId"], parse_time(fields.get("Initiated")))
+                )
+            if top.get("IsTruncated", "").lower() != "true":
+                return uploads
+            markers = {
+                "key-marker": top.get("NextKeyMarker", ""),
+                "upload-id-marker": top.get("NextUploadIdMarker", ""),
+            }
 
     async def _keys(self, bucket: str) -> list[str]:
         """Up to 1000 keys of ``bucket``."""

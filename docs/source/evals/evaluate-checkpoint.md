@@ -18,6 +18,16 @@ Your training process must hold a causal language model and tokenizer compatible
    scorer = ScoringModel(model, tokenizer, name=f"llm-pretrain@step-{step}")
    ```
 
+   A Flock model, such as `Olmo2`, takes a batch rather than the arguments of a transformers model. Wrap it in `FlockCausalLM` first, with the tokenizer its config names:
+
+   ```python
+   from flock.eval.model import FlockCausalLM
+
+   scorer = ScoringModel(
+       FlockCausalLM(model), model.get_hf_tokenizer(), name=f"llm-pretrain@step-{step}"
+   )
+   ```
+
 2. Score a registered task:
 
    ```python

@@ -148,7 +148,7 @@ def test_set_profile_keeps_what_follows():
 
 
 def test_buckets_commands(flock, alice, signed_in, flock_cli):
-    # Every org has flock-datasets, which Flock manages (013).
+    # Every org has flock-datasets and flock-models, which Flock manages (013, 014).
     managed = flock_cli("s3", "buckets", "list")
     assert managed.exit_code == 0
     assert managed.output.startswith("flock-datasets\t") and "managed by Flock" in managed.output
@@ -159,6 +159,7 @@ def test_buckets_commands(flock, alice, signed_in, flock_cli):
     assert [line.split("\t")[0] for line in listed.output.splitlines()] == [
         "checkpoints",
         "flock-datasets",
+        "flock-models",
         "shards",
     ]
     assert "by alice@lab.test" in listed.output
@@ -176,7 +177,11 @@ def test_buckets_commands(flock, alice, signed_in, flock_cli):
     credentials.save(flock.url, token, {})
     deleted = flock_cli("s3", "buckets", "delete", "shards", input="y\n")
     assert deleted.exit_code == 0, deleted.output
-    assert [b["name"] for b in s3.list_buckets()] == ["checkpoints", "flock-datasets"]
+    assert [b["name"] for b in s3.list_buckets()] == [
+        "checkpoints",
+        "flock-datasets",
+        "flock-models",
+    ]
 
 
 def flock_admin_token(flock: S3Flock) -> str:
@@ -230,7 +235,7 @@ def test_boto3_clients_renew_their_key(flock, alice, signed_in, monkeypatch):
     assert len({k["access_key_id"] for k in keys_of(flock, alice)} - used) == 1
     assert s3.create_bucket("more")["name"] == "more"
     names = [b["Name"] for b in client.list_buckets()["Buckets"]]
-    assert names == ["data", "flock-datasets", "more"]
+    assert names == ["data", "flock-datasets", "flock-models", "more"]
 
 
 def test_the_module_imports_no_s3_library():

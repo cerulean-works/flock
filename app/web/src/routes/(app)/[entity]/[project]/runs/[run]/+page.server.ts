@@ -1,7 +1,7 @@
 import { isHttpError } from '@sveltejs/kit';
 import { projectPath, flock } from '#lib/server/flock.ts';
 import { runActions } from '#lib/server/runs.ts';
-import type { Billing, Member, RunDetail, RunHistory } from '#lib/types.ts';
+import type { Billing, Member, RunDetail, RunHistory, RunModels } from '#lib/types.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 /** Points per curve: plenty for one run's panels, and a few MB at most. */
@@ -25,7 +25,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		flock(`${path}/history?stream=${stream}&max_points=${MAX_POINTS}`).then(
 			(res) => res.json() as Promise<RunHistory>
 		);
-	const [history, system, members, billing] = await Promise.all([
+	const [history, system, members, billing, models] = await Promise.all([
 		curves('history'),
 		curves('system'),
 		optional(
@@ -37,7 +37,9 @@ export const load: PageServerLoad = async ({ params }) => {
 			flock(`/api/v1/orgs/${encodeURIComponent(params.entity)}/billing`).then(
 				(res) => res.json() as Promise<Billing>
 			)
-		)
+		),
+		// The model versions it made and those it scored (D108), for the Checkpoints section.
+		optional(flock(`${path}/models`).then((res) => res.json() as Promise<RunModels>))
 	]);
 	const run = (await (await flock(path)).json()) as RunDetail;
 	const owner = members?.members.find((m) => m.id === run.owner) ?? null;
@@ -47,6 +49,7 @@ export const load: PageServerLoad = async ({ params }) => {
 		system,
 		owner: owner && { id: owner.id, name: owner.name, avatar_url: owner.avatar_url },
 		currency: billing?.currency ?? null,
+		models,
 		/** Relative times are from the server's clock, so SSR and hydration agree. */
 		now: Date.now() / 1000
 	};

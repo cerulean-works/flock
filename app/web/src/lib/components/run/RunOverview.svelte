@@ -7,7 +7,8 @@
 	import StateBadge from '#lib/components/StateBadge.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { flatten } from '#lib/data/run.ts';
-	import type { RunDetail } from '#lib/types.ts';
+	import type { RunDetail, RunModels } from '#lib/types.ts';
+	import RunModelsList from './RunModels.svelte';
 	import { dateTime, duration, formatValue, gpus, hours, money, relativeTime } from '#lib/utils.ts';
 
 	interface Props {
@@ -16,10 +17,12 @@
 		runState: string;
 		owner: { name: string; avatar_url: string | null } | null;
 		currency: string | null;
+		/** The model versions it made and scored; null when they can't be read. */
+		models?: RunModels | null;
 		now: number;
 	}
 
-	let { run, runState, owner, currency, now }: Props = $props();
+	let { run, runState, owner, currency, models = null, now }: Props = $props();
 
 	let query = $state('');
 	const config = $derived(flatten(run.config).sort(([a], [b]) => a.localeCompare(b)));
@@ -191,6 +194,13 @@
 		{@render code('Command', run.program)}
 		{@render code('Commit', run.commit)}
 	</dl>
+
+	{#if models?.made.length}
+		<RunModelsList title="Checkpoints" versions={models.made} />
+	{/if}
+	{#if models?.scored.length}
+		<RunModelsList title="Models scored" versions={models.scored} />
+	{/if}
 
 	{#if run.notes || run.description}
 		<div class="grid gap-2 border-t border-divider px-4 py-3">

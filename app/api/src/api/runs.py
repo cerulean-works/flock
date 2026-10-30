@@ -20,6 +20,7 @@ from app.api.src.api.deps import (
     rest_user,
 )
 from app.api.src.api.home import GpuType
+from app.api.src.api.models import with_users
 from app.api.src.core import query
 from app.api.src.core.errors import NotFound
 from app.api.src.core.store import RUN_COLUMNS, Project, Run, Store
@@ -482,6 +483,14 @@ async def get_run_logs(
             "lines": [{"line": line, "text": text} for line, text in lines],
         }
     )
+
+
+@router.get("/projects/{entity}/{project}/runs/{run}/models")
+async def get_run_models(run: RunDep, store: StoreDep) -> Response:
+    """The model versions the run made (``made``) and those it scored as an eval run
+    (``scored``), each with its eval runs (``evals``), by model name and number."""
+    found = await store.models.run_versions(run)
+    return JSONResponse({key: await with_users(store, items) for key, items in found.items()})
 
 
 @router.get("/projects/{entity}/{project}/runs/{run}/files")

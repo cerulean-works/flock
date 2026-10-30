@@ -22,7 +22,7 @@ import httpx
 import orjson
 
 from app.api.src import s3_credentials
-from app.api.src.core.errors import BadGateway, Conflict, Invalid, NotFound
+from app.api.src.core.errors import BadGateway, Conflict, Forbidden, Invalid, NotFound
 from app.api.src.s3_proxy import sigv4
 from app.api.src.s3_proxy.upstream import DELETE_BATCH, Upstream, UpstreamError, configured
 
@@ -56,7 +56,8 @@ class Bucket:
     created_by: int | None
     deleted_at: float | None = None
     purged_at: float | None = None
-    managed: str | None = None  # "datasets" for the org's flock-datasets (D85)
+    # "datasets" for the org's flock-datasets (D85), "models" for its flock-models (D97)
+    managed: str | None = None
 
 
 @dataclass(frozen=True)
@@ -120,9 +121,11 @@ class S3:
         "pk, org_pk, name, upstream_name, extract(epoch FROM created_at)::float8, created_by, "
         "extract(epoch FROM deleted_at)::float8, extract(epoch FROM purged_at)::float8, managed"
     )
-    # The bucket of each org that Flock creates and owns (D85), and the prefix new bucket names
-    # can't start with, so Flock can add more of its own later.
+    # The buckets of each org that Flock creates and owns (D85, D97), by kind, and the prefix
+    # new bucket names can't start with, so Flock can add more of its own later.
     DATASETS: ClassVar[str] = "flock-datasets"
+    MODELS: ClassVar[str] = "flock-models"
+    MANAGED: ClassVar[dict[str, str]] = {"datasets": DATASETS, "models": MODELS}
     RESERVED_PREFIX: ClassVar[str] = "flock-"
 
     def __init__(self, store: Store) -> None:
@@ -474,41 +477,50 @@ class S3:
         )
         return Bucket(*record) if record is not None else None
 
-    async def ensure_managed(self, org: Org) -> Bucket | None:
-        """The org's ``flock-datasets`` bucket (D85), created if it has none: by Flock, with no
-        user, its event saying ``via: flock``. A bucket of that name the org already has is
-        marked managed instead. None when S3 is off. Raises as ``create_bucket`` does."""
+    async def ensure_managed(self, org: Org, kind: str = "datasets") -> Bucket | None:
+        """The org's managed bucket of ``kind`` (``flock-datasets``, D85, or ``flock-models``,
+        D97), created if it has none: by Flock, with no user, its event saying ``via: flock``. A
+        bucket of that name the org already has is marked managed instead. None when S3 is off.
+        Raises as ``create_bucket`` does."""
         if self.upstream is None:
             return None
-        if (found := await self.managed_bucket(org)) is not None:
+        if (found := await self.managed_bucket(org, kind)) is not None:
             return found
+        name = self.MANAGED[kind]
         adopted = await self.store.db.fetchrow(
-            "UPDATE s3_buckets SET managed = 'datasets' "
+            "UPDATE s3_buckets SET managed = $3 "
             "WHERE org_pk = $1 AND name = $2 AND deleted_at IS NULL AND managed IS NULL "
-            "AND NOT EXISTS (SELECT 1 FROM s3_buckets WHERE org_pk = $1 AND managed = 'datasets' "
+            "AND NOT EXISTS (SELECT 1 FROM s3_buckets WHERE org_pk = $1 AND managed = $3 "
             f"AND deleted_at IS NULL) RETURNING {self.BUCKET_COLUMNS}",
             org.pk,
-            self.DATASETS,
+            name,
+            kind,
         )
         if adopted is not None:
             return Bucket(*adopted)
         try:
-            return await self._create(org, self.DATASETS, None, {"via": "flock"}, "datasets")
+            return await self._create(org, name, None, {"via": "flock"}, kind)
         except Conflict:
             # Another replica (or the startup pass) made it meanwhile.
-            if (found := await self.managed_bucket(org)) is not None:
+            if (found := await self.managed_bucket(org, kind)) is not None:
                 return found
             raise
 
-    async def ensure_all_managed(self) -> None:
-        """``ensure_managed`` for every org that lacks its bucket (at startup, in the background:
-        existing orgs, and S3 turned on later). Failures are logged and left for the Datasets
-        tab to retry."""
-        for org in await self.store.orgs():
+    async def ensure_every_managed(self, org: Org) -> None:
+        """Both of the org's managed buckets (at its creation). A failure is logged and leaves
+        the org be: startup and the tabs try again."""
+        for kind, name in self.MANAGED.items():
             try:
-                await self.ensure_managed(org)
+                await self.ensure_managed(org, kind)
             except Exception:
-                log.exception("could not create %s for %s", self.DATASETS, org.name)
+                log.exception("could not create %s for %s", name, org.name)
+
+    async def ensure_all_managed(self) -> None:
+        """``ensure_managed`` for every org that lacks one of its buckets (at startup, in the
+        background: existing orgs, and S3 turned on later). Failures are logged and left for
+        the Datasets and Models tabs to retry."""
+        for org in await self.store.orgs():
+            await self.ensure_every_managed(org)
 
     async def delete_org_buckets(self, conn: asyncpg.Connection, org: Org) -> None:
         """Delete every bucket of ``org``, in ``conn``'s transaction (the org's deletion); call
@@ -670,11 +682,22 @@ class S3:
             },
         }
 
+    @staticmethod
+    def _check_writable(bucket: Bucket) -> None:
+        """flock-models is written only through upload sessions and emptied only through the
+        model routes (D97, D109), so the dashboard's own writes are refused there, as the proxy
+        refuses every other client's."""
+        if bucket.managed == "models":
+            raise Forbidden(
+                "Files in flock-models change only through flock models push and the Models tab."
+            )
+
     async def create_folder(self, org: Org, name: str, prefix: str) -> None:
         """The empty ``prefix`` object (ending in ``/``) that makes a folder show up."""
         upstream = self.require()
         self.check_key(prefix, folder=True)
         bucket = await self.bucket(org, name)
+        self._check_writable(bucket)
         await self._call(upstream.put_empty(bucket.upstream_name, prefix))
 
     async def delete_objects(
@@ -689,6 +712,7 @@ class S3:
         for prefix in prefixes:
             self.check_key(prefix, folder=True)
         bucket = await self.bucket(org, name)
+        self._check_writable(bucket)
         limit = self.FOLDER_DELETE_LIMIT
         doomed = dict.fromkeys(keys)
         for prefix in prefixes:
