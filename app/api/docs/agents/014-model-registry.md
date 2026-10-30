@@ -25,7 +25,8 @@ tags them and links them to runs and evals. This stage adds:
    D105).
 6. **Links** from a version to the training run that made it and the eval runs that scored it
    (D106).
-7. **Checkpoints from the trainer,** uploaded in the background (D107).
+7. **A primary version** per model, the one loaded when no version is given, and a
+   `checkpoint-{step}` tag convention (D107).
 8. **A Models tab** with versions, tags and links (D108).
 
 Saving and loading a model is one call each:
@@ -33,8 +34,8 @@ Saving and loading a model is one call each:
 ```python
 from flock.hub import models
 
-version = models.save_to_hub(model, "acme/olmo2-1b", tags=["primary"])
-model = models.load_from_hub("acme/olmo2-1b@primary", device="cuda")
+version = models.save_to_hub(model, "acme/olmo2-1b", tags=["checkpoint-12000"], primary=True)
+model = models.load_from_hub("acme/olmo2-1b", device="cuda")  # the primary version
 ```
 
 **Why not git.** Hugging Face stores models in git, with large files in LFS or Xet. That gives
@@ -50,7 +51,9 @@ the S3 proxy, so a git server would be a second protocol to authenticate and run
 - deduplicating files across versions;
 - presigned URLs straight to Ceph, skipping the proxy (D101 says when to add them);
 - uploading from the web app;
-- model cards beyond a README in the version.
+- model cards beyond a README in the version;
+- the trainer saving checkpoints on its own. Training code calls `save_to_hub` itself, and
+  wiring that into `Trainer` is a separate change.
 
 ---
 
@@ -77,13 +80,14 @@ The numbering continues from 013.
 
 ```sql
 models(pk, org_pk → orgs CASCADE, name, created_by → users SET NULL, created_at,
-       deleted_at NULL, UNIQUE (org_pk, name) WHERE deleted_at IS NULL)
+       primary_version_pk → model_versions NULL, primary_set_by → users SET NULL,
+       primary_set_at, deleted_at NULL, UNIQUE (org_pk, name) WHERE deleted_at IS NULL)
 
 model_uploads(pk, ulid UNIQUE, model_pk → models CASCADE, user_pk → users SET NULL,
               state CHECK (state IN ('open', 'committed', 'aborted', 'expired')),
               files jsonb,              -- [{path, size}] as declared when opened
-              metadata jsonb, tags text[], run_pk → runs SET NULL NULL, step bigint NULL,
-              dedupe_key text NULL, created_at, last_activity_at)
+              metadata jsonb, tags text[], make_primary bool, run_pk → runs SET NULL NULL,
+              step bigint NULL, dedupe_key text NULL, created_at, last_activity_at)
 
 model_versions(pk, model_pk → models CASCADE, number, upload_pk → model_uploads,
                digest, total_bytes, metadata jsonb, run_pk → runs SET NULL NULL,
@@ -107,7 +111,7 @@ model_version_runs(version_pk → model_versions CASCADE, run_pk → runs CASCAD
 - **The digest** is the sha256 of the version's files, one line each, sorted by path:
   `{path}\t{size}\t{sha256}\n`. It names the exact bytes, as a commit hash does on the Hub.
 - **Tag names** follow D96's rules, and can't be only digits, so `@12` always means version 12.
-  `primary` is the tag tools load when no version is given. It's an ordinary tag otherwise.
+  `primary` is reserved for the primary version (D107) and can't be a tag.
 - **Why a table.** D85 chose no table for datasets because any Lance writer must be able to
   write. Models are written only through Flock, need numbers handed out safely to concurrent
   writers, and need links that are queried both ways. None of that works from S3 alone.
@@ -138,7 +142,7 @@ flock-models/
 - **The prefix is the model's name.** Renaming a model isn't offered in this stage, so the name
   in the path never goes stale.
 - **Required files:** `config.json`, `flock.json`, and either `model.safetensors` or the shards
-  named in `model.safetensors.index.json`. Anything else (a README, tokenizer files, D107's
+  named in `model.safetensors.index.json`. Anything else (a README, tokenizer files, D104's
   `training_state/`) is allowed and listed with the version.
 
 `flock.json` says how to rebuild the model:
@@ -166,9 +170,10 @@ flock-models/
 | `DELETE orgs/{org}/models/{name}/uploads/{ulid}` | aborts it |
 | `GET orgs/{org}/models/{name}/uploads?state=open` | your open uploads |
 
-- **Opening** takes `files: [{path, size}]`, `metadata`, `tags`, and optionally `run`, `step`
-  and `dedupe_key`. If a live version of the model already has the `dedupe_key`, it answers 200
-  with that version and no upload, so a trainer that restarts doesn't push the same step twice.
+- **Opening** takes `files: [{path, size}]`, `metadata`, `tags`, `primary` (whether the new
+  version becomes primary, default false), and optionally `run`, `step` and `dedupe_key`. If a
+  live version of the model already has the `dedupe_key`, it answers 200 with that version and
+  no upload, so a training job that restarts doesn't push the same step twice.
   Otherwise it answers 201 with the `ulid`, `bucket`, `prefix` and the part size to use (64 MiB).
   Members and admins can open uploads, as D54 lets them write.
 - **Committing** takes each file's `sha256`. The API then:
@@ -180,8 +185,8 @@ flock-models/
      naming a tensor no shard holds, is 422.
   3. Checks each object's `x-amz-meta-sha256` against the committed `sha256`. A mismatch is 409.
   4. In one transaction: locks the model row, takes `max(number) + 1`, inserts the version, its
-     files and its tags (moving tags already on other versions), and marks the upload
-     `committed`.
+     files and its tags (moving tags already on other versions), makes it primary if the upload
+     asked or the model has no primary yet (D107), and marks the upload `committed`.
   5. Writes `manifest.json` into the folder: the number, digest, files and metadata. If that
      fails it's logged, and the startup pass writes any that are missing. Postgres stays the
      record.
@@ -239,7 +244,7 @@ It's written before any byte is sent, and updated as each file finishes.
 | The key expires | the refreshable credentials renew it first. |
 | The process or machine dies mid-push | the upload stays `open`, with finished files and parts in S3 and the journal on disk. |
 | It dies after sending the commit | committing again returns the same version (D100). |
-| The trainer restarts and saves a step it already pushed | `dedupe_key` returns the existing version (D100). |
+| A training job restarts and saves a step it already pushed | `dedupe_key` returns the existing version (D100). |
 | The local files are gone | nothing can resume, so the upload expires (below). |
 | Two pushes of one model at once | each has its own folder, and the commit's row lock numbers them in commit order. |
 
@@ -264,8 +269,8 @@ Resuming reads the local files once more but sends only what's missing.
 - **`flock models push ./dir acme/olmo2-1b`** finds a journal for the same folder with the same
   sizes and modified times, and resumes it. `flock models uploads list` shows open uploads with
   their progress, and `flock models uploads resume {ulid}` and `abort {ulid}` act on one.
-- **The trainer** finishes journals left by an earlier process before taking new checkpoints
-  (D107).
+- **`models.resume_uploads(name)`** finishes every journal left for a model, so a restarted job
+  can clear what an earlier process left before saving anything new.
 
 **Cleaning up:**
 - **Expiry.** An upload with no activity for 7 days becomes `expired`. The sweep (every 10
@@ -280,9 +285,10 @@ Resuming reads the local files once more but sends only what's missing.
 
 ### D103. Downloading
 
-- **Resolving.** `GET orgs/{org}/models/{name}/resolve?ref=` takes a number or a tag and answers
-  with the number, digest, files (path, size, sha256), metadata and the folder's prefix. A tag
-  is resolved once, and everything after uses the number.
+- **Resolving.** `GET orgs/{org}/models/{name}/resolve?ref=` takes a number, a tag or
+  `primary`, and no `ref` means `primary`. It answers with the number, digest, files (path,
+  size, sha256), metadata and the folder's prefix. A tag or `primary` is resolved once, and
+  everything after uses the number.
 - **The cache** is `~/.cache/flock/models/{org}/{name}/{digest}/`, keyed by digest, so a moved
   tag never serves stale bytes and two names for one version share files.
 - **Each file** downloads to `{path}.partial` with up to 32 concurrent ranged GETs. After a
@@ -292,7 +298,7 @@ Resuming reads the local files once more but sends only what's missing.
   file lock on the version folder. A `.complete` marker means every file has been checked.
 - **Read-only keys** are enough, so jobs that only load models never hold a key that writes.
 - **Skipping files.** `allow` and `ignore` patterns choose which files download.
-  `training_state/` is skipped unless asked for (D107).
+  `training_state/` is skipped unless asked for (D104).
 
 ### D104. `save_to_hub` and `load_from_hub`
 
@@ -305,6 +311,7 @@ def save_to_hub(
     name: str,                             # "org/name"
     *,
     tags: Sequence[str] = (),
+    primary: bool = False,
     metadata: Mapping[str, Any] | None = None,
     run: wandb.Run | None = None,
     step: int | None = None,
@@ -324,6 +331,12 @@ def load_from_hub(
 ) -> BaseModel: ...
 
 def download(ref: str, *, allow=None, ignore=None, include_training_state=False) -> Path: ...
+
+def set_primary(ref: str) -> ModelVersion: ...       # "org/name@12" or "org/name@checkpoint-12000"
+def tag(ref: str, tag: str, *, move: bool = False) -> ModelVersion: ...
+def untag(name: str, tag: str) -> None: ...
+def versions(name: str) -> list[ModelVersion]: ...
+def resume_uploads(name: str) -> list[ModelVersion]: ...
 ```
 
 - **Saving a model:**
@@ -335,6 +348,10 @@ def download(ref: str, *, allow=None, ignore=None, include_training_state=False)
     tensors that share storage.
   - `run` and `step` go into `flock.json` and onto the version (D106). With a `run` and a
     `step`, `dedupe_key` defaults to `{run id}:{step}`.
+  - `training_state` is a mapping of names to state dicts, such as `{"optimizer": ...}`. Each
+    goes in `training_state/{name}.safetensors` in the same version. It's there to resume
+    training, so `load_from_hub` and `download` skip it unless `include_training_state=True`.
+    Plain values (a step, RNG seeds) go in `metadata`.
 - **`blocking=False`** returns a `PendingUpload` once the files are on local disk. Its
   `result()` waits for the version, and its `done()` says if it's there. The upload runs in a
   background thread.
@@ -346,18 +363,21 @@ def download(ref: str, *, allow=None, ignore=None, include_training_state=False)
 - **Only Flock's own classes.** `architecture` and `config_class` must be under
   `flock.training`. Anything else is refused, so loading a model never imports code named by
   the files it downloaded.
-- **`ModelVersion`** has `org`, `name`, `number`, `digest`, `files` and `metadata`, and prints
-  as `acme/olmo2-1b@12`.
+- **`ModelVersion`** has `org`, `name`, `number`, `digest`, `tags`, `primary`, `step`, `files`
+  and `metadata`, and prints as `acme/olmo2-1b@12`.
+- **Refs** are `org/name`, `org/name@{number}`, `org/name@{tag}` or `org/name@primary`. With no
+  `@`, every function that reads a version uses the primary one.
 
 ### D105. The `flock models` CLI
 
 | Command | Does |
 | --- | --- |
-| `flock models push DIR ORG/NAME [--tag T]…` | pushes a folder (D102 for resuming) |
-| `flock models pull ORG/NAME[@REF] [--to DIR]` | downloads into the cache, or copies to `DIR` |
-| `flock models list [--org]` | models, with their latest version and `primary` |
-| `flock models versions ORG/NAME` | versions, newest first, with tags and sizes |
-| `flock models tag ORG/NAME@REF TAG` | adds or moves a tag |
+| `flock models push DIR ORG/NAME [--tag T]… [--primary]` | pushes a folder (D102 for resuming) |
+| `flock models pull ORG/NAME[@REF] [--to DIR]` | downloads into the cache, or copies to `DIR`; no `@REF` means the primary |
+| `flock models list [--org]` | models, with their latest and primary versions |
+| `flock models versions ORG/NAME` | versions, newest first, with tags, steps, sizes and which is primary |
+| `flock models primary ORG/NAME@REF` | makes that version primary |
+| `flock models tag ORG/NAME@REF TAG [--move]` | adds a tag, or moves it with `--move` |
 | `flock models untag ORG/NAME TAG` | removes a tag |
 | `flock models uploads list\|resume ULID\|abort ULID` | open uploads (D102) |
 
@@ -379,21 +399,45 @@ version, for example `acme/olmo2-1b@12`.
 - **Queries both ways:** a version lists its training run and its eval runs, and a run's page
   lists the versions it made.
 
-### D107. Checkpoints from the trainer
+### D107. The primary version and checkpoint tags
 
-- **`TrainerConfig`** gains `checkpoint_every: int | None`, `checkpoint_model: str | None` (for
-  example `acme/olmo2-1b`) and `checkpoint_tags`. Every `checkpoint_every` steps, and after the
-  last one, the trainer calls `save_to_hub(..., blocking=False)` with its run and step.
-- **Training waits only for the disk.** The weights are copied to the CPU and written to the
-  staging folder, and training goes on while they upload.
-- **At most 2 pending checkpoints** (`max_pending_checkpoints`). Saving past that waits for the
-  oldest to commit, so a slow network can't fill the disk.
-- **On start,** the trainer resumes any journals left for `checkpoint_model` (D102).
-- **Optimizer state** goes in `training_state/` in the same version, as safetensors:
-  `optimizer.safetensors`, plus `trainer.json` with the step, the scheduler's state and the RNG
-  states. It's there to resume training, so `load_from_hub` and `download` skip it unless
-  `include_training_state=True`. `checkpoint_training_state` (default `True`) turns it off.
-- **Rank 0 saves** in this stage. Sharded saves from FSDP are a later stage.
+**The primary version** is the model's default: what `load_from_hub`, `download`, `flock models
+pull` and `flock:` refs in eval use when no version is given.
+
+- **It's not a tag.** It's `models.primary_version_pk`, so there's exactly one per model, it
+  can't be removed by untagging, and `primary` can't be used as a tag name (D98). `@primary` in
+  a ref names it explicitly.
+- **The first version** a model gets becomes primary, so every model with a version has one.
+- **Making a version primary:**
+  - in the Models tab, from the **⋯** menu on the version's row: **Make primary**, with a
+    confirmation that names the version it replaces ("Make version 14 primary? Loading
+    acme/olmo2-1b without a version will give version 14 instead of 12.");
+  - with `flock models primary acme/olmo2-1b@14`;
+  - with `models.set_primary("acme/olmo2-1b@14")`;
+  - at upload, with `primary=True` (`--primary` on the CLI), which takes effect at commit.
+
+  Members and admins can do it. `PUT orgs/{org}/models/{name}/primary {version}` is the route.
+- **The move is recorded,** with who made it and when (`primary_set_by`, `primary_set_at`), and
+  shows on the model page.
+- **The primary version can't be deleted** until another version is made primary (D109).
+- **Resolved once.** A job that loads `acme/olmo2-1b` records the number it got, as eval's
+  provenance does (D106), so moving the primary later doesn't change what an earlier run says it
+  used.
+
+**Checkpoint tags.** A version saved during training is tagged `checkpoint-{step}`, where `step`
+is the optimizer step it was saved after, for example `checkpoint-12000`:
+
+- **It's a convention.** Flock doesn't add the tag, the training code passes it in `tags`, along
+  with the same number as `step`. The guide shows how.
+- **What Flock does with it:** tags matching `checkpoint-\d+` sort by their number in the
+  version picker and the Versions tab, and the Versions tab has a **Checkpoints** filter that
+  shows only versions with one. Retention treats them as untagged (D109), since every training
+  checkpoint has one.
+- **One tag, one version.** Saving `checkpoint-12000` again answers 409, so a restarted job that
+  reaches a step it already saved doesn't silently move the tag. `dedupe_key` (D100) normally
+  returns the existing version before that happens.
+- **Tags stay put.** Unlike the primary, checkpoint tags aren't meant to move. `--move` and
+  `move=True` exist for other tags, such as `release`.
 
 ### D108. The Models tab
 
@@ -404,8 +448,8 @@ version, for example `acme/olmo2-1b@12`.
 
   | URL | Page |
   | --- | --- |
-  | `/models/{org}` | the org's models: name, latest version, `primary`'s version, size, updated |
-  | `/models/{org}/{name}` | a model, at `?version=` (a number or tag, default `primary`, else the latest) |
+  | `/models/{org}` | the org's models: name, latest version, primary version, size, updated |
+  | `/models/{org}/{name}` | a model, at `?version=` (a number or tag, default the primary) |
 
 - **The model page** has a header with the version picker, size, and actions: Load (a dialog with
   the `load_from_hub` and `flock models pull` snippets for the version shown), Browse files (the
@@ -414,7 +458,7 @@ version, for example `acme/olmo2-1b@12`.
   | Tab | Shows |
   | --- | --- |
   | Overview (default) | the README if the version has one, `config.json` as a table, and `flock.json` |
-  | Versions | newest first: number, tags, size, run and step, who pushed it and when, with View and Add tag |
+  | Versions | newest first: number, a **Primary** badge, tags, size, run and step, who pushed it and when. Each row's **⋯** menu has View, Make primary (D107), Add tag and Delete. A **Checkpoints** filter shows only versions with a `checkpoint-{step}` tag |
   | Evals | the version's eval runs, each task's metrics side by side, linked to the runs |
   | Files | each file's path, size and sha256 |
 
@@ -425,16 +469,19 @@ version, for example `acme/olmo2-1b@12`.
 ### D109. Deleting versions and models
 
 - **A version** is deleted from the Versions tab, by members and admins, with the type-the-name
-  dialog asking for `acme/olmo2-1b@12`. A version with a tag can't be deleted until the tag is
-  moved or removed. A version with eval runs can be deleted, after a warning that says how many.
+  dialog asking for `acme/olmo2-1b@12`. The primary version can't be deleted until another is
+  made primary. A version with a tag other than `checkpoint-{step}` can't be deleted until the
+  tag is moved or removed, and a checkpoint tag goes with its version. A version with eval runs
+  can be deleted, after a warning that says how many.
 - **What deleting does:** the row gets `deleted_at` and its files move to the trash bucket
   (D93's, at `{org pk:05}/models/{version pk}/`). Admins restore or delete it for good from a
   "Deleted models" section in org settings, and the sweep removes it after 14 days. A restored
   version keeps its number.
 - **A model** is deleted the same way, with every version in it, and restored the same way.
 - **Retention** is an org setting, on the org settings page: "Keep the newest N untagged versions
-  of each model", off by default. When on, the sweep deletes older versions that have no tag and
-  no eval runs, as above, so they wait 14 days in the trash.
+  of each model", off by default. When on, the sweep deletes older versions that aren't primary,
+  have no tag other than `checkpoint-{step}`, and have no eval runs, as above, so they wait 14
+  days in the trash.
 
 ---
 
@@ -449,7 +496,7 @@ branches from `feat/scaffold-training-loop`, and each next one from the one befo
   retention setting, and the `models` org name refused.
 - `ensure_managed` for `flock-models` (D97).
 - `core/models.py` and `api/models.py`: upload sessions and commits (D100), resolving (D103),
-  versions, tags, deleting and the trash (D109).
+  versions, tags, the primary version (D107), deleting and the trash (D109).
 - The proxy's write rule for `flock-models` and its cache of open uploads, cleared over the bus
   on commit, abort and expiry (D97, D101).
 - The sweep: expiry, stray prefixes, the trash and retention (D102, D109). The startup pass for
@@ -458,19 +505,22 @@ branches from `feat/scaffold-training-loop`, and each next one from the one befo
 ### PR 2. Client (`feat/model-registry-client`)
 
 - `flock.hub.models`: uploading with the journal and resuming (D101, D102), downloading and the
-  cache (D103), `save_to_hub`, `load_from_hub` and `download` (D104).
+  cache (D103), `save_to_hub`, `load_from_hub`, `download`, `set_primary`, `tag`, `untag`,
+  `versions` and `resume_uploads` (D104, D107).
 - `BaseModel.config`.
 - The `flock models` CLI (D105).
+- The guide and reference pages already written with this doc (`docs/source/hub/`), updated to
+  whatever the code ends up doing, with `[[autodoc]]` for the docstrings.
 
-### PR 3. Training and eval (`feat/model-registry-training`)
+### PR 3. Eval (`feat/model-registry-eval`)
 
-- The trainer's checkpoint options and background uploads (D107).
 - `flock:` refs in eval, `model_digest` in the provenance, and the API's eval links (D106).
 
 ### PR 4. Web (`feat/models-tab`)
 
-- The sidebar item, the list and model pages, the run page's Checkpoints section, the tag and
-  delete dialogs, and the "Deleted models" and retention sections in org settings (D108, D109).
+- The sidebar item, the list and model pages, the run page's Checkpoints section, the row menu
+  with Make primary, the tag and delete dialogs, the Checkpoints filter, and the "Deleted models"
+  and retention sections in org settings (D107 to D109).
 
 ### Tests
 
@@ -484,8 +534,12 @@ branches from `feat/scaffold-training-loop`, and each next one from the one befo
   - two commits at once getting consecutive numbers;
   - `dedupe_key` returning the existing version;
   - expiry with a moved clock, aborting and deleting what landed; stray prefixes;
-  - tags: adding, moving, digits-only names refused, resolving at a moved tag;
-  - deleting and restoring versions and models, tagged versions refused, retention;
+  - tags: adding, moving, digits-only names and `primary` refused, a second `checkpoint-12000`
+    refused, resolving at a moved tag;
+  - the primary: the first version becoming primary, `primary=True` at commit, moving it,
+    resolving with no ref, and deleting the primary refused;
+  - deleting and restoring versions and models, tagged versions refused, checkpoint tags going
+    with their version, retention skipping the primary and treating checkpoint tags as untagged;
   - eval links from a run config, and unresolvable refs ignored.
 - **`tests/s3/test_models.py`:**
   - a round trip of a small `Olmo2`, sharded and not, giving equal tensors;
@@ -504,14 +558,17 @@ branches from `feat/scaffold-training-loop`, and each next one from the one befo
 - **A benchmark,** not in CI: push and pull a 10 GB model against Ceph through the proxy and
   straight upstream, to see whether D101's presigned URLs are worth a stage.
 - **Web specs** for each page and dialog.
-- **Manual:** train a tiny `Olmo2` with `checkpoint_every`, kill the process during an upload,
-  restart it, see the upload resume and the run's checkpoints appear, evaluate one with
-  `flock:` and see the eval on the model page.
+- **Manual:** follow the guide's checkpoint loop with a tiny `Olmo2`, kill the process during an
+  upload, restart it, see the upload resume and the `checkpoint-{step}` versions appear, make one
+  primary from the row menu, load the model with no version, evaluate it with `flock:` and see
+  the eval on the model page.
 
 ### Docs and status
 
-- A guide page, "Storing models", for `save_to_hub`, `load_from_hub`, the CLI and the trainer's
-  checkpoints.
+- The guide, `docs/source/hub/store-models.md`, and the reference, `docs/source/hub/models.md`,
+  are written with this doc, ahead of the code, so they describe what it should do. Check them
+  against the code in PR 2 and swap the hand-written tables for `[[autodoc]]` where the
+  docstrings cover them.
 - An API reference page for the model routes.
 - Mark this file `applied`, with a "How it was actually built" section.
 
@@ -528,11 +585,20 @@ branches from `feat/scaffold-training-loop`, and each next one from the one befo
 - **Deleting from Storage isn't possible** in `flock-models`, since the proxy refuses it. That's
   the point, but it means the Models tab and the CLI are the only ways to remove anything.
 
-## 5. Open for review
+## 5. Settled before review
+
+1. **The primary version is its own pointer,** not a tag, set from the version's **⋯** menu, and
+   it's what loads when no version is given (D107).
+2. **Checkpoints are tagged `checkpoint-{step}`** by convention, added by the training code
+   (D107).
+3. **The trainer isn't changed** in this stage. The guide shows the loop to write.
+
+## 6. Open for review
 
 1. **One-segment model names** (`acme/olmo2-1b`), or folders like datasets (`acme/olmo2/1b`)?
    This proposal picks one segment.
 2. **Optimizer state in the same version** under `training_state/`, skipped by default, or in a
    separate model?
-3. **Retention off by default** (D109), with tagged versions and versions with evals always kept?
+3. **Retention off by default** (D109), with the primary, versions with evals and versions with
+   tags other than `checkpoint-{step}` always kept?
 4. **7 days** before an idle upload expires. Should this be an org setting too?

@@ -16,6 +16,10 @@ guide:
     title: Use storage from Python
   - local: cli/authenticate-jobs
     title: Authenticate an unattended job
+- title: Hub
+  sections:
+  - local: hub/store-models
+    title: Store and load models
 - title: Training
   sections:
   - local: training/trainer
@@ -67,6 +71,10 @@ reference:
     title: Credential resolution and Python API
   - local: cli/python-s3
     title: Python S3 API
+- title: Hub
+  sections:
+  - local: hub/models
+    title: Models API
 - title: Evals
   sections:
   - local: evals/commands
