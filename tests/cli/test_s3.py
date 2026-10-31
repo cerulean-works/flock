@@ -1,4 +1,4 @@
-"""`flock.cli.s3` and `flock s3` (D58, D59), against a flock with S3 on."""
+"""`flock.hub.s3` and `flock s3` (D58, D59), against a flock with S3 on."""
 
 import datetime as dt
 import json
