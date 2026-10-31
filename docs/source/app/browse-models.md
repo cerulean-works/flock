@@ -20,8 +20,6 @@ The tabs show the version in more detail. The tab is kept in the URL as `?tab=`.
 | **Versions** | Every version, newest first, with its tags, size, the run and step it came from, and who pushed it and when. |
 | **Files** | Each file's path, size and sha256. |
 
-To see only training checkpoints, turn on **Checkpoints** above the list in the **Versions** tab. It shows the versions with a `checkpoint-{step}` tag.
-
 ## Make a version primary
 
 The primary version is what loads when nobody names a version.

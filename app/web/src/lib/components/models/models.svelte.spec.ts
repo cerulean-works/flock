@@ -310,26 +310,6 @@ describe('ModelView', () => {
 		);
 	});
 
-	it('filters the Versions to checkpoints', async () => {
-		const calls = serve({
-			[`${API}/olmo2-1b/versions`]: (_, url) =>
-				page(url!.includes('checkpoints=true') ? versions.slice(0, 2) : versions)
-		});
-		view('http://flock.test/models/acme/olmo2-1b?tab=versions');
-		await expect.element(screen.getByRole('link', { name: '12', exact: true })).toBeVisible();
-		const toggle = screen.getByRole('switch', { name: 'Checkpoints' });
-		await expect
-			.element(toggle)
-			.toHaveAccessibleDescription(
-				'Shows only versions with a checkpoint tag, such as checkpoint-12000.'
-			);
-		await toggle.click();
-		await expect
-			.element(screen.getByRole('link', { name: '12', exact: true }))
-			.not.toBeInTheDocument();
-		expect(calls.at(-1)!.url).toBe(`${API}/olmo2-1b/versions?checkpoints=true`);
-	});
-
 	it('makes a version primary from the row menu and keeps the version shown', async () => {
 		const calls = serve({
 			[`${API}/olmo2-1b/versions`]: () => page(versions),

@@ -8,8 +8,6 @@
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
-	import { Label } from '#lib/components/ui/label/index.js';
-	import { Switch } from '#lib/components/ui/switch/index.js';
 	import { DialogSubject } from '#lib/data/dialog-subject.svelte.ts';
 	import { modelApi, modelCall, runPathHref, sortTags } from '#lib/models.ts';
 	import type { ModelInfo, ModelVersion, ModelVersionsPage } from '#lib/types.ts';
@@ -35,8 +33,7 @@
 	let { org, info, shown, versionHref, onchange, now }: Props = $props();
 	const name = $derived(info.name);
 
-	// Newest first, 100 a page; the Checkpoints filter shows only versions with a checkpoint tag.
-	let checkpoints = $state(false);
+	// Newest first, 100 a page.
 	let versions = $state<ModelVersion[]>([]);
 	let cursor = $state<number | null>(null);
 	let loaded = $state(false);
@@ -48,10 +45,7 @@
 		failed = null;
 		try {
 			const page = await modelCall<ModelVersionsPage>(
-				modelApi(org, name, 'versions', {
-					before: more ? cursor : null,
-					checkpoints: checkpoints || null
-				})
+				modelApi(org, name, 'versions', { before: more ? cursor : null })
 			);
 			versions = more ? [...versions, ...page.versions] : page.versions;
 			cursor = page.cursor;
@@ -64,7 +58,7 @@
 	}
 
 	$effect(() => {
-		void [name, checkpoints];
+		void name;
 		void load();
 	});
 
@@ -80,26 +74,12 @@
 	const deleting = new DialogSubject<ModelVersion>();
 </script>
 
-<div class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1">
-	<Switch
-		id="checkpoints-only"
-		bind:checked={checkpoints}
-		aria-describedby="checkpoints-only-hint"
-	/>
-	<Label for="checkpoints-only" class="font-normal">Checkpoints</Label>
-	<span id="checkpoints-only-hint" class="text-[13px] text-muted-foreground">
-		Shows only versions with a checkpoint tag, such as checkpoint-12000.
-	</span>
-</div>
-
 {#if failed && !loaded}
 	<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">{failed}</p>
 {:else if !loaded}
 	<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">Loading…</p>
 {:else if !versions.length}
-	<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">
-		{checkpoints ? 'No version has a checkpoint tag.' : 'This model has no versions yet.'}
-	</p>
+	<p class="bg-card px-4 py-6 text-[13px] text-muted-foreground">This model has no versions yet.</p>
 {:else}
 	<!-- Every cell starts on the same 24px line, so a row reads level whatever it holds. -->
 	<table class="w-full border-collapse text-[13px] leading-6">
