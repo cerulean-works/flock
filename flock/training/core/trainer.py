@@ -34,7 +34,7 @@ class TrainerConfig:
 
     max_norm: float = 1.0
     logging_steps: int = 10
-    seed = 42
+    seed: int = 42
 
 
 class Trainer:
@@ -190,7 +190,7 @@ class Trainer:
             window_tokens += num_tokens
             window_steps += 1
 
-            if (idx + 1) % self.logging_steps == 0:
+            if (idx + 1) % self.logging_steps == 0 or (idx + 1) == self.total_steps:
                 mean_loss, max_loss, mean_grad, max_grad = torch.stack(
                     (
                         loss_sum / window_tokens.clamp_min(1),
@@ -217,23 +217,3 @@ class Trainer:
                 grad_norm_max.zero_()
                 window_tokens.zero_()
                 window_steps.zero_()
-
-        if self.total_steps % self.logging_steps:
-            mean_loss, max_loss, mean_grad, max_grad = torch.stack(
-                (
-                    loss_sum / window_tokens.clamp_min(1),
-                    loss_max,
-                    grad_norm_sum / window_steps,
-                    grad_norm_max,
-                )
-            ).tolist()
-
-            self.run.log(
-                {
-                    "global_step": idx + 1,
-                    "train/loss_mean": mean_loss,
-                    "train/loss_window_max": max_loss,
-                    "train/grad_norm_mean": mean_grad,
-                    "train/grad_norm_window_max": max_grad,
-                }
-            )
