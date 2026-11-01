@@ -32,7 +32,7 @@ class TrainerConfig:
     wandb_project: str
     wandb_mode: Literal["online", "offline", "disabled", "shared"] = "online"
 
-    # Master weights are always stored in FP32, but the model can be trained in FP16 or BF16.
+    # Master weights are always stored in FP32, but the model can be trained in BF16.
     model_dtype: torch.dtype = torch.bfloat16
     max_norm: float = 1.0
     logging_steps: int = 10
