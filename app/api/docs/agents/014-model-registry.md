@@ -884,7 +884,7 @@ client's code needed no change.
   `model`, so it sits beside it in `results.json` and `Provenance(**old)` still loads files
   without it (the regression bank test does exactly that). It's `None` for Hugging Face models:
   their commit, already in `model`, names the bytes, and repeating it would make one field mean
-  two things. `schema_version` is 6, since the layout gained a field. `compare` refuses a
+  two things. `compare` refuses a
   different `model_digest` as another instrument, read with `get`, so a file without the field
   compares with a Hugging Face run's `None`. Two Flock servers can each have
   `flock:acme/olmo2-1b@12` with different bytes, which `model` alone wouldn't catch.
