@@ -1,7 +1,7 @@
 """S3 access through Flock: keys for an org's buckets, renewed before they expire.
 
 ```python
-from flock.cli import s3
+from flock.hub import s3
 
 creds = s3.credentials(org="acme")
 client = creds.boto3_client()
