@@ -34,7 +34,7 @@ The file number and the decision number are provisional. The file takes the next
 
 1. `cli.py`: the `--verbose` flag, and `format_results(results, verbose=False)` with the summary as default.
 2. Tests: the summary and the verbose print on hand-built `Results` with known values, a run of tasks only, and the CLI with and without `--verbose`.
-3. Docs: `cli.md` (what the command prints, the flag), `quickstart.md` and `results.md`.
+3. Docs: `commands.md` (what the command prints, the flag), `run-evaluation.md` and `results.md`, all under `docs/source/evals/`.
 
 ---
 
