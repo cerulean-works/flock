@@ -178,17 +178,17 @@
     ]
   },
   "toy:gold_only": {
-    "hash": "28453e9d8872ac73c558a42c6dcf508bf93eeb385ff8a6dd86ce70b5748383b1",
+    "hash": "84a8a48c56252049c42b4d9881c54571d20327845448ea416b29f65b0f8411d7",
     "requests": [
       {
-        "context": "文章：玉山、雪山、合歡山\n問題：臺灣最高的山是哪一座？\n答案：玉山\n\n文章：honey、milk、silk\n問題：What do bees make?\n答案：",
-        "continuation": "honey",
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: What do bees make?\nAnswer:",
+        "continuation": " honey",
         "doc": "q-1",
         "gold": true
       },
       {
-        "context": "文章：玉山、雪山、合歡山\n問題：臺灣最高的山是哪一座？\n答案：玉山\n\n文章：石頭、蘋果、椅子、雲\n問題：哪一個是水果？\n答案：",
-        "continuation": "蘋果",
+        "context": "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\nQuestion: Which gas do plants take in?\nAnswer: carbon dioxide\n\nQuestion: 哪一個是水果？\nAnswer:",
+        "continuation": " 蘋果",
         "doc": "q-2",
         "gold": true
       }

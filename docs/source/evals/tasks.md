@@ -27,7 +27,7 @@ A task is a [`~eval.tasks.MultipleChoiceTask`] registered by name in `TASKS`, an
 | `lab_bench_protocolqa` | [LAB-Bench](https://huggingface.co/datasets/futurehouse/lab-bench) ProtocolQA | `train` | 108 | 3 from `train`, the scored split | `acc_per_char` |
 | `medmcqa` | [MedMCQA](https://huggingface.co/datasets/openlifescienceai/medmcqa) | `validation` | 4183 | 5 from `train` | `acc_per_char` |
 | `medqa_en` | [MedQA](https://huggingface.co/datasets/davidheineman/medqa-en) (English) | `test` | 1273 | 5 from `train` | `acc_per_char`, no PMI |
-| `lambada` | [LAMBADA](https://huggingface.co/datasets/EleutherAI/lambada_openai) | `test` | 5153 | none | `bpb` of the last word |
+| `lambada` | [LAMBADA](https://huggingface.co/datasets/EleutherAI/lambada_openai) | `test` | 5153 | none | `acc_greedy`, greedy match of the last word |
 | `minerva_math_<subject>` | [MATH](https://huggingface.co/datasets/EleutherAI/hendrycks_math), one of 7 subjects | `test` | 5000 in all | 4, OLMES's fixed Minerva examples | `bpb` of the solution |
 | `humaneval` | [HumanEval](https://huggingface.co/datasets/openai/openai_humaneval) | `test` | 164 | 3, from `test`, never the doc itself | `bpb` of the solution |
 | `mbpp` | [MBPP](https://huggingface.co/datasets/google-research-datasets/mbpp) | `test` | 500 | 3, from `prompt` | `bpb` of the code |
@@ -40,14 +40,14 @@ Every English QA task's requests are identical, string for string, to OLMES's fo
 
 The math and code tasks score only the gold text, after the problem, so they report `bpb` alone. The subjects are `algebra` (1187 docs), `counting_and_probability` (474), `geometry` (479), `intermediate_algebra` (903), `number_theory` (540), `prealgebra` (871) and `precalculus` (546). The languages are `bash`, `c`, `cpp`, `csharp`, `go`, `haskell`, `java`, `javascript`, `matlab`, `php`, `python`, `r`, `ruby`, `rust`, `scala`, `swift` and `typescript`. Each task renders its prompt and gold text exactly as OLMES does, quirks included: HumanEval's examples put a space before the already indented solution, which the scored solution doesn't get.
 
-The other QA tasks' requests are identical to OLMES's too (`<task>:rc::gen2mc:xlarge`, `sciq:rc::olmo3`, `<task>:rc::olmes`, `lab_bench_<subset>`, `<task>:rc::none` and `lambada:bpb`). Where OLMES samples few-shot examples, the sample was drawn once with OLMES's code and is written in the task as ids, so every doc of a task sees the same examples, basic skills apart: its docs see 5 of the 6 drawn, never themselves. SciQ, MedQA and LAMBADA have no id column, so a doc's id is its row's position in its split. Basic skills reads `cerulean-works/basic-skills`, a parquet mirror of `allenai/basic-skills`, whose loading script `datasets` no longer runs.
+The other QA tasks' requests are identical to OLMES's too (`<task>:rc::gen2mc:xlarge`, `sciq:rc::olmo3`, `<task>:rc::olmes`, `lab_bench_<subset>`, `<task>:rc::none`, `lambada` and `lambada:bpb`). Where OLMES samples few-shot examples, the sample was drawn once with OLMES's code and is written in the task as ids, so every doc of a task sees the same examples, basic skills apart: its docs see 5 of the 6 drawn, never themselves. SciQ, MedQA and LAMBADA have no id column, so a doc's id is its row's position in its split. Basic skills reads `cerulean-works/basic-skills`, a parquet mirror of `allenai/basic-skills`, whose loading script `datasets` no longer runs.
 
 A few behaviours follow OLMES for parity and are worth knowing:
 
 - **The five gen2mc tasks** are OLMo 3's multiple-choice versions of short-form generative QA datasets. CoQA is zero-shot. The other four's few-shot examples exist only in OLMES's code, so they are written out as rows in `flock.eval.tasks.shots`.
 - **Qasper, SciRIFF and LAB-Bench show some docs their own answer.** OLMES draws their examples from the split it scores and keeps the doc itself, so 3 to 5 docs per task are shown their own question and answer.
 - **Basic skills shuffles each doc's choices** with a generator seeded by the doc's id, as OLMES does, so the order is fixed per doc. Its primary metric is `acc_per_token`; OLMES's own `acc_per_token` equals its `acc_raw`, so compare with OLMES's numbers on `acc_raw`.
-- **LAMBADA reports only `bpb` for now.** Its Base Easy accuracy is greedy match of the last word, which the scorer doesn't compute yet, so it is only in `base_easy:qa_bpb`.
+- **LAMBADA is one task for two OLMES tasks.** OLMES's `lambada` reports greedy match and `lambada:bpb` reports `bpb`, on the same requests. Our `lambada` reports both: `acc_greedy` is 1 when every token of the last word is the model's most likely next token. `base_easy:qa_rc` reads `acc_greedy` and `base_easy:qa_bpb` reads `bpb`.
 
 `drcd_bpb` scores Traditional Chinese reading comprehension as OLMo 3 scores SQuAD and DROP: the bits per byte of the gold answer after the passage and the question. It reads `cerulean-works/drcd`, a parquet mirror of DRCD's GitHub release in SQuAD's schema. A request is `文章：<passage>\n問題：<question>\n答案：` and the first of the two annotated answers, with no space before it, after one example from `validation`. There is no title line, since many DRCD titles are Wikipedia page names in Simplified script. OLMES has no DRCD task, so the reference its requests and float32 scores match is lm-evaluation-harness v0.4.3 rendering this format, as for TMMLU+. OLMo 3 shows SQuAD five examples; DRCD shows one, so that every request fits in 2,048 tokens under OLMo 2's and Qwen 2.5's tokenizers.
 
@@ -61,8 +61,8 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `mmlu:bpb` | the 57 `mmlu_<subject>` tasks | `bpb` | `mmlu:rc:bpb::olmes` |
 | `basic_skills` | the 6 `basic_skills_<skill>` tasks | each task's primary metric (`acc_per_token`) | `basic_skills:rc::olmes` |
 | `basic_skills:bpb` | the 6 `basic_skills_<skill>` tasks | `bpb` | `basic_skills:rc:bpb::olmes` |
-| `base_easy:qa_rc` | `arc_easy`, `arc_challenge`, `csqa`, `hellaswag`, `winogrande`, `socialiqa`, `piqa`, `sciq`, `qasper_yesno`, `sciriff_yesno`, `lab_bench_dbqa`, `lab_bench_protocolqa`, `medmcqa`, `medqa_en`, `coqa`, `drop`, `jeopardy`, `naturalqs`, `squad`, `mmlu`, `basic_skills` | each task's primary metric | `olmo3:base_easy:qa_rc` |
-| `base_easy:qa_bpb` | the same tasks, `mmlu:bpb`, `basic_skills:bpb` and `lambada` | `bpb` | `olmo3:base_easy:qa_bpb` |
+| `base_easy:qa_rc` | `arc_easy`, `arc_challenge`, `csqa`, `hellaswag`, `winogrande`, `socialiqa`, `piqa`, `sciq`, `qasper_yesno`, `sciriff_yesno`, `lab_bench_dbqa`, `lab_bench_protocolqa`, `medmcqa`, `medqa_en`, `coqa`, `drop`, `jeopardy`, `naturalqs`, `squad`, `mmlu`, `basic_skills`, `lambada` | each task's primary metric | `olmo3:base_easy:qa_rc` |
+| `base_easy:qa_bpb` | the same tasks, with `mmlu:bpb` and `basic_skills:bpb` in place of `mmlu` and `basic_skills` | `bpb` | `olmo3:base_easy:qa_bpb` |
 | `base_easy:math_bpb` | the 7 `minerva_math_<subject>` tasks | `bpb` | `olmo3:base_easy:math_bpb` |
 | `mt_mbpp` | the 17 `mt_mbpp_<language>` tasks | `bpb` | `mt_mbpp_v2fix` |
 | `base_easy:code_bpb` | `humaneval`, `mbpp`, `mt_mbpp` | `bpb` | `olmo3:base_easy:code_bpb` |
@@ -76,7 +76,7 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `tw_mock_exams:bpb` | the 10 `tw_mock_exams_<subject>` tasks | `bpb` | none |
 | `tw_mock_exams:all` | `tw_mock_exams`, `tw_mock_exams:bpb` | unscored | none |
 
-The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. OLMES groups ARC-Easy and ARC-Challenge into one suite with no metric of its own; here they are two members of `base_easy:qa_rc`. `basic_skills`, and so `base_easy:qa_rc`, averages our `acc_per_token`, which divides by the real token count. OLMES's equals its `acc_raw`, so these two scores differ from OLMES's by that member. See [Suites in results](results#suites) for when two suite scores compare.
+The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. OLMES groups ARC-Easy and ARC-Challenge into one suite with no metric of its own; here they are two members of `base_easy:qa_rc`. `basic_skills`, and so `base_easy:qa_rc`, averages our `acc_per_token`, which divides by the real token count. OLMES's equals its `acc_raw`, so these two scores differ from OLMES's by that member. In BF16, `lambada`'s `acc_greedy` can also differ by a few near-tie docs, since our argmax is taken over FP32 logits and OLMES's over its BF16 log-probabilities. See [Suites in results](results#suites) for when two suite scores compare.
 
 The `tmmluplus` score is the mean of the four category means, as the dataset card computes its total, so each category counts once however many subjects it has. `tmmluplus:taiwan` holds the three subjects behind the Taiwan columns of the Gemma-3-TAIDE model cards.
 
