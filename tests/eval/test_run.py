@@ -2,6 +2,7 @@ import dataclasses
 import hashlib
 import json
 import math
+import shlex
 import sys
 from types import SimpleNamespace
 
@@ -382,8 +383,9 @@ def test_cli_runs_and_prints_each_tasks_primary_metric(offline_model, tmp_path, 
     # `--task` only accepts registered names, fixed when the CLI is imported, so the toy task
     # runs under the name `arc_easy`.
     monkeypatch.setitem(run.TASKS, "arc_easy", TASK)
-    # The CLI records `sys.argv`, which `CliRunner` leaves alone.
-    monkeypatch.setattr(sys, "argv", ["flock-eval", *argv])
+    # The CLI records `sys.argv`, which `CliRunner` leaves alone, so it is set as the `flock`
+    # script sees it.
+    monkeypatch.setattr(sys, "argv", ["/venv/bin/flock", "eval", *argv])
 
     result = CliRunner().invoke(cli.main, argv, catch_exceptions=False)
 
@@ -391,7 +393,7 @@ def test_cli_runs_and_prints_each_tasks_primary_metric(offline_model, tmp_path, 
     assert out[0] == "model tiny@0  flock abc123"
     assert out[1].split()[2:] == ["acc_per_char", "docs", "2"]
     data = json.loads((tmp_path / "results.json").read_text())
-    assert data["provenance"]["command"] == "flock-eval " + " ".join(argv)
+    assert data["provenance"]["command"] == shlex.join(["flock", "eval", *argv])
 
 
 def test_run_loads_the_weights_in_the_dtype_asked_for(offline_model, scorer, monkeypatch, tmp_path):
@@ -425,7 +427,7 @@ def test_cli_prints_suite_scores(toy_suites, tmp_path, monkeypatch):
     # a registered name.
     monkeypatch.setitem(run.SUITES, "base_easy", dataclasses.replace(GROUP, name="base_easy"))
     argv = ["run", "--model", "tiny@0", "--suite", "base_easy", "--out", str(tmp_path)]
-    monkeypatch.setattr(sys, "argv", ["flock-eval", *argv])
+    monkeypatch.setattr(sys, "argv", ["/venv/bin/flock", "eval", *argv])
 
     result = CliRunner().invoke(cli.main, argv, catch_exceptions=False)
 

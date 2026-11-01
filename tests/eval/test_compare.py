@@ -15,7 +15,7 @@ from flock.eval.tasks import TASKS, Dataset, Truncation
 PROVENANCE = Provenance(
     model="allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf",
     flock_commit="abc123",
-    command="flock-eval run",
+    command="flock eval run",
     device="NVIDIA H200",
     dtype="float32",
     batch_tokens=16384,
