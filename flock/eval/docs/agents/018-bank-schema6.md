@@ -5,7 +5,7 @@
 | Status | in review |
 | Date | 2026-11-01 |
 | Builds on | [013](013-score-compare.md) (D2: refusals, D4: the bank and its refresh), [014](014-run-provenance.md) (D1: `suite_hash`, the library versions), [015](015-greedy-match.md) (D3: LAMBADA's new hash, D4: schema 6) |
-| Keeps | every score, request, task hash and tolerance |
+| Keeps | every task definition and tolerance; the bank's scores move only where 015 moved them (LAMBADA, `base_easy:qa_rc`) |
 | Result | `compare` refuses a common suite with another `suite_hash`; the bank `tests/eval/regression/olmo-2-0425-1b-float32.json` rewritten by the same command at schema 6 |
 
 The file number and the decision numbers are provisional. The file takes the next free number when its PR is opened.
@@ -34,6 +34,10 @@ A file written before schema 5 has no `suite_hash`. When either file's `schema_v
 
 013.D4 says `compare` will check the suite hash "in place of `members`"; both are checked (018.D1). 013's first known gap says that until the bank is refreshed, a task added to `base_easy` shows as a breach on the suites that hold it. Against a bank with suite hashes it is a refusal: the new member changes each holding suite's hash. The fix is the same, a refresh.
 
+015.D4 says `compare` reads the version only to print it. It now also reads it to decide whether the suite hash is checked (018.D1).
+
+The results guide said that files written before schema 6 have no `model_digest`. Schema 6 files written before the model registry landed, this bank among them, have none either; they read as `null` all the same. The guide now says so.
+
 ---
 
 ## 4. Plan
@@ -48,7 +52,7 @@ A file written before schema 5 has no `suite_hash`. When either file's `schema_v
 ## 5. How it was actually built
 
 - **Code.** `b75c96a` adds the refusal, its test and the `comparison.md` lines. Review then tied the skip to `schema_version` below 5 rather than to a missing key, so a schema 6 file without a `suite_hash` refuses (`d9faed9`, tested). The test gives the old file schema 4 and the new one another suite hash, so the skip is exercised.
-- **The bank.** `flock eval run --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf --suite base_easy --dtype float32` at `b75c96a` (scoring code equal to `main` at `cd0de44`), one H200, 2 h 59 min, written at schema 6 with `tokenizers` 0.23.3 and `datasets` 5.1.0. 109 tasks and 10 suites, as before. Its `results.json` replaces the bank unchanged.
+- **The bank.** `flock eval run --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf --suite base_easy --dtype float32 --out <dir>` at `b75c96a` (scoring code equal to `main` at `cd0de44`), one H200, 2 h 59 min, written at schema 6 with `tokenizers` 0.23.3 and `datasets` 5.1.0. Its provenance records the command as `flock-eval eval run ...`, the script's old name. The file has no `model_digest`: the model registry, which adds it, landed after the job, and a Hugging Face model's digest reads as `null` either way. 109 tasks and 10 suites, as before. Its `results.json` replaces the bank unchanged.
 - **Old bank against new, as is.** Refused, exit 2, on `lambada`'s `task_hash` (`2fbcb961` to `147d9b4c`), as 015.D3 predicts.
 - **Old bank without `lambada`, `base_easy:qa_rc` and `base_easy:qa_bpb`, against new.** `compared: tasks 108, suites 8, breaches 0`. `base_easy:qa_bpb` has to go too: it holds `lambada`, and a suite's tolerance needs every member in the file. Its score was checked by hand instead.
 - **Equality.** Every metric, `num_docs` and truncation count of the 108 other tasks is byte-equal. LAMBADA's `bpb` is byte-equal (0.4381837546825409); it gained `acc_greedy` (0.6019794344902039) as its primary metric. Every suite score is byte-equal except `base_easy:qa_rc`, which gained `lambada` as a member (0.5967264635396581 to 0.5969652349465011).
