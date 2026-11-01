@@ -176,9 +176,9 @@ class Trainer:
 
             with torch.autocast(self.device.type, dtype=self.model_dtype):
                 output: torch.Tensor = self.model(batch)
-            loss, num_tokens = self._calc_batch_loss(output, batch["labels"])
-            loss.backward()
+                loss, num_tokens = self._calc_batch_loss(output, batch["labels"])
 
+            loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(
                 self.model.parameters(),
                 max_norm=self.max_norm,
