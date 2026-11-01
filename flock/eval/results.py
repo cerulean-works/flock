@@ -196,21 +196,34 @@ def prediction_rows(docs: Sequence[MCDoc], scores: ChoiceScores) -> list[dict[st
 def perplexity_prediction_rows(
     docs: Sequence[TextDoc], scores: Scores, num_bytes: Sequence[int], window: int
 ) -> list[dict[str, Any]]:
-    """Returns one row per doc with its id, summed log-probability, token and UTF-8 byte counts and number of windows, so any domain's `bits_per_byte` can be recomputed."""
-    # One host copy per field, not per doc.
-    logprob = scores.logprob.tolist()
-    num_tokens = scores.num_tokens.tolist()
+    """
+    Returns one row per doc with its id, summed log-probability, token and UTF-8 byte counts, number of windows and whether every token is the greedy one, so any domain's `bits_per_byte` can be recomputed.
+
+    Raises:
+        `ValueError`: if `scores` or `num_bytes` doesn't hold one entry per doc.
+    """
+    # One host copy per field, not per doc. `strict`, so a count that doesn't match the docs
+    # raises rather than dropping rows.
+    per_doc = zip(
+        docs,
+        scores.logprob.tolist(),
+        scores.num_tokens.tolist(),
+        num_bytes,
+        scores.is_greedy.tolist(),
+        strict=True,
+    )
 
     rows = []
-    for i, doc in enumerate(docs):
+    for doc, logprob, num_tokens, doc_bytes, is_greedy in per_doc:
         rows.append(
             {
                 "id": doc.id,
-                "logprob": logprob[i],
-                "num_tokens": num_tokens[i],
-                "num_bytes": num_bytes[i],
+                "logprob": logprob,
+                "num_tokens": num_tokens,
+                "num_bytes": doc_bytes,
                 # The last window holds what is left.
-                "windows": math.ceil(num_tokens[i] / window),
+                "windows": math.ceil(num_tokens / window),
+                "is_greedy": is_greedy,
             }
         )
 

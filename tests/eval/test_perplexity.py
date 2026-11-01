@@ -3,11 +3,14 @@ import json
 import math
 
 import pytest
+import torch
 
 from flock.eval import run
 from flock.eval.model import ScoringModel
+from flock.eval.requests import Scores
+from flock.eval.results import perplexity_prediction_rows
 from flock.eval.run import EvalConfig, evaluate, score_task
-from flock.eval.tasks import SUITES, TASKS, Dataset, PerplexityTask, Suite
+from flock.eval.tasks import SUITES, TASKS, Dataset, PerplexityTask, Suite, TextDoc
 from flock.eval.tasks.paloma import PALOMA, source_suite
 
 from .toy import TASK, TEXT_ROWS, TEXT_TASK
@@ -82,8 +85,11 @@ def test_score_task_does_not_depend_on_batching(scorer):
     assert score_task(scorer, TEXT_TASK).metrics["bits_per_byte"] == pytest.approx(one_batch)
 
 
-def test_score_task_writes_one_prediction_row_per_doc(scorer, tmp_path):
-    score_task(scorer, TEXT_TASK, out=tmp_path)
+def test_score_task_writes_one_prediction_row_per_doc_and_never_replaces_it(
+    scorer, tmp_path, monkeypatch
+):
+    result = score_task(scorer, TEXT_TASK, out=tmp_path)
+    assert result.dataset == TEXT_TASK.dataset
 
     lines = (tmp_path / "predictions" / "toy_text.jsonl").read_text().splitlines()
     rows = [json.loads(line) for line in lines]
@@ -94,6 +100,26 @@ def test_score_task_writes_one_prediction_row_per_doc(scorer, tmp_path):
         assert row["num_bytes"] == len(source["text"].encode())
         assert row["windows"] == math.ceil(len(ids) / TEXT_TASK.window)
         assert row["logprob"] < 0
+        assert row["is_greedy"] is False  # a random model doesn't predict a whole text
+
+    # A second run into the same directory is refused before anything is scored.
+    monkeypatch.setattr(scorer, "rolling_loglikelihood", None)  # scoring would fail on None
+    with pytest.raises(FileExistsError, match="Pass a new out directory"):
+        score_task(scorer, TEXT_TASK, out=tmp_path)
+
+
+def test_prediction_rows_need_scores_for_every_doc():
+    docs = [TextDoc("a", "x"), TextDoc("b", "y")]
+    scores = Scores(
+        logprob=torch.tensor([-1.0], dtype=torch.float64),
+        num_tokens=torch.tensor([1]),
+        tokens_cut=torch.tensor([0]),
+        is_greedy=torch.tensor([False]),
+    )
+
+    # Rows are read by doc position, so scores for fewer docs raise instead of dropping rows.
+    with pytest.raises(ValueError):
+        perplexity_prediction_rows(docs, scores, [1, 1], window=8)
 
 
 def test_a_window_above_the_models_max_length_raises(lm, tokenizer):

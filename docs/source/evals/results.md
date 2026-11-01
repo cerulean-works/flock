@@ -94,6 +94,7 @@ A perplexity task's line has other fields, enough to recompute `bits_per_byte` o
 | `num_tokens` | The text's token count. |
 | `num_bytes` | The text's UTF-8 byte count. |
 | `windows` | How many windows the text was scored in. |
+| `is_greedy` | Whether every token of the text is its position's most likely next token. |
 
 ## Classes
 
