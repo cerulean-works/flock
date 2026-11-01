@@ -131,6 +131,7 @@ def test_compose_s3_proxy_service(compose):
     assert "s3" not in profiled
     proxy = profiled["flock-s3"]
     assert proxy["command"][:2] == ["uvicorn", "app.api.src.s3_proxy.app:app"]
+    assert proxy["command"][-2:] == ["--workers", "4"]
     s3_settings = {
         f"FLOCK_{field.name.upper()}"
         for field in dataclasses.fields(Settings)

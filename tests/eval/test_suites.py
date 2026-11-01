@@ -140,10 +140,29 @@ def test_registry_suites_hold_registered_tasks():
     code = tuple(task.name for task in SUITES["base_easy:code_bpb"].tasks)
     members = [*qa, *mmlu, *skills, "lambada", *math, *code]
     assert [task.name for task in SUITES["base_easy"].tasks] == members
-    # The two suites read one list of tasks, MMLU and basic skills through a suite of each kind.
+    # The two suites read one list of tasks, MMLU and basic skills through a suite of each kind,
+    # LAMBADA by `acc_greedy` and by `bpb`.
     rc, bpb = SUITES["base_easy:qa_rc"].members, SUITES["base_easy:qa_bpb"].members
-    assert [member.name for member in rc] == [*qa, "mmlu", "basic_skills"]
+    assert [member.name for member in rc] == [*qa, "mmlu", "basic_skills", "lambada"]
     assert [member.name for member in bpb] == [*qa, "mmlu:bpb", "basic_skills:bpb", "lambada"]
     assert SUITES["base_easy:qa_bpb"].metric == "bpb"
     for suite in SUITES.values():
         assert all(TASKS[task.name] is task for task in suite.tasks)
+
+
+def test_zh_tw_suites_count_each_benchmark_once():
+    zh_tw, zh_tw_bpb = SUITES["zh_tw"], SUITES["zh_tw:bpb"]
+    assert [member.name for member in zh_tw.members] == ["tmmluplus", "tw_mock_exams"]
+    assert [member.name for member in zh_tw_bpb.members] == [
+        "tmmluplus:bpb",
+        "drcd_bpb",
+        "tw_mock_exams:bpb",
+    ]
+
+    # Every TMMLU+ subject right and every exam wrong: 66 subjects against 10, and still a half.
+    metrics = {task.name: {"acc_per_char": 1.0, "bpb": 1.0} for task in SUITES["tmmluplus"].tasks}
+    for task in SUITES["tw_mock_exams"].tasks:
+        metrics[task.name] = {"acc_per_char": 0.0, "bpb": 1.0}
+    metrics["drcd_bpb"] = {"bpb": 4.0}
+    assert zh_tw.score(metrics) == pytest.approx(0.5)
+    assert zh_tw_bpb.score(metrics) == pytest.approx((1.0 + 4.0 + 1.0) / 3)

@@ -2,9 +2,14 @@
 
 ---
 
-Flock is Cerulean Labs' monorepo for training and evaluating models. We're also
-building tools to track model training and manage our datasets and model
-checkpoints in our own storage infrastructure.
+Flock is Cerulean's workspace for model evaluation, experiment tracking and shared
+dataset and checkpoint storage.
+
+## Documentation
+
+Read the [Flock docs](docs/source/index.md) for task guides and references grouped
+by CLI, Evals and App. To build or preview the site locally, see
+[the documentation contributor guide](docs/README.md).
 
 ## Getting Started
 
@@ -42,50 +47,32 @@ reports, see [Running Flock's tests](tests/README.md).
 
 ## Modules
 
-### Training
+### CLI
 
-[`flock.training`](flock/training/) is where we build training loops from scratch,
-along with efficient implementations of optimizers, learning rate schedulers,
-and other common training utilities. We want the code behind each experiment to
-be easy to inspect and change, whether we're trying a different optimization
-method or adjusting how a model learns from its data. Shared utilities let us
-carry those improvements across experiments without rebuilding the same pieces
-for every training run.
+[`flock.cli`](flock/cli/) provides account and storage access. After installing the
+workspace, run `uv run flock login` to authorize this machine with Cerulean's
+service and configure the wandb SDK. [Sign-in and access](docs/source/cli/sign-in.md)
+explains the credentials; [S3 storage](docs/source/cli/s3-access.md) explains
+key types and renewal before connecting your tools.
 
 ### Evaluation
 
-[`flock.eval`](flock/eval/) is home to our in-house evaluation suite. We're building
-base evaluators for tasks such as measuring perplexity and scoring multiple-choice
-answers using entropy, along with a CLI for running evaluations. These evaluators
-will provide reusable building blocks for new tasks and benchmarks, with a common
-way to run them across models and checkpoints. The goal is to make evaluation a
-routine part of experimentation, so we can understand what changes between
-training runs and compare results under a consistent setup. Its docs start at
-[`flock/eval/docs/source/index.md`](flock/eval/docs/source/index.md).
+[`flock.eval`](flock/eval/) scores pinned language models on tasks and suites,
+writes metrics and per-question predictions, and can score a model held in a
+training process. [Evaluate a model](docs/source/evals/run-evaluation.md) introduces
+tasks, metrics and comparable results before walking through `flock eval`.
 
-### CLI
+### App
 
-[`flock.cli`](flock/cli/) is the `flock` command. `flock login` signs a machine in to
-our Flock server by approving a code in the browser, and can point the `wandb` SDK at
-it too. `flock whoami`, `flock token` and `flock logout` manage that sign-in, and
-`flock.cli.credentials` lets any Flock client find it. `flock s3` and `flock.cli.s3` hand out
-S3 keys for an organization's buckets, renewed before they expire. We'll add commands for our
-training and evaluation workflows here. Its docs start at
-[`flock/cli/docs/source/index.md`](flock/cli/docs/source/index.md).
+[`app/api`](app/api/) serves the wandb protocol, the read API and organization
+storage; [`app/web`](app/web/) is the dashboard. Start with
+[Track an experiment](docs/source/app/log-runs.md) or
+[Explore experiments](docs/source/app/explore-runs.md). For local development and
+separate installations, see [Run locally](docs/source/app/run-locally.md) and
+[Deploy Flock](docs/source/app/deploy.md).
 
-### Flock
+### Training
 
-[`app/api`](app/api/) is our wandb-compatible experiment tracking server, and
-[`app/web`](app/web/) is its dashboard.
-Training code keeps logging through the regular `wandb` SDK, pointed at our server with
-`wandb login --host`, while dashboards read loss curves and filtered run tables from a
-low-latency JSON API. PostgreSQL is its only state, so it runs as any number of stateless
-replicas, and curves for dozens of runs and filters over 10k-run projects still return in tens
-of milliseconds. It can also front our Ceph object storage with an S3 proxy
-(`app/api/src/s3_proxy`): organizations create buckets in Flock, and each person reaches them
-with S3 keys of their own instead of the global key. See [Flock docs](app/api/README.md) for setup,
-configuration, the API and the design.
-
-```sh
-docker compose -f app/compose.yaml up -d --build
-```
+[`flock.training`](flock/training/) is a scaffold on this branch. To evaluate an
+existing model during training, use the implemented
+[in-memory evaluation API](docs/source/evals/evaluate-checkpoint.md).

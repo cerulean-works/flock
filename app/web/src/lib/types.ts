@@ -178,12 +178,17 @@ export interface BucketDetail extends Bucket {
 // ----------------------------------------------------------------------------------------------
 // Datasets (013): the Lance datasets in an org's flock-datasets bucket.
 
-/** A dataset in a folder's listing; `version` is null when its manifests use Lance's old naming. */
+/**
+ * A dataset in a folder's listing. The dashboard's server fills in `size` and, when the listing
+ * can't tell it (manifests in Lance's old naming), `version` from each dataset's info; both stay
+ * null when that can't be read.
+ */
 export interface DatasetEntry {
 	name: string;
 	path: string;
 	version: number | null;
 	updated_at: number | null;
+	size?: number | null;
 }
 
 /** A file in a folder's listing of flock-datasets. */

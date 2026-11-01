@@ -19,5 +19,6 @@ jobs:
       contents: read
     with:
       project: flock
-      path_to_docs: flock/app/api/docs/source
+      path_to_docs: flock/docs/source
       python_version: "3.14"
+      mock_deps: torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx

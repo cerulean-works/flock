@@ -48,6 +48,7 @@ def scores(**overrides) -> ChoiceScores:
         "num_chars": torch.tensor([[2, 8]]),
         "num_bytes": torch.tensor([[2, 8]]),
         "valid": torch.tensor([[True, True]]),
+        "is_greedy": torch.tensor([[False, True]]),
         "gold": torch.tensor([0]),
         "tokens_cut": torch.tensor([[0, 0]]),
         "logprob_uncond": None,
@@ -70,6 +71,9 @@ def scores(**overrides) -> ChoiceScores:
         ({"num_bytes": torch.tensor([[2, 1]])}, {"acc_per_byte": 1.0, "acc_per_char": 0.0}),
         # PMI: -4 - (-9) = 5 beats -3 - (-4) = 1
         ({"logprob_uncond": torch.tensor([[-9.0, -4.0]])}, {"acc_uncond": 1.0}),
+        # greedy reads the gold choice only: the gold " A" isn't greedy, " BBBBBBB" is
+        ({}, {"acc_greedy": 0.0}),
+        ({"gold": torch.tensor([1])}, {"acc_greedy": 1.0}),
     ],
 )
 def test_each_normalization(overrides, expected):
@@ -82,7 +86,14 @@ def test_multiple_choice_reports_gold_bpb_and_skips_uncond_without_it():
     metrics = multiple_choice(scores())
     assert "acc_uncond" not in metrics
     assert metrics["bpb"].item() == pytest.approx(4.0 / math.log(2) / 2)
-    assert list(metrics) == ["acc_raw", "acc_per_token", "acc_per_char", "acc_per_byte", "bpb"]
+    assert list(metrics) == [
+        "acc_raw",
+        "acc_per_token",
+        "acc_per_char",
+        "acc_per_byte",
+        "acc_greedy",
+        "bpb",
+    ]
 
 
 def test_multiple_choice_metrics_lists_every_name_in_order():

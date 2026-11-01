@@ -86,21 +86,17 @@ def chinese_doc(row: dict[str, Any]) -> MCDoc:
     )
 
 
-def passage_doc(row: dict[str, Any]) -> MCDoc:
-    """A toy row as DRCD renders it, scored on the gold answer alone after a `文章：` passage line: the choices joined stand in for the passage."""
-    texts = row["choices"]["text"]
-    gold = texts[row["choices"]["label"].index(row["answerKey"])]
+def not_about_bees(row: dict[str, Any]) -> bool:
+    """A `keep` predicate that drops q-1."""
+    return "bees" not in row["question"]
+
+
+def gold_doc(row: dict[str, Any]) -> MCDoc:
+    """A toy row as a gold-only doc: its question, then only its correct answer."""
+    gold = row["choices"]["label"].index(row["answerKey"])
 
     return MCDoc(
-        id=row["id"],
-        choices=cloze(
-            row["question"],
-            (gold,),
-            question_prefix=f"文章：{'、'.join(texts)}\n{CHINESE_QUESTION_PREFIX}",
-            answer_prefix=CHINESE_ANSWER_PREFIX,
-            separator="",
-        ),
-        gold=0,
+        id=row["id"], choices=cloze(row["question"], (row["choices"]["text"][gold],)), gold=0
     )
 
 
@@ -130,6 +126,8 @@ PROMPT_PATHS = (
     dataclasses.replace(TASK, name="toy:zero_shot", fewshot=None, unconditional_context=None),
     # Examples from another split: q-1 isn't shown `dev-1`, which shows its own answer.
     dataclasses.replace(TASK, name="toy:repeat", fewshot=Fewshot("dev", ("dev-1", "dev-2"))),
+    # A row filter: only q-2 is scored, and the examples aren't filtered.
+    dataclasses.replace(TASK, name="toy:keep", keep=not_about_bees),
     # The Chinese prefixes, with PMI scored after `答案：`.
     dataclasses.replace(
         TASK,
@@ -138,12 +136,14 @@ PROMPT_PATHS = (
         description="以下是關於常識考試單選題，請選出正確的答案。\n\n",
         unconditional_context=CHINESE_ANSWER_PREFIX,
     ),
-    # Scored on the gold text alone, with no PMI, after a passage in the Chinese format.
+    # One choice per doc and no unconditional requests, as math, code and LAMBADA are scored.
     GoldOnlyTask(
         name="toy:gold_only",
         dataset=TASK.dataset,
-        to_doc=passage_doc,
-        fewshot=Fewshot("train", ("shot-2",)),
+        to_doc=gold_doc,
+        primary_metric="acc_greedy",
+        metrics=("acc_greedy", "bpb"),
+        fewshot=TASK.fewshot,
     ),
 )
 

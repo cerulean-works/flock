@@ -78,6 +78,8 @@
 	const CAP_SHORT = 320;
 	const CAP_LONG = 448;
 	const MIN_LONG = 256;
+	// A header's type is cut short past this, so a long struct type can't widen its column.
+	const TYPE_MAX = 192;
 	// Cell padding, and a little more so text measured to fit doesn't wrap after rounding.
 	const PAD = 20;
 	let width = $state(0);
@@ -110,7 +112,9 @@
 		const mono = style.getPropertyValue('--font-mono') || 'monospace';
 		return rows.columns.map((column, j) =>
 			Math.max(
-				measure(column.name, `500 12px ${sans}`) + measure(column.type, `11px ${mono}`) + 4,
+				measure(column.name, `500 12px ${sans}`) +
+					Math.min(measure(column.type, `11px ${mono}`), TYPE_MAX) +
+					4,
 				...rows!.rows.map((row) => (row[j] ? cellWidth(row[j], sans, mono) : 0))
 			)
 		);
@@ -216,7 +220,10 @@
 							>
 								<div class="truncate" title="{column.name} {column.type}">
 									<span class="text-foreground">{column.name}</span>
-									<span class="ml-1 font-mono text-[11px] font-normal">{column.type}</span>
+									<span
+										class="ml-1 inline-block truncate align-bottom font-mono text-[11px] font-normal"
+										style:max-width="{TYPE_MAX}px">{column.type}</span
+									>
 								</div>
 							</th>
 						{/each}
