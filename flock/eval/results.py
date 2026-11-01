@@ -30,7 +30,7 @@ class TaskResult:
         primary_metric (`str`):
             The metric to read first.
         metrics (`dict[str, float]`):
-            Each metric over the task's docs: a mean over docs for multiple choice, and a ratio of sums over all docs for `bits_per_byte`.
+            Each metric over the task's docs: a mean over docs for multiple choice, and a ratio of sums over all docs for a perplexity task.
         num_docs (`int`):
             How many docs were scored.
         limit (`int`, *optional*):

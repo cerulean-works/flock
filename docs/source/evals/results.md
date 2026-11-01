@@ -87,7 +87,7 @@ Each line of `predictions/<task>.jsonl` is one doc, with enough to recompute eve
 
 [Metrics](metrics) gives each metric's formula over these fields.
 
-A perplexity task's line has other fields, enough to recompute `bits_per_byte` over any set of docs:
+A perplexity task's line has other fields, enough to recompute each of its metrics over any set of docs:
 
 | Field | Meaning |
 |---|---|

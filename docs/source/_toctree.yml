@@ -34,6 +34,8 @@ guide:
     title: Add an evaluation task
   - local: evals/compare-regression
     title: Compare with the regression bank
+  - local: evals/fineweb-edu
+    title: Scoring the FineWeb-Edu dev set
 - title: App
   sections:
   - title: Using Cerulean Flock
