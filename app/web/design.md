@@ -81,7 +81,7 @@ Spacing follows Tailwind's 4px scale: tight within a control, generous between g
 
 The page is one white plane. Grouping comes from the panel tint, dividers and space, not from stacked cards. A panel is the website's card: a flat `#f6f7f8` rectangle with no outline. Nothing reading-related floats.
 
-Shadows exist only where something genuinely sits above the page and must be told apart from it: menus, popovers, the floating pager, the plot tooltip, a sheet, and a chart panel while it is being dragged. They are small and neutral. No paper shadows, frosted panels, bevels, gradients or textures anywhere in the interface.
+Shadows exist only where something genuinely sits above the page and must be told apart from it: menus, popovers, the floating pager, the plot tooltip, a sheet, a chart panel while it is being dragged, and the sign-in card over the sky. They are small and neutral. No paper shadows, frosted panels, bevels, gradients or textures anywhere in the interface.
 
 ## Components
 
@@ -91,7 +91,7 @@ The supplied gradient disc (`LogoMark`) followed by "Flock" in Host Grotesk 500.
 
 ### Sky (signed-out pages)
 
-`AuthShell` places the cyanotype sky beside a narrow white form column. It is the only atmospheric image in the app and never sits behind text or data.
+`AuthShell` fills the page with the sky and centers the form on a canvas card above it: a daytime sky in light mode, the night sky in dark. It is the only atmospheric image in the app; text always sits on the card, never on the sky itself.
 
 ### Page header
 
@@ -132,7 +132,7 @@ One filled reading-blue button for a form's primary action; everything else is o
 - Don't reintroduce cream, beige or other warm tints, paper grain, or textures.
 - Don't add serif display type, or brown and sepia accents.
 - Don't use left-border callouts, decorative rules or drop shadows on in-page content.
-- Don't put text over the sky or apply texture to data.
+- Don't set text directly on the sky, or apply texture to data.
 - Don't replace the logo with a CSS gradient or letter.
 
 ## Quick reference

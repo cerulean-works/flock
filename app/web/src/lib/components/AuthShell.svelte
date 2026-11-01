@@ -1,25 +1,23 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import sky from '#lib/assets/brand/sky.jpg';
+	import skyDay from '#lib/assets/brand/sky-day.webp';
+	import skyNight from '#lib/assets/brand/sky-night.webp';
 	import LogoMark from './LogoMark.svelte';
 
 	let { children }: { children: Snippet } = $props();
 </script>
 
-<svelte:head>
-	<link rel="preload" as="image" href={sky} fetchpriority="high" />
-</svelte:head>
-
-<!-- The signed-out pages: the sky beside a narrow form column. -->
-<div class="grid min-h-dvh md:grid-cols-[minmax(0,1.15fr)_minmax(420px,1fr)]">
-	<section class="relative hidden overflow-hidden bg-deep md:block" aria-hidden="true">
-		<img src={sky} alt="" class="absolute inset-0 size-full object-cover" decoding="async" />
-	</section>
-
-	<main class="relative flex items-center justify-center overflow-y-auto px-6 py-16">
-		<div class="w-full max-w-90">
-			<LogoMark class="mb-8 size-8 md:hidden" />
-			{@render children()}
-		</div>
-	</main>
-</div>
+<!-- The signed-out pages: a form card over the sky, by day or by night with the theme. As
+     backgrounds, only the one the theme shows is downloaded. -->
+<main
+	class="relative flex h-full items-center justify-center overflow-y-auto bg-deep bg-(image:--sky-day) bg-cover bg-center px-4 py-16 dark:bg-(image:--sky-night)"
+	style:--sky-day="url({skyDay})"
+	style:--sky-night="url({skyNight})"
+>
+	<div
+		class="w-full max-w-100 rounded-xl bg-background px-8 py-10 shadow-2xl ring-1 ring-foreground/10"
+	>
+		<LogoMark class="mb-8 size-8" />
+		{@render children()}
+	</div>
+</main>
