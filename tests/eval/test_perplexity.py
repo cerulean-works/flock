@@ -237,6 +237,17 @@ def test_source_suite_names_a_task_per_domain():
     assert domains == ["00_a.org", "01_b.com"]
 
 
+def test_fineweb_edu_is_the_labs_task_in_no_suite():
+    task = TASKS["fineweb_edu"]
+    assert isinstance(task, PerplexityTask)
+    assert (task.window, task.primary_metric, task.domain) == (8192, "perplexity", None)
+    assert (task.dataset.repo, task.dataset.split) == (
+        "cerulean-works/fineweb-edu-dev",
+        "validation",
+    )
+    assert all(task not in suite.tasks for suite in SUITES.values())
+
+
 def test_toy_texts_span_several_windows(tokenizer):
     lengths = [len(tokenizer.encode(row["text"], add_special_tokens=False)) for row in TEXT_ROWS]
     assert min(lengths) > TEXT_TASK.window
@@ -288,3 +299,12 @@ def test_an_empty_split_has_no_rows_to_score(monkeypatch):
     monkeypatch.setattr(Dataset, "load", lambda self, split=None: [])
     with pytest.raises(ValueError, match="the split has no rows"):
         TEXT_TASK.load()
+
+
+def test_a_4096_token_model_cannot_run_fineweb_edu(monkeypatch, lm, tokenizer):
+    # OLMo 2 1B's context: the error names the task and both lengths before anything loads.
+    short = ScoringModel(lm, tokenizer, name="tiny@0", max_length=4096)
+    monkeypatch.setattr(ScoringModel, "from_pretrained", lambda *args, **kwargs: short)
+    monkeypatch.setattr(run, "score_task", lambda *args: pytest.fail("scored before the check"))
+    with pytest.raises(ValueError, match="fineweb_edu: window 8192 is above tiny@0's max_length"):
+        evaluate(EvalConfig(model="tiny@0", tasks=("fineweb_edu",)))

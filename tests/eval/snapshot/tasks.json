@@ -1252,6 +1252,19 @@
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
     },
+    "fineweb_edu": {
+      "dataset": {
+        "repo": "cerulean-works/fineweb-edu-dev",
+        "revision": "0000000000000000000000000000000000000000",
+        "row_index": false,
+        "split": "validation",
+        "subset": null
+      },
+      "domain": null,
+      "primary_metric": "perplexity",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 8192
+    },
     "hellaswag": {
       "dataset": {
         "repo": "allenai/hellaswag",
