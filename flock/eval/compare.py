@@ -56,7 +56,7 @@ def compare(banked: Path, new: Path) -> Comparison:
     Each task in both files is compared on `num_docs` and every entry of `metrics` and `truncation`, and each suite in both on `members` and `score`. Timing is not compared. An accuracy may move by `FLIPPED_DOCS` docs out of `num_docs`, any other metric by `RELATIVE_TOLERANCE` of its banked value, and a suite's score by its members' tolerances combined as independent errors. Counts and `members` must be equal.
 
     Raises:
-        `ValueError`: if the runs are different instruments (another model, `dtype`, `batch_tokens`, `max_length` or `attention`, a common task with another `task_hash` or `limit`, or a common suite with another `metric`), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
+        `ValueError`: if the runs are different instruments (another model, `dtype`, `batch_tokens`, `max_length` or `attention`, a common task with another `task_hash` or `limit`, or a common suite with another `metric` or `suite_hash`), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
     """
     files = {}
     for path in (banked, new):
@@ -116,6 +116,15 @@ def compare(banked: Path, new: Path) -> Comparison:
                 raise ValueError(
                     f"different instrument: {name} has metric {bank_suites[name]['metric']!r} "
                     f"in {banked}, {new_suites[name]['metric']!r} in {new}"
+                )
+            # The suite hash covers its members' hashes and whether it is scored. A file older
+            # than schema 5 has none, and its suites are still compared on members and score.
+            bank_hash = bank_suites[name].get("suite_hash")
+            new_hash = new_suites[name].get("suite_hash")
+            if bank_hash is not None and new_hash is not None and bank_hash != new_hash:
+                raise ValueError(
+                    f"different instrument: {name} has suite_hash {bank_hash!r} in {banked}, "
+                    f"{new_hash!r} in {new}"
                 )
 
         # Every compared value as (name, field, banked, new, tolerance). A value missing on one

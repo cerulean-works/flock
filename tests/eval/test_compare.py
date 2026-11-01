@@ -251,6 +251,22 @@ def test_a_suite_averaging_another_metric_is_refused(write):
         compare(write("bank", BANK), write("new", rerun))
 
 
+def test_a_suite_with_another_hash_is_refused_unless_a_file_predates_suite_hashes(write, tmp_path):
+    # A member's new task hash already refuses on the task, so change only the suite's own hash.
+    rerun = dataclasses.replace(BANK, suites=[dataclasses.replace(SUITE, suite_hash="hash-rc2")])
+
+    with pytest.raises(ValueError, match="different instrument: toy:rc has suite_hash 'hash-rc'"):
+        compare(write("bank", BANK), write("new", rerun))
+
+    # A schema 4 bank has no suite hashes: its suites are still compared on members and score.
+    old = BANK.to_dict()
+    del old["suites"][0]["suite_hash"]
+    (tmp_path / "old.json").write_text(json.dumps(old))
+    moved = dataclasses.replace(rerun, suites=[dataclasses.replace(SUITE, score=0.7)])
+    comparison = compare(tmp_path / "old.json", write("moved", moved))
+    assert comparison.breaches == [Breach("toy:rc", "score", 0.675, 0.7)]
+
+
 def test_a_repeated_nan_is_no_breach_but_a_new_one_is(write):
     nan = dataclasses.replace(PIQA, metrics={"acc_raw": float("nan")})
     bank = write("bank", dataclasses.replace(BANK, tasks=[ARC, nan]))

@@ -17,7 +17,7 @@ For each task in both files, `compare` checks `num_docs` and every entry of `met
 
 These values are a reasoned estimate, not a measurement. A real regression, such as a tokenization or truncation bug, moves an accuracy by far more than 2 docs and `bpb` by much more than 1e-4. Run-to-run drift on another stack should stay well inside both. They live in `flock/eval/compare.py` as `FLIPPED_DOCS` and `RELATIVE_TOLERANCE`. A suite is held tighter than its members, because their drifts are independent and partly cancel: the `mmlu` score, over 57 subjects of about 100 docs each, may move by about 0.002.
 
-A task or suite in one file only is listed and is not a breach. So you can compare a rerun of a few tasks (without `--limit`) against the full bank. A task added to `base_easy` after the bank was written shows as only in the new run, and each suite that holds it is a breach on `members` and `score` until the bank is refreshed. A task whose definition changed, so its `task_hash` differs, is refused as another instrument before anything is compared, and the bank must be refreshed first.
+A task or suite in one file only is listed and is not a breach. So you can compare a rerun of a few tasks (without `--limit`) against the full bank. A task added to `base_easy` after the bank was written changes the `suite_hash` of each suite that holds it, so the comparison is refused until the bank is refreshed. A task whose definition changed, so its `task_hash` differs, is refused the same way.
 
 The output lists, in order:
 - the fields that differ and often explain a breach: the provenance's `flock_commit`, `device`, `torch`, `transformers`, `tokenizers`, `datasets` and `python`, and the file's `schema_version`
@@ -41,7 +41,8 @@ A difference in score only means something if both runs scored the same requests
 - the provenance's `model`, `dtype`, `batch_tokens`, `max_length` or `attention` differ
 - a task in both files has a different `task_hash` (see [The task hash](results#the-task-hash)) or `limit`
 - a suite in both files has a different `metric`, so its score averages another metric
+- a suite in both files has a different `suite_hash` (see [Suites](results#suites)), so its members, their requests or its `metric` changed. A file written before schema 5 has no suite hash, and its suites are compared on `members` and `score` only.
 - no task is in both files
 - a file isn't JSON, a field it reads is missing, or a value there has the wrong type
 
-The message names the field and both values. Two runs that differ in a setting or a task hash need a new bank, not a looser check. A file that isn't a complete results file, such as one from a job killed while writing, needs a new run instead.
+The message names the field and both values. Two runs that differ in a setting, a task hash or a suite hash need a new bank, not a looser check. A file that isn't a complete results file, such as one from a job killed while writing, needs a new run instead.
