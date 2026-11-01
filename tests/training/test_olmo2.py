@@ -128,7 +128,9 @@ def test_tokenizer_config(config, tokenizer, monkeypatch):
     model = Olmo2(replace(config, hf_repo="offline"))
     assert model.get_hf_tokenizer() is tokenizer
     assert tokenizer.pad_token_id == tokenizer.eos_token_id
-    assert calls == [("offline", {"padding_side": "left", "model_max_length": 16})]
+    assert calls == [
+        ("offline", {"padding_side": "left", "model_max_length": 16, "add_eos_token": True})
+    ]
 
 
 def test_initialization_is_independent_of_global_rng(config):
