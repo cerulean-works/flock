@@ -67,6 +67,7 @@ All paths are relative to `/api/v1`. In paths, `{entity}` is an organization's I
 | `POST .../runs/update`, `POST .../runs/delete`, `POST .../runs/move` | Change many runs. | [Projects](projects#bulk-operations) |
 | `GET .../runs/{run}/logs` | A run's console output. | [Projects](projects#run-logs) |
 | `GET .../runs/{run}/files`, `GET .../runs/{run}/files/{name}` | A run's files. | [Projects](projects#run-files) |
+| `GET .../runs/{run}/models` | The model versions a run made and evaluated. | [Projects](projects#run-models) |
 | `GET .../columns` | The run table's columns. | [Queries](queries#get-columns) |
 | `GET .../runs`, `POST .../runs/query` | Filter, sort and page the run table. | [Queries](queries#the-run-table) |
 | `GET .../history`, `POST .../history/query` | Curves of many runs. | [Queries](queries#curves) |
@@ -79,5 +80,11 @@ All paths are relative to `/api/v1`. In paths, `{entity}` is an organization's I
 | `POST /s3/credentials` | Exchange your credential for an ephemeral S3 key. | [S3](s3#credentials) |
 | `GET /me/s3-keys`, `POST /me/s3-keys`, `DELETE /me/s3-keys/{id}` | Your S3 keys. | [S3](s3#keys) |
 | `GET /orgs/{org}/buckets`, `POST ...`, `GET /orgs/{org}/buckets/{name}`, `DELETE ...` | The organization's S3 buckets. | [S3](s3#buckets) |
+| `GET /orgs/{org}/datasets/...` and the rest | The Lance datasets in `flock-datasets`. | [Datasets](datasets) |
+| `GET /orgs/{org}/models`, `GET /orgs/{org}/models/{name}`, `DELETE ...` | The organization's models. | [Models](models#models-and-versions) |
+| `GET .../models/{name}/versions`, `GET .../models/{name}/resolve` | A model's versions. | [Models](models#models-and-versions) |
+| `PUT .../models/{name}/primary`, `PUT .../models/{name}/tags/{tag}`, `DELETE ...` | The primary version and tags. | [Models](models#tags-and-primary) |
+| `POST .../models/{name}/uploads`, `POST .../uploads/{ulid}/commit` and the rest | Upload sessions. | [Models](models#uploads) |
+| `GET /orgs/{org}/models/-/trash` and the rest | Deleted models and versions. Org admins only. | [Models](models#trash) |
 
-`.../` stands for `/projects/{entity}/{project}/`. `GET /healthz`, outside `/api/v1`, answers `{"ok":true}` without credentials.
+`.../` stands for `/projects/{entity}/{project}/`, and `.../models/` for `/orgs/{org}/models/`. `GET /healthz`, outside `/api/v1`, answers `{"ok":true}` without credentials.

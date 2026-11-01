@@ -151,3 +151,15 @@ Moved runs keep everything they logged, and their owner. Active runs answer 409,
 | `GET .../runs/{run}/files/{name}` | The file's contents. `name` may contain `/`, as in `media/images/sample.png`. A missing file answers 404. |
 
 The SDK uploads files such as `config.yaml`, `requirements.txt`, `wandb-metadata.json` and `wandb-summary.json`. Files can't be deleted one at a time: they go when the run is deleted.
+
+## Run models[[run-models]]
+
+`GET .../runs/{run}/models` returns the model versions the run saved, in its own organization, as `save_to_hub` with `run` records them:
+
+```json
+{
+  "made": [{"model": "flock/olmo2-1b", "number": 2, "step": 12000, "tags": ["checkpoint-12000"], "run": "flock/llm-pretrain/3k9x2", ...}]
+}
+```
+
+`made` is sorted by model name, then number. A version has the fields of a version in the model routes (`model`, `number`, `digest`, `tags`, `primary`, `step`, `run`, `total_bytes`, `created_by`, `created_at` and the rest). Deleted versions and models aren't listed.

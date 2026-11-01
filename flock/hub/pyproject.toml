@@ -9,5 +9,12 @@ dependencies = [
     "pylance>=14.0.0",
 ]
 
+[project.optional-dependencies]
+models = [
+    "boto3>=1.43.118",
+    "safetensors>=0.8.0",
+    "torch>=2.14.1",
+]
+
 [tool.uv]
 package = false

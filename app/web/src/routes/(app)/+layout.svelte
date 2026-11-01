@@ -1,5 +1,6 @@
 <script lang="ts">
 	import ActivityIcon from '@lucide/svelte/icons/activity';
+	import BoxIcon from '@lucide/svelte/icons/box';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
 	import HouseIcon from '@lucide/svelte/icons/house';
@@ -15,6 +16,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Sheet from '#lib/components/ui/sheet/index.js';
 	import { datasetsHref } from '#lib/datasets.ts';
+	import { modelsHref } from '#lib/models.ts';
 	import { entityHref } from '#lib/workspace/url.ts';
 	import { storageHref } from '#lib/storage.ts';
 	import { SIDEBAR_W, saveWidth } from '#lib/widths.ts';
@@ -40,6 +42,7 @@
 		!page.route.id?.startsWith('/(app)/[entity]') &&
 			!page.route.id?.startsWith('/(app)/orgs/') &&
 			!page.route.id?.startsWith('/(app)/datasets/') &&
+			!page.route.id?.startsWith('/(app)/models/') &&
 			!page.route.id?.startsWith('/(app)/storage/')
 	);
 </script>
@@ -123,6 +126,19 @@
 					title="Datasets"
 				>
 					<DatabaseIcon />
+				</Button>
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					class={[
+						'mt-1 text-muted-foreground',
+						page.route.id?.startsWith('/(app)/models/') && 'bg-muted text-foreground'
+					]}
+					href={modelsHref(data.shell.org)}
+					aria-label="Models"
+					title="Models"
+				>
+					<BoxIcon />
 				</Button>
 				<Button
 					variant="ghost"

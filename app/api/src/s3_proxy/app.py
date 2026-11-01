@@ -11,6 +11,7 @@ import base64
 import contextlib
 import hashlib
 import logging
+import re
 import time
 from collections.abc import AsyncGenerator, AsyncIterable
 from dataclasses import dataclass
@@ -111,6 +112,10 @@ CORS_EXPOSE = (
     "ETag, Content-Length, Content-Range, Content-Type, Content-Disposition, Accept-Ranges, "
     "Last-Modified"
 )
+# flock-models (D97): written only into an open upload's folder, `{model}/u/{ulid}/…`.
+MODELS = "models"
+UPLOAD_KEY = re.compile(r"([^/]+)/u/([0-9A-HJKMNP-TV-Z]{26})/.+", re.DOTALL)
+MODELS_REFUSED = "flock-models is written through flock models push"
 
 
 class S3Error(SigV4Error):
@@ -422,6 +427,7 @@ class Proxy:
     async def _delete_objects(self, call: Call) -> Response:
         """DeleteObjects; the body is buffered to send it with its MD5, which S3 requires."""
         self._writable(call)
+        await self._models_write(call)
         body = await self._read(call)
         headers = {
             "content-type": "application/xml",
@@ -446,6 +452,7 @@ class Proxy:
             )
             return await self._relay(call, response)
         self._writable(call)
+        await self._models_write(call)
         if method == "PUT":
             if "uploadId" in params or "partNumber" in params:
                 self._only(call, UPLOAD_PART_PARAMS)
@@ -474,6 +481,30 @@ class Proxy:
         if method == "DELETE" and (not params or params.keys() == {"uploadId"}):
             return await self._relay(call, await self._send(call, "DELETE", call.key, params))
         raise S3Error("NotImplemented", "this operation is not supported", 501)
+
+    async def _models_write(self, call: Call) -> None:
+        """Refuse a write to flock-models (D97) unless it's a PUT or a multipart call into an
+        open upload of the caller's: never a delete, a copy or a DeleteObjects."""
+        if call.bucket.managed != MODELS:
+            return
+        params = call.params
+        upload = None
+        allowed = call.method in ("PUT", "POST") or (
+            call.method == "DELETE" and params.keys() == {"uploadId"}
+        )
+        found = UPLOAD_KEY.fullmatch(call.key) if call.key else None
+        if allowed and found is not None and "x-amz-copy-source" not in call.headers:
+            upload = await self.directory.open_upload(found[2])
+            caller = call.caller
+            if upload is not None and (upload.user, upload.org, upload.model) != (
+                caller.user,
+                caller.org.pk,
+                found[1],
+            ):
+                upload = None  # someone else's, or another org's or model's
+        if upload is None:
+            raise S3Error("AccessDenied", MODELS_REFUSED)
+        self.directory.touch_upload(upload.pk)
 
     async def _put(self, call: Call) -> Response:
         """PutObject and UploadPart, streamed."""

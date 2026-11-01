@@ -1,13 +1,14 @@
 <script lang="ts">
 	import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
 	import TagIcon from '@lucide/svelte/icons/tag';
-	import XIcon from '@lucide/svelte/icons/x';
 	import type { ResolvedPathname } from '$app/types';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
+	import { DialogSubject } from '#lib/data/dialog-subject.svelte.ts';
 	import { datasetCall, datasetsApi } from '#lib/datasets.ts';
 	import type { DatasetVersion, VersionsPage } from '#lib/types.ts';
 	import { dateTime, relativeTime } from '#lib/utils.ts';
+	import TagChip from '../TagChip.svelte';
 	import RemoveTagDialog from './RemoveTagDialog.svelte';
 	import TagDialog from './TagDialog.svelte';
 
@@ -59,8 +60,8 @@
 		ontags?.();
 	}
 
-	let tagging = $state<number | null>(null);
-	let removing = $state<{ tag: string; version: number } | null>(null);
+	const tagging = new DialogSubject<number>();
+	const removing = new DialogSubject<{ tag: string; version: number }>();
 
 	/** The message a writer gave Lance's commit; it reads as the change's description. */
 	const MESSAGE = '__lance_commit_message';
@@ -102,18 +103,11 @@
 								aria-label="Tags of version {v.version}"
 							>
 								{#each v.tags as tag (tag)}
-									<li
-										class="inline-flex h-6 max-w-full min-w-0 items-center gap-1 rounded-full bg-secondary pr-1 pl-2 text-xs"
-									>
-										<span class="truncate" title={tag}>{tag}</span>
-										<button
-											class="grid size-4 flex-none place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
-											aria-label="Remove the tag {tag}"
-											onclick={() => (removing = { tag, version: v.version })}
-										>
-											<XIcon class="size-3" />
-										</button>
-									</li>
+									<TagChip
+										as="li"
+										{tag}
+										onremove={() => removing.show({ tag, version: v.version })}
+									/>
 								{/each}
 							</ul>
 						{:else}
@@ -171,7 +165,7 @@
 									{/snippet}
 								</DropdownMenu.Trigger>
 								<DropdownMenu.Content align="end" class="w-40">
-									<DropdownMenu.Item onSelect={() => (tagging = v.version)}>
+									<DropdownMenu.Item onSelect={() => tagging.show(v.version)}>
 										<TagIcon /> Add tag…
 									</DropdownMenu.Item>
 								</DropdownMenu.Content>
@@ -194,18 +188,12 @@
 	{/if}
 {/if}
 
-<TagDialog
-	bind:open={() => tagging !== null, (o) => (tagging = o ? tagging : null)}
-	{org}
-	{path}
-	version={tagging ?? 0}
-	ontagged={changed}
-/>
+<TagDialog bind:open={tagging.open} {org} {path} version={tagging.value ?? 0} ontagged={changed} />
 <RemoveTagDialog
-	bind:open={() => removing !== null, (o) => (removing = o ? removing : null)}
+	bind:open={removing.open}
 	{org}
 	{path}
-	tag={removing?.tag ?? ''}
-	version={removing?.version ?? 0}
+	tag={removing.value?.tag ?? ''}
+	version={removing.value?.version ?? 0}
 	onremoved={changed}
 />

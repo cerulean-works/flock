@@ -125,6 +125,38 @@ describe('ObjectBrowser', () => {
 	});
 });
 
+describe('ObjectBrowser in flock-models', () => {
+	it('reads files but leaves changes to flock models push and the Models tab', async () => {
+		serve({});
+		const listing: Listing = {
+			prefix: 'm/u/01JD/',
+			folders: [],
+			objects: [object('m/u/01JD/config.json')],
+			cursor: null
+		};
+		render(ObjectBrowser, {
+			org: 'acme',
+			bucket: 'flock-models',
+			prefix: 'm/u/01JD/',
+			listing,
+			now: 0
+		});
+		await expect.element(page.getByText('config.json')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Upload' })).not.toBeInTheDocument();
+		await expect
+			.element(page.getByRole('button', { name: 'Create folder' }))
+			.not.toBeInTheDocument();
+		expect(page.getByRole('link', { name: 'Models' }).element().getAttribute('href')).toBe(
+			'/models/acme'
+		);
+		await page.getByRole('checkbox', { name: 'Select config.json' }).click();
+		await expect.element(page.getByRole('button', { name: 'Download' })).toBeVisible();
+		await expect
+			.element(page.getByRole('toolbar').getByRole('button', { name: 'Delete' }))
+			.not.toBeInTheDocument();
+	});
+});
+
 describe('DeleteObjectsDialog', () => {
 	it('shows a refusal, such as the folder cap, and stays open', async () => {
 		serve({

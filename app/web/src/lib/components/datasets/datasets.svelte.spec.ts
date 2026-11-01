@@ -16,6 +16,7 @@ import DatasetView from './DatasetView.svelte';
 import DeleteDatasetDialog from './DeleteDatasetDialog.svelte';
 import DeletedDatasets from './DeletedDatasets.svelte';
 import FolderView from './FolderView.svelte';
+import NewFolderButton from './NewFolderButton.svelte';
 import RemoveTagDialog from './RemoveTagDialog.svelte';
 import RenameDialog from './RenameDialog.svelte';
 import TagDialog from './TagDialog.svelte';
@@ -115,6 +116,38 @@ describe('FolderView', () => {
 		const empty = { ...folder, datasets: [], folders: [], files: [], cursor: null };
 		render(FolderView, { org: 'acme', path: 'eval', folder: empty, now: 0 });
 		await expect.element(screen.getByText('This folder is empty.')).toBeVisible();
+	});
+});
+
+describe('NewFolderButton', () => {
+	it('creates a folder where it is, then reads the folder again', async () => {
+		const calls = serve({
+			'/api/storage/acme/flock-datasets/folders': () => ({ prefix: 'eval/new/' })
+		});
+		render(NewFolderButton, { org: 'acme', path: 'eval' });
+		await screen.getByRole('button', { name: 'New folder' }).click();
+		await expect.element(screen.getByText('s3://flock-datasets/eval/')).toBeVisible();
+		await screen.getByLabelText('Name').fill('a/b');
+		await screen.getByRole('button', { name: 'Create folder' }).click();
+		await expect
+			.element(screen.getByText('Folder names can’t contain /. Create one folder at a time.'))
+			.toBeVisible();
+		expect(calls).toEqual([]);
+		await screen.getByLabelText('Name').fill('new');
+		await screen.getByRole('button', { name: 'Create folder' }).click();
+		await vi.waitFor(() => expect(invalidateAll).toHaveBeenCalled());
+		expect(calls[0].url).toBe('/api/storage/acme/flock-datasets/folders');
+		expect(body(calls[0].init)).toEqual({ prefix: 'eval/new/' });
+	});
+
+	it('creates one at the root of the bucket', async () => {
+		const calls = serve({ '/api/storage/acme/flock-datasets/folders': () => ({ prefix: 'x/' }) });
+		render(NewFolderButton, { org: 'acme', path: '' });
+		await screen.getByRole('button', { name: 'New folder' }).click();
+		await screen.getByLabelText('Name').fill('x');
+		await screen.getByRole('button', { name: 'Create folder' }).click();
+		await vi.waitFor(() => expect(calls).toHaveLength(1));
+		expect(body(calls[0].init)).toEqual({ prefix: 'x/' });
 	});
 });
 

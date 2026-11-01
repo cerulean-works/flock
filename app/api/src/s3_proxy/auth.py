@@ -1,4 +1,5 @@
-"""Who is calling and which buckets they reach (D54, D61), from Postgres with a short cache."""
+"""Who is calling and which buckets they reach (D54, D61), and the open model uploads they may
+write to (D97), from Postgres with a short cache."""
 
 import asyncio
 import contextlib
@@ -19,6 +20,9 @@ log = logging.getLogger(__name__)
 # The channel the database notifies (by triggers, see migration 0011) when keys,
 # memberships, buckets or org policies change.
 CHANNEL = "s3_invalidate"
+# And the one it notifies with an upload's ULID when the upload's state changes (migration
+# 0015): committed, aborted or expired.
+UPLOADS_CHANNEL = "flock_model_uploads"
 
 
 @dataclass(frozen=True)
@@ -26,6 +30,18 @@ class Bucket:
     name: str
     upstream_name: str
     created_at: float
+    managed: str | None = None  # "datasets" or "models" for the buckets Flock owns
+
+
+@dataclass(frozen=True)
+class Upload:
+    """An open model upload (D100): its folder is ``{model}/u/{ulid}/`` of the org's
+    flock-models, and only ``user`` writes there."""
+
+    pk: int
+    user: int | None
+    org: int
+    model: str
 
 
 @dataclass(frozen=True)
@@ -65,7 +81,8 @@ class Directory:
     """
 
     TTL = 10.0
-    # s3_keys.last_used_at is written at most this often per key.
+    # s3_keys.last_used_at is written at most this often per key, and so is
+    # model_uploads.last_activity_at per upload (D101).
     LAST_USED_INTERVAL = 60.0
 
     def __init__(self, pool: asyncpg.Pool, bus: Bus) -> None:
@@ -75,8 +92,10 @@ class Directory:
         self._cache: dict[tuple, tuple[float, Any]] = {}
         self._generation = 0
         self._last_used: dict[int, float] = {}
+        self._last_active: dict[int, float] = {}
         self._tasks: set[asyncio.Task] = set()
         bus.listen(CHANNEL, self.invalidate)
+        bus.listen(UPLOADS_CHANNEL, self.forget_upload)
         bus.on_reset(self.invalidate)
 
     async def start(self) -> None:
@@ -94,6 +113,11 @@ class Directory:
     def invalidate(self, *_: object) -> None:
         self._generation += 1
         self._cache.clear()
+
+    def forget_upload(self, ulid: str) -> None:
+        """The upload ``ulid`` is no longer open: stop letting writes into its folder."""
+        self._generation += 1
+        self._cache.pop(("upload", ulid), None)
 
     async def _cached(self, key: tuple, load: Callable[[], Awaitable[Any]]) -> Any:
         hit = self._cache.get(key)
@@ -151,7 +175,8 @@ class Directory:
         if max_ttl is None:
             return None
         rows = await self.pool.fetch(
-            "SELECT name, upstream_name, extract(epoch FROM created_at)::float8 FROM s3_buckets "
+            "SELECT name, upstream_name, extract(epoch FROM created_at)::float8, managed "
+            "FROM s3_buckets "
             "WHERE org_pk = $1 AND deleted_at IS NULL",
             pk,
         )
@@ -183,6 +208,45 @@ class Directory:
                 )
             except Exception:
                 log.exception("could not update last_used_at of S3 key %s", key_pk)
+
+        task = asyncio.create_task(update())
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def open_upload(self, ulid: str) -> Upload | None:
+        """The open upload ``ulid``, if there is one. Only open ones are cached (and dropped when
+        their state changes), so a new upload is writable at once."""
+        return await self._cached(("upload", ulid), lambda: self._load_upload(ulid))
+
+    async def _load_upload(self, ulid: str) -> Upload | None:
+        row = await self.pool.fetchrow(
+            "SELECT u.pk, u.user_pk, m.org_pk, m.name FROM model_uploads u "
+            "JOIN models m ON m.pk = u.model_pk "
+            "WHERE u.ulid = $1 AND u.state = 'open' AND m.deleted_at IS NULL",
+            ulid,
+        )
+        return Upload(*row) if row is not None else None
+
+    def touch_upload(self, upload_pk: int) -> None:
+        """Note a write into an open upload (D101), at most once a minute: the sweep expires
+        uploads without activity."""
+        now = time.monotonic()
+        if (
+            now - self._last_active.get(upload_pk, -self.LAST_USED_INTERVAL)
+            < self.LAST_USED_INTERVAL
+        ):
+            return
+        self._last_active[upload_pk] = now
+
+        async def update() -> None:
+            try:
+                await self.pool.execute(
+                    "UPDATE model_uploads SET last_activity_at = now() "
+                    "WHERE pk = $1 AND state = 'open'",
+                    upload_pk,
+                )
+            except Exception:
+                log.exception("could not update last_activity_at of model upload %s", upload_pk)
 
         task = asyncio.create_task(update())
         self._tasks.add(task)

@@ -15,11 +15,9 @@
 		entry
 	}: { open: boolean; org: string; entry: TrashEntry | null } = $props();
 
-	// Typing the path is the confirmation; reset whenever the dialog opens.
-	let typed = $derived.by(() => {
-		void open;
-		return '';
-	});
+	// Typing the path is the confirmation. Reset once the dialog has closed, so its text stays
+	// put while it animates closed.
+	let typed = $state('');
 	let error = $state<string | null>(null);
 	let pending = $state(false);
 
@@ -40,7 +38,14 @@
 	}
 </script>
 
-<AlertDialog.Root bind:open onOpenChange={(o) => o || (error = null)}>
+<AlertDialog.Root
+	bind:open
+	onOpenChangeComplete={(o) => {
+		if (o) return;
+		typed = '';
+		error = null;
+	}}
+>
 	<AlertDialog.Content class="sm:max-w-md">
 		<AlertDialog.Header>
 			<AlertDialog.Title>Delete {entry?.path} for good?</AlertDialog.Title>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BoxIcon from '@lucide/svelte/icons/box';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
@@ -14,6 +15,7 @@
 	import ProjectMenu from '#lib/components/ProjectMenu.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { datasetsHref } from '#lib/datasets.ts';
+	import { modelsHref } from '#lib/models.ts';
 	import { storageHref } from '#lib/storage.ts';
 	import type { OrgEntry, ProjectInfo } from '#lib/types.ts';
 	import { entityHref, projectHref } from '#lib/workspace/url.ts';
@@ -24,7 +26,7 @@
 		org: string | null;
 		orgs: OrgEntry[];
 		projects: ProjectInfo[];
-		/** Whether the server has S3 storage: the Datasets and Storage items show only then. */
+		/** Whether the server has S3 storage: the Datasets, Models and Storage items show only then. */
 		s3?: boolean;
 		/** Hide the sidebar (wide windows only: the drawer closes by itself). */
 		oncollapse?: () => void;
@@ -32,12 +34,13 @@
 
 	let { org, orgs, projects, s3 = false, oncollapse }: Props = $props();
 
-	/** Inside an org (its runs, a project, its members, its datasets and storage), where switching
+	/** Inside an org (its runs, a project, its members, its datasets, models and storage), where switching
 	 * orgs leaves the page. */
 	const inOrg = $derived(
 		!!page.route.id?.startsWith('/(app)/[entity]') ||
 			!!page.route.id?.startsWith('/(app)/orgs/') ||
 			!!page.route.id?.startsWith('/(app)/datasets/') ||
+			!!page.route.id?.startsWith('/(app)/models/') ||
 			!!page.route.id?.startsWith('/(app)/storage/')
 	);
 	const route = $derived(page.route.id);
@@ -107,6 +110,13 @@
 						aria-current={route?.startsWith('/(app)/datasets/') ? 'page' : undefined}
 					>
 						<DatabaseIcon /> Datasets
+					</a>
+					<a
+						class={ITEM}
+						href={modelsHref(org)}
+						aria-current={route?.startsWith('/(app)/models/') ? 'page' : undefined}
+					>
+						<BoxIcon /> Models
 					</a>
 					<a
 						class={ITEM}

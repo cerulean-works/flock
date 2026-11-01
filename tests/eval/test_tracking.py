@@ -1,3 +1,4 @@
+import dataclasses
 from typing import Self
 
 import pytest
@@ -76,3 +77,15 @@ def test_a_failed_summary_update_finishes_the_run_as_failed(monkeypatch):
         log_to_tracker(Results(PROVENANCE, [task_result("toy", {"acc_raw": 0.5})]), "project")
 
     assert calls["exit_code"] == 1
+
+
+def test_log_to_tracker_sends_a_flock_model_and_its_digest_in_the_config(logged):
+    # The run's config names the exact version scored, by number and digest.
+    provenance = dataclasses.replace(
+        PROVENANCE, model="flock:acme/olmo2-1b@12", model_digest="d" * 64
+    )
+
+    log_to_tracker(Results(provenance, [task_result("toy", {"acc_raw": 0.5})]), "project")
+
+    assert logged["init"]["config"]["model"] == "flock:acme/olmo2-1b@12"
+    assert logged["init"]["config"]["model_digest"] == "d" * 64

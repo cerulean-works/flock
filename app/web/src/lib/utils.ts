@@ -55,6 +55,7 @@ const RESERVED = [
 	'invite',
 	'login',
 	'logout',
+	'models',
 	'orgs',
 	'reset',
 	'setup',

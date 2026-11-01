@@ -11,10 +11,10 @@ Keep full option tables, protocol details and nuanced edge cases in the module r
 Install Python 3.14 and [doc-builder](https://github.com/cerulean-works/doc-builder) in an environment where the Flock root package is installed. The same dependency mocks are used by production and PR builds so API reference generation does not load models or download data. Run from the repository root:
 
 ```bash
-doc-builder build flock docs/source --version main --mock_deps torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx --build_dir /tmp/flock-docs-check
+doc-builder build flock docs/source --version main --mock_deps torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx,safetensors --build_dir /tmp/flock-docs-check
 doc-builder check-links docs/source
-doc-builder build flock docs/source --version main --mock_deps torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx --html --build_dir /tmp/flock-docs-site
-doc-builder preview flock docs/source --mock_deps torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx
+doc-builder build flock docs/source --version main --mock_deps torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx,safetensors --html --build_dir /tmp/flock-docs-site
+doc-builder preview flock docs/source --mock_deps torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx,safetensors
 ```
 
 Open `http://localhost:5173/flock/main/guide/` and inspect both tabs, cross-module links and API rendering. Every page must appear once in `_toctree.yml`. Keep generated output outside the repository.

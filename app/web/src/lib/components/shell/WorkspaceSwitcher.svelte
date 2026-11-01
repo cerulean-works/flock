@@ -12,6 +12,7 @@
 	import Avatar from '#lib/components/Avatar.svelte';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { datasetsHref } from '#lib/datasets.ts';
+	import { modelsHref } from '#lib/models.ts';
 	import { storageHref } from '#lib/storage.ts';
 	import type { OrgEntry } from '#lib/types.ts';
 	import { orgHref } from '#lib/workspace/url.ts';
@@ -45,6 +46,7 @@
 	let target = $state('');
 	const storage = $derived(!!page.route.id?.startsWith('/(app)/storage/'));
 	const datasets = $derived(!!page.route.id?.startsWith('/(app)/datasets/'));
+	const models = $derived(!!page.route.id?.startsWith('/(app)/models/'));
 
 	async function choose(name: string) {
 		if (name === org) return;
@@ -156,8 +158,8 @@
 
 <form method="POST" action="{resolve('/(app)')}?/workspace" bind:this={form} use:enhance hidden>
 	<input type="hidden" name="org" value={target} />
-	<!-- Storage goes to the other org's buckets, Datasets to its datasets; other org pages to its
-	     runs. -->
+	<!-- Storage goes to the other org's buckets, Datasets to its datasets, Models to its models;
+	     other org pages to its runs. -->
 	<input
 		type="hidden"
 		name="next"
@@ -165,9 +167,11 @@
 			? storageHref(target)
 			: datasets && target
 				? datasetsHref(target)
-				: stay
-					? page.url.pathname + page.url.search
-					: ''}
+				: models && target
+					? modelsHref(target)
+					: stay
+						? page.url.pathname + page.url.search
+						: ''}
 	/>
 </form>
 <form method="POST" action="/logout" bind:this={signOut} hidden></form>
