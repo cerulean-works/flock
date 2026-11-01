@@ -8,10 +8,11 @@
  * Cerulean colors on shadcn's semantic tokens, mirrored from cerulean.works: its ink, slate,
  * reading blue, focus blue, quiet rule and selection wash, on a pure white canvas instead of
  * the site's paper. Panels are the site's flat tint (ink at 4% over the canvas); nothing is
- * beige, textured or warm. Host Grotesk is loaded from Google Fonts in app.html. Light is the
- * app's appearance; dark is mapped for completeness.
+ * beige, textured or warm. Host Grotesk is loaded from Google Fonts in app.html. Dark is a
+ * neutral near-black, chosen on the account page or following the system (#lib/theme.ts).
  */
 :root {
+	color-scheme: light;
 	--radius: 0.5rem;
 
 	--background: #ffffff; /* Canvas: pure white */
@@ -77,44 +78,55 @@
 }
 
 .dark {
-	--background: #10254b; /* Evening field */
-	--foreground: #f3f5f9;
-	--card: #142c56;
-	--card-foreground: #f3f5f9;
-	--popover: #10254b;
-	--popover-foreground: #f3f5f9;
-	--primary: #a8d4ff;
-	--primary-foreground: #10254b;
-	--secondary: #1a3462;
-	--secondary-foreground: #f3f5f9;
-	--muted: #1a3462;
-	--muted-foreground: #c1cbe0; /* Pale slate */
-	--accent: #1a3462;
-	--accent-foreground: #f3f5f9;
-	--destructive: #f08a80;
-	--border: #415577;
-	--input: #415577;
-	--ring: #a8d4ff;
-	--sidebar: #10254b;
-	--sidebar-foreground: #f3f5f9;
-	--sidebar-primary: #a8d4ff;
-	--sidebar-primary-foreground: #10254b;
-	--sidebar-accent: #1a3462;
-	--sidebar-accent-foreground: #f3f5f9;
-	--sidebar-border: #415577;
-	--sidebar-ring: #a8d4ff;
-	--faint: #8a99b8;
-	--divider: #24406f;
-	--selection: #235fa2;
-	--link: #a8d4ff;
-	--deep: #0c2048;
-	--ansi-red: #f08a80;
-	--ansi-green: #8fc79b;
+	/*
+	 * Neutral near-black, in the manner of Linear: graphite surfaces with no blue cast, lifted
+	 * a step for each layer (canvas, panel, hover, popover), and the reading blue lightened so
+	 * links and focus stay the only saturated thing on the page.
+	 */
+	color-scheme: dark;
+
+	--background: #0f1012; /* Canvas */
+	--foreground: #e8eaed;
+	--card: #17181b; /* Panel */
+	--card-foreground: #e8eaed;
+	--popover: #1b1c20; /* Menus and dialogs sit a step above the page */
+	--popover-foreground: #e8eaed;
+	--primary: #7ab4f5;
+	--primary-foreground: #0f1012;
+	--secondary: #222428; /* Panel hover */
+	--secondary-foreground: #e8eaed;
+	--muted: #222428;
+	--muted-foreground: #a0a6b0;
+	--accent: #222428;
+	--accent-foreground: #e8eaed;
+	--destructive: #f07167;
+	--border: #33363c;
+	--input: #33363c;
+	--ring: #7ab4f5;
+	--sidebar: #0f1012;
+	--sidebar-foreground: #e8eaed;
+	--sidebar-primary: #7ab4f5;
+	--sidebar-primary-foreground: #0f1012;
+	--sidebar-accent: #222428;
+	--sidebar-accent-foreground: #e8eaed;
+	--sidebar-border: #33363c;
+	--sidebar-ring: #7ab4f5;
+	--faint: #6e747e;
+	--divider: #24262b;
+	--selection: #1e3a5f;
+	--link: #85bcf7;
+	--deep: #24406f;
+	--state-running: #5ea2ec;
+	--state-finished: #45b87f;
+	--state-preempting: #e3a33c;
+	--state-failed: #f07167;
+	--ansi-red: #f07167;
+	--ansi-green: #6fcf97;
 	--ansi-yellow: #e6c271;
-	--ansi-blue: #a8d4ff;
+	--ansi-blue: #7ab4f5;
 	--ansi-magenta: #d9a2dd;
-	--ansi-cyan: #85d1d6;
-	--hl-comment: #8195b8;
+	--ansi-cyan: #6fd0d6;
+	--hl-comment: #7d838d;
 	--hl-keyword: #f472d0;
 	--hl-string: #4ade80;
 	--hl-number: #fb923c;

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="%flock.theme%" class="%flock.dark%">
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -10,6 +10,19 @@
 			rel="stylesheet"
 			href="https://fonts.googleapis.com/css2?family=Geist:wght@400..600&family=Host+Grotesk:ital,wght@0,300..800;1,300..800&display=swap"
 		/>
+		<script>
+			// `system` resolves here, before the body paints, and follows the OS while the page is
+			// open. The server already set the class for an explicit light or dark (#lib/theme.ts).
+			(() => {
+				const root = document.documentElement;
+				const media = matchMedia('(prefers-color-scheme: dark)');
+				const apply = () => {
+					if (root.dataset.theme === 'system') root.classList.toggle('dark', media.matches);
+				};
+				apply();
+				media.addEventListener('change', apply);
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

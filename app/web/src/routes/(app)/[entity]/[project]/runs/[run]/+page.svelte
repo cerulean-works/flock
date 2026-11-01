@@ -292,6 +292,7 @@
 						{runState}
 						owner={data.owner}
 						currency={data.currency}
+						models={data.models}
 						now={data.now}
 					/>
 				</div>

@@ -16,6 +16,7 @@ from app.api.src.api import (
     dashboard,
     datasets,
     home,
+    models,
     orgs,
     projects,
     runs,
@@ -176,6 +177,7 @@ def create_app(store: Store) -> FastAPI:
     app.include_router(avatars.router)
     app.include_router(s3.router)
     app.include_router(datasets.router)
+    app.include_router(models.router)
     return app
 
 

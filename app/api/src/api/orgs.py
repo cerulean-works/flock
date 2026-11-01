@@ -64,6 +64,8 @@ class OrgUpdate(BaseModel):
     # S3 key lifetimes in seconds (D56); a null maximum means keys may never expire.
     s3_ephemeral_ttl: int | None = None
     s3_key_max_ttl: int | None = None
+    # Keep the newest N untagged versions of each model (D109); null turns retention off.
+    model_retention: int | None = Field(None, ge=1, le=1_000_000)
 
 
 class RoleBody(BaseModel):
@@ -93,6 +95,7 @@ async def org_info(store: Store, org: Org, user: User) -> dict:
         "avatar_url": store.avatars.url(org.avatar),
         "s3_ephemeral_ttl": org.s3_ephemeral_ttl,
         "s3_key_max_ttl": org.s3_key_max_ttl,
+        "model_retention": org.model_retention,
     }
 
 
@@ -173,7 +176,7 @@ async def get_org(org: OrgDep, user: UserDep, store: StoreDep) -> Response:
 
 @router.patch("/orgs/{org}")
 async def update_org(org: AdminOrgDep, body: OrgUpdate, user: UserDep, store: StoreDep) -> Response:
-    """Change an organization's display name, or its S3 key lifetimes.
+    """Change an organization's display name, its S3 key lifetimes, or its model retention.
 
     Its ID (``name``) is fixed: projects, runs, URLs and wandb clients address the organization
     by it. A different ``name`` answers 400.
@@ -182,6 +185,10 @@ async def update_org(org: AdminOrgDep, body: OrgUpdate, user: UserDep, store: St
     ``s3_key_max_ttl`` the longest any key may live (null: no limit), both in seconds. The
     ephemeral lifetime can't exceed the maximum (422); lowering only the maximum below it
     lowers it too. A lower maximum applies to existing keys at once.
+
+    ``model_retention`` keeps the newest N untagged versions of each model: older ones that
+    aren't primary, have no tag other than ``checkpoint-{step}`` and have no eval runs go to
+    the trash. Null (the default) keeps every version.
     """
     if body.name is not None and body.name != org.name:
         raise APIError(400, "an organization's ID (name) can't be changed")
@@ -190,6 +197,8 @@ async def update_org(org: AdminOrgDep, body: OrgUpdate, user: UserDep, store: St
         raise APIError(422, "s3_ephemeral_ttl can't be null")
     if ttls:
         await store.s3.set_ttls(org, ttls)
+    if "model_retention" in body.model_fields_set:
+        await store.set_model_retention(org, body.model_retention)
     if body.display_name is not None:
         await store.set_org_display_name(org, body.display_name)
     return JSONResponse(await org_info(store, org, user))

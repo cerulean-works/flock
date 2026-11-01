@@ -1,6 +1,6 @@
 # Working on Flock documentation
 
-All public documentation lives in `docs/source/`. The Guide and Reference tabs each group content by CLI, Evals and App. The files live under matching module folders; `_toctree.yml` assigns each page to a tab. Internal implementation notes under component `docs/agents/` folders are not published.
+All public documentation lives in `docs/source/`. The Guide groups content by CLI, Training, Evals and App; Reference covers CLI, Evals and App. The single-page trainer guide lives in `docs/source/training/`. The files live under matching module folders; `_toctree.yml` assigns each page to a tab. Internal implementation notes under component `docs/agents/` folders are not published.
 
 Write complete workflows rather than a page for every command or small action. Explain the concepts needed for the task before giving commands: for example, S3 keys, expiry and renewal belong before key generation. Keep related steps together and link directly to sections when a reader has a narrower question.
 
@@ -11,10 +11,10 @@ Keep full option tables, protocol details and nuanced edge cases in the module r
 Install Python 3.14 and [doc-builder](https://github.com/cerulean-works/doc-builder) in an environment where the Flock root package is installed. The same dependency mocks are used by production and PR builds so API reference generation does not load models or download data. Run from the repository root:
 
 ```bash
-doc-builder build flock docs/source --version main --mock_deps torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx --build_dir /tmp/flock-docs-check
+doc-builder build flock docs/source --version main --mock_deps torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx,safetensors --build_dir /tmp/flock-docs-check
 doc-builder check-links docs/source
-doc-builder build flock docs/source --version main --mock_deps torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx --html --build_dir /tmp/flock-docs-site
-doc-builder preview flock docs/source --mock_deps torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx
+doc-builder build flock docs/source --version main --mock_deps torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx,safetensors --html --build_dir /tmp/flock-docs-site
+doc-builder preview flock docs/source --mock_deps torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx,safetensors
 ```
 
 Open `http://localhost:5173/flock/main/guide/` and inspect both tabs, cross-module links and API rendering. Every page must appear once in `_toctree.yml`. Keep generated output outside the repository.

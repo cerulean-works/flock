@@ -8,6 +8,7 @@ import type {
 	DeletedProject,
 	Invite,
 	Member,
+	ModelTrashEntry,
 	OrgImport,
 	OrgInfo,
 	Role,
@@ -34,7 +35,7 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 				if (isHttpError(e) && e.status === 403) return null;
 				throw e;
 			});
-	const [org, members, me, billing, invites, wandb, deleted, warnings, s3, trash] =
+	const [org, members, me, billing, invites, wandb, deleted, warnings, s3, trash, modelTrash] =
 		await Promise.all([
 			flock(path).then((r) => r.json() as Promise<OrgInfo>),
 			flock(`${path}/members`).then((r) => r.json() as Promise<{ members: Member[] }>),
@@ -64,6 +65,13 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 				.catch((e) => {
 					if (isHttpError(e) && (e.status === 403 || e.status === 404)) return null;
 					throw e;
+				}),
+			// Deleted models and versions, for admins (D109), the same way.
+			flock(`${path}/models/-/trash`)
+				.then((r) => r.json() as Promise<{ entries: ModelTrashEntry[] }>)
+				.catch((e) => {
+					if (isHttpError(e) && (e.status === 403 || e.status === 404)) return null;
+					throw e;
 				})
 		]);
 	return {
@@ -74,6 +82,7 @@ export const load: PageServerLoad = async ({ depends, params }) => {
 		billing,
 		deletedProjects: deleted?.deleted_projects ?? null,
 		deletedDatasets: trash?.entries ?? null,
+		deletedModels: modelTrash?.entries ?? null,
 		warnings,
 		s3,
 		me: { id: me.id, is_superadmin: me.is_superadmin },
@@ -271,6 +280,17 @@ export const actions: Actions = {
 			s3_key_max_ttl: maximum,
 			s3_ephemeral_ttl: ephemeral
 		});
+		if (refused(res)) return res;
+		return { org: res.data };
+	},
+
+	/** Model retention (D109): `keep` is the number of untagged versions kept, blank for off. */
+	modelRetention: async ({ params, request }) => {
+		const keep = formText(await request.formData(), 'keep');
+		const value = keep === '' ? null : Number(keep);
+		if (value !== null && !(Number.isInteger(value) && value >= 1 && value <= 1_000_000))
+			return fail(400, { error: 'Enter a whole number of versions, from 1 up' });
+		const res = await change<OrgInfo>('PATCH', orgPath(params.org), { model_retention: value });
 		if (refused(res)) return res;
 		return { org: res.data };
 	},

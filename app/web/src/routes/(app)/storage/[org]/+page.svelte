@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BoxIcon from '@lucide/svelte/icons/box';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
@@ -11,6 +12,7 @@
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { datasetsHref } from '#lib/datasets.ts';
+	import { modelsHref } from '#lib/models.ts';
 	import { objectHref } from '#lib/storage.ts';
 	import { count, dateTime, relativeTime } from '#lib/utils.ts';
 	import Page from '#lib/components/Page.svelte';
@@ -84,7 +86,9 @@
 											<Badge
 												variant="secondary"
 												class="text-muted-foreground"
-												title="Flock created this bucket for the Datasets tab"
+												title={bucket.managed === 'models'
+													? 'Flock created this bucket for the Models tab'
+													: 'Flock created this bucket for the Datasets tab'}
 											>
 												Managed by Flock
 											</Badge>
@@ -116,6 +120,14 @@
 													{#snippet child({ props })}
 														<a {...props} href={datasetsHref(params.org)}>
 															<DatabaseIcon /> Open in Datasets
+														</a>
+													{/snippet}
+												</DropdownMenu.Item>
+											{:else if bucket.managed === 'models'}
+												<DropdownMenu.Item>
+													{#snippet child({ props })}
+														<a {...props} href={modelsHref(params.org)}>
+															<BoxIcon /> Open in Models
 														</a>
 													{/snippet}
 												</DropdownMenu.Item>

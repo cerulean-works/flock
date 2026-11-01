@@ -18,15 +18,10 @@
 
 	let { open = $bindable(), org, path }: Props = $props();
 
-	// Starts as the current path whenever the dialog opens: a rename is a move too.
-	let to = $derived.by(() => {
-		void open;
-		return path;
-	});
-	let error = $derived.by((): string | null => {
-		void open;
-		return null;
-	});
+	// Starts as the current path, a rename being a move too. Reset once the dialog has closed,
+	// so its text stays put while it animates closed.
+	let to = $derived(path);
+	let error = $state<string | null>(null);
 	let pending = $state(false);
 
 	async function submit() {
@@ -55,7 +50,14 @@
 </script>
 
 <!-- While the copy runs, the dialog can't be closed: the request decides how it ends. -->
-<Dialog.Root bind:open={() => open, (o) => (open = pending ? true : o)}>
+<Dialog.Root
+	bind:open={() => open, (o) => (open = pending ? true : o)}
+	onOpenChangeComplete={(o) => {
+		if (o) return;
+		to = path;
+		error = null;
+	}}
+>
 	<Dialog.Content
 		class="sm:max-w-lg"
 		showCloseButton={!pending}

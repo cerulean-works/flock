@@ -46,7 +46,7 @@ A run with an output directory writes `results.json` and one predictions file pe
 }
 ```
 
-The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.results.TaskResult`] plus its `docs_per_second`, which is `null` if the clock measured no time, each entry of `suites` is a [`~eval.results.SuiteResult`], and `provenance` is described below. The class docstrings at the end of this page define every field.
+`flock eval run` prints only a summary of this file (each suite's score and the primary metric of each task outside a scored suite, or every metric with `--verbose`), so read the file for the rest. The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.results.TaskResult`] plus its `docs_per_second`, which is `null` if the clock measured no time, each entry of `suites` is a [`~eval.results.SuiteResult`], and `provenance` is described below. The class docstrings at the end of this page define every field.
 
 ### The task hash
 
@@ -63,6 +63,8 @@ A context too long for the model loses tokens from the left, and the continuatio
 ## Provenance
 
 `provenance` records what produced the run, so a number can be traced to the exact model, code and settings: [`~eval.provenance.Provenance`] at the end of this page defines each field. It is collected once the model has loaded and before any task is scored, so `created_at` is when scoring started, as lm-evaluation-harness records its start date. `command` is the CLI-supplied invocation label, and `null` for a Python API call that passes none. The current CLI retains a legacy executable label in this field; use the recorded settings and commits when reconstructing a run. `flock_commit` is `"unknown"` when the installed package isn't a flock checkout, and ends in `-dirty` when tracked files changed or new files appeared under `flock/`.
+
+`model` is `repo@commit` for a Hugging Face model, and `flock:org/name@{number}` for a version stored in Flock. `model_digest` is that version's digest, the sha256 of its file list, which names its exact files. It's `null` for a Hugging Face model, whose commit already names the files. Files written before schema version 6 have no `model_digest`, and read as `null`.
 
 ## Predictions
 

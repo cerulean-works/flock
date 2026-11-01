@@ -12,6 +12,7 @@
 	import { placeTip, Readout, tipSide, type TipBox } from '#lib/chart/readout.ts';
 	import { cancel, schedule } from '#lib/chart/scheduler.ts';
 	import { pointAt, SNAP_PX, smoothed, snapStep } from '#lib/chart/series.ts';
+	import { scheme } from '#lib/theme.svelte.ts';
 	import { formatMetric, formatTick, sameItems } from '#lib/utils.ts';
 	import {
 		getWorkspace,
@@ -39,8 +40,10 @@
 	type Line = PlotSeries & { metric: number };
 
 	const ws = getWorkspace();
-	// Canvas colors come from the theme tokens (read once the plot is in the document).
-	let palette = $state({ ink: '#172a50', paper: '#ffffff', wash: '#cce7fb' });
+	// Canvas colors come from the theme tokens (read once the plot is in the document, and again
+	// when the page turns light or dark).
+	const LIGHT = { ink: '#172a50', paper: '#ffffff', wash: '#cce7fb' };
+	let palette = $state(LIGHT);
 
 	const view = $derived(preview ?? ws.panels[panel]);
 	const config = $derived(view.config);
@@ -160,12 +163,15 @@
 	// Canvas lifecycle
 
 	function observe(el: HTMLDivElement) {
-		const css = getComputedStyle(el);
-		palette = {
-			ink: css.getPropertyValue('--foreground').trim() || palette.ink,
-			paper: css.getPropertyValue('--background').trim() || palette.paper,
-			wash: css.getPropertyValue('--selection').trim() || palette.wash
-		};
+		$effect(() => {
+			void scheme.dark;
+			const css = getComputedStyle(el);
+			palette = {
+				ink: css.getPropertyValue('--foreground').trim() || LIGHT.ink,
+				paper: css.getPropertyValue('--background').trim() || LIGHT.paper,
+				wash: css.getPropertyValue('--selection').trim() || LIGHT.wash
+			};
+		});
 		const ro = new ResizeObserver(([entry]) => {
 			w = entry.contentRect.width;
 			h = entry.contentRect.height;

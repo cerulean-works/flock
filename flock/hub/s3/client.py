@@ -1,7 +1,7 @@
 """S3 access through Flock: keys for an org's buckets, renewed before they expire.
 
 ```python
-from flock.cli import s3
+from flock.hub import s3
 
 creds = s3.credentials(org="acme")
 client = creds.boto3_client()
@@ -15,6 +15,7 @@ all a job needs. This module only needs httpx: boto3 and the rest are imported w
 import datetime as dt
 import threading
 import time
+from collections.abc import Collection
 from typing import Any, Self
 
 import httpx
@@ -27,7 +28,20 @@ keys shorter than 10 minutes)."""
 
 
 class S3Error(RuntimeError):
-    """Flock couldn't hand out S3 access: no sign-in, no S3 on the server, or a refusal."""
+    """
+    Flock couldn't hand out S3 access: no sign-in, no S3 on the server, or a refusal.
+
+    Attributes:
+        status (`int`, *optional*):
+            The HTTP status Flock answered, when it answered.
+        body (`Any`, *optional*):
+            The answer's JSON, such as the paths a model commit refused.
+    """
+
+    def __init__(self, message: str, status: int | None = None, body: Any = None) -> None:
+        super().__init__(message)
+        self.status = status
+        self.body = body
 
 
 def _missing(package: str, extra: str = "") -> ImportError:
@@ -51,19 +65,31 @@ class _Api:
     def __exit__(self, *_: object) -> None:
         self.client.close()
 
-    def call(self, method: str, path: str, body: Any = None, ok: int = 200) -> Any:
+    def call(
+        self,
+        method: str,
+        path: str,
+        body: Any = None,
+        ok: int | Collection[int] = 200,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
         try:
-            response = self.client.request(method, f"/api/v1/{path}", json=body)
+            response = self.client.request(method, f"/api/v1/{path}", json=body, params=params)
         except httpx.HTTPError as error:
             raise S3Error(f"Couldn't reach {self.host}: {error}") from None
-        if response.status_code != ok:
+        if response.status_code not in ((ok,) if isinstance(ok, int) else ok):
             try:
-                reason = response.json().get("error")
-            except ValueError, AttributeError:
-                reason = None
+                answer = response.json()
+            except ValueError:
+                answer = None
+            reason = answer.get("error") if isinstance(answer, dict) else None
             if response.status_code == 401:
                 reason = f"{self.host} refused your credential ({reason}): run flock login"
-            raise S3Error(reason or f"{self.host} answered {response.status_code}")
+            raise S3Error(
+                reason or f"{self.host} answered {response.status_code}",
+                response.status_code,
+                answer,
+            )
         return response.json() if response.content else None
 
     def default_org(self, org: str | None) -> str:
@@ -197,8 +223,9 @@ class S3Credentials:
         }
 
     def storage_options(self) -> dict[str, str]:
-        """Lance (object_store) `storage_options` with the current key. Lance doesn't renew
-        them: call this again for each dataset you open."""
+        """Lance (object_store) `storage_options` with the current key. This is a snapshot.
+        For native renewal, call [`get_process`] before opening the dataset and let
+        Lance obtain credentials without passing these keys."""
         current = self.current()
         options = {
             "aws_endpoint": current["endpoint"],
@@ -283,6 +310,60 @@ class S3Credentials:
 def iso(timestamp: float) -> str:
     """A time in ISO 8601, as the AWS tools write expirations."""
     return dt.datetime.fromtimestamp(timestamp, dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def get_process(
+    org: str | None = None,
+    *,
+    host: str | None = None,
+    token: str | None = None,
+    ttl: float | None = None,
+    read_only: bool = False,
+) -> dict[str, str]:
+    """
+    Configures native AWS credential-process renewal in the current Python process.
+
+    Call before opening Lance datasets or other AWS clients. Sets the AWS profile,
+    config paths, endpoint, region and HTTP settings, and removes conflicting AWS
+    credentials. Spawned workers inherit this environment; no shell setup is needed.
+    Existing clients keep their own configuration.
+
+    The profile uses this Python interpreter and a private temporary settings file
+    holding the resolved Flock sign-in. Files stay available until this interpreter
+    exits. Your existing AWS config is not modified.
+
+    Args:
+        org (`str`, *optional*):
+            The organization whose buckets to access. Defaults to your default org.
+        host (`str`, *optional*):
+            The Flock API. Defaults as [`~cli.credentials.resolve`] does.
+        token (`str`, *optional*):
+            A Flock CLI token. Defaults to your sign-in.
+        ttl (`float`, *optional*):
+            Seconds each issued S3 key lives, at most the org's ephemeral lifetime.
+        read_only (`bool`, *optional*, defaults to `False`):
+            Request keys that can only read.
+
+    Returns:
+        `dict[str, str]`: The environment variables applied to `os.environ`.
+
+    Raises:
+        `S3Error`: without a sign-in, when S3 is disabled, or when the API refuses.
+        `ValueError`: if `ttl` is not positive and finite.
+
+    Example:
+
+    ```python
+    from flock.hub import s3
+    import lance
+
+    s3.get_process(org="cerulean-labs")
+    dataset = lance.dataset("s3://flock-datasets/text")
+    ```
+    """
+    from ._process import configure_process
+
+    return configure_process(org, host=host, token=token, ttl=ttl, read_only=read_only)
 
 
 def credentials(

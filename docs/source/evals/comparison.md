@@ -39,6 +39,7 @@ A breach adds a line such as `piqa  metrics.acc_raw  0.6  ->  0.625  (+0.025)`.
 
 A difference in score only means something if both runs scored the same requests with the same settings. `compare` refuses, before it reads any score, when:
 - the provenance's `model`, `dtype`, `batch_tokens`, `max_length` or `attention` differ
+- the provenance's `model_digest` differs, as for two Flock servers that each have a `flock:acme/olmo2-1b@12`. A file written before `model_digest` existed counts as `null`, the value for a Hugging Face model.
 - a task in both files has a different `task_hash` (see [The task hash](results#the-task-hash)) or `limit`
 - a suite in both files has a different `metric`, so its score averages another metric
 - a suite in both files has a different `suite_hash` (see [Suites](results#suites)), so its members, their requests or its `metric` changed. A file written before schema 5 has no suite hash, and its suites are compared on `members` and `score` only.

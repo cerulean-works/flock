@@ -73,6 +73,7 @@ separate installations, see [Run locally](docs/source/app/run-locally.md) and
 
 ### Training
 
-[`flock.training`](flock/training/) is a scaffold on this branch. To evaluate an
-existing model during training, use the implemented
-[in-memory evaluation API](docs/source/evals/evaluate-checkpoint.md).
+[`flock.training`](flock/training/) runs single-device, next-token training on
+Lance text datasets. [Train with Flock](docs/source/training/trainer.md) explains
+the example experiment and configuration. To evaluate a model during training,
+use the [in-memory evaluation API](docs/source/evals/evaluate-checkpoint.md).

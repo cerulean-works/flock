@@ -1,3 +1,5 @@
+import time
+
 from tests.app.utils import history_rows
 
 ORGS = "/api/v1/orgs"
@@ -36,6 +38,7 @@ def test_org_crud(flock):
         "avatar_url": None,
         "s3_ephemeral_ttl": 8 * 3600,  # S3 key lifetimes (D56)
         "s3_key_max_ttl": 30 * 86400,
+        "model_retention": None,  # keep every model version (D109)
     }
     assert admin.post(ORGS, {"name": "lab"}).status == 409
     assert admin.post(ORGS, {"name": "a/b"}).status == 422
@@ -349,6 +352,15 @@ def test_password_resets(flock):
     assert reset(admin, dave.id).status == 201  # super admins reset anyone
 
 
+def signed_out(api, timeout: float = 5.0) -> bool:
+    """Whether ``api``'s user stops being signed in: a deleted account's cached sign-in is
+    dropped once the database's notification of the delete arrives, not at once."""
+    deadline = time.monotonic() + timeout
+    while (status := api.get("/api/v1/me").status) == 200 and time.monotonic() < deadline:
+        time.sleep(0.05)
+    return status == 401
+
+
 def test_user_administration(flock):
     admin = flock.client()
     admin_id = admin.get("/api/v1/me").json()["id"]
@@ -367,11 +379,11 @@ def test_user_administration(flock):
 
     assert alice.api.delete(f"/api/v1/users/{alice.id}").status == 409  # the last super admin
     assert alice.api.delete(f"/api/v1/users/{admin_id}").status == 204
-    assert admin.get("/api/v1/me").status == 401
+    assert signed_out(admin)
     flock.token = alice.token  # add_user invites as the super admin
     bob = flock.add_user("bob@lab.test", org="alices")
     assert upsert_error(bob.api, "alices", "p", "b1") is None
     assert alice.api.delete(f"/api/v1/users/{bob.id}").status == 204
     detail = alice.api.get("/api/v1/projects/alices/p/runs/b1").json()
     assert detail["owner"] is None  # runs stay, without an owner
-    assert bob.api.get("/api/v1/me").status == 401
+    assert signed_out(bob.api)

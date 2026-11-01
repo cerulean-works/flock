@@ -1,13 +1,18 @@
 import asyncio
+import datetime as dt
 
 from app.api.scripts.seed_demo import ADMIN_EMAIL, PASSWORD, simulate
+
+MID_MONTH = dt.datetime(2026, 10, 15, tzinfo=dt.UTC).timestamp()  # spend is counted per UTC month
 
 
 def test_a_simulated_month_loads_into_the_flock(postgres, make_flock, tmp_path):
     """A small simulated month: Flock loads it as written, with nothing to rebuild."""
     url = postgres.create()
     files = tmp_path / "flock-files-0"  # where the first flock of ``make_flock`` looks
-    stats = asyncio.run(simulate(url, scale=0.03, seed=7, files_dir=files, log=lambda _: None))
+    stats = asyncio.run(
+        simulate(url, scale=0.03, seed=7, now=MID_MONTH, files_dir=files, log=lambda _: None)
+    )
     assert stats["runs"] > 100 and stats["points"] > 0 and stats["gpu_hours"] > 0
 
     server = make_flock(database_url=url, api_key=stats["api_key"])
@@ -35,7 +40,7 @@ def test_a_simulated_month_loads_into_the_flock(postgres, make_flock, tmp_path):
     times = [item["at"] for item in feed]
     assert times == sorted(times, reverse=True)
 
-    budget = api.get("/api/v1/orgs/flock/budget").json()
+    budget = api.get("/api/v1/orgs/flock/budget", month="2026-10").json()
     assert budget["spent"] > 0 and budget["budget"] is not None
     assert budget["top_runs"] and budget["projects"]
 

@@ -149,7 +149,9 @@ def writer(flock: S3Flock) -> Writer:
 
 def test_managed_bucket_is_created_with_the_org(flock: S3Flock):
     api = flock.client()
-    (bucket,) = api.get(BUCKETS).json()["buckets"]
+    # flock-models (014) is the other bucket Flock manages.
+    bucket, models = api.get(BUCKETS).json()["buckets"]
+    assert (models["name"], models["managed"]) == ("flock-models", "models")
     assert bucket["name"] == "flock-datasets"
     assert bucket["managed"] == "datasets"
     assert bucket["created_by"] is None
@@ -161,7 +163,10 @@ def test_managed_bucket_is_created_with_the_org(flock: S3Flock):
     # A new org gets its own.
     assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
     listed = api.get("/api/v1/orgs/lab/buckets").json()["buckets"]
-    assert [(b["name"], b["managed"]) for b in listed] == [("flock-datasets", "datasets")]
+    assert [(b["name"], b["managed"]) for b in listed] == [
+        ("flock-datasets", "datasets"),
+        ("flock-models", "models"),
+    ]
     assert flock.s3.client().head_bucket(Bucket=upstream_name(flock, "lab"))
 
 
@@ -213,6 +218,7 @@ def test_startup_creates_missing_buckets_and_adopts_existing_ones(
         return [
             (b["name"], b["managed"])
             for b in api.get(f"/api/v1/orgs/{org}/buckets").json()["buckets"]
+            if b["managed"] != "models"  # flock-models (014) is ensured with it
         ]
 
     wait_for(lambda: managed("lab") == [("flock-datasets", "datasets")])
@@ -231,11 +237,13 @@ def test_the_datasets_tab_creates_a_missing_bucket(flock: S3Flock):
     # As if the org's creation had failed to make it: no row, no bucket upstream.
     flock.s3.client().delete_bucket(Bucket=upstream_name(flock))
     sql(flock, "DELETE FROM s3_buckets WHERE managed = 'datasets'")
-    assert flock.client().get(BUCKETS).json()["buckets"] == []
+    names = [b["name"] for b in flock.client().get(BUCKETS).json()["buckets"]]
+    assert names == ["flock-models"]
     listing = get(flock.client(), f"{DATASETS}/at")
     assert listing.status == 200, listing.body
     assert listing.json()["datasets"] == []
-    assert [b["name"] for b in flock.client().get(BUCKETS).json()["buckets"]] == ["flock-datasets"]
+    names = [b["name"] for b in flock.client().get(BUCKETS).json()["buckets"]]
+    assert names == ["flock-datasets", "flock-models"]
 
 
 def test_managed_bucket_cant_be_deleted_and_flock_names_are_reserved(flock: S3Flock):
@@ -243,7 +251,8 @@ def test_managed_bucket_cant_be_deleted_and_flock_names_are_reserved(flock: S3Fl
     refused = api.delete(f"{BUCKETS}/flock-datasets")
     assert refused.status == 409
     assert refused.json()["error"] == "flock-datasets is managed by Flock and can't be deleted"
-    assert [b["name"] for b in api.get(BUCKETS).json()["buckets"]] == ["flock-datasets"]
+    names = [b["name"] for b in api.get(BUCKETS).json()["buckets"]]
+    assert names == ["flock-datasets", "flock-models"]
 
     named = api.post(BUCKETS, {"name": "flock-models"})
     assert named.status == 422
@@ -303,6 +312,21 @@ def test_listing_finds_datasets_at_any_depth(
     assert (empty["datasets"], empty["folders"], empty["files"]) == ([], [], [])
     assert get(api, f"{DATASETS}/at", path="nowhere").status == 404
     assert get(api, f"{DATASETS}/at", path="/eval").status == 422
+
+
+def test_the_datasets_tab_creates_folders(flock: S3Flock, writer: Writer):
+    """The Datasets tab's New folder writes the folder's marker through the Storage tab's
+    route, and the empty folder lists."""
+    writer.write("eval/mmlu", table(0, 1))
+    api = flock.client()
+    folders = "/api/v1/orgs/flock/buckets/flock-datasets/folders"
+    assert api.post(folders, {"prefix": "eval/new/"}).status == 201
+    assert api.post(folders, {"prefix": "fresh/"}).status == 201
+    assert [f["path"] for f in get(api, f"{DATASETS}/at").json()["folders"]] == ["eval", "fresh"]
+    inside = get(api, f"{DATASETS}/at", path="eval").json()
+    assert [f["path"] for f in inside["folders"]] == ["eval/new"]
+    empty = get(api, f"{DATASETS}/at", path="eval/new").json()
+    assert (empty["datasets"], empty["folders"], empty["files"]) == ([], [], [])
 
 
 def test_listing_pages(flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch):
@@ -618,7 +642,7 @@ def test_the_trash_is_out_of_every_key_s_reach(flock: S3Flock, writer: Writer):
         config=Config(s3={"addressing_style": "path"}, retries={"max_attempts": 1}),
     )
     names = [b["Name"] for b in s3.list_buckets()["Buckets"]]
-    assert names == ["flock-datasets"]
+    assert names == ["flock-datasets", "flock-models"]
     trash = datasets(flock).trash
     for name in (trash, "flock-trash"):
         with pytest.raises(ClientError) as raised:

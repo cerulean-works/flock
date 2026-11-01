@@ -28,7 +28,7 @@ jobs:
       # The build checks the repository out into a folder named after it.
       path_to_docs: flock/docs/source
       python_version: "3.14"
-      mock_deps: torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx
+      mock_deps: torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx,safetensors
 
   publish:
     needs: build

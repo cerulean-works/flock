@@ -22,7 +22,7 @@ Each organization has its own buckets. Any member can create one, from the dashb
 
 Buckets created on the S3 server outside Flock aren't adopted, and creating a bucket whose name already exists there answers 409.
 
-Names starting with `flock-` are reserved for buckets Flock manages, such as `flock-datasets` (see [Datasets](#datasets)). Buckets that already had such a name keep working.
+Names starting with `flock-` are reserved for buckets Flock manages, such as `flock-datasets` (see [Datasets](#datasets)) and `flock-models` (see [Models](#models)). Buckets that already had such a name keep working.
 
 
 ## Keys
@@ -33,7 +33,7 @@ There are two ways to get one:
 
 | | Ephemeral keys | Long-lived keys |
 |---|---|---|
-| Made by | `flock s3 credentials`, `flock.cli.s3`, `POST /s3/credentials` | the account page, `POST /me/s3-keys` |
+| Made by | `flock s3 credentials`, `flock.hub.s3`, `POST /s3/credentials` | the account page, `POST /me/s3-keys` |
 | In exchange for | a CLI token | a browser session only |
 | Lifetime | the organization's ephemeral lifetime, or less if asked | anything up to the organization's maximum, including never if it allows |
 | Ends with | the CLI sign-in it was made for (`flock logout`, revoking the machine, a password change or reset) | revoking it on the account page; it survives password changes, as wandb keys do |
@@ -68,7 +68,7 @@ The proxy checks memberships on every request (through its cache), so removing s
 
 ## The Storage tab
 
-The dashboard's sidebar has a **Storage** item for the organization in view, at `/storage/{org}`. It lists the organization's buckets, with who created them, and creates and deletes them. A deleted bucket stays listed as "being deleted" until the S3 server has emptied it. Its Connect panel shows the endpoint and region, with snippets for `flock s3 configure`, `flock s3 credentials` and `flock.cli.s3`.
+The dashboard's sidebar has a **Storage** item for the organization in view, at `/storage/{org}`. It lists the organization's buckets, with who created them, and creates and deletes them. A deleted bucket stays listed as "being deleted" until the S3 server has emptied it. Its Connect panel shows the endpoint and region, with snippets for `flock s3 configure`, `flock s3 credentials` and `flock.hub.s3`.
 
 Each bucket opens a file browser, one folder level at a time:
 
@@ -87,11 +87,11 @@ Bucket and folder sizes aren't shown: the S3 server reports them only through Ce
 
 Every organization has a bucket named `flock-datasets`, which Flock creates and manages. Flock makes it when the organization is created, when the API starts (for organizations without one), and when the Datasets tab opens and finds none. If the organization already had a bucket of that name, Flock takes it over with its objects. The bucket can't be deleted, and the Storage tab marks it **Managed by Flock**.
 
-To S3 clients it's an ordinary bucket. Write Lance datasets into it with any client, for example with [`flock.cli.s3`](../cli/use-python-storage#write-a-lance-dataset):
+To S3 clients it's an ordinary bucket. Write Lance datasets into it with any client, for example with [`flock.hub.s3`](../cli/use-python-storage#write-a-lance-dataset):
 
 ```python
 import lance
-from flock.cli import s3
+from flock.hub import s3
 
 creds = s3.credentials("flock")
 lance.write_dataset(
@@ -101,7 +101,7 @@ lance.write_dataset(
 
 The dashboard's **Datasets** item, at `/datasets/{org}`, browses the bucket:
 
-- **Datasets are found, not registered.** Any folder that holds a `_versions/` folder is a dataset, at any depth. Flock keeps no table of them, so whatever writes to S3 is what the tab shows. Other folders and files are listed too, and files open in the Storage tab.
+- **Datasets are found, not registered.** Any folder that holds a `_versions/` folder is a dataset, at any depth. Flock keeps no table of them, so whatever writes to S3 is what the tab shows. Other folders and files are listed too, and files open in the Storage tab. **New folder** makes an empty folder where you are, as the Storage tab's "Create folder" does, so you can lay out a path before writing a dataset into it.
 - **A dataset's page** shows its `README.md` (its card, read from the dataset's folder and the same for every version), its rows, its schema and its versions. Any version can be opened, by number or by tag. The rows show images, embeddings, long text and JSON in a readable form, and open a cell in full in a side panel.
 - **Deleting** moves the dataset to a trash bucket, `FLOCK_S3_TRASH_BUCKET`, which no S3 key can reach. Organization admins restore deleted datasets, or delete them for good, from the organization's settings page. After 14 days they're removed. Deleting a dataset's folder from the Storage tab or an S3 client skips the trash.
 - **Renaming** copies the dataset to its new path on the S3 server, then deletes the old objects. Anything still writing to the old path makes a new dataset there.
@@ -111,9 +111,20 @@ The dashboard's **Datasets** item, at `/datasets/{org}`, browses the bucket:
 Lance reads go straight from the API to the S3 server with the global key. Who wrote each version isn't recorded, since Lance doesn't store it. A writer can put it in `transaction_properties`. The routes are listed in [Datasets](api/datasets).
 
 
+## Models
+
+Every organization also has a bucket named `flock-models`, which holds the versions of its [stored models](../hub/store-models). Flock creates, adopts and protects it as it does `flock-datasets`, and the Storage tab marks it **Managed by Flock**.
+
+- **Anyone in the organization reads it** with any key, through the proxy, the Storage tab or an S3 client.
+- **Only uploads write to it.** The proxy refuses every write and delete in the bucket with `AccessDenied` ("flock-models is written through flock models push"), except the writes of an open upload into its own folder by the user who opened it. Copies into the bucket are refused even inside an upload.
+- **The Storage tab only reads it.** It has no upload, folder or delete actions there, and the API's object delete and folder endpoints answer 403 for it.
+- **Versions are deleted through the registry,** from the Models tab or the [model endpoints](api/models#deleting), so a version's files never change once it's saved. Deleted versions wait 14 days in the trash.
+
+The dashboard's **Models** item, at `/models/{org}`, lists the models. [Browse and manage models](browse-models) shows how to use it.
+
 ## What the proxy supports
 
-Clients address buckets path-style: `<endpoint>/<bucket>/<key>`. boto3, the AWS CLI, Lance, s3fs and DuckDB all support it; `flock.cli.s3` and `flock s3 configure` set it for you.
+Clients address buckets path-style: `<endpoint>/<bucket>/<key>`. boto3, the AWS CLI, Lance, s3fs and DuckDB all support it; `flock.hub.s3` and `flock s3 configure` set it for you.
 
 | Supported | Operations |
 |---|---|

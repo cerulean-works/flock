@@ -20,7 +20,7 @@ def main() -> None:
 
 
 @main.command()
-@click.option("--model", required=True, help="Model as repo@revision.")
+@click.option("--model", required=True, help="Model as repo@revision or flock:org/name[@version].")
 @click.option(
     "--task",
     "tasks",
@@ -62,6 +62,11 @@ def main() -> None:
 )
 @click.option("--device", help="Torch device (default: cuda if available).")
 @click.option("--wandb-project", help="Also log the summary to this tracker project.")
+@click.option(
+    "--verbose",
+    is_flag=True,
+    help="Print every metric of every task and each suite's members.",
+)
 def run(
     model: str,
     tasks: tuple[str, ...],
@@ -72,6 +77,7 @@ def run(
     dtype: Dtype,
     device: str | None,
     wandb_project: str | None,
+    verbose: bool,
 ) -> None:
     """Score a model on tasks and suites and write results.json."""
     try:
@@ -90,7 +96,7 @@ def run(
     except ValueError as error:
         raise click.UsageError(str(error)) from None
 
-    click.echo(format_results(evaluate(config)))
+    click.echo(format_results(evaluate(config), verbose=verbose))
 
 
 @main.command(name="compare")
@@ -131,21 +137,55 @@ def format_comparison(comparison: Comparison) -> str:
     return "\n".join(lines)
 
 
-def format_results(results: Results) -> str:
-    """Formats a header with the model and commit, then per task a summary line and one line per metric, primary first, then one line per suite."""
+def format_results(results: Results, verbose: bool = False) -> str:
+    """Formats a header with the model and commit, then per suite, each before its members, its score, metric and member count, then per task that no scored suite holds its primary metric and doc count. `verbose` prints instead per task a summary line and one line per metric, primary first, then one line per suite with its members."""
     lines = [f"model {results.provenance.model}  flock {results.provenance.flock_commit}"]
 
-    for task in results.tasks:
-        speed = "" if task.docs_per_second is None else f"{task.docs_per_second:.1f} docs/s  "
-        lines.append(f"{task.task}  docs {task.num_docs}  {speed}hash {task.task_hash[:12]}")
-        names = [task.primary_metric] + [
-            name for name in task.metrics if name != task.primary_metric
-        ]
-        width = max(len(name) for name in names) + 1
-        lines += [f"  {name:<{width}} {task.metrics[name]:.4f}" for name in names]
+    if verbose:
+        for task in results.tasks:
+            speed = "" if task.docs_per_second is None else f"{task.docs_per_second:.1f} docs/s  "
+            lines.append(f"{task.task}  docs {task.num_docs}  {speed}hash {task.task_hash[:12]}")
+            names = [task.primary_metric] + [
+                name for name in task.metrics if name != task.primary_metric
+            ]
+            width = max(len(name) for name in names) + 1
+            lines += [f"  {name:<{width}} {task.metrics[name]:.4f}" for name in names]
 
-    for suite in results.suites:
+        for suite in results.suites:
+            score = "unscored" if suite.score is None else f"{suite.score:.4f}"
+            lines.append(f"{suite.suite}  {score}  ({', '.join(suite.members)})")
+
+        return "\n".join(lines)
+
+    # A task in a suite is in a scored one (an unscored suite holds only suites), and that
+    # suite's line stands for it, so it prints only with `verbose`.
+    nested = {name for suite in results.suites for name in suite.members}
+    tasks = [task for task in results.tasks if task.task not in nested]
+
+    # One name column for suites and tasks, so every score sits in one column.
+    names = [suite.suite for suite in results.suites] + [task.task for task in tasks]
+    width = max((len(name) for name in names), default=0)
+
+    # Results hold each suite after its members. Printed the other way round, each suite before
+    # its members in declared order, the suites that were asked for come first.
+    by_name = {suite.suite: suite for suite in results.suites}
+    todo = [suite for suite in results.suites if suite.suite not in nested]
+    ordered = []
+    while todo:
+        suite = todo.pop(0)
+        if suite not in ordered:  # a suite held by two others prints once
+            ordered.append(suite)
+            todo = [by_name[name] for name in suite.members if name in by_name] + todo
+
+    for suite in ordered:
         score = "unscored" if suite.score is None else f"{suite.score:.4f}"
-        lines.append(f"{suite.suite}  {score}  ({', '.join(suite.members)})")
+        metric = suite.metric or "primary"  # the members' primary metrics
+        lines.append(f"{suite.suite:<{width}}  {score:<8}  {metric}  members {len(suite.members)}")
+
+    for task in tasks:
+        score = f"{task.metrics[task.primary_metric]:.4f}"
+        lines.append(
+            f"{task.task:<{width}}  {score:<8}  {task.primary_metric}  docs {task.num_docs}"
+        )
 
     return "\n".join(lines)

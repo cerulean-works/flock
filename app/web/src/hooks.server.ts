@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { Handle } from '@sveltejs/kit/hooks';
 import { immutable } from '$app/manifest';
 import { loginHref, resolveSession } from '#lib/server/session.ts';
+import { parseTheme, THEME_COOKIE } from '#lib/theme.ts';
 
 // SvelteKit's client start awaits the root error component (node 1) alongside the root layout,
 // but only modulepreloads the nodes of the rendered route. Without this, that chunk is fetched
@@ -31,6 +32,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const session = await resolveSession(event.cookies);
 	event.locals.token = session.token;
 	event.locals.user = session.user;
+	event.locals.theme = parseTheme(event.cookies.get(THEME_COOKIE));
 
 	// Signed out: pages go to sign in (which sends a fresh server's first visitor on to
 	// setup), this server's API answers 401. Data requests pass: their server loads hit the
@@ -46,11 +48,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	// Preload JS and CSS so they download in parallel with the document. The font comes from
-	// Google Fonts, linked with a preconnect in app.html.
+	// Google Fonts, linked with a preconnect in app.html. The appearance goes on <html> here, so
+	// a chosen light or dark page never flashes the other (see #lib/theme.ts).
+	const theme = event.locals.theme;
 	return resolve(event, {
 		preload: ({ type }) => type === 'js' || type === 'css',
-		transformPageChunk: errorPreload
-			? ({ html }) => html.replace('</head>', `${errorPreload}</head>`)
-			: undefined
+		transformPageChunk: ({ html }) =>
+			html
+				.replace('%flock.theme%', theme)
+				.replace('%flock.dark%', theme === 'dark' ? 'dark' : '')
+				.replace('</head>', `${errorPreload}</head>`)
 	});
 };

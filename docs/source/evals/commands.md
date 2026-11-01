@@ -4,7 +4,7 @@
 
 ## `flock eval run`
 
-Scores one model on tasks and suites, writes the results, and prints each task's metrics with the primary metric first, then each suite's score.
+Scores one model on tasks and suites, writes the results, and prints a summary: one line per suite with its score, its metric (`primary` for each member's primary metric) and member count, each suite before its members, starting from the suites no other suite holds in the order you gave them, then one line per task with its primary metric and doc count. A task inside a scored suite prints only with `--verbose`, so `--suite base_easy` shows the suite lines alone. `--verbose` prints every metric of every task and each suite's members instead. `results.json` holds all of it either way.
 
 ```bash
 uv run flock eval run \
@@ -15,7 +15,7 @@ uv run flock eval run \
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--model` | required | The model as `repo@revision`. A branch or tag is resolved to its commit through the Hub, and the results record the commit. A full commit hash needs no Hub access, so it works offline. |
+| `--model` | required | The model as `repo@revision`. A branch or tag is resolved to its commit through the Hub, and the results record the commit. A full commit hash needs no Hub access, so it works offline. A model stored in Flock is `flock:org/name`, `flock:org/name@{number}`, `flock:org/name@{tag}` or `flock:org/name@primary`, and no version means the primary. It's resolved to its number through Flock, and the results record `flock:org/name@{number}` and the version's `model_digest`. See [Score a model stored in Flock](run-evaluation#score-a-model-stored-in-flock). |
 | `--task` | none | A task name from [Tasks](tasks#available-tasks). Repeat it for several tasks with one model load. |
 | `--suite` | none | A suite name from [Suites](tasks#suites). It runs the suite's tasks and scores the suite and every suite it holds. Repeat it for several suites. A task in several suites, or also given with `--task`, runs once. |
 | `--out` | required | The directory for `results.json` and `predictions/`. It must be new or empty, so one directory holds one run. |
@@ -24,6 +24,7 @@ uv run flock eval run \
 | `--dtype` | `bfloat16` | The weights' dtype, `bfloat16` or `float32`. Log-softmax runs in float32 either way. Compare only runs with the same value. |
 | `--device` | `cuda` if available, else `cpu` | The torch device. |
 | `--wandb-project` | off | Also log the run to this project through the `wandb` SDK. [Connect the SDK](../cli/sign-in#wandb-sdk) first so it goes to Flock. |
+| `--verbose` | off | Print every metric of each task, primary first, with its speed and the start of its task hash, then each suite with its members. |
 
 Give at least one `--task` or `--suite`. The command runs [`~eval.run.evaluate`], and every flag maps to a field of [`~eval.run.EvalConfig`].
 
