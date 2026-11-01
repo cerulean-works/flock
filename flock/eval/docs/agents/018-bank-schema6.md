@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | in review |
 | Date | 2026-11-01 |
-| Builds on | [013](013-score-compare.md) (D2: refusals, D4: the bank and its refresh), [014](014-run-provenance.md) (D1: `suite_hash`, the library versions), [015](015-greedy-match.md) (D3: LAMBADA's new hash, D4: schema 6) |
+| Builds on | [013](013-score-compare.md) (D2: refusals, D4: the bank and its refresh), [014](014-run-provenance.md) (D5: the library versions, D7: `suite_hash`), [015](015-greedy-match.md) (D3: LAMBADA's new hash, D4: schema 6) |
 | Keeps | every task definition and tolerance; the bank's scores move only where 015 moved them (LAMBADA, `base_easy:qa_rc`) |
 | Result | `compare` refuses a common suite with another `suite_hash`; the bank `tests/eval/regression/olmo-2-0425-1b-float32.json` rewritten by the same command at schema 6 |
 
@@ -22,7 +22,7 @@ The file number and the decision numbers are provisional. The file takes the nex
 
 ### 018.D1. `compare` refuses a common suite whose `suite_hash` differs, and skips the check for a file before schema 5
 
-A suite's hash covers its name, `metric`, whether it is scored, and each member's name and hash, all the way down (014.D1). Two equal suite hashes mean the same members scored the same requests; two different ones mean the suite's score is another quantity. So a difference refuses, before any score is read, the way a task's `task_hash` does (013.D2).
+A suite's hash covers its name, `metric`, whether it is scored, and each member's name and hash, all the way down (014.D7). Two equal suite hashes mean the same members scored the same requests; two different ones mean the suite's score is another quantity. So a difference refuses, before any score is read, the way a task's `task_hash` does (013.D2).
 
 A file written before schema 5 has no `suite_hash`. When either file's `schema_version` is below 5, the check is skipped and the suites are compared on `members` and `score` as before, so the old bank can still be compared with the new one in the refresh PR (section 4). The skip is tied to the version, not to the key: a file of schema 5 or later without a `suite_hash` is broken and refuses like any missing key (013.D2).
 
