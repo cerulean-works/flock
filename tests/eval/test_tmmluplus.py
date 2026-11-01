@@ -114,7 +114,10 @@ def test_chinese_choices_count_characters_and_utf8_bytes(tmmluplus_rows):
     built = task.requests(*task.load())
     n = len(built.requests)
     scores = Scores(
-        torch.zeros(n), torch.ones(n, dtype=torch.int64), torch.zeros(n, dtype=torch.int64)
+        torch.zeros(n),
+        torch.ones(n, dtype=torch.int64),
+        torch.zeros(n, dtype=torch.int64),
+        torch.zeros(n, dtype=torch.bool),
     )
     layout = built.choice_scores(scores)
 

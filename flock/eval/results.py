@@ -157,6 +157,7 @@ def prediction_rows(docs: Sequence[MCDoc], scores: ChoiceScores) -> list[dict[st
         "num_tokens": scores.num_tokens,
         "num_chars": scores.num_chars,
         "num_bytes": scores.num_bytes,
+        "is_greedy": scores.is_greedy,
         "tokens_cut": scores.tokens_cut,
         "logprob_uncond": scores.logprob_uncond,
         "tokens_cut_uncond": scores.tokens_cut_uncond,

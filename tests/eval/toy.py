@@ -1,8 +1,10 @@
-"""Toy dataset rows and toy tasks in ARC's row format, read by every eval test instead of a download."""
+"""Toy dataset rows and toy tasks in ARC's row format, read by every eval test instead of a download, and toy results built by hand."""
 
 import dataclasses
 from typing import Any
 
+from flock.eval.provenance import Provenance
+from flock.eval.results import TaskResult, Truncation
 from flock.eval.tasks import (
     CHINESE_ANSWER_PREFIX,
     CHINESE_QUESTION_PREFIX,
@@ -89,21 +91,12 @@ def not_about_bees(row: dict[str, Any]) -> bool:
     return "bees" not in row["question"]
 
 
-def passage_doc(row: dict[str, Any]) -> MCDoc:
-    """A toy row as DRCD renders it, scored on the gold answer alone after a `文章：` passage line: the choices joined stand in for the passage."""
-    texts = row["choices"]["text"]
-    gold = texts[row["choices"]["label"].index(row["answerKey"])]
+def gold_doc(row: dict[str, Any]) -> MCDoc:
+    """A toy row as a gold-only doc: its question, then only its correct answer."""
+    gold = row["choices"]["label"].index(row["answerKey"])
 
     return MCDoc(
-        id=row["id"],
-        choices=cloze(
-            row["question"],
-            (gold,),
-            question_prefix=f"文章：{'、'.join(texts)}\n{CHINESE_QUESTION_PREFIX}",
-            answer_prefix=CHINESE_ANSWER_PREFIX,
-            separator="",
-        ),
-        gold=0,
+        id=row["id"], choices=cloze(row["question"], (row["choices"]["text"][gold],)), gold=0
     )
 
 
@@ -143,12 +136,14 @@ PROMPT_PATHS = (
         description="以下是關於常識考試單選題，請選出正確的答案。\n\n",
         unconditional_context=CHINESE_ANSWER_PREFIX,
     ),
-    # Scored on the gold text alone, with no PMI, after a passage in the Chinese format.
+    # One choice per doc and no unconditional requests, as math, code and LAMBADA are scored.
     GoldOnlyTask(
         name="toy:gold_only",
         dataset=TASK.dataset,
-        to_doc=passage_doc,
-        fewshot=Fewshot("train", ("shot-2",)),
+        to_doc=gold_doc,
+        primary_metric="acc_greedy",
+        metrics=("acc_greedy", "bpb"),
+        fewshot=TASK.fewshot,
     ),
 )
 
@@ -156,3 +151,35 @@ PROMPT_PATHS = (
 def load(dataset: Dataset, split: str | None = None) -> list[dict[str, Any]]:
     """Stands in for `Dataset.load`, returning the toy rows of `split` whatever the dataset."""
     return ROWS[split or dataset.split]
+
+
+PROVENANCE = Provenance(
+    model="tiny@0",
+    flock_commit="abc123",
+    command="test",
+    device="cpu",
+    dtype="float32",
+    batch_tokens=64,
+    max_length=128,
+    attention="eager",
+    torch="2.8.0",
+    transformers="4.57.6",
+    tokenizers="0.23.3",
+    datasets="5.1.0",
+    python="3.14.0",
+    created_at="now",
+)
+
+
+def task_result(name: str, metrics: dict[str, float], seconds: float = 1.0) -> TaskResult:
+    return TaskResult(
+        task=name,
+        task_hash="hash-" + name,
+        dataset=TASK.dataset,
+        primary_metric=next(iter(metrics)),
+        metrics=metrics,
+        num_docs=2,
+        limit=None,
+        seconds=seconds,
+        truncation=Truncation(requests=0, docs=0, max_tokens_cut=0),
+    )

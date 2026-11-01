@@ -32,9 +32,11 @@ class TrainerConfig:
     wandb_project: str
     wandb_mode: Literal["online", "offline", "disabled", "shared"] = "online"
 
+    # Master weights are always stored in FP32, but the model can be trained in BF16.
+    model_dtype: torch.dtype = torch.bfloat16
     max_norm: float = 1.0
     logging_steps: int = 10
-    seed = 42
+    seed: int = 42
 
 
 class Trainer:
@@ -64,6 +66,7 @@ class Trainer:
         self.dataloader_prefetch_factor = config.dataloader_prefetch_factor
         self.dataloader_num_workers = config.dataloader_num_workers
 
+        self.model_dtype = config.model_dtype
         self.max_norm = config.max_norm
         self.logging_steps = config.logging_steps
 
@@ -72,7 +75,9 @@ class Trainer:
         self.lr_scheduler = self._get_lr_scheduler(config.lr_scheduler_config, self.total_steps)
 
         self.logger = logging.getLogger(__name__)
-        self.run = wandb.init(project=config.wandb_project, mode=config.wandb_mode)
+        self.run = wandb.init(
+            project=config.wandb_project, mode=config.wandb_mode, config=asdict(config)
+        )
         self.run.define_metric("global_step")
         self.run.define_metric("train/*", step_metric="global_step")
 
@@ -169,10 +174,11 @@ class Trainer:
             batch = cast(Batch, batch)
             batch = {k: v.to(self.device, non_blocking=True) for k, v in batch.items()}
 
-            output: torch.Tensor = self.model(batch)
-            loss, num_tokens = self._calc_batch_loss(output, batch["labels"])
-            loss.backward()
+            with torch.autocast(self.device.type, dtype=self.model_dtype):
+                output: torch.Tensor = self.model(batch)
+                loss, num_tokens = self._calc_batch_loss(output, batch["labels"])
 
+            loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(
                 self.model.parameters(),
                 max_norm=self.max_norm,
@@ -190,7 +196,7 @@ class Trainer:
             window_tokens += num_tokens
             window_steps += 1
 
-            if (idx + 1) % self.logging_steps == 0:
+            if (idx + 1) % self.logging_steps == 0 or (idx + 1) == self.total_steps:
                 mean_loss, max_loss, mean_grad, max_grad = torch.stack(
                     (
                         loss_sum / window_tokens.clamp_min(1),
@@ -217,23 +223,3 @@ class Trainer:
                 grad_norm_max.zero_()
                 window_tokens.zero_()
                 window_steps.zero_()
-
-        if self.total_steps % self.logging_steps:
-            mean_loss, max_loss, mean_grad, max_grad = torch.stack(
-                (
-                    loss_sum / window_tokens.clamp_min(1),
-                    loss_max,
-                    grad_norm_sum / window_steps,
-                    grad_norm_max,
-                )
-            ).tolist()
-
-            self.run.log(
-                {
-                    "global_step": idx + 1,
-                    "train/loss_mean": mean_loss,
-                    "train/loss_window_max": max_loss,
-                    "train/grad_norm_mean": mean_grad,
-                    "train/grad_norm_window_max": max_grad,
-                }
-            )

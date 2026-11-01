@@ -67,6 +67,7 @@ class BaseModel(nn.Module, ABC):
             self.hf_repo,
             padding_side="left",
             model_max_length=self.max_position_embeddings,
+            add_eos_token=True,
         )
         if not isinstance(tokenizer, TokenizersBackend):
             raise TypeError(

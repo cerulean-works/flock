@@ -1,7 +1,5 @@
 import logging
 
-import torch
-
 from flock.training import (
     AdamWConfig,
     DatasetConfig,
@@ -21,7 +19,7 @@ if __name__ == "__main__":
     ds_config = DatasetConfig(uri="s3://flock-datasets/finepdfs", version=1)
     dataset = get_dataset(ds_config)
 
-    model = Olmo2(OLMO2_1B_CONFIG).to(dtype=torch.bfloat16)
+    model = Olmo2(OLMO2_1B_CONFIG)
     tokenizer = model.get_hf_tokenizer()
     assert tokenizer is not None
 

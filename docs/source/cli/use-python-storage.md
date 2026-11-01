@@ -44,8 +44,12 @@ This client uses refreshable credentials, so it can renew keys while your proces
 Install Lance and Arrow:
 
 ```bash
-uv pip install pylance pyarrow
+uv pip install 'pylance>=14' pyarrow
 ```
+
+Call `s3.get_process()` before opening a dataset. It configures the credential-process profile and all required environment variables in Python, including HTTP settings for local endpoints. It also removes stale AWS credentials that could override the profile. For another organization, pass `org="organization-id"`.
+
+The call updates `os.environ` directly. You do not need shell exports or a separate `flock s3 configure` step. The profile points to a local Python credential process that fetches S3 keys when Lance needs them and returns their expiration. The [native-renewal reference](python-s3#native-renewal-from-python) explains the complete fetch and refresh flow.
 
 Choose an unused dataset path. This writes a one-row dataset, then checks that it can be read:
 
@@ -54,16 +58,48 @@ import lance
 import pyarrow as pa
 from flock.hub import s3
 
-creds = s3.credentials()
-uri = creds.uri("flock-datasets", "examples", "questions")
+s3.get_process()
+uri = "s3://flock-datasets/examples/questions"
 table = pa.table({"question": ["2 + 2?"], "answer": ["4"]})
-lance.write_dataset(table, uri, storage_options=creds.storage_options())
-dataset = lance.dataset(uri, storage_options=creds.storage_options())
+lance.write_dataset(table, uri)
+dataset = lance.dataset(uri)
 assert dataset.to_table().to_pylist() == [{"question": "2 + 2?", "answer": "4"}]
 ```
 
 Open **Datasets** in [the dashboard](https://flock.cerulean.works) and navigate to `examples/questions`. The rows and schema should match the table. Append rows with `mode="append"`; each write creates another dataset version. A `README.md` object in the dataset folder supplies its dashboard card.
 
-Lance retains the credential values used when opening a dataset. Unlike the boto3 helper, an already open dataset does not receive later renewals from `creds`. Request current `storage_options()` when opening again, and account for expiry in long-lived jobs. The [Python S3 reference](python-s3#renewal-and-client-lifetimes) covers these lifetimes and subprocess behavior.
+Lance's native AWS provider fetches keys through the configured process and uses the returned `Expiration` to renew them. Omit static keys from `storage_options`. Pass `version=3` or `version="release"` to `lance.dataset` to select a version number or tag. The [Python S3 reference](python-s3#renewal-and-client-lifetimes) describes the environment changes, temporary files and native renewal, with links to the upstream documentation.
 
 [Storage and datasets](../app/storage-and-datasets) explains how to inspect versions, create tags and restore deleted datasets.
+
+## Read with PyTorch
+
+Call `get_process` in the parent before creating the dataset and workers. Each spawned worker inherits the configured environment and renews its own S3 keys. Keep the `main` guard so workers do not repeat setup when Python imports the script:
+
+```python
+from lance.torch.data import SafeLanceDataset
+from torch.utils.data import DataLoader
+from flock.hub import s3
+
+
+def main():
+    s3.get_process(read_only=True)
+    uri = "s3://flock-datasets/examples/questions"
+    dataset = SafeLanceDataset(
+        uri=uri,
+        dataset_options={"version": 1},
+    )
+    loader = DataLoader(
+        dataset,
+        batch_size=1,
+        num_workers=2,
+        multiprocessing_context="spawn",
+        persistent_workers=True,
+    )
+    for batch in loader:
+        print(batch["question"])
+
+
+if __name__ == "__main__":
+    main()
+```

@@ -82,7 +82,8 @@
         "naturalqs",
         "squad",
         "mmlu",
-        "basic_skills"
+        "basic_skills",
+        "lambada"
       ],
       "metric": null,
       "scored": true
@@ -524,6 +525,23 @@
         "tw_mock_exams_geography",
         "tw_mock_exams_physics",
         "tw_mock_exams_chemistry"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "zh_tw": {
+      "members": [
+        "tmmluplus",
+        "tw_mock_exams"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "zh_tw:bpb": {
+      "members": [
+        "tmmluplus:bpb",
+        "drcd_bpb",
+        "tw_mock_exams:bpb"
       ],
       "metric": "bpb",
       "scored": true
@@ -1002,11 +1020,12 @@
       "fewshot": null,
       "keep": null,
       "metrics": [
+        "acc_greedy",
         "bpb"
       ],
-      "primary_metric": "bpb",
+      "primary_metric": "acc_greedy",
       "to_doc": "flock.eval.tasks.lambada.lambada_doc",
-      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "type": "flock.eval.tasks.base.GoldOnlyTask",
       "unconditional_context": null
     },
     "mbpp": {

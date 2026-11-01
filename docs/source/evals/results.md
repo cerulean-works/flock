@@ -30,9 +30,9 @@ A run with an output directory writes `results.json` and one predictions file pe
   ],
   "suites": [
     {"suite": "mmlu", "suite_hash": "<sha256>", "members": ["mmlu_abstract_algebra", ...], "metric": null, "score": ...},
-    {"suite": "base_easy:qa_rc", "suite_hash": "<sha256>", "members": ["arc_easy", ..., "mmlu"], "metric": null, "score": ...},
+    {"suite": "base_easy:qa_rc", "suite_hash": "<sha256>", "members": ["arc_easy", ..., "basic_skills", "lambada"], "metric": null, "score": ...},
     {"suite": "mmlu:bpb", "suite_hash": "<sha256>", "members": ["mmlu_abstract_algebra", ...], "metric": "bpb", "score": ...},
-    {"suite": "base_easy:qa_bpb", "suite_hash": "<sha256>", "members": ["arc_easy", ..., "mmlu:bpb"], "metric": "bpb", "score": ...},
+    {"suite": "base_easy:qa_bpb", "suite_hash": "<sha256>", "members": ["arc_easy", ..., "basic_skills:bpb", "lambada"], "metric": "bpb", "score": ...},
     ...,
     {
       "suite": "base_easy",
@@ -46,7 +46,7 @@ A run with an output directory writes `results.json` and one predictions file pe
 }
 ```
 
-The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.results.TaskResult`] plus its `docs_per_second`, which is `null` if the clock measured no time, each entry of `suites` is a [`~eval.results.SuiteResult`], and `provenance` is described below. The class docstrings at the end of this page define every field.
+`flock eval run` prints only a summary of this file (each suite's score and the primary metric of each task outside a scored suite, or every metric with `--verbose`), so read the file for the rest. The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.results.TaskResult`] plus its `docs_per_second`, which is `null` if the clock measured no time, each entry of `suites` is a [`~eval.results.SuiteResult`], and `provenance` is described below. The class docstrings at the end of this page define every field.
 
 ### The task hash
 
@@ -78,6 +78,7 @@ Each line of `predictions/<task>.jsonl` is one doc, with enough to recompute eve
 | `num_tokens` | Each choice's token count. |
 | `num_chars` | Each choice's character count, leading space included. |
 | `num_bytes` | Each choice's UTF-8 byte count, leading space included. |
+| `is_greedy` | Whether each choice's continuation is the model's greedy output: every token is its position's most likely next token. |
 | `tokens_cut` | The tokens cut from the left of each choice's context, 0 if it fit. |
 | `logprob_uncond` | Each choice's log-probability after the unconditional context, for tasks that score pointwise mutual information (PMI). |
 | `tokens_cut_uncond` | `tokens_cut` for the unconditional requests, with `logprob_uncond`. |

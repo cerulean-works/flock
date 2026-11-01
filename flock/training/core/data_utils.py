@@ -57,14 +57,10 @@ class DatasetConfig:
 
 
 def get_dataset(config: DatasetConfig) -> SafeLanceDataset:
-    creds = s3.credentials(org="cerulean-labs")
-
-    # SafeLanceDataset is a lazy wrapper around a lance dataset, delaying ds initialization until
-    # first read to prevent pickling a LanceDataset during spawn
+    if config.uri.startswith(("s3://", "s3a://", "s3n://")):
+        s3.get_process(org="cerulean-labs", read_only=True)
+    # Spawned workers inherit the native credential-process configuration.
     return SafeLanceDataset(
         uri=config.uri,
-        dataset_options={
-            "version": config.version,
-            "storage_options": creds.storage_options(),
-        },
+        dataset_options={"version": config.version},
     )

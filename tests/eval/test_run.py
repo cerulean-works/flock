@@ -12,14 +12,14 @@ import torch
 from click.testing import CliRunner
 
 from flock.eval import cli, run
-from flock.eval.metrics import MULTIPLE_CHOICE_METRICS, ChoiceScores
+from flock.eval.metrics import ChoiceScores
 from flock.eval.model import ScoringModel
 from flock.eval.provenance import Provenance
-from flock.eval.results import Results, prediction_rows, write_predictions
+from flock.eval.results import Results, SuiteResult, prediction_rows, write_predictions
 from flock.eval.run import EvalConfig, evaluate, score_task
 from flock.eval.tasks import MCDoc, Suite, cloze
 
-from .toy import TASK
+from .toy import PROMPT_PATHS, PROVENANCE, TASK, task_result
 
 
 @pytest.fixture
@@ -48,7 +48,7 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
     assert task["num_docs"] == 2
     assert task["task_hash"] == TASK.requests(*TASK.load()).hash
     assert task["dataset"] == dataclasses.asdict(TASK.dataset)
-    assert set(task["metrics"]) == set(MULTIPLE_CHOICE_METRICS)
+    assert list(task["metrics"]) == list(TASK.reported_metrics)
     assert all(0 <= task["metrics"][m] <= 1 for m in task["metrics"] if m.startswith("acc"))
     assert task["metrics"]["bpb"] > 0
     assert task["docs_per_second"] > 0
@@ -229,6 +229,7 @@ def test_prediction_rows_drop_padded_choices(tmp_path):
         num_chars=counts + 10,
         num_bytes=counts + 20,
         valid=counts > 0,
+        is_greedy=counts > 3,
         gold=torch.tensor([1, 0]),
         tokens_cut=counts + 30,
     )
@@ -243,6 +244,7 @@ def test_prediction_rows_drop_padded_choices(tmp_path):
             "num_tokens": [1, 2],
             "num_chars": [11, 12],
             "num_bytes": [21, 22],
+            "is_greedy": [False, False],
             "tokens_cut": [31, 32],
         },
         {
@@ -252,6 +254,7 @@ def test_prediction_rows_drop_padded_choices(tmp_path):
             "num_tokens": [3, 4, 5],
             "num_chars": [13, 14, 15],
             "num_bytes": [23, 24, 25],
+            "is_greedy": [False, True, True],
             "tokens_cut": [33, 34, 35],
         },
     ]
@@ -282,7 +285,7 @@ def test_a_task_timed_at_zero_seconds_has_no_throughput(offline_model, tmp_path,
 
     [task] = json.loads((tmp_path / "results.json").read_text())["tasks"]
     assert task["docs_per_second"] is None
-    assert "docs/s" not in cli.format_results(results)
+    assert "docs/s" not in cli.format_results(results, verbose=True)
 
 
 def test_score_task_does_not_depend_on_batching(scorer):
@@ -291,10 +294,27 @@ def test_score_task_does_not_depend_on_batching(scorer):
     assert score_task(scorer, TASK).metrics == pytest.approx(one_batch.metrics, abs=1e-5)
 
 
+def test_score_task_averages_greedy_match_over_gold_only_docs(scorer, monkeypatch, tmp_path):
+    gold_only = next(task for task in PROMPT_PATHS if task.name == "toy:gold_only")
+    loglikelihood = scorer.loglikelihood
+
+    def second_doc_greedy(requests):
+        scores = loglikelihood(requests)
+        return dataclasses.replace(scores, is_greedy=torch.tensor([False, True]))
+
+    monkeypatch.setattr(scorer, "loglikelihood", second_doc_greedy)
+    result = score_task(scorer, gold_only, out=tmp_path)
+
+    assert list(result.metrics) == ["acc_greedy", "bpb"]
+    assert result.metrics["acc_greedy"] == 0.5  # one doc of two, read from its one request
+    lines = (tmp_path / "predictions" / "toy:gold_only.jsonl").read_text().splitlines()
+    assert [json.loads(line)["is_greedy"] for line in lines] == [[False], [True]]
+
+
 def test_score_task_reports_only_the_tasks_metrics(scorer):
     gold_only = dataclasses.replace(TASK, metrics=("bpb",), primary_metric="bpb")
     assert list(score_task(scorer, gold_only).metrics) == ["bpb"]
-    assert list(score_task(scorer, TASK).metrics) == list(MULTIPLE_CHOICE_METRICS)
+    assert list(score_task(scorer, TASK).metrics) == list(TASK.reported_metrics)
 
 
 def test_score_task_records_truncation(lm, tokenizer):
@@ -357,7 +377,7 @@ def test_cli_rejects_counts_below_one(flag):
     assert "x>=1" in result.output
 
 
-def test_cli_runs_and_prints_primary_metric_first(offline_model, tmp_path, monkeypatch):
+def test_cli_runs_and_prints_each_tasks_primary_metric(offline_model, tmp_path, monkeypatch):
     argv = ["run", "--model", "tiny@0", "--task", "arc_easy", "--out", str(tmp_path)]
     # `--task` only accepts registered names, fixed when the CLI is imported, so the toy task
     # runs under the name `arc_easy`.
@@ -369,7 +389,7 @@ def test_cli_runs_and_prints_primary_metric_first(offline_model, tmp_path, monke
 
     out = result.output.splitlines()
     assert out[0] == "model tiny@0  flock abc123"
-    assert out[2].split()[0] == "acc_per_char"
+    assert out[1].split()[2:] == ["acc_per_char", "docs", "2"]
     data = json.loads((tmp_path / "results.json").read_text())
     assert data["provenance"]["command"] == "flock-eval " + " ".join(argv)
 
@@ -409,6 +429,68 @@ def test_cli_prints_suite_scores(toy_suites, tmp_path, monkeypatch):
 
     result = CliRunner().invoke(cli.main, argv, catch_exceptions=False)
 
-    out = result.output.splitlines()
-    assert out[-3].startswith("toy:rc  0.")
-    assert out[-1] == "base_easy  unscored  (toy:rc, toy:bpb)"
+    out = [line.split() for line in result.output.splitlines()]
+    assert out[1] == ["base_easy", "unscored", "primary", "members", "2"]
+    assert out[2][0] == "toy:rc" and out[2][2:] == ["primary", "members", "2"]
+    assert out[3][0] == "toy:bpb" and out[3][2:] == ["bpb", "members", "2"]
+    assert len(out) == 4  # every task is in a scored suite
+
+    verbose = ["run", "--model", "tiny@0", "--suite", "base_easy", "--verbose"]
+    result = CliRunner().invoke(
+        cli.main, [*verbose, "--out", str(tmp_path / "verbose")], catch_exceptions=False
+    )
+
+    assert result.output.splitlines()[-1] == "base_easy  unscored  (toy:rc, toy:bpb)"
+
+
+def test_the_summary_prints_each_suite_before_its_members_then_tasks_outside_scored_suites():
+    arc = task_result("arc_easy", {"acc_per_char": 0.75, "acc_raw": 0.5, "bpb": 1.25})
+    mbpp = task_result("mbpp:bpb", {"bpb": 0.5}, seconds=0.0)
+    # As `evaluate` orders them for `--suite base_easy --suite knowledge`: each after its members.
+    suites = [
+        SuiteResult("mmlu", "hash-mmlu", ["arc_easy"], None, 0.75),
+        SuiteResult("base_easy:qa_rc", "hash-rc", ["mmlu", "arc_easy"], None, 0.75),
+        SuiteResult("base_easy:qa_bpb", "hash-bpb", ["arc_easy", "mbpp:bpb"], "bpb", 0.875),
+        SuiteResult("base_easy", "hash-be", ["base_easy:qa_rc", "base_easy:qa_bpb"], None, None),
+        SuiteResult("knowledge", "hash-kn", ["mmlu"], None, 0.75),
+    ]
+    results = Results(PROVENANCE, [arc, mbpp], suites)
+
+    assert cli.format_results(results).splitlines() == [
+        "model tiny@0  flock abc123",
+        "base_easy         unscored  primary  members 2",
+        "base_easy:qa_rc   0.7500    primary  members 2",
+        "mmlu              0.7500    primary  members 1",
+        "base_easy:qa_bpb  0.8750    bpb  members 2",
+        "knowledge         0.7500    primary  members 1",  # mmlu, held twice, prints once
+    ]
+
+    # Verbose is the full print: every metric, primary first, then the suites in results order.
+    assert cli.format_results(results, verbose=True).splitlines() == [
+        "model tiny@0  flock abc123",
+        "arc_easy  docs 2  2.0 docs/s  hash hash-arc_eas",
+        "  acc_per_char  0.7500",
+        "  acc_raw       0.5000",
+        "  bpb           1.2500",
+        "mbpp:bpb  docs 2  hash hash-mbpp:bp",
+        "  bpb  0.5000",
+        "mmlu  0.7500  (arc_easy)",
+        "base_easy:qa_rc  0.7500  (mmlu, arc_easy)",
+        "base_easy:qa_bpb  0.8750  (arc_easy, mbpp:bpb)",
+        "base_easy  unscored  (base_easy:qa_rc, base_easy:qa_bpb)",
+        "knowledge  0.7500  (mmlu)",
+    ]
+
+    # Without tasks or suites only the header is left.
+    assert cli.format_results(Results(PROVENANCE, [])) == "model tiny@0  flock abc123"
+
+    # A run of tasks only has no suite lines.
+    assert cli.format_results(Results(PROVENANCE, [mbpp])).splitlines()[1:] == [
+        "mbpp:bpb  0.5000    bpb  docs 2"
+    ]
+
+    # A task given next to the suites, held by none of them, still prints.
+    piqa = task_result("piqa", {"acc_raw": 0.25})
+    assert cli.format_results(Results(PROVENANCE, [arc, mbpp, piqa], suites)).splitlines()[-1] == (
+        "piqa              0.2500    acc_raw  docs 2"
+    )
