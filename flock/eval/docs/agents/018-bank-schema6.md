@@ -40,14 +40,19 @@ A file written before schema 5 has no `suite_hash`. When either file's `schema_v
 
 1. `compare.py`: the refusal of 018.D1, its test, and the refusals list in `comparison.md`.
 2. The bank: the command of 013.D4 at this branch's first commit as one GPU job, its `results.json` copied unchanged over the old bank.
-3. `compare` of the old bank against the new one, twice: as is, expected to refuse on `lambada` (015.D3); and against a copy of the old bank without `lambada` and `base_easy:qa_rc`, expected to have no breach. LAMBADA's `bpb` must equal its old banked value exactly, since its requests did not change.
+3. `compare` of the old bank against the new one, twice: as is, expected to refuse on `lambada` (015.D3); and against a copy of the old bank without `lambada`, `base_easy:qa_rc` and `base_easy:qa_bpb`, expected to have no breach. LAMBADA's `bpb` must equal its old banked value exactly, since its requests did not change.
 4. The bank's CI test reads the bank as written, without stand-ins for missing fields.
 
 ---
 
 ## 5. How it was actually built
 
-RESULTS
+- **Code.** `b75c96a` adds the refusal, its test and the `comparison.md` lines. Review then tied the skip to `schema_version` below 5 rather than to a missing key, so a schema 6 file without a `suite_hash` refuses (`d9faed9`, tested). The test gives the old file schema 4 and the new one another suite hash, so the skip is exercised.
+- **The bank.** `flock eval run --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf --suite base_easy --dtype float32` at `b75c96a` (scoring code equal to `main` at `cd0de44`), one H200, 2 h 59 min, written at schema 6 with `tokenizers` 0.23.3 and `datasets` 5.1.0. 109 tasks and 10 suites, as before. Its `results.json` replaces the bank unchanged.
+- **Old bank against new, as is.** Refused, exit 2, on `lambada`'s `task_hash` (`2fbcb961` to `147d9b4c`), as 015.D3 predicts.
+- **Old bank without `lambada`, `base_easy:qa_rc` and `base_easy:qa_bpb`, against new.** `compared: tasks 108, suites 8, breaches 0`. `base_easy:qa_bpb` has to go too: it holds `lambada`, and a suite's tolerance needs every member in the file. Its score was checked by hand instead.
+- **Equality.** Every metric, `num_docs` and truncation count of the 108 other tasks is byte-equal. LAMBADA's `bpb` is byte-equal (0.4381837546825409); it gained `acc_greedy` (0.6019794344902039) as its primary metric. Every suite score is byte-equal except `base_easy:qa_rc`, which gained `lambada` as a member (0.5967264635396581 to 0.5969652349465011).
+- **CI test.** The bank test now builds every field straight from the file and checks that `compare` sees no provenance difference and that the file's `schema_version` is the one `Results` writes.
 
 ---
 
