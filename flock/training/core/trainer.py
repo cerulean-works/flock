@@ -75,7 +75,9 @@ class Trainer:
         self.lr_scheduler = self._get_lr_scheduler(config.lr_scheduler_config, self.total_steps)
 
         self.logger = logging.getLogger(__name__)
-        self.run = wandb.init(project=config.wandb_project, mode=config.wandb_mode)
+        self.run = wandb.init(
+            project=config.wandb_project, mode=config.wandb_mode, config=asdict(config)
+        )
         self.run.define_metric("global_step")
         self.run.define_metric("train/*", step_metric="global_step")
 
