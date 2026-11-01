@@ -2,7 +2,6 @@ import asyncio
 import datetime as dt
 
 from app.api.scripts.seed_demo import ADMIN_EMAIL, PASSWORD, simulate
-from app.api.src.core import gpus
 
 MID_MONTH = dt.datetime(2026, 10, 15, tzinfo=dt.UTC).timestamp()  # spend is counted per UTC month
 
