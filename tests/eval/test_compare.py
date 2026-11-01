@@ -10,7 +10,7 @@ from flock.eval import cli
 from flock.eval.compare import Breach, compare
 from flock.eval.provenance import Provenance
 from flock.eval.results import Results, SuiteResult, TaskResult
-from flock.eval.tasks import TASKS, Dataset, Truncation
+from flock.eval.tasks import Dataset, Truncation
 
 PROVENANCE = Provenance(
     model="allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf",
@@ -342,18 +342,15 @@ def test_the_bank_compares_equal_to_itself_rewritten_in_the_current_layout(write
         fields: dict[str, Any] = dict(task)
         del fields["docs_per_second"]  # derived, not a field
         fields["truncation"] = Truncation(**fields["truncation"])
-        fields["dataset"] = TASKS[task["task"]].dataset
+        fields["dataset"] = Dataset(**fields["dataset"])
         tasks.append(TaskResult(**fields))
-    # The bank predates schema 5's suite hashes and library versions. `compare` reads neither.
-    suites = [SuiteResult(suite_hash="unknown", **suite) for suite in data["suites"]]
-    provenance = Provenance(**data["provenance"], tokenizers="unknown", datasets="unknown")
-    rewritten = Results(provenance, tasks, suites)
+    suites = [SuiteResult(**suite) for suite in data["suites"]]
+    rewritten = Results(Provenance(**data["provenance"]), tasks, suites)
 
     comparison = compare(bank, write("rewritten", rewritten))
 
+    assert data["schema_version"] == rewritten.schema_version
     assert data["provenance"]["dtype"] == "float32"
     assert "base_easy" in comparison.suites
     assert comparison.breaches == []
-    # Only the layout differs: a bank from an older schema still passes, and the versions it
-    # lacks print as causes.
-    assert comparison.provenance.keys() <= {"schema_version", "tokenizers", "datasets"}
+    assert comparison.provenance == {}
