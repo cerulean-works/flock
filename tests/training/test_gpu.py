@@ -28,6 +28,19 @@ def test_cuda_olmo2_huggingface_training_parity(config, cuda_device, dtype, kv_h
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.bfloat16])
+@pytest.mark.parametrize("kv_heads", [4, 2, 1], ids=["mha", "gqa", "mqa"])
+@pytest.mark.parametrize("padding", ["left", "right"])
+def test_cuda_padded_olmo2_default_sdpa_training_parity(
+    config, cuda_device, dtype, kv_heads, padding
+):
+    # Exercise normal SDPA dispatch with the model's boolean padding/causal mask,
+    # including fully masked query rows from left padding.
+    olmo2_training_parity(
+        replace(config, num_key_value_heads=kv_heads), padding, cuda_device, dtype
+    )
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.bfloat16])
 def test_cuda_swiglu_huggingface_parity(config, cuda_device, dtype):
     check_swiglu_parity(config, cuda_device, dtype)
 
