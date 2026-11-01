@@ -1,6 +1,6 @@
 # Working on Flock documentation
 
-All public documentation lives in `docs/source/`. The Guide and Reference tabs each group content by CLI, Evals and App. The files live under matching module folders; `_toctree.yml` assigns each page to a tab. Internal implementation notes under component `docs/agents/` folders are not published.
+All public documentation lives in `docs/source/`. The Guide groups content by CLI, Training, Evals and App; Reference covers CLI, Evals and App. The single-page trainer guide lives in `docs/source/training/`. The files live under matching module folders; `_toctree.yml` assigns each page to a tab. Internal implementation notes under component `docs/agents/` folders are not published.
 
 Write complete workflows rather than a page for every command or small action. Explain the concepts needed for the task before giving commands: for example, S3 keys, expiry and renewal belong before key generation. Keep related steps together and link directly to sections when a reader has a narrower question.
 

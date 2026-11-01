@@ -1,5 +1,3 @@
-"""`flock s3`: S3 keys for the shell and the AWS tools, and an org's buckets."""
-
 import json
 import os
 import re
@@ -12,8 +10,8 @@ from typing import Any
 
 import click
 
-from flock.cli import s3
-from flock.cli.s3 import S3Error
+from flock.hub import s3
+from flock.hub.s3 import S3Error
 
 UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 
@@ -125,7 +123,7 @@ def configure(org: str | None, profile: str, read_only: bool, host: str | None) 
     """Add an AWS profile that fetches Flock S3 keys as it needs them.
 
     The profile runs `flock s3 credentials --format process` (credential_process), so the AWS
-    CLI, boto3 and DuckDB get a new key whenever the last one expires, and none is stored.
+    CLI, boto3, Lance and DuckDB can renew keys, and no S3 key is stored in the profile.
     """
     try:
         current = s3.endpoint(org, host=host)

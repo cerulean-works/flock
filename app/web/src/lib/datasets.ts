@@ -168,7 +168,7 @@ export const cellCut = (cell: Cell) => (cell.k === 'str' || cell.k === 'json') &
 export const writeSnippet = (org: string) =>
 	[
 		'import lance',
-		'from flock.cli import s3',
+		'from flock.hub import s3',
 		'',
 		`creds = s3.credentials("${org}")`,
 		'lance.write_dataset(',

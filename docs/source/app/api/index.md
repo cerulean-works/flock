@@ -13,7 +13,7 @@ Every endpoint needs credentials, except the public ones marked in the index bel
 | Browser session | an access token: a JWT, with two dots | signing in on the web | this API, from the web app |
 | CLI token | `flock_cli_…` | `flock login` (see [Device sign-in](auth#device)) | this API and `POST /s3/credentials`: the `flock` command and every `flock.*` package |
 | wandb key | `flock-wandb-…` | the account page, or `flock login`'s wandb step | the [wandb protocol](../wandb-compatibility#protocol-endpoints) only |
-| S3 key | `FLK…` and a secret | `flock s3 credentials`, `flock.cli.s3`, or the account page | the [S3 proxy](../s3-behavior) only |
+| S3 key | `FLK…` and a secret | `flock s3 credentials`, `flock.hub.s3`, or the account page | the [S3 proxy](../s3-behavior) only |
 
 Send an access token or a CLI token as `Authorization: Bearer <token>`. A Bearer value with two dots is read as an access token, and one starting with `flock_cli_` as a CLI token.
 
