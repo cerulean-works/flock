@@ -28,7 +28,7 @@ A score describes both the model and the evaluation setup. Changing prompts, dat
 
    The `repo@revision` form pins which weights are scored. A model name without a revision is refused.
 
-3. Check the printed task metrics and these output files:
+3. The run prints each suite's score and each task's primary metric, and `--verbose` prints every metric. Check the printed scores and these output files:
 
    ```text
    results/olmo2-1b/

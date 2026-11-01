@@ -3,42 +3,10 @@ from typing import Self
 import pytest
 import wandb
 
-from flock.eval.provenance import Provenance
-from flock.eval.results import Results, SuiteResult, TaskResult, Truncation
+from flock.eval.results import Results, SuiteResult
 from flock.eval.tracking import log_to_tracker
 
-from .toy import TASK
-
-PROVENANCE = Provenance(
-    model="tiny@0",
-    flock_commit="abc123",
-    command="test",
-    device="cpu",
-    dtype="float32",
-    batch_tokens=64,
-    max_length=128,
-    attention="eager",
-    torch="2.8.0",
-    transformers="4.57.6",
-    tokenizers="0.23.3",
-    datasets="5.1.0",
-    python="3.14.0",
-    created_at="now",
-)
-
-
-def task_result(name: str, metrics: dict[str, float], seconds: float = 1.0) -> TaskResult:
-    return TaskResult(
-        task=name,
-        task_hash="hash-" + name,
-        dataset=TASK.dataset,
-        primary_metric=next(iter(metrics)),
-        metrics=metrics,
-        num_docs=2,
-        limit=None,
-        seconds=seconds,
-        truncation=Truncation(requests=0, docs=0, max_tokens_cut=0),
-    )
+from .toy import PROVENANCE, task_result
 
 
 class FakeRun:
