@@ -84,7 +84,7 @@ class Results:
     """
     Every task's scores from one run, and its provenance.
 
-    `schema_version`, 5, is the version of the file's layout, bumped when a field changes. It isn't an argument, so a file can't claim a layout it doesn't have.
+    `schema_version`, 6, is the version of the file's layout, bumped when a field changes. It isn't an argument, so a file can't claim a layout it doesn't have.
 
     Args:
         provenance (`Provenance`):
@@ -98,7 +98,7 @@ class Results:
     provenance: Provenance
     tasks: list[TaskResult]
     suites: list[SuiteResult] = field(default_factory=list)
-    schema_version: int = field(default=5, init=False)
+    schema_version: int = field(default=6, init=False)
 
     def to_dict(self) -> dict[str, Any]:
         """Returns the results as plain JSON-ready data, with each task's `docs_per_second` added."""
@@ -157,6 +157,7 @@ def prediction_rows(docs: Sequence[MCDoc], scores: ChoiceScores) -> list[dict[st
         "num_tokens": scores.num_tokens,
         "num_chars": scores.num_chars,
         "num_bytes": scores.num_bytes,
+        "is_greedy": scores.is_greedy,
         "tokens_cut": scores.tokens_cut,
         "logprob_uncond": scores.logprob_uncond,
         "tokens_cut_uncond": scores.tokens_cut_uncond,
