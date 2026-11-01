@@ -176,15 +176,17 @@ def test_all_ignored_logging_windows_remain_finite(
         }
 
 
-def reference_epoch(model, batches, max_norm):
+def reference_epoch(model, batches, max_norm, model_dtype):
     """Independent three-update loop: explicit LR values and gradient clipping math."""
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.01, betas=(0.8, 0.9))
     records = []
     for batch, factor in zip(batches, [1.0, 0.775, 0.325], strict=True):
         optimizer.zero_grad()
         valid = batch["labels"] != -100
-        logits = model(batch)
-        loss = F.cross_entropy(logits[valid], batch["labels"][valid])
+        # Match the trainer's forward precision, keeping loss and master weights in FP32.
+        with torch.autocast("cpu", dtype=model_dtype):
+            logits = model(batch)
+        loss = F.cross_entropy(logits.float()[valid], batch["labels"][valid])
         loss.backward()
         norm = torch.sqrt(sum(p.grad.square().sum() for p in model.parameters()))
         assert norm.item() > max_norm, "fixture must exercise actual gradient clipping"
@@ -205,7 +207,7 @@ def test_training_updates_and_token_weighted_logging(trainer_factory, monkeypatc
     loader = DataLoader(trainer.dataset, batch_size=2, collate_fn=collator.collate_fn)
     batches = list(loader)
     reference = copy.deepcopy(trainer.model)
-    records = reference_epoch(reference, batches, trainer.max_norm)
+    records = reference_epoch(reference, batches, trainer.max_norm, trainer.model_dtype)
     trainer.model.eval()
     monkeypatch.setattr(trainer, "_get_training_dataloader", lambda: loader)
     trainer.train()
