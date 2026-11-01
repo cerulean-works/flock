@@ -119,13 +119,14 @@ def compare(banked: Path, new: Path) -> Comparison:
                 )
             # The suite hash covers its members' hashes and whether it is scored. A file older
             # than schema 5 has none, and its suites are still compared on members and score.
-            bank_hash = bank_suites[name].get("suite_hash")
-            new_hash = new_suites[name].get("suite_hash")
-            if bank_hash is not None and new_hash is not None and bank_hash != new_hash:
-                raise ValueError(
-                    f"different instrument: {name} has suite_hash {bank_hash!r} in {banked}, "
-                    f"{new_hash!r} in {new}"
-                )
+            if bank.get("schema_version", 0) >= 5 and rerun.get("schema_version", 0) >= 5:
+                bank_hash = bank_suites[name]["suite_hash"]
+                new_hash = new_suites[name]["suite_hash"]
+                if bank_hash != new_hash:
+                    raise ValueError(
+                        f"different instrument: {name} has suite_hash {bank_hash!r} in {banked}, "
+                        f"{new_hash!r} in {new}"
+                    )
 
         # Every compared value as (name, field, banked, new, tolerance). A value missing on one
         # side is None, so a metric added or dropped is a breach too.

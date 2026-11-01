@@ -260,11 +260,18 @@ def test_a_suite_with_another_hash_is_refused_unless_a_file_predates_suite_hashe
 
     # A schema 4 bank has no suite hashes: its suites are still compared on members and score.
     old = BANK.to_dict()
+    old["schema_version"] = 4
     del old["suites"][0]["suite_hash"]
     (tmp_path / "old.json").write_text(json.dumps(old))
-    moved = dataclasses.replace(rerun, suites=[dataclasses.replace(SUITE, score=0.7)])
-    comparison = compare(tmp_path / "old.json", write("moved", moved))
-    assert comparison.breaches == [Breach("toy:rc", "score", 0.675, 0.7)]
+    moved = dataclasses.replace(SUITE, suite_hash="hash-rc2", score=0.7)
+    new = write("moved", dataclasses.replace(BANK, suites=[moved]))
+    assert compare(tmp_path / "old.json", new).breaches == [Breach("toy:rc", "score", 0.675, 0.7)]
+
+    # From schema 5 on a suite without one is a broken file, not an old one.
+    old["schema_version"] = 6
+    (tmp_path / "old.json").write_text(json.dumps(old))
+    with pytest.raises(ValueError, match="not a results file: KeyError\\('suite_hash'\\)"):
+        compare(tmp_path / "old.json", new)
 
 
 def test_a_repeated_nan_is_no_breach_but_a_new_one_is(write):
