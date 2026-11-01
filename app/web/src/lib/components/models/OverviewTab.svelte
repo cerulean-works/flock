@@ -1,17 +1,18 @@
 <script lang="ts">
 	import { flatten } from '#lib/data/run.ts';
 	import { readText, runPathHref, sortTags } from '#lib/models.ts';
-	import type { ModelVersionDetail } from '#lib/types.ts';
+	import type { ModelInfo, ModelVersionDetail } from '#lib/types.ts';
 	import { bytes, dateTime, formatValue } from '#lib/utils.ts';
 	import Markdown from '../Markdown.svelte';
 	import TagChip from '../TagChip.svelte';
 
 	interface Props {
 		org: string;
+		info: ModelInfo;
 		version: ModelVersionDetail;
 	}
 
-	let { org, version }: Props = $props();
+	let { org, info, version }: Props = $props();
 
 	/** A file of the version read from storage: its text, or why it couldn't be read. */
 	type Read = { text: string } | { error: string } | null;
@@ -55,7 +56,13 @@
 			['Files', version.files.length.toLocaleString('en-US')],
 			['Step', version.step === null ? null : version.step.toLocaleString('en-US')],
 			['Pushed', dateTime(version.created_at)],
-			['Pushed by', version.created_by?.name ?? null]
+			['Pushed by', version.created_by?.name ?? null],
+			// When this version became primary, and by whom.
+			[
+				'Made primary',
+				version.primary && info.primary_set_at !== null ? dateTime(info.primary_set_at) : null
+			],
+			['Made primary by', (version.primary && info.primary_set_by?.name) || null]
 		].filter((f): f is [string, string] => f[1] !== null)
 	);
 </script>
@@ -114,7 +121,10 @@
 			<tbody>
 				{#each facts as [label, value] (label)}
 					<tr class="border-b border-divider">
-						<th scope="row" class="py-2 pr-4 text-left font-normal text-muted-foreground">
+						<th
+							scope="row"
+							class="py-2 pr-4 text-left font-normal whitespace-nowrap text-muted-foreground"
+						>
 							{label}
 						</th>
 						<td class="py-2 text-right tabular-nums">{value}</td>
@@ -122,7 +132,11 @@
 				{/each}
 				{#if version.run}
 					<tr class="border-b border-divider">
-						<th scope="row" class="py-2 pr-4 text-left font-normal text-muted-foreground">Run</th>
+						<th
+							scope="row"
+							class="py-2 pr-4 text-left font-normal whitespace-nowrap text-muted-foreground"
+							>Run</th
+						>
 						<td class="py-2 text-right break-all">
 							{#if runHref}
 								<a class="text-link underline-offset-3 hover:underline" href={runHref}
@@ -136,7 +150,10 @@
 				{/if}
 				{#if version.tags.length}
 					<tr class="border-b border-divider">
-						<th scope="row" class="py-2 pr-4 text-left align-top font-normal text-muted-foreground">
+						<th
+							scope="row"
+							class="py-2 pr-4 text-left align-top font-normal whitespace-nowrap text-muted-foreground"
+						>
 							{version.tags.length === 1 ? 'Tag' : 'Tags'}
 						</th>
 						<td class="py-2">
@@ -149,7 +166,10 @@
 					</tr>
 				{/if}
 				<tr class="border-b border-divider">
-					<th scope="row" class="py-2 pr-4 text-left align-top font-normal text-muted-foreground">
+					<th
+						scope="row"
+						class="py-2 pr-4 text-left align-top font-normal whitespace-nowrap text-muted-foreground"
+					>
 						Digest
 					</th>
 					<td class="py-2 text-right font-mono text-[12px] break-all" title={version.digest}>

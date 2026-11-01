@@ -9,7 +9,6 @@
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { folderHref } from '#lib/models.ts';
 	import type { ModelInfo, ModelVersionDetail } from '#lib/types.ts';
-	import { bytes, dateTime, relativeTime } from '#lib/utils.ts';
 	import { withParam } from '#lib/workspace/url.ts';
 	import DeleteModelDialog from './DeleteModelDialog.svelte';
 	import FilesTab from './FilesTab.svelte';
@@ -64,12 +63,6 @@
 		return goto(pinned, { replace: true, reset: false, invalidateAll: true });
 	}
 
-	const primarySetBy = $derived(
-		version?.primary && info.primary_set_at !== null
-			? `Made primary ${info.primary_set_by ? `by ${info.primary_set_by.name} ` : ''}${relativeTime(info.primary_set_at, now)}`
-			: null
-	);
-
 	let loading = $state(false);
 	let deleting = $state(false);
 </script>
@@ -91,21 +84,6 @@
 		{#if version.primary}<Badge variant="secondary">Primary</Badge>{/if}
 	{/if}
 </div>
-
-{#if version}
-	<p class="mt-2 text-[13px] text-muted-foreground tabular-nums">
-		{bytes(version.total_bytes)} ·
-		<span title={dateTime(version.created_at)}
-			>Pushed {version.created_by ? `by ${version.created_by.name} ` : ''}{relativeTime(
-				version.created_at,
-				now
-			)}</span
-		>
-		{#if primarySetBy && info.primary_set_at !== null}
-			· <span title={dateTime(info.primary_set_at)}>{primarySetBy}</span>
-		{/if}
-	</p>
-{/if}
 
 <div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
 	<Tabs.Root value={tab} onValueChange={(v) => setTab(v as Tab)}>
@@ -161,7 +139,7 @@
 		</p>
 	{:else if tab === 'overview'}
 		{#key version.number}
-			<OverviewTab {org} {version} />
+			<OverviewTab {org} {info} {version} />
 		{/key}
 	{:else}
 		<FilesTab {org} {version} />

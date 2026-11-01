@@ -79,7 +79,10 @@
 				<tbody>
 					{#each facts as [label, value] (label)}
 						<tr class="border-b border-divider">
-							<th scope="row" class="py-2 pr-4 text-left font-normal text-muted-foreground">
+							<th
+								scope="row"
+								class="py-2 pr-4 text-left font-normal whitespace-nowrap text-muted-foreground"
+							>
 								{label}
 							</th>
 							<td class="py-2 text-right tabular-nums">{value}</td>
@@ -89,7 +92,7 @@
 						<tr class="border-b border-divider">
 							<th
 								scope="row"
-								class="py-2 pr-4 text-left align-top font-normal text-muted-foreground"
+								class="py-2 pr-4 text-left align-top font-normal whitespace-nowrap text-muted-foreground"
 							>
 								{tags.length === 1 ? 'Tag' : 'Tags'}
 							</th>

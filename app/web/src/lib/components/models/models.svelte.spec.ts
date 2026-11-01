@@ -168,14 +168,12 @@ describe('ModelView', () => {
 			new Response(files[url!.split('/').at(-1)!] ?? '')
 	});
 
-	it('shows the header with the primary, who made it primary and the actions', async () => {
+	it('shows the header with the primary and the actions', async () => {
 		serve(storage());
 		view();
 		await expect.element(screen.getByRole('heading', { name: 'olmo2-1b', level: 1 })).toBeVisible();
 		await expect.element(screen.getByRole('button', { name: /^Version 12/ })).toBeVisible();
 		await expect.element(screen.getByText('Primary', { exact: true })).toBeVisible();
-		await expect.element(screen.getByText('Made primary by Bob 2h ago')).toBeVisible();
-		await expect.element(screen.getByText('3.0 GB ·', { exact: false }).first()).toBeVisible();
 		expect(screen.getByRole('link', { name: 'Browse files' }).element().getAttribute('href')).toBe(
 			'/storage/acme/flock-models/olmo2-1b/u/ULID12/'
 		);
@@ -190,6 +188,11 @@ describe('ModelView', () => {
 		await expect.element(screen.getByText('2,048')).toBeVisible();
 		await expect.element(screen.getByRole('rowheader', { name: 'architecture' })).toBeVisible();
 		await expect.element(screen.getByRole('rowheader', { name: 'Digest' })).toBeVisible();
+		await expect.element(screen.getByRole('row', { name: /^Size 3\.0 GB/ })).toBeVisible();
+		await expect.element(screen.getByRole('row', { name: 'Made primary by Bob' })).toBeVisible();
+		await expect
+			.element(screen.getByRole('rowheader', { name: 'Made primary', exact: true }))
+			.toBeVisible();
 		const keys = calls
 			.filter((c) => c.url.endsWith('/presign'))
 			.map((c) => body(c.init).key)
