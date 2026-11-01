@@ -45,7 +45,7 @@
 	</div>
 
 	{#if data.step === 'account'}
-		<h1 class="font-serif text-[34px] leading-[1.15] tracking-[-0.02em]">Set up Flock</h1>
+		<h1 class="text-[34px] leading-[1.15] tracking-[-0.025em]">Set up Flock</h1>
 		<p class="mt-3 leading-relaxed text-muted-foreground">
 			The first account becomes the super admin. Create it before sharing this address.
 		</p>
@@ -114,7 +114,7 @@
 			</Button>
 		</form>
 	{:else}
-		<h1 class="font-serif text-[34px] leading-[1.15] tracking-[-0.02em]">Create your workspace</h1>
+		<h1 class="text-[34px] leading-[1.15] tracking-[-0.025em]">Create your workspace</h1>
 		<p class="mt-3 leading-relaxed text-muted-foreground">
 			An organization holds projects and runs, and the people you invite to them. You can add more
 			later.

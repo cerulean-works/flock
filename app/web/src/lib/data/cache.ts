@@ -42,6 +42,8 @@ async function checked(res: Response) {
 export const projectUrl = (entity: string, project: string) =>
 	`/api/projects/${encodeURIComponent(entity)}/${encodeURIComponent(project)}`;
 
+export const membersUrl = (org: string) => `/api/orgs/${encodeURIComponent(org)}/members`;
+
 export function runPageUrl(entity: string, project: string, q: RunQuery) {
 	return `${projectUrl(entity, project)}/runs?${runQueryString(q)}`;
 }

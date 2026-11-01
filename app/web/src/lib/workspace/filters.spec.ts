@@ -4,10 +4,13 @@ import {
 	describeFilters,
 	flockFilter,
 	opsFor,
+	ownedBy,
 	parseValue,
 	readFilters,
+	setOwner,
 	valueText,
 	writeFilters,
+	type People,
 	type RunFilter
 } from './filters.ts';
 
@@ -22,6 +25,14 @@ const grouped: RunFilter[] = [
 		]
 	}
 ];
+
+const people: People = new Map(
+	[
+		{ id: 3, name: 'Alice', email: 'alice@lab.test', avatar_url: null },
+		{ id: 4, name: 'Sam', email: 'sam@lab.test', avatar_url: null },
+		{ id: 5, name: 'Sam', email: 'sam.lee@lab.test', avatar_url: null }
+	].map((p) => [p.id, p])
+);
 
 describe('parseValue', () => {
 	it('types values by column kind', () => {
@@ -39,6 +50,21 @@ describe('parseValue', () => {
 		expect(valueText(Date.UTC(2026, 9, 1) / 1000, 'time')).toBe('2026-10-01');
 	});
 
+	it('reads users as the members they name', () => {
+		expect(parseValue('Alice@lab.test', 'user', people)).toEqual({ value: 3 });
+		expect(parseValue('alice', 'user', people)).toEqual({ value: 3 });
+		expect(parseValue('sam', 'user', people)).toEqual({
+			error: '2 members are named sam: use an email'
+		});
+		expect(parseValue('bob@lab.test', 'user', people)).toEqual({
+			error: 'No member is bob@lab.test'
+		});
+		// Someone who has left: by id.
+		expect(parseValue('9', 'user', people)).toEqual({ value: 9 });
+		expect(valueText(3, 'user', people)).toBe('alice@lab.test');
+		expect(valueText(9, 'user', people)).toBe('9');
+	});
+
 	it('guesses for lists and unknown columns', () => {
 		expect(parseValue('baseline', 'json')).toEqual({ value: 'baseline' });
 		expect(parseValue('3', undefined)).toEqual({ value: 3 });
@@ -52,6 +78,12 @@ describe('opsFor', () => {
 		expect(opsFor('num').map((o) => o.op)).toContain('lt');
 		expect(opsFor('str').map((o) => o.op)).toContain('contains');
 		expect(opsFor('json')[0]).toEqual({ op: 'eq', label: 'includes' });
+		expect(opsFor('user')).toEqual([
+			{ op: 'eq', label: 'is' },
+			{ op: 'ne', label: 'is not' },
+			{ op: 'exists', label: 'is set' },
+			{ op: 'missing', label: 'is not set' }
+		]);
 	});
 });
 
@@ -154,6 +186,31 @@ describe('describing filters', () => {
 				() => 'time'
 			)
 		).toBe('created_at ≥ 2026-10-01');
+		expect(
+			describeFilters([{ key: 'owner', op: 'eq', value: 3 }], () => 'user', false, people)
+		).toBe('owner is alice@lab.test');
+	});
+});
+
+describe('My runs', () => {
+	const alice = { key: 'owner', op: 'eq', value: 3 } as const;
+
+	it('adds an owner in place of any other, and takes only its own away', () => {
+		const sam = { key: 'owner', op: 'eq', value: 4 } as const;
+		const on = setOwner([sam, ...grouped], 3, true);
+		expect(on).toEqual([alice, ...grouped]);
+		expect(ownedBy(on, 3)).toBe(true);
+		expect(ownedBy(on, 4)).toBe(false);
+		expect(setOwner(on, 3, false)).toEqual(grouped);
+		expect(setOwner([sam], 3, false)).toEqual([sam]);
+	});
+
+	it('keeps a lone group of any of several filters as it was', () => {
+		const any = [grouped[1]];
+		expect(setOwner(any, 3, true)).toEqual([alice, grouped[1]]);
+		expect(setOwner(setOwner(any, 3, true), 3, false)).toEqual(any);
+		// Owners inside groups are the viewer's own filters, not "My runs".
+		expect(ownedBy([{ match: 'any', filters: [alice, grouped[0]] }], 3)).toBe(false);
 	});
 });
 

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 
@@ -55,3 +56,22 @@ class Migrations:
                 await conn.execute("SELECT pg_advisory_unlock($1)", self.LOCK)
         finally:
             await conn.close()
+
+
+async def main() -> None:
+    """Apply pending migrations, then the backfill they need (D83's migration Job:
+    ``python -m app.api.src.db.migrate``, with ``FLOCK_*`` settings from the environment)."""
+    from app.api.src.db.backfill import backfill
+    from app.api.src.settings import Settings
+
+    settings = Settings.load()
+    logging.basicConfig(
+        level=settings.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
+    applied = await Migrations().apply(settings.database_url)
+    log.info("applied %d migrations", len(applied))
+    await backfill(settings.database_url)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

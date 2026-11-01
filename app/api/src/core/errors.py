@@ -31,3 +31,16 @@ class Forbidden(Exception):
         super().__init__(message)
         self.message = message
         self.ids = list(ids)
+
+
+class TooManyAttempts(Exception):
+    """Too many wrong guesses, such as sign-in codes, in a short time (HTTP 429)."""
+
+
+class Invalid(ValueError):
+    """A well-formed request asking for something out of range, such as a key outliving its
+    organization's policy (HTTP 422)."""
+
+
+class BadGateway(Exception):
+    """A server Flock relies on, such as the S3 server, refused or failed (HTTP 502)."""

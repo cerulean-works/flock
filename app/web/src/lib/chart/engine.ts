@@ -72,6 +72,16 @@ export function computeDomain(series: PlotSeries[], opts: DomainOptions): Domain
 		x0 -= pad;
 		x1 += pad;
 	}
+	// Steps, step metrics and durations that never go below zero start at zero, not left of it:
+	// neither padding nor a zoom shows negative x. Wall times are absolute: left as they are.
+	if (opts.xKind !== 'time' && x0 < 0) {
+		let first = Infinity;
+		for (const { series: s } of series) if (s.n) first = Math.min(first, s.firstStep);
+		if (first >= 0) {
+			x0 = 0;
+			if (!(x1 > x0)) x1 = 1;
+		}
+	}
 
 	let lo = Infinity;
 	let hi = -Infinity;

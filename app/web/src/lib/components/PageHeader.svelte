@@ -26,10 +26,7 @@
 <header class="flex-none">
 	<div class="box-content flex h-10 items-baseline gap-x-3 px-5 pt-5 pb-3">
 		<div class="flex min-w-0 items-baseline gap-1">
-			<h1
-				class="min-w-0 truncate font-serif text-[34px] leading-10 font-normal tracking-[-0.02em]"
-				{title}
-			>
+			<h1 class="min-w-0 truncate text-[34px] leading-10 font-normal tracking-[-0.025em]" {title}>
 				{title}
 			</h1>
 			{#if badges}

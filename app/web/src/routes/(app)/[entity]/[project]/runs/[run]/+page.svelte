@@ -35,6 +35,7 @@
 	import { LIVE_STATES } from '#lib/types.ts';
 	import { entityHref, projectHref, runHref, withParam } from '#lib/workspace/url.ts';
 	import { Workspace, setWorkspace } from '#lib/workspace/workspace.svelte.ts';
+	import Page from '#lib/components/Page.svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -171,7 +172,7 @@
 	<title>{name} · {data.run.project}</title>
 </svelte:head>
 
-<div class="flex min-h-0 flex-1 flex-col">
+<Page width="full">
 	<PageHeader title={name}>
 		{#snippet badges()}
 			<DropdownMenu.Root>
@@ -297,7 +298,7 @@
 			</aside>
 		{/if}
 	</div>
-</div>
+</Page>
 
 {#if fullscreen != null}
 	<FullscreenPanel

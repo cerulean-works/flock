@@ -169,6 +169,53 @@ interface Remapped {
 	out: Series;
 }
 
+/**
+ * The value of `map` at x `s` (plus `offset`), as `remap` puts a point there: interpolated
+ * between its points, NaN outside them.
+ */
+export function mapAt(map: MapSource, s: number, offset = 0): number {
+	const { x, y, n } = map;
+	if (!n || !(s >= x[0] && s <= x[n - 1])) return NaN;
+	let lo = 0;
+	let hi = n - 1;
+	while (hi - lo > 1) {
+		const mid = (lo + hi) >> 1;
+		if (x[mid] <= s) lo = mid;
+		else hi = mid;
+	}
+	const v =
+		s <= x[lo] || hi === lo
+			? y[lo]
+			: s >= x[hi]
+				? y[hi]
+				: y[lo] + ((y[hi] - y[lo]) * (s - x[lo])) / (x[hi] - x[lo]);
+	return v + offset;
+}
+
+/**
+ * The x of `map` at which it reads `v` (`mapAt`'s inverse): on the first stretch between two
+ * points that spans `v`, interpolated; else at the point whose value is nearest. NaN without
+ * points. Maps that go back and forth (a step metric reset mid-run) read at their first pass.
+ */
+export function unmapAt(map: MapSource, v: number, offset = 0): number {
+	const { x, y, n } = map;
+	const t = v - offset;
+	let best = NaN;
+	let dist = Infinity;
+	for (let i = 0; i < n; i++) {
+		const d = Math.abs(y[i] - t);
+		if (d < dist) {
+			dist = d;
+			best = x[i];
+		}
+		if (i + 1 < n && (y[i] - t) * (y[i + 1] - t) < 0) {
+			return x[i] + ((x[i + 1] - x[i]) * (t - y[i])) / (y[i + 1] - y[i]);
+		}
+		if (d === 0) return x[i];
+	}
+	return best;
+}
+
 const cache = new WeakMap<Series, Map<string, Remapped>>();
 
 /** `remap`, memoised per series and axis until either curve (or the offset) changes. */
@@ -215,17 +262,39 @@ export function stepMetricOf(defs: readonly MetricDefinition[], key: string): st
 	return step && step !== key ? step : null;
 }
 
+/** What `sharedStepMetric` knows of the runs' data, by run index. */
+export interface StepMetricData {
+	/** Whether the run logged the metric: it has a line to plot. */
+	logged(run: number): boolean;
+	/** Whether the run's x values on `step` are known: it logged that step metric. */
+	maps(run: number, step: string): boolean;
+}
+
 /**
  * The step metric of `key` for a chart of several runs, which has one x axis: the first run
  * that defined `key` (by name or glob) decides, so an explicit "no step metric" counts too.
  * Runs that defined nothing don't.
+ *
+ * With `data`, only runs that logged `key` decide: a glob such as Hugging Face's `*` of a run
+ * that never logged the metric says nothing about it. And a step metric some run that logged
+ * `key` didn't log is no axis for that run's line, which would be left off the chart: the chart
+ * stays on `_step` then (null), where every line is.
  */
 export function sharedStepMetric(
 	runs: readonly (readonly MetricDefinition[])[],
-	key: string
+	key: string,
+	data?: StepMetricData
 ): string | null {
-	for (const defs of runs) if (definitionOf(defs, key)) return stepMetricOf(defs, key);
-	return null;
+	let of = runs.map((_, i) => i);
+	if (data) {
+		const logged = of.filter((i) => data.logged(i));
+		// None did (yet): no lines to plot either way, so the definitions alone decide.
+		if (logged.length) of = logged;
+	}
+	const first = of.find((i) => definitionOf(runs[i], key));
+	const step = first === undefined ? null : stepMetricOf(runs[first], key);
+	if (!step || !data) return step;
+	return of.every((i) => !data.logged(i) || data.maps(i, step)) ? step : null;
 }
 
 // ------------------------------------------------------------------------------------------

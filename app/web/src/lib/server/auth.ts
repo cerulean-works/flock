@@ -1,7 +1,7 @@
 import { error, fail, isHttpError, redirect, type Cookies } from '@sveltejs/kit';
 import { FLOCK_API_URL } from '$app/env/private';
 import { getRequestEvent } from '$app/server';
-import type { OrgInfo, UserInfo } from '#lib/types.ts';
+import type { OrgInfo, S3Config, UserInfo } from '#lib/types.ts';
 import { change, refused, flock } from './flock.ts';
 import { setUser, startSession, type SessionUser, type SignedIn } from './session.ts';
 
@@ -9,7 +9,7 @@ import { setUser, startSession, type SessionUser, type SignedIn } from './sessio
 export async function authConfig() {
 	const res = await flock('/api/v1/auth/config');
 	try {
-		return (await res.json()) as { signup_open: boolean; google: boolean };
+		return (await res.json()) as { signup_open: boolean; google: boolean; s3: S3Config | null };
 	} catch {
 		// Something else answers at FLOCK_API_URL (a web page, a proxy's error).
 		error(502, `Flock at ${FLOCK_API_URL} answered something other than its API`);

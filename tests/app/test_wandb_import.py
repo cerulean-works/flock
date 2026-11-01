@@ -120,7 +120,10 @@ class FakeWandb:
                 pass
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.thread = threading.Thread(
+            target=lambda: self.server.serve_forever(poll_interval=0.01), daemon=True
+        )
+        self.thread.start()
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
 
     def add(self, project: str, *runs: dict[str, Any], created: str = CREATED) -> None:
@@ -190,6 +193,9 @@ def wandb() -> Iterator[FakeWandb]:
     yield fake
     fake.gate.set()
     fake.server.shutdown()
+    fake.server.server_close()
+    fake.thread.join(timeout=5)
+    assert not fake.thread.is_alive()
 
 
 def source(fake: FakeWandb, **fields: Any) -> dict[str, Any]:
@@ -285,10 +291,18 @@ def test_create_org_imports_wandb_projects_and_runs(flock, api, wandb, wait_for)
     content = api.get("/api/v1/projects/lab/vision/runs/r1/files/requirements.txt")
     assert content.body == b"torch\n"
 
-    # Imported series are stored compacted, so a restart has nothing to rebuild.
+    # Imported series are stored as one chunk per metric, so there is nothing to compact.
     store = flock.store
-    r1 = store.get_run("lab", "vision", "r1")
-    assert r1.compacted == {"history": 3, "system": 4}
+    r1 = flock.call(store.get_run("lab", "vision", "r1"))
+    chunks = flock.call(
+        store.db.fetch(
+            "SELECT stream, max(first_line), sum(n) FROM series_chunks WHERE run_pk = $1 "
+            "AND key IN ('_step', '_runtime') GROUP BY stream",
+            r1.pk,
+        )
+    )
+    assert sorted(tuple(c) for c in chunks) == [("history", 0, 3), ("system", 0, 4)]
+    assert flock.call(store.db.fetchval("SELECT uncompacted FROM runs WHERE pk = $1", r1.pk)) == 0
     assert alice.api.get("/api/v1/orgs/lab/import").status == 404  # not a member
 
 
@@ -348,11 +362,17 @@ def test_running_imports_can_be_cancelled_or_stopped_by_deleting_the_org(
     assert api.get("/api/v1/orgs/lab/import").json()["state"] == "cancelled"
     assert api.runs("p", entity="lab")["total"] == 0
 
+    previous_history = wandb.queries.count("FlockHistory")
     assert api.post("/api/v1/orgs/lab/import", source(wandb)).status == 202
-    wait_for(lambda: wandb.queries.count("FlockHistory") >= 2)
+    wait_for(
+        lambda: (
+            any(job.current_project == "p" for job in flock.store.imports.jobs.values())
+            and wandb.queries.count("FlockHistory") > previous_history
+        )
+    )
     assert api.delete("/api/v1/orgs/lab").status == 204
     assert api.get("/api/v1/orgs/lab").status == 404
-    assert flock.store.imports.jobs == {}
+    wait_for(lambda: flock.store.imports.jobs == {})
 
 
 def test_imports_cut_short_by_a_restart_are_interrupted(make_flock, wandb, wait_for):

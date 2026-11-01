@@ -91,7 +91,7 @@
 	size="sm"
 	class={[
 		'card relative min-w-0 gap-1.5 pb-2 transition-shadow',
-		dragging && 'shadow-xl ring-foreground/20'
+		dragging && 'shadow-lg ring-1 ring-foreground/15'
 	]}
 	aria-label={view.title}
 >

@@ -3,7 +3,17 @@
 import dataclasses
 from typing import Any
 
-from flock.eval.tasks import Dataset, Fewshot, MultipleChoiceTask, PerplexityTask
+from flock.eval.tasks import (
+    CHINESE_ANSWER_PREFIX,
+    CHINESE_QUESTION_PREFIX,
+    Dataset,
+    Fewshot,
+    GoldOnlyTask,
+    MCDoc,
+    MultipleChoiceTask,
+    PerplexityTask,
+    cloze,
+)
 from flock.eval.tasks.arc import arc_doc
 
 # Paloma's row format, as the split "text" of a source with one domain and the split "domains"
@@ -56,7 +66,53 @@ ROWS = {
     ],
     "text": TEXT_ROWS,
     "domains": DOMAIN_ROWS,
+    # Another split repeating q-1 with its choices reordered, as some TMMLU+ dev rows repeat a
+    # test row.
+    "dev": [
+        {
+            "id": "dev-1",
+            "question": "What do bees make?",
+            "choices": {"text": ["silk", "honey"], "label": ["A", "B"]},
+            "answerKey": "B",
+        },
+        {
+            "id": "dev-2",
+            "question": "What do cows drink?",
+            "choices": {"text": ["water", "milk"], "label": ["A", "B"]},
+            "answerKey": "A",
+        },
+    ],
 }
+
+
+def chinese_doc(row: dict[str, Any]) -> MCDoc:
+    """A toy row in the Traditional Chinese cloze format, with no space before the answer, as TMMLU+ renders it."""
+    return MCDoc(
+        id=row["id"],
+        choices=cloze(
+            row["question"],
+            row["choices"]["text"],
+            question_prefix=CHINESE_QUESTION_PREFIX,
+            answer_prefix=CHINESE_ANSWER_PREFIX,
+            separator="",
+        ),
+        gold=row["choices"]["label"].index(row["answerKey"]),
+    )
+
+
+def not_about_bees(row: dict[str, Any]) -> bool:
+    """A `keep` predicate that drops q-1."""
+    return "bees" not in row["question"]
+
+
+def gold_doc(row: dict[str, Any]) -> MCDoc:
+    """A toy row as a gold-only doc: its question, then only its correct answer."""
+    gold = row["choices"]["label"].index(row["answerKey"])
+
+    return MCDoc(
+        id=row["id"], choices=cloze(row["question"], (row["choices"]["text"][gold],)), gold=0
+    )
+
 
 TASK = MultipleChoiceTask(
     name="toy",
@@ -85,6 +141,27 @@ PROMPT_PATHS = (
     ),
     dataclasses.replace(TASK, name="toy:rows", fewshot=Fewshot(rows=tuple(ROWS["train"]))),
     dataclasses.replace(TASK, name="toy:zero_shot", fewshot=None, unconditional_context=None),
+    # Examples from another split: q-1 isn't shown `dev-1`, which shows its own answer.
+    dataclasses.replace(TASK, name="toy:repeat", fewshot=Fewshot("dev", ("dev-1", "dev-2"))),
+    # A row filter: only q-2 is scored, and the examples aren't filtered.
+    dataclasses.replace(TASK, name="toy:keep", keep=not_about_bees),
+    # The Chinese prefixes, with PMI scored after `答案：`.
+    dataclasses.replace(
+        TASK,
+        name="toy:chinese",
+        to_doc=chinese_doc,
+        description="以下是關於常識考試單選題，請選出正確的答案。\n\n",
+        unconditional_context=CHINESE_ANSWER_PREFIX,
+    ),
+    # One choice per doc and no unconditional requests, as math, code and LAMBADA are scored.
+    GoldOnlyTask(
+        name="toy:gold_only",
+        dataset=TASK.dataset,
+        to_doc=gold_doc,
+        primary_metric="acc_greedy",
+        metrics=("acc_greedy", "bpb"),
+        fewshot=TASK.fewshot,
+    ),
     TEXT_TASK,
     # One domain of a source with two, as each Paloma source with domains is scored.
     dataclasses.replace(

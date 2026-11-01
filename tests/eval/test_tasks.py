@@ -6,10 +6,19 @@ import torch
 
 from flock.eval.metrics import MULTIPLE_CHOICE_METRICS
 from flock.eval.requests import Scores
-from flock.eval.tasks import TASKS, Choice, Dataset, Fewshot, MCDoc, Truncation, cloze
+from flock.eval.tasks import (
+    TASKS,
+    Choice,
+    Dataset,
+    Fewshot,
+    GoldOnlyTask,
+    MCDoc,
+    Truncation,
+    cloze,
+)
 from flock.eval.tasks.arc import ARC_EASY, arc_doc
 
-from .toy import ROWS, TASK
+from .toy import ROWS, TASK, not_about_bees
 
 
 @pytest.mark.parametrize(
@@ -37,6 +46,18 @@ def test_load_keeps_fewshot_order_and_limit():
     docs, shots = TASK.load(limit=1)
     assert [d.id for d in docs] == ["q-1"]
     assert [s.id for s in shots] == ["shot-2", "shot-1"]
+
+
+def test_keep_filters_scored_rows_before_limit_and_leaves_examples_and_hash_alone():
+    task = dataclasses.replace(TASK, keep=not_about_bees)
+
+    docs, shots = task.load(limit=1)
+    assert [d.id for d in docs] == ["q-2"]  # q-1 is dropped before the limit takes the first
+    assert [s.id for s in shots] == ["shot-2", "shot-1"]
+
+    # The predicate isn't hashed, but the docs it keeps are.
+    assert task.requests(docs, shots).hash == TASK.requests(docs, shots).hash
+    assert task.requests(*task.load()).hash != TASK.requests(*TASK.load()).hash
 
 
 @pytest.mark.parametrize("limit", [0, -1])
@@ -107,19 +128,23 @@ def test_requests_cover_every_choice_then_the_unconditional_ones():
 
 
 def uniform_scores(n: int, tokens_cut: list[int] | None = None) -> Scores:
-    """Scores for `n` requests: log-probability 0, one token each, and `tokens_cut` (default none)."""
+    """Scores for `n` requests: log-probability 0, one token each, not greedy, and `tokens_cut` (default none)."""
     cut = torch.tensor(tokens_cut) if tokens_cut is not None else torch.zeros(n, dtype=torch.int64)
-    return Scores(torch.zeros(n), torch.ones(n, dtype=torch.int64), cut)
+    return Scores(
+        torch.zeros(n), torch.ones(n, dtype=torch.int64), cut, torch.zeros(n, dtype=torch.bool)
+    )
 
 
 def test_choice_scores_lays_requests_out_per_doc():
     built = TASK.requests(*TASK.load())
     n = len(built.requests)
-    # Request i scores -i with i + 1 tokens, so each cell shows which request it came from.
+    # Request i scores -i with i + 1 tokens, and only odd requests are greedy, so each cell shows
+    # which request it came from.
     scores = Scores(
         -torch.arange(n, dtype=torch.float32),
         torch.arange(n) + 1,
         torch.zeros_like(torch.arange(n)),
+        torch.arange(n) % 2 == 1,
     )
     layout = built.choice_scores(scores)
 
@@ -128,6 +153,7 @@ def test_choice_scores_lays_requests_out_per_doc():
     assert layout.logprob[:, :3].tolist() == [[0, -1, -2], [-3, -4, -5]]
     assert layout.logprob[1, 3].item() == -6
     assert layout.num_tokens[0, :3].tolist() == [1, 2, 3]
+    assert layout.is_greedy[1].tolist() == [True, False, True, False]
     assert layout.gold.tolist() == [0, 1]
 
     # The unconditional requests follow the 7 conditional ones, so doc 1's are 7 + 3 to 7 + 6.
@@ -342,6 +368,51 @@ def test_num_shots_skips_the_scored_doc():
     )
 
 
+@pytest.mark.parametrize("reorder", [False, True])
+def test_a_shot_showing_the_docs_answer_is_not_shown_to_it(reorder):
+    docs, shots = TASK.load()
+    # Doc q-2 repeated under the few-shot id shot-9, as a dataset may repeat a question, perhaps
+    # with its choices in another order. Either way the example would show q-2's answer.
+    repeat = dataclasses.replace(docs[1], id="shot-9")
+    if reorder:
+        repeat = dataclasses.replace(repeat, choices=repeat.choices[::-1], gold=2)
+    assert repeat.choices[repeat.gold] == docs[1].choices[docs[1].gold]
+
+    built = TASK.requests(docs, [*shots, repeat])
+    # Doc q-1 sees all three examples, and q-2 all but its repeat.
+    assert built.requests[0].context.count("Question:") == 4
+    assert built.requests[3].context.count("Question:") == 3
+
+
+def test_a_shot_is_compared_with_the_doc_by_the_text_it_shows():
+    docs, _ = TASK.load()
+    # A doc whose examples read differently from its scored text, as HumanEval's do. An example
+    # is the doc itself only if it shows the same text, so the plain repeat stays.
+    doc = dataclasses.replace(docs[0], example="Question: q-1, as an example")
+    repeat = dataclasses.replace(docs[0], id="shot-9")
+
+    built = TASK.requests([doc], [repeat, dataclasses.replace(doc, id="shot-8")])
+    assert built.requests[0].context.count("Question:") == 2
+    assert "as an example" not in built.requests[0].context
+
+
+def test_shots_from_the_scored_split_are_shown_to_their_own_doc():
+    # OLMES shows a curated example from the scored split to every doc, its own included.
+    task = dataclasses.replace(TASK, fewshot=Fewshot("test", ("q-1",)))
+    docs, shots = task.load()
+
+    built = task.requests(docs, shots)
+    assert built.requests[0].context.count("Question:") == 2
+
+
+def test_shots_from_another_split_may_share_an_id_with_the_doc():
+    docs, shots = TASK.load()
+    namesake = dataclasses.replace(shots[0], id=docs[0].id)
+
+    built = TASK.requests(docs[:1], [namesake])
+    assert built.requests[0].context.count("Question:") == 2
+
+
 def test_description_and_per_choice_contexts():
     # A WinoGrande-like doc: the choices differ in context and share one continuation.
     doc = MCDoc("w", (Choice("Tom gave it to", " him."), Choice("Ann gave it to", " him.")), 1)
@@ -367,7 +438,8 @@ def test_doc_rejects_an_empty_example():
 def test_example_replaces_the_gold_choice_in_the_shots():
     shot = MCDoc("s", (Choice("Q1", " a"),), 0, example="Q1  a")
     doc = MCDoc("d", (Choice("Q2", " b"),), 0)
-    task = dataclasses.replace(TASK, unconditional_context=None)
+    # An example from the scored split is shown to its own doc too, as OLMES's curated ones are.
+    task = dataclasses.replace(TASK, fewshot=Fewshot("test", ("s",)), unconditional_context=None)
 
     # The doc's own `example` doesn't change how it is scored, only how it reads as a shot.
     built = task.requests([doc, shot], [shot])
@@ -383,17 +455,32 @@ def test_requests_are_immutable():
 
 
 def test_reported_metrics_follow_pmi_and_the_metrics_field():
-    assert TASK.reported_metrics == MULTIPLE_CHOICE_METRICS
+    # `acc_greedy` compares no choices, so only a gold-only task reports it.
+    assert TASK.reported_metrics == tuple(m for m in MULTIPLE_CHOICE_METRICS if m != "acc_greedy")
     no_pmi = dataclasses.replace(TASK, unconditional_context=None)
     assert "acc_uncond" not in no_pmi.reported_metrics
-    gold_only = dataclasses.replace(TASK, metrics=("bpb",), primary_metric="bpb")
-    assert gold_only.reported_metrics == ("bpb",)
+    bpb_only = dataclasses.replace(TASK, metrics=("bpb",), primary_metric="bpb")
+    assert bpb_only.reported_metrics == ("bpb",)
+
+
+def test_gold_only_tasks_report_bpb_unless_asked_for_greedy_match():
+    gold_only = GoldOnlyTask(name="toy:gold", dataset=TASK.dataset, to_doc=arc_doc)
+    assert (gold_only.primary_metric, gold_only.reported_metrics) == ("bpb", ("bpb",))
+    assert gold_only.unconditional_context is None
+
+    greedy = dataclasses.replace(
+        gold_only, primary_metric="acc_greedy", metrics=("bpb", "acc_greedy")
+    )
+    assert greedy.reported_metrics == ("acc_greedy", "bpb")  # in `multiple_choice`'s order
+    with pytest.raises(ValueError, match="metrics must be among"):
+        dataclasses.replace(gold_only, metrics=("acc_raw",))
 
 
 @pytest.mark.parametrize(
     ("kwargs", "match"),
     [
         pytest.param({"metrics": ("acc_nope",)}, "metrics must be among", id="unknown"),
+        pytest.param({"metrics": ("acc_greedy",)}, "metrics must be among", id="greedy"),
         pytest.param(
             {
                 "metrics": ("acc_uncond",),

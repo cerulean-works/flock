@@ -1,0 +1,133 @@
+# Cerulean-focused Flock docs: complete workflows in Guide, detailed behavior in Reference.
+guide:
+- title: Get started
+  sections:
+  - local: index
+    title: Flock
+  - local: installation
+    title: Install Flock
+- title: CLI
+  sections:
+  - local: cli/sign-in
+    title: Sign in and manage access
+  - local: cli/s3-access
+    title: Use S3 storage
+  - local: cli/use-python-storage
+    title: Use storage from Python
+  - local: cli/authenticate-jobs
+    title: Authenticate an unattended job
+- title: Evals
+  sections:
+  - local: evals/run-evaluation
+    title: Evaluate a model and read its scores
+  - local: evals/evaluate-checkpoint
+    title: Evaluate a training checkpoint in memory
+  - local: evals/add-task
+    title: Add an evaluation task
+  - local: evals/compare-regression
+    title: Compare with the regression bank
+- title: App
+  sections:
+  - title: Using Cerulean Flock
+    sections:
+    - local: app/accounts
+      title: Use your account and organization
+    - local: app/log-runs
+      title: Track an experiment
+    - local: app/explore-runs
+      title: Explore and organize experiments
+    - local: app/storage-and-datasets
+      title: Browse storage and datasets
+    - local: app/import-wandb
+      title: Import W&B runs
+    - local: app/configure-budgets
+      title: Configure GPU prices and budgets
+  - title: Development and hosting
+    sections:
+    - local: app/run-locally
+      title: Run Flock locally
+    - local: app/deploy
+      title: Deploy another Flock installation
+    - local: app/operate
+      title: Operate a Flock installation
+    - local: app/build-dashboard-client
+      title: Build a dashboard client
+reference:
+- title: CLI
+  sections:
+  - local: cli/commands
+    title: CLI command index
+  - local: cli/commands/s3
+    title: flock s3
+  - local: cli/credentials
+    title: Credential resolution and Python API
+  - local: cli/python-s3
+    title: Python S3 API
+- title: Evals
+  sections:
+  - local: evals/commands
+    title: Command line
+  - local: evals/python-api
+    title: Python API
+  - local: evals/tasks
+    title: Tasks
+  - local: evals/task-definitions
+    title: Task definitions
+  - local: evals/metrics
+    title: Metrics
+  - local: evals/scoring
+    title: Scoring behavior
+  - local: evals/results
+    title: Results files
+  - local: evals/comparison
+    title: Score comparison
+- title: App
+  sections:
+  - title: Behavior
+    sections:
+    - local: app/authentication
+      title: Accounts and authentication
+    - local: app/permissions
+      title: Permissions
+    - local: app/logging-behavior
+      title: Logging behavior
+    - local: app/run-management
+      title: Project and run mutation rules
+    - local: app/wandb-compatibility
+      title: wandb compatibility
+    - local: app/s3-behavior
+      title: S3 storage behavior
+    - local: app/import-behavior
+      title: W&B import behavior
+    - local: app/budget-behavior
+      title: GPU accounting, budgets and activity
+    - local: app/errors
+      title: Errors and status codes
+  - title: Operations
+    sections:
+    - local: app/configuration
+      title: Settings
+    - local: app/operations
+      title: Deployment and operation reference
+    - local: app/architecture
+      title: How it works
+  - title: HTTP API
+    sections:
+    - local: app/api/index
+      title: HTTP API overview
+    - local: app/api/auth
+      title: Sign-in and accounts
+    - local: app/api/orgs
+      title: Organizations and invites
+    - local: app/api/projects
+      title: Projects and runs
+    - local: app/api/queries
+      title: Queries and filters
+    - local: app/api/dashboard
+      title: Snapshot and live stream
+    - local: app/api/home
+      title: Home feed and budgets
+    - local: app/api/s3
+      title: S3 keys and buckets
+    - local: app/api/datasets
+      title: Datasets

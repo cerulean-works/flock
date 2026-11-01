@@ -2,9 +2,14 @@
 
 ---
 
-Flock is Cerulean Labs' monorepo for training and evaluating models. We're also
-building tools to track model training and manage our datasets and model
-checkpoints in our own storage infrastructure.
+Flock is Cerulean's workspace for model evaluation, experiment tracking and shared
+dataset and checkpoint storage.
+
+## Documentation
+
+Read the [Flock docs](docs/source/index.md) for task guides and references grouped
+by CLI, Evals and App. To build or preview the site locally, see
+[the documentation contributor guide](docs/README.md).
 
 ## Getting Started
 
@@ -35,46 +40,39 @@ uv add --package flock-app-api <dependency>
 uv add --package flock-tests <dependency>
 ```
 
+### Running tests
+
+For the full test suite, worker limits, CPU-only CI dependencies, and timing
+reports, see [Running Flock's tests](tests/README.md).
+
 ## Modules
-
-### Training
-
-[`flock.training`](flock/training/) is where we build training loops from scratch,
-along with efficient implementations of optimizers, learning rate schedulers,
-and other common training utilities. We want the code behind each experiment to
-be easy to inspect and change, whether we're trying a different optimization
-method or adjusting how a model learns from its data. Shared utilities let us
-carry those improvements across experiments without rebuilding the same pieces
-for every training run.
-
-### Evaluation
-
-[`flock.eval`](flock/eval/) is home to our in-house evaluation suite. We're building
-base evaluators for tasks such as measuring perplexity and scoring multiple-choice
-answers using entropy, along with a CLI for running evaluations. These evaluators
-will provide reusable building blocks for new tasks and benchmarks, with a common
-way to run them across models and checkpoints. The goal is to make evaluation a
-routine part of experimentation, so we can understand what changes between
-training runs and compare results under a consistent setup. Its docs start at
-[`flock/eval/docs/source/index.md`](flock/eval/docs/source/index.md).
 
 ### CLI
 
-[`flock.cli`](flock/cli/) is where we're building command-line tools for our
-training and evaluation workflows, including managing datasets and model
-checkpoints in our own storage infrastructure.
+[`flock.cli`](flock/cli/) provides account and storage access. After installing the
+workspace, run `uv run flock login` to authorize this machine with Cerulean's
+service and configure the wandb SDK. [Sign-in and access](docs/source/cli/sign-in.md)
+explains the credentials; [S3 storage](docs/source/cli/s3-access.md) explains
+key types and renewal before connecting your tools.
 
-### Flock
+### Evaluation
 
-[`app/api`](app/api/) is our wandb-compatible experiment tracking server, and
-[`app/web`](app/web/) is its dashboard.
-Training code keeps logging through the regular `wandb` SDK, pointed at our server with
-`wandb login --host`, while dashboards read loss curves and filtered run tables from a
-low-latency JSON API. It stores runs in PostgreSQL and keeps the data it serves in memory, so
-curves for dozens of runs load in a few milliseconds and filters over 10k-run projects return
-in single-digit milliseconds. See [Flock docs](app/api/README.md) for setup,
-configuration, the API and the design.
+[`flock.eval`](flock/eval/) scores pinned language models on tasks and suites,
+writes metrics and per-question predictions, and can score a model held in a
+training process. [Evaluate a model](docs/source/evals/run-evaluation.md) introduces
+tasks, metrics and comparable results before walking through `flock eval`.
 
-```sh
-docker compose -f app/compose.yaml up -d --build
-```
+### App
+
+[`app/api`](app/api/) serves the wandb protocol, the read API and organization
+storage; [`app/web`](app/web/) is the dashboard. Start with
+[Track an experiment](docs/source/app/log-runs.md) or
+[Explore experiments](docs/source/app/explore-runs.md). For local development and
+separate installations, see [Run locally](docs/source/app/run-locally.md) and
+[Deploy Flock](docs/source/app/deploy.md).
+
+### Training
+
+[`flock.training`](flock/training/) is a scaffold on this branch. To evaluate an
+existing model during training, use the implemented
+[in-memory evaluation API](docs/source/evals/evaluate-checkpoint.md).

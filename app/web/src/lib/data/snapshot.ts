@@ -70,6 +70,7 @@ const WIDTHS: Record<ColumnKind, number> = {
 	num: 124,
 	time: 148,
 	duration: 104,
+	user: 160,
 	str: 160,
 	state: 116,
 	bool: 96,
@@ -269,10 +270,17 @@ export function decodeWorkspace(buf: ArrayBuffer, query: RunQuery): WorkspaceDat
 	const defs = header.runs.map((r) => r.metric_defs ?? []);
 
 	const columns = header.columns.map((c) => columnDef(c.key, c.kind));
+	// No panel for a metric none of the page's runs has points of (a key the server lists, but
+	// whose every curve came back empty): it would only say "No runs plotted".
+	const hidden = hiddenMetrics(header.metrics, defs);
+	header.metrics.forEach((key, m) => {
+		for (let r = 0; r < R; r++) if (series[r * M + m]?.n) return;
+		hidden.add(key);
+	});
 	const { metrics, panels, sections } = metricSections(
 		header.metrics,
 		header.system_metrics,
-		hiddenMetrics(header.metrics, defs)
+		hidden
 	);
 	return {
 		meta: {

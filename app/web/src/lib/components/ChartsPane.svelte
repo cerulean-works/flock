@@ -436,7 +436,7 @@
 						<ChevronDownIcon
 							class={['text-muted-foreground transition-transform', !open && '-rotate-90']}
 						/>
-						<h2 class="font-serif text-[22px] font-normal tracking-[-0.01em]">{sec.key}</h2>
+						<h2 class="text-[22px] font-normal tracking-[-0.01em]">{sec.key}</h2>
 						<Badge variant="secondary" class="text-muted-foreground">{count}</Badge>
 					</Button>
 					{#if open && pages > 1}

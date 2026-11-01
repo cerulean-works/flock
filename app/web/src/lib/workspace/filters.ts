@@ -1,4 +1,4 @@
-import type { ColumnKind } from '#lib/types.ts';
+import type { ColumnKind, Person } from '#lib/types.ts';
 
 // Run filters: what the workspace's Filter popover edits, how they travel in its URL
 // (`?filters=[["state","eq","running"],{"any":[["config.lr","lt",0.01],["config.opt","eq","adam"]]}]`)
@@ -35,6 +35,11 @@ export type RunFilter = RunCondition | RunFilterGroup;
 
 export const isGroup = (f: RunFilter): f is RunFilterGroup => 'match' in f;
 
+/** The org's members by id: who the values of `user` columns (user ids) are. */
+export type People = ReadonlyMap<number, Person>;
+
+const NOBODY: People = new Map();
+
 /** Operators that compare against no value. */
 export const UNARY: ReadonlySet<FilterOp> = new Set(['exists', 'missing']);
 
@@ -52,7 +57,8 @@ const LABELS: Record<FilterOp, string> = {
 
 /**
  * The operators that make sense for a column. Lists (`tags`) are `json`: Flock's `is` matches a
- * list containing the value. Unknown columns (typed by hand) get every operator.
+ * list containing the value. A run's `owner` is someone or no one. Unknown columns (typed by
+ * hand) get every operator.
  */
 export function opsFor(kind: ColumnKind | undefined): { op: FilterOp; label: string }[] {
 	const ops: FilterOp[] =
@@ -62,7 +68,7 @@ export function opsFor(kind: ColumnKind | undefined): { op: FilterOp; label: str
 				? ['eq', 'ne', 'contains', 'exists', 'missing']
 				: kind === 'state' || kind === 'bool'
 					? ['eq', 'ne']
-					: kind === 'json'
+					: kind === 'json' || kind === 'user'
 						? ['eq', 'ne', 'exists', 'missing']
 						: ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'contains', 'exists', 'missing'];
 	return ops.map((op) => ({ op, label: kind === 'json' && op === 'eq' ? 'includes' : LABELS[op] }));
@@ -72,11 +78,13 @@ export const opLabel = (op: FilterOp) => LABELS[op];
 
 /**
  * A typed value from what was typed, for a column of `kind`; an error message when it doesn't
- * fit. Times take a date (`2026-10-01`, read as UTC) or seconds since the epoch.
+ * fit. Times take a date (`2026-10-01`, read as UTC) or seconds since the epoch. Users take one
+ * of `people`'s emails, a name no one else has, or a user id (of someone who left, say).
  */
 export function parseValue(
 	text: string,
-	kind: ColumnKind | undefined
+	kind: ColumnKind | undefined,
+	people: People = NOBODY
 ): { value: FilterValue } | { error: string } {
 	const raw = text.trim();
 	if (!raw) return { error: 'Enter a value' };
@@ -89,6 +97,20 @@ export function parseValue(
 			if (Number.isFinite(number)) return { value: number };
 			const ms = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T00:00:00Z` : raw);
 			return Number.isFinite(ms) ? { value: ms / 1000 } : { error: `${raw} isn’t a date` };
+		}
+		case 'user': {
+			if (Number.isInteger(number)) return { value: number };
+			const q = raw.toLowerCase();
+			const members = [...people.values()];
+			const byEmail = members.find((p) => p.email.toLowerCase() === q);
+			if (byEmail) return { value: byEmail.id };
+			const named = members.filter((p) => p.name.toLowerCase() === q);
+			if (named.length === 1) return { value: named[0].id };
+			return {
+				error: named.length
+					? `${named.length} members are named ${raw}: use an email`
+					: `No member is ${raw}`
+			};
 		}
 		case 'bool':
 			return raw === 'true' || raw === 'false'
@@ -104,11 +126,17 @@ export function parseValue(
 	}
 }
 
-/** How a filter's value reads back in its input. */
-export function valueText(value: FilterValue | null, kind: ColumnKind | undefined): string {
+/** How a filter's value reads back in its input: users as their email, if they're in `people`. */
+export function valueText(
+	value: FilterValue | null,
+	kind: ColumnKind | undefined,
+	people: People = NOBODY
+): string {
 	if (value == null) return '';
 	if (kind === 'time' && typeof value === 'number')
 		return new Date(value * 1000).toISOString().slice(0, 10);
+	if (kind === 'user' && typeof value === 'number')
+		return people.get(value)?.email ?? String(value);
 	return String(value);
 }
 
@@ -186,16 +214,17 @@ export function countConditions(filters: readonly RunFilter[]): number {
 /**
  * Filters as text, e.g. `state is running and (config.lr < 0.001 or config.opt is adam)`.
  * Top-level conditions go on lines of their own when `lines` is set. `kindOf` types values
- * (dates read back as dates).
+ * (dates read back as dates, and users of `people` as their email).
  */
 export function describeFilters(
 	filters: readonly RunFilter[],
 	kindOf: (key: string) => ColumnKind | undefined = () => undefined,
-	lines = false
+	lines = false,
+	people: People = NOBODY
 ): string {
 	const one = (f: RunFilter, nested: boolean): string => {
 		if (!isGroup(f))
-			return `${f.key} ${opLabel(f.op)}${UNARY.has(f.op) ? '' : ` ${valueText(f.value, kindOf(f.key))}`}`;
+			return `${f.key} ${opLabel(f.op)}${UNARY.has(f.op) ? '' : ` ${valueText(f.value, kindOf(f.key), people)}`}`;
 		const text = f.filters.map((g) => one(g, true)).join(f.match === 'any' ? ' or ' : ' and ');
 		return nested && f.filters.length > 1 ? `(${text})` : text;
 	};
@@ -206,6 +235,23 @@ export function describeFilters(
 	return top.filters
 		.map((f) => one(f, top.filters.length > 1))
 		.join(`${sep}${top.match === 'any' ? 'or' : 'and'} `);
+}
+
+/** A top-level `owner is …`, as "My runs" adds. */
+const isOwnerIs = (f: RunFilter): f is RunCondition =>
+	!isGroup(f) && f.key === 'owner' && f.op === 'eq';
+
+/** Whether the filters keep only the runs `user` logged ("My runs"). */
+export const ownedBy = (filters: readonly RunFilter[], user: number) =>
+	filters.some((f) => isOwnerIs(f) && f.value === user);
+
+/**
+ * The filters keeping only the runs `user` logged, in place of any other top-level owner; or,
+ * when not `on`, no longer. The other filters stay as they were.
+ */
+export function setOwner(filters: readonly RunFilter[], user: number, on: boolean): RunFilter[] {
+	const rest = filters.filter((f) => !(isOwnerIs(f) && (on || f.value === user)));
+	return on ? [{ key: 'owner', op: 'eq', value: user }, ...rest] : rest;
 }
 
 /** `text` as a Python regular expression matching it literally. */
