@@ -1,6 +1,6 @@
 # Tasks
 
-A task is a [`~eval.tasks.MultipleChoiceTask`] registered by name in `TASKS`, and a suite is a [`~eval.tasks.Suite`] of tasks registered in `SUITES`. [Adding a task](add-task) shows how to write one.
+A task is a [`~eval.tasks.MultipleChoiceTask`] or a [`~eval.tasks.PerplexityTask`] registered by name in `TASKS`, and a suite is a [`~eval.tasks.Suite`] of tasks registered in `SUITES`. [Adding a task](add-task) shows how to write one.
 
 ## Available tasks
 
@@ -51,9 +51,29 @@ A few behaviours follow OLMES for parity and are worth knowing:
 
 `drcd_bpb` scores Traditional Chinese reading comprehension as OLMo 3 scores SQuAD and DROP: the bits per byte of the gold answer after the passage and the question. It reads `cerulean-works/drcd`, a parquet mirror of DRCD's GitHub release in SQuAD's schema. A request is `文章：<passage>\n問題：<question>\n答案：` and the first of the two annotated answers, with no space before it, after one example from `validation`. There is no title line, since many DRCD titles are Wikipedia page names in Simplified script. OLMES has no DRCD task, so the reference its requests and float32 scores match is lm-evaluation-harness v0.4.3 rendering this format, as for TMMLU+. OLMo 3 shows SQuAD five examples; DRCD shows one, so that every request fits in 2,048 tokens under OLMo 2's and Qwen 2.5's tokenizers.
 
+### Perplexity tasks
+
+A perplexity task scores each doc's text whole and reports `bits_per_byte` over all of its docs (see [Metrics](metrics#perplexity)). Each [Paloma](https://arxiv.org/abs/2312.10523) domain is one task, scored on its whole `test` split in windows of 2048 tokens.
+
+The first version has 9 of [Paloma](https://huggingface.co/datasets/allenai/paloma)'s 16 sources: those licensed under AI2's ImpACT Low Risk license or CC BY-SA, without the fringe sources. A source with one domain has one task, `paloma_<source>`. A source with several has one task per domain, `paloma_<source>__<domain>`, and `flock/eval/tasks/paloma.py` lists the domains.
+
+| Source | Tasks | Domains | Docs | Licence |
+|---|---|---|---|---|
+| `c4_en` | `paloma_c4_en` | 1 | 2,124 | ImpACT LR |
+| `mc4` | `paloma_mc4` | 1 | 1,202 | ImpACT LR |
+| `wikitext_103` | `paloma_wikitext_103` | 1 | 61 | CC BY-SA |
+| `ptb` | `paloma_ptb` | 1 | 1 | ImpACT LR |
+| `falcon-refinedweb` | `paloma_falcon-refinedweb` | 1 | 1,711 | ImpACT LR |
+| `dolma-v1_5` | `paloma_dolma-v1_5__<domain>` | 5 | 4,481 | ImpACT LR |
+| `c4_100_domains` | `paloma_c4_100_domains__<domain>` | 99 | 14,131 | ImpACT LR |
+| `dolma_100_subreddits` | `paloma_dolma_100_subreddits__<domain>` | 100 | 46,203 | ImpACT LR |
+| `dolma_100_programing_languages` | `paloma_dolma_100_programing_languages__<domain>` | 100 | 7,832 | ImpACT LR |
+
+Every task scores its domain's whole `test` split in windows of 2048 tokens, with `bits_per_byte` as its primary metric. `ptb` is one document of 98,844 OLMo 2 tokens. Paloma is gated: accept its terms on the dataset page before the first run.
+
 ## Suites
 
-A suite's score is the unweighted mean of its members' scores, as OLMES's `macro` aggregate. A member task gives the suite's `metric`, or its own primary metric if the suite sets none. A member suite counts as one member, whatever its size, and gives its own score, so a suite that sets `metric` holds only suites that set the same one. A scored suite's members share one scale: all accuracies, or all one other metric such as `bpb`, since those don't average. `base_easy` has no score of its own: it groups suites whose scores don't average, so that one name runs them all.
+A suite's score is the unweighted mean of its members' scores, as OLMES's `macro` aggregate. A member task gives the suite's `metric`, or its own primary metric if the suite sets none. A member suite counts as one member, whatever its size, and gives its own score, so a suite that sets `metric` holds only suites that set the same one. A scored suite's members share one scale: all accuracies, or all one other metric such as `bpb` or perplexity `bits_per_byte`, since those don't average. `base_easy` has no score of its own: it groups suites whose scores don't average, so that one name runs them all.
 
 | Name | Members | Metric | OLMES suite |
 |---|---|---|---|
@@ -77,6 +97,8 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `tw_mock_exams:all` | `tw_mock_exams`, `tw_mock_exams:bpb` | unscored | none |
 | `zh_tw` | `tmmluplus`, `tw_mock_exams` | each member suite's score | none |
 | `zh_tw:bpb` | `tmmluplus:bpb`, `drcd_bpb`, `tw_mock_exams:bpb` | `bpb` | none |
+| `paloma:<source>` | the source's tasks | `bits_per_byte` | OLMES's task `paloma_<source>::paloma`: the same number for a source with one domain, and its docs pooled instead of a mean of domains for a source with several |
+| `paloma` | the 9 `paloma:<source>` suites | unscored | none |
 
 The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. OLMES groups ARC-Easy and ARC-Challenge into one suite with no metric of its own; here they are two members of `base_easy:qa_rc`. `basic_skills`, and so `base_easy:qa_rc`, averages our `acc_per_token`, which divides by the real token count. OLMES's equals its `acc_raw`, so these two scores differ from OLMES's by that member. In BF16, `lambada`'s `acc_greedy` can also differ by a few near-tie docs, since our argmax is taken over FP32 logits and OLMES's over its BF16 log-probabilities. See [Suites in results](results#suites) for when two suite scores compare.
 
@@ -85,6 +107,8 @@ The `tmmluplus` score is the mean of the four category means, as the dataset car
 The mock exam tasks read `cerulean-works/tw-mock-exams`, a private dataset: the papers are school and publisher mock exams whose rights don't allow a public copy, so only members of the organization can run them, with a Hugging Face token in the environment. The subjects are `english` (英文), `social` (社會), `chinese` (國文), `science` (自然), `history` (歷史), `civics` (公民與社會), `biology` (生物), `geography` (地理), `physics` (物理) and `chemistry` (化學). The items were transcribed from scanned papers, and each task scores only single-answer items a text-only model can answer: no multi-answer, character-sensitive (錯別字, 字音, 字形), listening, cloze, figure or follow-up items. A grouped item shows its passage on the line before the question. 英文 uses MMLU's English format, the others TMMLU+'s Chinese one. No reference implementation scores this data, so there are no reference numbers to compare with.
 
 `zh_tw` and `zh_tw:bpb` give one Traditional Chinese number of each kind, next to the Base Easy suites. No benchmark suite to follow exists: OLMo 3's Base Easy is English only, and TMLU and TMMLU+ each average only their own subjects. Each benchmark is one member through its own suite, so TMMLU+ (66 subjects) and the exam set (10) each count as one member. `drcd_bpb` reports only `bpb`, so it is in `zh_tw:bpb` alone. The exam set's `english` subject is an English exam, so a small part of both scores measures English. Use `zh_tw:bpb` for small checkpoints, whose accuracy is still near chance, and `zh_tw` for larger models. Run both with `--suite zh_tw --suite zh_tw:bpb`; the tasks they share run once. Both read the private exam set, so they need the access described above.
+
+A Paloma source is a suite of its domains, scored as their unweighted mean, as the paper averages a source's domains. OLMES instead reports a source's bits per byte over all of its docs together, so a source with several domains differs from OLMES's number. `paloma` has no score, since Paloma defines none over all sources.
 
 ## Classes
 
@@ -103,5 +127,9 @@ The mock exam tasks read `cerulean-works/tw-mock-exams`, a private dataset: the 
 [[autodoc]] eval.tasks.cloze
 
 [[autodoc]] eval.tasks.MCRequests
+
+[[autodoc]] eval.tasks.PerplexityTask
+
+[[autodoc]] eval.tasks.TextDoc
 
 [[autodoc]] eval.tasks.Suite

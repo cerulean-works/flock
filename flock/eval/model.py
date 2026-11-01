@@ -1,5 +1,6 @@
 """Batched loglikelihood scoring with a causal language model, kept on the model's device."""
 
+import itertools
 import logging
 import re
 from collections.abc import Generator, Iterator, Sequence
@@ -327,6 +328,81 @@ class ScoringModel:
                 self.max_length,
             )
 
+        num_tokens = torch.tensor(
+            [len(continuation) for _, continuation in encoded], dtype=torch.int64
+        )
+        logprob, is_greedy = self._logprobs(encoded)
+        return Scores(
+            logprob,
+            num_tokens.to(self.device, non_blocking=True),
+            torch.tensor(tokens_cut, dtype=torch.int64).to(self.device, non_blocking=True),
+            is_greedy,
+        )
+
+    @torch.no_grad()  # As in `loglikelihood`.
+    def rolling_loglikelihood(self, texts: Sequence[str], window: int) -> Scores:
+        """
+        Scores each text whole, in disjoint windows of at most `window` tokens, as lm-evaluation-harness's `loglikelihood_rolling` does.
+
+        Each text is tokenized with no special tokens and split as `get_rolling_token_windows(..., context_len=1)` and `make_disjoint_window` split it (`lm_eval/utils.py` at lm-eval 0.4.3), which OLMES's Paloma tasks use (`loglikelihood_rolling_verbose` in `oe_eval/models/eleuther_huggingface.py`). The first window predicts the first `window` tokens after one prefix token: BOS if the tokenizer has one, else EOS, as lm-evaluation-harness's own `prefix_token_id` (OLMES always uses EOS). Each later window predicts the next `window` tokens, or what is left, from an input of exactly `window` tokens, so every token is predicted once. The windows of all texts are batched together as `loglikelihood` batches requests.
+
+        Returns:
+            `Scores`: per text, the FP64 sum of its windows' log-probabilities, its token count, `tokens_cut` all 0, since no token is cut, and whether every token is the greedy one.
+
+        Raises:
+            `ValueError`: if `window` is below 1 or above `max_length`, or a text has no tokens (it would score 0 bits over 0 bytes).
+        """
+        if not 1 <= window <= self.max_length:
+            raise ValueError(f"window must be from 1 to max_length {self.max_length}, got {window}")
+
+        token_ids = self._tokenize(list(texts))
+        prefix = self._prefix_token()
+        # Each text's windows, in order.
+        per_text: list[list[_Encoded]] = []
+        for text, ids in zip(texts, token_ids, strict=True):
+            if not ids:
+                raise ValueError(f"text has no tokens: {text!r}")
+            text_windows = [([prefix], ids[:window])]
+            for start in range(window, len(ids), window):
+                end = min(start + window, len(ids))
+                # The input is the `window` tokens before `end`, so a last window that predicts
+                # fewer than `window` tokens conditions on the rest of the previous one.
+                text_windows.append((ids[end - window - 1 : start], ids[start:end]))
+            per_text.append(text_windows)
+        windows = list(itertools.chain.from_iterable(per_text))
+
+        # One row of window scores per text, summed along the row: unlike `index_add_` on CUDA,
+        # which adds in any order, the sum is the same in every run. FP64, as OLMES adds
+        # windows up in Python floats: a long text sums to about 1e5 nats, which FP32
+        # resolves only to about 0.01. The cells a text fills are found on the host, row by row
+        # as `windows` lists them, so placing the scores never waits for the GPU.
+        counts = [len(text_windows) for text_windows in per_text]
+        width = max(counts, default=0)
+        filled = torch.arange(width) < torch.tensor(counts, dtype=torch.int64)[:, None]
+        rows, columns = filled.nonzero(as_tuple=True)
+        by_window = torch.zeros(len(per_text), width, dtype=torch.float64, device=self.device)
+        cells = (
+            rows.to(self.device, non_blocking=True),
+            columns.to(self.device, non_blocking=True),
+        )
+        window_logprob, window_is_greedy = self._logprobs(windows)
+        by_window[cells] = window_logprob.double()
+        logprob = by_window.sum(-1)
+        # Cells a text doesn't fill count as greedy, so a text is greedy if all its windows are.
+        greedy_by_window = torch.ones(len(per_text), width, dtype=torch.bool, device=self.device)
+        greedy_by_window[cells] = window_is_greedy
+
+        num_tokens = torch.tensor([len(ids) for ids in token_ids], dtype=torch.int64)
+        return Scores(
+            logprob,
+            num_tokens.to(self.device, non_blocking=True),
+            torch.zeros(len(token_ids), dtype=torch.int64, device=self.device),
+            greedy_by_window.all(-1),
+        )
+
+    def _logprobs(self, encoded: list[_Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
+        """Each encoded request's summed continuation log-probability (FP32) and whether its continuation is the greedy one, in order on the model's device, scored longest first in batches of at most `batch_tokens` padded tokens."""
+        input_lengths = [_input_length(pair, self.max_length) for pair in encoded]
         # Longest first, as lm-evaluation-harness sorts (`_collate` in `_loglikelihood_tokens`),
         # so the first request of each batch sets its padded width.
         order = sorted(range(len(encoded)), key=lambda i: -input_lengths[i])
@@ -340,15 +416,7 @@ class ScoringModel:
                 index = torch.tensor(batch).to(self.device, non_blocking=True)
                 logprob[index], is_greedy[index] = self._score([encoded[i] for i in batch])
 
-        num_tokens = torch.tensor(
-            [len(continuation) for _, continuation in encoded], dtype=torch.int64
-        )
-        return Scores(
-            logprob,
-            num_tokens.to(self.device, non_blocking=True),
-            torch.tensor(tokens_cut, dtype=torch.int64).to(self.device, non_blocking=True),
-            is_greedy,
-        )
+        return logprob, is_greedy
 
     def _encode(self, requests: Sequence[Request]) -> list[_Encoded]:
         """[`encode`] for many requests, with one tokenizer call for the distinct contexts and one for the joined texts."""
@@ -392,9 +460,9 @@ class ScoringModel:
 
     def _prefix_token(self) -> int:
         """
-        The token an empty context becomes: BOS if the tokenizer has one, else EOS, as lm-evaluation-harness's `prefix_token_id`.
+        The token an empty context becomes, and a rolling text's first window starts from: BOS if the tokenizer has one, else EOS, as lm-evaluation-harness's `prefix_token_id`.
 
-        It isn't padding: the continuation's first token needs one real token to be predicted from.
+        It isn't padding: the first scored token needs one real token to be predicted from.
 
         Raises:
             `ValueError`: if the tokenizer has neither.
@@ -404,7 +472,7 @@ class ScoringModel:
             prefix = self.tokenizer.eos_token_id
         if prefix is None:
             raise ValueError(
-                "an empty context needs a BOS or EOS token, and the tokenizer has neither"
+                "scoring needs a BOS or EOS prefix token, and the tokenizer has neither"
             )
 
         return prefix

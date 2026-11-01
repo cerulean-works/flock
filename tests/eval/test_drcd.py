@@ -5,7 +5,7 @@ import pytest
 
 from flock.eval.model import ScoringModel
 from flock.eval.run import score_task
-from flock.eval.tasks import TASKS, Choice, Dataset, MCDoc, Truncation
+from flock.eval.tasks import TASKS, Choice, Dataset, MCDoc, MultipleChoiceTask, Truncation
 from flock.eval.tasks.drcd import drcd_doc
 
 
@@ -53,6 +53,7 @@ def test_doc_strips_every_field_and_scores_the_first_answer():
 
 def test_request_is_the_example_then_the_passage_and_question(drcd_rows):
     task = TASKS["drcd_bpb"]
+    assert isinstance(task, MultipleChoiceTask)
 
     built = task.requests(*task.load())
 
@@ -66,6 +67,7 @@ def test_request_is_the_example_then_the_passage_and_question(drcd_rows):
 
 def test_bpb_divides_by_the_answers_utf8_bytes(scorer, drcd_rows):
     task = TASKS["drcd_bpb"]
+    assert isinstance(task, MultipleChoiceTask)
     built = task.requests(*task.load())
     logprob = scorer.loglikelihood(built.requests).logprob.tolist()
 
@@ -81,6 +83,7 @@ def test_bpb_divides_by_the_answers_utf8_bytes(scorer, drcd_rows):
 
 def test_long_passages_are_cut_from_the_left_and_counted(lm, tokenizer, drcd_rows):
     task = TASKS["drcd_bpb"]
+    assert isinstance(task, MultipleChoiceTask)
     built = task.requests(*task.load())
     scorer = ScoringModel(lm, tokenizer, name="tiny@0")
     windows = [sum(map(len, scorer.encode(request))) for request in built.requests]
@@ -102,6 +105,7 @@ def test_long_passages_are_cut_from_the_left_and_counted(lm, tokenizer, drcd_row
 
 def test_scores_do_not_depend_on_batching(scorer, drcd_rows):
     task = TASKS["drcd_bpb"]
+    assert isinstance(task, MultipleChoiceTask)
     one_batch = score_task(scorer, task)
 
     # One request per batch, against all three left-padded to the longest in one.

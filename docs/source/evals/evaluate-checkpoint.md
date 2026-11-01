@@ -45,4 +45,4 @@ Your training process must hold a causal language model and tokenizer compatible
 
 Scoring disables gradients and restores the modules' previous training modes. It uses the model's existing device and dtype. Keep evaluation settings consistent between checkpoints. See [Scoring](scoring) and the [Python API](python-api) for batching and model-state behavior.
 
-`score_task` returns metrics in memory. With `out`, it writes predictions only, not `results.json`; give each checkpoint its own output path. See [Results](results).
+`score_task` returns metrics in memory: a mean over docs for a multiple-choice metric, and a ratio of sums for a perplexity task's `bits_per_byte` (see [Metrics](metrics#perplexity)). With `out`, it writes predictions only, not `results.json`; give each checkpoint its own output path. See [Results](results).

@@ -10,11 +10,17 @@ from typing import Literal, get_args
 
 import torch
 
-from flock.eval.metrics import multiple_choice
+from flock.eval.metrics import bits_per_byte, multiple_choice
 from flock.eval.model import DEFAULT_BATCH_TOKENS, ScoringModel
 from flock.eval.provenance import Provenance
-from flock.eval.results import Results, SuiteResult, TaskResult, write_predictions
-from flock.eval.tasks import SUITES, TASKS, MultipleChoiceTask
+from flock.eval.results import (
+    Results,
+    SuiteResult,
+    TaskResult,
+    write_perplexity_predictions,
+    write_predictions,
+)
+from flock.eval.tasks import SUITES, TASKS, PerplexityTask, Task, Truncation
 from flock.eval.tasks.suite import by_name
 
 # Why `evaluate` and `score_task` refuse an output that is already there, and what to do.
@@ -92,7 +98,7 @@ def evaluate(config: EvalConfig) -> Results:
 
     Raises:
         `KeyError`: if a task or suite name isn't in its registry.
-        `ValueError`: if two different tasks, or two different suites, to run share a name, a task and a suite share a name, or a task is named `suites`.
+        `ValueError`: if two different tasks, or two different suites, to run share a name, a task and a suite share a name, a task is named `suites`, or a perplexity task's window is above the model's `max_length`.
         `FileExistsError`: if `config.out` exists and isn't an empty directory.
     """
     _check_names("tasks", config.tasks, TASKS)
@@ -125,6 +131,14 @@ def evaluate(config: EvalConfig) -> Results:
         dtype=getattr(torch, config.dtype),
         batch_tokens=config.batch_tokens,
     )
+    # Checked before scoring, so a model too short for a perplexity task fails in seconds rather
+    # than after every task before it.
+    for task in tasks:
+        if isinstance(task, PerplexityTask) and task.window > model.max_length:
+            raise ValueError(
+                f"{task.name}: window {task.window} is above {model.name}'s max_length "
+                f"{model.max_length}"
+            )
     # Collected before scoring, so the commit's dirty flag describes the tree as scoring starts
     # and `created_at` is when scoring started, as lm-evaluation-harness records `start_date`.
     provenance = Provenance.collect(
@@ -191,7 +205,7 @@ def _check_out(out: Path | None) -> None:
 
 
 def score_task(
-    model: ScoringModel, task: MultipleChoiceTask, limit: int | None = None, out: Path | None = None
+    model: ScoringModel, task: Task, limit: int | None = None, out: Path | None = None
 ) -> TaskResult:
     """
     Scores one task with an already loaded model, as training loops do between steps.
@@ -199,7 +213,7 @@ def score_task(
     Args:
         model (`ScoringModel`):
             The model to score.
-        task (`MultipleChoiceTask`):
+        task (`MultipleChoiceTask` or `PerplexityTask`):
             The task.
         limit (`int`, *optional*):
             Score only the first `limit` docs.
@@ -212,6 +226,8 @@ def score_task(
     predictions = out / "predictions" / f"{task.name}.jsonl" if out is not None else None
     if predictions is not None and predictions.exists():
         raise FileExistsError(f"{predictions} exists: {_ONE_RUN}")
+    if isinstance(task, PerplexityTask):
+        return _score_perplexity(model, task, limit, predictions)
 
     docs, shots = task.load(limit)
     prepared = task.requests(docs, shots)
@@ -242,4 +258,41 @@ def score_task(
         limit=limit,
         seconds=seconds,
         truncation=truncation,
+    )
+
+
+def _score_perplexity(
+    model: ScoringModel, task: PerplexityTask, limit: int | None, predictions: Path | None
+) -> TaskResult:
+    """[`score_task`] for a perplexity task, writing its rows to `predictions` if given."""
+    docs = task.load(limit)
+    texts = [doc.text for doc in docs]
+    # Each whole text's UTF-8 bytes, as OLMES's `num_bytes` (`loglikelihood_rolling_verbose` in
+    # `oe_eval/models/eleuther_huggingface.py`).
+    num_bytes = [len(text.encode()) for text in texts]
+
+    start = time.perf_counter()
+    scores = model.rolling_loglikelihood(texts, task.window)
+    # Summed over all of the task's docs before dividing, as Paloma defines bits per byte
+    # (App. B) and OLMES computes it per domain (`PerplexityMetric`), so a doc counts by its
+    # bytes. The byte count stays on the host, so `.item()` is the task's one wait for the GPU,
+    # and `seconds` times the scoring.
+    total_bytes = torch.tensor(sum(num_bytes))
+    metric = bits_per_byte(scores.logprob.sum(), total_bytes).item()
+    seconds = time.perf_counter() - start
+
+    if predictions is not None:
+        write_perplexity_predictions(predictions, docs, scores, num_bytes, task.window)
+
+    return TaskResult(
+        task=task.name,
+        task_hash=task.task_hash(docs),
+        dataset=task.dataset,
+        primary_metric=task.primary_metric,
+        metrics={"bits_per_byte": metric},
+        num_docs=len(docs),
+        limit=limit,
+        seconds=seconds,
+        # Every token is predicted once, in windows that fit the model, so nothing is cut.
+        truncation=Truncation(requests=0, docs=0, max_tokens_cut=0),
     )

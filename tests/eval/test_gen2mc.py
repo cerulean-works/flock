@@ -2,7 +2,7 @@ import hashlib
 
 import pytest
 
-from flock.eval.tasks import TASKS, Choice, MCDoc, cloze
+from flock.eval.tasks import TASKS, Choice, MCDoc, MultipleChoiceTask, cloze
 from flock.eval.tasks.gen2mc import coqa_doc, drop_doc, jeopardy_doc, naturalqs_doc, squad_doc
 
 # Each expected doc below is what OLMES's `_process_doc` and `doc_to_text` give for the same row
@@ -70,9 +70,12 @@ HEADS = {
 
 
 def test_gen2mc_shots_render_olmes_heads():
-    assert TASKS["coqa"].fewshot is None
+    coqa = TASKS["coqa"]
+    assert isinstance(coqa, MultipleChoiceTask)
+    assert coqa.fewshot is None
     for name, digest in HEADS.items():
         task = TASKS[name]
+        assert isinstance(task, MultipleChoiceTask)
         assert task.fewshot is not None
         shots = [task.to_doc(row) for row in task.fewshot.rows]
         doc = shots[0]

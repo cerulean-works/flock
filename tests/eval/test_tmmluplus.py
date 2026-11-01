@@ -6,7 +6,16 @@ import torch
 
 from flock.eval.requests import Scores
 from flock.eval.run import score_task
-from flock.eval.tasks import SUITES, TASKS, Choice, Dataset, Fewshot, MCDoc, cloze
+from flock.eval.tasks import (
+    SUITES,
+    TASKS,
+    Choice,
+    Dataset,
+    Fewshot,
+    MCDoc,
+    MultipleChoiceTask,
+    cloze,
+)
 from flock.eval.tasks.tmmluplus import CATEGORIES, TAIWAN_TASKS, TMMLUPLUS, tmmluplus_doc
 
 ROWS = {
@@ -85,6 +94,7 @@ def test_doc_strips_text_and_scores_answers_with_no_leading_space():
 
 def test_request_is_header_then_shots_then_question(tmmluplus_rows):
     task = TASKS["tmmluplus_organic_chemistry"]
+    assert isinstance(task, MultipleChoiceTask)
 
     built = task.requests(*task.load())
     assert built.requests[1].context == (
@@ -101,16 +111,21 @@ def test_request_is_header_then_shots_then_question(tmmluplus_rows):
 
 
 def test_short_dev_split_shows_every_dev_row(tmmluplus_rows):
+    chemistry = TASKS["tmmluplus_organic_chemistry"]
+    accounting = TASKS["tmmluplus_accounting"]
+    assert isinstance(chemistry, MultipleChoiceTask)
+    assert isinstance(accounting, MultipleChoiceTask)
     # `organic_chemistry` has 3 dev rows in v1.1, and most subjects have 5.
-    assert TASKS["tmmluplus_organic_chemistry"].fewshot == Fewshot("train", ("0", "1", "2"))
-    assert TASKS["tmmluplus_accounting"].fewshot == Fewshot("train", ("0", "1", "2", "3", "4"))
+    assert chemistry.fewshot == Fewshot("train", ("0", "1", "2"))
+    assert accounting.fewshot == Fewshot("train", ("0", "1", "2", "3", "4"))
 
-    _, shots = TASKS["tmmluplus_organic_chemistry"].load()
+    _, shots = chemistry.load()
     assert [shot.id for shot in shots] == ["0", "1", "2"]
 
 
 def test_chinese_choices_count_characters_and_utf8_bytes(tmmluplus_rows):
     task = TASKS["tmmluplus_organic_chemistry"]
+    assert isinstance(task, MultipleChoiceTask)
     built = task.requests(*task.load())
     n = len(built.requests)
     scores = Scores(
@@ -131,6 +146,7 @@ def test_chinese_choices_count_characters_and_utf8_bytes(tmmluplus_rows):
 
 def test_metrics_on_chinese_text_follow_their_definitions(scorer, tmmluplus_rows):
     task = TASKS["tmmluplus_organic_chemistry"]
+    assert isinstance(task, MultipleChoiceTask)
     built = task.requests(*task.load())
     logprob = scorer.loglikelihood(built.requests).logprob.tolist()
 
@@ -155,6 +171,7 @@ def test_metrics_on_chinese_text_follow_their_definitions(scorer, tmmluplus_rows
 
 def test_chinese_scores_do_not_depend_on_batching(scorer, tmmluplus_rows):
     task = TASKS["tmmluplus_organic_chemistry"]
+    assert isinstance(task, MultipleChoiceTask)
     one_batch = score_task(scorer, task)
 
     scorer.batch_tokens = 1
@@ -203,6 +220,7 @@ def test_a_test_row_repeating_a_dev_row_skips_that_shot(tmmluplus_rows):
     # As `official_document_management`'s test row 129 repeats its dev row 0 in v1.1, with the
     # choices in another order.
     task = TASKS["tmmluplus_organic_chemistry"]
+    assert isinstance(task, MultipleChoiceTask)
     _, shots = task.load()
     row = {**ROWS["train"][2], "A": "蘋果", "D": "石頭", "answer": "A", "index": 129}
     repeat = tmmluplus_doc(row)

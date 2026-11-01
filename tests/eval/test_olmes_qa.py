@@ -1,4 +1,4 @@
-from flock.eval.tasks import SUITES, TASKS, Choice, MCDoc, cloze
+from flock.eval.tasks import SUITES, TASKS, Choice, MCDoc, MultipleChoiceTask, cloze
 from flock.eval.tasks.hellaswag import hellaswag_doc
 from flock.eval.tasks.mmlu import MMLU_TASKS, SUBJECTS, mmlu_doc
 from flock.eval.tasks.piqa import piqa_doc
@@ -97,6 +97,7 @@ def test_piqa_uses_the_goal_prefix():
 
 def test_mmlu_subject_header_comes_before_the_shots():
     task = TASKS["mmlu_high_school_us_history"]
+    assert isinstance(task, MultipleChoiceTask)
     shot = mmlu_doc({"index": 0, "question": "1 + 1?", "choices": ["1", "2"], "answer": 1})
     doc = mmlu_doc({"index": 7, "question": "2 + 2?", "choices": ["4", "5"], "answer": 0})
 

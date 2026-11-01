@@ -2,6 +2,7 @@
 
 import dataclasses
 import json
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -9,7 +10,9 @@ from typing import Any
 
 from flock.eval.metrics import ChoiceScores
 from flock.eval.provenance import Provenance
+from flock.eval.requests import Scores
 from flock.eval.tasks.base import Dataset, MCDoc, Truncation
+from flock.eval.tasks.perplexity import TextDoc
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,7 +30,7 @@ class TaskResult:
         primary_metric (`str`):
             The metric to read first.
         metrics (`dict[str, float]`):
-            Each metric's mean over docs.
+            Each metric over the task's docs: a mean over docs for multiple choice, and a ratio of sums over all docs for `bits_per_byte`.
         num_docs (`int`):
             How many docs were scored.
         limit (`int`, *optional*):
@@ -132,7 +135,23 @@ def write_predictions(path: Path, docs: Sequence[MCDoc], scores: ChoiceScores) -
         `FileExistsError`: if `path` exists, so two runs never write one file.
     """
     # Built before the file is created, so a failed check leaves no empty file to block a rerun.
-    rows = prediction_rows(docs, scores)
+    _write_rows(path, prediction_rows(docs, scores))
+
+
+def write_perplexity_predictions(
+    path: Path, docs: Sequence[TextDoc], scores: Scores, num_bytes: Sequence[int], window: int
+) -> None:
+    """
+    Writes `perplexity_prediction_rows` to `path` as JSON lines, creating its directory if needed.
+
+    Raises:
+        `FileExistsError`: if `path` exists, so two runs never write one file.
+    """
+    _write_rows(path, perplexity_prediction_rows(docs, scores, num_bytes, window))
+
+
+def _write_rows(path: Path, rows: Sequence[dict[str, Any]]) -> None:
+    """Writes `rows` to `path` as JSON lines, refusing a file that exists."""
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with path.open("x") as f:
@@ -170,5 +189,42 @@ def prediction_rows(docs: Sequence[MCDoc], scores: ChoiceScores) -> list[dict[st
         for name, per_doc in values.items():
             row[name] = per_doc[i][: len(doc.choices)]
         rows.append(row)
+
+    return rows
+
+
+def perplexity_prediction_rows(
+    docs: Sequence[TextDoc], scores: Scores, num_bytes: Sequence[int], window: int
+) -> list[dict[str, Any]]:
+    """
+    Returns one row per doc with its id, summed log-probability, token and UTF-8 byte counts, number of windows and whether every token is the greedy one, so any domain's `bits_per_byte` can be recomputed.
+
+    Raises:
+        `ValueError`: if `scores` or `num_bytes` doesn't hold one entry per doc.
+    """
+    # One host copy per field, not per doc. `strict`, so a count that doesn't match the docs
+    # raises rather than dropping rows.
+    per_doc = zip(
+        docs,
+        scores.logprob.tolist(),
+        scores.num_tokens.tolist(),
+        num_bytes,
+        scores.is_greedy.tolist(),
+        strict=True,
+    )
+
+    rows = []
+    for doc, logprob, num_tokens, doc_bytes, is_greedy in per_doc:
+        rows.append(
+            {
+                "id": doc.id,
+                "logprob": logprob,
+                "num_tokens": num_tokens,
+                "num_bytes": doc_bytes,
+                # The last window holds what is left.
+                "windows": math.ceil(num_tokens / window),
+                "is_greedy": is_greedy,
+            }
+        )
 
     return rows

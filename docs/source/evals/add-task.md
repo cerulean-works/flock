@@ -44,6 +44,10 @@ uv run flock eval run \
 ```
 
 
+## A perplexity task
+
+A [`~eval.tasks.PerplexityTask`] needs no row function: it reads each row's `id` and `text`, and keeps the rows whose `subdomain` is its `domain`. A Paloma source is one line in `DOMAINS` in `flock/eval/tasks/paloma.py`, with the domains `flock/eval/scripts/paloma_census.py` prints for it. `source_suite` makes one task per domain and the source's suite, and `PALOMA` registers them.
+
 ## Check that it works
 
 Run your row-mapping test and the snapshot check before the GPU smoke run. Review the generated snapshot diff and confirm that only the intended task definitions changed. A smoke run should write one predictions file and a task entry in `results.json`.

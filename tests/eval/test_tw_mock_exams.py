@@ -6,7 +6,7 @@ import torch
 
 from flock.eval.requests import Scores
 from flock.eval.run import score_task
-from flock.eval.tasks import SUITES, TASKS, Choice, Dataset, Fewshot
+from flock.eval.tasks import SUITES, TASKS, Choice, Dataset, Fewshot, MultipleChoiceTask
 from flock.eval.tasks.tw_mock_exams import SUBJECTS, TW_MOCK_EXAMS, chinese_doc, english_doc
 
 
@@ -108,6 +108,7 @@ def test_english_takes_olmes_format_with_a_spaced_answer():
         doc_subject="英文", passage="Rivers shape the land.",
     )  # fmt: skip
     task = TASKS["tw_mock_exams_english"]
+    assert isinstance(task, MultipleChoiceTask)
 
     assert english_doc(english).choices == (
         Choice("Rivers shape the land.\nQuestion: What is the main idea?\nAnswer:", " Trees"),
@@ -145,6 +146,7 @@ def test_lengths_count_characters_and_utf8_bytes(history):
     assert layout.num_bytes[0, 0].item() == 8
 
     english = TASKS["tw_mock_exams_english"]
+    assert isinstance(english, MultipleChoiceTask)
     doc = english_doc(row("e1", "Pick one.", ["tea", "茶"], "A", doc_subject="英文"))
     layout = english.requests([doc], []).choice_scores(uniform_scores(4))
 
