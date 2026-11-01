@@ -274,6 +274,12 @@ def test_a_suite_with_another_hash_is_refused_unless_a_file_predates_suite_hashe
     with pytest.raises(ValueError, match="not a results file: KeyError\\('suite_hash'\\)"):
         compare(tmp_path / "old.json", new)
 
+    # Every results file has a version, so one without it is broken too.
+    del old["schema_version"]
+    (tmp_path / "old.json").write_text(json.dumps(old))
+    with pytest.raises(ValueError, match="not a results file: KeyError\\('schema_version'\\)"):
+        compare(tmp_path / "old.json", new)
+
 
 def test_a_repeated_nan_is_no_breach_but_a_new_one_is(write):
     nan = dataclasses.replace(PIQA, metrics={"acc_raw": float("nan")})

@@ -119,15 +119,16 @@ def compare(banked: Path, new: Path) -> Comparison:
                         f"different instrument: {name} has {key} {bank_tasks[name][key]!r} "
                         f"in {banked}, {new_tasks[name][key]!r} in {new}"
                     )
+        # The suite hash covers its members' hashes and whether it is scored. A file older than
+        # schema 5 has none, and its suites are still compared on members and score.
+        hashed = bank["schema_version"] >= 5 and rerun["schema_version"] >= 5
         for name in suites:
             if bank_suites[name]["metric"] != new_suites[name]["metric"]:
                 raise ValueError(
                     f"different instrument: {name} has metric {bank_suites[name]['metric']!r} "
                     f"in {banked}, {new_suites[name]['metric']!r} in {new}"
                 )
-            # The suite hash covers its members' hashes and whether it is scored. A file older
-            # than schema 5 has none, and its suites are still compared on members and score.
-            if bank.get("schema_version", 0) >= 5 and rerun.get("schema_version", 0) >= 5:
+            if hashed:
                 bank_hash = bank_suites[name]["suite_hash"]
                 new_hash = new_suites[name]["suite_hash"]
                 if bank_hash != new_hash:
