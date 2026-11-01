@@ -98,8 +98,8 @@ def compare(banked: Path, new: Path) -> Comparison:
             if bank["provenance"].get(key) != rerun["provenance"].get(key):
                 provenance[key] = (bank["provenance"].get(key), rerun["provenance"].get(key))
         # A new layout can add a metric or a count, which shows as breaches beside it.
-        if bank.get("schema_version") != rerun.get("schema_version"):
-            provenance["schema_version"] = (bank.get("schema_version"), rerun.get("schema_version"))
+        if bank["schema_version"] != rerun["schema_version"]:
+            provenance["schema_version"] = (bank["schema_version"], rerun["schema_version"])
 
         bank_tasks = {task["task"]: task for task in bank["tasks"]}
         new_tasks = {task["task"]: task for task in rerun["tasks"]}
@@ -123,18 +123,11 @@ def compare(banked: Path, new: Path) -> Comparison:
         # schema 5 has none, and its suites are still compared on members and score.
         hashed = bank["schema_version"] >= 5 and rerun["schema_version"] >= 5
         for name in suites:
-            if bank_suites[name]["metric"] != new_suites[name]["metric"]:
-                raise ValueError(
-                    f"different instrument: {name} has metric {bank_suites[name]['metric']!r} "
-                    f"in {banked}, {new_suites[name]['metric']!r} in {new}"
-                )
-            if hashed:
-                bank_hash = bank_suites[name]["suite_hash"]
-                new_hash = new_suites[name]["suite_hash"]
-                if bank_hash != new_hash:
+            for key in ("metric", "suite_hash") if hashed else ("metric",):
+                if bank_suites[name][key] != new_suites[name][key]:
                     raise ValueError(
-                        f"different instrument: {name} has suite_hash {bank_hash!r} in {banked}, "
-                        f"{new_hash!r} in {new}"
+                        f"different instrument: {name} has {key} {bank_suites[name][key]!r} "
+                        f"in {banked}, {new_suites[name][key]!r} in {new}"
                     )
 
         # Every compared value as (name, field, banked, new, tolerance). A value missing on one

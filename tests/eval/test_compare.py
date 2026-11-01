@@ -267,6 +267,8 @@ def test_a_suite_with_another_hash_is_refused_unless_a_file_predates_suite_hashe
     moved = dataclasses.replace(SUITE, suite_hash="hash-rc2", score=0.7)
     new = write("moved", dataclasses.replace(BANK, suites=[moved]))
     assert compare(tmp_path / "old.json", new).breaches == [Breach("toy:rc", "score", 0.675, 0.7)]
+    # The same with the old file on the other side.
+    assert compare(new, tmp_path / "old.json").breaches == [Breach("toy:rc", "score", 0.7, 0.675)]
 
     # From schema 5 on a suite without one is a broken file, not an old one.
     old["schema_version"] = 6
