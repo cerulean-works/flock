@@ -9,8 +9,9 @@ the learning rate. Padding targets are ignored when computing loss.
 
 The [experiment recipe](https://github.com/cerulean-works/flock/blob/feat/scaffold-training-loop/flock/training/experiments/scaffold/olmo2_dolma3.py) reads
 `s3://flock-datasets/finepdfs` at version `1`, using its `text` column. The current
-`get_dataset` helper requests storage credentials for `cerulean-labs`, so your
-account needs access to that organization. Pinning a version keeps the training
+`get_dataset` helper calls `s3.get_process` for read-only access to `cerulean-labs`,
+which your account must have access to. This sets up Lance's native credential
+process and its environment automatically. Pinning a version keeps the training
 data fixed between runs.
 
 The recipe initializes a fresh OLMo 2 1B model in bfloat16; it does not load
@@ -33,6 +34,12 @@ dtype for those devices. The recipe currently logs offline.
 
 3. Check that the logs report a loaded dataloader and training metrics. The recipe
    keeps run data locally in `wandb/`; see [Check the run](#check-the-run) below.
+
+For S3 URIs, `get_dataset` configures the credential process before opening the
+dataset, so no manual AWS profile setup or shell exports are needed. Spawned
+workers inherit that environment and use Lance's native renewal. Local paths
+skip this setup. The [native-renewal reference](../cli/python-s3#native-renewal-from-python)
+lists the environment changes and explains how keys are fetched and renewed.
 
 ## Configure a run
 

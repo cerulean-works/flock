@@ -5,6 +5,7 @@ from .client import (
     credentials,
     delete_bucket,
     endpoint,
+    get_process,
     list_buckets,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "credentials",
     "delete_bucket",
     "endpoint",
+    "get_process",
     "list_buckets",
 ]

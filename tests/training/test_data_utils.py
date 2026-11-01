@@ -1,5 +1,3 @@
-from types import SimpleNamespace
-
 import pytest
 import torch
 
@@ -48,40 +46,52 @@ def test_collator_does_not_mutate_rows(tokenizer):
 
 
 @pytest.mark.parametrize("version", [7, "release"])
-def test_dataset_factory_forwards_version_and_storage_options(monkeypatch, version):
+@pytest.mark.parametrize("uri", ["s3://offline-bucket/text", "/offline/text.lance"])
+def test_dataset_factory_configures_native_credentials_for_s3(monkeypatch, version, uri):
     calls = []
-    options = {"aws_endpoint": "https://storage.invalid", "aws_region": "test-region"}
-
-    def credentials(**kwargs):
-        calls.append(("credentials", kwargs))
-        return SimpleNamespace(storage_options=lambda: options)
-
     sentinel = object()
+
+    def get_process(**kwargs):
+        calls.append(("get_process", kwargs))
 
     def dataset(**kwargs):
         calls.append(("dataset", kwargs))
         return sentinel
 
-    monkeypatch.setattr(data_utils.s3, "credentials", credentials)
     monkeypatch.setattr(data_utils, "SafeLanceDataset", dataset)
-    config = DatasetConfig(uri="s3://offline-bucket/text", version=version)
+    monkeypatch.setattr(data_utils.s3, "get_process", get_process)
+    config = DatasetConfig(uri=uri, version=version)
     assert data_utils.get_dataset(config) is sentinel
+    setup = (
+        [("get_process", {"org": "cerulean-labs", "read_only": True})]
+        if uri.startswith("s3://")
+        else []
+    )
     assert calls == [
-        ("credentials", {"org": "cerulean-labs"}),
+        *setup,
         (
             "dataset",
             {
                 "uri": config.uri,
-                "dataset_options": {"version": version, "storage_options": options},
+                "dataset_options": {"version": version},
             },
         ),
     ]
 
 
-def test_dataset_factory_propagates_credentials_failure(monkeypatch):
-    def credentials(**kwargs):
-        raise RuntimeError("offline credential failure")
+def test_dataset_factory_propagates_open_failure(monkeypatch):
+    def dataset(**kwargs):
+        raise RuntimeError("dataset open failed")
 
-    monkeypatch.setattr(data_utils.s3, "credentials", credentials)
-    with pytest.raises(RuntimeError, match="offline credential failure"):
+    monkeypatch.setattr(data_utils, "SafeLanceDataset", dataset)
+    with pytest.raises(RuntimeError, match="dataset open failed"):
+        data_utils.get_dataset(DatasetConfig(uri="/offline/text.lance", version=1))
+
+
+def test_dataset_factory_propagates_process_setup_failure(monkeypatch):
+    def get_process(**kwargs):
+        raise RuntimeError("credential process setup failed")
+
+    monkeypatch.setattr(data_utils.s3, "get_process", get_process)
+    with pytest.raises(RuntimeError, match="credential process setup failed"):
         data_utils.get_dataset(DatasetConfig(uri="s3://offline-bucket/text", version=1))
