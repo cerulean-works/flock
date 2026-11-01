@@ -19,6 +19,7 @@ import {
 	type RunPage,
 	type SectionDef
 } from '#lib/types.ts';
+import { scheme } from '#lib/theme.svelte.ts';
 import { toggle } from '#lib/utils.ts';
 import type { People } from './filters.ts';
 import {
@@ -73,13 +74,38 @@ const PALETTE = [
 	'#a83232'
 ];
 
-const runColor = (ordinal: number) => PALETTE[ordinal % PALETTE.length];
+/**
+ * The same order on a dark page: the hues that sink into near-black (green, violet, the deep
+ * half) are lifted, and the second eight go one step lighter instead of deeper.
+ */
+const PALETTE_DARK = [
+	'#3d8be6',
+	'#eb6834',
+	'#1baf7a',
+	'#eda100',
+	'#e87ba4',
+	'#2fa82f',
+	'#8b7cf0',
+	'#ec5f5e',
+	'#7ab4f5',
+	'#f29b6e',
+	'#5fd3a8',
+	'#f5c451',
+	'#f2a6c3',
+	'#6cc46c',
+	'#b3a9f5',
+	'#f28a88'
+];
+
+const palette = () => (scheme.dark ? PALETTE_DARK : PALETTE);
+
+const runColor = (ordinal: number) => palette()[ordinal % PALETTE.length];
 
 /**
  * Color of the `k`th metric of a panel, when its lines are told apart by metric (one run, as on
  * a run's page): the run palette again, so a panel's first line keeps the first color.
  */
-export const metricColor = (k: number) => PALETTE[k % PALETTE.length];
+export const metricColor = (k: number) => palette()[k % PALETTE.length];
 
 /** Where a plot is drawn: a grid card, the full-screen panel, or the panel editor's preview. */
 export type Surface = 'grid' | 'fullscreen' | 'editor';

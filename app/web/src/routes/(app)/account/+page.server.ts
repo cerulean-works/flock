@@ -33,7 +33,7 @@ async function s3Keys() {
 	};
 }
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ locals }) => {
 	const [me, keys, cli, s3] = await Promise.all([
 		flock('/api/v1/me'),
 		flock('/api/v1/me/wandb-keys'),
@@ -45,6 +45,7 @@ export const load: PageServerLoad = async () => {
 		keys: ((await keys.json()) as { keys: WandbKey[] }).keys,
 		cliSessions: ((await cli.json()) as { sessions: CliSession[] }).sessions,
 		s3,
+		theme: locals.theme,
 		now: Date.now() / 1000
 	};
 };
