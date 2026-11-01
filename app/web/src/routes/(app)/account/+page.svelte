@@ -1,4 +1,7 @@
 <script lang="ts">
+	import MonitorIcon from '@lucide/svelte/icons/monitor';
+	import MoonIcon from '@lucide/svelte/icons/moon';
+	import SunIcon from '@lucide/svelte/icons/sun';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { enhance } from '$app/forms';
 	import KeysSection from '#lib/components/KeysSection.svelte';
@@ -6,6 +9,8 @@
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
+	import type { Theme } from '#lib/theme.ts';
+	import { setTheme } from '#lib/theme.svelte.ts';
 	import { dateTime, relativeTime } from '#lib/utils.ts';
 	import { entityHref } from '#lib/workspace/url.ts';
 	import Page from '#lib/components/Page.svelte';
@@ -21,6 +26,14 @@
 		},
 		toastErrors: true
 	});
+
+	const appearances = [
+		{ value: 'light', label: 'Light', icon: SunIcon },
+		{ value: 'dark', label: 'Dark', icon: MoonIcon },
+		{ value: 'system', label: 'System', icon: MonitorIcon }
+	] as const satisfies { value: Theme; label: string; icon: unknown }[];
+
+	let theme = $derived(data.theme);
 </script>
 
 <svelte:head>
@@ -131,5 +144,34 @@
 				{/each}
 			</tbody>
 		</table>
+	</section>
+
+	<section class="mt-10">
+		<h2 class="text-2xl tracking-[-0.01em]">Appearance</h2>
+		<p class="mt-2 max-w-[62ch] text-muted-foreground">
+			System follows your computer’s light or dark setting. Saved in this browser.
+		</p>
+		<div
+			role="radiogroup"
+			aria-label="Appearance"
+			class="mt-4 inline-flex gap-1 rounded-lg border p-1"
+		>
+			{#each appearances as { value, label, icon: Icon } (value)}
+				<label
+					class="flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-muted-foreground transition-colors select-none hover:text-foreground has-checked:bg-muted has-checked:text-foreground has-focus-visible:ring-3 has-focus-visible:ring-ring/50 [&_svg]:size-4"
+				>
+					<input
+						type="radio"
+						name="theme"
+						class="sr-only"
+						{value}
+						checked={theme === value}
+						onchange={() => ((theme = value), setTheme(value))}
+					/>
+					<Icon />
+					{label}
+				</label>
+			{/each}
+		</div>
 	</section>
 </Page>

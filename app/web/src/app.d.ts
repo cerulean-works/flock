@@ -1,6 +1,7 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 import type { SessionUser } from '#lib/server/session.ts';
+import type { Theme } from '#lib/theme.ts';
 
 declare global {
 	namespace App {
@@ -10,6 +11,8 @@ declare global {
 			token: string | null;
 			/** The signed-in user; null when nobody is signed in. */
 			user: SessionUser | null;
+			/** The appearance from the theme cookie. */
+			theme: Theme;
 		}
 		// interface PageData {}
 		// interface PageState {}

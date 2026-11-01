@@ -2,7 +2,7 @@
 
 > Open skies, a clean white page, and one grotesque doing all the talking
 
-**Theme:** light (a dark mapping exists for completeness)
+**Theme:** light, dark or the system's, chosen on the account page and kept in the `flock-theme` cookie (`src/lib/theme.ts`)
 
 **Use:** the Flock dashboard. It mirrors the current [cerulean.works](https://cerulean.works) website so the product and the lab read as one thing.
 
@@ -16,24 +16,26 @@ Every value lives once, in `src/routes/layout.css`, mapped onto shadcn's semanti
 
 | Name           | Light     | Dark      | Token                              | Role                                                                       |
 | -------------- | --------- | --------- | ---------------------------------- | -------------------------------------------------------------------------- |
-| Canvas         | `#ffffff` | `#10254b` | `background`, `popover`, `sidebar` | Page, sidebar, menus and dialogs. Pure white; never tinted                 |
-| Panel          | `#f6f7f8` | `#142c56` | `card`                             | Chart panels, the log panel, inline notes. Ink at 4% over white            |
-| Panel hover    | `#eff0f3` | `#1a3462` | `muted`, `secondary`, `accent`     | Hover and current-item fills, quiet controls, meter tracks. Ink at 7%      |
-| Ink            | `#172a50` | `#f3f5f9` | `foreground`                       | Titles, body text, essential labels                                        |
-| Slate          | `#4b5d79` | `#c1cbe0` | `muted-foreground`                 | Captions, dates, supporting text; still comfortably legible                |
-| Faint          | `#7b88a0` | `#8a99b8` | `faint`                            | Tertiary text: counts, empty cells, placeholders                           |
-| Quiet rule     | `#cdd3db` | `#415577` | `border`, `input`                  | Control outlines and necessary structural rules                            |
-| Divider        | `#e6e9ee` | `#24406f` | `divider`                          | Row and section dividers, lighter than a rule                              |
-| Reading blue   | `#145a9a` | `#a8d4ff` | `primary`, `link`                  | Links, the one filled action per form, switches, checks, budget meter      |
-| Focus blue     | `#1768af` | `#a8d4ff` | `ring`                             | Visible focus                                                              |
-| Selection wash | `#cce7fb` | `#235fa2` | `selection`                        | Selected text, the selected log line                                       |
-| Deep blue      | `#102c60` | `#0c2048` | `deep`                             | Initials tiles and avatars, the sky's fallback                             |
-| Running        | `#1768af` |           | `state-running`                    | Live runs                                                                  |
-| Finished       | `#23804f` |           | `state-finished`                   | Finished runs                                                              |
-| Preempting     | `#b86e00` |           | `state-preempting`                 | Preempted runs; the budget meter past 80%. A warning amber, not decoration |
-| Failed         | `#c0392f` |           | `state-failed`, `destructive`      | Failed and crashed runs, over budget, destructive actions                  |
+| Canvas         | `#ffffff` | `#0f1012` | `background`, `popover`, `sidebar` | Page, sidebar, menus and dialogs. Pure white; never tinted                 |
+| Panel          | `#f6f7f8` | `#17181b` | `card`                             | Chart panels, the log panel, inline notes. Ink at 4% over white            |
+| Panel hover    | `#eff0f3` | `#222428` | `muted`, `secondary`, `accent`     | Hover and current-item fills, quiet controls, meter tracks. Ink at 7%      |
+| Ink            | `#172a50` | `#e8eaed` | `foreground`                       | Titles, body text, essential labels                                        |
+| Slate          | `#4b5d79` | `#a0a6b0` | `muted-foreground`                 | Captions, dates, supporting text; still comfortably legible                |
+| Faint          | `#7b88a0` | `#6e747e` | `faint`                            | Tertiary text: counts, empty cells, placeholders                           |
+| Quiet rule     | `#cdd3db` | `#33363c` | `border`, `input`                  | Control outlines and necessary structural rules                            |
+| Divider        | `#e6e9ee` | `#24262b` | `divider`                          | Row and section dividers, lighter than a rule                              |
+| Reading blue   | `#145a9a` | `#7ab4f5` | `primary`, `link`                  | Links, the one filled action per form, switches, checks, budget meter      |
+| Focus blue     | `#1768af` | `#7ab4f5` | `ring`                             | Visible focus                                                              |
+| Selection wash | `#cce7fb` | `#1e3a5f` | `selection`                        | Selected text, the selected log line                                       |
+| Deep blue      | `#102c60` | `#24406f` | `deep`                             | Initials tiles and avatars, the sky's fallback                             |
+| Running        | `#1768af` | `#5ea2ec` | `state-running`                    | Live runs                                                                  |
+| Finished       | `#23804f` | `#45b87f` | `state-finished`                   | Finished runs                                                              |
+| Preempting     | `#b86e00` | `#e3a33c` | `state-preempting`                 | Preempted runs; the budget meter past 80%. A warning amber, not decoration |
+| Failed         | `#c0392f` | `#f07167` | `state-failed`, `destructive`      | Failed and crashed runs, over budget, destructive actions                  |
 
-Text on a filled blue or deep surface is plain white. Chart series keep their own categorical palette (`workspace.svelte.ts`); the brand blue is not forced into every series. Terminal output uses the `ansi-*` tokens.
+Text on a filled blue or deep surface is plain white (near-black on dark mode's lighter reading blue). Chart series keep their own categorical palette (`workspace.svelte.ts`), with a lifted variant for dark pages; the brand blue is not forced into every series. Terminal output uses the `ansi-*` tokens.
+
+Dark is a neutral near-black in the manner of Linear, not a navy: graphite surfaces with no blue cast, each layer a step lighter (canvas, panel, hover, then menus and dialogs at `#1b1c20`), and the reading blue lightened so links and focus stay the only saturated thing on the page.
 
 ## Tokens — Typography
 
@@ -79,7 +81,7 @@ Spacing follows Tailwind's 4px scale: tight within a control, generous between g
 
 The page is one white plane. Grouping comes from the panel tint, dividers and space, not from stacked cards. A panel is the website's card: a flat `#f6f7f8` rectangle with no outline. Nothing reading-related floats.
 
-Shadows exist only where something genuinely sits above the page and must be told apart from it: menus, popovers, the floating pager, the plot tooltip, a sheet, and a chart panel while it is being dragged. They are small and neutral. No paper shadows, frosted panels, bevels, gradients or textures anywhere in the interface.
+Shadows exist only where something genuinely sits above the page and must be told apart from it: menus, popovers, the floating pager, the plot tooltip, a sheet, a chart panel while it is being dragged, and the sign-in card over the sky. They are small and neutral. No paper shadows, frosted panels, bevels, gradients or textures anywhere in the interface.
 
 ## Components
 
@@ -89,7 +91,7 @@ The supplied gradient disc (`LogoMark`) followed by "Flock" in Host Grotesk 500.
 
 ### Sky (signed-out pages)
 
-`AuthShell` places the cyanotype sky beside a narrow white form column. It is the only atmospheric image in the app and never sits behind text or data.
+`AuthShell` fills the page with the sky and centers the form on a canvas card above it: a daytime sky in light mode, the night sky in dark. It is the only atmospheric image in the app; text always sits on the card, never on the sky itself.
 
 ### Page header
 
@@ -130,7 +132,7 @@ One filled reading-blue button for a form's primary action; everything else is o
 - Don't reintroduce cream, beige or other warm tints, paper grain, or textures.
 - Don't add serif display type, or brown and sepia accents.
 - Don't use left-border callouts, decorative rules or drop shadows on in-page content.
-- Don't put text over the sky or apply texture to data.
+- Don't set text directly on the sky, or apply texture to data.
 - Don't replace the logo with a CSS gradient or letter.
 
 ## Quick reference
