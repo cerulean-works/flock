@@ -48,7 +48,7 @@
 					{view.section} · {position} of {section.panels.length}
 				</Dialog.Description>
 				<Dialog.Title
-					class="mt-0.5 truncate font-serif text-[34px] leading-[1.15] font-normal tracking-[-0.02em]"
+					class="mt-0.5 truncate text-[34px] leading-[1.15] font-normal tracking-[-0.025em]"
 				>
 					{view.title}
 				</Dialog.Title>

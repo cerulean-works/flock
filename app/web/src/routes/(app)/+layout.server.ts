@@ -1,4 +1,5 @@
 import { redirect } from '@sveltejs/kit';
+import { authConfig } from '#lib/server/auth.ts';
 import { flock } from '#lib/server/flock.ts';
 import type { OrgEntry, OrgInfo, ProjectInfo, UserInfo } from '#lib/types.ts';
 import { NAME_W, readWidth, SIDEBAR_W } from '#lib/widths.ts';
@@ -19,12 +20,13 @@ async function listProjects(org: string) {
 export const load: LayoutServerLoad = async ({ params, cookies }) => {
 	const known = params.entity ?? params.org;
 	// `/orgs` for the organizations' pictures (`/me` names them only).
-	const [me, listed, listedOrgs] = await Promise.all([
+	const [me, listed, listedOrgs, config] = await Promise.all([
 		flock('/api/v1/me').then((res) => res.json() as Promise<UserInfo>),
 		known ? listProjects(known) : null,
 		flock('/api/v1/orgs')
 			.then((res) => res.json() as Promise<{ orgs: OrgInfo[] }>)
-			.then(({ orgs }) => new Map(orgs.map((o) => [o.name, o])))
+			.then(({ orgs }) => new Map(orgs.map((o) => [o.name, o]))),
+		authConfig()
 	]);
 	// A super admin sees every organization: with none, the server's setup is halfway (the
 	// account was made, its first workspace not yet), and resumes.
@@ -62,6 +64,8 @@ export const load: LayoutServerLoad = async ({ params, cookies }) => {
 			orgName: current?.display_name ?? org,
 			/** The caller's role in it; super admins are admins everywhere. */
 			admin: role === 'admin',
+			/** Whether the server has S3 storage, for the sidebar's Storage item. */
+			s3: !!config.s3,
 			orgs: orgs.toSorted(
 				(a, b) => a.display_name.localeCompare(b.display_name) || a.name.localeCompare(b.name)
 			),

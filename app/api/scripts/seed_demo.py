@@ -7,7 +7,7 @@ Flock loads it. Writing through Flock's API instead would stamp everything "now"
 What it creates (at ``--scale 1``):
 - 3 organizations with GPU prices (one GPU type left unpriced) and monthly budgets for this
   month and the last, set around what they spend, so one or two end up over budget;
-- ~40 users (a super admin with an API key, org admins, members, people who joined
+- ~40 users (a super admin with a wandb key, org admins, members, people who joined
   mid-month), most with an identicon avatar, plus a few pending invitations;
 - ~20 projects of five kinds: long multi-node pretraining runs (preempted and resumed), large
   hyperparameter sweeps run by parallel agents, fine-tunes, evaluation jobs and scratch runs;
@@ -56,6 +56,7 @@ from argon2 import PasswordHasher
 
 from app.api.src.core import gpus
 from app.api.src.core.names import ADJECTIVES, NOUNS
+from app.api.src.db.backfill import backfill
 from app.api.src.db.migrate import Migrations
 from app.api.src.settings import Settings
 
@@ -812,7 +813,8 @@ def utc(t: float) -> dt.datetime:
 
 
 TABLES = (
-    "gpu_usage", "gpu_rates", "org_budgets", "history_columns", "history", "events", "logs",
+    "gpu_usage", "gpu_rates", "org_budgets", "series_chunks", "run_metrics",
+    "run_values", "project_keys", "backfill", "history", "events", "logs",
     "run_files", "runs", "projects", "invites", "password_resets", "sessions", "api_keys",
     "memberships", "users", "orgs", "avatars",
 )  # fmt: skip
@@ -855,7 +857,8 @@ class Writer:
                 hashlib.sha256(person.avatar).digest() if person.avatar else None,
                 person.avatar_source,
             )
-        key = f"flock-{secrets.token_hex(24)}"
+        alphabet = string.ascii_letters + string.digits  # a wandb key, as Accounts makes them
+        key = "flock-wandb-" + "".join(secrets.choice(alphabet) for _ in range(40))
         await conn.execute(
             "INSERT INTO api_keys (user_pk, name, prefix, hash, created_at) "
             "VALUES ($1, 'simulate-month', $2, $3, now())",
@@ -942,22 +945,20 @@ class Writer:
     async def _write_batch(self, batch: list[RunPlan], logged: list[Logged | None]) -> None:
         conn = self.conn
         history, events, logs, columns, files, usage = [], [], [], [], [], []
+        inserted: list[int] = []
         async with conn.transaction():
             for plan, sent in zip(batch, logged, strict=True):
                 project = plan.project
                 if sent is not None:
-                    active = plan.state == "running"
-                    compacted = 0 if active else None
                     plan.pk = await conn.fetchval(
                         """
                         INSERT INTO runs (project_pk, name, display_name, state, created_at,
                             updated_at, heartbeat_at, config, summary, tags, notes, group_name,
                             job_type, host, program, commit_hash, sweep, exitcode,
                             history_line_count, events_line_count, log_line_count,
-                            history_compacted_line_count, system_compacted_line_count,
                             owner_pk, gpu_type, gpu_count, gpu_count_override)
                         VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10, $11, $12, $13,
-                            $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+                            $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
                         RETURNING pk
                         """,
                         project.pk,
@@ -980,13 +981,12 @@ class Writer:
                         len(sent.history),
                         len(sent.events),
                         len(sent.logs),
-                        len(sent.history) if compacted is None else compacted,
-                        len(sent.events) if compacted is None else compacted,
                         plan.owner.pk,
                         gpus.normalize(DEVICES[plan.gpu_type][0]) if plan.gpu_type else None,
                         plan.gpu_count,
                         plan.gpu_count_override,
                     )
+                    inserted.append(plan.pk)
                     history += [(plan.pk, i, line) for i, line in enumerate(sent.history)]
                     events += [(plan.pk, i, line) for i, line in enumerate(sent.events)]
                     logs += [(plan.pk, i, line) for i, line in enumerate(sent.logs)]
@@ -1019,7 +1019,13 @@ class Writer:
                 ("history", history, ("run_pk", "line", "data")),
                 ("events", events, ("run_pk", "line", "data")),
                 ("logs", logs, ("run_pk", "line", "data")),
-                ("history_columns", columns, ("run_pk", "stream", "key", "n", "data")),
+                (
+                    "series_chunks",
+                    [(pk, stream, key, 0, n, data) for pk, stream, key, n, data in columns],
+                    ("run_pk", "stream", "key", "first_line", "n", "data"),
+                ),
+                # The run table's values and columns are filled by the backfill (see simulate).
+                ("backfill", [(pk, []) for pk in inserted], ("run_pk", "streams")),
                 (
                     "gpu_usage",
                     usage,
@@ -1081,7 +1087,7 @@ async def simulate(
     log: Callable[[str], None] = print,
 ) -> dict[str, Any]:
     """Write a simulated month into the database at ``database_url``; returns statistics,
-    including the super admin's new ``api_key``."""
+    including the super admin's new wandb key (``api_key``)."""
     started = time.perf_counter()
     plan = Planner(random.Random(seed), now or time.time(), scale, keep_running).plan()
     log(
@@ -1106,6 +1112,7 @@ async def simulate(
             stats = await Writer(conn, plan, files_dir, log).write()
     finally:
         await conn.close()
+    await backfill(database_url, report=log)
     stats["seconds"] = time.perf_counter() - started
     stats["orgs"] = len(plan.orgs)
     stats["users"] = len(plan.people)
@@ -1153,7 +1160,7 @@ def main(argv: list[str] | None = None) -> None:
         f"in {stats['seconds']:.0f}s"
     )
     print(f"sign in as {ADMIN_EMAIL} / {PASSWORD} (every simulated user has that password)")
-    print(f"super admin API key: {stats['api_key']}")
+    print(f"super admin wandb key: {stats['api_key']}")
     print("start (or restart) Flock to load it")
 
 

@@ -3,7 +3,10 @@ name = "flock-tests"
 version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
+    "boto3>=1.43.118",
     "modal>=1.6.2",
+    "moto[server]>=5.2.4",
+    "pylance>=14.0.0",
     "wandb>=0.31.0",
 ]
 

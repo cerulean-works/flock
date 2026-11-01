@@ -316,3 +316,6 @@ http-client.private.env.json
 # Uploaded run files of a locally run Flock API (FLOCK_FILES_DIR)
 flock-files/
 wandb/
+
+# Local pytest timing and reliability reports
+test-results/

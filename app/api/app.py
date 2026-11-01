@@ -1,20 +1,38 @@
 import asyncio
 import contextlib
-import gc
 import logging
 import signal
 import threading
 from collections.abc import AsyncGenerator
 
+import asyncpg
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from app.api.src.api import auth, avatars, dashboard, home, orgs, projects, runs, wandb_protocol
+from app.api.src.api import (
+    auth,
+    avatars,
+    dashboard,
+    datasets,
+    home,
+    orgs,
+    projects,
+    runs,
+    s3,
+    wandb_protocol,
+)
 from app.api.src.api.deps import APIError, JSONResponse
-from app.api.src.core.errors import Conflict, Forbidden, NotFound
+from app.api.src.core.errors import (
+    BadGateway,
+    Conflict,
+    Forbidden,
+    Invalid,
+    NotFound,
+    TooManyAttempts,
+)
+from app.api.src.core.query import FilterError
 from app.api.src.core.store import Store
-from app.api.src.core.table import FilterError
 from app.api.src.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -26,7 +44,7 @@ def create_app(store: Store) -> FastAPI:
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await store.open()
-        if store.accounts.signup_open:
+        if await store.accounts.signup_open():
             # A fresh server: say where the first account comes from, since every request
             # (including the dashboard's) is refused until it exists.
             setup = store.settings.web_url
@@ -34,17 +52,13 @@ def create_app(store: Store) -> FastAPI:
                 "no accounts yet: %s to create the first one, which becomes the super admin",
                 f"open {setup.rstrip('/')}/setup" if setup else "open the dashboard",
             )
-        # Move everything loaded at startup out of the cyclic GC's view so full collections
-        # don't stall requests scanning millions of long-lived run-table objects.
-        gc.collect()
-        gc.freeze()
 
         async def watch_crashed_runs(interval: float) -> None:
             while True:
                 await asyncio.sleep(interval)
                 try:
-                    for run in await store.mark_crashed_runs():
-                        log.info("marked run %s as crashed", run.path)
+                    for path in await store.mark_crashed_runs():
+                        log.info("marked run %s as crashed", path)
                 except Exception:
                     log.exception("crash detection failed")
 
@@ -63,7 +77,7 @@ def create_app(store: Store) -> FastAPI:
                 if callable(previous):
 
                     def on_signal(signum, frame, previous=previous):
-                        loop.call_soon_threadsafe(store.live.close)
+                        loop.call_soon_threadsafe(store.drain)
                         previous(signum, frame)
 
                     chained[sig] = previous
@@ -108,6 +122,18 @@ def create_app(store: Store) -> FastAPI:
     async def not_found(request: Request, exc: NotFound) -> Response:
         return JSONResponse({"error": str(exc)}, status_code=404)
 
+    @app.exception_handler(TooManyAttempts)
+    async def too_many_attempts(request: Request, exc: TooManyAttempts) -> Response:
+        return JSONResponse({"error": str(exc)}, status_code=429)
+
+    @app.exception_handler(Invalid)
+    async def invalid(request: Request, exc: Invalid) -> Response:
+        return JSONResponse({"error": str(exc)}, status_code=422)
+
+    @app.exception_handler(BadGateway)
+    async def bad_gateway(request: Request, exc: BadGateway) -> Response:
+        return JSONResponse({"error": str(exc)}, status_code=502)
+
     @app.exception_handler(FilterError)
     async def filter_error(request: Request, exc: FilterError) -> Response:
         return JSONResponse({"error": str(exc)}, status_code=400)
@@ -122,16 +148,34 @@ def create_app(store: Store) -> FastAPI:
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> Response:
+        """Liveness: touches nothing (D83)."""
         return JSONResponse({"ok": True})
 
+    @app.get("/readyz", include_in_schema=False)
+    async def readyz() -> Response:
+        """Readiness (D83): the pool answers and the listening connection is up, so this
+        replica sees every replica's writes; not while shutting down."""
+        ready = store.ready
+        if ready:
+            try:
+                await asyncio.wait_for(store.db.fetchval("SELECT 1"), 2.0)
+            except OSError, TimeoutError, asyncpg.PostgresError, asyncpg.InterfaceError:
+                ready = False
+        return JSONResponse({"ok": ready}, status_code=200 if ready else 503)
+
     app.include_router(wandb_protocol.router)
+    app.include_router(wandb_protocol.public)
+    app.include_router(auth.public)  # before auth.router: auth/device/token is public
     app.include_router(auth.router)
     app.include_router(orgs.router)
     app.include_router(projects.router)
     app.include_router(runs.router)
     app.include_router(dashboard.router)
     app.include_router(home.router)
+    app.include_router(avatars.public)
     app.include_router(avatars.router)
+    app.include_router(s3.router)
+    app.include_router(datasets.router)
     return app
 
 

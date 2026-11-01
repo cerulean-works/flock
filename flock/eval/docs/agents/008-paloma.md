@@ -4,9 +4,9 @@
 | --- | --- |
 | Status | PR 1 built (core and `wikitext_103`); PR 2 (the other 8 sources and the parity table) next |
 | Date | 2026-10-24 |
-| Builds on | [001](001-eval-core.md) (scoring, `bits_per_byte`), [003](003-base-easy.md) (D18, suites as data), [004](004-suites.md) (`Suite` and its scales), [012](012-task-snapshot.md) (the snapshot) |
-| Keeps | 001's tokenization, batching and float32 log-softmax; 002's `truncation` field (always 0 here); D18's unweighted suite means |
-| Result | PR 1: `paloma_wikitext_103` 0.7065 bits per byte in bfloat16 on OLMo 2 1B; float32 parity in section 7 |
+| Builds on | [001](001-eval-core.md) (scoring, `bits_per_byte`), [003](003-base-easy.md) (D18, suites as data), [004](004-suites.md) (`Suite` and its scales), [012](012-task-snapshot.md) (the snapshot), [014](014-run-provenance.md) (predictions files are never replaced), [015](015-greedy-match.md) (`is_greedy`) |
+| Keeps | 001's tokenization, batching and FP32 log-softmax; 002's `truncation` field (always 0 here); D18's unweighted suite means |
+| Result | PR 1: `paloma_wikitext_103` 0.7065 bits per byte in BF16 on OLMo 2 1B; FP32 parity in section 7 |
 
 ## 1. Goal
 
@@ -134,7 +134,7 @@ def rolling_loglikelihood(self, texts: Sequence[str], window: int) -> Scores: ..
 - **Tokens.** Each text is tokenized whole, with no special tokens, as OLMES's `tok_encode` does for OLMo 2 (`add_bos_token` is false for it).
 - **Windows.** The windows are exactly lm-evaluation-harness's `get_rolling_token_windows(context_len=1)` followed by `make_disjoint_window` (section 2.2), with `max_seq_len=window`. Each window is a (context ids, continuation ids) pair, which is what `loglikelihood` scores after `_encode`, so windows go through the same `_batches` and `_score`. Sorting longest first and the token budget work across documents unchanged.
 - **The first window's prefix** is `_prefix_token`: BOS, else EOS (Harry, 2026-10-24). This follows the paper's `<BOS>document` and lm-evaluation-harness, and differs from OLMES only for tokenizers whose BOS and EOS differ. Parity can't see the difference, since OLMo 2's two are one token.
-- **Per document.** The windows' log-probabilities are laid out one row per text on the device and summed along each row, so the sum is the same in every run (the stage file first said `index_add_`, which adds in any order on CUDA). The sum is float64 (Harry, 2026-10-25): a 100,000-token text sums to about 3e5 nats, which float32 resolves only to about 0.03, close to check 2's budget for `ptb` (49 windows, 0.049 nats). OLMES adds windows in Python floats. `Scores.logprob` is float64 from this method only. `Scores` keeps its three fields, one entry per text. `tokens_cut` is all zeros, since every token is predicted once and nothing is cut, so the task's `truncation` is always 0.
+- **Per document.** The windows' log-probabilities are laid out one row per text on the device and summed along each row, so the sum is the same in every run (the stage file first said `index_add_`, which adds in any order on CUDA). The sum is FP64 (Harry, 2026-10-25): a 100,000-token text sums to about 3e5 nats, which FP32 resolves only to about 0.03, close to check 2's budget for `ptb` (49 windows, 0.049 nats). OLMES adds windows in Python floats. `Scores.logprob` is FP64 from this method only. `Scores` keeps its fields, one entry per text. `is_greedy` (015) is true when every window's tokens are all greedy, so a text is greedy only as a whole. `tokens_cut` is all zeros, since every token is predicted once and nothing is cut, so the task's `truncation` is always 0.
 - **The only change to the existing path** is moving the batching loop of `loglikelihood` into a private method both callers share. It is a move with no behaviour change, checked by comparing every multiple-choice score on the tiny model before and after on the CPU.
 - **Raises** if `window` is below 1 or above `max_length`, and if a text has no tokens, which would give 0 bits over 0 bytes (as D11 refuses an empty continuation).
 
@@ -173,9 +173,9 @@ The setup is D22's: OLMES from its own environment, `allenai/OLMo-2-0425-1B` at 
 2. **Float32: the implementation.** Every document's summed log-probability is within 1e-3 nats per window of OLMES's, and every domain's `bits_per_byte` is within 1e-5.
 3. **Bfloat16: what we report.** Every domain's `bits_per_byte`, and every source's mean, within a tolerance fixed before the full comparison.
 
-**Calibration first,** as D22 was fixed. `c4_en`, `wikitext_103` and `ptb` run on both sides in both dtypes (four dev jobs). The bfloat16 tolerance is the larger of the largest observed per-domain gap (rounded up to one significant figure) and our same-commit run-to-run noise on the same three tasks, with D22's 3e-4 as the ceiling. It is written here and frozen, and only then does the full first version run.
+**Calibration first,** as D22 was fixed. `c4_en`, `wikitext_103` and `ptb` run on both sides in both dtypes (four dev jobs). The BF16 tolerance is the larger of the largest observed per-domain gap (rounded up to one significant figure) and our same-commit run-to-run noise on the same three tasks, with D22's 3e-4 as the ceiling. It is written here and frozen, and only then does the full first version run.
 
-**The verdict rests on checks 1 and 2.** Check 3 is reported pass or fail for every domain, next to each side's bfloat16 drift from OLMES's float32 run, but a fail there doesn't keep a domain from being used. OLMES sums each window's bfloat16 log-probabilities in bfloat16 (`_loglikelihood_tokens_verbose` in `oe_eval/models/eleuther_huggingface.py`, the multiple-choice path), so its bfloat16 numbers are rounded values, while the two float32 runs share one answer. Our own bfloat16 drift from float32 is a domain's noise floor: a difference between two checkpoints smaller than it is not a result.
+**The verdict rests on checks 1 and 2.** Check 3 is reported pass or fail for every domain, next to each side's BF16 drift from OLMES's FP32 run, but a fail there doesn't keep a domain from being used. OLMES sums each window's BF16 log-probabilities in BF16 (`_loglikelihood_tokens_verbose` in `oe_eval/models/eleuther_huggingface.py`, the multiple-choice path), so its BF16 numbers are rounded values, while the two FP32 runs share one answer. Our own BF16 drift from FP32 is a domain's noise floor: a difference between two checkpoints smaller than it is not a result.
 
 ---
 
@@ -214,14 +214,15 @@ All on CPU with the tiny random model, no downloads.
 
 ### PR 1: the core and `wikitext_103`
 
-- **`ScoringModel.rolling_loglikelihood`** (`model.py`) builds each text's windows in a loop over its ids: the first window is `([prefix], ids[:window])`, and each later window starting at `start` is `(ids[end - window - 1 : start], ids[start:end])`, which is what `make_disjoint_window` makes of `get_rolling_token_windows(context_len=1)`. A test compares the windows with a copy of lm-evaluation-harness's two functions for windows of 1 to 64 tokens. The windows go through `_logprobs`, the batching loop moved out of `loglikelihood` unchanged (every multiple-choice score, both task hashes and every output file are bit-for-bit equal before and after the move, on the tiny model on the CPU). Per-text sums are float64 (008.D3). The cells of the one-row-per-text layout are found on the host from each text's window count, so placing the scores never waits for the GPU.
+- **`ScoringModel.rolling_loglikelihood`** (`model.py`) builds each text's windows in a loop over its ids: the first window is `([prefix], ids[:window])`, and each later window starting at `start` is `(ids[end - window - 1 : start], ids[start:end])`, which is what `make_disjoint_window` makes of `get_rolling_token_windows(context_len=1)`. A test compares the windows with a copy of lm-evaluation-harness's two functions for windows of 1 to 64 tokens. The windows go through `_logprobs`, the batching loop moved out of `loglikelihood` unchanged (every multiple-choice score, both task hashes and every output file are bit-for-bit equal before and after the move, on the tiny model on the CPU). Per-text sums are FP64 (008.D3). The cells of the one-row-per-text layout are found on the host from each text's window count, so placing the scores never waits for the GPU.
 - **`PerplexityTask`** and **`TextDoc`** (`tasks/perplexity.py`), as 008.D2. `load` raises when a domain has no rows, so a misspelt domain can't score 0 bits over 0 bytes. The hash is `task_hash(docs)`, over the definition and every doc's id and text.
 - **`score_task`** sends a perplexity task to `_score_perplexity` in `run.py`, which divides the summed log-probability by the summed bytes on the device and copies one number to the host. `truncation` is all zeros.
-- **Predictions.** `write_predictions(path, rows)` now takes rows, so one writer serves both kinds of task: `prediction_rows` for multiple choice and `perplexity_prediction_rows` for perplexity (`id`, `logprob`, `num_tokens`, `num_bytes`, `windows`). This and the `Task` alias below were approved as public-surface changes (Harry, 2026-10-25).
+- **Predictions.** `write_perplexity_predictions` writes `perplexity_prediction_rows` (`id`, `logprob`, `num_tokens`, `num_bytes`, `windows`) beside `write_predictions` for multiple choice. Both go through one private writer that opens the file with `"x"`, so a perplexity task refuses an existing predictions file as 014 made every task do, and `score_task` checks for the file before either kind is scored. The branch first changed `write_predictions` to take rows; merging 014, which gave it the refusal, kept its signature instead (Harry, 2026-10-28). The `Task` alias below was approved as a public-surface change (Harry, 2026-10-25).
 - **`Suite`** takes `Task | Suite` members, where `Task = MultipleChoiceTask | PerplexityTask` (`tasks/suite.py`). Its scale check needed no change: 004's `scale` already keeps every metric but the accuracies on its own scale, so `bits_per_byte` never averages with `bpb` (008.D5).
 - **Paloma** (`tasks/paloma.py`): `DOMAINS` maps each source to its domains, and `source_suite` builds a source's tasks and suite. PR 1 lists `wikitext_103` only.
 - **The census** (`scripts/paloma_census.py`) reads the raw files at the pinned revision with OLMo 2's tokenizer, writes the counts of section 2.3, and prints each source's domains in `DOMAINS`'s format. Its output equals the design census in every count, for all 16 sources.
 - **Snapshot** (012.D2). `TASKS` now holds either kind of task. The snapshot pins a perplexity task's definition as it pins a multiple-choice one, without the row function and examples it doesn't have. Two toy perplexity tasks, a source with one domain and one domain of a source with two, join the toy prompt paths: they render no requests, so the snapshot pins the texts each scores and its hash. Their windows depend on the tokenizer, and the test against lm-evaluation-harness's windows pins those.
+- **Merged with `main`** after 014, 015 and the move of the user docs to `docs/source/evals/`. The window check now runs before the provenance is collected, `_score_perplexity` records the task's `dataset` (014), and `_logprobs` returns each request's `is_greedy` with its log-probability (015). The Paloma sentences moved into the new pages.
 - **Loading cost** of one split per domain (008.D2) is measured in PR 2, which adds the sources with 99 and 100 domains.
 
 **Checks on `allenai/OLMo-2-0425-1B` at `a1847dff`**, OLMES at batch size 1 and `max_length` 2048, both on `test` at `65cd6fc5`:
@@ -230,9 +231,9 @@ All on CPU with the tiny random model, no downloads.
 | --- | --- | --- |
 | docs, windows | 61, 170 | 61, 170 |
 | check 1 (ids in order, texts, tokens, windows, bytes) | equal | |
-| float32 bits per byte | 0.7064185 | 0.7064184 |
+| FP32 bits per byte | 0.7064185 | 0.7064184 |
 | check 2: most nats per window, bits per byte difference | 7.3e-4, 3.5e-8 (pass) | |
-| bfloat16 bits per byte | 0.7065046 | 0.7064772 |
-| bfloat16 drift from OLMES's float32 | 8.6e-5 | 5.9e-5 |
+| BF16 bits per byte | 0.7065046 | 0.7064772 |
+| BF16 drift from OLMES's FP32 | 8.6e-5 | 5.9e-5 |
 
-The bfloat16 run took 5.2 seconds for 285,336 tokens on one H200. Check 3's tolerance is set by PR 2's calibration.
+The BF16 run took 5.2 seconds for 285,336 tokens on one H200. Check 3's tolerance is set by PR 2's calibration.

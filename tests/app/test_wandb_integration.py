@@ -31,6 +31,29 @@ def test_login_cli_rejects_unknown_key(flock, wandb_client):
     assert "alice@lab.test" in ok.stdout + ok.stderr
 
 
+def test_wandb_keys_pass_the_sdks_check_and_log_runs(flock, make_wandb_client):
+    from wandb.sdk.lib.wbauth.validation import check_api_key
+
+    alice = flock.add_user("alice@lab.test")
+    key = alice.api.post("/api/v1/me/wandb-keys", {"name": "sdk"}).json()["key"]
+    assert key.startswith("flock-wandb-")
+    assert check_api_key(key) is None
+    make_wandb_client(flock, key).run(
+        """
+        run = wandb.init(project="keys", id="by-wandb-key", settings=SETTINGS)
+        run.log({"loss": 0.5})
+        run.finish()
+        """
+    )
+    row = flock.client().runs("keys", columns="state,owner")
+    assert (row["ids"], row["data"]) == (
+        ["by-wandb-key"],
+        {"state": ["finished"], "owner": [alice.id]},
+    )
+    refused = flock.client(api_key=key).get("/api/v1/projects/flock/keys/runs")
+    assert refused.status == 401  # but not the REST API (D72)
+
+
 def test_init_log_summary_and_config(flock, api, wandb_client):
     wandb_client.run(
         """

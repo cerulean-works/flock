@@ -23,7 +23,7 @@
      Evening's --deep is nearly its background, so the tile is the selection blue there. -->
 <span
 	class={cn(
-		'grid size-7 flex-none place-items-center rounded-md font-serif text-[14px] text-[#fffdf4]',
+		'grid size-7 flex-none place-items-center rounded-md text-[13px] font-medium text-white',
 		!shown && 'bg-deep dark:bg-selection',
 		className
 	)}

@@ -122,18 +122,11 @@ class TestCurves:
         timing.check(self.P50_MS, self.P95_MS)
 
     def test_recent_50_runs_loss_curves_cold(self, curves):
-        server, client = curves
-
-        async def drop_cached_histories() -> None:
-            # Evict finished runs so the next read loads their compacted data from PostgreSQL.
-            store = server.store
-            for key in list(store._history):  # keyed by (run pk, stream)
-                if store.runs_by_pk[key[0]].state == "finished":
-                    del store._history[key]
-
+        """Curves aren't cached in Flock (D78): every read, like this one, decodes the chunks
+        PostgreSQL returns. Only PostgreSQL's own buffer cache is warm."""
+        _, client = curves
         times = []
         for _ in range(25):
-            server.call(drop_cached_histories())
             start = time.perf_counter()
             runs = client.get(self.PATH, keys="loss").json()["runs"]
             times.append((time.perf_counter() - start) * 1000)
@@ -151,16 +144,17 @@ class TestCurves:
     def test_ongoing_runs_curves_while_runs_are_logging(self, curves):
         """Read curves of running runs while those runs keep streaming history over HTTP."""
         server, client = curves
-        project = server.store.project("flock", "curves")
-        running = sorted(project.active)
+        project = server.call(server.store.project("flock", "curves"))
+        running = server.call(server.store.active_runs(project))
         assert len(running) == self.RUNNING
+        found = server.call(server.store.project_runs(project, running))
         stop = threading.Event()
         sent = {"batches": 0}
 
         def writer():
             rng = random.Random(1)
             writer_client = server.client()
-            offsets = {name: project.by_name[name].history_line_count for name in running}
+            offsets = {name: found[name].history_line_count for name in running}
             while not stop.is_set():
                 for name in running:
                     offset = offsets[name]
@@ -256,9 +250,19 @@ class TestSweep:
         started = time.perf_counter()
         server.call(populate())
         print(f"\ningested {cls.RUNS} runs in {time.perf_counter() - started:.1f}s")
-        table = server.store.project("flock", "sweep").table
-        assert table.n == cls.RUNS
-        assert len(table.columns) >= cls.CONFIG_COLUMNS + cls.SUMMARY_COLUMNS
+        store = server.store
+        server.call(store.flush())  # fold the column counts every new run changed
+        project = server.call(store.project("flock", "sweep"))
+        info = server.call(store.project_info(project))
+        assert info["run_count"] == cls.RUNS
+        assert info["column_count"] >= cls.CONFIG_COLUMNS + cls.SUMMARY_COLUMNS
+        # The main storage cost of 012 (D77): one row per run and column, with its indexes.
+        rows, size = server.call(
+            store.db.fetchrow(
+                "SELECT (SELECT count(*) FROM run_values), pg_total_relation_size('run_values')"
+            )
+        )
+        print(f"run_values: {rows} rows, {size / 1e9:.2f} GB with indexes")
         client = server.client()
         yield client, specs
         client.close()
@@ -364,7 +368,8 @@ class TestSweep:
     # Mutations come last: they change the shared dataset.
 
     def test_bulk_delete_and_move_then_filter(self, sweep):
-        """Deleting ~1k runs and moving 500 rebuild the 10k × 1.5k table; filters stay fast."""
+        """Deleting ~1k runs (marked deleted, then purged in the background) and moving 500
+        of the 10k × 1.5k table; filters stay fast."""
         client, specs = sweep
         base = "/api/v1/projects/flock/sweep/runs"
         finished = [r for r in range(self.RUNS) if r % 7]  # every 7th run is still running
@@ -383,7 +388,8 @@ class TestSweep:
         assert resp.status == 200, resp.body
         print(f"\ndelete {len(doomed)} runs: {delete_ms:.0f}ms, move {len(moved)}: {move_ms:.0f}ms")
         assert delete_ms < 200
-        assert move_ms < 200
+        # A move rewrites the moved runs' values (D77): accepted at up to 2 s in 012's review.
+        assert move_ms < 2000
 
         gone = {int(name[3:]) for name in doomed + moved}
         body = {"filter": {"summary.loss": {"$lt": 0.1}}}

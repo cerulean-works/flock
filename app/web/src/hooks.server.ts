@@ -45,9 +45,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 		return new Response(null, { status: 303, headers: { location } });
 	}
 
-	// Preload fonts alongside JS and CSS so they download in parallel with the document.
+	// Preload JS and CSS so they download in parallel with the document. The font comes from
+	// Google Fonts, linked with a preconnect in app.html.
 	return resolve(event, {
-		preload: ({ type }) => type === 'js' || type === 'css' || type === 'font',
+		preload: ({ type }) => type === 'js' || type === 'css',
 		transformPageChunk: errorPreload
 			? ({ html }) => html.replace('</head>', `${errorPreload}</head>`)
 			: undefined

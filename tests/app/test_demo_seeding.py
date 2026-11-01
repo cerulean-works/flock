@@ -1,20 +1,25 @@
 import asyncio
+import datetime as dt
 
 from app.api.scripts.seed_demo import ADMIN_EMAIL, PASSWORD, simulate
+
+MID_MONTH = dt.datetime(2026, 10, 15, tzinfo=dt.UTC).timestamp()  # spend is counted per UTC month
 
 
 def test_a_simulated_month_loads_into_the_flock(postgres, make_flock, tmp_path):
     """A small simulated month: Flock loads it as written, with nothing to rebuild."""
     url = postgres.create()
     files = tmp_path / "flock-files-0"  # where the first flock of ``make_flock`` looks
-    stats = asyncio.run(simulate(url, scale=0.03, seed=7, files_dir=files, log=lambda _: None))
+    stats = asyncio.run(
+        simulate(url, scale=0.03, seed=7, now=MID_MONTH, files_dir=files, log=lambda _: None)
+    )
     assert stats["runs"] > 100 and stats["points"] > 0 and stats["gpu_hours"] > 0
 
     server = make_flock(database_url=url, api_key=stats["api_key"])
     store = server.store
-    assert len(store.runs_by_pk) == stats["runs"]
-    stale = [r for r in store.runs_by_pk.values() if r.compacted["history"] < r.history_line_count]
-    assert stale == []  # stored compacted, as Flock keeps finished runs
+    assert server.call(store.db.fetchval("SELECT count(*) FROM runs")) == stats["runs"]
+    uncompacted = server.call(store.db.fetchval("SELECT count(*) FROM runs WHERE uncompacted > 0"))
+    assert uncompacted == 0  # one chunk per metric, as Flock keeps finished runs
     api = server.client()
     login = server.anonymous().post(
         "/api/v1/auth/login", {"email": ADMIN_EMAIL, "password": PASSWORD}
@@ -35,13 +40,19 @@ def test_a_simulated_month_loads_into_the_flock(postgres, make_flock, tmp_path):
     times = [item["at"] for item in feed]
     assert times == sorted(times, reverse=True)
 
-    budget = api.get("/api/v1/orgs/flock/budget").json()
+    budget = api.get("/api/v1/orgs/flock/budget", month="2026-10").json()
     assert budget["spent"] > 0 and budget["budget"] is not None
     assert budget["top_runs"] and budget["projects"]
 
     # A finished training run reads back with its curves, GPUs and metadata file.
-    project = store.project("flock", "lr-sweep")
-    run = next(r for r in project.runs if r.state == "finished" and r.gpu_count)
+    name = server.call(
+        store.db.fetchval(
+            "SELECT r.name FROM runs r JOIN projects p ON p.pk = r.project_pk "
+            "WHERE p.name = 'lr-sweep' AND r.state = 'finished' AND r.gpu_count > 0 "
+            "ORDER BY r.created_at, r.pk LIMIT 1"
+        )
+    )
+    run = server.call(store.get_run("flock", "lr-sweep", name))
     path = f"/api/v1/projects/flock/lr-sweep/runs/{run.name}"
     detail = api.get(path).json()
     assert detail["gpu_detected"]["count"] == run.gpu_count_detected

@@ -69,7 +69,7 @@ export function flockSort(q: RunQuery): string {
 export const entityHref = (entity: string) => resolve('/(app)/[entity]', { entity });
 
 /** An organization's members, invitations and settings; `section` jumps to one of them. */
-export const orgHref = (org: string, section?: 'budget') =>
+export const orgHref = (org: string, section?: 'budget' | 'deleted-projects') =>
 	`${resolve('/(app)/orgs/[org]', { org })}${section ? `#${section}` : ''}` as ResolvedPathname;
 
 /** The current page with one search param set, or removed when null: tabs and filters. */

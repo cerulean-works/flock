@@ -9,12 +9,13 @@
 		type PlotSeries
 	} from '#lib/chart/engine.ts';
 	import { formatX, formatXTick, formatXValue } from '#lib/chart/axes.ts';
-	import { Readout, tooltipPosition, tooltipRows } from '#lib/chart/readout.ts';
+	import { placeTip, Readout, tipSide, type TipBox } from '#lib/chart/readout.ts';
 	import { cancel, schedule } from '#lib/chart/scheduler.ts';
 	import { pointAt, SNAP_PX, smoothed, snapStep } from '#lib/chart/series.ts';
 	import { formatMetric, formatTick, sameItems } from '#lib/utils.ts';
 	import {
 		getWorkspace,
+		type Cursor,
 		type PanelView,
 		type Surface,
 		type XRange
@@ -39,7 +40,7 @@
 
 	const ws = getWorkspace();
 	// Canvas colors come from the theme tokens (read once the plot is in the document).
-	let palette = $state({ ink: '#172a50', paper: '#fcfbf6', wash: '#cce7fb' });
+	let palette = $state({ ink: '#172a50', paper: '#ffffff', wash: '#cce7fb' });
 
 	const view = $derived(preview ?? ws.panels[panel]);
 	const config = $derived(view.config);
@@ -216,9 +217,30 @@
 	let dragTo = $state<number | null>(null);
 	let ownsHover = false;
 
-	// Steps, times and metrics don't line up, so the crosshair only follows panels on the same
-	// x axis.
-	const cursor = $derived(ws.cursor && ws.cursor.axis === axis.id ? ws.cursor : null);
+	/**
+	 * The cursor as this plot follows it. On the hovered plot's x axis, at its x. On another,
+	 * through the history row under the pointer (both plots of logged metrics): each run at its
+	 * own x here (`xs`, by page row), the crosshair at the hovered run's (else the first run's).
+	 * System metrics, sampled on a timer, only follow plots on their own axis.
+	 */
+	const cursor = $derived.by((): (Cursor & { xs: Float64Array | null }) | null => {
+		const c = ws.cursor;
+		if (!c) return null;
+		if (c.axis === axis.id) return { ...c, xs: null };
+		if (!c.rows || view.stream !== 'history') return null;
+		const rows = c.rows;
+		const xs = new Float64Array(rows.length).fill(NaN);
+		let first = NaN;
+		for (const row of ws.visible) {
+			if (row >= rows.length || Number.isNaN(rows[row])) continue;
+			const x = ws.xAtHistoryStep(row, axis, rows[row]);
+			xs[row] = x;
+			if (Number.isNaN(first)) first = x;
+		}
+		const at = c.nearest != null && c.nearest < xs.length ? xs[c.nearest] : NaN;
+		const step = Number.isNaN(at) ? first : at;
+		return Number.isNaN(step) ? null : { ...c, step, xs };
+	});
 	const here = $derived(cursor?.panel === panel && cursor.surface === surface);
 
 	/** How far from the cursor (in x units) a point reads out: a few pixels of this plot. */
@@ -255,23 +277,27 @@
 	const tips = $derived(!ws.dragging && !(surface === 'grid' && ws.editing != null));
 
 	/**
-	 * The tooltip for the readings just taken: rows sorted high to low, as many as fit in the
-	 * plot, windowed around the focused line; beside the crosshair, inside the plot.
+	 * The tooltip for the readings just taken: rows sorted high to low, windowed around the
+	 * focused line, beside the crosshair, as many rows as fit in the plot. The hovered plot's
+	 * (and in the grid every plot's: `float`) floats over the page, so its card doesn't clip it
+	 * and it can sit beside the crosshair outside the plot, rather than over the lines. The
+	 * hovered plot's is stacked over the others'.
 	 */
 	function layoutTip(
 		lines: readonly Line[],
 		step: number,
 		fy: number,
+		fx: number,
 		d: typeof domain,
-		[cw, ch]: [number, number]
+		[cw, ch]: [number, number],
+		float: boolean,
+		hovered: boolean
 	): Tip | null {
 		const n = readout.count;
 		if (!n) return null;
 		const x = ((step - d.x0) / (d.x1 - d.x0)) * cw;
 		if (!(x >= 0 && x <= cw)) return null;
 		const size = surface === 'grid' ? 'compact' : 'roomy';
-		const boxW = gutter + cw + 6;
-		const boxH = PLOT_TOP + ch + below;
 		const order = readout.order;
 		let at = -1;
 		for (let r = 0; r < n; r++)
@@ -279,9 +305,37 @@
 				at = r;
 				break;
 			}
-		const fit = tooltipRows(n, at, boxH - 4, TIP_METRICS[size]);
-		const width = Math.min(TIP_WIDTH[size], boxW - 4);
-		const pos = tooltipPosition(gutter + x, PLOT_TOP + fy * ch, width, fit.height, boxW, boxH);
+		// In the grid, every plot's tooltip sits alike: on the side the hovered pointer decides,
+		// top-aligned with the plot area. Full screen, it follows the pointer.
+		const side = surface === 'grid' ? tipSide(fx) : null;
+		// The box, and the crosshair's point (or the plot area's top), in its coordinates: the
+		// window's, or the plot's.
+		const plot = {
+			x: gutter + x,
+			y: PLOT_TOP + (side ? 0 : fy * ch),
+			w: gutter + cw + 6,
+			h: PLOT_TOP + ch + below
+		};
+		let box: TipBox | null = null;
+		if (float && area) {
+			const rect = area.getBoundingClientRect();
+			// Only what the pane shows of the plot: none for a plot scrolled out of it, and the
+			// pane's top for one partly scrolled under it.
+			const shown = root?.getBoundingClientRect();
+			const top = Math.max(rect.top, shown?.top ?? 0);
+			const bottom = Math.min(rect.bottom, shown?.bottom ?? window.innerHeight);
+			if (!(bottom > top)) return null;
+			box = {
+				x: rect.left + x,
+				y: side ? top : rect.top + fy * ch,
+				w: window.innerWidth,
+				h: window.innerHeight
+			};
+		}
+		const { fit, width, ...pos } = placeTip(n, at, plot, TIP_METRICS[size], TIP_WIDTH[size], {
+			float: box,
+			side
+		});
 		const fmt = view.format;
 		const raw = smoothing > 0;
 		const byMetric = ws.byMetric(view);
@@ -309,7 +363,9 @@
 			header: formatX(axis, step),
 			rows,
 			above: fit.above,
-			below: fit.below
+			below: fit.below,
+			float,
+			hovered
 		};
 	}
 
@@ -331,6 +387,10 @@
 		const focus = focused;
 		const within = tol;
 		const withTip = tips;
+		// Every grid plot's tooltip floats over the page, so no card clips it; full screen and
+		// in the editor, only the hovered plot's.
+		const float = here || surface === 'grid';
+		const hovered = here;
 		const opts = {
 			focus,
 			markers: readout,
@@ -346,11 +406,12 @@
 		schedule(
 			overlayKey,
 			() => {
-				if (c) readout.read(lines, c.step, within, focus);
+				const xs = c?.xs;
+				if (c) readout.read(lines, xs ? (j) => xs[lines[j].row] : c.step, within, focus);
 				else readout.clear();
 				const surf = prepare(canvas, size[0], size[1], cdpr);
 				if (surf) drawOverlay(surf, d, opts);
-				tip = withTip && c ? layoutTip(lines, c.step, c.fy, d, size) : null;
+				tip = withTip && c ? layoutTip(lines, c.step, c.fy, c.fx, d, size, float, hovered) : null;
 			},
 			'urgent'
 		);
@@ -399,14 +460,22 @@
 		const step = snapped >= domain.x0 && snapped <= domain.x1 ? snapped : raw;
 		const line = nearestLine(step, y);
 		const nearest = line?.row ?? null;
+		// The history row under the pointer, per run, for plots on other x axes to follow.
+		let rows: Float64Array | null = null;
+		if (view.stream === 'history') {
+			rows = new Float64Array(ws.page.runs.length).fill(NaN);
+			for (const row of ws.visible) rows[row] = ws.historyStepAt(row, axis, step);
+		}
 		ws.cursor = {
 			step,
 			tol,
+			rows,
 			axis: axis.id,
 			panel,
 			view,
 			surface,
 			fy: Math.max(0, Math.min(1, y / h)),
+			fx: Math.max(0, Math.min(1, x / w)),
 			nearest,
 			line: line?.metric ?? null
 		};
@@ -550,6 +619,10 @@
 		title={xLabel}>{xLabel}</span
 	>
 	{#if tip}
-		<PlotTooltip {tip} compact={surface === 'grid'} />
+		<!-- Remounted when it starts or stops floating: it moves between the document's end and
+		     here. -->
+		{#key tip.float}
+			<PlotTooltip {tip} compact={surface === 'grid'} />
+		{/key}
 	{/if}
 </div>

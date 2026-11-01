@@ -3,7 +3,9 @@ name = "flock-cli"
 version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
+    "click>=8.5.0",
     "flock",
+    "httpx>=0.28.1",
 ]
 
 [tool.uv]

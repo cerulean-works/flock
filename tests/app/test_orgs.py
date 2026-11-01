@@ -1,5 +1,3 @@
-import time
-
 from tests.app.utils import history_rows
 
 ORGS = "/api/v1/orgs"
@@ -36,6 +34,8 @@ def test_org_crud(flock):
         "member_count": 1,  # its creator, as admin
         "role": "admin",
         "avatar_url": None,
+        "s3_ephemeral_ttl": 8 * 3600,  # S3 key lifetimes (D56)
+        "s3_key_max_ttl": 30 * 86400,
     }
     assert admin.post(ORGS, {"name": "lab"}).status == 409
     assert admin.post(ORGS, {"name": "a/b"}).status == 422
@@ -131,7 +131,7 @@ def test_only_org_admins_change_display_names(flock):
     ]
 
 
-def test_delete_org(make_flock):
+def test_delete_org(make_flock, notification, wait_for):
     server = make_flock()
     store = server.store
     api = server.client()
@@ -139,22 +139,25 @@ def test_delete_org(make_flock):
     alice = server.add_user("alice@lab.test", org="lab")
     assert alice.api.patch("/api/v1/me", {"default_org": "lab"}).status == 200
     assert upsert_error(alice.api, "lab", "p", "a1") is None  # still running
-    run = store.get_run("lab", "p", "a1")
+    run = server.call(store.get_run("lab", "p", "a1"))
     server.call(store.save_file(run, "config.yaml", b"x"))
     api.create_run("kept", "r1")
 
     refused = api.delete(f"{ORGS}/lab")
     assert refused.status == 409
     assert refused.json()["ids"] == ["p/a1"]
-    assert api.delete(f"{ORGS}/lab", force="true").status == 204
-    assert not (server.files_dir / str(run.pk)).exists()
+    with notification(store.bus, server.loop, "flock_auth", "orgs"):
+        assert api.delete(f"{ORGS}/lab", force="true").status == 204
+    server.call(store.flush())  # the purge removes the rows and files in the background (D80)
+    # Another background purge can already own the rows when flush finds no work.
+    wait_for(lambda: not (server.files_dir / str(run.pk)).exists())
 
     def check(server) -> None:
         client = server.client()
         assert client.get(f"{ORGS}/lab").status == 404
         assert client.get("/api/v1/projects/lab/p").status == 404
         assert [p["name"] for p in client.get("/api/v1/projects").json()["projects"]] == ["kept"]
-        me = server.client(api_key=alice.api_key).get("/api/v1/me").json()
+        me = server.client(token=alice.token).get("/api/v1/me").json()
         assert (me["orgs"], me["default_org"]) == ([], None)
 
     check(server)
@@ -223,10 +226,12 @@ def test_invites(make_flock):
 
 
 def test_invites_expire(make_flock):
-    server = make_flock(invite_ttl=0.5)
+    server = make_flock(invite_ttl=60)
     token = server.client().post(f"{ORGS}/flock/invites", {"email": "x@lab.test"}).json()["token"]
     assert server.anonymous().get(f"/api/v1/invites/{token}").status == 200
-    time.sleep(1)
+    server.call(
+        server.store.db.execute("UPDATE invites SET expires_at = now() - interval '1 second'")
+    )
     assert server.anonymous().get(f"/api/v1/invites/{token}").status == 404
 
 
@@ -363,7 +368,7 @@ def test_user_administration(flock):
     assert alice.api.delete(f"/api/v1/users/{alice.id}").status == 409  # the last super admin
     assert alice.api.delete(f"/api/v1/users/{admin_id}").status == 204
     assert admin.get("/api/v1/me").status == 401
-    flock.api_key = alice.api_key  # add_user invites as the super admin
+    flock.token = alice.token  # add_user invites as the super admin
     bob = flock.add_user("bob@lab.test", org="alices")
     assert upsert_error(bob.api, "alices", "p", "b1") is None
     assert alice.api.delete(f"/api/v1/users/{bob.id}").status == 204

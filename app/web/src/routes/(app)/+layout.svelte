@@ -1,4 +1,7 @@
 <script lang="ts">
+	import ActivityIcon from '@lucide/svelte/icons/activity';
+	import DatabaseIcon from '@lucide/svelte/icons/database';
+	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
 	import HouseIcon from '@lucide/svelte/icons/house';
 	import MenuIcon from '@lucide/svelte/icons/menu';
 	import PanelLeftOpenIcon from '@lucide/svelte/icons/panel-left-open';
@@ -11,6 +14,9 @@
 	import WorkspaceSwitcher from '#lib/components/shell/WorkspaceSwitcher.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Sheet from '#lib/components/ui/sheet/index.js';
+	import { datasetsHref } from '#lib/datasets.ts';
+	import { entityHref } from '#lib/workspace/url.ts';
+	import { storageHref } from '#lib/storage.ts';
 	import { SIDEBAR_W, saveWidth } from '#lib/widths.ts';
 	import type { LayoutProps } from './$types';
 
@@ -31,7 +37,10 @@
 
 	// The rail's switcher keeps home and account pages in place, like the sidebar's.
 	const stay = $derived(
-		!page.route.id?.startsWith('/(app)/[entity]') && !page.route.id?.startsWith('/(app)/orgs/')
+		!page.route.id?.startsWith('/(app)/[entity]') &&
+			!page.route.id?.startsWith('/(app)/orgs/') &&
+			!page.route.id?.startsWith('/(app)/datasets/') &&
+			!page.route.id?.startsWith('/(app)/storage/')
 	);
 </script>
 
@@ -45,6 +54,7 @@
 				org={data.shell.org}
 				orgs={data.shell.orgs}
 				projects={data.shell.projects}
+				s3={data.shell.s3}
 				oncollapse={() => setCollapsed(true)}
 			/>
 			<ResizeHandle
@@ -75,13 +85,59 @@
 			<Button
 				variant="ghost"
 				size="icon-sm"
-				class="mt-3 text-muted-foreground"
+				class={[
+					'mt-3 text-muted-foreground',
+					page.route.id === '/(app)' && 'bg-muted text-foreground'
+				]}
 				href={resolve('/(app)')}
 				aria-label="Home"
 				title="Home"
 			>
 				<HouseIcon />
 			</Button>
+			{#if data.shell.org}
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					class={[
+						'mt-1 text-muted-foreground',
+						page.route.id === '/(app)/[entity]' && 'bg-muted text-foreground'
+					]}
+					href={entityHref(data.shell.org)}
+					aria-label="Runs"
+					title="Runs"
+				>
+					<ActivityIcon />
+				</Button>
+			{/if}
+			{#if data.shell.s3 && data.shell.org}
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					class={[
+						'mt-1 text-muted-foreground',
+						page.route.id?.startsWith('/(app)/datasets/') && 'bg-muted text-foreground'
+					]}
+					href={datasetsHref(data.shell.org)}
+					aria-label="Datasets"
+					title="Datasets"
+				>
+					<DatabaseIcon />
+				</Button>
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					class={[
+						'mt-1 text-muted-foreground',
+						page.route.id?.startsWith('/(app)/storage/') && 'bg-muted text-foreground'
+					]}
+					href={storageHref(data.shell.org)}
+					aria-label="Storage"
+					title="Storage"
+				>
+					<HardDriveIcon />
+				</Button>
+			{/if}
 			<div class="mt-auto py-2">
 				<WorkspaceSwitcher org={data.shell.org} orgs={data.shell.orgs} {stay} compact />
 			</div>
@@ -101,10 +157,10 @@
 			</Button>
 			<a
 				href={resolve('/(app)')}
-				class="flex items-center gap-2 rounded-md font-serif text-[19px] tracking-[-0.01em] outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+				class="flex items-center gap-2 rounded-md text-[19px] font-medium tracking-[-0.025em] outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
 			>
 				<LogoMark class="size-6" />
-				<span class="translate-y-[0.13em]">Flock</span>
+				<span>Flock</span>
 			</a>
 		</header>
 		{@render children()}
@@ -114,6 +170,11 @@
 <Sheet.Root bind:open={drawer}>
 	<Sheet.Content side="left" class="w-72 gap-0 p-0" showCloseButton={false}>
 		<Sheet.Title class="sr-only">Navigation</Sheet.Title>
-		<Sidebar org={data.shell.org} orgs={data.shell.orgs} projects={data.shell.projects} />
+		<Sidebar
+			org={data.shell.org}
+			orgs={data.shell.orgs}
+			projects={data.shell.projects}
+			s3={data.shell.s3}
+		/>
 	</Sheet.Content>
 </Sheet.Root>

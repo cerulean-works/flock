@@ -36,13 +36,15 @@
 	import { entityHref, workspaceHrefWith } from '#lib/workspace/url.ts';
 	import { Workspace, setWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import { lastView, rememberView, type ProjectView } from '#lib/workspace/project-view.svelte.ts';
+	import Page from '#lib/components/Page.svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 
 	const ws = new Workspace(
 		() => data.meta,
-		() => data.runs
+		() => data.runs,
+		() => data.members
 	);
 	setWorkspace(ws);
 
@@ -236,7 +238,7 @@
 		const { search, filters } = ws.page.query;
 		if (!filters.length) return `No run’s name or id contains “${search}”.`;
 		const kindOf = (key: string) => ws.meta.columns.find((c) => c.key === key)?.kind;
-		const where = describeFilters(filters, kindOf);
+		const where = describeFilters(filters, kindOf, false, ws.people);
 		if (!search) return `No run matches ${where}.`;
 		return `No run matching “${search}” has ${where}.`;
 	});
@@ -261,7 +263,7 @@
 
 <svelte:window {onkeydown} />
 
-<div class="flex min-h-0 flex-1 flex-col" data-sveltekit-reset="false" style:--name-w="{nameW}px">
+<Page width="full" data-sveltekit-reset={false} style="--name-w: {nameW}px">
 	<PageHeader title={ws.meta.project} subtitleTitle={projectInfo.description ?? undefined}>
 		{#snippet subtitle()}
 			{#if projectInfo.description}
@@ -366,7 +368,7 @@
 				title="No runs yet"
 			>
 				{#snippet lead()}
-					The SDK needs an API key: <a
+					The SDK needs a wandb key: <a
 						class="text-link underline-offset-3 hover:underline"
 						href={resolve('/(app)/account')}>create one</a
 					>.
@@ -394,7 +396,7 @@ run.log(&lbrace;"loss": 0.5&rbrace;)</code
 			</div>
 		{/if}
 	</main>
-</div>
+</Page>
 
 {#if fullscreen != null}
 	<FullscreenPanel

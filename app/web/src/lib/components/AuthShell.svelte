@@ -16,7 +16,7 @@
 		<img src={sky} alt="" class="absolute inset-0 size-full object-cover" decoding="async" />
 	</section>
 
-	<main class="flex items-center justify-center overflow-y-auto px-6 py-16">
+	<main class="relative flex items-center justify-center overflow-y-auto px-6 py-16">
 		<div class="w-full max-w-90">
 			<LogoMark class="mb-8 size-8 md:hidden" />
 			{@render children()}
