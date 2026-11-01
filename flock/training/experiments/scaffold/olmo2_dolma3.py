@@ -1,7 +1,5 @@
 import logging
 
-import torch
-
 from flock.training import (
     AdamWConfig,
     DatasetConfig,
