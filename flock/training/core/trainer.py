@@ -32,6 +32,8 @@ class TrainerConfig:
     wandb_project: str
     wandb_mode: Literal["online", "offline", "disabled", "shared"] = "online"
 
+    # Master weights are always stored in FP32, but the model can be trained in FP16 or BF16.
+    model_dtype: torch.dtype = torch.bfloat16
     max_norm: float = 1.0
     logging_steps: int = 10
     seed: int = 42
@@ -64,6 +66,7 @@ class Trainer:
         self.dataloader_prefetch_factor = config.dataloader_prefetch_factor
         self.dataloader_num_workers = config.dataloader_num_workers
 
+        self.model_dtype = config.model_dtype
         self.max_norm = config.max_norm
         self.logging_steps = config.logging_steps
 
@@ -169,7 +172,8 @@ class Trainer:
             batch = cast(Batch, batch)
             batch = {k: v.to(self.device, non_blocking=True) for k, v in batch.items()}
 
-            output: torch.Tensor = self.model(batch)
+            with torch.autocast(self.device.type, dtype=self.model_dtype):
+                output: torch.Tensor = self.model(batch)
             loss, num_tokens = self._calc_batch_loss(output, batch["labels"])
             loss.backward()
 
