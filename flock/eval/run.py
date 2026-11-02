@@ -29,9 +29,9 @@ from flock.eval.tasks import (
     MultipleChoiceTask,
     PerplexityTask,
     Task,
+    TextDoc,
     Truncation,
 )
-from flock.eval.tasks.perplexity import TextDoc
 from flock.eval.tasks.suite import by_name
 
 # Why `evaluate` and `score_task` refuse an output that is already there, and what to do.
@@ -190,8 +190,8 @@ def evaluate(config: EvalConfig) -> Results:
     if config.out is not None:
         results.write(config.out)
     if config.wandb_project is not None:
-        # Imported here so importing this module, as training loops do for `score_task`, doesn't
-        # import wandb.
+        # Imported here so importing this module, as training loops do for `prepare_task` and
+        # `score_prepared`, doesn't import wandb.
         from flock.eval.tracking import log_to_tracker
 
         log_to_tracker(results, config.wandb_project)
@@ -223,8 +223,8 @@ class PreparedMultipleChoice:
     Args:
         task (`MultipleChoiceTask`):
             The task.
-        limit (`int`, *optional*):
-            The doc limit it was prepared with.
+        limit (`int` or `None`):
+            The doc limit it was prepared with, `None` for every doc.
         tokenizer (`PreTrainedTokenizerBase`):
             The tokenizer `encoded` comes from.
         requests (`MCRequests`):
@@ -248,8 +248,8 @@ class PreparedPerplexity:
     Args:
         task (`PerplexityTask`):
             The task.
-        limit (`int`, *optional*):
-            The doc limit it was prepared with.
+        limit (`int` or `None`):
+            The doc limit it was prepared with, `None` for every doc.
         tokenizer (`PreTrainedTokenizerBase`):
             The tokenizer `token_ids` comes from.
         docs (`tuple[TextDoc, ...]`):

@@ -44,7 +44,12 @@ def test_scoring_a_prepared_task_neither_loads_nor_tokenizes(scorer, task, monke
     def refuse(*args, **kwargs):
         raise AssertionError("scoring a prepared task loaded or tokenized again")
 
+    # The task's own methods, not only `Dataset.load`: a perplexity task's split is cached after
+    # the first load, so a reload would never reach the dataset.
     monkeypatch.setattr(Dataset, "load", refuse)
+    for method in ("load", "requests", "task_hash"):
+        if hasattr(type(task), method):
+            monkeypatch.setattr(type(task), method, refuse)
     monkeypatch.setattr(scorer, "tokenize", refuse)
     monkeypatch.setattr(scorer, "encode_requests", refuse)
     assert untimed(score_prepared(scorer, prepared)) == expected
