@@ -285,7 +285,7 @@ def _score_perplexity(
     bpb, loss_per_token = torch.stack([bits_per_byte(logprob, total_bytes), loss]).tolist()
     seconds = time.perf_counter() - start
     # `math.exp` raises past about 709.78 nats, which a diverged checkpoint can reach. Its
-    # perplexity is infinite rather than the run's every result lost; OLMES writes `1e30`.
+    # perplexity is infinite, so the run keeps its other results; OLMES writes `1e30`.
     try:
         perplexity = math.exp(loss_per_token)
     except OverflowError:
