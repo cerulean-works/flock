@@ -336,6 +336,42 @@ def test_every_forward_pass_runs_pinned_and_the_flags_come_back(scorer, monkeypa
     assert sdpa_flags() == before  # a training step after scoring gets its own choice back
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="the pin applies on CUDA only")
+@pytest.mark.parametrize("flock", [False, True], ids=["transformers", "flock"])
+def test_on_cuda_scoring_runs_pinned_and_repeats_in_bf16(lm, tokenizer, monkeypatch, flock):
+    # Both models have grouped-query attention (4 heads, 2 key-value heads), which Flock's
+    # attention hands to SDPA as `enable_gqa`: the pinned kernel must run it.
+    if flock:
+        config = Olmo2Config(
+            vocab_size=len(tokenizer),
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            max_position_embeddings=128,
+        )
+        cuda_model = FlockCausalLM(Olmo2(config).to("cuda", torch.bfloat16))
+    else:
+        cuda_model = copy.deepcopy(lm).to("cuda", torch.bfloat16)
+    scorer = ScoringModel(cuda_model, tokenizer, name="tiny@0")
+    forward = cuda_model.forward
+    seen = []
+
+    def recording_forward(**kwargs):
+        seen.append(sdpa_flags())
+        return forward(**kwargs)
+
+    monkeypatch.setattr(cuda_model, "forward", recording_forward)
+    first = scorer.loglikelihood(REQUESTS).logprob
+    second = scorer.loglikelihood(REQUESTS).logprob
+
+    assert scorer.sdpa_backend == "EFFICIENT_ATTENTION"
+    assert set(seen) == {(True, False, False, False)}
+    assert torch.equal(first, second)
+    assert first.isfinite().all()
+
+
 def test_score_rejects_a_model_that_ignores_logits_to_keep(scorer, monkeypatch):
     forward = scorer.model.forward
     monkeypatch.setattr(
