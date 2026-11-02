@@ -13,7 +13,7 @@
 The cycle 3 lab ("predictable scaling") ranks pairs by the perplexity of their 1B model on a designated FineWeb-Edu evaluation set, at a context of 8192 tokens, scores forecasts in log-perplexity, and asks every pair to log `eval/loss` (token-averaged cross-entropy on that set) and `eval/perplexity` while training. It names no set and no evaluation code. This stage provides both, so the number on the leaderboard and the number in each pair's training log are the same definition:
 
 1. **Token metrics.** Every `PerplexityTask` reports `loss_per_token` (nats) and `perplexity` beside `bits_per_byte`.
-2. **A dev set.** 5,000 documents of FineWeb-Edu, sampled with a fixed seed from one named file, pinned as a private dataset whose ids training data drops.
+2. **A dev set.** 5,000 documents of FineWeb-Edu, sampled with a fixed seed from one named file, pinned as a public dataset whose ids training data drops.
 3. **One task.** `fineweb_edu`: that dev set, whole documents, windows of 8192 tokens, `perplexity` as its primary metric.
 
 **Out of scope:** any change to `flock.training`; a second window size; a suite holding `fineweb_edu`; fitting scaling laws; removing near-duplicates of the dev set from the training data (section 2.3).
@@ -32,7 +32,7 @@ OLMES has the same metric, `ppl_token` in `PerplexityMetric` (`oe_eval/metrics/p
 
 ### 019.D2. `primary_metric` is a field of `PerplexityTask`, outside the task hash
 
-`PerplexityTask` gains `primary_metric`, defaulting to `bits_per_byte` so Paloma is unchanged, and validated against `reported_metrics` as `MultipleChoiceTask` validates its own. The task hash covers what decides the requests: name, dataset, domain and window (results file docs, "The task hash"). Which reported metric is read first changes no request, so `task_hash` leaves `primary_metric` out, and Paloma's 309 hashes stay what the bank and every earlier results file recorded. A test pins one Paloma hash to its value on `main`.
+`PerplexityTask` gains `primary_metric`, defaulting to `bits_per_byte` so Paloma is unchanged, and validated against `reported_metrics` as `MultipleChoiceTask` validates its own. The task hash covers what decides the requests: name, dataset, domain and window (results file docs, "The task hash"). Which reported metric is read first changes no request, so `task_hash` leaves `primary_metric` out, and Paloma's 309 hashes stay what the bank and every earlier results file recorded. A test pins two Paloma hashes to their values on `main`.
 
 ### 019.D3. The dev set: 5,000 docs drawn uniformly from one named file of the newest dump
 
@@ -43,7 +43,7 @@ FineWeb-Edu (Penedo et al. 2024, arXiv 2406.17557) has no validation split, so t
 - **Fields.** `id` and `text`, which `PerplexityTask` reads, plus `url` and `dump` for whoever audits the set.
 - **Held out by id.** The training data must drop these ids. FineWeb-Edu is FineWeb filtered by an educational-quality classifier (sec. 5), and FineWeb runs MinHash deduplication on "each snapshot (independently from the others)" (sec. 3.4), so a dev document can have near-duplicates in other dumps that dropping ids does not remove. That is a known limitation, stated in the dataset card and the docs.
 
-The set is the private `cerulean-works/fineweb-edu-dev`, split `validation`, pinned by revision in the task.
+The set is the public `cerulean-works/fineweb-edu-dev`, split `validation`, pinned by revision in the task.
 
 ### 019.D4. One task, window 8192, in no suite
 
@@ -68,6 +68,7 @@ The set is the private `cerulean-works/fineweb-edu-dev`, split `validation`, pin
 - **Metrics.** `_score_perplexity` sums the docs' FP64 log-probabilities once, divides by the summed bytes and by the summed tokens, and copies both quotients to the host in one `tolist()`, so the task still waits for the GPU once. `perplexity` is `math.exp` of the host value, or infinity where that overflows (above about 709.78 nats), so a diverged checkpoint doesn't lose the run. `bits_per_byte` is the same expression as before and reads back bit for bit.
 - **Hash.** `task_hash` deletes `primary_metric` from the definition before hashing. On the tiny test model and on Paloma's real data, all 309 Paloma hashes are equal to `main`'s, and a test pins two of them on fixed docs.
 - **Locks.** On a tiny Llama model, every multiple-choice request score, `results.json` and predictions file is byte-equal to `main`. A text task gives the same `bits_per_byte` (to the last bit), task hash and predictions, and only gains `loss_per_token` and `perplexity`.
+- **Schema.** `schema_version` stays 6: metric keys are defined by each task and the file layout is unchanged, so the multiple-choice lock above is the acceptance. One consequence: `compare` of a new Paloma run against a Paloma results file written before this stage lists `loss_per_token` and `perplexity` as one-sided metrics (618 on the full Paloma run) until that reference is re-scored.
 - **Snapshot.** The diff is 309 `"primary_metric": "bits_per_byte"` lines and the new `fineweb_edu` entry. The toy requests are unchanged.
 - **Dev set.** Built from the file named above with seed `20261101`: 5,000 docs, 27,077,101 UTF-8 bytes, 5,546,839 GPT-2 tokens. A second build is byte-identical.
 - **Docs.** The docs page carries a plain PyTorch `document_loss` for pairs whose trainer computes the loss itself. On the tiny model it matches `rolling_loglikelihood` within 8e-6 nats at windows 1, 3, 8 and 64.

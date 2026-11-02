@@ -4,7 +4,7 @@ The `fineweb_edu` task scores a model on a fixed set of 5,000 FineWeb-Edu docume
 
 ## What the number is
 
-`fineweb_edu` is a [`~eval.tasks.PerplexityTask`] on the private dataset `cerulean-works/fineweb-edu-dev`, split `validation`. Each document is scored whole, as follows:
+`fineweb_edu` is a [`~eval.tasks.PerplexityTask`] on the public dataset `cerulean-works/fineweb-edu-dev`, split `validation`. Each document is scored whole, as follows:
 
 1. Tokenize the document's `text` with the model's tokenizer, with no special tokens.
 2. Put one prefix token in front: BOS, or EOS if the tokenizer has no BOS. The prefix is input only, never a target.
@@ -29,7 +29,7 @@ uv run flock eval run \
 
 The run prints `perplexity`, and `results/fineweb-edu/results.json` holds all three metrics. The model needs a context of at least 8192 tokens: a model whose `max_length` is smaller is refused before scoring, with an error that names the task, the window and the model's `max_length`. If the full windows don't fit in memory, lower `--batch-tokens`; it changes how windows are batched, not which tokens are scored.
 
-You need read access to `cerulean-works/fineweb-edu-dev` on the Hugging Face Hub.
+`cerulean-works/fineweb-edu-dev` is public on the Hugging Face Hub, so loading it needs no token.
 
 ## Log `eval/loss` while training
 
