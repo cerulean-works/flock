@@ -60,7 +60,8 @@ describe('the org’s page from outside it', () => {
 		run_count: 12,
 		active_run_count: 0,
 		column_count: 0,
-		visibility: 'public'
+		visibility: 'public',
+		created_by: null
 	};
 	const outside = {
 		flockUrl: HOST,

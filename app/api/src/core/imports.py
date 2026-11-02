@@ -299,7 +299,9 @@ class Imports:
         owners: dict[str, int],
         importer: int,
     ) -> None:
-        project = await self.store.import_project(job.org, found.name, None, found.created_at)
+        project = await self.store.import_project(
+            job.org, found.name, None, found.created_at, importer
+        )
         limit = asyncio.Semaphore(self.CONCURRENCY)
         seen = 0
 

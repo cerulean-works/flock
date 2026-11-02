@@ -13,7 +13,8 @@ Who can do what, by role. A user's role is per organization: they can be an admi
 | Create a project with the API | yes | yes | yes |
 | Rename a project or change its description | no | yes | yes |
 | Delete a project | no | yes | yes |
-| Make a project or dataset public or private | no | yes | yes |
+| Make a project public or private | if they created it | yes | yes |
+| Make a dataset public or private | no | yes | yes |
 | Edit, move or delete runs | own runs | any run | any run |
 | Invite people, list and withdraw invitations | no | yes | yes |
 | Change members' roles, remove members | no | yes | yes |
@@ -32,9 +33,11 @@ Who can do what, by role. A user's role is per organization: they can be an admi
 
 "Own runs" are the runs whose `owner` is the user: the runs they logged. Runs without an owner, logged before accounts existed or by a deleted account, can only be changed by admins.
 
+A project's creator is the user who created it, in the dashboard, with the API or by logging its first run with the SDK. Projects created before Flock recorded this are credited to whoever logged their earliest run, and projects with no such run have no creator.
+
 ## Public projects and datasets
 
-An org admin can make a project public, and a single dataset private, since datasets start public ([Share projects and datasets publicly](share-publicly)). Anyone outside the organization, signed out or signed in, has read-only access to public projects and datasets:
+An org admin, or the member who created it, can make a project public. An org admin can make a single dataset private, since datasets start public ([Share projects and datasets publicly](share-publicly)). Anyone outside the organization, signed out or signed in, has read-only access to public projects and datasets:
 
 | Action | Outsider |
 |---|---|

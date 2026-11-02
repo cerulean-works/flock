@@ -78,11 +78,12 @@ export const actions: Actions = {
 		const name = formText(form, 'name');
 		const invalid = projectNameError(name);
 		if (invalid) return fail(400, { error: invalid });
-		// Only admins' forms have it (D110): making the project public or private.
+		// Only the forms of admins and the project's creator have it (D110, D118).
 		const visibility = formText(form, 'visibility');
 		const res = await change<ProjectInfo>('PATCH', projectPath(params.entity, project), {
 			...(name !== project && { name }),
-			description: formText(form, 'description') || null,
+			// Absent from a creator's form, who may change only the visibility (D118).
+			...(form.has('description') && { description: formText(form, 'description') || null }),
 			...((visibility === 'private' || visibility === 'public') && { visibility })
 		});
 		if (refused(res)) return res;
