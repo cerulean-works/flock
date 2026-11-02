@@ -1,4 +1,4 @@
-"""Compare a new results file with a banked one: refuse different instruments, list every score that moved past its tolerance."""
+"""Compare a new results file with a banked one: refuse different instruments, list the tasks and suites scored differently, and list every other score that moved past its tolerance."""
 
 import json
 import math
@@ -33,8 +33,8 @@ class Comparison:
     Args:
         tasks (`list[str]`), suites (`list[str]`):
             The tasks and suites in both files that were compared, in the banked file's order.
-        changed (`list[str]`):
-            The tasks and suites in both files that were scored differently, so they were listed and not compared: a task with another `task_hash` or `limit`, a suite with another `metric` or `suite_hash`, or one holding a changed task or suite at any depth.
+        changed (`list[tuple[str, str]]`):
+            The tasks and suites in both files that were scored differently, so they were listed and not compared, each with the first field that differs: a task's `task_hash` or `limit`, a suite's `metric` or `suite_hash`, or `members` for a suite holding a changed task or suite at any depth. Tasks first, then suites, in the banked file's order.
         breaches (`list[Breach]`):
             Every compared value that moved past its tolerance. Empty when the new run reproduces the bank.
         provenance (`dict[str, tuple[Any, Any]]`):
@@ -45,7 +45,7 @@ class Comparison:
 
     tasks: list[str]
     suites: list[str]
-    changed: list[str]
+    changed: list[tuple[str, str]]
     breaches: list[Breach]
     provenance: dict[str, tuple[Any, Any]]
     only_banked: list[str]
@@ -111,29 +111,39 @@ def compare(banked: Path, new: Path) -> Comparison:
         if not any(name in new_tasks for name in bank_tasks):
             raise ValueError(f"no task is in both {banked} and {new}")
 
-        # A task or suite scored differently is listed and skipped, so every other score still
-        # compares (021.D1). A suite's `metric` says which metric its score averages, and its
-        # hash covers its members' hashes. A file older than schema 5 has no suite hash, so its
-        # suites change through a changed member, at any depth, as a hash would.
+        # A task or suite scored differently is listed with the first field that differs and
+        # skipped, so every other score still compares (021.D1). A suite's `metric` says which
+        # metric its score averages, and its hash covers its members' hashes. A file older than
+        # schema 5 has no suite hash, so its suites change through a changed member, as a hash
+        # would.
         hashed = bank["schema_version"] >= 5 and rerun["schema_version"] >= 5
-        keys = ("metric", "suite_hash") if hashed else ("metric",)
-        changed_tasks, changed_suites = [], []
+        changed_tasks, changed_suites = {}, {}
         for name, task in bank_tasks.items():
-            other = new_tasks.get(name)
-            if other is None:
-                continue
-            if task["task_hash"] != other["task_hash"] or task["limit"] != other["limit"]:
-                changed_tasks.append(name)
-        # Each suite comes after the suites it holds, so a changed member is already listed. A
-        # member of either side counts: a changed task added to a suite changes the suite.
+            if name in new_tasks:
+                for key in ("task_hash", "limit"):
+                    if task[key] != new_tasks[name][key]:
+                        changed_tasks.setdefault(name, key)
         for name, suite in bank_suites.items():
-            other = new_suites.get(name)
-            if other is None:
-                continue
-            held = changed_tasks + changed_suites
-            members = suite["members"] + other["members"]
-            if any(suite[key] != other[key] for key in keys) or any(m in held for m in members):
-                changed_suites.append(name)
+            if name in new_suites:
+                for key in ("metric", "suite_hash") if hashed else ("metric",):
+                    if suite[key] != new_suites[name][key]:
+                        changed_suites.setdefault(name, key)
+        # A suite holding a changed task or suite changes too, at any depth. A member of either
+        # file counts, and it is a task if either file has a task of that name, as
+        # `_suite_tolerance` reads it. A suite may hold, in the new file only, a suite after it in
+        # the bank, so this repeats until no suite is added.
+        added = True
+        while added:
+            added = False
+            for name, suite in bank_suites.items():
+                if name not in new_suites or name in changed_suites:
+                    continue
+                for member in suite["members"] + new_suites[name]["members"]:
+                    is_task = member in bank_tasks or member in new_tasks
+                    if member in (changed_tasks if is_task else changed_suites):
+                        changed_suites[name] = "members"
+                        added = True
+                        break
         tasks = [name for name in bank_tasks if name in new_tasks and name not in changed_tasks]
         suites = [name for name in bank_suites if name in new_suites and name not in changed_suites]
 
@@ -176,7 +186,9 @@ def compare(banked: Path, new: Path) -> Comparison:
     only_banked += [name for name in bank_suites if name not in new_suites]
     only_new = [name for name in new_tasks if name not in bank_tasks]
     only_new += [name for name in new_suites if name not in bank_suites]
-    changed = changed_tasks + changed_suites
+    # Suites in the bank's order, though the loop above may add one in a later pass.
+    changed = list(changed_tasks.items())
+    changed += [(name, changed_suites[name]) for name in bank_suites if name in changed_suites]
     return Comparison(tasks, suites, changed, breaches, provenance, only_banked, only_new)
 
 

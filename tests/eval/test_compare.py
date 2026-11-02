@@ -188,7 +188,7 @@ def test_a_task_scored_on_other_requests_is_listed_with_its_suites_and_the_rest_
 
     comparison = compare(write("bank", BANK), write("new", rerun))
 
-    assert comparison.changed == ["piqa", "toy:rc"]
+    assert comparison.changed == [("piqa", next(iter(change))), ("toy:rc", "members")]
     assert comparison.tasks == ["arc_easy"]
     assert comparison.suites == []
     assert comparison.breaches == [Breach("arc_easy", "metrics.acc_per_char", 0.75, 0.8)]
@@ -253,7 +253,7 @@ def test_cli_exits_0_on_equal_scores_1_on_a_breach_and_2_on_a_change_or_a_refusa
     result = CliRunner().invoke(cli.main, ["compare", str(bank), str(changed)])
     assert result.exit_code == 2
     assert result.output.splitlines() == [
-        "changed, not compared: piqa, toy:rc",
+        "changed, not compared: piqa (task_hash), toy:rc (members)",
         "arc_easy  metrics.acc_per_char  0.75  ->  0.8  (+0.05)",
         "compared: tasks 1, suites 0, breaches 1",
     ]
@@ -268,7 +268,8 @@ def test_a_suite_averaging_another_metric_is_listed_as_changed(write):
 
     comparison = compare(write("bank", BANK), write("new", rerun))
 
-    assert (comparison.changed, comparison.tasks) == (["toy:rc"], ["arc_easy", "piqa"])
+    assert comparison.changed == [("toy:rc", "metric")]
+    assert comparison.tasks == ["arc_easy", "piqa"]
 
 
 def test_a_suite_with_another_hash_is_listed_unless_a_file_predates_suite_hashes(write, tmp_path):
@@ -276,7 +277,8 @@ def test_a_suite_with_another_hash_is_listed_unless_a_file_predates_suite_hashes
     rerun = dataclasses.replace(BANK, suites=[dataclasses.replace(SUITE, suite_hash="hash-rc2")])
 
     comparison = compare(write("bank", BANK), write("new", rerun))
-    assert (comparison.changed, comparison.suites, comparison.breaches) == (["toy:rc"], [], [])
+    assert comparison.changed == [("toy:rc", "suite_hash")]
+    assert (comparison.suites, comparison.breaches) == ([], [])
 
     # A schema 4 bank has no suite hashes: its suites are still compared on members and score.
     old = BANK.to_dict()
@@ -319,8 +321,29 @@ def test_a_suite_holding_a_changed_member_at_any_depth_is_listed_in_old_files_to
 
     comparison = compare(tmp_path / "old.json", rerun)
 
-    assert comparison.changed == ["piqa", "toy:rc", "toy"]
+    assert comparison.changed == [("piqa", "task_hash"), ("toy:rc", "members"), ("toy", "members")]
     assert (comparison.tasks, comparison.suites, comparison.breaches) == (["arc_easy"], [], [])
+
+
+def test_a_suite_holding_a_changed_suite_that_comes_after_it_in_the_bank_is_listed(write, tmp_path):
+    # Each file writes a suite after the suites it holds, but only its own: here `toy` holds
+    # `toy:rc` in the new file only, so in the bank it comes first.
+    bank = BANK.to_dict()
+    bank["schema_version"] = 4
+    bank["suites"] = [
+        {"suite": "toy", "members": ["arc_easy"], "metric": None, "score": None},
+        {"suite": "toy:rc", "members": ["piqa"], "metric": None, "score": None},
+    ]
+    (tmp_path / "old.json").write_text(json.dumps(bank))
+    inner = SuiteResult("toy:rc", "hash-rc", ["piqa"], None, None)
+    outer = SuiteResult("toy", "hash-toy", ["arc_easy", "toy:rc"], None, None)
+    piqa = dataclasses.replace(PIQA, task_hash="5e2d")
+    rerun = write("new", Results(PROVENANCE, [ARC, piqa], [inner, outer]))
+
+    comparison = compare(tmp_path / "old.json", rerun)
+
+    assert comparison.changed == [("piqa", "task_hash"), ("toy", "members"), ("toy:rc", "members")]
+    assert (comparison.suites, comparison.breaches) == ([], [])
 
 
 def test_a_repeated_nan_is_no_breach_but_a_new_one_is(write):
@@ -388,7 +411,8 @@ def test_cli_prints_the_tokenizers_and_datasets_versions_when_they_differ(write)
 def test_a_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(write, name, suite):
     # Offline: a change to what `Results` writes, or to what `compare` reads, that a bank can
     # no longer pass fails here rather than after a GPU rerun. A bank's version may lag the
-    # layout's: banks are refreshed on the eval loop's schedule, not in every schema bump (021.D2).
+    # layout's: a bank is refreshed when its scores are meant to change, not in every schema bump
+    # (021.D2).
     bank = Path(__file__).parent / "regression" / f"{name}.json"
     data = json.loads(bank.read_text())
     tasks = []

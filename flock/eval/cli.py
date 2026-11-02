@@ -126,7 +126,8 @@ def format_comparison(comparison: Comparison) -> str:
     if comparison.only_new:
         lines.append(f"only in the new run: {', '.join(comparison.only_new)}")
     if comparison.changed:
-        lines.append(f"changed, not compared: {', '.join(comparison.changed)}")
+        names = ", ".join(f"{name} ({field})" for name, field in comparison.changed)
+        lines.append(f"changed, not compared: {names}")
 
     for breach in comparison.breaches:
         line = f"{breach.name}  {breach.field}  {breach.banked}  ->  {breach.new}"
