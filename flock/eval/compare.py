@@ -32,7 +32,9 @@ class Comparison:
 
     Args:
         tasks (`list[str]`), suites (`list[str]`):
-            The tasks and suites in both files, which were compared, in the banked file's order.
+            The tasks and suites in both files that were compared, in the banked file's order.
+        changed (`list[str]`):
+            The tasks and suites in both files that were scored differently, so they were listed and not compared: a task with another `task_hash` or `limit`, a suite with another `metric` or `suite_hash`, or one holding a changed task or suite at any depth.
         breaches (`list[Breach]`):
             Every compared value that moved past its tolerance. Empty when the new run reproduces the bank.
         provenance (`dict[str, tuple[Any, Any]]`):
@@ -43,6 +45,7 @@ class Comparison:
 
     tasks: list[str]
     suites: list[str]
+    changed: list[str]
     breaches: list[Breach]
     provenance: dict[str, tuple[Any, Any]]
     only_banked: list[str]
@@ -53,10 +56,10 @@ def compare(banked: Path, new: Path) -> Comparison:
     """
     Compares two `results.json` files task by task and suite by suite, requiring every score to stay within its tolerance.
 
-    Each task in both files is compared on `num_docs` and every entry of `metrics` and `truncation`, and each suite in both on `members` and `score`. Timing is not compared. An accuracy may move by `FLIPPED_DOCS` docs out of `num_docs`, any other metric by `RELATIVE_TOLERANCE` of its banked value, and a suite's score by its members' tolerances combined as independent errors. Counts and `members` must be equal.
+    Each task in both files is compared on `num_docs` and every entry of `metrics` and `truncation`, and each suite in both on `members` and `score`. Timing is not compared. An accuracy may move by `FLIPPED_DOCS` docs out of `num_docs`, any other metric by `RELATIVE_TOLERANCE` of its banked value, and a suite's score by its members' tolerances combined as independent errors. Counts and `members` must be equal. A task or suite scored differently in the two runs is listed in `changed` and not compared.
 
     Raises:
-        `ValueError`: if the runs are different instruments (another model or `model_digest`, `dtype`, `batch_tokens`, `max_length` or `attention`, a common task with another `task_hash` or `limit`, or a common suite with another `metric` or `suite_hash`), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
+        `ValueError`: if the runs are different instruments (another model or `model_digest`, `dtype`, `batch_tokens`, `max_length` or `attention`), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
     """
     files = {}
     for path in (banked, new):
@@ -105,30 +108,34 @@ def compare(banked: Path, new: Path) -> Comparison:
         new_tasks = {task["task"]: task for task in rerun["tasks"]}
         bank_suites = {suite["suite"]: suite for suite in bank["suites"]}
         new_suites = {suite["suite"]: suite for suite in rerun["suites"]}
-        tasks = [name for name in bank_tasks if name in new_tasks]
-        suites = [name for name in bank_suites if name in new_suites]
-        if not tasks:
+        if not any(name in new_tasks for name in bank_tasks):
             raise ValueError(f"no task is in both {banked} and {new}")
 
-        # Every refusal comes before any score is read, so a refused pair prints no breach. A
-        # suite's `metric` says which metric its score averages, so it refuses like a hash.
-        for name in tasks:
-            for key in ("task_hash", "limit"):
-                if bank_tasks[name][key] != new_tasks[name][key]:
-                    raise ValueError(
-                        f"different instrument: {name} has {key} {bank_tasks[name][key]!r} "
-                        f"in {banked}, {new_tasks[name][key]!r} in {new}"
-                    )
-        # The suite hash covers its members' hashes and whether it is scored. A file older than
-        # schema 5 has none, and its suites are still compared on members and score.
+        # A task or suite scored differently is listed and skipped, so every other score still
+        # compares (021.D1). A suite's `metric` says which metric its score averages, and its
+        # hash covers its members' hashes. A file older than schema 5 has no suite hash, so its
+        # suites change through a changed member, at any depth, as a hash would.
         hashed = bank["schema_version"] >= 5 and rerun["schema_version"] >= 5
-        for name in suites:
-            for key in ("metric", "suite_hash") if hashed else ("metric",):
-                if bank_suites[name][key] != new_suites[name][key]:
-                    raise ValueError(
-                        f"different instrument: {name} has {key} {bank_suites[name][key]!r} "
-                        f"in {banked}, {new_suites[name][key]!r} in {new}"
-                    )
+        keys = ("metric", "suite_hash") if hashed else ("metric",)
+        changed_tasks, changed_suites = [], []
+        for name, task in bank_tasks.items():
+            other = new_tasks.get(name)
+            if other is None:
+                continue
+            if task["task_hash"] != other["task_hash"] or task["limit"] != other["limit"]:
+                changed_tasks.append(name)
+        # Each suite comes after the suites it holds, so a changed member is already listed. A
+        # member of either side counts: a changed task added to a suite changes the suite.
+        for name, suite in bank_suites.items():
+            other = new_suites.get(name)
+            if other is None:
+                continue
+            held = changed_tasks + changed_suites
+            members = suite["members"] + other["members"]
+            if any(suite[key] != other[key] for key in keys) or any(m in held for m in members):
+                changed_suites.append(name)
+        tasks = [name for name in bank_tasks if name in new_tasks and name not in changed_tasks]
+        suites = [name for name in bank_suites if name in new_suites and name not in changed_suites]
 
         # Every compared value as (name, field, banked, new, tolerance). A value missing on one
         # side is None, so a metric added or dropped is a breach too.
@@ -169,7 +176,8 @@ def compare(banked: Path, new: Path) -> Comparison:
     only_banked += [name for name in bank_suites if name not in new_suites]
     only_new = [name for name in new_tasks if name not in bank_tasks]
     only_new += [name for name in new_suites if name not in bank_suites]
-    return Comparison(tasks, suites, breaches, provenance, only_banked, only_new)
+    changed = changed_tasks + changed_suites
+    return Comparison(tasks, suites, changed, breaches, provenance, only_banked, only_new)
 
 
 def _number(value: Any) -> bool:

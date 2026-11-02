@@ -104,7 +104,7 @@ def run(
 @click.argument("banked", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.argument("new", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 def compare_command(banked: Path, new: Path) -> None:
-    """Compare a new results.json with a banked one. Exits 1 if any score moved past its tolerance, 2 if the runs are different instruments."""
+    """Compare a new results.json with a banked one. Exits 2 if the runs are different instruments or a task or suite in both was scored differently, else 1 if any score moved past its tolerance."""
     try:
         comparison = compare(banked, new)
     except ValueError as error:
@@ -112,11 +112,12 @@ def compare_command(banked: Path, new: Path) -> None:
         sys.exit(2)
 
     click.echo(format_comparison(comparison))
-    sys.exit(1 if comparison.breaches else 0)
+    # A changed task or suite still fails the check, as the refusal it replaces did (021.D1).
+    sys.exit(2 if comparison.changed else 1 if comparison.breaches else 0)
 
 
 def format_comparison(comparison: Comparison) -> str:
-    """Formats the provenance fields that differ, the one-sided tasks and suites, one line per breach, then a count."""
+    """Formats the provenance fields that differ, the one-sided and the changed tasks and suites, one line per breach, then a count."""
     lines = []
     for key, (banked, new) in comparison.provenance.items():
         lines.append(f"{key}  {banked}  ->  {new}")
@@ -124,6 +125,8 @@ def format_comparison(comparison: Comparison) -> str:
         lines.append(f"only in the bank: {', '.join(comparison.only_banked)}")
     if comparison.only_new:
         lines.append(f"only in the new run: {', '.join(comparison.only_new)}")
+    if comparison.changed:
+        lines.append(f"changed, not compared: {', '.join(comparison.changed)}")
 
     for breach in comparison.breaches:
         line = f"{breach.name}  {breach.field}  {breach.banked}  ->  {breach.new}"
