@@ -274,14 +274,6 @@ export interface DatasetInfo {
 	public?: boolean;
 }
 
-/** One of an org's public datasets (`GET …/datasets/public`). */
-export interface PublicDataset {
-	path: string;
-	made_public_at: number;
-	version: number | null;
-	updated_at: number | null;
-}
-
 /** A cell, rendered by the API for display (D90). */
 export type Cell =
 	| { k: 'null' }

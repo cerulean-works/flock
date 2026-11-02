@@ -19,11 +19,11 @@ This stage adds read-only public access, the way a public Hugging Face repo work
 
 1. **Public projects** (D110). An org admin makes a project public. Anyone with its URL can then
    see its runs, charts, run pages, files and logs, without signing in.
-2. **Public datasets** (D115). An org admin makes a single dataset public. Anyone with its URL
-   can then open its dataset page (README, rows, schema and versions). The rest of the org's S3
-   storage stays private.
-3. **A public view of the org** (D114). An org's page lists its public projects and datasets to
-   outsiders, and nothing else.
+2. **Public datasets** (D115). Datasets are public unless an org admin makes one private.
+   Anyone with a public dataset's URL can open its dataset page (README, rows, schema and
+   versions). The rest of the org's S3 storage stays private, and datasets aren't listed.
+3. **A public view of the org** (D114). An org's page lists its public projects to outsiders,
+   and nothing else.
 4. **The same view for everyone outside the org** (D111). A signed-in user who isn't a member sees
    exactly what an anonymous visitor sees.
 
@@ -133,43 +133,54 @@ publish dialog says so (D116).
 ### D114. The org, as outsiders see it
 
 - **`GET orgs/{org}`** answers outsiders with `{name, display_name, avatar_url}` when the org
-  has at least one public project or public dataset, and 404 otherwise. Members get the full
+  has at least one public project, and 404 otherwise. Members get the full
   response, as today.
 - **`GET projects?entity={org}`** lists the org's public projects to outsiders. Without
   `entity`, it lists only the viewer's own orgs' projects, as today, so there's no way to list
   public projects across orgs.
-- **`GET orgs/{org}/datasets/public`** lists the org's public datasets: `{path, made_public_at}`,
-  with each one's latest version read as the folder listing does (D87).
+- **Datasets aren't listed.** With datasets public by default (D115), a list would mean walking
+  the whole bucket on every visit. A public dataset is reached by its URL.
 - **Members-only, unchanged:** members, invites, imports, billing, budget, budget warnings,
   deleted projects, the feed, the Storage routes (D63–D69) and the dataset folder browser
   (`datasets/at`).
 
 ### D115. Public datasets
 
+Datasets are public by default, and an org admin makes one private where there's a cause (an
+exam set whose items can't be published, for example). This follows review on #68: open by
+default, private as the exception. Projects keep the opposite default (D110), because a project
+appears on a run's first log and its configs and logs may hold secrets (section 4).
+
 Datasets aren't rows anywhere (D85), so the flag needs its own table. Migration 0016 adds:
 
 ```sql
-public_datasets(org_pk REFERENCES orgs ON DELETE CASCADE, path text,
-                made_by REFERENCES users ON DELETE SET NULL, created_at,
-                PRIMARY KEY (org_pk, path))
+private_datasets(org_pk REFERENCES orgs ON DELETE CASCADE, path text,
+                 made_by REFERENCES users ON DELETE SET NULL, created_at,
+                 PRIMARY KEY (org_pk, path))
+orgs.open_datasets boolean  -- false for orgs that exist at migration, true for new ones
 ```
 
-Like visibility, it's loaded into memory at startup: a set of `(org_pk, path)`.
+A dataset is public when its org is open and no row names its path.
 
-- **Who:** org admins, with `PUT` and `DELETE orgs/{org}/datasets/public?path=`. `PUT` checks
-  that `path` is a dataset (D87), and gives 404 otherwise. Both write a `dataset_visibility`
-  event.
-- **The exact path only.** A public dataset doesn't make its folder or its siblings public. A
-  dataset nested inside a public dataset's folder isn't looked for (D87), so it can't become
-  public by accident.
-- **Readable routes** for outsiders, when `(org, path)` is public: `info`, `rows`, `cell`,
+- **Who:** org admins, with `DELETE` (make private) and `PUT` (make public again)
+  `orgs/{org}/datasets/public?path=`. Both write a `dataset_visibility` event. A path can be made
+  private before anything is written there, so a dataset is private from its first version.
+- **The exact path only.** A private dataset doesn't make its folder or its siblings private.
+- **Readable routes** for outsiders, unless `(org, path)` is private: `info`, `rows`, `cell`,
   `versions` and `readme`, at any version or tag. Anything else (`at`, delete, rename, tags, the
-  trash) stays members-only. An outsider asking for a private path gets 404, the same answer as
-  for a missing one.
-- **Renames carry the flag** (D95): the row's `path` is updated in the transaction that commits
-  the rename, so a public dataset stays public at its new path.
-- **Deletes drop the flag** (D93). A dataset restored from the trash comes back private, so an
-  admin decides again whether to publish it.
+  trash) stays members-only, so outsiders can't list datasets. A private path answers 404, the
+  same as a missing one.
+- **Private wins.** A rename (D95) moves the flag in the transaction that commits it, and a
+  dataset renamed onto a flagged path becomes private. A delete (D93) leaves the flag, so the
+  dataset comes back private when restored, and a restore to another path copies it there. A
+  stale flag can only make something private: deletes through the Storage tab, the S3 proxy or
+  the upstream directly need no handling.
+- **Orgs that predate this.** Their datasets were written while everything was private, so
+  migration 0016 leaves those orgs closed (`open_datasets` false), and none of their datasets
+  is public. `Datasets.close_existing` walks each closed org's flock-datasets with delimited
+  listings, flags every folder holding a `_versions/` private (D87), and opens the org in one
+  transaction. It runs at startup and before each trash sweep, until it succeeds, and any
+  number of replicas can run it. `PUT` and `DELETE public` answer 409 until then.
 - **S3 is unaffected.** The proxy (D54) never serves anonymous requests, and the bucket's
   objects stay reachable only with an S3 key. The dataset page reads rows through the API, so
   outsiders get rendered pages of rows, not the files.
@@ -191,8 +202,7 @@ Like visibility, it's loaded into memory at startup: a set of `(org_pk, path)`.
     pages.
 
   A signed-in non-member gets the same, plus their own account menu and org switcher.
-- **The org page** (`/{entity}`) shows outsiders two lists: public projects, and public datasets
-  linking to their dataset pages.
+- **The org page** (`/{entity}`) shows outsiders its public projects (D114).
 - **A "Public" badge** next to the project's name in its header, and on public datasets'
   headers, for members and outsiders alike.
 - **Visibility settings,** for admins:
@@ -225,7 +235,8 @@ One PR, `feat/public-projects`, from main.
 
 ### Step 1. Migration
 
-`0016_public_projects.sql`: `projects.visibility` and the `public_datasets` table (D110, D115).
+`0016_public_projects.sql`: `projects.visibility`, the `private_datasets` table and
+`orgs.open_datasets` (D110, D115).
 Load both into memory in `store.py` and `core/datasets.py`.
 
 ### Step 2. Access
@@ -240,8 +251,8 @@ Load both into memory in `store.py` and `core/datasets.py`.
 
 - `visibility` in `PATCH projects/{e}/{p}` and in `project_info`, the event, and closing
   outsiders' streams on going private (D110).
-- `public_datasets`: the PUT, DELETE and list routes, the readable dataset routes, and carrying
-  the flag through renames and dropping it on deletes (D115).
+- `private_datasets`: the PUT and DELETE routes, the readable dataset routes, carrying the flag
+  through renames and restores, and flagging existing orgs' datasets (D115).
 
 ### Step 4. Web
 
@@ -295,6 +306,9 @@ Load both into memory in `store.py` and `core/datasets.py`.
   a key (section 1).
 - **Public datasets can't be downloaded** as files, since S3 stays private (D115). Rows can only
   be read a page at a time.
+- **A member can publish a private dataset** by copying it to another path through S3, since a
+  copy outside the dataset routes carries no flag. Members can already read it, so this is the
+  same trust as any member sharing what they read.
 - **No discovery** beyond an org's page: no explore page and no search.
 - **No link previews** (Open Graph tags) for shared URLs.
 
@@ -304,7 +318,8 @@ Load both into memory in `store.py` and `core/datasets.py`.
 2. **Visibility is per project**, not per org (D110).
 3. **Outsiders see runs, metrics, charts, files and logs** of a public project (D112), but **not
    GPU spend or owners' emails** (D113).
-4. **Datasets are made public one at a time**, and **S3 stays private** (D115).
+4. **Datasets are public by default and made private one at a time**, and **S3 stays private**
+   (D115).
 5. **Only org admins** change visibility, and **there's no explore page** (D110, D114).
 6. **Signed-in non-members see what anonymous visitors see** (D111).
 
@@ -327,8 +342,8 @@ signed-out 404 goes to sign in, owners' names stay visible, and outsiders get li
 
 ### 7.1. The API
 
-- **The migration (D110, D115).** `0016_public_projects.sql` adds `projects.visibility` and
-  `public_datasets` as planned, and a third table, `visibility_events`, for the event log. Each
+- **The migration (D110, D115).** `0016_public_projects.sql` adds `projects.visibility`,
+  `private_datasets` and `orgs.open_datasets` as planned, and a third table, `visibility_events`, for the event log. Each
   row has `org_pk`, then `project_pk` for a project or `path` for a dataset, with `kind`
   (`visibility` or `dataset_visibility`), `from_visibility`, `to_visibility`, `user_pk` and
   `at`. Projects had no event log that this could join. A row is written only when the
@@ -337,17 +352,18 @@ signed-out 404 goes to sign in, owners' names stay visible, and outsiders get li
   (`PROJECT_COLUMNS`), and `Project.public` is a property on it. `update_project` re-reads the
   locked row's visibility before writing, since another admin may have changed it since the
   request read the project.
-- **Public datasets aren't cached (D115).** `Datasets.is_public` is one primary-key lookup per
-  request instead of a set loaded at startup. That needs no invalidation across replicas (012),
+- **Dataset flags aren't cached (D115).** `Datasets.is_public` is one query per request (the
+  org's `open_datasets` and a primary-key lookup) instead of a set loaded at startup. That needs no invalidation across replicas (012),
   and dataset reads already go to S3, which costs far more. Members skip it, except in `info`,
   which reports `public`; an outsider's `info` doesn't ask twice.
-- **Deletes outside the dataset routes drop the flag too (D115).** A dataset deleted through the
-  Storage tab or the S3 proxy would otherwise leave its row, and a dataset written at that path
-  later would start public. After any delete from flock-datasets, `drop_deleted_public` drops
-  the flag of each public dataset the keys were in whose `_versions/` is now empty. If the drop
-  fails, the proxy answers the delete with a 503 rather than a success, so the S3 client retries:
-  the delete is a no-op the second time and the drop runs again. Deletes made straight against
-  the upstream S3, with the global key, aren't seen.
+- **Datasets started private in the first draft (D115).** The flag was `public_datasets`, and
+  every delete outside the dataset routes (the Storage tab, the S3 proxy) had to drop it, or a
+  dataset written at that path later would start public; a failed drop left exactly that.
+  Inverting the flag removed the problem: a stale private flag errs the safe way, so those
+  deletes no longer touch it.
+- **Run metadata (D113).** `GET …/runs/{run}/files/wandb-metadata.json` answers outsiders the
+  file's JSON without `email` and `username`. The SDK fills `email` from the viewer query once
+  it has resolved the account, and W&B imports (`core/imports.py`) bring files that carry both.
 - **The viewer (D111).** `viewer` in `deps.py` returns None only when the request has no
   `x-api-key` and no `Authorization` with a value. Anything else goes through `rest_user`, so a
   bad token is 401 and a wandb key is `WANDB_KEY_REFUSED`. `accounts.access` returns `admin`,
@@ -373,16 +389,14 @@ signed-out 404 goes to sign in, owners' names stay visible, and outsiders get li
   updates the badge from it.
 - **The org (D114).** `GET orgs/{org}` answers outsiders with `role: null` beside the three
   fields, so the web app can tell the views apart with one call. `Store.has_public` checks for a
-  live public project or any public dataset. `GET orgs/{org}/datasets/public` answers members
-  too, and each entry carries `version` and `updated_at` as well as `path` and
-  `made_public_at`. Without an S3 upstream it answers an empty list. Paths whose dataset is gone
-  from the bucket (deleted outside Flock) are left out.
-- **Datasets (D115).** `info` answers `public`, for the badge and the menu. `PUT public` checks
-  for a dataset with the same `latest` lookup that folder listings use, under the dataset's
-  lock. `DELETE public` on a path that isn't public changes nothing, and logs nothing. A rename
-  moves the row inside the rename's lock. A delete drops the row in the transaction that moves
-  the dataset to the trash. A restore deletes it again at the target path, in case an admin
-  published a new dataset at that path meanwhile.
+  live public project only, since datasets aren't listed.
+- **Datasets (D115).** `info` answers `public`, for the badge and the menu. `PUT` and `DELETE
+  public` take the path's lock, and change nothing (and log nothing) when the path is already
+  that way. A rename copies the source's row to the target and drops the source's, inside the
+  rename's lock. A restore to another path copies the old path's row to it. The target's row
+  is committed on its own before any object lands there: inside the move's transaction it
+  would be invisible to readers until the commit, and the dataset public meanwhile. A delete
+  leaves the row. `close_existing` locks the org row, so two replicas flagging the same org finish once.
 
 ### 7.2. The web app
 

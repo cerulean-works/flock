@@ -34,15 +34,14 @@ A cell is an object whose `k` says its kind:
 
 ## Public datasets[[public]]
 
-An org admin can make one dataset public, by its exact path. Anyone can then call `info`, `rows`, `cell`, `versions` and `readme` on it, at any version or tag, without credentials. Its folder, the datasets beside it, `at` and every change stay members-only, and the bucket's objects stay out of reach without an S3 key. Other paths answer outsiders 404, as missing datasets do.
+Datasets are public unless an org admin makes them private, by exact path. Anyone can call `info`, `rows`, `cell`, `versions` and `readme` on a public dataset, at any version or tag, without credentials. `at`, the trash and every change stay members-only, so outsiders can't list datasets, and the bucket's objects stay out of reach without an S3 key. Private paths answer outsiders 404, as missing datasets do.
 
 | Endpoint | Who | Meaning |
 |---|---|---|
-| `GET public` | members, anyone if the organization has public things | `{"datasets": [{"path", "made_public_at", "version", "updated_at"}]}`: the public datasets, by path, each with its latest version. |
-| `PUT public?path` | org admins | Makes the dataset public. Answers `{"path", "public": true}`, or 404 when `path` isn't a dataset. |
-| `DELETE public?path` | org admins | Makes it private again. Answers 204. |
+| `PUT public?path` | org admins | Makes the path public again. Answers `{"path", "public": true}`. |
+| `DELETE public?path` | org admins | Makes the path private, whether or not a dataset is there yet. Answers 204. |
 
-Renaming a public dataset keeps it public at its new path. Deleting it makes it private, so a dataset restored from the trash comes back private.
+Renaming a private dataset keeps it private at its new path, and renaming any dataset onto a private path makes it private. Deleting a private dataset keeps its path private, so it comes back private when restored, at its path or another. `PUT public` and `DELETE public` answer 409 in an organization whose existing datasets Flock hasn't marked private yet, a few minutes after an upgrade from a version where datasets started private.
 
 ## Changing[[changing]]
 

@@ -484,11 +484,10 @@ class Store:
         return [Org.load(record) for record in records]
 
     async def has_public(self, org: Org) -> bool:
-        """Whether ``org`` has a public project or dataset, which outsiders may see it for
-        (D114)."""
+        """Whether ``org`` has a public project, which outsiders may see it for (D114). Public datasets don't count: they're reached by URL, not listed."""
         return await self.db.fetchval(
             "SELECT EXISTS (SELECT FROM projects WHERE org_pk = $1 AND deleted_at IS NULL "
-            "AND visibility = 'public') OR EXISTS (SELECT FROM public_datasets WHERE org_pk = $1)",
+            "AND visibility = 'public')",
             org.pk,
         )
 

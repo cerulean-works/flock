@@ -1,11 +1,11 @@
 # Share projects and datasets publicly
 
-Make a project or a dataset public so that anyone with its link can read it, signed in or not, without being invited into your organization. Public access is read-only, like a public Hugging Face repository.
+Anyone with a public project's or dataset's link can read it, signed in or not, without being invited into your organization. Public access is read-only, like a public Hugging Face repository. Projects start private and you make them public. Datasets start public and you make them private.
 
 ## What you need
 
 - To be an admin of the organization. Members can't change visibility.
-- The project or dataset to share. Everything starts private.
+- The project to share, or the dataset to keep private.
 
 ## Check for secrets first
 
@@ -26,14 +26,23 @@ To make it private again, choose **Private**. No confirmation is asked. Outsider
 
 Renaming a public project keeps it public, but its old URL stops working, as for any rename.
 
-## Make a dataset public
+## Keep a dataset private
+
+Every dataset in `flock-datasets` is public, unless an admin made it private. Outsiders read a public dataset's README, rows, schema and versions on its page, at every version and tag. They can't browse `flock-datasets` or list its datasets, and they can't download a dataset's files, because S3 access always needs a key. So a public dataset is found only through the links you share.
+
+To make a dataset private:
 
 1. Open the dataset's page in **Datasets**.
-2. Open its menu and choose **Make public**, then confirm.
+2. Open its menu and choose **Make private**. No confirmation is asked.
 
-Only that dataset becomes public, at every version and tag. Its folder, the datasets beside it and the rest of `flock-datasets` stay private. Outsiders read its README, rows, schema and versions on its page. They can't download its files, because S3 access always needs a key.
+Only that exact path becomes private. Datasets inside its folder, or beside it, stay public. To make it public again, choose **Make public**, then confirm.
 
-A public dataset stays public when you rename it. Deleting it makes it private: if an admin restores it from the trash, it comes back private, and you decide again whether to publish it.
+> [!TIP]
+> To keep a dataset private from its first version, make its path private before you write it, with `DELETE /api/v1/orgs/{org}/datasets/public?path=...` ([Datasets API](api/datasets#public)).
+
+A private dataset stays private when you rename it, and a dataset renamed onto a private path becomes private. Deleting a private dataset keeps its path private: if an admin restores it from the trash, to its path or another, it comes back private, and so does a new dataset written at its path.
+
+Datasets written before datasets became public by default stay private until an admin makes each one public. Flock marks them private once, a few minutes after it's upgraded. Until then, no dataset of the organization is public.
 
 ## What outsiders see
 
@@ -44,8 +53,8 @@ Anyone outside the organization, whether signed out or signed in to another orga
 | Open the project's runs table, charts and run pages, with live updates | Edit, move or delete runs, or log to the project |
 | Read run configs, summaries, metrics, files and console logs | See GPU cost, budgets or billing |
 | See who logged each run, by name and avatar | See anyone's email, or the organization's members |
-| Open the organization's page, which lists its public projects and datasets | See its private projects, datasets, Storage or settings |
-| Read a public dataset's page at any version | Browse `flock-datasets`, or read the dataset's objects through S3 |
+| Open the organization's page, which lists its public projects | See its private projects, datasets, Storage or settings |
+| Read a public dataset's page at any version | Browse or list `flock-datasets`, or read the dataset's objects through S3 |
 
 A private project or dataset looks exactly like one that doesn't exist. A signed-out visitor who opens one is asked to sign in, in case they're a member.
 

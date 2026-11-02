@@ -22,7 +22,6 @@ import httpx
 import orjson
 
 from app.api.src import s3_credentials
-from app.api.src.core.datasets import drop_deleted_public
 from app.api.src.core.errors import BadGateway, Conflict, Forbidden, Invalid, NotFound
 from app.api.src.s3_proxy import sigv4
 from app.api.src.s3_proxy.upstream import DELETE_BATCH, Upstream, UpstreamError, configured
@@ -738,8 +737,6 @@ class S3:
         for start in range(0, len(listed), DELETE_BATCH):
             batch = listed[start : start + DELETE_BATCH]
             await self._call(upstream.delete_keys(bucket.upstream_name, batch))
-        if bucket.managed == "datasets" and listed:
-            await drop_deleted_public(self.store.db, upstream, org.pk, bucket.upstream_name, listed)
         return len(listed)
 
     # ------------------------------------------------------------------ presigned URLs (D69)

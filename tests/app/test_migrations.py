@@ -708,7 +708,7 @@ def test_0015_refuses_an_org_named_models(postgres, tmp_path):
     assert asyncio.run(Migrations().apply(url)) == ["0015_models", "0016_public_projects"]
 
 
-def test_0016_leaves_existing_projects_private(postgres, tmp_path):
+def test_0016_leaves_existing_projects_and_datasets_private(postgres, tmp_path):
     url = postgres.create(migrated=False)
     before = tmp_path / "before"
     before.mkdir()
@@ -734,4 +734,13 @@ def test_0016_leaves_existing_projects_private(postgres, tmp_path):
     assert asyncio.run(Migrations().apply(url)) == ["0016_public_projects"]
     rows = asyncio.run(run("SELECT name, visibility FROM projects ORDER BY name"))
     assert [tuple(row) for row in rows] == [("a", "private"), ("b", "private")]
-    assert asyncio.run(run("SELECT * FROM public_datasets")) == []
+    assert asyncio.run(run("SELECT * FROM private_datasets")) == []
+    # Existing orgs are closed until their datasets are flagged private; new ones start open.
+    asyncio.run(
+        run(
+            "INSERT INTO orgs (name, display_name, created_at, updated_at) "
+            "VALUES ('new', 'New', now(), now())"
+        )
+    )
+    rows = asyncio.run(run("SELECT name, open_datasets FROM orgs ORDER BY name"))
+    assert [tuple(row) for row in rows] == [("lab", False), ("new", True)]

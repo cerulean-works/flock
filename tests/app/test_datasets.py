@@ -962,12 +962,19 @@ def make_public(client: Client, path: str) -> Any:
     return client.request("PUT", query(f"{DATASETS}/public", path=path))
 
 
-def test_public_datasets_are_readable_by_anyone(flock: S3Flock, writer: Writer):
+def make_private(client: Client, path: str) -> Any:
+    return client.request("DELETE", query(f"{DATASETS}/public", path=path))
+
+
+def private_paths(flock: S3Flock) -> list[str]:
+    return [r["path"] for r in sql(flock, "SELECT path FROM private_datasets ORDER BY path")]
+
+
+def test_datasets_are_public_unless_made_private(flock: S3Flock, writer: Writer):
     path = "eval/mmlu"
     writer.write(path, table(0, 10))
     writer.write(path, table(10, 10), mode="append")
     writer.write("eval/sibling", table(0, 1))
-    writer.write("eval/mmlu-nested/inner", table(0, 1))
     put(flock, f"{path}/README.md", b"# card")
     api = flock.client()
     tagged = api.request("PUT", f"{DATASETS}/tags/v1.0", body={"path": path, "version": 1})
@@ -985,23 +992,7 @@ def test_public_datasets_are_readable_by_anyone(flock: S3Flock, writer: Writer):
         ("versions", {}),
         ("readme", {}),
     ]
-    for client in (outsider, anon):
-        for route, params in reads:
-            assert get(client, f"{DATASETS}/{route}", path=path, **params).status == 404, route
-        assert get(client, f"{DATASETS}/public").status == 404
-
-    # Admins only, datasets only.
-    assert make_public(member.api, path).status == 403
-    assert make_public(outsider, path).status == 404
-    assert make_public(api, "eval").status == 404  # a folder
-    assert make_public(api, "eval/nope").status == 404
-    made = make_public(api, path)
-    assert made.status == 200, made.body
-    assert made.json() == {"path": path, "public": True}
-    assert make_public(api, path).status == 200  # already public
-
     assert get(api, f"{DATASETS}/info", path=path).json()["public"] is True
-    assert get(api, f"{DATASETS}/info", path="eval/sibling").json()["public"] is False
     for client in (outsider, anon):
         for route, params in reads:
             resp = get(client, f"{DATASETS}/{route}", path=path, **params)
@@ -1009,145 +1000,102 @@ def test_public_datasets_are_readable_by_anyone(flock: S3Flock, writer: Writer):
         assert get(client, f"{DATASETS}/info", path=path, version="v1.0").json()["version"] == 1
         assert get(client, f"{DATASETS}/rows", path=path).json()["total"] == 20
         assert get(client, f"{DATASETS}/readme", path=path).json()["text"] == "# card"
-        # Only the exact path: not its folder, siblings or what's beside it.
-        for other in ("eval", "eval/sibling", "eval/mmlu-nested/inner"):
-            assert get(client, f"{DATASETS}/info", path=other).status == 404, other
+        assert get(client, f"{DATASETS}/info", path="eval/sibling").status == 200
+        # Datasets only: folders, the trash and listings stay members-only, and a public
+        # dataset doesn't open the org's page (D114).
+        assert get(client, f"{DATASETS}/info", path="eval").status == 404
         assert get(client, f"{DATASETS}/at", path="eval").status in (401, 404)
-        assert get(client, f"{DATASETS}/at", path=path).status in (401, 404)
         assert get(client, f"{DATASETS}/trash").status in (401, 404)
-        listed = get(client, f"{DATASETS}/public").json()["datasets"]
-        assert [(d["path"], d["version"]) for d in listed] == [(path, 2)]
-        assert client.get("/api/v1/orgs/flock").json()["role"] is None
-    renamed = anon.post(f"{DATASETS}/rename", {"path": path, "to": "x"})
-    assert renamed.status == 401
+        assert client.get("/api/v1/orgs/flock").status == 404
+    assert anon.post(f"{DATASETS}/rename", {"path": path, "to": "x"}).status == 401
     assert outsider.post(f"{DATASETS}/delete", {"path": path}).status == 404
 
+    # Admins only.
+    assert make_private(member.api, path).status == 403
+    assert make_private(outsider, path).status == 404
+    assert make_private(api, path).status == 204
+    assert make_private(api, path).status == 204  # already private
+    assert get(api, f"{DATASETS}/info", path=path).json()["public"] is False
+    assert get(member.api, f"{DATASETS}/rows", path=path).status == 200
+    for client in (outsider, anon):
+        for route, params in reads:
+            assert get(client, f"{DATASETS}/{route}", path=path, **params).status == 404, route
+        # Only the exact path.
+        assert get(client, f"{DATASETS}/info", path="eval/sibling").status == 200
+
+    assert make_public(member.api, path).status == 403
+    made = make_public(api, path)
+    assert made.status == 200, made.body
+    assert made.json() == {"path": path, "public": True}
+    assert get(anon, f"{DATASETS}/info", path=path).status == 200
     events = sql(
         flock,
         "SELECT kind, path, from_visibility, to_visibility FROM visibility_events ORDER BY pk",
     )
-    assert [tuple(e) for e in events] == [("dataset_visibility", path, "private", "public")]
-    assert member.api.request("DELETE", query(f"{DATASETS}/public", path=path)).status == 403
-    assert delete(api, f"{DATASETS}/public", path=path).status == 204
-    assert get(anon, f"{DATASETS}/info", path=path).status == 404
-    assert get(api, f"{DATASETS}/info", path=path).json()["public"] is False
-    assert len(sql(flock, "SELECT * FROM visibility_events")) == 2
+    assert [tuple(e) for e in events] == [
+        ("dataset_visibility", path, "public", "private"),
+        ("dataset_visibility", path, "private", "public"),
+    ]
 
 
-def test_public_follows_renames_and_is_dropped_on_delete(flock: S3Flock, writer: Writer):
-    writer.write("a", table(0, 3))
+def test_a_path_made_private_ahead_is_private_from_its_first_version(
+    flock: S3Flock, writer: Writer
+):
     api = flock.client()
     anon = flock.anonymous()
-    assert make_public(api, "a").status == 200
+    assert make_private(api, "exam/v1").status == 204
+    writer.write("exam/v1", table(0, 3))
+    assert get(anon, f"{DATASETS}/info", path="exam/v1").status == 404
+    assert get(api, f"{DATASETS}/info", path="exam/v1").json()["public"] is False
+
+
+def test_private_follows_renames_and_outlives_deletes(flock: S3Flock, writer: Writer):
+    writer.write("a", table(0, 3))
+    writer.write("open", table(0, 3))
+    api = flock.client()
+    anon = flock.anonymous()
+    assert make_private(api, "a").status == 204
     renamed = api.post(f"{DATASETS}/rename", {"path": "a", "to": "b/c"})
     assert renamed.status == 200, renamed.body
-    assert get(anon, f"{DATASETS}/info", path="a").status == 404
-    assert get(anon, f"{DATASETS}/info", path="b/c").json()["rows"] == 3
+    assert get(anon, f"{DATASETS}/info", path="b/c").status == 404
+    assert private_paths(flock) == ["b/c"]
 
+    # A deleted dataset's flag stays: it comes back private, and so does a new one at its path.
     deleted = api.post(f"{DATASETS}/delete", {"path": "b/c"})
     assert deleted.status == 200, deleted.body
+    writer.write("b/c", table(0, 1))
     assert get(anon, f"{DATASETS}/info", path="b/c").status == 404
-    assert sql(flock, "SELECT * FROM public_datasets") == []
-    restored = api.post(f"{DATASETS}/trash/{deleted.json()['id']}/restore", {})
+    restored = api.post(f"{DATASETS}/trash/{deleted.json()['id']}/restore", {"to": "d"})
     assert restored.status == 200, restored.body
-    # Restored private: an admin decides again.
-    assert get(api, f"{DATASETS}/info", path="b/c").json()["public"] is False
-    assert get(anon, f"{DATASETS}/info", path="b/c").status == 404
+    assert get(anon, f"{DATASETS}/info", path="d").status == 404
+    assert get(api, f"{DATASETS}/info", path="d").json()["rows"] == 3
 
-
-def test_rename_onto_a_stale_public_path(flock: S3Flock, writer: Writer):
-    # A row left by a dataset deleted outside Flock neither blocks the rename nor makes the
-    # renamed dataset public.
-    writer.write("a", table(0, 3))
-    api = flock.client()
-    anon = flock.anonymous()
-    sql(
-        flock,
-        "INSERT INTO public_datasets (org_pk, path) SELECT pk, 'b' FROM orgs WHERE name = 'flock'",
-    )
-    renamed = api.post(f"{DATASETS}/rename", {"path": "a", "to": "b"})
+    # A public dataset renamed onto a private path becomes private.
+    assert make_private(api, "e").status == 204
+    renamed = api.post(f"{DATASETS}/rename", {"path": "open", "to": "e"})
     assert renamed.status == 200, renamed.body
-    assert get(anon, f"{DATASETS}/info", path="b").status == 404
-    assert sql(flock, "SELECT path FROM public_datasets") == []
+    assert get(anon, f"{DATASETS}/info", path="e").status == 404
+    assert private_paths(flock) == ["b/c", "d", "e"]
 
 
-def test_deletes_outside_the_dataset_routes_drop_the_flag(flock: S3Flock, writer: Writer):
-    # A public dataset deleted through the Storage tab or the proxy mustn't leave its flag for
-    # whatever is written at that path next.
-    import boto3
-    from botocore.config import Config
-
+def test_orgs_from_before_keep_their_datasets_private(flock: S3Flock, writer: Writer):
+    # Orgs made before datasets became public by default (migration 0016) start closed: every
+    # dataset they hold is flagged private before any is public.
+    for path in ("old", "eval/mmlu", "eval/deep/set"):
+        writer.write(path, table(0, 2))
+    put(flock, "eval/notes.txt", b"not a dataset")
+    sql(flock, "UPDATE orgs SET open_datasets = false WHERE name = 'flock'")
     api = flock.client()
     anon = flock.anonymous()
-    for path in ("tab", "proxy", "kept"):
-        writer.write(path, table(0, 3))
-        assert make_public(api, path).status == 200
+    assert get(anon, f"{DATASETS}/info", path="old").status == 404
+    assert make_public(api, "old").status == 409
 
-    # A file beside the manifests leaves the dataset, and its flag, in place.
-    readme = api.post(f"{BUCKETS}/flock-datasets/objects/delete", {"keys": ["kept/README.md"]})
-    assert readme.status == 200, readme.body
-    gone = api.post(f"{BUCKETS}/flock-datasets/objects/delete", {"prefixes": ["tab/"]})
-    assert gone.status == 200, gone.body
-
-    creds = flock.credentials()
-    s3 = boto3.client(
-        "s3",
-        endpoint_url=flock.proxy.url,
-        aws_access_key_id=creds["access_key_id"],
-        aws_secret_access_key=creds["secret_access_key"],
-        region_name="us-east-1",
-        config=Config(s3={"addressing_style": "path"}, retries={"max_attempts": 1}),
-    )
-    listed = [
-        o["Key"] for o in s3.list_objects_v2(Bucket="flock-datasets", Prefix="proxy/")["Contents"]
-    ]
-    last = [k for k in listed if k.startswith("proxy/_versions/")][-1]
-    rest = [{"Key": k} for k in listed if k != last]
-    s3.delete_objects(Bucket="flock-datasets", Delete={"Objects": rest})
-    # One manifest left: still a dataset, still public.
-    assert len(sql(flock, "SELECT path FROM public_datasets WHERE path = 'proxy'")) == 1
-    s3.delete_object(Bucket="flock-datasets", Key=last)
-
-    assert [r["path"] for r in sql(flock, "SELECT path FROM public_datasets")] == ["kept"]
-    writer.write("tab", table(0, 2))
-    assert get(anon, f"{DATASETS}/info", path="tab").status == 404
-    assert get(anon, f"{DATASETS}/info", path="kept").json()["rows"] == 3
-
-
-def test_a_failed_flag_drop_fails_the_delete_so_the_client_retries(
-    flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
-):
-    # A success would leave the flag, so a dataset written at the path later would start public.
-    import boto3
-    from botocore.config import Config
-
-    from app.api.src.s3_proxy import app as proxy_app
-
-    api = flock.client()
-    writer.write("d", table(0, 3))
-    assert make_public(api, "d").status == 200
-    drop = proxy_app.drop_deleted_public
-    calls = []
-
-    async def flaky(*args: Any) -> None:
-        calls.append(args)
-        if len(calls) == 1:
-            raise OSError("database unreachable")
-        await drop(*args)
-
-    monkeypatch.setattr(proxy_app, "drop_deleted_public", flaky)
-    creds = flock.credentials()
-    s3 = boto3.client(
-        "s3",
-        endpoint_url=flock.proxy.url,
-        aws_access_key_id=creds["access_key_id"],
-        aws_secret_access_key=creds["secret_access_key"],
-        region_name="us-east-1",
-        config=Config(s3={"addressing_style": "path"}, retries={"max_attempts": 3}),
-    )
-    keys = [{"Key": o["Key"]} for o in s3.list_objects_v2(Bucket="flock-datasets")["Contents"]]
-    # The first attempt answers 503; boto3's retry repeats the delete, a no-op by then, and the
-    # flag is dropped.
-    s3.delete_objects(Bucket="flock-datasets", Delete={"Objects": keys})
-    assert len(calls) == 2
-    assert sql(flock, "SELECT path FROM public_datasets") == []
+    assert flock.call(datasets(flock).close_existing()) == 3
+    assert private_paths(flock) == ["eval/deep/set", "eval/mmlu", "old"]
+    assert flock.call(datasets(flock).close_existing()) == 0
+    for path in ("old", "eval/mmlu", "eval/deep/set"):
+        assert get(anon, f"{DATASETS}/info", path=path).status == 404, path
+    writer.write("new", table(0, 2))
+    assert get(anon, f"{DATASETS}/info", path="new").status == 200
+    assert make_public(api, "old").status == 200
+    assert get(anon, f"{DATASETS}/info", path="old").status == 200

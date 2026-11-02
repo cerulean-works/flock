@@ -34,7 +34,7 @@ Who can do what, by role. A user's role is per organization: they can be an admi
 
 ## Public projects and datasets
 
-An org admin can make a project or a single dataset public ([Share projects and datasets publicly](share-publicly)). Anyone outside the organization, signed out or signed in, then has read-only access to it:
+An org admin can make a project public, and a single dataset private, since datasets start public ([Share projects and datasets publicly](share-publicly)). Anyone outside the organization, signed out or signed in, has read-only access to public projects and datasets:
 
 | Action | Outsider |
 |---|---|
@@ -43,7 +43,7 @@ An org admin can make a project or a single dataset public ([Share projects and 
 | See a run's GPU cost, the budget, billing or the members | no |
 | Read a public dataset's info, rows, cells, versions and README | yes |
 | Browse `flock-datasets`, or read any object through S3 | no |
-| Read the organization's name, avatar, public projects and public datasets | yes, while it has a public project or dataset |
+| Read the organization's name, avatar and public projects | yes, while it has a public project |
 | Change anything | no |
 
 Private projects and datasets answer 404 to outsiders, the same as ones that don't exist.

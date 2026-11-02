@@ -23,7 +23,7 @@ An organization is returned as:
 |---|---|---|
 | `GET /orgs` | anyone | Your organizations as `{"orgs": [...]}`, sorted by display name, then by ID. Super admins get every organization. |
 | `POST /orgs` | super admins | Creates an organization from `{"name": "vision", "display_name": "Vision Lab"}`, with you as its admin. `display_name` defaults to `name`. Answers 201, or 409 if the ID is taken. Add `wandb` to [import a W&B entity](#imports) into it. |
-| `GET /orgs/{org}` | members, anyone if it has public things | One organization. Outsiders get only `{"name", "display_name", "avatar_url", "role": null}`, and only while it has a [public project or dataset](../share-publicly). Otherwise they get 404. |
+| `GET /orgs/{org}` | members, anyone if it has a public project | One organization. Outsiders get only `{"name", "display_name", "avatar_url", "role": null}`, and only while it has a [public project](../share-publicly). Otherwise they get 404. |
 | `PATCH /orgs/{org}` | org admins | Changes its display name, with `{"display_name": "..."}`, its S3 key lifetimes, with `s3_ephemeral_ttl` and `s3_key_max_ttl` (seconds, at least 600; `null` for no maximum), and its model retention, with `model_retention` (1 to 1,000,000, or `null` for off). An ephemeral lifetime longer than the maximum answers 422; lowering only the maximum below it lowers it too. Returns the organization. |
 | `DELETE /orgs/{org}` | org admins | Deletes it, with all its projects and runs. Its S3 buckets are deleted too, and emptied in the background. Answers 204. |
 | `PUT /orgs/{org}/avatar` | org admins | Sets its avatar. The body is the image, with the same rules as [`PUT /me/avatar`](auth#avatars). Returns the organization. |

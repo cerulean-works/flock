@@ -67,7 +67,6 @@ describe('the org’s page from outside it', () => {
 		shell: { projects: [BERT], access: 'public' },
 		org: { name: 'acme', display_name: 'Acme', avatar_url: null, role: null },
 		outside: true,
-		datasets: [{ path: 'eval/mmlu', made_public_at: 1, version: 5, updated_at: 1_789_900_000 }],
 		feed: null,
 		query: {},
 		mine: false,
@@ -75,7 +74,7 @@ describe('the org’s page from outside it', () => {
 		now: 1_790_000_000
 	};
 
-	it('lists its public projects and datasets, and nothing to change', async () => {
+	it('lists its public projects, and nothing to change', async () => {
 		resetApp('http://flock.test/acme', outside);
 		// @ts-expect-error -- a page's props: only what the outsiders' view reads
 		render(Page, { data: outside, params: { entity: 'acme' } });
@@ -88,25 +87,20 @@ describe('the org’s page from outside it', () => {
 		await expect.element(projects.getByText('Masked language models')).toBeVisible();
 		await expect.element(projects.getByText('12 runs')).toBeVisible();
 
-		const datasets = page.getByRole('region', { name: /Datasets/ });
-		const mmlu = datasets.getByRole('link', { name: 'eval/mmlu' });
-		await expect.element(mmlu).toBeVisible();
-		expect(mmlu.element().getAttribute('href')).toBe('/datasets/acme/eval/mmlu');
-		await expect.element(datasets.getByText('v5')).toBeVisible();
-
-		// No feed, no settings, no new project, no first-run instructions.
+		// No feed, no settings, no new project, no first-run instructions, and no datasets: public
+		// ones are reached by their URL (D115).
 		await expect.element(page.getByText('Latest runs')).not.toBeInTheDocument();
 		await expect.element(page.getByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: 'New project' })).not.toBeInTheDocument();
 		await expect.element(page.getByText('Log your first run')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('region', { name: /Datasets/ })).not.toBeInTheDocument();
 	});
 
-	it('says when nothing of a kind is public', async () => {
-		const empty = { ...outside, datasets: [] };
+	it('says when no project is public', async () => {
+		const empty = { ...outside, shell: { ...outside.shell, projects: [] } };
 		resetApp('http://flock.test/acme', empty);
 		// @ts-expect-error -- a page's props: only what the outsiders' view reads
 		render(Page, { data: empty, params: { entity: 'acme' } });
-		await expect.element(page.getByText('No public datasets.')).toBeVisible();
-		await expect.element(page.getByRole('link', { name: 'bert' })).toBeVisible();
+		await expect.element(page.getByText('No public projects.')).toBeVisible();
 	});
 });

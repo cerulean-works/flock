@@ -71,7 +71,7 @@
 	>
 		{#snippet subtitle()}
 			{#if data.outside}
-				Public projects and datasets
+				Public projects
 			{:else}
 				{count(data.org.project_count, 'project')} · {count(data.org.member_count, 'member')}
 			{/if}
@@ -83,12 +83,7 @@
 
 	{#if data.outside}
 		<main class="relative min-h-0 flex-1 overflow-y-auto pb-10">
-			<PublicOrg
-				org={params.entity}
-				projects={data.shell.projects}
-				datasets={data.datasets}
-				now={data.now}
-			/>
+			<PublicOrg org={params.entity} projects={data.shell.projects} now={data.now} />
 		</main>
 	{:else if fresh || !data.feed}
 		<main class="relative min-h-0 flex-1 overflow-y-auto">
