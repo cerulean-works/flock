@@ -182,9 +182,11 @@ def test_a_task_scored_on_other_requests_is_listed_with_its_suites_and_the_rest_
     write, change
 ):
     # PIQA's moved score is not a breach: it was scored on other requests. ARC still compares.
+    # The suite's hash moves with PIQA's, as in a real file, and the suite is listed by member.
     piqa = dataclasses.replace(PIQA, metrics={"acc_raw": 0.5}, **change)
     arc = dataclasses.replace(ARC, metrics={"acc_raw": 0.7, "acc_per_char": 0.8})
-    rerun = dataclasses.replace(BANK, tasks=[arc, piqa])
+    suite = dataclasses.replace(SUITE, suite_hash="hash-rc2")
+    rerun = dataclasses.replace(BANK, tasks=[arc, piqa], suites=[suite])
 
     comparison = compare(write("bank", BANK), write("new", rerun))
 
@@ -232,7 +234,8 @@ def test_cli_exits_0_on_equal_scores_1_on_a_breach_and_2_on_a_change_or_a_refusa
     breach = write("breach", dataclasses.replace(BANK, tasks=[ARC, moved]))
     arc = dataclasses.replace(ARC, metrics={"acc_raw": 0.7, "acc_per_char": 0.8})
     rehashed = dataclasses.replace(moved, task_hash="5e2d")
-    changed = write("changed", dataclasses.replace(BANK, tasks=[arc, rehashed]))
+    suite = dataclasses.replace(SUITE, suite_hash="hash-rc2")
+    changed = write("changed", dataclasses.replace(BANK, tasks=[arc, rehashed], suites=[suite]))
     other = dataclasses.replace(BANK, provenance=dataclasses.replace(PROVENANCE, dtype="bfloat16"))
     refused = write("refused", other)
 

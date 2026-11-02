@@ -128,19 +128,19 @@ def compare(banked: Path, new: Path) -> Comparison:
                 for key in ("metric", "suite_hash") if hashed else ("metric",):
                     if suite[key] != new_suites[name][key]:
                         changed_suites.setdefault(name, key)
-        # A suite holding a changed task or suite changes too, at any depth. A member of either
-        # file counts, and it is a task if either file has a task of that name, as
+        # A suite holding a changed task or suite changes too, at any depth, and is listed with
+        # `members` rather than `suite_hash`, since its hash covers its members'. A member of
+        # either file counts, and it is a task if the bank has a task of that name, as
         # `_suite_tolerance` reads it. A suite may hold, in the new file only, a suite after it in
         # the bank, so this repeats until no suite is added.
         added = True
         while added:
             added = False
             for name, suite in bank_suites.items():
-                if name not in new_suites or name in changed_suites:
+                if name not in new_suites or changed_suites.get(name) in ("metric", "members"):
                     continue
                 for member in suite["members"] + new_suites[name]["members"]:
-                    is_task = member in bank_tasks or member in new_tasks
-                    if member in (changed_tasks if is_task else changed_suites):
+                    if member in (changed_tasks if member in bank_tasks else changed_suites):
                         changed_suites[name] = "members"
                         added = True
                         break

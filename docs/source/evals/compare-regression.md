@@ -46,6 +46,8 @@ A changed task or suite is listed and not compared, and the rest is still compar
    cp results/regression/results.json tests/eval/regression/olmo-2-0425-1b-float32.json
    ```
 
+   For Paloma, copy it over `olmo-2-0425-1b-paloma-float32.json` instead.
+
 3. Include the comparison output and reasons in the change review. Keep a library-driven bank refresh in the same change as its lockfile update.
 
 A change to the results file's layout doesn't require a refresh in the same change. The banks only need to load under the current layout, which CI checks, and `compare` prints a `schema_version` difference beside any breach it causes. Refresh a bank when its scores are meant to change, as in the steps above.
