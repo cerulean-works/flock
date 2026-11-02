@@ -10,7 +10,7 @@ FINEWEB_EDU = PerplexityTask(
     name="fineweb_edu",
     dataset=Dataset(
         repo="cerulean-works/fineweb-edu-dev",
-        revision="0000000000000000000000000000000000000000",
+        revision="2484afe000a6fdf442ba2396391a3bec12644903",
         subset=None,
         split="validation",
     ),
