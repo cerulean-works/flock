@@ -12,6 +12,8 @@ servers as needed; external services are not required.
 
 Pytest uses up to four workers by default. Use `-n 0` for serial debugging or
 `-n N` to choose a worker count. GPU and latency tests are excluded by default.
+Each test process caps its own threads (`OMP_NUM_THREADS` and `RAYON_NUM_THREADS` at
+4, `TOKENIZERS_PARALLELISM=false`), and a value set in your shell wins.
 
 ## CPU-only environment
 
