@@ -1,4 +1,4 @@
-"""Every task and suite `flock-eval` can run, by name."""
+"""Every task and suite `flock eval` can run, by name."""
 
 from flock.eval.tasks.arc import ARC_EASY
 from flock.eval.tasks.base_easy import BASE_EASY

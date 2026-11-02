@@ -1,4 +1,4 @@
-"""The `flock-eval` command line."""
+"""The `flock eval` command line."""
 
 import shlex
 import sys
@@ -91,7 +91,8 @@ def run(
             dtype=dtype,
             device=device,
             wandb_project=wandb_project,
-            command=shlex.join(["flock-eval", *sys.argv[1:]]),
+            # The program's name as invoked (`flock` for the script) and its arguments.
+            command=shlex.join([Path(sys.argv[0]).name, *sys.argv[1:]]),
         )
     except ValueError as error:
         raise click.UsageError(str(error)) from None
