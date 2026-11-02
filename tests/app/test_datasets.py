@@ -694,8 +694,10 @@ def test_delete_for_good_and_who_may(flock: S3Flock, writer: Writer):
     assert get(api, f"{DATASETS}/trash").json()["entries"] == []
     assert api.delete(f"{DATASETS}/trash/{pk}").status == 404
 
-    # Someone outside the org gets 404 everywhere.
+    # Someone outside the org reads a public dataset, and gets 404 everywhere once it is private.
     writer.write("e", table(0, 1))
+    assert get(olga.api, f"{DATASETS}/info", path="e").status == 200
+    assert make_private(api, "e").status == 204
     for method, path, body in [
         ("GET", f"{DATASETS}/at", None),
         ("GET", query(f"{DATASETS}/info", path="e"), None),
