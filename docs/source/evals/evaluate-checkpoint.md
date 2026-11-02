@@ -45,4 +45,6 @@ Your training process must hold a causal language model and tokenizer compatible
 
 Scoring disables gradients and restores the modules' previous training modes. It uses the model's existing device and dtype. Keep evaluation settings consistent between checkpoints. See [Scoring](scoring) and the [Python API](python-api) for batching and model-state behavior.
 
+`score_task` loads the task's docs and tokenizes them at every call. To score the same task at many steps, call [`~eval.run.prepare_task`] once at startup and [`~eval.run.score_prepared`] at each step instead. The result is the same, and only the forward passes repeat. Keep the tokenizer object you prepared with: a `ScoringModel` built around another one is refused. [Scoring the FineWeb-Edu dev set](fineweb-edu#log-evalloss-while-training) shows the pattern.
+
 `score_task` returns metrics in memory: a mean over docs for a multiple-choice metric, and a ratio of sums over all docs for a perplexity task's metrics (see [Metrics](metrics#perplexity)). With `out`, it writes predictions only, not `results.json`; give each checkpoint its own output path. See [Results](results).
