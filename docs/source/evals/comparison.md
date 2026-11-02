@@ -20,7 +20,7 @@ These values are a reasoned estimate, not a measurement. A real regression, such
 A task or suite in one file only is listed and is not a breach. So you can compare a rerun of a few tasks (without `--limit`) against the full bank. A task added to `base_easy` after the bank was written shows as only in the new run, and each suite that holds it is a breach on `members` and `score` until the bank is refreshed. A task whose definition changed, so its `task_hash` differs, is refused as another instrument before anything is compared, and the bank must be refreshed first.
 
 The output lists, in order:
-- the fields that differ and often explain a breach: the provenance's `flock_commit`, `device`, `torch`, `transformers`, `tokenizers`, `datasets` and `python`, and the file's `schema_version`
+- the fields that differ and often explain a breach: the provenance's `flock_commit`, `device`, `sdpa_backend`, `torch`, `transformers`, `tokenizers`, `datasets` and `python`, and the file's `schema_version`
 - the tasks and suites in one file only
 - one line per breach, with the task or suite, the field, both values and their difference
 - a count of what was compared
@@ -40,7 +40,7 @@ A breach adds a line such as `piqa  metrics.acc_raw  0.6  ->  0.625  (+0.025)`.
 A difference in score only means something if both runs scored the same requests with the same settings. `compare` refuses, before it reads any score, when:
 - the provenance's `model`, `dtype`, `batch_tokens`, `max_length` or `attention` differ
 - the provenance's `model_digest` differs, as for two Flock servers that each have a `flock:acme/olmo2-1b@12`. A file written before `model_digest` existed counts as `null`, the value for a Hugging Face model.
-- the provenance's `sdpa_backend` differs, the SDPA kernel that changes BF16 scores. A file written before `sdpa_backend` existed is not refused on it: its kernel is unknown, and in FP32 the kernel changes no score, so an older FP32 bank stays comparable.
+- the provenance's `sdpa_backend` differs, the SDPA kernel that changes BF16 scores. A file written before `sdpa_backend` existed is not refused on it: its kernel is unknown, and in FP32 the kernel changes no score, so an older FP32 bank stays comparable. Its missing field prints as `None` among the causes below, as other missing fields do.
 - a task in both files has a different `task_hash` (see [The task hash](results#the-task-hash)) or `limit`
 - a suite in both files has a different `metric`, so its score averages another metric
 - no task is in both files

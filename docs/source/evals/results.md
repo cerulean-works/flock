@@ -68,7 +68,7 @@ A context too long for the model loses tokens from the left, and the continuatio
 
 `model` is `repo@commit` for a Hugging Face model, and `flock:org/name@{number}` for a version stored in Flock. `model_digest` is that version's digest, the sha256 of its file list, which names its exact files. It's `null` for a Hugging Face model, whose commit already names the files. Files written before schema version 6 have no `model_digest`, and read as `null`.
 
-`attention` is the model's attention implementation, and `sdpa_backend` the SDPA kernel scoring was pinned to: `"EFFICIENT_ATTENTION"` on CUDA with `sdpa` attention, `null` on the CPU or with other attention (see [Batching and precision](scoring#batching-and-precision)). Files written before schema version 7 have no `sdpa_backend`: PyTorch chose the kernel for each batch, so their BF16 scores don't repeat exactly.
+`attention` is the model's attention implementation, and `sdpa_backend` the SDPA kernel scoring was pinned to: `"EFFICIENT_ATTENTION"` on CUDA with `sdpa` attention, `null` on the CPU or another non-CUDA device, where PyTorch still picks the kernel, or with other attention (see [Batching and precision](scoring#batching-and-precision)). Files written before schema version 7 have no `sdpa_backend`: PyTorch chose the kernel for each batch, so their BF16 scores don't repeat exactly.
 
 ## Predictions
 

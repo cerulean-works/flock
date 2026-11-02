@@ -77,7 +77,7 @@ Pinning moves BF16 numbers wherever PyTorch picked another kernel: ARC-Easy acc_
 1. `model.py`: the pin in `_logprobs`, the `sdpa_backend` property.
 2. `provenance.py`, `run.py`, `results.py`: the field, schema 7.
 3. `compare.py`: `sdpa_backend` refuses when both files record it.
-4. Tests (CPU): `sdpa_backend` is `None` on the CPU; every forward pass sees only the efficient kernel and the SDPA flags after scoring equal those before; `compare` refuses a different kernel and accepts a file without the field. On CUDA, skipped in CI: a transformers model and a Flock model, both with grouped-query attention, score pinned and repeat in BF16.
+4. Tests (CPU): `sdpa_backend` is `None` on the CPU; every forward pass sees only the efficient kernel and the SDPA flags after scoring equal those before; `compare` refuses a different kernel and accepts a file without the field. On CUDA, skipped in CI: a transformers model and a Flock model, both with grouped-query attention, score requests and whole texts pinned and repeat in BF16.
 5. Docs: `scoring.md`, `results.md`, `comparison.md`, `evaluate-checkpoint.md`.
 6. Before/after on the GPU: ARC-Easy BF16 at `main` and at the branch, with the shift stated; two BF16 runs of the branch byte-equal; FP32 byte-equal before and after.
 
@@ -90,7 +90,7 @@ As planned, in three files of code: the pin is one `with` in `_logprobs`, `sdpa_
 Detours and checks:
 
 - **A reviewer's worry about grouped-query attention.** Flock's attention passes `enable_gqa=True` to SDPA when a model has fewer key-value heads than heads, and older PyTorch ran that only on the flash and math kernels. A CUDA test, skipped in CI, scores a tiny transformers Llama and a tiny Flock `Olmo2`, both with 4 heads and 2 key-value heads, in BF16 under the pin: both run on the efficient kernel alone and repeat bit for bit on an H200 with torch 2.14.1.
-- **The "missing means unknown" rule in `compare`** (023.D3) was chosen over reading a missing field as `None`, which would have refused every new CUDA run against the FP32 bank until it was rescored. `compare` still prints `sdpa_backend` among the likely causes when only one file records it.
+- **The "missing means unknown" rule in `compare`** (023.D3) was chosen over reading a missing field as `None`, which would have refused every new CUDA run against the FP32 bank until it was rescored. `compare` still prints `sdpa_backend` among the likely causes when one file lacks it and the other records a kernel; the missing side shows as `None`, as other missing fields do.
 - **Before and after on the GPU** (OLMo 2 1B `a1847dff`, ARC-Easy, 2,376 docs, 9,501 scored continuations, `batch_tokens` 32768, one H200, both jobs on one node):
 
 | Check | Result |
@@ -102,4 +102,4 @@ Detours and checks:
 
 The BF16 shift is the one section 2 measured (0.7677 to 0.7673). The counts differ in unit, not in kind: section 2 counts every request, conditional and unconditional (19,002 = 2 x 9,501), at another commit, while this table counts the scored continuations in the prediction files. 0.28 nats (section 1) is run-to-run noise under the default; 0.49 and 0.30 nats are the default against the pin. On the CPU the tiny-model behaviour lock is unchanged: every score, task hash and prediction row equal to `main`, and `results.json` differs only in `schema_version` and the new field.
 
-**Known gaps:** the pin is tested on one GPU type and one torch version. A file from before the pin compared with a pinned BF16 run is not refused: it shows the shift as breaches beside `schema_version`.
+**Known gaps:** the pin is tested on one GPU type and one torch version. A model compiled with `torch.compile` before scoring may keep the kernel it was traced with, which the recorded `sdpa_backend` would not show; flock's scoring compiles nothing today. On devices other than CUDA and the CPU, such as MPS, `sdpa_backend` is `None` and PyTorch still picks the kernel. A file from before the pin compared with a pinned BF16 run is not refused: it shows the shift as breaches beside `schema_version`.

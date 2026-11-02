@@ -293,7 +293,7 @@ def test_loglikelihood_restores_each_module_mode(scorer):
     ("device", "attention", "backend"),
     [("cuda", "sdpa", "EFFICIENT_ATTENTION"), ("cuda", "eager", None), ("cpu", "sdpa", None)],
 )
-def test_scoring_is_pinned_on_cuda_with_sdpa_attention_only(
+def test_sdpa_backend_is_set_on_cuda_with_sdpa_attention_only(
     scorer, monkeypatch, device, attention, backend
 ):
     # On the CPU there is no efficient kernel and no cuDNN to pin away, so CPU scores, which CI
@@ -365,11 +365,14 @@ def test_on_cuda_scoring_runs_pinned_and_repeats_in_bf16(lm, tokenizer, monkeypa
     monkeypatch.setattr(cuda_model, "forward", recording_forward)
     first = scorer.loglikelihood(REQUESTS).logprob
     second = scorer.loglikelihood(REQUESTS).logprob
+    # The rolling path too: full windows, no padding.
+    rolling = [scorer.rolling_loglikelihood(TEXTS, 8).logprob for _ in range(2)]
 
     assert scorer.sdpa_backend == "EFFICIENT_ATTENTION"
     assert set(seen) == {(True, False, False, False)}
     assert torch.equal(first, second)
-    assert first.isfinite().all()
+    assert torch.equal(rolling[0], rolling[1])
+    assert first.isfinite().all() and rolling[0].isfinite().all()
 
 
 def test_score_rejects_a_model_that_ignores_logits_to_keep(scorer, monkeypatch):
