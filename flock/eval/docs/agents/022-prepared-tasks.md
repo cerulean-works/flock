@@ -6,7 +6,7 @@
 | Date | 2026-11-02 |
 | Builds on | [001](001-eval-core.md) (`score_task`, `ScoringModel`), [008](008-paloma.md) (`PerplexityTask`, rolling windows), [019](019-fineweb-edu-dev.md) (`fineweb_edu` and the in-training snippet) |
 | Keeps | every request, token id, score, task hash, `results.json` and predictions file; `score_task(model, task)` and `evaluate` as they are |
-| Result | `prepare_task` loads and tokenizes a task once; `score_prepared` scores it with a model that has the same tokenizer |
+| Result | `prepare_task` loads and tokenizes a task once; `score_prepared` scores it with a model that has the same tokenizer, with results byte-equal to `score_task`, and saves the 1 to 2 s of host work each call spent before |
 
 ## 1. Goal
 
@@ -50,4 +50,9 @@ The model's own limits stay checked at every call, since one prepared task may b
 
 ## 4. How it was actually built
 
-Written after the build.
+- **Code.** `model.py` first (`Encoded`, `encode_requests`, `tokenize`, and the optional ids on `loglikelihood` and `rolling_loglikelihood`), then `run.py` (the two prepared dataclasses, `prepare_task`, `score_prepared`, and `score_task` as the two composed). `evaluate`, the CLI and `score_task`'s signature are unchanged.
+- **Tests.** `tests/eval/test_prepared.py`: a multiple-choice and a perplexity task give the same `TaskResult` (all fields but `seconds`) and the same predictions bytes through `score_task` and through two `score_prepared` calls on one prepared task; scoring a prepared task fails if it calls `Dataset.load`, the task's `load`, `requests` or `task_hash`, or the model's `tokenize` or `encode_requests` (the task methods are patched too, because a perplexity task's split is cached after its first load and a reload would never reach the dataset); a copy of the tokenizer is refused, a new `ScoringModel` around the same tokenizer object is accepted; a model with a shorter `max_length` is refused at the call.
+- **Locks.** On a tiny Llama model, `score_task` on `main` and `prepare_task` plus three `score_prepared` calls on this branch give equal results (every field but `seconds`, metrics compared by `repr`) and byte-equal predictions, for a multiple-choice task with shots and truncated contexts and for a text task with window 8. `evaluate`'s `results.json` and predictions for the toy task are byte-equal to `main`.
+- **Checks on real weights** (one H200, `batch_tokens` 32768). Through the prepared path in FP32, `fineweb_edu` on Qwen2.5-0.5B (`060db649`) gives perplexity 10.958357925241533 and the task hash of stage 019's run, every metric equal to the last bit, and `arc_easy` on OLMo 2 1B (`a1847dff`) gives every metric of `main`'s FP32 run to the last bit.
+- **Time.** In BF16, five `score_task` calls on `fineweb_edu` with Qwen2.5-0.5B took 42.1 s and then 32.5 to 33.1 s each; one `prepare_task` took 1.5 s, and five `score_prepared` calls 30.9 s each. On `arc_easy` with OLMo 2 1B, ten `score_task` calls took 18.9 s and then 13.1 to 13.4 s; `prepare_task` took 1.0 s and each `score_prepared` 12.1 s. So a step saves about 1.8 s on `fineweb_edu` and 1.1 s on `arc_easy`, the host work `seconds` never counted. The forward passes dominate at these sizes: the saving is about 5 to 8 percent of a step. All calls of one task gave the same metrics.
+- **Not changed.** The token ids are Python lists of ints, as the scorer takes them, which is about 200 MB of host memory for `fineweb_edu` while a run holds the prepared task. `score_task` now prepares before it checks that the predictions file is new, so that error comes after the load. `_score_perplexity` still counts each doc's UTF-8 bytes at every call (about 30 ms for 27 MB), and a tokenizer changed in place after preparing is not detected.
