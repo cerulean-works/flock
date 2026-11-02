@@ -381,11 +381,15 @@ def test_cli_prints_the_tokenizers_and_datasets_versions_when_they_differ(write)
     ]
 
 
-def test_the_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(write):
-    # Offline: a change to what `Results` writes, or to what `compare` reads, that the bank can
-    # no longer pass fails here rather than after a GPU rerun. The bank's version may lag the
-    # layout's: it is refreshed on the eval loop's schedule, not in every schema bump (021.D2).
-    bank = Path(__file__).parent / "regression" / "olmo-2-0425-1b-float32.json"
+@pytest.mark.parametrize(
+    ("name", "suite"),
+    [("olmo-2-0425-1b-float32", "base_easy"), ("olmo-2-0425-1b-paloma-float32", "paloma")],
+)
+def test_a_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(write, name, suite):
+    # Offline: a change to what `Results` writes, or to what `compare` reads, that a bank can
+    # no longer pass fails here rather than after a GPU rerun. A bank's version may lag the
+    # layout's: banks are refreshed on the eval loop's schedule, not in every schema bump (021.D2).
+    bank = Path(__file__).parent / "regression" / f"{name}.json"
     data = json.loads(bank.read_text())
     tasks = []
     for task in data["tasks"]:
@@ -400,7 +404,7 @@ def test_the_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(
     comparison = compare(bank, write("rewritten", rewritten))
 
     assert data["provenance"]["dtype"] == "float32"
-    assert "base_easy" in comparison.suites
+    assert suite in comparison.suites
     assert comparison.changed == []
     assert comparison.breaches == []
     assert comparison.provenance.keys() <= {"schema_version"}
