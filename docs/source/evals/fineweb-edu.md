@@ -27,7 +27,7 @@ uv run flock eval run \
   --out results/fineweb-edu
 ```
 
-The run prints `perplexity`, and `results/fineweb-edu/results.json` holds all three metrics. The model needs a context of at least 8192 tokens: a model whose `max_length` is smaller is refused before scoring, with an error that names the task, the window and the model's `max_length`. If the full windows don't fit in memory, lower `--batch-tokens`; it changes how windows are batched, not which tokens are scored.
+The run prints `perplexity`, and `results/fineweb-edu/results.json` holds all three metrics. The model needs a context of at least 8192 tokens: a model whose `max_length` is smaller is refused before scoring, with an error that names the task, the window and the model's `max_length`. If the full windows don't fit in memory, lower `--batch-tokens`, down to 8192; it changes how windows are batched, not which tokens are scored. A pass always holds at least one window, so going below 8192 saves no memory.
 
 `cerulean-works/fineweb-edu-dev` is public on the Hugging Face Hub, so loading it needs no token.
 
@@ -43,11 +43,13 @@ from flock.eval.tasks import TASKS
 tokenizer = model.get_hf_tokenizer()
 if tokenizer is None:
     raise ValueError("the model's config has no hf_repo, so it names no tokenizer")
-# One 8192-token window per forward pass keeps the logits small next to the training state.
+task = TASKS["fineweb_edu"]
+# At most one full window of padded tokens per forward pass keeps the logits small next to
+# the training state.
 scorer = ScoringModel(
-    FlockCausalLM(model), tokenizer, name=f"my-run@step-{step}", batch_tokens=8192
+    FlockCausalLM(model), tokenizer, name=f"my-run@step-{step}", batch_tokens=task.window
 )
-result = score_task(scorer, TASKS["fineweb_edu"])
+result = score_task(scorer, task)
 run.log(
     {
         "eval/loss": result.metrics["loss_per_token"],

@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | done |
+| Status | in review |
 | Date | 2026-11-01 |
 | Builds on | [008](008-paloma.md) (`PerplexityTask`, disjoint windows, `bits_per_byte` as a ratio of sums), [012](012-task-snapshot.md) (the snapshot), [014](014-run-provenance.md) (the results file) |
 | Keeps | every request, every task hash (Paloma's 309 included) and every multiple-choice result; `bits_per_byte` byte for byte |
@@ -72,5 +72,5 @@ The set is the public `cerulean-works/fineweb-edu-dev`, split `validation`, pinn
 - **Snapshot.** The diff is 309 `"primary_metric": "bits_per_byte"` lines and the new `fineweb_edu` entry. The toy requests are unchanged.
 - **Dev set.** Built from the file named above with seed `20261101`: 5,000 docs, 27,077,101 UTF-8 bytes, 5,546,839 GPT-2 tokens. A second build is byte-identical.
 - **Docs.** The docs page carries a plain PyTorch `document_loss` for pairs whose trainer computes the loss itself. On the tiny model it matches `rolling_loglikelihood` within 8e-6 nats at windows 1, 3, 8 and 64.
-- **Checks on real weights** (one H200, FP32, `batch_tokens` 32768). On Paloma's `wikitext_103` with OLMo 2 1B (window 2048, 61 docs), a plain Transformers forward pass over the same windows gives the same 285,336 tokens and a perplexity 9.6e-8 relative from flock's (8.881759 against 8.881759, no doc more than 0.0021 nats apart); `bits_per_byte` is byte-equal to the result before this stage. On `fineweb_edu`, Qwen2.5-0.5B (`060db649`) scores perplexity 10.958, `loss_per_token` 2.3941 and `bits_per_byte` 0.6907 in 164 s; Llama 3.2 1B (`4e20de36`) scores 8.971, 2.1940 and 0.6254 in 343 s. OLMo 2 1B is refused before scoring with the message below.
+- **Checks on real weights** (one H200, FP32, `batch_tokens` 32768). On Paloma's `wikitext_103` with OLMo 2 1B (window 2048, 61 docs), a plain Transformers forward pass over the same windows gives the same 285,336 tokens and a perplexity 9.6e-8 relative from flock's (8.8817586 against 8.8817595, no doc more than 0.0021 nats apart); `bits_per_byte` is byte-equal to the result before this stage. On `fineweb_edu`, Qwen2.5-0.5B (`060db649`) scores perplexity 10.958, `loss_per_token` 2.3941 and `bits_per_byte` 0.6907 in 164 s of scoring (181 s with the model load); Llama 3.2 1B (`4e20de36`) scores 8.971, 2.1940 and 0.6254 in 343 s of scoring (359 s in all). OLMo 2 1B is refused before scoring with the message below.
 - **Error path.** `evaluate` already checks every perplexity task's window against the model before scoring, naming the task: `fineweb_edu: window 8192 is above <model>'s max_length 4096`. `score_task` called directly from a training loop raises from `rolling_loglikelihood` without the task's name, which is enough for a caller that passed one task.
