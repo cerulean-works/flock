@@ -4,13 +4,14 @@ import itertools
 import logging
 import re
 from collections.abc import Generator, Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Literal
 
 import torch
 from huggingface_hub import HfApi
+from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -293,6 +294,13 @@ class ScoringModel:
         # transformers has no public accessor for it, only this private config attribute.
         return self.model.config._attn_implementation
 
+    @property
+    def sdpa_backend(self) -> str | None:
+        """The SDPA kernel scoring is pinned to, `"EFFICIENT_ATTENTION"` on CUDA with `sdpa` attention, else `None`: the CPU has no such kernel, and other attention never calls SDPA."""
+        if self.device.type == "cuda" and self.attention == "sdpa":
+            return SDPBackend.EFFICIENT_ATTENTION.name
+        return None
+
     def encode(self, request: Request) -> tuple[list[int], list[int]]:
         """
         Returns the (context, continuation) token ids the model scores for `request`.
@@ -409,7 +417,11 @@ class ScoringModel:
 
         logprob = torch.zeros(len(encoded), dtype=torch.float32, device=self.device)
         is_greedy = torch.zeros(len(encoded), dtype=torch.bool, device=self.device)
-        with _eval_mode(self.model):
+        # Pinned to one kernel so BF16 scores repeat run to run: left to choose, PyTorch runs
+        # cuDNN attention on some padded batches, and its results vary (023.D1, 023.D2). No
+        # fallback: a model the kernel can't run fails here rather than mix kernels.
+        pin = sdpa_kernel(SDPBackend.EFFICIENT_ATTENTION) if self.sdpa_backend else nullcontext()
+        with _eval_mode(self.model), pin:
             for batch in self._batches(order, input_lengths):
                 # `non_blocking` on these small CPU tensors: the copy is staged at once and the
                 # host never waits for GPU work already queued.

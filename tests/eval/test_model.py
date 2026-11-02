@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 import torch
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from flock.eval import model
 from flock.eval.model import FlockCausalLM, ModelRef, ScoringModel
@@ -286,6 +287,53 @@ def test_loglikelihood_restores_each_module_mode(scorer):
     finally:
         # The model is shared by the whole session, so later tests must get it back in eval mode.
         scorer.model.eval()
+
+
+@pytest.mark.parametrize(
+    ("device", "attention", "backend"),
+    [("cuda", "sdpa", "EFFICIENT_ATTENTION"), ("cuda", "eager", None), ("cpu", "sdpa", None)],
+)
+def test_scoring_is_pinned_on_cuda_with_sdpa_attention_only(
+    scorer, monkeypatch, device, attention, backend
+):
+    # On the CPU there is no efficient kernel and no cuDNN to pin away, so CPU scores, which CI
+    # checks against unbatched references, run unpinned as before.
+    monkeypatch.setattr(ScoringModel, "device", property(lambda self: torch.device(device)))
+    monkeypatch.setattr(ScoringModel, "attention", property(lambda self: attention))
+
+    assert scorer.sdpa_backend == backend
+
+
+def sdpa_flags() -> tuple[bool, bool, bool, bool]:
+    """Which SDPA kernels PyTorch may pick: efficient, cuDNN, flash and math."""
+    return (
+        torch.backends.cuda.mem_efficient_sdp_enabled(),
+        torch.backends.cuda.cudnn_sdp_enabled(),
+        torch.backends.cuda.flash_sdp_enabled(),
+        torch.backends.cuda.math_sdp_enabled(),
+    )
+
+
+def test_every_forward_pass_runs_pinned_and_the_flags_come_back(scorer, monkeypatch):
+    monkeypatch.setattr(ScoringModel, "sdpa_backend", property(lambda self: "EFFICIENT_ATTENTION"))
+    forward = scorer.model.forward
+    seen = []
+
+    def recording_forward(**kwargs):
+        seen.append(sdpa_flags())
+        # The CPU has no efficient kernel, so the pass itself runs on the math one. This inner
+        # pin gives the outer one back on exit.
+        with sdpa_kernel(SDPBackend.MATH):
+            return forward(**kwargs)
+
+    monkeypatch.setattr(scorer.model, "forward", recording_forward)
+    before = sdpa_flags()
+    scorer.loglikelihood(REQUESTS)
+    scorer.rolling_loglikelihood(TEXTS, 8)
+
+    assert len(seen) >= 2
+    assert set(seen) == {(True, False, False, False)}  # only the efficient kernel, in both paths
+    assert sdpa_flags() == before  # a training step after scoring gets its own choice back
 
 
 def test_score_rejects_a_model_that_ignores_logits_to_keep(scorer, monkeypatch):
