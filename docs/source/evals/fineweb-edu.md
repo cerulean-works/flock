@@ -43,7 +43,10 @@ from flock.eval.tasks import TASKS
 tokenizer = model.get_hf_tokenizer()
 if tokenizer is None:
     raise ValueError("the model's config has no hf_repo, so it names no tokenizer")
-scorer = ScoringModel(FlockCausalLM(model), tokenizer, name=f"my-run@step-{step}")
+# One 8192-token window per forward pass keeps the logits small next to the training state.
+scorer = ScoringModel(
+    FlockCausalLM(model), tokenizer, name=f"my-run@step-{step}", batch_tokens=8192
+)
 result = score_task(scorer, TASKS["fineweb_edu"])
 run.log(
     {

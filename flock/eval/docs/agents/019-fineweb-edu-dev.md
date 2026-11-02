@@ -2,11 +2,11 @@
 
 | | |
 | --- | --- |
-| Status | in progress |
+| Status | done |
 | Date | 2026-11-01 |
 | Builds on | [008](008-paloma.md) (`PerplexityTask`, disjoint windows, `bits_per_byte` as a ratio of sums), [012](012-task-snapshot.md) (the snapshot), [014](014-run-provenance.md) (the results file) |
 | Keeps | every request, every task hash (Paloma's 309 included) and every multiple-choice result; `bits_per_byte` byte for byte |
-| Result | to be filled when built |
+| Result | `PerplexityTask` reports `loss_per_token` and `perplexity`, equal to a plain FP32 forward pass within 1e-7 relative on `wikitext_103`; `fineweb_edu` scores Qwen2.5-0.5B at perplexity 10.958 and Llama 3.2 1B at 8.971 in FP32 |
 
 ## 1. Goal
 
@@ -68,8 +68,9 @@ The set is the public `cerulean-works/fineweb-edu-dev`, split `validation`, pinn
 - **Metrics.** `_score_perplexity` sums the docs' FP64 log-probabilities once, divides by the summed bytes and by the summed tokens, and copies both quotients to the host in one `tolist()`, so the task still waits for the GPU once. `perplexity` is `math.exp` of the host value, or infinity where that overflows (above about 709.78 nats), so a diverged checkpoint doesn't lose the run. `bits_per_byte` is the same expression as before and reads back bit for bit.
 - **Hash.** `task_hash` deletes `primary_metric` from the definition before hashing. On the tiny test model and on Paloma's real data, all 309 Paloma hashes are equal to `main`'s, and a test pins two of them on fixed docs.
 - **Locks.** On a tiny Llama model, every multiple-choice request score, `results.json` and predictions file is byte-equal to `main`. A text task gives the same `bits_per_byte` (to the last bit), task hash and predictions, and only gains `loss_per_token` and `perplexity`.
-- **Schema.** `schema_version` stays 6: metric keys are defined by each task and the file layout is unchanged, so the multiple-choice lock above is the acceptance. One consequence: `compare` of a new Paloma run against a Paloma results file written before this stage lists `loss_per_token` and `perplexity` as one-sided metrics (618 on the full Paloma run) until that reference is re-scored.
+- **Schema.** `schema_version` stays 6: metric keys are defined by each task and the file layout is unchanged, so the multiple-choice lock above is the acceptance. One consequence: `compare` of a new Paloma run against a Paloma results file written before this stage reports `loss_per_token` and `perplexity` as one-sided breaches (618 on the full Paloma run) and exits with a breach until that reference is re-scored.
 - **Snapshot.** The diff is 309 `"primary_metric": "bits_per_byte"` lines and the new `fineweb_edu` entry. The toy requests are unchanged.
 - **Dev set.** Built from the file named above with seed `20261101`: 5,000 docs, 27,077,101 UTF-8 bytes, 5,546,839 GPT-2 tokens. A second build is byte-identical.
 - **Docs.** The docs page carries a plain PyTorch `document_loss` for pairs whose trainer computes the loss itself. On the tiny model it matches `rolling_loglikelihood` within 8e-6 nats at windows 1, 3, 8 and 64.
+- **Checks on real weights** (one H200, FP32, `batch_tokens` 32768). On Paloma's `wikitext_103` with OLMo 2 1B (window 2048, 61 docs), a plain Transformers forward pass over the same windows gives the same 285,336 tokens and a perplexity 9.6e-8 relative from flock's (8.881759 against 8.881759, no doc more than 0.0021 nats apart); `bits_per_byte` is byte-equal to the result before this stage. On `fineweb_edu`, Qwen2.5-0.5B (`060db649`) scores perplexity 10.958, `loss_per_token` 2.3941 and `bits_per_byte` 0.6907 in 164 s; Llama 3.2 1B (`4e20de36`) scores 8.971, 2.1940 and 0.6254 in 343 s. OLMo 2 1B is refused before scoring with the message below.
 - **Error path.** `evaluate` already checks every perplexity task's window against the model before scoring, naming the task: `fineweb_edu: window 8192 is above <model>'s max_length 4096`. `score_task` called directly from a training loop raises from `rolling_loglikelihood` without the task's name, which is enough for a caller that passed one task.
