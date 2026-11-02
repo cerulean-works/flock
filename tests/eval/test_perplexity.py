@@ -8,12 +8,12 @@ import torch
 from flock.eval import run
 from flock.eval.model import ScoringModel
 from flock.eval.requests import Scores
-from flock.eval.results import perplexity_prediction_rows
+from flock.eval.results import Results, perplexity_prediction_rows
 from flock.eval.run import EvalConfig, evaluate, score_task
 from flock.eval.tasks import SUITES, TASKS, Dataset, PerplexityTask, Suite, TextDoc
 from flock.eval.tasks.paloma import PALOMA, source_suite
 
-from .toy import DOMAIN_ROWS, TASK, TEXT_ROWS, TEXT_TASK
+from .toy import DOMAIN_ROWS, PROVENANCE, TASK, TEXT_ROWS, TEXT_TASK
 
 DOMAINS = dataclasses.replace(TEXT_TASK.dataset, split="domains")
 NEWS = dataclasses.replace(TEXT_TASK, name="toy_text__news", dataset=DOMAINS, domain="news")
@@ -94,7 +94,7 @@ def test_loss_per_token_averages_over_every_token_of_every_doc(scorer, tokenizer
     assert list(result.metrics) == list(TEXT_TASK.reported_metrics)
 
 
-def test_perplexity_is_infinite_where_exp_overflows(monkeypatch, scorer):
+def test_perplexity_is_infinite_where_exp_overflows(monkeypatch, scorer, tmp_path):
     # A diverged checkpoint: about 1e4 nats per token, far past `math.exp`'s limit.
     score = scorer.rolling_loglikelihood
 
@@ -107,6 +107,14 @@ def test_perplexity_is_infinite_where_exp_overflows(monkeypatch, scorer):
 
     assert result.metrics["loss_per_token"] == pytest.approx(1e4)
     assert result.metrics["perplexity"] == math.inf
+
+    # JSON has no Infinity token, so the file holds null and a strict parser reads it.
+    def refuse(token):
+        raise ValueError(f"non-JSON token {token}")
+
+    path = Results(PROVENANCE, [result]).write(tmp_path)
+    written = json.loads(path.read_text(), parse_constant=refuse)["tasks"][0]["metrics"]
+    assert written == {**result.metrics, "perplexity": None}
 
 
 def test_score_task_does_not_depend_on_batching(scorer):

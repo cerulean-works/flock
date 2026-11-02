@@ -118,8 +118,19 @@ class Results:
         Raises:
             `FileExistsError`: if `out` already holds a `results.json`, so two runs never write one file.
         """
+        # JSON has no Infinity or NaN (RFC 8259 sec. 6), so a non-finite metric, such as a
+        # diverged checkpoint's perplexity, is written as null and stays non-finite in memory.
+        data = self.to_dict()
+        for entry in data["tasks"]:
+            metrics = entry["metrics"]
+            for name, value in metrics.items():
+                metrics[name] = value if math.isfinite(value) else None
+        for entry in data["suites"]:
+            if entry["score"] is not None and not math.isfinite(entry["score"]):
+                entry["score"] = None
+
         # Serialized before the file is created, so a failure leaves no empty file to block a rerun.
-        text = json.dumps(self.to_dict(), indent=2) + "\n"
+        text = json.dumps(data, indent=2, allow_nan=False) + "\n"
         out.mkdir(parents=True, exist_ok=True)
         path = out / "results.json"
         with path.open("x") as f:

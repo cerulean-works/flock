@@ -14,7 +14,7 @@ A [`~eval.tasks.PerplexityTask`] reports three metrics, each a ratio of sums ove
 |---|---|
 | `bits_per_byte` | the summed log-probability of all docs, negated and divided by their total UTF-8 bytes, in base 2 (Paloma, App. B) |
 | `loss_per_token` | the summed log-probability of all docs, negated and divided by their total tokens, in nats: the token-averaged cross-entropy a trainer reports as its loss |
-| `perplexity` | `exp(loss_per_token)`, or infinity if that overflows a float (above about 709.78 nats) |
+| `perplexity` | `exp(loss_per_token)`, or infinity if that overflows a float (above about 709.78 nats), which `results.json` writes as `null` |
 
 Every token is predicted exactly once (see [Scoring behavior](scoring#scoring-a-whole-text)), so the token count is the docs' own token count, without the prefix token. `loss_per_token` and `perplexity` depend on the tokenizer, so they compare models only when the models share one. `bits_per_byte` doesn't. The task's `primary_metric` says which one to read first: `bits_per_byte` for Paloma, `perplexity` for `fineweb_edu`. Multiple-choice `bpb` is a mean over docs, which is why it has a different name and never shares a suite with `bits_per_byte`.
 
