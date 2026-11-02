@@ -10,7 +10,7 @@ from flock.eval import cli
 from flock.eval.compare import Breach, compare
 from flock.eval.provenance import Provenance
 from flock.eval.results import Results, SuiteResult, TaskResult
-from flock.eval.tasks import TASKS, Dataset, Truncation
+from flock.eval.tasks import Dataset, Truncation
 
 PROVENANCE = Provenance(
     model="allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf",
@@ -253,6 +253,37 @@ def test_a_suite_averaging_another_metric_is_refused(write):
         compare(write("bank", BANK), write("new", rerun))
 
 
+def test_a_suite_with_another_hash_is_refused_unless_a_file_predates_suite_hashes(write, tmp_path):
+    # A member's new task hash already refuses on the task, so change only the suite's own hash.
+    rerun = dataclasses.replace(BANK, suites=[dataclasses.replace(SUITE, suite_hash="hash-rc2")])
+
+    with pytest.raises(ValueError, match="different instrument: toy:rc has suite_hash 'hash-rc'"):
+        compare(write("bank", BANK), write("new", rerun))
+
+    # A schema 4 bank has no suite hashes: its suites are still compared on members and score.
+    old = BANK.to_dict()
+    old["schema_version"] = 4
+    del old["suites"][0]["suite_hash"]
+    (tmp_path / "old.json").write_text(json.dumps(old))
+    moved = dataclasses.replace(SUITE, suite_hash="hash-rc2", score=0.7)
+    new = write("moved", dataclasses.replace(BANK, suites=[moved]))
+    assert compare(tmp_path / "old.json", new).breaches == [Breach("toy:rc", "score", 0.675, 0.7)]
+    # The same with the old file on the other side.
+    assert compare(new, tmp_path / "old.json").breaches == [Breach("toy:rc", "score", 0.7, 0.675)]
+
+    # From schema 5 on a suite without one is a broken file, not an old one.
+    old["schema_version"] = 6
+    (tmp_path / "old.json").write_text(json.dumps(old))
+    with pytest.raises(ValueError, match="not a results file: KeyError\\('suite_hash'\\)"):
+        compare(tmp_path / "old.json", new)
+
+    # Every results file has a version, so one without it is broken too.
+    del old["schema_version"]
+    (tmp_path / "old.json").write_text(json.dumps(old))
+    with pytest.raises(ValueError, match="not a results file: KeyError\\('schema_version'\\)"):
+        compare(tmp_path / "old.json", new)
+
+
 def test_a_repeated_nan_is_no_breach_but_a_new_one_is(write):
     nan = dataclasses.replace(PIQA, metrics={"acc_raw": float("nan")})
     bank = write("bank", dataclasses.replace(BANK, tasks=[ARC, nan]))
@@ -321,21 +352,18 @@ def test_the_bank_compares_equal_to_itself_rewritten_in_the_current_layout(write
         fields: dict[str, Any] = dict(task)
         del fields["docs_per_second"]  # derived, not a field
         fields["truncation"] = Truncation(**fields["truncation"])
-        fields["dataset"] = TASKS[task["task"]].dataset
+        fields["dataset"] = Dataset(**fields["dataset"])
         tasks.append(TaskResult(**fields))
-    # The bank predates schema 5's suite hashes and library versions. `compare` reads neither.
-    suites = [SuiteResult(suite_hash="unknown", **suite) for suite in data["suites"]]
-    provenance = Provenance(**data["provenance"], tokenizers="unknown", datasets="unknown")
-    rewritten = Results(provenance, tasks, suites)
+    suites = [SuiteResult(**suite) for suite in data["suites"]]
+    rewritten = Results(Provenance(**data["provenance"]), tasks, suites)
 
     comparison = compare(bank, write("rewritten", rewritten))
 
+    assert data["schema_version"] == rewritten.schema_version
     assert data["provenance"]["dtype"] == "float32"
     assert "base_easy" in comparison.suites
     assert comparison.breaches == []
-    # Only the layout differs: a bank from an older schema still passes, and the versions it
-    # lacks print as causes.
-    assert comparison.provenance.keys() <= {"schema_version", "tokenizers", "datasets"}
+    assert comparison.provenance == {}
 
 
 def test_a_file_without_model_digest_compares_with_one_whose_digest_is_none(write):

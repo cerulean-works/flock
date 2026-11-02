@@ -56,7 +56,7 @@ def compare(banked: Path, new: Path) -> Comparison:
     Each task in both files is compared on `num_docs` and every entry of `metrics` and `truncation`, and each suite in both on `members` and `score`. Timing is not compared. An accuracy may move by `FLIPPED_DOCS` docs out of `num_docs`, any other metric by `RELATIVE_TOLERANCE` of its banked value, and a suite's score by its members' tolerances combined as independent errors. Counts and `members` must be equal.
 
     Raises:
-        `ValueError`: if the runs are different instruments (another model or `model_digest`, `dtype`, `batch_tokens`, `max_length` or `attention`, a common task with another `task_hash` or `limit`, or a common suite with another `metric`), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
+        `ValueError`: if the runs are different instruments (another model or `model_digest`, `dtype`, `batch_tokens`, `max_length` or `attention`, a common task with another `task_hash` or `limit`, or a common suite with another `metric` or `suite_hash`), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
     """
     files = {}
     for path in (banked, new):
@@ -98,8 +98,8 @@ def compare(banked: Path, new: Path) -> Comparison:
             if bank["provenance"].get(key) != rerun["provenance"].get(key):
                 provenance[key] = (bank["provenance"].get(key), rerun["provenance"].get(key))
         # A new layout can add a metric or a count, which shows as breaches beside it.
-        if bank.get("schema_version") != rerun.get("schema_version"):
-            provenance["schema_version"] = (bank.get("schema_version"), rerun.get("schema_version"))
+        if bank["schema_version"] != rerun["schema_version"]:
+            provenance["schema_version"] = (bank["schema_version"], rerun["schema_version"])
 
         bank_tasks = {task["task"]: task for task in bank["tasks"]}
         new_tasks = {task["task"]: task for task in rerun["tasks"]}
@@ -119,12 +119,16 @@ def compare(banked: Path, new: Path) -> Comparison:
                         f"different instrument: {name} has {key} {bank_tasks[name][key]!r} "
                         f"in {banked}, {new_tasks[name][key]!r} in {new}"
                     )
+        # The suite hash covers its members' hashes and whether it is scored. A file older than
+        # schema 5 has none, and its suites are still compared on members and score.
+        hashed = bank["schema_version"] >= 5 and rerun["schema_version"] >= 5
         for name in suites:
-            if bank_suites[name]["metric"] != new_suites[name]["metric"]:
-                raise ValueError(
-                    f"different instrument: {name} has metric {bank_suites[name]['metric']!r} "
-                    f"in {banked}, {new_suites[name]['metric']!r} in {new}"
-                )
+            for key in ("metric", "suite_hash") if hashed else ("metric",):
+                if bank_suites[name][key] != new_suites[name][key]:
+                    raise ValueError(
+                        f"different instrument: {name} has {key} {bank_suites[name][key]!r} "
+                        f"in {banked}, {new_suites[name][key]!r} in {new}"
+                    )
 
         # Every compared value as (name, field, banked, new, tolerance). A value missing on one
         # side is None, so a metric added or dropped is a breach too.

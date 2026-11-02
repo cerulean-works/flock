@@ -32,7 +32,7 @@ A refusal requires checking the task definitions, run settings or file validity 
 
 ## Refresh the bank after an intentional change
 
-1. Run the comparison above and explain every expected difference.
+1. Run the comparison above and explain every expected difference. A changed task or suite is refused rather than listed, and the refusal names the first one. To see the breaches of everything else, compare against a copy of the bank without the changed tasks and every suite that holds them, directly or through another suite.
 2. Copy the new `results.json` unchanged over the banked file:
 
    ```bash
