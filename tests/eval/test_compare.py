@@ -141,10 +141,11 @@ def test_an_infinity_must_repeat_exactly(write):
     bank = write("bank", dataclasses.replace(BANK, tasks=[inf, PIQA]))
     finite = dataclasses.replace(ARC, metrics={"acc_per_char": 0.75, "bpb": 1.0})
 
+    # The file holds the infinity as null, which repeats exactly and breaches against a number.
     assert compare(bank, bank).breaches == []
     assert compare(
         bank, write("new", dataclasses.replace(BANK, tasks=[finite, PIQA]))
-    ).breaches == [Breach("arc_easy", "metrics.bpb", float("inf"), 1.0)]
+    ).breaches == [Breach("arc_easy", "metrics.bpb", None, 1.0)]
 
 
 def test_a_task_with_no_docs_must_repeat_its_metrics_exactly(write):

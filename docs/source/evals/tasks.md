@@ -53,7 +53,7 @@ A few behaviours follow OLMES for parity and are worth knowing:
 
 ### Perplexity tasks
 
-A perplexity task scores each doc's text whole and reports `bits_per_byte` over all of its docs (see [Metrics](metrics#perplexity)). Each [Paloma](https://arxiv.org/abs/2312.10523) domain is one task, scored on its whole `test` split in windows of 2048 tokens.
+A perplexity task scores each doc's text whole and reports `bits_per_byte`, `loss_per_token` and `perplexity` over all of its docs (see [Metrics](metrics#perplexity)). Each [Paloma](https://arxiv.org/abs/2312.10523) domain is one task, scored on its whole `test` split in windows of 2048 tokens.
 
 The first version has 9 of [Paloma](https://huggingface.co/datasets/allenai/paloma)'s 16 sources: those licensed under AI2's ImpACT Low Risk license or CC BY-SA, without the fringe sources. A source with one domain has one task, `paloma_<source>`. A source with several has one task per domain, `paloma_<source>__<domain>`, and `flock/eval/tasks/paloma.py` lists the domains.
 
@@ -70,6 +70,8 @@ The first version has 9 of [Paloma](https://huggingface.co/datasets/allenai/palo
 | `dolma_100_programing_languages` | `paloma_dolma_100_programing_languages__<domain>` | 100 | 7,832 | ImpACT LR |
 
 Every task scores its domain's whole `test` split in windows of 2048 tokens, with `bits_per_byte` as its primary metric. `ptb` is one document of 98,844 OLMo 2 tokens. Paloma is gated: accept its terms on the dataset page before the first run.
+
+`fineweb_edu` scores 5,000 documents of [FineWeb-Edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu), drawn with a fixed seed from one file of its newest dump, in windows of 8192 tokens, with `perplexity` as its primary metric. It reads the public dataset `cerulean-works/fineweb-edu-dev` and belongs to no suite. A model needs a context of at least 8192 tokens to run it. [Scoring the FineWeb-Edu dev set](fineweb-edu) defines the number and lists the ids training data must drop.
 
 ## Suites
 

@@ -3,6 +3,7 @@
 from flock.eval.tasks.arc import ARC_EASY
 from flock.eval.tasks.base_easy import BASE_EASY
 from flock.eval.tasks.drcd import DRCD_BPB
+from flock.eval.tasks.fineweb_edu import FINEWEB_EDU
 from flock.eval.tasks.paloma import PALOMA
 from flock.eval.tasks.suite import Suite, Task, by_name
 from flock.eval.tasks.tmmluplus import TMMLUPLUS_ALL
@@ -29,5 +30,6 @@ TASKS: dict[str, Task] = by_name(
         *TW_MOCK_EXAMS_ALL.tasks,
         DRCD_BPB,
         *PALOMA.tasks,
+        FINEWEB_EDU,
     )
 )

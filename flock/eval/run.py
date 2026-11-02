@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -275,11 +276,20 @@ def _score_perplexity(
     scores = model.rolling_loglikelihood(texts, task.window)
     # Summed over all of the task's docs before dividing, as Paloma defines bits per byte
     # (App. B) and OLMES computes it per domain (`PerplexityMetric`), so a doc counts by its
-    # bytes. The byte count stays on the host, so `.item()` is the task's one wait for the GPU,
-    # and `seconds` times the scoring.
+    # bytes, and the loss is averaged over tokens as a trainer averages it over a batch. Every
+    # token is predicted once, so a doc's token count is its number of predictions. One host
+    # copy for both is the task's one wait for the GPU, so `seconds` times the scoring.
+    logprob = scores.logprob.sum()
     total_bytes = torch.tensor(sum(num_bytes))
-    metric = bits_per_byte(scores.logprob.sum(), total_bytes).item()
+    loss = -logprob / scores.num_tokens.sum()
+    bpb, loss_per_token = torch.stack([bits_per_byte(logprob, total_bytes), loss]).tolist()
     seconds = time.perf_counter() - start
+    # `math.exp` raises past about 709.78 nats, which a diverged checkpoint can reach. Its
+    # perplexity is infinite, so the run keeps its other results; OLMES writes `1e30`.
+    try:
+        perplexity = math.exp(loss_per_token)
+    except OverflowError:
+        perplexity = math.inf
 
     if predictions is not None:
         write_perplexity_predictions(predictions, docs, scores, num_bytes, task.window)
@@ -289,7 +299,11 @@ def _score_perplexity(
         task_hash=task.task_hash(docs),
         dataset=task.dataset,
         primary_metric=task.primary_metric,
-        metrics={"bits_per_byte": metric},
+        metrics={
+            "bits_per_byte": bpb,
+            "loss_per_token": loss_per_token,
+            "perplexity": perplexity,
+        },
         num_docs=len(docs),
         limit=limit,
         seconds=seconds,

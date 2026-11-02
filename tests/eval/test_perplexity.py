@@ -8,12 +8,12 @@ import torch
 from flock.eval import run
 from flock.eval.model import ScoringModel
 from flock.eval.requests import Scores
-from flock.eval.results import perplexity_prediction_rows
+from flock.eval.results import Results, perplexity_prediction_rows
 from flock.eval.run import EvalConfig, evaluate, score_task
 from flock.eval.tasks import SUITES, TASKS, Dataset, PerplexityTask, Suite, TextDoc
 from flock.eval.tasks.paloma import PALOMA, source_suite
 
-from .toy import DOMAIN_ROWS, TASK, TEXT_ROWS, TEXT_TASK
+from .toy import DOMAIN_ROWS, PROVENANCE, TASK, TEXT_ROWS, TEXT_TASK
 
 DOMAINS = dataclasses.replace(TEXT_TASK.dataset, split="domains")
 NEWS = dataclasses.replace(TEXT_TASK, name="toy_text__news", dataset=DOMAINS, domain="news")
@@ -70,7 +70,7 @@ def test_bits_per_byte_is_a_ratio_of_sums_over_utf8_bytes(scorer):
     result = score_task(scorer, TEXT_TASK)
 
     expected = -sum(logprob) / (sum(num_bytes) * math.log(2))
-    assert result.metrics == {"bits_per_byte": pytest.approx(expected, rel=1e-6)}
+    assert result.metrics["bits_per_byte"] == pytest.approx(expected, rel=1e-6)
     mean_of_ratios = sum(-lp / (b * math.log(2)) for lp, b in zip(logprob, num_bytes)) / 3
     assert result.metrics["bits_per_byte"] != pytest.approx(mean_of_ratios, rel=1e-3)
     assert result.primary_metric == "bits_per_byte"
@@ -79,10 +79,71 @@ def test_bits_per_byte_is_a_ratio_of_sums_over_utf8_bytes(scorer):
     assert result.truncation.requests == 0
 
 
+def test_loss_per_token_averages_over_every_token_of_every_doc(scorer, tokenizer):
+    texts = [row["text"] for row in TEXT_ROWS]
+    logprob = scorer.rolling_loglikelihood(texts, TEXT_TASK.window).logprob.tolist()
+    # Each token is predicted once, so the count is the doc's own tokens, no prefix and no
+    # window overlap.
+    num_tokens = [len(tokenizer.encode(text, add_special_tokens=False)) for text in texts]
+
+    result = score_task(scorer, TEXT_TASK)
+
+    expected = -sum(logprob) / sum(num_tokens)
+    assert result.metrics["loss_per_token"] == pytest.approx(expected, rel=1e-12)
+    assert result.metrics["perplexity"] == math.exp(result.metrics["loss_per_token"])
+    assert list(result.metrics) == list(TEXT_TASK.reported_metrics)
+
+
+def test_perplexity_is_infinite_where_exp_overflows(monkeypatch, scorer, tmp_path):
+    # A diverged checkpoint: about 1e4 nats per token, far past `math.exp`'s limit.
+    score = scorer.rolling_loglikelihood
+
+    def diverged(texts, window):
+        scores = score(texts, window)
+        return dataclasses.replace(scores, logprob=-1e4 * scores.num_tokens.double())
+
+    monkeypatch.setattr(scorer, "rolling_loglikelihood", diverged)
+    result = score_task(scorer, TEXT_TASK)
+
+    assert result.metrics["loss_per_token"] == pytest.approx(1e4)
+    assert result.metrics["perplexity"] == math.inf
+
+    # JSON has no Infinity token, so the file holds null and a strict parser reads it.
+    def refuse(token):
+        raise ValueError(f"non-JSON token {token}")
+
+    path = Results(PROVENANCE, [result]).write(tmp_path)
+    written = json.loads(path.read_text(), parse_constant=refuse)["tasks"][0]["metrics"]
+    assert written == {**result.metrics, "perplexity": None}
+
+
 def test_score_task_does_not_depend_on_batching(scorer):
-    one_batch = score_task(scorer, TEXT_TASK).metrics["bits_per_byte"]
+    one_batch = score_task(scorer, TEXT_TASK).metrics
     scorer.batch_tokens = 1
-    assert score_task(scorer, TEXT_TASK).metrics["bits_per_byte"] == pytest.approx(one_batch)
+    assert score_task(scorer, TEXT_TASK).metrics == pytest.approx(one_batch)
+
+
+def test_primary_metric_must_be_reported():
+    assert dataclasses.replace(TEXT_TASK, primary_metric="perplexity").primary_metric
+    with pytest.raises(ValueError, match="primary_metric must be one of"):
+        dataclasses.replace(TEXT_TASK, primary_metric="bpb")
+
+
+def test_task_hash_leaves_out_the_primary_metric_and_keeps_paloma_hashes():
+    docs = [TextDoc("t-1", "玉山 is 3,952 m tall.")]
+    wikitext = TASKS["paloma_wikitext_103"]
+    assert isinstance(wikitext, PerplexityTask)
+    reread = dataclasses.replace(wikitext, primary_metric="perplexity")
+    assert reread.task_hash(docs) == wikitext.task_hash(docs)
+    # The hashes `main` gave before the field existed, so no bank or results file goes stale.
+    assert wikitext.task_hash(docs) == (
+        "889027a97129888e4050e8b3ae822dc53e6df5d65be1bcdf9bad6bd0af7b4846"
+    )
+    nytimes = TASKS["paloma_c4_100_domains__1_www.nytimes.com"]
+    assert isinstance(nytimes, PerplexityTask)
+    assert nytimes.task_hash(docs) == (
+        "341659acc40baaf6e5a22749f6768cd99c9744c48331b5fd59c2d6f49222280d"
+    )
 
 
 def test_score_task_writes_one_prediction_row_per_doc_and_never_replaces_it(
@@ -199,6 +260,17 @@ def test_source_suite_names_a_task_per_domain():
     assert domains == ["00_a.org", "01_b.com"]
 
 
+def test_fineweb_edu_is_the_labs_task_in_no_suite():
+    task = TASKS["fineweb_edu"]
+    assert isinstance(task, PerplexityTask)
+    assert (task.window, task.primary_metric, task.domain) == (8192, "perplexity", None)
+    assert (task.dataset.repo, task.dataset.split) == (
+        "cerulean-works/fineweb-edu-dev",
+        "validation",
+    )
+    assert all(task not in suite.tasks for suite in SUITES.values())
+
+
 def test_toy_texts_span_several_windows(tokenizer):
     lengths = [len(tokenizer.encode(row["text"], add_special_tokens=False)) for row in TEXT_ROWS]
     assert min(lengths) > TEXT_TASK.window
@@ -250,3 +322,12 @@ def test_an_empty_split_has_no_rows_to_score(monkeypatch):
     monkeypatch.setattr(Dataset, "load", lambda self, split=None: [])
     with pytest.raises(ValueError, match="the split has no rows"):
         TEXT_TASK.load()
+
+
+def test_a_4096_token_model_cannot_run_fineweb_edu(monkeypatch, lm, tokenizer):
+    # OLMo 2 1B's context: the error names the task and both lengths before anything loads.
+    short = ScoringModel(lm, tokenizer, name="tiny@0", max_length=4096)
+    monkeypatch.setattr(ScoringModel, "from_pretrained", lambda *args, **kwargs: short)
+    monkeypatch.setattr(run, "score_task", lambda *args: pytest.fail("scored before the check"))
+    with pytest.raises(ValueError, match="fineweb_edu: window 8192 is above tiny@0's max_length"):
+        evaluate(EvalConfig(model="tiny@0", tasks=("fineweb_edu",)))
