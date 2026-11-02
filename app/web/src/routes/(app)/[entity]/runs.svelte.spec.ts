@@ -49,3 +49,58 @@ describe('the empty Runs page', () => {
 		await expect.element(page.getByText('Log a run to Acme')).toBeVisible();
 	});
 });
+
+describe('the org’s page from outside it', () => {
+	const BERT = {
+		entity: 'acme',
+		name: 'bert',
+		description: 'Masked language models',
+		created_at: 1_789_000_000,
+		updated_at: 1_789_990_000,
+		run_count: 12,
+		active_run_count: 0,
+		column_count: 0,
+		visibility: 'public'
+	};
+	const outside = {
+		flockUrl: HOST,
+		shell: { projects: [BERT], access: 'public' },
+		org: { name: 'acme', display_name: 'Acme', avatar_url: null, role: null },
+		outside: true,
+		feed: null,
+		query: {},
+		mine: false,
+		project: null,
+		now: 1_790_000_000
+	};
+
+	it('lists its public projects, and nothing to change', async () => {
+		resetApp('http://flock.test/acme', outside);
+		// @ts-expect-error -- a page's props: only what the outsiders' view reads
+		render(Page, { data: outside, params: { entity: 'acme' } });
+		await expect.element(page.getByRole('heading', { name: 'Acme', level: 1 })).toBeVisible();
+
+		const projects = page.getByRole('region', { name: /Projects/ });
+		const bert = projects.getByRole('link', { name: 'bert' });
+		await expect.element(bert).toBeVisible();
+		expect(bert.element().getAttribute('href')).toBe('/acme/bert');
+		await expect.element(projects.getByText('Masked language models')).toBeVisible();
+		await expect.element(projects.getByText('12 runs')).toBeVisible();
+
+		// No feed, no settings, no new project, no first-run instructions, and no datasets: public
+		// ones are reached by their URL (D115).
+		await expect.element(page.getByText('Latest runs')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('link', { name: 'Settings' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'New project' })).not.toBeInTheDocument();
+		await expect.element(page.getByText('Log your first run')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('region', { name: /Datasets/ })).not.toBeInTheDocument();
+	});
+
+	it('says when no project is public', async () => {
+		const empty = { ...outside, shell: { ...outside.shell, projects: [] } };
+		resetApp('http://flock.test/acme', empty);
+		// @ts-expect-error -- a page's props: only what the outsiders' view reads
+		render(Page, { data: empty, params: { entity: 'acme' } });
+		await expect.element(page.getByText('No public projects.')).toBeVisible();
+	});
+});

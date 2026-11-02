@@ -72,6 +72,10 @@ export const entityHref = (entity: string) => resolve('/(app)/[entity]', { entit
 export const orgHref = (org: string, section?: 'budget' | 'deleted-projects') =>
 	`${resolve('/(app)/orgs/[org]', { org })}${section ? `#${section}` : ''}` as ResolvedPathname;
 
+/** Where a signed-out visitor signs in, coming back to the page they're on afterwards. */
+export const loginHref = (url: { pathname: string; search: string }) =>
+	`${resolve('/login')}?${new URLSearchParams({ next: url.pathname + url.search })}` as ResolvedPathname;
+
 /** The current page with one search param set, or removed when null: tabs and filters. */
 export function withParam(
 	url: { pathname: string; search: string },

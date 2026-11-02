@@ -9,9 +9,27 @@ import type { Actions, PageServerLoad } from './$types';
 /**
  * An organization's latest runs, newest first: the feed's `run_started` items. `?runs=mine`
  * keeps them to the user's own, `?project=` to one project.
+ *
+ * Outside the org (signed out, or not one of its members), its public projects instead (D114):
+ * the sidebar's, which lists only public ones to outsiders.
  */
-export const load: PageServerLoad = async ({ params, url, depends }) => {
+export const load: PageServerLoad = async ({ params, url, depends, locals }) => {
 	depends(FEED);
+	const now = Date.now() / 1000;
+	const orgPath = `/api/v1/orgs/${encodeURIComponent(params.entity)}`;
+	const outside = (org: OrgInfo) => ({
+		org,
+		outside: true as const,
+		feed: null,
+		query: {},
+		mine: false,
+		project: null,
+		now
+	});
+	// Signed out there's no feed to read: the org is someone else's. (A 404, an org with
+	// no public project, sends the visitor to sign in.)
+	if (!locals.token) return outside(await flock(orgPath).then((r) => r.json() as Promise<OrgInfo>));
+
 	const mine = url.searchParams.get('runs') === 'mine';
 	const project = url.searchParams.get('project') || null;
 	const query: Record<string, string> = {
@@ -21,15 +39,18 @@ export const load: PageServerLoad = async ({ params, url, depends }) => {
 		...(mine && { owner: 'me' }),
 		...(project && { project })
 	};
-	// The org answers 404 to non-members (the feed would just be empty).
-	const [org, feed] = await Promise.all([
-		flock(`/api/v1/orgs/${encodeURIComponent(params.entity)}`).then(
-			(r) => r.json() as Promise<OrgInfo>
-		),
-		flock(`/api/v1/feed?${new URLSearchParams(query)}`).then((r) => r.json() as Promise<FeedPage>)
-	]);
+	// The org answers 404 to non-members unless it has public projects, and says they have no
+	// role. The feed is members' only, a 404 to anyone else: it's read alongside, and its
+	// failure only matters once the org says the viewer is a member.
+	const feeding = flock(`/api/v1/feed?${new URLSearchParams(query)}`).then(
+		(r) => r.json() as Promise<FeedPage>
+	);
+	feeding.catch(() => {});
+	const org = await flock(orgPath).then((r) => r.json() as Promise<OrgInfo>);
+	if (!org.role) return outside(org);
+	const feed = await feeding;
 	// Relative times are computed against this, so SSR and hydration print the same text.
-	return { org, feed, query, mine, project, now: Date.now() / 1000 };
+	return { org, outside: false as const, feed, query, mine, project, now };
 };
 
 /**
@@ -57,9 +78,12 @@ export const actions: Actions = {
 		const name = formText(form, 'name');
 		const invalid = projectNameError(name);
 		if (invalid) return fail(400, { error: invalid });
+		// Only admins' forms have it (D110): making the project public or private.
+		const visibility = formText(form, 'visibility');
 		const res = await change<ProjectInfo>('PATCH', projectPath(params.entity, project), {
 			...(name !== project && { name }),
-			description: formText(form, 'description') || null
+			description: formText(form, 'description') || null,
+			...((visibility === 'private' || visibility === 'public') && { visibility })
 		});
 		if (refused(res)) return res;
 		if (form.get('from') === 'project' && name !== project)

@@ -27,7 +27,7 @@
 
 	let { data }: PageProps = $props();
 
-	const me = $derived(page.data.shell?.me.id ?? page.data.user?.id);
+	const me = $derived(page.data.shell?.me?.id ?? page.data.user?.id);
 
 	let creating = $state(false);
 	let displayName = $state('');

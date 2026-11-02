@@ -35,7 +35,7 @@
 	const applied = $derived(ws.page.query.filters);
 	const count = $derived(countConditions(applied));
 	/** Who is looking: "My runs" keeps the runs they logged. */
-	const me = $derived(page.data.shell?.me.id);
+	const me = $derived(page.data.shell?.me?.id);
 	const mine = $derived(me != null && ownedBy(applied, me));
 
 	const STATES: RunState[] = ['running', 'preempting', 'finished', 'failed', 'crashed'];
@@ -44,7 +44,9 @@
 	const suggestions = $derived<Partial<Record<ColumnKind, AutocompleteOption[]>>>({
 		state: STATES.map((value) => ({ value })),
 		bool: [{ value: 'true' }, { value: 'false' }],
-		user: [...ws.people.values()].map((p) => ({ value: p.email, hint: p.name }))
+		user: [...ws.people.values()].map((p) =>
+			p.email ? { value: p.email, hint: p.name } : { value: p.name }
+		)
 	});
 
 	const KINDS: Record<ColumnKind, string> = {

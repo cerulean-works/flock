@@ -10,7 +10,12 @@
 	let { data, params }: PageProps = $props();
 
 	const title = $derived(data.path ? nameOf(data.path) : 'Datasets');
-	const trail = $derived(crumbs(params.org, data.shell.orgName ?? params.org, data.path));
+	// Outside the org its folders can't be opened (D114): no trail to them.
+	const trail = $derived(
+		data.shell.access === 'public'
+			? []
+			: crumbs(params.org, data.shell.orgName ?? params.org, data.path)
+	);
 </script>
 
 <svelte:head>
@@ -32,6 +37,7 @@
 			<FolderView org={params.org} path={data.path} folder={data.folder} now={data.now} />
 		{/key}
 	{:else}
+		{#if !trail.length}<div class="pt-5"></div>{/if}
 		{#key data.path}
 			<DatasetView
 				org={params.org}
@@ -40,6 +46,7 @@
 				failed={data.failed}
 				requested={data.requested}
 				s3={data.s3}
+				access={data.shell.access}
 				now={data.now}
 			/>
 		{/key}

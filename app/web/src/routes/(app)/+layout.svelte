@@ -4,6 +4,7 @@
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
 	import HouseIcon from '@lucide/svelte/icons/house';
+	import LogInIcon from '@lucide/svelte/icons/log-in';
 	import MenuIcon from '@lucide/svelte/icons/menu';
 	import PanelLeftOpenIcon from '@lucide/svelte/icons/panel-left-open';
 	import { afterNavigate } from '$app/navigation';
@@ -11,13 +12,14 @@
 	import { page } from '$app/state';
 	import LogoMark from '#lib/components/LogoMark.svelte';
 	import ResizeHandle from '#lib/components/ResizeHandle.svelte';
+	import OrgMark from '#lib/components/shell/OrgMark.svelte';
 	import Sidebar from '#lib/components/shell/Sidebar.svelte';
 	import WorkspaceSwitcher from '#lib/components/shell/WorkspaceSwitcher.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Sheet from '#lib/components/ui/sheet/index.js';
 	import { datasetsHref } from '#lib/datasets.ts';
 	import { modelsHref } from '#lib/models.ts';
-	import { entityHref } from '#lib/workspace/url.ts';
+	import { entityHref, loginHref } from '#lib/workspace/url.ts';
 	import { storageHref } from '#lib/storage.ts';
 	import { SIDEBAR_W, saveWidth } from '#lib/widths.ts';
 	import type { LayoutProps } from './$types';
@@ -37,6 +39,20 @@
 
 	afterNavigate(() => (drawer = false));
 
+	const signedIn = $derived(!!data.shell.me);
+	// From outside the org: none of its members' pages, and the org itself in the sidebar.
+	const outside = $derived(data.shell.access === 'public');
+	const sidebar = $derived({
+		org: data.shell.org,
+		orgs: data.shell.orgs,
+		projects: data.shell.projects,
+		s3: data.shell.s3,
+		access: data.shell.access,
+		orgName: data.shell.orgName,
+		orgAvatar: data.shell.orgAvatar,
+		signedIn
+	});
+
 	// The rail's switcher keeps home and account pages in place, like the sidebar's.
 	const stay = $derived(
 		!page.route.id?.startsWith('/(app)/[entity]') &&
@@ -53,13 +69,7 @@
 			class="relative hidden flex-none border-r border-divider md:block"
 			style:width="{sidebarW}px"
 		>
-			<Sidebar
-				org={data.shell.org}
-				orgs={data.shell.orgs}
-				projects={data.shell.projects}
-				s3={data.shell.s3}
-				oncollapse={() => setCollapsed(true)}
-			/>
+			<Sidebar {...sidebar} oncollapse={() => setCollapsed(true)} />
 			<ResizeHandle
 				value={sidebarW}
 				bounds={SIDEBAR_W}
@@ -85,20 +95,31 @@
 					<PanelLeftOpenIcon />
 				</Button>
 			</div>
-			<Button
-				variant="ghost"
-				size="icon-sm"
-				class={[
-					'mt-3 text-muted-foreground',
-					page.route.id === '/(app)' && 'bg-muted text-foreground'
-				]}
-				href={resolve('/(app)')}
-				aria-label="Home"
-				title="Home"
-			>
-				<HouseIcon />
-			</Button>
-			{#if data.shell.org}
+			{#if signedIn}
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					class={[
+						'mt-3 text-muted-foreground',
+						page.route.id === '/(app)' && 'bg-muted text-foreground'
+					]}
+					href={resolve('/(app)')}
+					aria-label="Home"
+					title="Home"
+				>
+					<HouseIcon />
+				</Button>
+			{/if}
+			{#if outside && data.shell.org}
+				<a
+					class="mt-3 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+					href={entityHref(data.shell.org)}
+					aria-label={data.shell.orgName ?? data.shell.org}
+					title={data.shell.orgName ?? data.shell.org}
+				>
+					<OrgMark name={data.shell.orgName ?? data.shell.org} src={data.shell.orgAvatar} />
+				</a>
+			{:else if data.shell.org}
 				<Button
 					variant="ghost"
 					size="icon-sm"
@@ -113,7 +134,7 @@
 					<ActivityIcon />
 				</Button>
 			{/if}
-			{#if data.shell.s3 && data.shell.org}
+			{#if data.shell.s3 && data.shell.org && !outside}
 				<Button
 					variant="ghost"
 					size="icon-sm"
@@ -155,7 +176,26 @@
 				</Button>
 			{/if}
 			<div class="mt-auto py-2">
-				<WorkspaceSwitcher org={data.shell.org} orgs={data.shell.orgs} {stay} compact />
+				{#if signedIn}
+					<WorkspaceSwitcher
+						org={outside ? null : data.shell.org}
+						orgs={data.shell.orgs}
+						{stay}
+						compact
+					/>
+				{:else}
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						class="text-muted-foreground"
+						href={loginHref(page.url)}
+						data-sveltekit-reload
+						aria-label="Sign in"
+						title="Sign in"
+					>
+						<LogInIcon />
+					</Button>
+				{/if}
 			</div>
 		</aside>
 	{/if}
@@ -186,11 +226,6 @@
 <Sheet.Root bind:open={drawer}>
 	<Sheet.Content side="left" class="w-72 gap-0 p-0" showCloseButton={false}>
 		<Sheet.Title class="sr-only">Navigation</Sheet.Title>
-		<Sidebar
-			org={data.shell.org}
-			orgs={data.shell.orgs}
-			projects={data.shell.projects}
-			s3={data.shell.s3}
-		/>
+		<Sidebar {...sidebar} />
 	</Sheet.Content>
 </Sheet.Root>

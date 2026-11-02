@@ -45,6 +45,7 @@ export const goto = vi.fn(async (to: string | URL) => {
 });
 export const invalidate = vi.fn(async () => {});
 export const invalidateAll = vi.fn(async () => {});
+export const refreshAll = vi.fn(async () => {});
 
 export function enhance(form: HTMLFormElement, submit: SubmitFunction = () => {}) {
 	async function onsubmit(event: SubmitEvent) {

@@ -1,14 +1,16 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import { enhance, type SubmitFunction } from '$app/forms';
+	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { Textarea } from '#lib/components/ui/textarea/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
-	import type { ProjectInfo } from '#lib/types.ts';
+	import type { ProjectInfo, Visibility } from '#lib/types.ts';
 	import { formText, projectNameError } from '#lib/utils.ts';
 	import { entityHref } from '#lib/workspace/url.ts';
+	import ConfirmDialog from './ConfirmDialog.svelte';
 	import FormError from './FormError.svelte';
 
 	interface Props {
@@ -31,6 +33,34 @@
 	// Live clients address their runs by project name, so Flock refuses to rename a
 	// project while any of its runs is running.
 	const locked = $derived(!!project?.active_run_count);
+
+	// Visibility (D110), for org admins: Flock refuses everyone else.
+	const admin = $derived(page.data.shell?.access === 'admin');
+	const visibilities: { value: Visibility; label: string; hint: string }[] = $derived([
+		{ value: 'private', label: 'Private', hint: `Only members of ${entity} can see it.` },
+		{
+			value: 'public',
+			label: 'Public',
+			hint: 'Anyone with the link can see its runs, without signing in.'
+		}
+	]);
+	let visibility = $derived<Visibility>(project?.visibility ?? 'private');
+
+	// Making it public is confirmed first, then the whole form goes from the confirmation.
+	let publishing = $state(false);
+	let fields = $state<Record<string, string>>({});
+	const submit: SubmitFunction = (input) => {
+		const { formData, cancel } = input;
+		// Sent only when changed: an untouched choice mustn't undo another admin's change, or
+		// make a project private whose visibility this dialog never knew.
+		if (formData.get('visibility') === (project?.visibility ?? 'private'))
+			formData.delete('visibility');
+		const going = project?.visibility !== 'public' && formData.get('visibility') === 'public';
+		if (!going || projectNameError(formText(formData, 'name'))) return mutation.enhance(input);
+		cancel();
+		fields = Object.fromEntries([...formData].map(([k, v]) => [k, String(v)]));
+		publishing = true;
+	};
 </script>
 
 <Dialog.Root bind:open onOpenChange={(o) => o || mutation.reset()}>
@@ -49,7 +79,7 @@
 			method="POST"
 			action="{entityHref(entity)}?/{project ? 'update' : 'create'}"
 			class="grid gap-4"
-			use:enhance={mutation.enhance}
+			use:enhance={submit}
 		>
 			{#if project}
 				<input type="hidden" name="project" value={project.name} />
@@ -90,6 +120,28 @@
 					rows={3}
 				/>
 			</div>
+			{#if project && admin}
+				<fieldset class="grid gap-2">
+					<legend class="mb-2 text-sm leading-none font-medium">Visibility</legend>
+					{#each visibilities as v (v.value)}
+						<label
+							class="flex cursor-pointer items-start gap-3 rounded-lg border border-input px-3 py-2.5 has-checked:border-ring has-checked:bg-muted/60 has-focus-visible:ring-3 has-focus-visible:ring-ring/50"
+						>
+							<input
+								type="radio"
+								name="visibility"
+								value={v.value}
+								bind:group={visibility}
+								class="mt-0.5 accent-primary outline-none"
+							/>
+							<span class="grid gap-0.5">
+								<span class="text-sm font-medium">{v.label}</span>
+								<span class="text-xs text-muted-foreground">{v.hint}</span>
+							</span>
+						</label>
+					{/each}
+				</fieldset>
+			{/if}
 			<FormError error={mutation.error} />
 			<Dialog.Footer>
 				<Dialog.Close>
@@ -104,3 +156,17 @@
 		</form>
 	</Dialog.Content>
 </Dialog.Root>
+
+{#if project && admin}
+	<ConfirmDialog
+		bind:open={publishing}
+		action="{entityHref(entity)}?/update"
+		{fields}
+		title="Make {project.name} public?"
+		description="Anyone with the link will be able to see every run in this project, including configs, files and logs. Check that none of them hold secrets."
+		confirm="Make public"
+		pending="Saving…"
+		success="{project.name} is now public"
+		done={() => (open = false)}
+	/>
+{/if}

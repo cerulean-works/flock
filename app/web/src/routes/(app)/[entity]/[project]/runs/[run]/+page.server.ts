@@ -1,7 +1,7 @@
 import { isHttpError } from '@sveltejs/kit';
 import { projectPath, flock } from '#lib/server/flock.ts';
 import { runActions } from '#lib/server/runs.ts';
-import type { Billing, Member, RunDetail, RunHistory, RunModels } from '#lib/types.ts';
+import type { Billing, RunDetail, RunHistory, RunModels } from '#lib/types.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 /** Points per curve: plenty for one run's panels, and a few MB at most. */
@@ -15,34 +15,39 @@ const optional = <T>(promise: Promise<T>) =>
 	});
 
 /**
- * A run with its curves, the name of whoever logged it and the org's currency. The curves are
- * read before the run itself: live updates resume from the run's line counts, so points logged
- * in between are streamed again rather than missed twice over.
+ * A run with its curves, whoever logged it and the org's currency. The curves are read before
+ * the run itself: live updates resume from the run's line counts, so points logged in between
+ * are streamed again rather than missed twice over.
+ *
+ * Outside the org there's no price (the run's cost is null, D113) and no checkpoints to list:
+ * neither is asked for.
  */
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params, parent }) => {
 	const path = `${projectPath(params.entity, params.project)}/runs/${encodeURIComponent(params.run)}`;
 	const curves = (stream: 'history' | 'system') =>
 		flock(`${path}/history?stream=${stream}&max_points=${MAX_POINTS}`).then(
 			(res) => res.json() as Promise<RunHistory>
 		);
-	const [history, system, members, billing, models] = await Promise.all([
+	const member = parent().then(({ shell }) => shell.access !== 'public');
+	const [history, system, billing, models] = await Promise.all([
 		curves('history'),
 		curves('system'),
-		optional(
-			flock(`/api/v1/orgs/${encodeURIComponent(params.entity)}/members`).then(
-				(res) => res.json() as Promise<{ members: Member[] }>
-			)
-		),
-		optional(
-			flock(`/api/v1/orgs/${encodeURIComponent(params.entity)}/billing`).then(
-				(res) => res.json() as Promise<Billing>
-			)
+		member.then((yes) =>
+			yes
+				? optional(
+						flock(`/api/v1/orgs/${encodeURIComponent(params.entity)}/billing`).then(
+							(res) => res.json() as Promise<Billing>
+						)
+					)
+				: null
 		),
 		// The model versions it made (D108), for the Checkpoints section.
-		optional(flock(`${path}/models`).then((res) => res.json() as Promise<RunModels>))
+		member.then((yes) =>
+			yes ? optional(flock(`${path}/models`).then((res) => res.json() as Promise<RunModels>)) : null
+		)
 	]);
 	const run = (await (await flock(path)).json()) as RunDetail;
-	const owner = members?.members.find((m) => m.id === run.owner) ?? null;
+	const owner = run.owner_user ?? null;
 	return {
 		run,
 		history,

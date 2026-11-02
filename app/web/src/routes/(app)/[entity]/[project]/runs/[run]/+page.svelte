@@ -8,7 +8,7 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import { onMount, untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import ChartsPane from '#lib/components/ChartsPane.svelte';
 	import DeleteRunsDialog from '#lib/components/DeleteRunsDialog.svelte';
@@ -54,9 +54,14 @@
 		untrack(() => ws.restoreLayout());
 	});
 
+	/** Outside the org: read-only, with no run actions (D116). */
+	const readonly = $derived(data.shell.access === 'public');
+
 	function onproject(e: ProjectEvent) {
-		// Renamed or deleted under us: the project's page knows where it went.
-		if (e.deleted) void goto(entityHref(data.run.entity), { replace: true });
+		// Renamed or deleted under us: the project's page knows where it went. Made private while
+		// an outsider watched: reading it again sends them to sign in, or to the 404 page.
+		if (e.visibility === 'private') void invalidateAll();
+		else if (e.deleted) void goto(entityHref(data.run.entity), { replace: true });
 		else void goto(projectHref(data.run.entity, e.renamed_to ?? data.run.project));
 	}
 	const live = new LiveConnection(ws, onproject);
@@ -172,33 +177,38 @@
 	<title>{name} · {data.run.project}</title>
 </svelte:head>
 
+<!-- Members' actions on the run. -->
+{#snippet runMenu()}
+	<DropdownMenu.Root>
+		<DropdownMenu.Trigger>
+			{#snippet child({ props })}
+				<Button {...props} variant="ghost" size="icon-sm" aria-label="Run actions">
+					<EllipsisIcon />
+				</Button>
+			{/snippet}
+		</DropdownMenu.Trigger>
+		<DropdownMenu.Content align="start" class="w-48">
+			<DropdownMenu.Item onSelect={() => ws.openDialog('edit', 0)}>
+				<PencilIcon /> Edit run…
+			</DropdownMenu.Item>
+			<DropdownMenu.Item onSelect={() => ws.openDialog('tag', 0)}>
+				<TagIcon /> Tags…
+			</DropdownMenu.Item>
+			<DropdownMenu.Item onSelect={() => ws.openDialog('move', 0)}>
+				<FolderInputIcon /> Move to project…
+			</DropdownMenu.Item>
+			<DropdownMenu.Separator />
+			<DropdownMenu.Item variant="destructive" onSelect={() => ws.openDialog('delete', 0)}>
+				<Trash2Icon /> Delete run…
+			</DropdownMenu.Item>
+		</DropdownMenu.Content>
+	</DropdownMenu.Root>
+{/snippet}
+
 <Page width="full">
 	<PageHeader title={name}>
 		{#snippet badges()}
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger>
-					{#snippet child({ props })}
-						<Button {...props} variant="ghost" size="icon-sm" aria-label="Run actions">
-							<EllipsisIcon />
-						</Button>
-					{/snippet}
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="start" class="w-48">
-					<DropdownMenu.Item onSelect={() => ws.openDialog('edit', 0)}>
-						<PencilIcon /> Edit run…
-					</DropdownMenu.Item>
-					<DropdownMenu.Item onSelect={() => ws.openDialog('tag', 0)}>
-						<TagIcon /> Tags…
-					</DropdownMenu.Item>
-					<DropdownMenu.Item onSelect={() => ws.openDialog('move', 0)}>
-						<FolderInputIcon /> Move to project…
-					</DropdownMenu.Item>
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item variant="destructive" onSelect={() => ws.openDialog('delete', 0)}>
-						<Trash2Icon /> Delete run…
-					</DropdownMenu.Item>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
+			{#if !readonly}{@render runMenu()}{/if}
 			<StateBadge state={runState} />
 		{/snippet}
 		{#snippet actions()}
@@ -312,9 +322,11 @@
 {/if}
 
 <PanelEditor />
-<EditRunDialog
-	gpu={{ type: data.run.gpu_type, count: data.run.gpu_count, detected: data.run.gpu_detected }}
-/>
-<TagRunsDialog />
-<MoveRunsDialog leave={(to) => runHref(data.run.entity, to, data.run.id)} />
-<DeleteRunsDialog leave={() => projectHref(data.run.entity, data.run.project)} />
+{#if !readonly}
+	<EditRunDialog
+		gpu={{ type: data.run.gpu_type, count: data.run.gpu_count, detected: data.run.gpu_detected }}
+	/>
+	<TagRunsDialog />
+	<MoveRunsDialog leave={(to) => runHref(data.run.entity, to, data.run.id)} />
+	<DeleteRunsDialog leave={() => projectHref(data.run.entity, data.run.project)} />
+{/if}

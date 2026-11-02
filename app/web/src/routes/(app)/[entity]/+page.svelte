@@ -5,6 +5,7 @@
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import FeedFilters from '#lib/components/home/FeedFilters.svelte';
 	import LatestRuns from '#lib/components/home/LatestRuns.svelte';
+	import PublicOrg from '#lib/components/home/PublicOrg.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import ProjectDialog from '#lib/components/ProjectDialog.svelte';
 	import SegmentedNav from '#lib/components/SegmentedNav.svelte';
@@ -23,7 +24,7 @@
 
 	const running = $derived(data.shell.projects.reduce((n, p) => n + p.active_run_count, 0));
 	// Nothing logged yet: how to log the first run, instead of an empty table.
-	const fresh = $derived(!data.mine && !data.project && !data.feed.items.length);
+	const fresh = $derived(!data.mine && !data.project && !data.feed?.items.length);
 
 	const TABS = [
 		['', 'Everyone'],
@@ -36,6 +37,15 @@
 <svelte:head>
 	<title>Runs · {data.org.display_name}</title>
 </svelte:head>
+
+{#snippet actions()}
+	<Button variant="ghost" href={orgHref(params.entity)}>
+		<SettingsIcon /> <span class="max-sm:sr-only">Settings</span>
+	</Button>
+	<Button variant="outline" onclick={() => (creating = true)}>
+		<PlusIcon /> <span class="max-sm:sr-only">New project</span>
+	</Button>
+{/snippet}
 
 <!-- The feed's own controls, under the title once there are runs to show. -->
 {#snippet feedToolbar()}
@@ -54,24 +64,28 @@
 {/snippet}
 
 <Page width="full">
-	<PageHeader title={data.org.display_name} toolbar={fresh ? undefined : feedToolbar}>
+	<PageHeader
+		title={data.org.display_name}
+		toolbar={fresh || data.outside ? undefined : feedToolbar}
+		actions={data.outside ? undefined : actions}
+	>
 		{#snippet subtitle()}
-			{count(data.org.project_count, 'project')} · {count(data.org.member_count, 'member')}
+			{#if data.outside}
+				Public projects
+			{:else}
+				{count(data.org.project_count, 'project')} · {count(data.org.member_count, 'member')}
+			{/if}
 			{#if running}
 				· <span class="text-state-running">{count(running, 'run')} running</span>
 			{/if}
 		{/snippet}
-		{#snippet actions()}
-			<Button variant="ghost" href={orgHref(params.entity)}>
-				<SettingsIcon /> <span class="max-sm:sr-only">Settings</span>
-			</Button>
-			<Button variant="outline" onclick={() => (creating = true)}>
-				<PlusIcon /> <span class="max-sm:sr-only">New project</span>
-			</Button>
-		{/snippet}
 	</PageHeader>
 
-	{#if fresh}
+	{#if data.outside}
+		<main class="relative min-h-0 flex-1 overflow-y-auto pb-10">
+			<PublicOrg org={params.entity} projects={data.shell.projects} now={data.now} />
+		</main>
+	{:else if fresh || !data.feed}
 		<main class="relative min-h-0 flex-1 overflow-y-auto">
 			<EmptyState variant="onboarding" title="Log your first run">
 				{#snippet lead()}Runs appear here once they’re logged.{/snippet}
@@ -105,10 +119,11 @@
 			</EmptyState>
 		</main>
 	{:else}
+		{@const feed = data.feed}
 		<main class="relative min-h-0 flex-1 overflow-y-auto pb-10">
 			{#key JSON.stringify(data.query)}
 				<LatestRuns
-					first={() => data.feed}
+					first={() => feed}
 					query={data.query}
 					now={data.now}
 					empty={data.project
@@ -122,4 +137,4 @@
 	{/if}
 </Page>
 
-<ProjectDialog bind:open={creating} entity={params.entity} />
+{#if !data.outside}<ProjectDialog bind:open={creating} entity={params.entity} />{/if}

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page as screen } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../routes/layout.css';
-import { goto, invalidateAll, resetApp } from '#lib/testing/app.svelte.ts';
+import { app, goto, invalidateAll, resetApp } from '#lib/testing/app.svelte.ts';
 import type {
 	Cell,
 	DatasetFolder,
@@ -21,6 +21,7 @@ import RemoveTagDialog from './RemoveTagDialog.svelte';
 import RenameDialog from './RenameDialog.svelte';
 import TagDialog from './TagDialog.svelte';
 
+vi.mock('$app/forms', () => import('#lib/testing/app.svelte.ts'));
 vi.mock('$app/navigation', () => import('#lib/testing/app.svelte.ts'));
 vi.mock('$app/state', () => import('#lib/testing/app.svelte.ts'));
 
@@ -539,6 +540,99 @@ describe('DatasetView', () => {
 			.element(screen.getByRole('alert'))
 			.toHaveTextContent('Lance couldn’t read the dataset: missing data file');
 		await expect.element(screen.getByRole('button', { name: 'Delete' })).toBeVisible();
+	});
+});
+
+describe('a dataset’s visibility', () => {
+	/** The dataset page, public or not, seen with `access`. */
+	const view = (access: 'admin' | 'member' | 'public', pub: boolean) => {
+		serve({
+			'/api/datasets/acme/readme': () => ({ text: '', truncated: false }),
+			'/api/datasets/acme/versions': () => versions
+		});
+		resetApp('http://flock.test/datasets/acme/eval/mmlu');
+		render(DatasetView, {
+			org: 'acme',
+			path: 'eval/mmlu',
+			info: { ...info, public: pub },
+			failed: null,
+			requested: null,
+			s3,
+			access,
+			now: 1_790_000_100
+		});
+	};
+	const sent = () => app.sent.map((s) => ({ action: s.action, ...Object.fromEntries(s.form) }));
+	const badge = () => screen.getByText('Public', { exact: true });
+	const more = () => screen.getByRole('button', { name: 'More dataset actions' });
+
+	it('shows a Public badge to everyone on a public dataset', async () => {
+		view('member', true);
+		await expect.element(badge()).toBeVisible();
+		await expect
+			.element(screen.getByTitle('Anyone with the link can see every version of it'))
+			.toBeVisible();
+	});
+
+	it('has no badge on a private one', async () => {
+		view('admin', false);
+		await expect.element(screen.getByRole('heading', { name: 'mmlu', level: 1 })).toBeVisible();
+		await expect.element(badge()).not.toBeInTheDocument();
+	});
+
+	it('lets admins make it public, once they confirm', async () => {
+		view('admin', false);
+		await more().click();
+		await screen.getByRole('menuitem', { name: 'Make public…' }).click();
+		const confirm = screen.getByRole('alertdialog');
+		await expect
+			.element(
+				confirm.getByText(
+					'Anyone with the link will be able to see every version of this dataset. Check that none of them hold secrets.'
+				)
+			)
+			.toBeVisible();
+		expect(app.sent).toEqual([]);
+		await confirm.getByRole('button', { name: 'Make public' }).click();
+		await vi.waitFor(() =>
+			expect(sent()).toEqual([{ action: '/datasets/acme/eval/mmlu?/visibility', public: 'true' }])
+		);
+	});
+
+	it('lets admins make it private again, without asking', async () => {
+		view('admin', true);
+		await more().click();
+		await expect
+			.element(screen.getByRole('menuitem', { name: 'Make public…' }))
+			.not.toBeInTheDocument();
+		await screen.getByRole('menuitem', { name: 'Make private' }).click();
+		await vi.waitFor(() =>
+			expect(sent()).toEqual([{ action: '/datasets/acme/eval/mmlu?/visibility', public: 'false' }])
+		);
+		await expect.element(screen.getByRole('alertdialog')).not.toBeInTheDocument();
+	});
+
+	it('isn’t offered to members', async () => {
+		view('member', false);
+		await expect.element(screen.getByRole('button', { name: 'Rename' })).toBeVisible();
+		await expect.element(more()).not.toBeInTheDocument();
+	});
+
+	it('leaves outsiders the dataset to read, and nothing to change or reach in S3', async () => {
+		view('public', true);
+		await expect.element(badge()).toBeVisible();
+		await expect.element(screen.getByRole('tab', { name: 'Viewer' })).toBeVisible();
+		for (const name of ['Access in S3', 'Rename', 'Delete', 'More dataset actions'])
+			await expect.element(screen.getByRole('button', { name })).not.toBeInTheDocument();
+		await expect
+			.element(screen.getByRole('link', { name: 'Browse files' }))
+			.not.toBeInTheDocument();
+		// Nor tags to add or remove.
+		await screen.getByRole('tab', { name: 'Versions' }).click();
+		await expect.element(screen.getByLabelText('View version 4')).toBeVisible();
+		await expect
+			.element(screen.getByRole('button', { name: 'Version 4 actions' }))
+			.not.toBeInTheDocument();
 	});
 });
 

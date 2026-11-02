@@ -44,6 +44,10 @@ export const projectUrl = (entity: string, project: string) =>
 
 export const membersUrl = (org: string) => `/api/orgs/${encodeURIComponent(org)}/members`;
 
+/** Who logged a project's runs, for viewers outside the org, who can't list its members. */
+export const ownersUrl = (entity: string, project: string) =>
+	`${projectUrl(entity, project)}/owners`;
+
 export function runPageUrl(entity: string, project: string, q: RunQuery) {
 	return `${projectUrl(entity, project)}/runs?${runQueryString(q)}`;
 }
