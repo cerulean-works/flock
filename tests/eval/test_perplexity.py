@@ -94,6 +94,21 @@ def test_loss_per_token_averages_over_every_token_of_every_doc(scorer, tokenizer
     assert list(result.metrics) == list(TEXT_TASK.reported_metrics)
 
 
+def test_perplexity_is_infinite_where_exp_overflows(monkeypatch, scorer):
+    # A diverged checkpoint: about 1e4 nats per token, far past `math.exp`'s limit.
+    score = scorer.rolling_loglikelihood
+
+    def diverged(texts, window):
+        scores = score(texts, window)
+        return dataclasses.replace(scores, logprob=-1e4 * scores.num_tokens.double())
+
+    monkeypatch.setattr(scorer, "rolling_loglikelihood", diverged)
+    result = score_task(scorer, TEXT_TASK)
+
+    assert result.metrics["loss_per_token"] == pytest.approx(1e4)
+    assert result.metrics["perplexity"] == math.inf
+
+
 def test_score_task_does_not_depend_on_batching(scorer):
     one_batch = score_task(scorer, TEXT_TASK).metrics
     scorer.batch_tokens = 1

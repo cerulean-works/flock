@@ -197,7 +197,7 @@ def perplexity_prediction_rows(
     docs: Sequence[TextDoc], scores: Scores, num_bytes: Sequence[int], window: int
 ) -> list[dict[str, Any]]:
     """
-    Returns one row per doc with its id, summed log-probability, token and UTF-8 byte counts, number of windows and whether every token is the greedy one, so any domain's `bits_per_byte` can be recomputed.
+    Returns one row per doc with its id, summed log-probability, token and UTF-8 byte counts, number of windows and whether every token is the greedy one, so any domain's `bits_per_byte`, `loss_per_token` and `perplexity` can be recomputed.
 
     Raises:
         `ValueError`: if `scores` or `num_bytes` doesn't hold one entry per doc.

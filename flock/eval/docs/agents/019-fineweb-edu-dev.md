@@ -65,7 +65,7 @@ The set is the private `cerulean-works/fineweb-edu-dev`, split `validation`, pin
 
 ## 4. How it was actually built
 
-- **Metrics.** `_score_perplexity` sums the docs' FP64 log-probabilities once, divides by the summed bytes and by the summed tokens, and copies both quotients to the host in one `tolist()`, so the task still waits for the GPU once. `perplexity` is `math.exp` of the host value. `bits_per_byte` is the same expression as before and reads back bit for bit.
+- **Metrics.** `_score_perplexity` sums the docs' FP64 log-probabilities once, divides by the summed bytes and by the summed tokens, and copies both quotients to the host in one `tolist()`, so the task still waits for the GPU once. `perplexity` is `math.exp` of the host value, or infinity where that overflows (above about 709.78 nats), so a diverged checkpoint doesn't lose the run. `bits_per_byte` is the same expression as before and reads back bit for bit.
 - **Hash.** `task_hash` deletes `primary_metric` from the definition before hashing. On the tiny test model and on Paloma's real data, all 309 Paloma hashes are equal to `main`'s, and a test pins two of them on fixed docs.
 - **Locks.** On a tiny Llama model, every multiple-choice request score, `results.json` and predictions file is byte-equal to `main`. A text task gives the same `bits_per_byte` (to the last bit), task hash and predictions, and only gains `loss_per_token` and `perplexity`.
 - **Snapshot.** The diff is 309 `"primary_metric": "bits_per_byte"` lines and the new `fineweb_edu` entry. The toy requests are unchanged.

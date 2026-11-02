@@ -40,7 +40,10 @@ from flock.eval.model import FlockCausalLM, ScoringModel
 from flock.eval.run import score_task
 from flock.eval.tasks import TASKS
 
-scorer = ScoringModel(FlockCausalLM(model), model.get_hf_tokenizer(), name=f"my-run@step-{step}")
+tokenizer = model.get_hf_tokenizer()
+if tokenizer is None:
+    raise ValueError("the model's config has no hf_repo, so it names no tokenizer")
+scorer = ScoringModel(FlockCausalLM(model), tokenizer, name=f"my-run@step-{step}")
 result = score_task(scorer, TASKS["fineweb_edu"])
 run.log(
     {
