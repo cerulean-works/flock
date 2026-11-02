@@ -151,6 +151,7 @@ def evaluate(config: EvalConfig) -> Results:
         batch_tokens=model.batch_tokens,
         max_length=model.max_length,
         attention=model.attention,
+        sdpa_backend=model.sdpa_backend,
     )
     task_results = [score_task(model, task, config.limit, config.out) for task in tasks]
 

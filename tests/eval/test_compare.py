@@ -21,6 +21,7 @@ PROVENANCE = Provenance(
     batch_tokens=16384,
     max_length=4096,
     attention="sdpa",
+    sdpa_backend="EFFICIENT_ATTENTION",
     torch="2.14.1",
     transformers="5.20.1",
     tokenizers="0.23.3",
@@ -168,6 +169,7 @@ def test_a_task_with_no_docs_must_repeat_its_metrics_exactly(write):
         ({"max_length": 2048}, "provenance.max_length"),
         ({"attention": "eager"}, "provenance.attention"),
         ({"model_digest": "f" * 64}, "provenance.model_digest"),
+        ({"sdpa_backend": None}, "provenance.sdpa_backend"),
     ],
 )
 def test_runs_with_other_settings_are_refused(write, change, match):
@@ -325,7 +327,14 @@ def test_the_bank_compares_equal_to_itself_rewritten_in_the_current_layout(write
         tasks.append(TaskResult(**fields))
     # The bank predates schema 5's suite hashes and library versions. `compare` reads neither.
     suites = [SuiteResult(suite_hash="unknown", **suite) for suite in data["suites"]]
-    provenance = Provenance(**data["provenance"], tokenizers="unknown", datasets="unknown")
+    # A run on today's code records the pinned kernel, which the bank, older than the field,
+    # lacks.
+    provenance = Provenance(
+        **data["provenance"],
+        tokenizers="unknown",
+        datasets="unknown",
+        sdpa_backend="EFFICIENT_ATTENTION",
+    )
     rewritten = Results(provenance, tasks, suites)
 
     comparison = compare(bank, write("rewritten", rewritten))
@@ -347,3 +356,18 @@ def test_a_file_without_model_digest_compares_with_one_whose_digest_is_none(writ
     bank.write_text(json.dumps(data))
 
     assert compare(bank, write("new", BANK)).breaches == []
+
+
+@pytest.mark.parametrize("backend", ["EFFICIENT_ATTENTION", None])
+def test_a_file_without_sdpa_backend_compares_with_any_kernel(write, backend):
+    # Results written before the pin lack the key: PyTorch chose the kernel per batch, which is
+    # unknown, not none. FP32 scores don't move with the kernel, so the run is not refused.
+    bank = write("bank", BANK)
+    data = json.loads(bank.read_text())
+    del data["provenance"]["sdpa_backend"]
+    bank.write_text(json.dumps(data))
+    provenance = dataclasses.replace(PROVENANCE, sdpa_backend=backend)
+
+    assert (
+        compare(bank, write("new", dataclasses.replace(BANK, provenance=provenance))).breaches == []
+    )

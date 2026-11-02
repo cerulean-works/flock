@@ -189,6 +189,7 @@ PROVENANCE = Provenance(
     batch_tokens=64,
     max_length=128,
     attention="eager",
+    sdpa_backend=None,
     torch="2.8.0",
     transformers="4.57.6",
     tokenizers="0.23.3",

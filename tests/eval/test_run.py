@@ -34,7 +34,7 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
     results = evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path))
 
     data = json.loads((tmp_path / "results.json").read_text())
-    assert data["schema_version"] == 6
+    assert data["schema_version"] == 7
     assert data["provenance"]["model"] == "tiny@0"
     assert data["provenance"]["model_digest"] is None  # only a Flock version has one
     assert data["provenance"]["flock_commit"] == "abc123"
@@ -42,6 +42,7 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
     assert data["provenance"]["dtype"] == "float32"
     assert data["provenance"]["max_length"] == 128
     assert data["provenance"]["attention"] == "sdpa"
+    assert data["provenance"]["sdpa_backend"] is None  # no pin on the CPU
     assert data["provenance"]["tokenizers"] == tokenizers.__version__
     assert data["provenance"]["datasets"] == datasets.__version__
     [task] = data["tasks"]

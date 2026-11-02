@@ -56,7 +56,7 @@ def compare(banked: Path, new: Path) -> Comparison:
     Each task in both files is compared on `num_docs` and every entry of `metrics` and `truncation`, and each suite in both on `members` and `score`. Timing is not compared. An accuracy may move by `FLIPPED_DOCS` docs out of `num_docs`, any other metric by `RELATIVE_TOLERANCE` of its banked value, and a suite's score by its members' tolerances combined as independent errors. Counts and `members` must be equal.
 
     Raises:
-        `ValueError`: if the runs are different instruments (another model or `model_digest`, `dtype`, `batch_tokens`, `max_length` or `attention`, a common task with another `task_hash` or `limit`, or a common suite with another `metric`), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
+        `ValueError`: if the runs are different instruments (another model or `model_digest`, `dtype`, `batch_tokens`, `max_length` or `attention`, or another `sdpa_backend` when both files record one, a common task with another `task_hash` or `limit`, or a common suite with another `metric`), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
     """
     files = {}
     for path in (banked, new):
@@ -83,6 +83,16 @@ def compare(banked: Path, new: Path) -> Comparison:
                 f"different instrument: provenance.model_digest is {digests[0]!r} in {banked}, "
                 f"{digests[1]!r} in {new}"
             )
+        # The pinned SDPA kernel changes BF16 scores (023.D3). A file older than the field has an
+        # unknown kernel, not none, so only two files that both record it can refuse: the FP32
+        # bank, where the pin changes no score, stays comparable.
+        if "sdpa_backend" in bank["provenance"] and "sdpa_backend" in rerun["provenance"]:
+            backends = bank["provenance"]["sdpa_backend"], rerun["provenance"]["sdpa_backend"]
+            if backends[0] != backends[1]:
+                raise ValueError(
+                    f"different instrument: provenance.sdpa_backend is {backends[0]!r} in "
+                    f"{banked}, {backends[1]!r} in {new}"
+                )
         # The usual causes of a breach, printed beside it. Read with `get`: a file without one
         # of them is still comparable.
         provenance = {}
