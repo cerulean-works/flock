@@ -8,6 +8,7 @@ from app.api.src.api.deps import (
     AdminProjectDep,
     APIError,
     JSONResponse,
+    MemberProjectDep,
     Name,
     ReadableProjectDep,
     StoreDep,
@@ -67,7 +68,7 @@ async def list_projects(
 async def create_project(body: ProjectCreate, store: StoreDep, user: UserDep) -> Response:
     """Create an empty project in an org of the user (``wandb.init`` also creates projects)."""
     await visible_org(body.entity, store, user)
-    project = await store.create_project(body.entity, body.name, body.description)
+    project = await store.create_project(body.entity, body.name, body.description, creator=user.pk)
     return JSONResponse(await store.project_info(project), status_code=201)
 
 
@@ -95,9 +96,10 @@ async def list_owners(project: ReadableProjectDep, store: StoreDep, viewer: View
 
 @router.patch("/projects/{entity}/{project}")
 async def update_project(
-    project: AdminProjectDep, body: ProjectUpdate, store: StoreDep, user: UserDep
+    project: MemberProjectDep, body: ProjectUpdate, store: StoreDep, user: UserDep
 ) -> Response:
-    """Rename a project, change its description, or its ``visibility`` (org admins only).
+    """Rename a project, change its description (org admins only), or its ``visibility`` (org
+    admins and the member who created it, D118).
 
     Renaming is refused (409) while the project has active runs, since their clients address
     them by the old name. Dashboards streaming the project get a ``project`` event.
@@ -108,11 +110,17 @@ async def update_project(
     fields = body.model_dump(include=body.model_fields_set)
     if "visibility" in fields and fields["visibility"] is None:
         raise APIError(422, "visibility can't be null")
+    admin = store.accounts.role(user, project.org) == "admin"
+    if not admin and (fields.keys() - {"visibility"} or project.created_by != user.pk):
+        raise APIError(
+            403, f"only admins of {project.entity}, and its creator for its visibility, can do this"
+        )
     try:
         project = await store.update_project(project, fields, user)
     except NotFound as exc:
         raise APIError(404, str(exc)) from exc
-    return JSONResponse({**await store.project_info(project), "access": "admin"})
+    access = "admin" if admin else "member"
+    return JSONResponse({**await store.project_info(project), "access": access})
 
 
 @router.delete("/projects/{entity}/{project}", status_code=204)

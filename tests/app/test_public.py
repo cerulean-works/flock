@@ -146,7 +146,7 @@ def test_outsiders_get_run_metadata_without_who_ran_it(setup):
         assert call(client, "GET", path).status == 404
 
 
-def test_only_admins_change_visibility(setup, flock):
+def test_admins_change_visibility_of_projects_they_didnt_create(setup, flock):
     api, member, outsider, _ = setup
     assert member.patch(f"{P}/p", {"visibility": "public"}).status == 403
     assert outsider.patch(f"{P}/p", {"visibility": "public"}).status == 404
@@ -171,6 +171,29 @@ def test_only_admins_change_visibility(setup, flock):
     assert api.patch(f"{P}/p", {"name": "p2"}).json()["visibility"] == "public"
     assert call(outsider, "GET", "/p2").status == 200
     assert call(outsider, "GET", "/p").status == 404
+
+
+def test_creators_change_visibility_and_nothing_else(setup, flock):
+    api, member, outsider, _ = setup
+    other = flock.add_user("n@x.io").api
+    # A project created in the dashboard, and one created by a run's upload (D118).
+    assert member.post("/api/v1/projects", {"entity": "flock", "name": "m"}).status == 201
+    member.create_run("q", "r1")
+    me = member.get("/api/v1/me").json()["id"]
+    assert call(api, "GET", "/m").json()["created_by"] == me
+    assert call(api, "GET", "/q").json()["created_by"] == me
+    assert call(api, "GET", "/p").json()["created_by"] != me
+    for project in ("m", "q"):
+        published = publish(member, project)
+        assert (published["visibility"], published["access"]) == ("public", "member")
+        assert call(outsider, "GET", f"/{project}").status == 200
+        assert other.patch(f"{P}/{project}", {"visibility": "private"}).status == 403
+    # Renames and descriptions stay with admins, even alongside a visibility change.
+    assert member.patch(f"{P}/m", {"description": "x"}).status == 403
+    assert member.patch(f"{P}/m", {"visibility": "private", "name": "m2"}).status == 403
+    assert call(api, "GET", "/m").json()["visibility"] == "public"
+    assert publish(member, "m", visibility="private")["visibility"] == "private"
+    assert publish(api, "m")["visibility"] == "public"
 
 
 def test_going_private_ends_outsiders_streams_only(setup, flock, events):

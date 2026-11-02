@@ -16,7 +16,8 @@ const BERT = {
 	run_count: 3,
 	active_run_count: 0,
 	column_count: 0,
-	visibility: 'public'
+	visibility: 'public',
+	created_by: null
 } satisfies ProjectInfo;
 
 const ME = {

@@ -19,7 +19,8 @@ const BERT: ProjectInfo = {
 	run_count: 3,
 	active_run_count: 0,
 	column_count: 0,
-	visibility: 'public'
+	visibility: 'public',
+	created_by: null
 };
 
 const ADA = { id: 7, name: 'Ada', email: 'ada@other.test', is_superadmin: false, avatar_url: null };

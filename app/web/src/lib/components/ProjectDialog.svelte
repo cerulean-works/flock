@@ -30,12 +30,18 @@
 		done: () => (open = false)
 	});
 
+	// Org admins edit everything; a member who created the project only its visibility (D118).
+	const admin = $derived(page.data.shell?.access === 'admin');
+	const creator = $derived(
+		project?.created_by != null && project.created_by === page.data.shell?.me?.id
+	);
+	const editable = $derived(!project || admin);
+	const publisher = $derived(admin || creator);
+
 	// Live clients address their runs by project name, so Flock refuses to rename a
 	// project while any of its runs is running.
 	const locked = $derived(!!project?.active_run_count);
-
-	// Visibility (D110), for org admins: Flock refuses everyone else.
-	const admin = $derived(page.data.shell?.access === 'admin');
+	const renamable = $derived(editable && !locked);
 	const visibilities: { value: Visibility; label: string; hint: string }[] = $derived([
 		{ value: 'private', label: 'Private', hint: `Only members of ${entity} can see it.` },
 		{
@@ -87,22 +93,26 @@
 			{/if}
 			<div class="grid gap-2">
 				<Label for="project-name">Name</Label>
-				{#if locked}
+				{#if !renamable}
 					<!-- A disabled field isn't submitted: send the current name instead. -->
 					<input type="hidden" name="name" value={project?.name} />
 				{/if}
 				<Input
 					id="project-name"
-					name={locked ? undefined : 'name'}
+					name={renamable ? 'name' : undefined}
 					value={project?.name ?? ''}
 					autocomplete="off"
 					spellcheck="false"
 					required
 					maxlength={128}
-					disabled={locked}
+					disabled={!renamable}
 					aria-invalid={!!mutation.error}
 				/>
-				{#if locked}
+				{#if !editable}
+					<p class="text-xs text-muted-foreground">
+						Only admins of {entity} can rename it or change its description.
+					</p>
+				{:else if locked}
 					<p class="text-xs text-muted-foreground">
 						Can’t be renamed while {project?.active_run_count}
 						{project?.active_run_count === 1 ? 'run is' : 'runs are'} running.
@@ -118,9 +128,10 @@
 					name="description"
 					value={project?.description ?? ''}
 					rows={3}
+					disabled={!editable}
 				/>
 			</div>
-			{#if project && admin}
+			{#if project && publisher}
 				<fieldset class="grid gap-2">
 					<legend class="mb-2 text-sm leading-none font-medium">Visibility</legend>
 					{#each visibilities as v (v.value)}
@@ -157,7 +168,7 @@
 	</Dialog.Content>
 </Dialog.Root>
 
-{#if project && admin}
+{#if project && publisher}
 	<ConfirmDialog
 		bind:open={publishing}
 		action="{entityHref(entity)}?/update"
