@@ -39,7 +39,7 @@ flock_commit  d23f66846b528327acbeb38fc6ce90279fd8bd79  ->  7dd26fbb6cc5d6452355
 compared: tasks 109, suites 10, breaches 0
 ```
 
-A breach adds a line such as `piqa  metrics.acc_raw  0.6  ->  0.625  (+0.025)`. A changed task adds a line such as `changed, not compared: lambada, base_easy:qa_rc, base_easy`.
+A breach adds a line such as `piqa  metrics.acc_raw  0.6  ->  0.625  (+0.025)`. A changed task adds a line such as `changed, not compared: lambada, base_easy:qa_rc, base_easy:qa_bpb, base_easy`.
 
 
 ## Refusals
