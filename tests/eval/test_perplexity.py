@@ -98,8 +98,8 @@ def test_perplexity_is_infinite_where_exp_overflows(monkeypatch, scorer, tmp_pat
     # A diverged checkpoint: about 1e4 nats per token, far past `math.exp`'s limit.
     score = scorer.rolling_loglikelihood
 
-    def diverged(texts, window):
-        scores = score(texts, window)
+    def diverged(texts, window, token_ids=None):
+        scores = score(texts, window, token_ids)
         return dataclasses.replace(scores, logprob=-1e4 * scores.num_tokens.double())
 
     monkeypatch.setattr(scorer, "rolling_loglikelihood", diverged)
