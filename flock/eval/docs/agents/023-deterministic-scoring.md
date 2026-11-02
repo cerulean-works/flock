@@ -90,7 +90,7 @@ As planned, in three files of code: the pin is one `with` in `_logprobs`, `sdpa_
 Detours and checks:
 
 - **A reviewer's worry about grouped-query attention.** Flock's attention passes `enable_gqa=True` to SDPA when a model has fewer key-value heads than heads, and older PyTorch ran that only on the flash and math kernels. A CUDA test, skipped in CI, scores a tiny transformers Llama and a tiny Flock `Olmo2`, both with 4 heads and 2 key-value heads, in BF16 under the pin: both run on the efficient kernel alone and repeat bit for bit on an H200 with torch 2.14.1.
-- **The "missing means unknown" rule in `compare`** (023.D3) was chosen over reading a missing field as `None`, which would have refused every new CUDA run against the FP32 bank until it was rescored.
+- **The "missing means unknown" rule in `compare`** (023.D3) was chosen over reading a missing field as `None`, which would have refused every new CUDA run against the FP32 bank until it was rescored. `compare` still prints `sdpa_backend` among the likely causes when only one file records it.
 - **Before and after on the GPU** (OLMo 2 1B `a1847dff`, ARC-Easy, 2,376 docs, 9,501 scored continuations, `batch_tokens` 32768, one H200, both jobs on one node):
 
 | Check | Result |
@@ -100,6 +100,6 @@ Detours and checks:
 | BF16, `main` against this branch | every continuation moves, by up to 0.30 nats; acc_per_char 0.7677 to 0.7673, acc_raw 0.7462 to 0.7483, bpb 0.53873 to 0.53882 |
 | `flock eval compare`, FP32 bank (schema 4) against this branch's FP32 run | `arc_easy` compared, 0 breaches |
 
-The BF16 shift is the one section 2 measured (0.7677 to 0.7673). On the CPU the tiny-model behaviour lock is unchanged: every score, task hash and prediction row equal to `main`, and `results.json` differs only in `schema_version` and the new field.
+The BF16 shift is the one section 2 measured (0.7677 to 0.7673). The counts differ in unit, not in kind: section 2 counts every request, conditional and unconditional (19,002 = 2 x 9,501), at another commit, while this table counts the scored continuations in the prediction files. 0.28 nats (section 1) is run-to-run noise under the default; 0.49 and 0.30 nats are the default against the pin. On the CPU the tiny-model behaviour lock is unchanged: every score, task hash and prediction row equal to `main`, and `results.json` differs only in `schema_version` and the new field.
 
 **Known gaps:** the pin is tested on one GPU type and one torch version. A file from before the pin compared with a pinned BF16 run is not refused: it shows the shift as breaches beside `schema_version`.

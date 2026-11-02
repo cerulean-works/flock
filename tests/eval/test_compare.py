@@ -344,7 +344,12 @@ def test_the_bank_compares_equal_to_itself_rewritten_in_the_current_layout(write
     assert comparison.breaches == []
     # Only the layout differs: a bank from an older schema still passes, and the versions it
     # lacks print as causes.
-    assert comparison.provenance.keys() <= {"schema_version", "tokenizers", "datasets"}
+    assert comparison.provenance.keys() <= {
+        "schema_version",
+        "tokenizers",
+        "datasets",
+        "sdpa_backend",
+    }
 
 
 def test_a_file_without_model_digest_compares_with_one_whose_digest_is_none(write):
@@ -368,6 +373,8 @@ def test_a_file_without_sdpa_backend_compares_with_any_kernel(write, backend):
     bank.write_text(json.dumps(data))
     provenance = dataclasses.replace(PROVENANCE, sdpa_backend=backend)
 
-    assert (
-        compare(bank, write("new", dataclasses.replace(BANK, provenance=provenance))).breaches == []
-    )
+    comparison = compare(bank, write("new", dataclasses.replace(BANK, provenance=provenance)))
+
+    assert comparison.breaches == []
+    if backend is not None:  # printed as a likely cause, the missing side read as None
+        assert comparison.provenance["sdpa_backend"] == (None, backend)

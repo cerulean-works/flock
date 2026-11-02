@@ -99,6 +99,7 @@ def compare(banked: Path, new: Path) -> Comparison:
         for key in (
             "flock_commit",
             "device",
+            "sdpa_backend",
             "torch",
             "transformers",
             "tokenizers",

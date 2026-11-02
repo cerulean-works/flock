@@ -290,7 +290,7 @@ class ScoringModel:
 
     @property
     def attention(self) -> str:
-        """The attention implementation (`sdpa`, `eager`, ...), which changes bfloat16 scores."""
+        """The attention implementation (`sdpa`, `eager`, ...), which changes BF16 scores."""
         # transformers has no public accessor for it, only this private config attribute.
         return self.model.config._attn_implementation
 
@@ -420,7 +420,9 @@ class ScoringModel:
         # Pinned to one kernel so BF16 scores repeat run to run: left to choose, PyTorch runs
         # cuDNN attention on some padded batches, and its results vary (023.D1, 023.D2). No
         # fallback: a model the kernel can't run fails here rather than mix kernels.
-        pin = sdpa_kernel(SDPBackend.EFFICIENT_ATTENTION) if self.sdpa_backend else nullcontext()
+        # `sdpa_backend` names the kernel, so what is recorded is what runs.
+        backend = self.sdpa_backend
+        pin = sdpa_kernel(getattr(SDPBackend, backend)) if backend else nullcontext()
         with _eval_mode(self.model), pin:
             for batch in self._batches(order, input_lengths):
                 # `non_blocking` on these small CPU tensors: the copy is staged at once and the
@@ -521,8 +523,9 @@ class ScoringModel:
         device = self.device
 
         # TODO: try FlashAttention 3 from the `kernels` package and packed sequences (cu_seqlens)
-        # instead of padding. Measure the speedup first, and record the kernel in the provenance:
-        # a different kernel changes bfloat16 scores slightly. Packing also changes which
+        # instead of padding. Measure the speedup first. A kernel other than SDPA bypasses the pin
+        # in `_logprobs`, so `sdpa_backend` must then record that kernel instead (023.D2): a
+        # different kernel changes BF16 scores slightly. Packing also changes which
         # positions `logits_to_keep` must keep.
         logits = self.model(
             input_ids=batch.input_ids.to(device, non_blocking=True),
