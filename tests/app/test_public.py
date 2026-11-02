@@ -1,6 +1,8 @@
 """Public projects (015): read-only access for anyone with the link, on projects an org admin
 made public."""
 
+import json
+
 import pytest
 
 from tests.app.conftest import Client, EventStream, FlockServer
@@ -125,6 +127,23 @@ def test_outsiders_see_no_cost_or_email(setup):
         assert call(client, "GET", "/p/owners").json()["owners"] == [run["owner_user"]]
         # The owner column still filters by the user's id.
         assert client.runs("p", filter={"owner": run["owner"]})["ids"] == ["r1"]
+
+
+def test_outsiders_get_run_metadata_without_who_ran_it(setup):
+    api, member, outsider, anon = setup
+    metadata = {"email": "a@x.io", "username": "alice", "program": "train.py", "host": "n1"}
+    api.upload("p", "r1", "wandb-metadata.json", json.dumps(metadata).encode())
+    publish(api)
+    path = "/p/runs/r1/files/wandb-metadata.json"
+    for client in (api, member):
+        assert json.loads(call(client, "GET", path).body) == metadata
+    for client in (outsider, anon):
+        assert call(client, "GET", path).json() == {"program": "train.py", "host": "n1"}
+    # One that can't be stripped isn't served raw.
+    api.upload("p", "r1", "wandb-metadata.json", b'{"email": "a@x.io"')
+    assert call(member, "GET", path).status == 200
+    for client in (outsider, anon):
+        assert call(client, "GET", path).status == 404
 
 
 def test_only_admins_change_visibility(setup, flock):

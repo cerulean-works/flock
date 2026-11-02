@@ -1112,3 +1112,42 @@ def test_deletes_outside_the_dataset_routes_drop_the_flag(flock: S3Flock, writer
     writer.write("tab", table(0, 2))
     assert get(anon, f"{DATASETS}/info", path="tab").status == 404
     assert get(anon, f"{DATASETS}/info", path="kept").json()["rows"] == 3
+
+
+def test_a_failed_flag_drop_fails_the_delete_so_the_client_retries(
+    flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
+):
+    # A success would leave the flag, so a dataset written at the path later would start public.
+    import boto3
+    from botocore.config import Config
+
+    from app.api.src.s3_proxy import app as proxy_app
+
+    api = flock.client()
+    writer.write("d", table(0, 3))
+    assert make_public(api, "d").status == 200
+    drop = proxy_app.drop_deleted_public
+    calls = []
+
+    async def flaky(*args: Any) -> None:
+        calls.append(args)
+        if len(calls) == 1:
+            raise OSError("database unreachable")
+        await drop(*args)
+
+    monkeypatch.setattr(proxy_app, "drop_deleted_public", flaky)
+    creds = flock.credentials()
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=flock.proxy.url,
+        aws_access_key_id=creds["access_key_id"],
+        aws_secret_access_key=creds["secret_access_key"],
+        region_name="us-east-1",
+        config=Config(s3={"addressing_style": "path"}, retries={"max_attempts": 3}),
+    )
+    keys = [{"Key": o["Key"]} for o in s3.list_objects_v2(Bucket="flock-datasets")["Contents"]]
+    # The first attempt answers 503; boto3's retry repeats the delete, a no-op by then, and the
+    # flag is dropped.
+    s3.delete_objects(Bucket="flock-datasets", Delete={"Objects": keys})
+    assert len(calls) == 2
+    assert sql(flock, "SELECT path FROM public_datasets") == []

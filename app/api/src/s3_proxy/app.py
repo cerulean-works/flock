@@ -447,16 +447,21 @@ class Proxy:
         return await self._renamed(call, response)
 
     async def _deleted(self, call: Call, keys: list[str]) -> None:
-        """After a delete from flock-datasets: drop the public flag of a dataset it removed
-        (D115), so a dataset written at that path later doesn't start public."""
-        if call.bucket.managed != DATASETS or not keys or self._pool is None:
+        """After a delete from flock-datasets: drop the public flag of a dataset it removed (D115), so a dataset written at that path later doesn't start public.
+
+        If that fails the client gets a 503, which S3 clients retry: the delete is a no-op the second time and the flag is dropped then. A success would leave the flag in place."""
+        if call.bucket.managed != DATASETS or not keys:
             return
+        assert self._pool is not None, "the proxy is not started"
         try:
             await drop_deleted_public(
                 self._pool, self.upstream, call.caller.org.pk, call.bucket.upstream_name, keys
             )
         except Exception:
             log.exception("could not drop the public flags of deleted datasets")
+            raise S3Error(
+                "ServiceUnavailable", "the delete succeeded but needs a retry to finish", 503
+            ) from None
 
     # ------------------------------------------------------------------ objects
 

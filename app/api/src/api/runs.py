@@ -522,8 +522,25 @@ async def list_run_files(run: ReadableRunDep, store: StoreDep) -> Response:
     )
 
 
+# Who ran it, in the wandb SDK's machine description: the account's email (once the SDK has
+# looked it up) and the OS user. Outsiders get the file without them (D113).
+PRIVATE_METADATA = ("email", "username")
+
+
 @public.get("/projects/{entity}/{project}/runs/{run}/files/{name:path}")
-async def get_run_file(run: ReadableRunDep, name: str, store: StoreDep) -> Response:
+async def get_run_file(
+    run: ReadableRunDep, name: str, store: StoreDep, viewer: ViewerDep
+) -> Response:
+    """A file the run uploaded. Outsiders reading a public project get ``wandb-metadata.json`` without ``email`` and ``username``, and 404 if it isn't a JSON object."""
+    if name == Store.METADATA_FILE and store.accounts.access(viewer, run.project) == "public":
+        data = await store.read_file(run, name)
+        try:
+            metadata = orjson.loads(data) if data is not None else None
+        except orjson.JSONDecodeError:
+            metadata = None
+        if not isinstance(metadata, dict):
+            raise APIError(404, "file not found")
+        return JSONResponse({k: v for k, v in metadata.items() if k not in PRIVATE_METADATA})
     found = await store.files.get(run.pk, name) if store.file_parts(name) else None
     if found is None:
         raise APIError(404, "file not found")

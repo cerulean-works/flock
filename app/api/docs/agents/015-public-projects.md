@@ -121,6 +121,9 @@ The response shapes don't change. Some fields are emptied when access is `public
 - **Owners' emails.** `accounts.briefs(pks)` gains a `public` form, `{id, name, avatar_url}`
   without `email`. It's used for run owners in run details and the runs table. The `owner`
   column's filter still works by user pk.
+- **Who ran it.** `wandb-metadata.json` is served without `email` and `username`. The SDK writes
+  the account's email there once it has looked it up, and the OS user always, and runs imported
+  from W&B bring theirs. A file that isn't a JSON object is 404, since it can't be stripped.
 - **Org members.** No route lists them to outsiders (D114).
 
 Everything else the run logged is shown as members see it: config, summary, metrics, system
@@ -341,8 +344,10 @@ signed-out 404 goes to sign in, owners' names stay visible, and outsiders get li
 - **Deletes outside the dataset routes drop the flag too (D115).** A dataset deleted through the
   Storage tab or the S3 proxy would otherwise leave its row, and a dataset written at that path
   later would start public. After any delete from flock-datasets, `drop_deleted_public` drops
-  the flag of each public dataset the keys were in whose `_versions/` is now empty. Deletes
-  made straight against the upstream S3, with the global key, aren't seen.
+  the flag of each public dataset the keys were in whose `_versions/` is now empty. If the drop
+  fails, the proxy answers the delete with a 503 rather than a success, so the S3 client retries:
+  the delete is a no-op the second time and the drop runs again. Deletes made straight against
+  the upstream S3, with the global key, aren't seen.
 - **The viewer (D111).** `viewer` in `deps.py` returns None only when the request has no
   `x-api-key` and no `Authorization` with a value. Anything else goes through `rest_user`, so a
   bad token is 401 and a wandb key is `WANDB_KEY_REFUSED`. `accounts.access` returns `admin`,

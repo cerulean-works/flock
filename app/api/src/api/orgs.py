@@ -178,7 +178,7 @@ async def get_org(org: str, viewer: ViewerDep, store: StoreDep) -> Response:
     null), when it has a public project or dataset; otherwise the same 404 as for unknown
     organizations (D114)."""
     found = await store.find_org(org)
-    if found is not None and store.accounts.role(viewer, found):
+    if found is not None and viewer is not None and store.accounts.role(viewer, found):
         return JSONResponse(await org_info(store, found, viewer))
     if found is None or not await store.has_public(found):
         raise APIError(404, f"organization {org} not found")
