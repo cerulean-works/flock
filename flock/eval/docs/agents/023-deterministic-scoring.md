@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | in build |
+| Status | in review |
 | Date | 2026-10-27 (design), 2026-11-02 (build) |
 | Builds on | [001](001-eval-core.md) (batched scoring), [008](008-paloma.md) (the rolling path), [013](013-score-compare.md) (`compare`), [014](014-run-provenance.md) (the results file) |
 | Keeps | FP32 scores, every parity result, every task hash, `results.json`'s existing fields |
@@ -85,4 +85,21 @@ Pinning moves BF16 numbers wherever PyTorch picked another kernel: ARC-Easy acc_
 
 ## 5. How it was actually built
 
-Not built yet.
+As planned, in three files of code: the pin is one `with` in `_logprobs`, `sdpa_backend` is a property of `ScoringModel` that `evaluate` copies into `Provenance`, and `compare` refuses a different kernel only when both files record one. The design was written on 2026-10-27, before the rolling path and schema 6 landed; at the build the pin moved into `_logprobs`, which both paths share by then, and the schema went to 7 instead of 5.
+
+Detours and checks:
+
+- **A reviewer's worry about grouped-query attention.** Flock's attention passes `enable_gqa=True` to SDPA when a model has fewer key-value heads than heads, and older PyTorch ran that only on the flash and math kernels. A CUDA test, skipped in CI, scores a tiny transformers Llama and a tiny Flock `Olmo2`, both with 4 heads and 2 key-value heads, in BF16 under the pin: both run on the efficient kernel alone and repeat bit for bit on an H200 with torch 2.14.1.
+- **The "missing means unknown" rule in `compare`** (023.D3) was chosen over reading a missing field as `None`, which would have refused every new CUDA run against the FP32 bank until it was rescored.
+- **Before and after on the GPU** (OLMo 2 1B `a1847dff`, ARC-Easy, 2,376 docs, 9,501 scored continuations, `batch_tokens` 32768, one H200, both jobs on one node):
+
+| Check | Result |
+| --- | --- |
+| FP32, `main` against this branch | predictions byte-equal, acc_per_char 0.7706 both |
+| BF16, two runs of this branch | predictions byte-equal, acc_per_char 0.7673 both |
+| BF16, `main` against this branch | every continuation moves, by up to 0.30 nats; acc_per_char 0.7677 to 0.7673, acc_raw 0.7462 to 0.7483, bpb 0.53873 to 0.53882 |
+| `flock eval compare`, FP32 bank (schema 4) against this branch's FP32 run | `arc_easy` compared, 0 breaches |
+
+The BF16 shift is the one section 2 measured (0.7677 to 0.7673). On the CPU the tiny-model behaviour lock is unchanged: every score, task hash and prediction row equal to `main`, and `results.json` differs only in `schema_version` and the new field.
+
+**Known gaps:** the pin is tested on one GPU type and one torch version. A file from before the pin compared with a pinned BF16 run is not refused: it shows the shift as breaches beside `schema_version`.
