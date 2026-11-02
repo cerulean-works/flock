@@ -59,6 +59,11 @@
 		return () => controller.abort();
 	});
 
+	/** Moving into a public project publishes the runs (D110). */
+	const publishes = $derived(
+		!creating && projects?.find((p) => p.name === target)?.visibility === 'public'
+	);
+
 	const runs = (n: number) => `${n.toLocaleString('en-US')} ${n === 1 ? 'run' : 'runs'}`;
 	const nameOf = (id: string) => ws.page.runs.find((r) => r.id === id)?.name ?? id;
 
@@ -132,6 +137,11 @@
 					<Label for="move-new-name">New project name</Label>
 					<Input id="move-new-name" bind:value={newName} autocomplete="off" spellcheck="false" />
 				</div>
+			{/if}
+			{#if publishes}
+				<p class="bg-card px-3 py-2.5 text-[13px]" role="status">
+					{target} is public. The runs you move will be public.
+				</p>
 			{/if}
 			{#if live}
 				<p class="text-[13px] text-muted-foreground">

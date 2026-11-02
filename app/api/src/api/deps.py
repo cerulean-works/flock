@@ -137,6 +137,21 @@ async def rest_user(request: Request, user: UserDep) -> User:
 RestUser = Annotated[User, Depends(rest_user)]
 
 
+async def viewer(request: Request, store: StoreDep) -> User | None:
+    """Who reads a project or dataset that may be public (D111): None for a request with no
+    credential at all, or the user of a browser session or CLI token, as ``rest_user`` gives.
+    A credential that's present but invalid or expired is still 401, never read as anonymous,
+    and a wandb key is still refused (D72)."""
+    scheme, _, credentials = request.headers.get("authorization", "").partition(" ")
+    if not request.headers.get("x-api-key") and not (scheme and credentials.strip()):
+        request.state.credential = None
+        return None
+    return await rest_user(request, await current_user(request, store))
+
+
+ViewerDep = Annotated[User | None, Depends(viewer)]
+
+
 async def wandb_user(user: UserDep) -> User:
     """The user of a wandb protocol request: any credential, wandb keys included. The wandb
     protocol's router depends on it."""
@@ -206,17 +221,32 @@ def get_admin_org(org: OrgDep, store: StoreDep, user: UserDep) -> Org:
 AdminOrgDep = Annotated[Org, Depends(get_admin_org)]
 
 
-async def get_project(entity: str, project: str, store: StoreDep, user: UserDep) -> Project:
+async def get_readable_project(
+    entity: str, project: str, store: StoreDep, viewer: ViewerDep
+) -> Project:
+    """A project anyone may read if it's public (D112); private ones are 404 to outsiders, the
+    same answer as for unknown ones."""
+    found = await store.project(entity, project)
+    if found is None or store.accounts.access(viewer, found) is None:
+        raise APIError(404, f"project {entity}/{project} not found")
+    return found
+
+
+ReadableProjectDep = Annotated[Project, Depends(get_readable_project)]
+
+
+async def get_member_project(entity: str, project: str, store: StoreDep, user: UserDep) -> Project:
+    """A project of the user's orgs; outsiders get 404 even when it's public."""
     found = await store.project(entity, project)
     if found is None or store.accounts.role(user, found.org) is None:
         raise APIError(404, f"project {entity}/{project} not found")
     return found
 
 
-ProjectDep = Annotated[Project, Depends(get_project)]
+MemberProjectDep = Annotated[Project, Depends(get_member_project)]
 
 
-def get_admin_project(project: ProjectDep, store: StoreDep, user: UserDep) -> Project:
+def get_admin_project(project: MemberProjectDep, store: StoreDep, user: UserDep) -> Project:
     if store.accounts.role(user, project.org) != "admin":
         raise APIError(403, f"only admins of {project.entity} can do this")
     return project
@@ -225,14 +255,25 @@ def get_admin_project(project: ProjectDep, store: StoreDep, user: UserDep) -> Pr
 AdminProjectDep = Annotated[Project, Depends(get_admin_project)]
 
 
-async def get_run(run: str, project: ProjectDep, store: StoreDep) -> Run:
+async def find_run(store: Store, project: Project, run: str) -> Run:
     found = await store.project_run(project, run)
     if found is None:
         raise APIError(404, f"run {run} not found")
     return found
 
 
-RunDep = Annotated[Run, Depends(get_run)]
+async def get_readable_run(run: str, project: ReadableProjectDep, store: StoreDep) -> Run:
+    return await find_run(store, project, run)
+
+
+ReadableRunDep = Annotated[Run, Depends(get_readable_run)]
+
+
+async def get_member_run(run: str, project: MemberProjectDep, store: StoreDep) -> Run:
+    return await find_run(store, project, run)
+
+
+MemberRunDep = Annotated[Run, Depends(get_member_run)]
 
 
 def check_owner(store: Store, user: User, project: Project, runs: Iterable[Run]) -> None:

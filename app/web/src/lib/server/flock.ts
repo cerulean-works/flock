@@ -6,7 +6,8 @@ import { endSession, loginHref } from './session.ts';
 /**
  * Flock's API. The dashboard talks to it only from the server, as the signed-in
  * user (see hooks.server.ts), so Flock's address and the user's tokens never reach the
- * browser.
+ * browser. A signed-out visitor's requests carry no token at all: Flock answers them with
+ * what's public (015).
  */
 
 function authorized(init: RequestInit): RequestInit {
@@ -25,6 +26,17 @@ function signedOut(): never {
 	const event = getRequestEvent();
 	endSession(event.cookies);
 	if (event.url.pathname.startsWith('/api/')) error(401, 'Sign in to continue');
+	redirect(303, loginHref(event.url));
+}
+
+/**
+ * Something a page needs isn't there. Signed out, that may only be because it's private (a
+ * project or dataset that isn't public, D116): sign in, then come back. Signed in, it's the
+ * 404 page as usual, and this server's own API answers 404 either way.
+ */
+function notFound() {
+	const event = getRequestEvent();
+	if (event.locals.token || event.url.pathname.startsWith('/api/')) return;
 	redirect(303, loginHref(event.url));
 }
 
@@ -57,6 +69,7 @@ export async function flock(path: string, init: RequestInit = {}): Promise<Respo
 		error(502, `Flock at ${FLOCK_API_URL} is not reachable`);
 	}
 	if (res.status === 401 && !path.startsWith('/api/v1/auth/')) signedOut();
+	if (res.status === 404 && !path.startsWith('/api/v1/auth/')) notFound();
 	if (!res.ok) {
 		const body = (await res.json().catch(() => null)) as ErrorBody | null;
 		error(res.status as 400, messageOf(body, res.status));

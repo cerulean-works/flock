@@ -19,7 +19,7 @@ const bucket = (name: string, managed: Bucket['managed'] = null): Bucket => ({
 });
 
 const data = {
-	shell: { admin: true, orgName: 'Acme' },
+	shell: { access: 'admin', orgName: 'Acme' },
 	s3: { endpoint: 'https://s3.flock.test', region: 'us-east-1' },
 	buckets: [
 		bucket('checkpoints'),

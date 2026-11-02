@@ -13,6 +13,7 @@ import hashlib
 import logging
 import re
 import time
+import xml.etree.ElementTree as ET
 from collections.abc import AsyncGenerator, AsyncIterable
 from dataclasses import dataclass
 from urllib.parse import unquote, urlsplit
@@ -27,6 +28,7 @@ from starlette.responses import Response, StreamingResponse
 from starlette.routing import Route
 
 from app.api.src.core.bus import Bus
+from app.api.src.core.datasets import drop_deleted_public
 from app.api.src.s3_proxy import chunked, s3xml, sigv4
 from app.api.src.s3_proxy.auth import Bucket, Caller, Directory
 from app.api.src.s3_proxy.sigv4 import SigV4Error
@@ -114,6 +116,7 @@ CORS_EXPOSE = (
 )
 # flock-models (D97): written only into an open upload's folder, `{model}/u/{ulid}/…`.
 MODELS = "models"
+DATASETS = "datasets"
 UPLOAD_KEY = re.compile(r"([^/]+)/u/([0-9A-HJKMNP-TV-Z]{26})/.+", re.DOTALL)
 MODELS_REFUSED = "flock-models is written through flock models push"
 
@@ -436,7 +439,24 @@ class Proxy:
         response = await self._send(
             call, "POST", None, {"delete": ""}, headers, body, hashlib.sha256(body).hexdigest()
         )
+        if response.status_code < 300 and call.bucket.managed == DATASETS:
+            with contextlib.suppress(ET.ParseError):
+                root = ET.fromstring(body)
+                keys = [e.text or "" for e in root.iter() if s3xml.local(e.tag) == "Key"]
+                await self._deleted(call, keys)
         return await self._renamed(call, response)
+
+    async def _deleted(self, call: Call, keys: list[str]) -> None:
+        """After a delete from flock-datasets: drop the public flag of a dataset it removed
+        (D115), so a dataset written at that path later doesn't start public."""
+        if call.bucket.managed != DATASETS or not keys or self._pool is None:
+            return
+        try:
+            await drop_deleted_public(
+                self._pool, self.upstream, call.caller.org.pk, call.bucket.upstream_name, keys
+            )
+        except Exception:
+            log.exception("could not drop the public flags of deleted datasets")
 
     # ------------------------------------------------------------------ objects
 
@@ -479,7 +499,10 @@ class Proxy:
                 )
                 return await self._renamed(call, response, location=True)
         if method == "DELETE" and (not params or params.keys() == {"uploadId"}):
-            return await self._relay(call, await self._send(call, "DELETE", call.key, params))
+            response = await self._send(call, "DELETE", call.key, params)
+            if not params and response.status_code < 300:
+                await self._deleted(call, [call.key])
+            return await self._relay(call, response)
         raise S3Error("NotImplemented", "this operation is not supported", 501)
 
     async def _models_write(self, call: Call) -> None:

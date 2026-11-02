@@ -20,7 +20,7 @@
 
 	let { data, params }: PageProps = $props();
 
-	const admin = $derived(data.shell.admin);
+	const admin = $derived(data.shell.access === 'admin');
 	const live = $derived(data.buckets.filter((b) => b.deleted_at === undefined));
 
 	let history = $state<string | null>(null);

@@ -16,6 +16,7 @@
 		/** Its state, as the live stream reports it. */
 		runState: string;
 		owner: { name: string; avatar_url: string | null } | null;
+		/** The org's, for the run's cost; null outside the org, where there's no cost (D113). */
 		currency: string | null;
 		/** The model versions it made; null when they can't be read. */
 		models?: RunModels | null;
@@ -171,7 +172,7 @@
 		{@render field(
 			'GPU hours',
 			run.gpu_hours
-				? `${hours(run.gpu_hours)}${currency ? ` · ${money(run.cost, currency)}` : ''}`
+				? `${hours(run.gpu_hours)}${currency && run.cost != null ? ` · ${money(run.cost, currency)}` : ''}`
 				: null
 		)}
 		{@render field('Host', run.host)}

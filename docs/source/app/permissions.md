@@ -13,6 +13,7 @@ Who can do what, by role. A user's role is per organization: they can be an admi
 | Create a project with the API | yes | yes | yes |
 | Rename a project or change its description | no | yes | yes |
 | Delete a project | no | yes | yes |
+| Make a project or dataset public or private | no | yes | yes |
 | Edit, move or delete runs | own runs | any run | any run |
 | Invite people, list and withdraw invitations | no | yes | yes |
 | Change members' roles, remove members | no | yes | yes |
@@ -31,12 +32,28 @@ Who can do what, by role. A user's role is per organization: they can be an admi
 
 "Own runs" are the runs whose `owner` is the user: the runs they logged. Runs without an owner, logged before accounts existed or by a deleted account, can only be changed by admins.
 
+## Public projects and datasets
+
+An org admin can make a project or a single dataset public ([Share projects and datasets publicly](share-publicly)). Anyone outside the organization, signed out or signed in, then has read-only access to it:
+
+| Action | Outsider |
+|---|---|
+| Read a public project's runs, run table, curves, logs and files, and stream its live updates | yes |
+| See a run's owner | name and avatar, without email |
+| See a run's GPU cost, the budget, billing or the members | no |
+| Read a public dataset's info, rows, cells, versions and README | yes |
+| Browse `flock-datasets`, or read any object through S3 | no |
+| Read the organization's name, avatar, public projects and public datasets | yes, while it has a public project or dataset |
+| Change anything | no |
+
+Private projects and datasets answer 404 to outsiders, the same as ones that don't exist.
+
 ## What a refusal looks like
 
 | Situation | Response |
 |---|---|
-| No credentials, or invalid ones | 401 |
-| The organization is one you don't belong to | 404, as if it didn't exist. The same goes for its projects and runs. |
+| No credentials, or invalid ones | 401. Reads of public projects and datasets work without credentials, but invalid ones still answer 401. |
+| The organization is one you don't belong to | 404, as if it didn't exist. The same goes for its projects and runs, unless they're [public](#public-projects-and-datasets). |
 | Your role doesn't allow the action | 403 |
 | Runs you don't own, through the API | 403, with their run ids in `ids`. Bulk operations change nothing. |
 | A run you don't own, through the SDK | The SDK fails with `run <path> belongs to another user` (or 403 for `file_stream`). |

@@ -1,16 +1,24 @@
 <script lang="ts">
+	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
+	import GlobeIcon from '@lucide/svelte/icons/globe';
+	import LockIcon from '@lucide/svelte/icons/lock';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import PlugIcon from '@lucide/svelte/icons/plug';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { SvelteSet } from 'svelte/reactivity';
+	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
+	import PublicBadge from '#lib/components/PublicBadge.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
+	import { Mutation } from '#lib/data/mutation.svelte.ts';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { DATASETS_BUCKET, datasetCall, datasetsApi, nameOf } from '#lib/datasets.ts';
 	import { objectHref } from '#lib/storage.ts';
-	import type { DatasetInfo, S3Config } from '#lib/types.ts';
+	import type { Access, DatasetInfo, S3Config } from '#lib/types.ts';
 	import { withParam } from '#lib/workspace/url.ts';
 	import AboutTab from './AboutTab.svelte';
 	import ColumnsPicker from './ColumnsPicker.svelte';
@@ -32,10 +40,17 @@
 		requested: string | null;
 		/** The S3 proxy, for the Access in S3 dialog. */
 		s3: S3Config;
+		/**
+		 * What the viewer may do: admins also make it public or private; from outside the org
+		 * (`public`) it's read-only, with nothing of S3 (D115).
+		 */
+		access?: Access;
 		now: number;
 	}
 
-	let { org, path, info, failed, requested, s3, now }: Props = $props();
+	let { org, path, info, failed, requested, s3, access = 'member', now }: Props = $props();
+
+	const isPublic = $derived(!!info?.public);
 
 	type Tab = 'about' | 'rows' | 'schema' | 'versions';
 	const TABS: { value: Tab; label: string }[] = [
@@ -91,12 +106,21 @@
 	let accessing = $state(false);
 	let renaming = $state(false);
 	let deleting = $state(false);
+	let publishing = $state(false);
+
+	// Making it private again needs no confirmation.
+	const unpublishing = new Mutation({
+		toastErrors: true,
+		success: () => `${nameOf(path)} is now private`
+	});
+	let unpublish = $state<HTMLFormElement>();
 </script>
 
 <div class="flex flex-wrap items-center gap-x-3 gap-y-2 pt-3">
 	<h1 class="min-w-0 truncate text-[34px] leading-[1.15] tracking-[-0.025em]" title={path}>
 		{nameOf(path)}
 	</h1>
+	{#if isPublic}<PublicBadge what="every version of it" />{/if}
 	{#if info}
 		<VersionPicker {org} {path} version={info.version} {requested} tags={allTags} {versionHref} />
 	{/if}
@@ -124,38 +148,69 @@
 			<ColumnsPicker names={info.schema.map((f) => f.name)} {hidden} />
 			<span class="mx-1 h-5 w-px bg-border" aria-hidden="true"></span>
 		{/if}
-		<Button
-			variant="ghost"
-			size="sm"
-			class="text-muted-foreground"
-			onclick={() => (accessing = true)}
-		>
-			<PlugIcon /> Access in S3
-		</Button>
-		<Button
-			variant="ghost"
-			size="sm"
-			class="text-muted-foreground"
-			href={objectHref(org, DATASETS_BUCKET, `${path}/`)}
-		>
-			<FolderOpenIcon /> Browse files
-		</Button>
-		<Button
-			variant="ghost"
-			size="sm"
-			class="text-muted-foreground"
-			onclick={() => (renaming = true)}
-		>
-			<PencilIcon /> Rename
-		</Button>
-		<Button
-			variant="ghost"
-			size="sm"
-			class="text-muted-foreground hover:text-destructive"
-			onclick={() => (deleting = true)}
-		>
-			<Trash2Icon /> Delete
-		</Button>
+		{#if access !== 'public'}
+			<Button
+				variant="ghost"
+				size="sm"
+				class="text-muted-foreground"
+				onclick={() => (accessing = true)}
+			>
+				<PlugIcon /> Access in S3
+			</Button>
+			<Button
+				variant="ghost"
+				size="sm"
+				class="text-muted-foreground"
+				href={objectHref(org, DATASETS_BUCKET, `${path}/`)}
+			>
+				<FolderOpenIcon /> Browse files
+			</Button>
+			<Button
+				variant="ghost"
+				size="sm"
+				class="text-muted-foreground"
+				onclick={() => (renaming = true)}
+			>
+				<PencilIcon /> Rename
+			</Button>
+			<Button
+				variant="ghost"
+				size="sm"
+				class="text-muted-foreground hover:text-destructive"
+				onclick={() => (deleting = true)}
+			>
+				<Trash2Icon /> Delete
+			</Button>
+		{/if}
+		{#if access === 'admin' && info}
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger>
+					{#snippet child({ props })}
+						<Button
+							{...props}
+							variant="ghost"
+							size="icon-sm"
+							class="text-muted-foreground"
+							aria-label="More dataset actions"
+							disabled={unpublishing.pending}
+						>
+							<EllipsisIcon />
+						</Button>
+					{/snippet}
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content align="end" class="w-44">
+					{#if isPublic}
+						<DropdownMenu.Item onSelect={() => unpublish?.requestSubmit()}>
+							<LockIcon /> Make private
+						</DropdownMenu.Item>
+					{:else}
+						<DropdownMenu.Item onSelect={() => (publishing = true)}>
+							<GlobeIcon /> Make public…
+						</DropdownMenu.Item>
+					{/if}
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
+		{/if}
 	</div>
 </div>
 
@@ -173,10 +228,41 @@
 	{:else if tab === 'schema'}
 		<SchemaTab {info} />
 	{:else}
-		<VersionsTab {org} {path} shown={info.version} {versionHref} ontags={refreshTags} {now} />
+		<VersionsTab
+			{org}
+			{path}
+			shown={info.version}
+			{versionHref}
+			ontags={refreshTags}
+			readonly={access === 'public'}
+			{now}
+		/>
 	{/if}
 </div>
 
-<S3AccessDialog bind:open={accessing} {path} {s3} />
-<RenameDialog bind:open={renaming} {org} {path} />
-<DeleteDatasetDialog bind:open={deleting} {org} {path} />
+{#if access !== 'public'}
+	<S3AccessDialog bind:open={accessing} {path} {s3} />
+	<RenameDialog bind:open={renaming} {org} {path} />
+	<DeleteDatasetDialog bind:open={deleting} {org} {path} />
+{/if}
+{#if access === 'admin'}
+	<ConfirmDialog
+		bind:open={publishing}
+		action="?/visibility"
+		fields={{ public: 'true' }}
+		title="Make {nameOf(path)} public?"
+		description="Anyone with the link will be able to see every version of this dataset. Check that none of them hold secrets."
+		confirm="Make public"
+		pending="Saving…"
+		success="{nameOf(path)} is now public"
+	/>
+	<form
+		method="POST"
+		action="?/visibility"
+		bind:this={unpublish}
+		use:enhance={unpublishing.enhance}
+		hidden
+	>
+		<input type="hidden" name="public" value="false" />
+	</form>
+{/if}

@@ -13,14 +13,17 @@ from app.api.src.api.deps import (
     OrgDep,
     StoreDep,
     UserDep,
+    ViewerDep,
     rest_user,
 )
 from app.api.src.core.datasets import Datasets, TagTaken, Taken, TooLarge
-from app.api.src.core.store import Store
+from app.api.src.core.store import Org, Store
 
 router = APIRouter(
     prefix="/api/v1/orgs/{org}/datasets", tags=["datasets"], dependencies=[Depends(rest_user)]
 )
+# The dataset page's reads, which answer outsiders too for public datasets (D115).
+public = APIRouter(prefix="/api/v1/orgs/{org}/datasets", tags=["datasets"])
 
 DatasetPath = Annotated[str, Query(min_length=1, max_length=1024, description="the dataset's path")]
 VersionQuery = Annotated[
@@ -62,6 +65,22 @@ def datasets(store: Store) -> Datasets:
     return store.datasets
 
 
+async def get_readable_org(org: str, path: DatasetPath, store: StoreDep, viewer: ViewerDep) -> Org:
+    """The org, for reading the dataset at ``path``: any of its members, and anyone when that
+    exact dataset is public (D115). Others get the same 404 as for a missing dataset."""
+    found = await store.find_org(org)
+    if found is not None and store.accounts.role(viewer, found):
+        return found
+    if found is None:
+        raise APIError(404, f"organization {org} not found")
+    if not await store.datasets.is_public(found, path):
+        raise APIError(404, f"dataset {path} not found")
+    return found
+
+
+ReadableOrgDep = Annotated[Org, Depends(get_readable_org)]
+
+
 @router.get("/at")
 async def at(org: OrgDep, store: StoreDep, path: str = "", cursor: str | None = None) -> Response:
     """A folder of flock-datasets, one level (100 entries a page): its datasets (with their
@@ -70,18 +89,25 @@ async def at(org: OrgDep, store: StoreDep, path: str = "", cursor: str | None = 
     return JSONResponse(await datasets(store).at(org, path, cursor))
 
 
-@router.get("/info")
+@public.get("/info")
 async def info(
-    org: OrgDep, store: StoreDep, path: DatasetPath, version: VersionQuery = None
+    org: ReadableOrgDep,
+    store: StoreDep,
+    viewer: ViewerDep,
+    path: DatasetPath,
+    version: VersionQuery = None,
 ) -> Response:
     """The dataset at ``version``: its numbers, schema, details and tags, with the version
-    resolved (and the latest)."""
-    return JSONResponse(await datasets(store).info(org, path, version))
+    resolved (and the latest), and whether it's ``public``."""
+    found = await datasets(store).info(org, path, version)
+    # An outsider only gets here for a public dataset (``get_readable_org`` checked).
+    public = not store.accounts.role(viewer, org) or await store.datasets.is_public(org, path)
+    return JSONResponse({**found, "public": public})
 
 
-@router.get("/rows")
+@public.get("/rows")
 async def rows(
-    org: OrgDep,
+    org: ReadableOrgDep,
     store: StoreDep,
     path: DatasetPath,
     version: VersionQuery = None,
@@ -96,9 +122,9 @@ async def rows(
     return JSONResponse(await datasets(store).rows(org, path, version, offset, limit, columns))
 
 
-@router.get("/cell")
+@public.get("/cell")
 async def cell(
-    org: OrgDep,
+    org: ReadableOrgDep,
     store: StoreDep,
     path: DatasetPath,
     row: Annotated[int, Query(ge=0)],
@@ -109,9 +135,9 @@ async def cell(
     return JSONResponse(await datasets(store).cell(org, path, version, row, column))
 
 
-@router.get("/versions")
+@public.get("/versions")
 async def versions(
-    org: OrgDep,
+    org: ReadableOrgDep,
     store: StoreDep,
     path: DatasetPath,
     cursor: Annotated[int | None, Query(ge=0)] = None,
@@ -120,10 +146,42 @@ async def versions(
     return JSONResponse(await datasets(store).versions(org, path, cursor))
 
 
-@router.get("/readme")
-async def readme(org: OrgDep, store: StoreDep, path: DatasetPath) -> Response:
+@public.get("/readme")
+async def readme(org: ReadableOrgDep, store: StoreDep, path: DatasetPath) -> Response:
     """The README.md in the dataset's folder (its first 1 MiB), or 404."""
     return JSONResponse(await datasets(store).readme(org, path))
+
+
+@public.get("/public")
+async def list_public(org: str, store: StoreDep, viewer: ViewerDep) -> Response:
+    """The org's public datasets, with their latest version (D114). Outsiders see them when
+    the org has public projects or datasets; otherwise 404."""
+    found = await store.find_org(org)
+    member = found is not None and store.accounts.role(viewer, found)
+    if found is None or not (member or await store.has_public(found)):
+        raise APIError(404, f"organization {org} not found")
+    if store.s3.upstream is None:
+        return JSONResponse({"datasets": []})
+    return JSONResponse({"datasets": await store.datasets.public_datasets(found)})
+
+
+@router.put("/public")
+async def make_public(
+    org: AdminOrgDep, path: DatasetPath, user: UserDep, store: StoreDep
+) -> Response:
+    """Make the dataset at ``path`` public (admins): anyone with its URL can read its page,
+    at any version (D115). Its folder, siblings and the bucket's objects stay private."""
+    await datasets(store).set_public(org, path, True, user)
+    return JSONResponse({"path": path, "public": True})
+
+
+@router.delete("/public", status_code=204)
+async def make_private(
+    org: AdminOrgDep, path: DatasetPath, user: UserDep, store: StoreDep
+) -> Response:
+    """Make the dataset at ``path`` private again (admins)."""
+    await datasets(store).set_public(org, path, False, user)
+    return Response(status_code=204)
 
 
 @router.post("/delete")

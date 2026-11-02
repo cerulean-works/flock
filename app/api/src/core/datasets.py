@@ -101,6 +101,27 @@ def newest(found: tuple[ListedObject] | tuple[()] | None) -> int | None:
     return manifest_version(found[0].key)
 
 
+async def drop_deleted_public(
+    db: Any, upstream: Upstream, org_pk: int, bucket: str, keys: list[str]
+) -> None:
+    """After ``keys`` were deleted from the org's flock-datasets outside the dataset routes (the
+    Storage tab, the S3 proxy): drop the public flag (D115) of each public dataset they were in
+    that is no longer a dataset, so whatever is written at its path next starts private.
+    ``db`` is the store's database or an asyncpg pool."""
+    paths = await db.fetch(
+        "SELECT path FROM public_datasets WHERE org_pk = $1 AND EXISTS "
+        "(SELECT FROM unnest($2::text[]) AS k WHERE starts_with(k, path || '/'))",
+        org_pk,
+        keys,
+    )
+    for (path,) in paths:
+        listing = await upstream.list_objects(bucket, f"{path}/{VERSIONS}", None, None, 1)
+        if not listing.objects:
+            await db.execute(
+                "DELETE FROM public_datasets WHERE org_pk = $1 AND path = $2", org_pk, path
+            )
+
+
 def manifest_version(key: str) -> int | None:
     """The version a ``_versions/`` key names, or None if it isn't a manifest."""
     name = key.rpartition("/")[2]
@@ -906,6 +927,80 @@ class Datasets:
         text = data[: self.README_BYTES].decode("utf-8", errors="replace")
         return {"text": text, "truncated": truncated}
 
+    # ------------------------------------------------------------------ public datasets (D115)
+
+    async def is_public(self, org: Org, path: str) -> bool:
+        """Whether the dataset at exactly ``path`` is public (its folder and siblings aren't)."""
+        return await self.store.db.fetchval(
+            "SELECT EXISTS (SELECT FROM public_datasets WHERE org_pk = $1 AND path = $2)",
+            org.pk,
+            path,
+        )
+
+    async def set_public(self, org: Org, path: str, public: bool, user: User) -> None:
+        """Make the dataset at ``path`` public or private. Only a dataset can be made public;
+        making a path private that isn't public changes nothing."""
+        bucket = await self.bucket(org)
+        name = bucket.upstream_name
+        check_path(path)
+        async with self._locked(name, [path]) as conn:
+            if public:
+                if await self.latest(name, path) is None:
+                    raise NotFound(f"dataset {path} not found")
+                changed = await conn.fetchval(
+                    "INSERT INTO public_datasets (org_pk, path, made_by) VALUES ($1, $2, $3) "
+                    "ON CONFLICT DO NOTHING RETURNING true",
+                    org.pk,
+                    path,
+                    user.pk,
+                )
+            else:
+                changed = await conn.fetchval(
+                    "DELETE FROM public_datasets WHERE org_pk = $1 AND path = $2 RETURNING true",
+                    org.pk,
+                    path,
+                )
+            if changed:
+                old, new = ("private", "public") if public else ("public", "private")
+                await conn.execute(
+                    "INSERT INTO visibility_events (org_pk, path, kind, from_visibility, "
+                    "to_visibility, user_pk) VALUES ($1, $2, 'dataset_visibility', $3, $4, $5)",
+                    org.pk,
+                    path,
+                    old,
+                    new,
+                    user.pk,
+                )
+
+    async def public_datasets(self, org: Org) -> list[dict[str, Any]]:
+        """The org's public datasets by path, each with its latest version as a folder lists
+        it (D87). Paths whose dataset is gone (deleted outside Flock) are left out."""
+        records = await self.store.db.fetch(
+            "SELECT path, extract(epoch FROM created_at)::float8 FROM public_datasets "
+            "WHERE org_pk = $1 ORDER BY path",
+            org.pk,
+        )
+        if not records:
+            return []
+        name = (await self.bucket(org)).upstream_name
+        limit = asyncio.Semaphore(self.DETECT_AT_ONCE)
+
+        async def detect(path: str) -> tuple[ListedObject] | tuple[()] | None:
+            async with limit:
+                return await self.latest(name, path)
+
+        found = await asyncio.gather(*(detect(path) for path, _ in records))
+        return [
+            {
+                "path": path,
+                "made_public_at": made_public_at,
+                "version": newest(latest),
+                "updated_at": latest[0].last_modified if latest else None,
+            }
+            for (path, made_public_at), latest in zip(records, found, strict=True)
+            if latest is not None
+        ]
+
     # ------------------------------------------------------------------ moving objects
 
     @contextlib.asynccontextmanager
@@ -1005,9 +1100,20 @@ class Datasets:
         check_new_path(to)
         if to == path or to.startswith(f"{path}/"):
             raise Invalid("The new path can't be inside the dataset.")
-        async with self._locked(name, [path, to]):
+        async with self._locked(name, [path, to]) as conn:
             before = await self.resolve(name, path, None)
             await self._check_target(name, to)
+            # Before any object moves, so a failure rolls it back with nothing moved. A row
+            # already at ``to`` is a dataset deleted outside Flock: it mustn't make this public.
+            await conn.execute(
+                "DELETE FROM public_datasets WHERE org_pk = $1 AND path = $2", org.pk, to
+            )
+            await conn.execute(
+                "UPDATE public_datasets SET path = $3 WHERE org_pk = $1 AND path = $2",
+                org.pk,
+                path,
+                to,
+            )
             objects = await self._call(
                 self._upstream().list_all(name, f"{path}/", self.MOVE_OBJECTS)
             )
@@ -1140,6 +1246,10 @@ class Datasets:
                 sum(o.size for o in objects),
             )
             await conn.execute("SELECT 1 FROM dataset_trash WHERE pk = $1 FOR UPDATE", pk)
+            # Committed with the move: a restored dataset comes back private (D115).
+            await conn.execute(
+                "DELETE FROM public_datasets WHERE org_pk = $1 AND path = $2", org.pk, path
+            )
             prefix = self._trash_prefix(org.pk, pk)
             await self._copy_all(objects, name, f"{path}/", trash, prefix)
             await self._delete_all(name, [o.key for o in objects], f"{path}/")
@@ -1197,6 +1307,9 @@ class Datasets:
                 await self._copy_all(objects, trash, prefix, name, f"{target}/")
                 await self._delete_all(trash, [o.key for o in objects], prefix)
             await conn.execute("DELETE FROM dataset_trash WHERE pk = $1", pk)
+            await conn.execute(
+                "DELETE FROM public_datasets WHERE org_pk = $1 AND path = $2", org.pk, target
+            )
         self._forget(name, target)
         return {"path": target}
 

@@ -14,7 +14,7 @@ import { slotOf, type Series } from '#lib/chart/series.ts';
 import {
 	LIVE_STATES,
 	type MetricStream,
-	type Person,
+	type Owner,
 	type ProjectMeta,
 	type RunPage,
 	type SectionDef
@@ -199,7 +199,7 @@ export interface RunDialog {
 export class Workspace {
 	#meta: () => ProjectMeta;
 	#page: () => RunPage;
-	#members: () => readonly Person[];
+	#members: () => readonly Owner[];
 
 	/** Run ids hidden from charts. Kept across pages so a hidden run stays hidden. */
 	readonly hidden = new SvelteSet<string>();
@@ -268,7 +268,7 @@ export class Workspace {
 	constructor(
 		meta: () => ProjectMeta,
 		page: () => RunPage,
-		members: () => readonly Person[] = () => []
+		members: () => readonly Owner[] = () => []
 	) {
 		this.#meta = meta;
 		this.#page = page;
@@ -284,7 +284,10 @@ export class Workspace {
 		return this.#page();
 	}
 
-	/** The org's members by id: who logged the runs, as the `owner` column has them. */
+	/**
+	 * Who logged the runs, by id, as the `owner` column has them: the org's members, or the
+	 * project's owners for a viewer outside the org.
+	 */
 	people: People = $derived.by(
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- rebuilt, never mutated
 		() => new Map(this.#members().map((m) => [m.id, m]))

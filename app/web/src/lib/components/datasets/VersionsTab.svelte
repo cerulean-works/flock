@@ -21,10 +21,12 @@
 		versionHref: (version: string | null) => ResolvedPathname;
 		/** Called after a tag was added, moved or removed. */
 		ontags?: () => void;
+		/** Outside the org: tags can't be changed (D115). */
+		readonly?: boolean;
 		now: number;
 	}
 
-	let { org, path, shown, versionHref, ontags, now }: Props = $props();
+	let { org, path, shown, versionHref, ontags, readonly = false, now }: Props = $props();
 
 	// The history, newest first, 50 a page (D89).
 	let versions = $state<DatasetVersion[]>([]);
@@ -106,7 +108,9 @@
 									<TagChip
 										as="li"
 										{tag}
-										onremove={() => removing.show({ tag, version: v.version })}
+										onremove={readonly
+											? undefined
+											: () => removing.show({ tag, version: v.version })}
 									/>
 								{/each}
 							</ul>
@@ -150,26 +154,28 @@
 							>
 								View
 							</Button>
-							<DropdownMenu.Root>
-								<DropdownMenu.Trigger>
-									{#snippet child({ props })}
-										<Button
-											{...props}
-											variant="ghost"
-											size="icon-sm"
-											class="text-muted-foreground"
-											aria-label="Version {v.version} actions"
-										>
-											<EllipsisVerticalIcon />
-										</Button>
-									{/snippet}
-								</DropdownMenu.Trigger>
-								<DropdownMenu.Content align="end" class="w-40">
-									<DropdownMenu.Item onSelect={() => tagging.show(v.version)}>
-										<TagIcon /> Add tag…
-									</DropdownMenu.Item>
-								</DropdownMenu.Content>
-							</DropdownMenu.Root>
+							{#if !readonly}
+								<DropdownMenu.Root>
+									<DropdownMenu.Trigger>
+										{#snippet child({ props })}
+											<Button
+												{...props}
+												variant="ghost"
+												size="icon-sm"
+												class="text-muted-foreground"
+												aria-label="Version {v.version} actions"
+											>
+												<EllipsisVerticalIcon />
+											</Button>
+										{/snippet}
+									</DropdownMenu.Trigger>
+									<DropdownMenu.Content align="end" class="w-40">
+										<DropdownMenu.Item onSelect={() => tagging.show(v.version)}>
+											<TagIcon /> Add tag…
+										</DropdownMenu.Item>
+									</DropdownMenu.Content>
+								</DropdownMenu.Root>
+							{/if}
 						</div>
 					</td>
 				</tr>
@@ -188,12 +194,20 @@
 	{/if}
 {/if}
 
-<TagDialog bind:open={tagging.open} {org} {path} version={tagging.value ?? 0} ontagged={changed} />
-<RemoveTagDialog
-	bind:open={removing.open}
-	{org}
-	{path}
-	tag={removing.value?.tag ?? ''}
-	version={removing.value?.version ?? 0}
-	onremoved={changed}
-/>
+{#if !readonly}
+	<TagDialog
+		bind:open={tagging.open}
+		{org}
+		{path}
+		version={tagging.value ?? 0}
+		ontagged={changed}
+	/>
+	<RemoveTagDialog
+		bind:open={removing.open}
+		{org}
+		{path}
+		tag={removing.value?.tag ?? ''}
+		version={removing.value?.version ?? 0}
+		onremoved={changed}
+	/>
+{/if}

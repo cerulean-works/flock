@@ -7,7 +7,7 @@ Endpoints for projects, single runs, bulk changes to runs, and run logs and file
 A project is returned as:
 
 ```json
-{"entity": "flock", "name": "llm-pretrain", "description": null, "created_at": 1792282202.83, "updated_at": 1792282202.83, "run_count": 1, "active_run_count": 0, "column_count": 21}
+{"entity": "flock", "name": "llm-pretrain", "description": null, "created_at": 1792282202.83, "updated_at": 1792282202.83, "run_count": 1, "active_run_count": 0, "column_count": 21, "visibility": "private"}
 ```
 
 | Field | Meaning |
@@ -18,18 +18,23 @@ A project is returned as:
 | `created_at`, `updated_at` | When the project was created, and when its name or description last changed. |
 | `run_count`, `active_run_count` | How many runs it has, and how many of them are active. |
 | `column_count` | How many columns its run table has. |
+| `visibility` | `private`, for the organization's members only, or `public`, readable by anyone with its URL. See [Share projects and datasets publicly](../share-publicly). |
+| `access` | `GET` and `PATCH` of one project only: what you can do with it. `admin`, `member`, or `public` (read only, as an outsider). |
 
 | Endpoint | Who | Meaning |
 |---|---|---|
-| `GET /projects?entity=` | members | `{"projects": [...]}`: the projects of your organizations, empty ones included. `entity` keeps one organization's. |
+| `GET /projects?entity=` | anyone | `{"projects": [...]}`: the projects of your organizations, empty ones included. `entity` keeps one organization's, and gives outsiders that organization's public projects. Without `entity`, outsiders get an empty list. |
 | `POST /projects` | members | Creates an empty project from `{"entity", "name", "description"}`. `description` is optional. Answers 201, or 409 if it exists. |
-| `GET /projects/{entity}/{project}` | members | One project. |
-| `PATCH /projects/{entity}/{project}` | org admins | Changes `name` and `description`. Fields you leave out don't change, and `"description": null` clears it. Returns the project. |
+| `GET /projects/{entity}/{project}` | members, anyone if public | One project. |
+| `GET /projects/{entity}/{project}/owners` | members, anyone if public | `{"owners": [{"id", "name", "email", "avatar_url"}]}`: the users who logged its runs, which the run table's `owner` column names by `id`. Outsiders get them without `email`. |
+| `PATCH /projects/{entity}/{project}` | org admins | Changes `name`, `description` and `visibility`. Fields you leave out don't change, and `"description": null` clears it. Returns the project. |
 | `DELETE /projects/{entity}/{project}` | org admins | Deletes the project with all its runs, their history, logs and files. Answers 204. |
 
 Project names given here are 1 to 128 characters, with no spaces around them, no control characters and none of `/ \ # ? % :`. Other names answer 422. Names that arrive from the `wandb` SDK aren't checked.
 
 **Renaming** is refused with 409 while the project has active runs, which `ids` lists. A name another project of the organization uses answers 409. Dashboards streaming the project get a `project` event with `renamed_to`, and their streams end.
+
+**Changing visibility** records who changed it and when. Dashboards streaming the project get a `project` event with the new `visibility`. When it becomes `private`, outsiders' streams end after that event, and members' streams carry on. Moving runs into a public project makes them public.
 
 **Deleting** is refused with 409 while the project has active runs, listed in `ids`, unless you add `?force=true`. Dashboards streaming the project get a `project` event with `"deleted": true`.
 
@@ -69,7 +74,8 @@ Returns a run's attributes and everything about it except its curves:
 | `metric_defs` | Its metric definitions from `run.define_metric`, as the [snapshot](dashboard#metric-definitions) describes them. |
 | `history_keys`, `system_keys` | The names of its logged metrics and of its system metrics, sorted. |
 | `history_line_count`, `system_line_count`, `log_line_count` | How many history lines, system samples and console lines it has. |
-| `gpu_detected`, `runtime`, `cost` | The GPUs read from its metadata, the seconds it was alive, and its cost at the organization's current prices. See [GPUs on runs](home#run-gpus). |
+| `gpu_detected`, `runtime`, `cost` | The GPUs read from its metadata, the seconds it was alive, and its cost at the organization's current prices. See [GPUs on runs](home#run-gpus). `cost` is `null` for outsiders reading a public project. |
+| `owner_user` | The owner as `{"id", "name", "email", "avatar_url"}`, or `null`. Outsiders get it without `email`. |
 
 ### `PATCH .../runs/{run}`[[patch-run]]
 

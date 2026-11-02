@@ -1,0 +1,82 @@
+<script lang="ts">
+	import DatabaseIcon from '@lucide/svelte/icons/database';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import { datasetsHref } from '#lib/datasets.ts';
+	import type { ProjectInfo, PublicDataset } from '#lib/types.ts';
+	import { count, dateTime, relativeTime } from '#lib/utils.ts';
+	import { projectHref } from '#lib/workspace/url.ts';
+
+	interface Props {
+		org: string;
+		/** Its public projects, newest first. */
+		projects: ProjectInfo[];
+		datasets: PublicDataset[];
+		now: number;
+	}
+
+	let { org, projects, datasets, now }: Props = $props();
+
+	const ROW =
+		'relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 border-b border-divider px-5 py-2.5 hover:bg-muted';
+	// The link covers the row.
+	const LINK =
+		'flex min-w-0 items-center gap-2.5 font-medium after:absolute after:inset-0 hover:text-link [&_svg]:size-4 [&_svg]:flex-none [&_svg]:text-muted-foreground';
+</script>
+
+<!-- An org's page as people outside it see it: what it made public, and nothing else (D114). -->
+{#snippet heading(id: string, label: string, n: number)}
+	<h2
+		{id}
+		class="flex h-10 items-center gap-2 border-b px-5 text-[13px] font-medium text-muted-foreground"
+	>
+		{label} <span class="font-normal text-faint tabular-nums">{n}</span>
+	</h2>
+{/snippet}
+
+<section aria-labelledby="public-projects">
+	{@render heading('public-projects', 'Projects', projects.length)}
+	<ul>
+		{#each projects as p (p.name)}
+			<li class={ROW}>
+				<div class="min-w-0">
+					<a class={LINK} href={projectHref(org, p.name)}>
+						<FolderIcon /> <span class="truncate">{p.name}</span>
+					</a>
+					{#if p.description}
+						<p class="mt-0.5 truncate pl-6.5 text-[13px] text-muted-foreground">
+							{p.description}
+						</p>
+					{/if}
+				</div>
+				<span class="text-right text-[13px] text-muted-foreground tabular-nums">
+					{count(p.run_count, 'run')} ·
+					<span title={dateTime(p.updated_at)}>{relativeTime(p.updated_at, now)}</span>
+				</span>
+			</li>
+		{:else}
+			<li class="border-b border-divider px-5 py-6 text-muted-foreground">No public projects.</li>
+		{/each}
+	</ul>
+</section>
+
+<section aria-labelledby="public-datasets" class="mt-8">
+	{@render heading('public-datasets', 'Datasets', datasets.length)}
+	<ul>
+		{#each datasets as d (d.path)}
+			<li class={ROW}>
+				<a class={LINK} href={datasetsHref(org, d.path)}>
+					<DatabaseIcon /> <span class="truncate">{d.path}</span>
+				</a>
+				<span class="text-right text-[13px] text-muted-foreground tabular-nums">
+					{#if d.version != null}v{d.version}{/if}
+					{#if d.version != null && d.updated_at != null}·{/if}
+					{#if d.updated_at != null}
+						<span title={dateTime(d.updated_at)}>{relativeTime(d.updated_at, now)}</span>
+					{/if}
+				</span>
+			</li>
+		{:else}
+			<li class="border-b border-divider px-5 py-6 text-muted-foreground">No public datasets.</li>
+		{/each}
+	</ul>
+</section>

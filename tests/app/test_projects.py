@@ -17,6 +17,7 @@ def test_create_list_get_and_update(api):
         "run_count": 0,
         "active_run_count": 0,
         "column_count": 0,
+        "visibility": "private",
     }
     duplicate = api.post(PROJECTS, {"entity": "flock", "name": "vision"})
     assert duplicate.status == 409

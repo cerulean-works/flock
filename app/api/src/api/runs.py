@@ -11,11 +11,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.api.src.api.deps import (
     APIError,
     JSONResponse,
+    MemberProjectDep,
+    MemberRunDep,
     Name,
-    ProjectDep,
-    RunDep,
+    ReadableProjectDep,
+    ReadableRunDep,
     StoreDep,
     UserDep,
+    ViewerDep,
     check_owner,
     rest_user,
 )
@@ -26,6 +29,8 @@ from app.api.src.core.errors import NotFound
 from app.api.src.core.store import RUN_COLUMNS, Project, Run, Store
 
 router = APIRouter(prefix="/api/v1", tags=["flock"], dependencies=[Depends(rest_user)])
+# Reads that answer outsiders too, on public projects (D112): they need no credential.
+public = APIRouter(prefix="/api/v1", tags=["flock"])
 
 
 class SortKey(BaseModel):
@@ -176,9 +181,9 @@ class RunMove(Selection):
     create: bool = Field(False, description="create the target project if it doesn't exist")
 
 
-@router.get("/projects/{entity}/{project}/columns")
+@public.get("/projects/{entity}/{project}/columns")
 async def list_columns(
-    project: ProjectDep,
+    project: ReadableProjectDep,
     store: StoreDep,
     q: Annotated[str, Query(description="case-insensitive substring")] = "",
     prefix: Annotated[str, Query(description="e.g. summary.")] = "",
@@ -198,9 +203,9 @@ async def list_columns(
 # ---------------------------------------------------------------------- runs table
 
 
-@router.get("/projects/{entity}/{project}/runs")
+@public.get("/projects/{entity}/{project}/runs")
 async def get_runs(
-    project: ProjectDep,
+    project: ReadableProjectDep,
     filter: Annotated[str | None, Query(description="Mongo-style filter as JSON")] = None,
     sort: Annotated[str | None, Query(description="e.g. -summary.loss,created_at")] = None,
     columns: Annotated[str | None, Query(description="comma separated names/globs")] = None,
@@ -223,8 +228,8 @@ async def get_runs(
     return await query_runs(project, runs_query, store)
 
 
-@router.post("/projects/{entity}/{project}/runs/query")
-async def query_runs(project: ProjectDep, body: RunsQuery, store: StoreDep) -> Response:
+@public.post("/projects/{entity}/{project}/runs/query")
+async def query_runs(project: ReadableProjectDep, body: RunsQuery, store: StoreDep) -> Response:
     """Filter, sort and page the runs table.
 
     Returns ``total`` matches, the page's run ``ids`` and the requested ``columns`` as
@@ -266,9 +271,9 @@ async def _nothing() -> list[query.Column]:
 # ---------------------------------------------------------------------- curves
 
 
-@router.get("/projects/{entity}/{project}/history")
+@public.get("/projects/{entity}/{project}/history")
 async def get_history(
-    project: ProjectDep,
+    project: ReadableProjectDep,
     store: StoreDep,
     keys: Annotated[str, Query(description="comma separated metrics, e.g. loss,val_loss")],
     runs: Annotated[str | None, Query(description="comma separated run ids")] = None,
@@ -294,8 +299,10 @@ async def get_history(
     return await query_history(project, query, store)
 
 
-@router.post("/projects/{entity}/{project}/history/query")
-async def query_history(project: ProjectDep, body: HistoryQuery, store: StoreDep) -> Response:
+@public.post("/projects/{entity}/{project}/history/query")
+async def query_history(
+    project: ReadableProjectDep, body: HistoryQuery, store: StoreDep
+) -> Response:
     """Curves of ``keys`` for the runs chosen by ``runs`` or by ``filter``/``running``/``sort``.
 
     Each run carries ``series[key] = {"x": [...], "y": [...]}``; non-finite values are null.
@@ -327,19 +334,21 @@ async def query_history(project: ProjectDep, body: HistoryQuery, store: StoreDep
 
 
 @router.patch("/projects/{entity}/{project}/runs/{run}")
-async def update_run(run: RunDep, body: RunFields, store: StoreDep, user: UserDep) -> Response:
+async def update_run(
+    run: MemberRunDep, body: RunFields, store: StoreDep, user: UserDep
+) -> Response:
     """Edit a run's display name, notes, tags, group, job type, description or GPUs."""
     check_owner(store, user, run.project, [run])
     await store.edit_runs(run.project, [run], body.model_dump(include=body.model_fields_set))
     edited = await store.project_run(run.project, run.name)
     if edited is None:
         raise APIError(404, f"run {run.name} not found")
-    return await get_run(edited, store)
+    return await get_run(edited, store, user)
 
 
 @router.delete("/projects/{entity}/{project}/runs/{run}", status_code=204)
 async def delete_run(
-    run: RunDep,
+    run: MemberRunDep,
     store: StoreDep,
     user: UserDep,
     force: Annotated[bool, Query(description="delete it even while it is running")] = False,
@@ -359,7 +368,7 @@ def changed(runs: list[str], dry_run: bool = False) -> Response:
 
 @router.post("/projects/{entity}/{project}/runs/update")
 async def update_runs(
-    project: ProjectDep, body: RunUpdate, store: StoreDep, user: UserDep
+    project: MemberProjectDep, body: RunUpdate, store: StoreDep, user: UserDep
 ) -> Response:
     """Edit many runs at once: set attributes, and add or remove tags.
 
@@ -376,7 +385,7 @@ async def update_runs(
 
 @router.post("/projects/{entity}/{project}/runs/delete")
 async def delete_runs(
-    project: ProjectDep, body: RunDelete, store: StoreDep, user: UserDep
+    project: MemberProjectDep, body: RunDelete, store: StoreDep, user: UserDep
 ) -> Response:
     """Delete many runs. Refused (409, listing them) if any is active, unless ``force``, and
     (403) if a member selects runs they didn't log."""
@@ -388,7 +397,9 @@ async def delete_runs(
 
 
 @router.post("/projects/{entity}/{project}/runs/move")
-async def move_runs(project: ProjectDep, body: RunMove, store: StoreDep, user: UserDep) -> Response:
+async def move_runs(
+    project: MemberProjectDep, body: RunMove, store: StoreDep, user: UserDep
+) -> Response:
     """Move finished runs to another project of the same entity, with everything they logged.
 
     Refused (409, listing them) if any run is active or the target has a run with the same id,
@@ -412,10 +423,15 @@ async def move_runs(project: ProjectDep, body: RunMove, store: StoreDep, user: U
 # ---------------------------------------------------------------------- single run
 
 
-@router.get("/projects/{entity}/{project}/runs/{run}")
-async def get_run(run: RunDep, store: StoreDep) -> Response:
+@public.get("/projects/{entity}/{project}/runs/{run}")
+async def get_run(run: ReadableRunDep, store: StoreDep, viewer: ViewerDep) -> Response:
     """Run attributes, unwrapped config, summary, the names of its logged/system metrics and
-    its metric definitions (``metric_defs``: step metrics and hidden metrics)."""
+    its metric definitions (``metric_defs``: step metrics and hidden metrics).
+
+    ``owner_user`` is the owner as a user. Outsiders reading a public project get it without
+    email, and ``cost`` null (D113)."""
+    outsider = store.accounts.access(viewer, run.project) == "public"
+    owners = await store.accounts.briefs([run.owner], outsider)
     summary = await store.read_summary(run)
     summary.pop("_wandb", None)
     (hist,) = await store.histories([run], ())
@@ -434,7 +450,8 @@ async def get_run(run: RunDep, store: StoreDep) -> Response:
             **run.attributes(),
             "gpu_detected": {"type": run.gpu_type_detected, "count": run.gpu_count_detected},
             "runtime": run.runtime,
-            "cost": await store.budgets.run_cost(run),
+            "cost": None if outsider else await store.budgets.run_cost(run),
+            "owner_user": owners.get(run.owner) if run.owner is not None else None,
             "config": config,
             "summary": summary,
             "metric_defs": run.metric_defs,
@@ -447,9 +464,9 @@ async def get_run(run: RunDep, store: StoreDep) -> Response:
     )
 
 
-@router.get("/projects/{entity}/{project}/runs/{run}/history")
+@public.get("/projects/{entity}/{project}/runs/{run}/history")
 async def get_run_history(
-    run: RunDep,
+    run: ReadableRunDep,
     store: StoreDep,
     keys: Annotated[str | None, Query(description="defaults to every metric")] = None,
     stream: Literal["history", "system"] = "history",
@@ -468,9 +485,9 @@ async def get_run_history(
     return JSONResponse({"id": run.name, "stream": stream, "x": x, "series": series})
 
 
-@router.get("/projects/{entity}/{project}/runs/{run}/logs")
+@public.get("/projects/{entity}/{project}/runs/{run}/logs")
 async def get_run_logs(
-    run: RunDep,
+    run: ReadableRunDep,
     store: StoreDep,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=0, le=100_000)] = 1000,
@@ -486,14 +503,14 @@ async def get_run_logs(
 
 
 @router.get("/projects/{entity}/{project}/runs/{run}/models")
-async def get_run_models(run: RunDep, store: StoreDep) -> Response:
+async def get_run_models(run: MemberRunDep, store: StoreDep) -> Response:
     """The model versions the run made (``made``), by model name and number."""
     found = await store.models.run_versions(run)
     return JSONResponse({key: await with_users(store, items) for key, items in found.items()})
 
 
-@router.get("/projects/{entity}/{project}/runs/{run}/files")
-async def list_run_files(run: RunDep, store: StoreDep) -> Response:
+@public.get("/projects/{entity}/{project}/runs/{run}/files")
+async def list_run_files(run: ReadableRunDep, store: StoreDep) -> Response:
     """Files uploaded by the run (config.yaml, wandb-metadata.json, requirements.txt, ...)."""
     return JSONResponse(
         {
@@ -505,8 +522,8 @@ async def list_run_files(run: RunDep, store: StoreDep) -> Response:
     )
 
 
-@router.get("/projects/{entity}/{project}/runs/{run}/files/{name:path}")
-async def get_run_file(run: RunDep, name: str, store: StoreDep) -> Response:
+@public.get("/projects/{entity}/{project}/runs/{run}/files/{name:path}")
+async def get_run_file(run: ReadableRunDep, name: str, store: StoreDep) -> Response:
     found = await store.files.get(run.pk, name) if store.file_parts(name) else None
     if found is None:
         raise APIError(404, "file not found")
