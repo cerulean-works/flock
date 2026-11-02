@@ -171,7 +171,7 @@ class ScoringModel:
     """
     A causal LM and its tokenizer that answer loglikelihood [`~eval.requests.Request`]s in batches.
 
-    Requests are tokenized as OLMES does, then scored longest first in left-padded batches of at most `batch_tokens` padded tokens. Inputs longer than `max_length` lose tokens from the left.
+    Requests are tokenized as OLMES does, then scored longest first in left-padded batches of at most `batch_tokens` padded tokens. Inputs longer than `max_length` lose tokens from the left. On CUDA with `sdpa` attention, scoring is pinned to SDPA's memory-efficient kernel, so BF16 scores repeat run to run (see [`~eval.model.ScoringModel.sdpa_backend`]).
 
     Args:
         model (`PreTrainedModel` or `FlockCausalLM`):

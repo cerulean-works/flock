@@ -10,7 +10,7 @@
 
 ## 1. Goal
 
-Scoring one model twice at one flock commit in BF16 does not give the same numbers. On ARC-Easy with OLMo 2 1B, 386 of 19,002 requests moved between two runs, by up to 0.28 nats, and acc_per_char moved 0.04 pt. The cause is PyTorch's scaled dot product attention (SDPA). For most padded batches it dispatches to cuDNN attention, and only those batches move. Restricting SDPA to its memory-efficient kernel gave bit-identical runs, and that setting was the fastest BF16 one measured. With every scoring forward pass pinned, a before/after check on the GPU can claim byte equality in BF16, which until now held only in FP32.
+Scoring one model twice at one flock commit in BF16 does not give the same numbers. On ARC-Easy with OLMo 2 1B, 386 of 19,002 requests moved between two runs in a first measurement, by up to 0.28 nats, and 1,385 in a second (section 2): the count varies with timing. The cause is PyTorch's scaled dot product attention (SDPA). For most padded batches it dispatches to cuDNN attention, and only those batches move. Restricting SDPA to its memory-efficient kernel gave bit-identical runs, and that setting was the fastest BF16 one measured. With every scoring forward pass pinned, a before/after check on the GPU can claim byte equality in BF16, which until now held only in FP32.
 
 **Out of scope:** FP32 behaviour, the BF16 drift from FP32 (a separate noise floor), FlashAttention 3 and packed sequences (the TODO in `_score`).
 
@@ -51,7 +51,7 @@ Known limit: SDPA's backend flags are process-wide, not per thread. A training s
 
 The pin applies when the model is on a CUDA device and its attention implementation is `sdpa`, which includes a Flock model wrapped in `FlockCausalLM` (its attention calls `scaled_dot_product_attention`). Elsewhere scoring runs as before:
 
-- **CPU.** PyTorch has no memory-efficient kernel on the CPU: pinned to it, SDPA raises "No viable backend for scaled_dot_product_attention was found." The CPU has no cuDNN attention either, so there is nothing to pin away. CI's tests run here, and a test states that CPU scores are unchanged.
+- **CPU.** PyTorch has no memory-efficient kernel on the CPU: pinned to it, SDPA raises "No viable backend for scaled_dot_product_attention was found." The CPU has no cuDNN attention either, so there is nothing to pin away. CI's tests run here: `sdpa_backend` is `None`, and CPU scores still match the unbatched references they matched before.
 - **`eager` or another attention implementation.** SDPA is never called, so the pin would do nothing.
 
 If the efficient kernel can't run a model on CUDA (an unsupported head size, dtype or mask), PyTorch raises and the run stops. There is no fallback to PyTorch's choice. A silent fallback would let two models in one comparison be scored by different kernels, and the scores move when the kernel changes. The error names the reason, and a model that needs another kernel is a change to this decision, made in code and recorded.
@@ -60,7 +60,7 @@ If the efficient kernel can't run a model on CUDA (an unsupported head size, dty
 
 `Provenance` gains `sdpa_backend: str | None`: `"EFFICIENT_ATTENTION"` (PyTorch's `SDPBackend` name) when the pin applied, `None` when it didn't (CPU, or attention other than SDPA). `ScoringModel.sdpa_backend` gives the same value, so `evaluate` and scripts that build `Provenance` record it the same way. `results.json` goes to schema 7, so a file without the field is known to come from before the pin, when PyTorch chose per batch.
 
-`compare` refuses two files whose `sdpa_backend` differs, like `attention`. A file that lacks the field (schema 6 or older) is not refused: its kernel is unknown, not `None`, and in FP32 the pin changes no score (section 2), so the FP32 bank in `tests/eval/regression/` stays comparable without a rerun. The schema difference is printed beside any breach as its likely cause. `results.md` documents the field and `how-scoring-works.md` lists the kernel among the settings that change BF16 scores.
+`compare` refuses two files whose `sdpa_backend` differs, like `attention`. A file that lacks the field (schema 6 or older) is not refused: its kernel is unknown, not `None`, and in FP32 the pin changes no score (section 2), so the FP32 bank in `tests/eval/regression/` stays comparable without a rerun. The schema difference is printed beside any breach as its likely cause. `results.md` documents the field, `comparison.md` the refusal, and `scoring.md` lists the kernel among the settings that change BF16 scores.
 
 ### 023.D4. No option to unpin
 
@@ -77,8 +77,8 @@ Pinning moves BF16 numbers wherever PyTorch picked another kernel: ARC-Easy acc_
 1. `model.py`: the pin in `_logprobs`, the `sdpa_backend` property.
 2. `provenance.py`, `run.py`, `results.py`: the field, schema 7.
 3. `compare.py`: `sdpa_backend` refuses when both files record it.
-4. Tests (CPU): `sdpa_backend` is `None` on the CPU and CPU scores are unchanged; the SDPA flags after scoring equal those before; `compare` refuses a different kernel and accepts a file without the field; on CUDA, skipped in CI, the pin is active during the forward pass.
-5. Docs: `how-scoring-works.md`, `results.md`.
+4. Tests (CPU): `sdpa_backend` is `None` on the CPU; every forward pass sees only the efficient kernel and the SDPA flags after scoring equal those before; `compare` refuses a different kernel and accepts a file without the field. On CUDA, skipped in CI: a transformers model and a Flock model, both with grouped-query attention, score pinned and repeat in BF16.
+5. Docs: `scoring.md`, `results.md`, `comparison.md`, `evaluate-checkpoint.md`.
 6. Before/after on the GPU: ARC-Easy BF16 at `main` and at the branch, with the shift stated; two BF16 runs of the branch byte-equal; FP32 byte-equal before and after.
 
 ---

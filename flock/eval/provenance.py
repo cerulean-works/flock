@@ -37,7 +37,7 @@ class Provenance:
             The model's input limit in tokens. Longer inputs lost tokens from the left.
         attention (`str`):
             The attention implementation (`sdpa`, `eager`, ...), which changes BF16 scores.
-        sdpa_backend (`str`, *optional*):
+        sdpa_backend (`str` or `None`):
             The SDPA kernel scoring was pinned to, `"EFFICIENT_ATTENTION"` on CUDA with `sdpa` attention, or `None` where no pin applied (the CPU, other attention). Results files written before the pin have no `sdpa_backend`: PyTorch chose the kernel per batch, which changes BF16 scores run to run.
         torch (`str`), transformers (`str`), tokenizers (`str`), datasets (`str`), python (`str`):
             Library and interpreter versions. `tokenizers` decides token boundaries, and `datasets` reads the rows.
