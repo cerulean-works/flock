@@ -28,7 +28,7 @@ For example, after the definition of `lambada` changed, the comparison of the ol
 The output lists, in order:
 - the fields that differ and often explain a breach: the provenance's `flock_commit`, `device`, `torch`, `transformers`, `tokenizers`, `datasets` and `python`, and the file's `schema_version`
 - the tasks and suites in one file only
-- the changed tasks and suites, which aren't compared
+- the changed tasks and suites, which aren't compared, each with the first field that differs (`members` for a suite that holds a changed task or suite)
 - one line per breach, with the task or suite, the field, both values and their difference
 - a count of what was compared
 
@@ -39,7 +39,7 @@ flock_commit  d23f66846b528327acbeb38fc6ce90279fd8bd79  ->  7dd26fbb6cc5d6452355
 compared: tasks 109, suites 10, breaches 0
 ```
 
-A breach adds a line such as `piqa  metrics.acc_raw  0.6  ->  0.625  (+0.025)`. A changed task adds a line such as `changed, not compared: lambada, base_easy:qa_rc, base_easy:qa_bpb, base_easy`.
+A breach adds a line such as `piqa  metrics.acc_raw  0.6  ->  0.625  (+0.025)`. A changed task adds a line such as `changed, not compared: lambada (task_hash), base_easy:qa_rc (members), base_easy:qa_bpb (members), base_easy (members)`.
 
 
 ## Refusals

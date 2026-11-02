@@ -48,6 +48,6 @@ A changed task or suite is listed and not compared, and the rest is still compar
 
 3. Include the comparison output and reasons in the change review. Keep a library-driven bank refresh in the same change as its lockfile update.
 
-A change to the results file's layout doesn't require a refresh in the same change. The banks only need to load under the current layout, which CI checks, and `compare` prints a `schema_version` difference beside any breach it causes. The banks are refreshed on the evaluation schedule instead.
+A change to the results file's layout doesn't require a refresh in the same change. The banks only need to load under the current layout, which CI checks, and `compare` prints a `schema_version` difference beside any breach it causes. Refresh a bank when its scores are meant to change, as in the steps above.
 
 Do not loosen tolerances to conceal a changed task or different evaluation settings. For deliberately changed tasks, record and review a new baseline.
