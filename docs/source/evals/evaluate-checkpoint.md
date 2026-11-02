@@ -43,6 +43,6 @@ Your training process must hold a causal language model and tokenizer compatible
 
 4. Check the printed metric and the training run's dashboard. Continue training after scoring returns.
 
-Scoring disables gradients and restores the modules' previous training modes. It uses the model's existing device and dtype. Keep evaluation settings consistent between checkpoints. See [Scoring](scoring) and the [Python API](python-api) for batching and model-state behavior.
+Scoring disables gradients, then restores the modules' previous training modes and PyTorch's SDPA kernel choice, which it pins while it scores on CUDA. It uses the model's existing device and dtype. Keep evaluation settings consistent between checkpoints. See [Scoring](scoring) and the [Python API](python-api) for batching and model-state behavior.
 
 `score_task` returns metrics in memory: a mean over docs for a multiple-choice metric, and a ratio of sums over all docs for a perplexity task's metrics (see [Metrics](metrics#perplexity)). With `out`, it writes predictions only, not `results.json`; give each checkpoint its own output path. See [Results](results).

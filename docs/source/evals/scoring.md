@@ -31,9 +31,11 @@ Requests are sorted longest first and packed into batches of at most `batch_toke
 
 Log-softmax runs in float32, whatever the weights' dtype. In float32, a batched score matches the same request scored alone within 2e-4 nats. In bfloat16, the default for [`~eval.model.ScoringModel.from_pretrained`], a score depends slightly on which requests share its batch: about 0.05 nats on average and 0.49 at most, measured with OLMo 2 1B on 300 ARC-Easy docs at budgets of 32768 and 512 tokens.
 
+On CUDA, scoring pins PyTorch's scaled dot product attention (SDPA) to its memory-efficient kernel, so two BF16 runs of one model at one flock commit give byte-equal scores. Left to choose, PyTorch runs cuDNN attention on some padded batches, and those scores move from run to run: up to 0.28 nats on ARC-Easy with OLMo 2 1B. In FP32 PyTorch already picks the efficient kernel, so the pin changes no FP32 score. It doesn't apply on the CPU, which has no such kernel, or to attention other than `sdpa`. There is no option to turn it off: another kernel gives other BF16 numbers, so it would be another instrument. If the kernel can't run a model on CUDA, the run stops with PyTorch's error rather than fall back.
+
 So compare runs only when they used the same:
 - `batch_tokens` and `limit`, which decide the batches
-- dtype and attention implementation, which change bfloat16 arithmetic
+- dtype, attention implementation and SDPA kernel, which change BF16 arithmetic
 - `max_length`, which decides where long inputs are cut
 
 `results.json` records all of them: `limit` with each task, and the rest in its provenance. See [Results files](results#provenance).
