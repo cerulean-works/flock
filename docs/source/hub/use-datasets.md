@@ -24,15 +24,16 @@ Run Python scripts from the workspace with `uv run python your-script.py`. The e
 
 ## Load a dataset
 
-Configure authentication before creating clients or opening S3 datasets:
+Request temporary S3 credentials and pass their connection settings to Lance:
 
 ```python
 import lance
 from flock.hub import s3
 
-s3.get_process(read_only=True)
+creds = s3.credentials(read_only=True)
+read_options = creds.storage_options()
 uri = "s3://flock-datasets/examples/questions"
-dataset = lance.dataset(uri, version=1)
+dataset = lance.dataset(uri, version=1, storage_options=read_options)
 print(dataset.version, dataset.count_rows())
 print(dataset.schema)
 ```
@@ -41,26 +42,20 @@ The helper uses your default organization. Pass `org="cerulean-labs"` when selec
 
 Omitting `version` opens the latest committed snapshot at that moment. A version number pins your read; a tag such as `version="baseline"` resolves to a version when opened. Record the URI and resolved `dataset.version` with your experiment, since a tag can move. An already open handle does not automatically advance when someone appends rows.
 
-### S3 options and credential renewal
+### S3 storage options
 
-`get_process()` configures this process's AWS profile, endpoint and region. It removes conflicting AWS credentials and applies the environment itself. Lance's native AWS provider runs a local credential process to fetch ephemeral S3 keys, then renews them as storage requests need fresh credentials. You do not need shell exports or to copy keys into your code.
-
-Use `storage_options` for per-dataset connection settings, such as a request timeout:
+`storage_options()` supplies the endpoint, region, path-style setting and current temporary key values. You can add per-dataset connection settings, such as a request timeout:
 
 ```python
-dataset = lance.dataset(uri, version=1, storage_options={"timeout": "60s"})
+dataset = lance.dataset(
+    uri, version=1, storage_options={**read_options, "timeout": "60s"}
+)
 ```
 
-Keep access keys out of that dictionary when using native renewal. If you need explicit credentials for a short operation, the snapshot form is:
+> [!WARNING]
+> Temporary S3 keys expire after **8 hours by default**, subject to your organization's policy. These options contain a fixed key pair, and an open Lance dataset does not renew it. Once the keys expire, the next S3 read or write fails and can terminate your training run. Use [credential renewal](#renew-credentials-for-long-runs) for long jobs.
 
-```python
-creds = s3.credentials(read_only=True)
-snapshot = lance.dataset(uri, version=1, storage_options=creds.storage_options())
-```
-
-`storage_options()` supplies the endpoint, region, path-style setting and current key values. These are static for that dataset handle. Renewing `creds` later does not update the open dataset; reopen with current options before the key expires. Prefer `get_process()` for long reads and training workers. Its setup affects clients created afterward and children of this process, rather than the parent shell.
-
-The [Python S3 reference](../cli/python-s3#native-renewal-from-python) owns the environment variables, temporary-file lifetime and renewal details. [Lance's storage options](https://lance.org/guide/object_store/) lists other connection settings. For unattended jobs, supply [FLOCK_TOKEN](../cli/authenticate-jobs).
+Requesting new keys through `creds` does not update options already held by an open dataset. [Lance's storage options](https://lance.org/guide/object_store/) lists other connection settings.
 
 ## Read rows and batches
 
@@ -134,7 +129,8 @@ import lance
 import pyarrow as pa
 from flock.hub import s3
 
-s3.get_process()
+creds = s3.credentials()
+write_options = creds.storage_options()
 uri = "s3://flock-datasets/examples/questions"
 schema = pa.schema([
     ("id", pa.int64()),
@@ -146,19 +142,23 @@ table = pa.Table.from_pylist([
     {"id": 102, "question": "3 + 3?", "answer": "6"},
     {"id": 103, "question": "4 + 4?", "answer": "8"},
 ], schema=schema)
-written = lance.write_dataset(table, uri, mode="create")
+written = lance.write_dataset(
+    table, uri, mode="create", storage_options=write_options
+)
 first_version = written.version
-check = lance.dataset(uri, version=first_version)
+check = lance.dataset(uri, version=first_version, storage_options=write_options)
 assert check.to_table().equals(table)
 ```
 
-`mode="create"` refuses an existing dataset. Choose another path to repeat the example. For a local experiment, replace the S3 URI with an unused local directory and omit `get_process()`.
+`mode="create"` refuses an existing dataset. Choose another path to repeat the example. For a local experiment, replace the S3 URI with an unused local directory and omit the credential setup and `storage_options` arguments.
 
 Set the schema explicitly so empty or all-null batches do not infer unintended types. Keep the same schema when appending. Lance also accepts Arrow record-batch readers, so a source larger than memory can be written incrementally. For example, with an existing `schema` and an iterator named `batches` that yields compatible `pa.RecordBatch` objects:
 
 ```python
 reader = pa.RecordBatchReader.from_batches(schema, batches)
-written = lance.write_dataset(reader, uri + "-streamed", mode="create")
+written = lance.write_dataset(
+    reader, uri + "-streamed", mode="create", storage_options=write_options
+)
 ```
 
 This commits one dataset version from the stream. Prefer a single streamed write or reasonably sized append batches over one commit per row. The writer's file-size settings control file boundaries; record-batch boundaries do not each become a dataset version.
@@ -171,18 +171,40 @@ Append new rows to create another version:
 more = pa.Table.from_pylist([
     {"id": 104, "question": "5 + 5?", "answer": "10"},
 ], schema=schema)
-updated = lance.write_dataset(more, uri, mode="append")
+updated = lance.write_dataset(
+    more, uri, mode="append", storage_options=write_options
+)
 assert updated.count_rows() == 4
 assert check.count_rows() == 3  # the earlier handle keeps its snapshot
 
 updated.tags.create("baseline", first_version)
-pinned = lance.dataset(uri, version="baseline")
+pinned = lance.dataset(uri, version="baseline", storage_options=write_options)
 assert pinned.version == first_version
 ```
 
 Each successful append adds those rows again; it does not deduplicate by `id`. Create the tag once. Record the resolved version number for a reproducible run.
 
 Use `mode="overwrite"` only when you intend to replace the current table contents with a new snapshot. It is not an append. Older snapshots remain readable only while their required files and manifests are retained. Do not run version cleanup while experiments still need that history; tags protect versions from Lance cleanup. The [dataset behavior reference](../app/s3-behavior#datasets) explains Flock's version and tag handling.
+
+## Renew credentials for long runs
+
+For reads or writes that can outlast the temporary keys, call `s3.get_process()` before creating the dataset. This is the setup used by the [trainer's S3 dataset helper](../training/trainer):
+
+```python
+import lance
+from flock.hub import s3
+
+s3.get_process(org="cerulean-labs", read_only=True)
+dataset = lance.dataset("s3://flock-datasets/examples/questions", version=1)
+```
+
+The call configures this process's AWS profile, endpoint and region, removes conflicting credentials, and applies the environment itself. Lance's native AWS provider runs a local credential process to fetch ephemeral keys and renew them as storage requests need fresh credentials. You do not need shell exports or a separate `flock s3 configure` step.
+
+Omit access keys from `storage_options` when using this flow. Passing the static options from the earlier examples selects fixed-key authentication instead of native renewal. You can still pass non-credential options such as `{"timeout": "60s"}`.
+
+For a writer, use `s3.get_process()` without `read_only=True` and open or write datasets without the earlier `write_options`. Omit `org` to use your default organization. Configure access before opening clients; existing handles retain their configuration. Setup affects this process and children it starts, rather than its parent shell.
+
+The [Python S3 reference](../cli/python-s3#native-renewal-from-python) explains environment variables, temporary-file lifetime and renewal behavior. For unattended jobs, supply [FLOCK_TOKEN](../cli/authenticate-jobs).
 
 ## Read from worker processes
 
