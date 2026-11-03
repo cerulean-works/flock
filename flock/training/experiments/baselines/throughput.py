@@ -137,7 +137,8 @@ def main() -> int:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    model = Olmo2(OLMO2_1B_CONFIG)
+    config = OLMO2_1B_CONFIG
+    model = Olmo2(config)
     tokenizer = model.get_hf_tokenizer()
     assert tokenizer is not None
     rows = args.steps * args.batch_size
@@ -149,9 +150,7 @@ def main() -> int:
         dataset = Subset(finepdfs, range(0, len(finepdfs), len(finepdfs) // rows)[:rows])
     else:
         # Eight distinct batches, cycled: the scaffold's sequence length with the network out.
-        packed = memory_rows(
-            tokenizer, OLMO2_1B_CONFIG.max_position_embeddings, 8 * args.batch_size
-        )
+        packed = memory_rows(tokenizer, config.max_position_embeddings, 8 * args.batch_size)
         dataset = [packed[index % len(packed)] for index in range(rows)]
 
     # The trainer's wandb.init takes no run name, and the default would be random.
@@ -205,10 +204,11 @@ def main() -> int:
         return 3
 
     seconds = clock.step_seconds
+    sequence_length = max(length for _, length in clock.shapes)
     losses = {window["global_step"]: window["train/loss_mean"] for window in metrics.windows}
     result |= {
         "oom": False,
-        "sequence_length_max": max(length for _, length in clock.shapes),
+        "sequence_length_max": sequence_length,
         "sequence_length_mean": statistics.fmean(length for _, length in clock.shapes),
         "step_seconds_mean": statistics.fmean(seconds),
         "step_seconds_median": statistics.median(seconds),
@@ -222,6 +222,12 @@ def main() -> int:
         # 989e12 is the H200's dense BF16 peak from NVIDIA's datasheet.
         "mfu_total": 6 * n_total * clock.tokens_per_second / 989e12,
         "mfu_nonembed": 6 * n_nonembed * clock.tokens_per_second / 989e12,
+        # PaLM's full count adds 12 L H Q T per token for attention; H Q is the hidden size.
+        "mfu_total_with_attention": (
+            6 * n_total + 12 * config.num_hidden_layers * config.hidden_size * sequence_length
+        )
+        * clock.tokens_per_second
+        / 989e12,
         "peak_memory_bytes": max(clock.peak_bytes, default=None),
         "loss_at_warmup": losses.get(args.warmup),
         "loss_at_end": losses.get(args.steps),
