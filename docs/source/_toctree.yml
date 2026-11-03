@@ -18,6 +18,8 @@ guide:
     title: Authenticate an unattended job
 - title: Hub
   sections:
+  - local: hub/use-datasets
+    title: Use datasets
   - local: hub/store-models
     title: Store and load models
 - title: Training
