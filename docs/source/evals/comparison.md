@@ -39,6 +39,8 @@ flock_commit  d23f66846b528327acbeb38fc6ce90279fd8bd79  ->  7dd26fbb6cc5d6452355
 compared: tasks 109, suites 10, breaches 0
 ```
 
+A rerun on a newer layout than the bank's also prints the fields that came with it, such as `schema_version  6  ->  7` and, for a bank written before the SDPA pin, `sdpa_backend  None  ->  EFFICIENT_ATTENTION`.
+
 A breach adds a line such as `piqa  metrics.acc_raw  0.6  ->  0.625  (+0.025)`. A changed task adds a line such as `changed, not compared: lambada (task_hash), base_easy:qa_rc (members), base_easy:qa_bpb (members), base_easy (members)`.
 
 
@@ -47,7 +49,7 @@ A breach adds a line such as `piqa  metrics.acc_raw  0.6  ->  0.625  (+0.025)`. 
 A difference in score only means something if both runs used the same settings. `compare` refuses, before it reads any score, when:
 - the provenance's `model`, `dtype`, `batch_tokens`, `max_length` or `attention` differ
 - the provenance's `model_digest` differs, as for two Flock servers that each have a `flock:acme/olmo2-1b@12`. A file written before `model_digest` existed counts as `null`, the value for a Hugging Face model.
-- the provenance's `sdpa_backend` differs, the SDPA kernel that changes BF16 scores. A file written before `sdpa_backend` existed is not refused on it: its kernel is unknown, and in FP32 the kernel changes no score, so an older FP32 bank stays comparable. Its missing field prints as `None` among the causes below, as other missing fields do.
+- the provenance's `sdpa_backend` differs, the SDPA kernel that changes BF16 scores. A file written before `sdpa_backend` existed is not refused on it: its kernel is unknown, and in FP32 the kernel changes no score, so an older FP32 bank stays comparable. Its missing field prints as `None` among the causes above, as other missing fields do.
 - no task is in both files
 - a file isn't JSON, a field it reads is missing, or a value there has the wrong type
 
