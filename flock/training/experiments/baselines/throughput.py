@@ -28,41 +28,58 @@ from flock.training.core.models import OLMO2_1B_CONFIG, Olmo2
 
 
 class StepClock:
-    """Wall time, non-padding input tokens and peak memory of each optimizer step of a trainer.
+    """Duration, non-padding input tokens and peak memory of each optimizer step of a trainer.
 
-    It hooks the model's forward and the optimizer's step, so the trainer itself is unchanged. Steps after `warmup` form the measured window.
+    It hooks the model's forward and the optimizer's step, so the trainer itself is unchanged. On CUDA each step boundary is a recorded event, so the clock adds no synchronization the trainer does not already have. Steps after `warmup` form the measured window.
     """
 
     def __init__(self, trainer: Trainer, warmup: int):
         self.device = trainer.device
         self.warmup = warmup
-        self.ends: list[float] = []
+        # The start of the first step, then the end of every step.
+        self.events: list[torch.cuda.Event] = []
+        self.wall: list[float] = []
         self.tokens: list[torch.Tensor] = []
         self.shapes: list[tuple[int, int]] = []
         self.peak_bytes: list[int] = []
-        trainer.model.register_forward_pre_hook(self._count_tokens)
+        trainer.model.register_forward_pre_hook(self._start_step)
         trainer.optimizer.register_step_post_hook(self._end_step)
 
-    def _count_tokens(self, module: torch.nn.Module, args: tuple[Any, ...]) -> None:
+    def _start_step(self, module: torch.nn.Module, args: tuple[Any, ...]) -> None:
         # The model's only argument is the collated batch; its mask marks real input tokens.
         mask = args[0]["attention_mask"]
         self.tokens.append(mask.sum())
         self.shapes.append((mask.shape[0], mask.shape[1]))
+        if len(self.tokens) == 1:
+            self._mark()
 
     def _end_step(self, optimizer: torch.optim.Optimizer, args: Any, kwargs: Any) -> None:
+        self._mark()
         if self.device.type == "cuda":
-            # Kernels run asynchronously: wait for this step's work before reading the clock.
-            torch.cuda.synchronize(self.device)
             self.peak_bytes.append(torch.cuda.max_memory_allocated(self.device))
-        self.ends.append(time.perf_counter())
+            torch.cuda.reset_peak_memory_stats(self.device)
+
+    def _mark(self) -> None:
+        if self.device.type == "cuda":
+            event = torch.cuda.Event(enable_timing=True)
+            event.record()
+            self.events.append(event)
+        else:
+            self.wall.append(time.perf_counter())
 
     @property
     def step_seconds(self) -> list[float]:
-        """Durations of the measured steps, each from the previous step's end to its own."""
-        return [
-            end - start
-            for start, end in zip(self.ends[self.warmup - 1 :], self.ends[self.warmup :])
-        ]
+        """Durations of every step, from the previous step's end (the first from its forward)."""
+        if self.events:
+            self.events[-1].synchronize()
+            return [
+                start.elapsed_time(end) / 1000 for start, end in zip(self.events, self.events[1:])
+            ]
+        return [end - start for start, end in zip(self.wall, self.wall[1:])]
+
+    @property
+    def window_seconds(self) -> list[float]:
+        return self.step_seconds[self.warmup :]
 
     @property
     def window_tokens(self) -> int:
@@ -74,11 +91,11 @@ class StepClock:
 
     @property
     def tokens_per_second(self) -> float:
-        return self.window_tokens / sum(self.step_seconds)
+        return self.window_tokens / sum(self.window_seconds)
 
     @property
     def padded_tokens_per_second(self) -> float:
-        return self.window_padded_tokens / sum(self.step_seconds)
+        return self.window_padded_tokens / sum(self.window_seconds)
 
 
 class TrainerMetrics(logging.Handler):
@@ -132,6 +149,9 @@ def main() -> int:
     args = parser.parse_args()
     if not 0 < args.warmup < args.steps:
         parser.error("--warmup must be positive and below --steps")
+    # MFU below divides by the H200's peak, so another device would get a wrong number.
+    if "H200" not in (torch.cuda.get_device_name() if torch.cuda.is_available() else ""):
+        parser.error("this baseline measures an NVIDIA H200")
 
     logging.basicConfig(
         level=logging.INFO,
@@ -146,10 +166,12 @@ def main() -> int:
     # The trainer runs one pass over its dataset, so the dataset is cut to `steps` batches.
     if args.data == "lance":
         finepdfs = get_dataset(DatasetConfig(uri="s3://flock-datasets/finepdfs", version=1))
+        if rows > len(finepdfs):
+            parser.error(f"--steps x --batch-size exceeds the dataset's {len(finepdfs)} rows")
         # Rows are spread over the whole dataset, so reads touch as many fragments as a real run.
         dataset = Subset(finepdfs, range(0, len(finepdfs), len(finepdfs) // rows)[:rows])
     else:
-        # Eight distinct batches, cycled: the scaffold's sequence length with the network out.
+        # Eight batches' worth of distinct full-length rows, repeated; the loader shuffles them.
         packed = memory_rows(tokenizer, config.max_position_embeddings, 8 * args.batch_size)
         dataset = [packed[index % len(packed)] for index in range(rows)]
 
@@ -185,9 +207,7 @@ def main() -> int:
         "warmup": args.warmup,
         "n_total": n_total,
         "n_nonembed": n_nonembed,
-        "device": torch.cuda.get_device_name()
-        if torch.cuda.is_available()
-        else str(trainer.device),
+        "device": torch.cuda.get_device_name(),
         "flock_commit": os.environ.get("FLOCK_COMMIT"),
         "job_id": os.environ.get("SLURM_JOB_ID"),
         "command": " ".join(sys.argv),
@@ -198,17 +218,31 @@ def main() -> int:
     try:
         trainer.train()
     except torch.OutOfMemoryError as error:
-        result |= {"oom": True, "error": str(error).splitlines()[0], "steps_done": len(clock.ends)}
+        result |= {
+            "oom": True,
+            "error": str(error).splitlines()[0],
+            "steps_done": len(clock.peak_bytes),
+        }
         path.write_text(json.dumps(result, indent=2) + "\n")
         trainer.run.finish(exit_code=1)
         return 3
 
-    seconds = clock.step_seconds
-    sequence_length = max(length for _, length in clock.shapes)
+    seconds = clock.window_seconds
+    per_step_tokens = torch.stack(clock.tokens).tolist()
     losses = {window["global_step"]: window["train/loss_mean"] for window in metrics.windows}
+    # PaLM (Chowdhery et al. 2022, App. B): MFU is the token rate times the model FLOPs per
+    # token over the hardware's peak, here the H200's dense BF16 989 TFLOP/s (NVIDIA datasheet).
+    peak_flops = 989e12
+    # PaLM's attention term, 12 L H Q T per token (H Q is the hidden size), at each step's T.
+    attention_flops = sum(
+        12 * config.num_hidden_layers * config.hidden_size * length * tokens
+        for tokens, (_, length) in zip(per_step_tokens[args.warmup :], clock.shapes[args.warmup :])
+    )
+    # An embedding lookup is not a matmul, so PaLM's matmul count leaves the input table out.
+    n_matmul = n_total - model.model.embed_tokens.weight.numel()
     result |= {
         "oom": False,
-        "sequence_length_max": sequence_length,
+        "sequence_length_max": max(length for _, length in clock.shapes),
         "sequence_length_mean": statistics.fmean(length for _, length in clock.shapes),
         "step_seconds_mean": statistics.fmean(seconds),
         "step_seconds_median": statistics.median(seconds),
@@ -218,24 +252,19 @@ def main() -> int:
         "window_padded_tokens": clock.window_padded_tokens,
         "tokens_per_second": clock.tokens_per_second,
         "padded_tokens_per_second": clock.padded_tokens_per_second,
-        # PaLM (Chowdhery et al. 2022, App. B): 6N FLOPs per token over the hardware's peak.
-        # 989e12 is the H200's dense BF16 peak from NVIDIA's datasheet.
-        "mfu_total": 6 * n_total * clock.tokens_per_second / 989e12,
-        "mfu_nonembed": 6 * n_nonembed * clock.tokens_per_second / 989e12,
-        # PaLM's full count adds 12 L H Q T per token for attention; H Q is the hidden size.
-        "mfu_total_with_attention": (
-            6 * n_total + 12 * config.num_hidden_layers * config.hidden_size * sequence_length
-        )
-        * clock.tokens_per_second
-        / 989e12,
-        "peak_memory_bytes": max(clock.peak_bytes, default=None),
-        "loss_at_warmup": losses.get(args.warmup),
-        "loss_at_end": losses.get(args.steps),
-        # A window longer than twice the shortest step marks the run unstable.
+        "mfu_total": 6 * n_total * clock.tokens_per_second / peak_flops,
+        "mfu_nonembed": 6 * n_nonembed * clock.tokens_per_second / peak_flops,
+        "mfu_matmul_with_attention": (6 * n_matmul * clock.window_tokens + attention_flops)
+        / sum(seconds)
+        / peak_flops,
+        "peak_memory_bytes": max(clock.peak_bytes),
+        # Each logged loss is the token-weighted mean over the 10 steps ending at its key.
+        "loss_windows": losses,
+        # A step more than twice as long as the shortest one marks the run unstable.
         "stable": max(seconds) <= 2 * min(seconds)
         and all(math.isfinite(loss) for loss in losses.values()),
-        "per_step_seconds": [b - a for a, b in zip(clock.ends, clock.ends[1:])],
-        "per_step_tokens": torch.stack(clock.tokens).tolist(),
+        "per_step_seconds": clock.step_seconds,
+        "per_step_tokens": per_step_tokens,
         "per_step_peak_bytes": clock.peak_bytes,
     }
     path.write_text(json.dumps(result, indent=2) + "\n")

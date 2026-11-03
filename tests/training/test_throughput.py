@@ -40,19 +40,22 @@ def test_step_clock_counts_every_real_input_token_once(
     metrics = TrainerMetrics()
     caplog.set_level(logging.INFO, logger="flock.training.core.trainer")
     logging.getLogger("flock.training.core.trainer").addHandler(metrics)
-    trainer.train()
-    logging.getLogger("flock.training.core.trainer").removeHandler(metrics)
+    try:
+        trainer.train()
+    finally:
+        logging.getLogger("flock.training.core.trainer").removeHandler(metrics)
 
     # The collator drops each row's last position, which left padding keeps real.
     real_inputs = [len(tokenizer(text)["input_ids"]) - 1 for text in texts]
-    assert len(clock.ends) == len(clock.tokens) == trainer.total_steps
+    assert len(clock.step_seconds) == len(clock.tokens) == trainer.total_steps
+    assert clock.events == []  # CUDA events only exist on CUDA; the CPU clock is the wall.
     assert int(torch.stack(clock.tokens).sum()) == sum(real_inputs)
     assert sum(rows for rows, _ in clock.shapes) == len(texts)
 
     first_batch = int(clock.tokens[0])
     assert clock.window_tokens == sum(real_inputs) - first_batch
-    assert len(clock.step_seconds) == trainer.total_steps - 1
-    assert clock.tokens_per_second == pytest.approx(clock.window_tokens / sum(clock.step_seconds))
+    assert clock.window_seconds == clock.step_seconds[1:]
+    assert clock.tokens_per_second == pytest.approx(clock.window_tokens / sum(clock.window_seconds))
     assert clock.window_padded_tokens >= clock.window_tokens
     assert clock.peak_bytes == []  # Memory is only read on CUDA.
     assert [window["global_step"] for window in metrics.windows] == list(
