@@ -428,7 +428,10 @@ def test_a_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(wr
         fields["dataset"] = Dataset(**fields["dataset"])
         tasks.append(TaskResult(**fields))
     suites = [SuiteResult(**suite) for suite in data["suites"]]
-    rewritten = Results(Provenance(**data["provenance"]), tasks, suites)
+    # A run on today's code records the pinned kernel, which the bank, older than the field,
+    # lacks: a cause, not a refusal.
+    provenance = Provenance(**data["provenance"], sdpa_backend="EFFICIENT_ATTENTION")
+    rewritten = Results(provenance, tasks, suites)
 
     comparison = compare(bank, write("rewritten", rewritten))
 
@@ -436,7 +439,7 @@ def test_a_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(wr
     assert suite in comparison.suites
     assert comparison.changed == []
     assert comparison.breaches == []
-    assert comparison.provenance.keys() <= {"schema_version"}
+    assert comparison.provenance.keys() <= {"schema_version", "sdpa_backend"}
 
 
 def test_a_file_without_model_digest_compares_with_one_whose_digest_is_none(write):
