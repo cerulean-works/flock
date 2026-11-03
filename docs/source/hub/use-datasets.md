@@ -47,9 +47,7 @@ Omitting `version` opens the latest committed snapshot at that moment. A version
 `storage_options()` supplies the endpoint, region, path-style setting and current temporary key values. You can add per-dataset connection settings, such as a request timeout:
 
 ```python
-dataset = lance.dataset(
-    uri, version=1, storage_options={**read_options, "timeout": "60s"}
-)
+dataset = lance.dataset(uri, version=1, storage_options={**read_options, "timeout": "60s"})
 ```
 
 > [!WARNING]
@@ -97,9 +95,7 @@ Positions must be in range. Pin the dataset version when storing positions for l
 For application IDs, filter your explicit column:
 
 ```python
-matches = dataset.to_table(
-    columns=["id", "question"], filter="id IN (103, 101)"
-)
+matches = dataset.to_table(columns=["id", "question"], filter="id IN (103, 101)")
 assert set(matches["id"].to_pylist()) == {101, 103}
 ```
 
@@ -132,19 +128,22 @@ from flock.hub import s3
 creds = s3.credentials()
 write_options = creds.storage_options()
 uri = "s3://flock-datasets/examples/questions"
-schema = pa.schema([
-    ("id", pa.int64()),
-    ("question", pa.string()),
-    ("answer", pa.string()),
-])
-table = pa.Table.from_pylist([
-    {"id": 101, "question": "2 + 2?", "answer": "4"},
-    {"id": 102, "question": "3 + 3?", "answer": "6"},
-    {"id": 103, "question": "4 + 4?", "answer": "8"},
-], schema=schema)
-written = lance.write_dataset(
-    table, uri, mode="create", storage_options=write_options
+schema = pa.schema(
+    [
+        ("id", pa.int64()),
+        ("question", pa.string()),
+        ("answer", pa.string()),
+    ]
 )
+table = pa.Table.from_pylist(
+    [
+        {"id": 101, "question": "2 + 2?", "answer": "4"},
+        {"id": 102, "question": "3 + 3?", "answer": "6"},
+        {"id": 103, "question": "4 + 4?", "answer": "8"},
+    ],
+    schema=schema,
+)
+written = lance.write_dataset(table, uri, mode="create", storage_options=write_options)
 first_version = written.version
 check = lance.dataset(uri, version=first_version, storage_options=write_options)
 assert check.to_table().equals(table)
@@ -168,12 +167,13 @@ This commits one dataset version from the stream. Prefer a single streamed write
 Append new rows to create another version:
 
 ```python
-more = pa.Table.from_pylist([
-    {"id": 104, "question": "5 + 5?", "answer": "10"},
-], schema=schema)
-updated = lance.write_dataset(
-    more, uri, mode="append", storage_options=write_options
+more = pa.Table.from_pylist(
+    [
+        {"id": 104, "question": "5 + 5?", "answer": "10"},
+    ],
+    schema=schema,
 )
+updated = lance.write_dataset(more, uri, mode="append", storage_options=write_options)
 assert updated.count_rows() == 4
 assert check.count_rows() == 3  # the earlier handle keeps its snapshot
 
