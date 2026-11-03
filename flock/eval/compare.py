@@ -1,4 +1,4 @@
-"""Compare a new results file with a banked one: refuse different instruments, list every score that moved past its tolerance."""
+"""Compare a new results file with a banked one: refuse different instruments, list the tasks and suites scored differently, and list every other score that moved past its tolerance."""
 
 import json
 import math
@@ -32,7 +32,9 @@ class Comparison:
 
     Args:
         tasks (`list[str]`), suites (`list[str]`):
-            The tasks and suites in both files, which were compared, in the banked file's order.
+            The tasks and suites in both files that were compared, in the banked file's order.
+        changed (`list[tuple[str, str]]`):
+            The tasks and suites in both files that were scored differently, so they were listed and not compared, each with the first field that differs: a task's `task_hash` or `limit`, a suite's `metric` or `suite_hash`, or `members` for a suite holding a changed task or suite at any depth. Tasks first, then suites, in the banked file's order.
         breaches (`list[Breach]`):
             Every compared value that moved past its tolerance. Empty when the new run reproduces the bank.
         provenance (`dict[str, tuple[Any, Any]]`):
@@ -43,6 +45,7 @@ class Comparison:
 
     tasks: list[str]
     suites: list[str]
+    changed: list[tuple[str, str]]
     breaches: list[Breach]
     provenance: dict[str, tuple[Any, Any]]
     only_banked: list[str]
@@ -53,10 +56,10 @@ def compare(banked: Path, new: Path) -> Comparison:
     """
     Compares two `results.json` files task by task and suite by suite, requiring every score to stay within its tolerance.
 
-    Each task in both files is compared on `num_docs` and every entry of `metrics` and `truncation`, and each suite in both on `members` and `score`. Timing is not compared. An accuracy may move by `FLIPPED_DOCS` docs out of `num_docs`, any other metric by `RELATIVE_TOLERANCE` of its banked value, and a suite's score by its members' tolerances combined as independent errors. Counts and `members` must be equal.
+    Each task in both files is compared on `num_docs` and every entry of `metrics` and `truncation`, and each suite in both on `members` and `score`. Timing is not compared. An accuracy may move by `FLIPPED_DOCS` docs out of `num_docs`, any other metric by `RELATIVE_TOLERANCE` of its banked value, and a suite's score by its members' tolerances combined as independent errors. Counts and `members` must be equal. A task or suite scored differently in the two runs is listed in `changed` and not compared.
 
     Raises:
-        `ValueError`: if the runs are different instruments (another model or `model_digest`, `dtype`, `batch_tokens`, `max_length` or `attention`, a common task with another `task_hash` or `limit`, or a common suite with another `metric` or `suite_hash`), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
+        `ValueError`: if the runs are different instruments (another model or `model_digest`, `dtype`, `batch_tokens`, `max_length` or `attention`), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
     """
     files = {}
     for path in (banked, new):
@@ -105,30 +108,44 @@ def compare(banked: Path, new: Path) -> Comparison:
         new_tasks = {task["task"]: task for task in rerun["tasks"]}
         bank_suites = {suite["suite"]: suite for suite in bank["suites"]}
         new_suites = {suite["suite"]: suite for suite in rerun["suites"]}
-        tasks = [name for name in bank_tasks if name in new_tasks]
-        suites = [name for name in bank_suites if name in new_suites]
-        if not tasks:
+        if not any(name in new_tasks for name in bank_tasks):
             raise ValueError(f"no task is in both {banked} and {new}")
 
-        # Every refusal comes before any score is read, so a refused pair prints no breach. A
-        # suite's `metric` says which metric its score averages, so it refuses like a hash.
-        for name in tasks:
-            for key in ("task_hash", "limit"):
-                if bank_tasks[name][key] != new_tasks[name][key]:
-                    raise ValueError(
-                        f"different instrument: {name} has {key} {bank_tasks[name][key]!r} "
-                        f"in {banked}, {new_tasks[name][key]!r} in {new}"
-                    )
-        # The suite hash covers its members' hashes and whether it is scored. A file older than
-        # schema 5 has none, and its suites are still compared on members and score.
+        # A task or suite scored differently is listed with the first field that differs and
+        # skipped, so every other score still compares (021.D1). A suite's `metric` says which
+        # metric its score averages, and its hash covers its members' hashes. A file older than
+        # schema 5 has no suite hash, so its suites change through a changed member, as a hash
+        # would.
         hashed = bank["schema_version"] >= 5 and rerun["schema_version"] >= 5
-        for name in suites:
-            for key in ("metric", "suite_hash") if hashed else ("metric",):
-                if bank_suites[name][key] != new_suites[name][key]:
-                    raise ValueError(
-                        f"different instrument: {name} has {key} {bank_suites[name][key]!r} "
-                        f"in {banked}, {new_suites[name][key]!r} in {new}"
-                    )
+        changed_tasks, changed_suites = {}, {}
+        for name, task in bank_tasks.items():
+            if name in new_tasks:
+                for key in ("task_hash", "limit"):
+                    if task[key] != new_tasks[name][key]:
+                        changed_tasks.setdefault(name, key)
+        for name, suite in bank_suites.items():
+            if name in new_suites:
+                for key in ("metric", "suite_hash") if hashed else ("metric",):
+                    if suite[key] != new_suites[name][key]:
+                        changed_suites.setdefault(name, key)
+        # A suite holding a changed task or suite changes too, at any depth, and is listed with
+        # `members` rather than `suite_hash`, since its hash covers its members'. A member of
+        # either file counts, and it is a task if the bank has a task of that name, as
+        # `_suite_tolerance` reads it. A suite may hold, in the new file only, a suite after it in
+        # the bank, so this repeats until no suite is added.
+        added = True
+        while added:
+            added = False
+            for name, suite in bank_suites.items():
+                if name not in new_suites or changed_suites.get(name) in ("metric", "members"):
+                    continue
+                for member in suite["members"] + new_suites[name]["members"]:
+                    if member in (changed_tasks if member in bank_tasks else changed_suites):
+                        changed_suites[name] = "members"
+                        added = True
+                        break
+        tasks = [name for name in bank_tasks if name in new_tasks and name not in changed_tasks]
+        suites = [name for name in bank_suites if name in new_suites and name not in changed_suites]
 
         # Every compared value as (name, field, banked, new, tolerance). A value missing on one
         # side is None, so a metric added or dropped is a breach too.
@@ -169,7 +186,10 @@ def compare(banked: Path, new: Path) -> Comparison:
     only_banked += [name for name in bank_suites if name not in new_suites]
     only_new = [name for name in new_tasks if name not in bank_tasks]
     only_new += [name for name in new_suites if name not in bank_suites]
-    return Comparison(tasks, suites, breaches, provenance, only_banked, only_new)
+    # Suites in the bank's order, though the loop above may add one in a later pass.
+    changed = list(changed_tasks.items())
+    changed += [(name, changed_suites[name]) for name in bank_suites if name in changed_suites]
+    return Comparison(tasks, suites, changed, breaches, provenance, only_banked, only_new)
 
 
 def _number(value: Any) -> bool:

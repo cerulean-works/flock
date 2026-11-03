@@ -177,16 +177,23 @@ def test_runs_with_other_settings_are_refused(write, change, match):
         compare(write("bank", BANK), write("new", rerun))
 
 
-@pytest.mark.parametrize(
-    ("change", "match"), [({"task_hash": "5e2d"}, "task_hash"), ({"limit": 10}, "limit")]
-)
-def test_a_task_scored_on_other_requests_is_refused_before_any_score(write, change, match):
-    # The changed metric would be a breach, but the refusal comes first.
+@pytest.mark.parametrize("change", [{"task_hash": "5e2d"}, {"limit": 10}])
+def test_a_task_scored_on_other_requests_is_listed_with_its_suites_and_the_rest_compared(
+    write, change
+):
+    # PIQA's moved score is not a breach: it was scored on other requests. ARC still compares.
+    # The suite's hash moves with PIQA's, as in a real file, and the suite is listed by member.
     piqa = dataclasses.replace(PIQA, metrics={"acc_raw": 0.5}, **change)
-    rerun = dataclasses.replace(BANK, tasks=[ARC, piqa])
+    arc = dataclasses.replace(ARC, metrics={"acc_raw": 0.7, "acc_per_char": 0.8})
+    suite = dataclasses.replace(SUITE, suite_hash="hash-rc2")
+    rerun = dataclasses.replace(BANK, tasks=[arc, piqa], suites=[suite])
 
-    with pytest.raises(ValueError, match=f"different instrument: piqa has {match}"):
-        compare(write("bank", BANK), write("new", rerun))
+    comparison = compare(write("bank", BANK), write("new", rerun))
+
+    assert comparison.changed == [("piqa", next(iter(change))), ("toy:rc", "members")]
+    assert comparison.tasks == ["arc_easy"]
+    assert comparison.suites == []
+    assert comparison.breaches == [Breach("arc_easy", "metrics.acc_per_char", 0.75, 0.8)]
 
 
 def test_tasks_and_suites_in_one_file_are_listed_not_compared(write):
@@ -221,10 +228,14 @@ def test_files_with_no_common_task_or_a_missing_key_are_refused(write, tmp_path)
         compare(bank, tmp_path / "list.json")
 
 
-def test_cli_exits_0_on_equal_scores_1_on_a_breach_and_2_on_a_refusal(write):
+def test_cli_exits_0_on_equal_scores_1_on_a_breach_and_2_on_a_change_or_a_refusal(write):
     bank = write("bank", BANK)
     moved = dataclasses.replace(PIQA, metrics={"acc_raw": 0.625})
     breach = write("breach", dataclasses.replace(BANK, tasks=[ARC, moved]))
+    arc = dataclasses.replace(ARC, metrics={"acc_raw": 0.7, "acc_per_char": 0.8})
+    rehashed = dataclasses.replace(moved, task_hash="5e2d")
+    suite = dataclasses.replace(SUITE, suite_hash="hash-rc2")
+    changed = write("changed", dataclasses.replace(BANK, tasks=[arc, rehashed], suites=[suite]))
     other = dataclasses.replace(BANK, provenance=dataclasses.replace(PROVENANCE, dtype="bfloat16"))
     refused = write("refused", other)
 
@@ -241,24 +252,36 @@ def test_cli_exits_0_on_equal_scores_1_on_a_breach_and_2_on_a_refusal(write):
         "compared: tasks 2, suites 1, breaches 1",
     ]
 
+    # A change outranks a breach beside it, and both print.
+    result = CliRunner().invoke(cli.main, ["compare", str(bank), str(changed)])
+    assert result.exit_code == 2
+    assert result.output.splitlines() == [
+        "changed, not compared: piqa (task_hash), toy:rc (members)",
+        "arc_easy  metrics.acc_per_char  0.75  ->  0.8  (+0.05)",
+        "compared: tasks 1, suites 0, breaches 1",
+    ]
+
     result = CliRunner().invoke(cli.main, ["compare", str(bank), str(refused)])
     assert result.exit_code == 2
     assert "refused: different instrument: provenance.dtype is 'float32'" in result.output
 
 
-def test_a_suite_averaging_another_metric_is_refused(write):
+def test_a_suite_averaging_another_metric_is_listed_as_changed(write):
     rerun = dataclasses.replace(BANK, suites=[dataclasses.replace(SUITE, metric="acc_raw")])
 
-    with pytest.raises(ValueError, match="different instrument: toy:rc has metric"):
-        compare(write("bank", BANK), write("new", rerun))
+    comparison = compare(write("bank", BANK), write("new", rerun))
+
+    assert comparison.changed == [("toy:rc", "metric")]
+    assert comparison.tasks == ["arc_easy", "piqa"]
 
 
-def test_a_suite_with_another_hash_is_refused_unless_a_file_predates_suite_hashes(write, tmp_path):
-    # A member's new task hash already refuses on the task, so change only the suite's own hash.
+def test_a_suite_with_another_hash_is_listed_unless_a_file_predates_suite_hashes(write, tmp_path):
+    # Change only the suite's own hash: its members and every score are the same.
     rerun = dataclasses.replace(BANK, suites=[dataclasses.replace(SUITE, suite_hash="hash-rc2")])
 
-    with pytest.raises(ValueError, match="different instrument: toy:rc has suite_hash 'hash-rc'"):
-        compare(write("bank", BANK), write("new", rerun))
+    comparison = compare(write("bank", BANK), write("new", rerun))
+    assert comparison.changed == [("toy:rc", "suite_hash")]
+    assert (comparison.suites, comparison.breaches) == ([], [])
 
     # A schema 4 bank has no suite hashes: its suites are still compared on members and score.
     old = BANK.to_dict()
@@ -282,6 +305,48 @@ def test_a_suite_with_another_hash_is_refused_unless_a_file_predates_suite_hashe
     (tmp_path / "old.json").write_text(json.dumps(old))
     with pytest.raises(ValueError, match="not a results file: KeyError\\('schema_version'\\)"):
         compare(tmp_path / "old.json", new)
+
+
+def test_a_suite_holding_a_changed_member_at_any_depth_is_listed_in_old_files_too(write, tmp_path):
+    # A suite hash covers its members' hashes all the way down, and a file older than schema 5
+    # has none, so the member rule must name the same suites. Here the bank's suite lacks the
+    # changed task, as when a task joins a suite in the same change that moves its hash.
+    outer = SuiteResult("toy", "hash-toy", ["toy:rc"], None, None)
+    bank = BANK.to_dict()
+    bank["schema_version"] = 4
+    bank["suites"][0]["members"] = ["arc_easy"]
+    bank["suites"].append(dataclasses.asdict(outer))
+    for suite in bank["suites"]:
+        del suite["suite_hash"]
+    (tmp_path / "old.json").write_text(json.dumps(bank))
+    piqa = dataclasses.replace(PIQA, task_hash="5e2d")
+    rerun = write("new", Results(PROVENANCE, [ARC, piqa], [SUITE, outer]))
+
+    comparison = compare(tmp_path / "old.json", rerun)
+
+    assert comparison.changed == [("piqa", "task_hash"), ("toy:rc", "members"), ("toy", "members")]
+    assert (comparison.tasks, comparison.suites, comparison.breaches) == (["arc_easy"], [], [])
+
+
+def test_a_suite_holding_a_changed_suite_that_comes_after_it_in_the_bank_is_listed(write, tmp_path):
+    # Each file writes a suite after the suites it holds, but only its own: here `toy` holds
+    # `toy:rc` in the new file only, so in the bank it comes first.
+    bank = BANK.to_dict()
+    bank["schema_version"] = 4
+    bank["suites"] = [
+        {"suite": "toy", "members": ["arc_easy"], "metric": None, "score": None},
+        {"suite": "toy:rc", "members": ["piqa"], "metric": None, "score": None},
+    ]
+    (tmp_path / "old.json").write_text(json.dumps(bank))
+    inner = SuiteResult("toy:rc", "hash-rc", ["piqa"], None, None)
+    outer = SuiteResult("toy", "hash-toy", ["arc_easy", "toy:rc"], None, None)
+    piqa = dataclasses.replace(PIQA, task_hash="5e2d")
+    rerun = write("new", Results(PROVENANCE, [ARC, piqa], [inner, outer]))
+
+    comparison = compare(tmp_path / "old.json", rerun)
+
+    assert comparison.changed == [("piqa", "task_hash"), ("toy", "members"), ("toy:rc", "members")]
+    assert (comparison.suites, comparison.breaches) == ([], [])
 
 
 def test_a_repeated_nan_is_no_breach_but_a_new_one_is(write):
@@ -342,10 +407,16 @@ def test_cli_prints_the_tokenizers_and_datasets_versions_when_they_differ(write)
     ]
 
 
-def test_the_bank_compares_equal_to_itself_rewritten_in_the_current_layout(write):
-    # Offline: a change to what `Results` writes, or to what `compare` reads, that the bank can
-    # no longer pass fails here rather than after a GPU rerun.
-    bank = Path(__file__).parent / "regression" / "olmo-2-0425-1b-float32.json"
+@pytest.mark.parametrize(
+    ("name", "suite"),
+    [("olmo-2-0425-1b-float32", "base_easy"), ("olmo-2-0425-1b-paloma-float32", "paloma")],
+)
+def test_a_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(write, name, suite):
+    # Offline: a change to what `Results` writes, or to what `compare` reads, that a bank can
+    # no longer pass fails here rather than after a GPU rerun. A bank's version may lag the
+    # layout's: a bank is refreshed when its scores are meant to change, not in every schema bump
+    # (021.D2).
+    bank = Path(__file__).parent / "regression" / f"{name}.json"
     data = json.loads(bank.read_text())
     tasks = []
     for task in data["tasks"]:
@@ -359,11 +430,11 @@ def test_the_bank_compares_equal_to_itself_rewritten_in_the_current_layout(write
 
     comparison = compare(bank, write("rewritten", rewritten))
 
-    assert data["schema_version"] == rewritten.schema_version
     assert data["provenance"]["dtype"] == "float32"
-    assert "base_easy" in comparison.suites
+    assert suite in comparison.suites
+    assert comparison.changed == []
     assert comparison.breaches == []
-    assert comparison.provenance == {}
+    assert comparison.provenance.keys() <= {"schema_version"}
 
 
 def test_a_file_without_model_digest_compares_with_one_whose_digest_is_none(write):
