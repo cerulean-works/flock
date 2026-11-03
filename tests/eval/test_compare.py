@@ -21,6 +21,7 @@ PROVENANCE = Provenance(
     batch_tokens=16384,
     max_length=4096,
     attention="sdpa",
+    sdpa_backend="EFFICIENT_ATTENTION",
     torch="2.14.1",
     transformers="5.20.1",
     tokenizers="0.23.3",
@@ -168,6 +169,7 @@ def test_a_task_with_no_docs_must_repeat_its_metrics_exactly(write):
         ({"max_length": 2048}, "provenance.max_length"),
         ({"attention": "eager"}, "provenance.attention"),
         ({"model_digest": "f" * 64}, "provenance.model_digest"),
+        ({"sdpa_backend": None}, "provenance.sdpa_backend"),
     ],
 )
 def test_runs_with_other_settings_are_refused(write, change, match):
@@ -426,7 +428,12 @@ def test_a_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(wr
         fields["dataset"] = Dataset(**fields["dataset"])
         tasks.append(TaskResult(**fields))
     suites = [SuiteResult(**suite) for suite in data["suites"]]
-    rewritten = Results(Provenance(**data["provenance"]), tasks, suites)
+    # A run on today's code records the pinned kernel, which a bank older than the field lacks:
+    # a cause, not a refusal. A bank refreshed since keeps its own.
+    provenance_fields: dict[str, Any] = {"sdpa_backend": "EFFICIENT_ATTENTION"}
+    provenance_fields.update(data["provenance"])
+    provenance = Provenance(**provenance_fields)
+    rewritten = Results(provenance, tasks, suites)
 
     comparison = compare(bank, write("rewritten", rewritten))
 
@@ -434,7 +441,7 @@ def test_a_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(wr
     assert suite in comparison.suites
     assert comparison.changed == []
     assert comparison.breaches == []
-    assert comparison.provenance.keys() <= {"schema_version"}
+    assert comparison.provenance.keys() <= {"schema_version", "sdpa_backend"}
 
 
 def test_a_file_without_model_digest_compares_with_one_whose_digest_is_none(write):
@@ -446,3 +453,20 @@ def test_a_file_without_model_digest_compares_with_one_whose_digest_is_none(writ
     bank.write_text(json.dumps(data))
 
     assert compare(bank, write("new", BANK)).breaches == []
+
+
+@pytest.mark.parametrize("backend", ["EFFICIENT_ATTENTION", None])
+def test_a_file_without_sdpa_backend_compares_with_any_kernel(write, backend):
+    # Results written before the pin lack the key: PyTorch chose the kernel per batch, which is
+    # unknown, not none. FP32 scores don't move with the kernel, so the run is not refused.
+    bank = write("bank", BANK)
+    data = json.loads(bank.read_text())
+    del data["provenance"]["sdpa_backend"]
+    bank.write_text(json.dumps(data))
+    provenance = dataclasses.replace(PROVENANCE, sdpa_backend=backend)
+
+    comparison = compare(bank, write("new", dataclasses.replace(BANK, provenance=provenance)))
+
+    assert comparison.breaches == []
+    if backend is not None:  # printed as a likely cause, the missing side read as None
+        assert comparison.provenance["sdpa_backend"] == (None, backend)

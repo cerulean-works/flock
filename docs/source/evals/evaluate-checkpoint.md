@@ -43,7 +43,7 @@ Your training process must hold a causal language model and tokenizer compatible
 
 4. Check the printed metric and the training run's dashboard. Continue training after scoring returns.
 
-Scoring disables gradients and restores the modules' previous training modes. It uses the model's existing device and dtype. Keep evaluation settings consistent between checkpoints. See [Scoring](scoring) and the [Python API](python-api) for batching and model-state behavior.
+Scoring disables gradients, then restores the modules' previous training modes and PyTorch's SDPA kernel choice, which it pins while it scores on CUDA. It uses the model's existing device and dtype. Keep evaluation settings consistent between checkpoints. See [Scoring](scoring) and the [Python API](python-api) for batching and model-state behavior.
 
 `score_task` loads the task's docs and tokenizes them at every call. To score the same task at many steps, call [`~eval.run.prepare_task`] once at startup and [`~eval.run.score_prepared`] at each step instead. The result is the same, and only the forward passes repeat. Keep the tokenizer object you prepared with: a `ScoringModel` built around another one is refused. [Scoring the FineWeb-Edu dev set](fineweb-edu#log-evalloss-while-training) shows the pattern.
 

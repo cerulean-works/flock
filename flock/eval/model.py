@@ -4,13 +4,14 @@ import itertools
 import logging
 import re
 from collections.abc import Generator, Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Literal, NamedTuple
 
 import torch
 from huggingface_hub import HfApi
+from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -174,7 +175,7 @@ class ScoringModel:
     """
     A causal LM and its tokenizer that answer loglikelihood [`~eval.requests.Request`]s in batches.
 
-    Requests are tokenized as OLMES does, then scored longest first in left-padded batches of at most `batch_tokens` padded tokens. Inputs longer than `max_length` lose tokens from the left.
+    Requests are tokenized as OLMES does, then scored longest first in left-padded batches of at most `batch_tokens` padded tokens. Inputs longer than `max_length` lose tokens from the left. On CUDA with `sdpa` attention, scoring is pinned to SDPA's memory-efficient kernel, so BF16 scores repeat run to run (see [`~eval.model.ScoringModel.sdpa_backend`]).
 
     Args:
         model (`PreTrainedModel` or `FlockCausalLM`):
@@ -293,9 +294,16 @@ class ScoringModel:
 
     @property
     def attention(self) -> str:
-        """The attention implementation (`sdpa`, `eager`, ...), which changes bfloat16 scores."""
+        """The attention implementation (`sdpa`, `eager`, ...), which changes BF16 scores."""
         # transformers has no public accessor for it, only this private config attribute.
         return self.model.config._attn_implementation
+
+    @property
+    def sdpa_backend(self) -> str | None:
+        """The SDPA kernel scoring is pinned to, `"EFFICIENT_ATTENTION"` on CUDA with `sdpa` attention, else `None`: the CPU has no such kernel, and other attention never calls SDPA."""
+        if self.device.type == "cuda" and self.attention == "sdpa":
+            return SDPBackend.EFFICIENT_ATTENTION.name
+        return None
 
     def encode(self, request: Request) -> Encoded:
         """
@@ -433,7 +441,13 @@ class ScoringModel:
 
         logprob = torch.zeros(len(encoded), dtype=torch.float32, device=self.device)
         is_greedy = torch.zeros(len(encoded), dtype=torch.bool, device=self.device)
-        with _eval_mode(self.model):
+        # Pinned to one kernel so BF16 scores repeat run to run: left to choose, PyTorch runs
+        # cuDNN attention on some padded batches, and its results vary (023.D1, 023.D2). No
+        # fallback: a model the kernel can't run fails here rather than mix kernels.
+        # `sdpa_backend` names the kernel, so what is recorded is what runs.
+        backend = self.sdpa_backend
+        pin = sdpa_kernel(getattr(SDPBackend, backend)) if backend else nullcontext()
+        with _eval_mode(self.model), pin:
             for batch in self._batches(order, input_lengths):
                 # `non_blocking` on these small CPU tensors: the copy is staged at once and the
                 # host never waits for GPU work already queued.
@@ -533,8 +547,9 @@ class ScoringModel:
         device = self.device
 
         # TODO: try FlashAttention 3 from the `kernels` package and packed sequences (cu_seqlens)
-        # instead of padding. Measure the speedup first, and record the kernel in the provenance:
-        # a different kernel changes bfloat16 scores slightly. Packing also changes which
+        # instead of padding. Measure the speedup first. A kernel other than SDPA bypasses the pin
+        # in `_logprobs`, so `sdpa_backend` must then record that kernel instead (023.D2): a
+        # different kernel changes BF16 scores slightly. Packing also changes which
         # positions `logits_to_keep` must keep.
         logits = self.model(
             input_ids=batch.input_ids.to(device, non_blocking=True),
