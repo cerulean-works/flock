@@ -229,7 +229,7 @@ def main() -> int:
 
     seconds = clock.window_seconds
     per_step_tokens = torch.stack(clock.tokens).tolist()
-    losses = {window["global_step"]: window["train/loss_mean"] for window in metrics.windows}
+    losses = {str(window["global_step"]): window["train/loss_mean"] for window in metrics.windows}
     # PaLM (Chowdhery et al. 2022, App. B): MFU is the token rate times the model FLOPs per
     # token over the hardware's peak, here the H200's dense BF16 989 TFLOP/s (NVIDIA datasheet).
     peak_flops = 989e12
