@@ -87,17 +87,7 @@ Bucket and folder sizes aren't shown: the S3 server reports them only through Ce
 
 Every organization has a bucket named `flock-datasets`, which Flock creates and manages. Flock makes it when the organization is created, when the API starts (for organizations without one), and when the Datasets tab opens and finds none. If the organization already had a bucket of that name, Flock takes it over with its objects. The bucket can't be deleted, and the Storage tab marks it **Managed by Flock**.
 
-To S3 clients it's an ordinary bucket. Write Lance datasets into it with any client, for example with [`flock.hub.s3`](../cli/use-python-storage#write-a-lance-dataset):
-
-```python
-import lance
-from flock.hub import s3
-
-creds = s3.credentials("flock")
-lance.write_dataset(
-    table, creds.uri("flock-datasets", "eval", "mmlu"), storage_options=creds.storage_options()
-)
-```
+To S3 clients it's an ordinary bucket. [Use datasets](../hub/use-datasets) shows how to write Lance datasets there with `flock.hub.s3` authentication and read them by version.
 
 The dashboard's **Datasets** item, at `/datasets/{org}`, browses the bucket:
 

@@ -21,7 +21,7 @@ Storage transfers use the browser's signed-in session to obtain scoped access; y
 
 ## Browse datasets and versions
 
-1. Open **Datasets** and navigate to a dataset, such as `examples/questions` from the [Python storage example](../cli/use-python-storage#write-a-lance-dataset).
+1. Open **Datasets** and navigate to a dataset, such as `examples/questions` from the [dataset guide](../hub/use-datasets#write-a-dataset).
 2. Read its card, then inspect the rows and schema. Open a large cell to see its full value.
 3. Open **Versions** to choose an earlier version or tag. A version is a snapshot of the table, so rows and schema are read from that version rather than mixed across writes.
 4. Add a tag to a useful version, then use the version selector to verify it resolves to that snapshot. A tag is a name for a version; it does not create another copy of the table.
@@ -37,4 +37,4 @@ To remove a dataset with a recovery window, use its delete action in **Datasets*
 > [!CAUTION]
 > Dataset trash lasts 14 days. Deleting objects through Storage or an S3 client bypasses it. Permanently purging trash has no undo.
 
-The [Dataset API](api/datasets) and [S3 behavior](s3-behavior) specify rename/delete limits, managed buckets and tag operations. Use [Python storage](../cli/use-python-storage) to publish a new dataset or [S3 access](../cli/s3-access) to manage ordinary buckets.
+The [Dataset API](api/datasets) and [S3 behavior](s3-behavior) specify rename/delete limits, managed buckets and tag operations. Use [the dataset guide](../hub/use-datasets) to publish a new dataset or [S3 access](../cli/s3-access) to manage ordinary buckets.
