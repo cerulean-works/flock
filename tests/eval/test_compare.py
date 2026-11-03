@@ -428,9 +428,11 @@ def test_a_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(wr
         fields["dataset"] = Dataset(**fields["dataset"])
         tasks.append(TaskResult(**fields))
     suites = [SuiteResult(**suite) for suite in data["suites"]]
-    # A run on today's code records the pinned kernel, which the bank, older than the field,
-    # lacks: a cause, not a refusal.
-    provenance = Provenance(**data["provenance"], sdpa_backend="EFFICIENT_ATTENTION")
+    # A run on today's code records the pinned kernel, which a bank older than the field lacks:
+    # a cause, not a refusal. A bank refreshed since keeps its own.
+    provenance_fields: dict[str, Any] = {"sdpa_backend": "EFFICIENT_ATTENTION"}
+    provenance_fields.update(data["provenance"])
+    provenance = Provenance(**provenance_fields)
     rewritten = Results(provenance, tasks, suites)
 
     comparison = compare(bank, write("rewritten", rewritten))

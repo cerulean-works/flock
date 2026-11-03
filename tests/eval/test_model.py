@@ -330,8 +330,11 @@ def test_every_forward_pass_runs_pinned_and_the_flags_come_back(scorer, monkeypa
     before = sdpa_flags()
     scorer.loglikelihood(REQUESTS)
     scorer.rolling_loglikelihood(TEXTS, 8)
+    # Prepared inputs, as a training loop passes them, take the same path.
+    scorer.loglikelihood(REQUESTS, scorer.encode_requests(REQUESTS))
+    scorer.rolling_loglikelihood(TEXTS, 8, scorer.tokenize(list(TEXTS)))
 
-    assert len(seen) >= 2
+    assert len(seen) >= 4
     assert set(seen) == {(True, False, False, False)}  # only the efficient kernel, in both paths
     assert sdpa_flags() == before  # a training step after scoring gets its own choice back
 
