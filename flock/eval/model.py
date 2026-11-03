@@ -7,7 +7,7 @@ from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 import torch
 from huggingface_hub import HfApi
@@ -26,8 +26,12 @@ FLOCK = "flock:"
 
 logger = logging.getLogger(__name__)
 
-# One request's (context, continuation) token ids.
-type _Encoded = tuple[list[int], list[int]]
+
+class Encoded(NamedTuple):
+    """The token ids of one request, or one window of a text: the context the model conditions on, and the continuation it scores."""
+
+    context: list[int]
+    continuation: list[int]
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,25 +297,34 @@ class ScoringModel:
         # transformers has no public accessor for it, only this private config attribute.
         return self.model.config._attn_implementation
 
-    def encode(self, request: Request) -> tuple[list[int], list[int]]:
+    def encode(self, request: Request) -> Encoded:
         """
         Returns the (context, continuation) token ids the model scores for `request`.
 
         An empty or whitespace-only context becomes one token: the tokenizer's beginning-of-sequence (BOS) token, or its end-of-sequence (EOS) token if it has no BOS.
         """
-        return self._encode([request])[0]
+        return self.encode_requests([request])[0]
 
     @torch.no_grad()  # Not inference_mode: buffers rebuilt here must stay usable in training.
-    def loglikelihood(self, requests: Sequence[Request]) -> Scores:
+    def loglikelihood(
+        self, requests: Sequence[Request], encoded: Sequence[Encoded] | None = None
+    ) -> Scores:
         """
         Scores every request, in order, and counts the context tokens each lost to left truncation.
 
         The model runs in eval mode, and each module is put back in the mode it was in. The scores stay on the model's device: nothing here waits for the GPU.
 
+        Args:
+            requests (`Sequence[Request]`):
+                The requests to score.
+            encoded (`Sequence[Encoded]`, *optional*):
+                The requests' token ids from [`encode_requests`] with this model's tokenizer, to skip tokenizing them again. Tokenized here if not given.
+
         Raises:
             `ValueError`: if a continuation has no tokens, or is longer than `max_length` on its own.
         """
-        encoded = self._encode(requests)
+        if encoded is None:
+            encoded = self.encode_requests(requests)
         self._check_continuations(requests, encoded)
         input_lengths = [_input_length(pair, self.max_length) for pair in encoded]
         tokens_cut = [
@@ -340,11 +353,21 @@ class ScoringModel:
         )
 
     @torch.no_grad()  # As in `loglikelihood`.
-    def rolling_loglikelihood(self, texts: Sequence[str], window: int) -> Scores:
+    def rolling_loglikelihood(
+        self, texts: Sequence[str], window: int, token_ids: Sequence[list[int]] | None = None
+    ) -> Scores:
         """
         Scores each text whole, in disjoint windows of at most `window` tokens, as lm-evaluation-harness's `loglikelihood_rolling` does.
 
         Each text is tokenized with no special tokens and split as `get_rolling_token_windows(..., context_len=1)` and `make_disjoint_window` split it (`lm_eval/utils.py` at lm-eval 0.4.3), which OLMES's Paloma tasks use (`loglikelihood_rolling_verbose` in `oe_eval/models/eleuther_huggingface.py`). The first window predicts the first `window` tokens after one prefix token: BOS if the tokenizer has one, else EOS, as lm-evaluation-harness's own `prefix_token_id` (OLMES always uses EOS). Each later window predicts the next `window` tokens, or what is left, from an input of exactly `window` tokens, so every token is predicted once. The windows of all texts are batched together as `loglikelihood` batches requests.
+
+        Args:
+            texts (`Sequence[str]`):
+                The texts to score.
+            window (`int`):
+                The most tokens in one model input.
+            token_ids (`Sequence[list[int]]`, *optional*):
+                The texts' token ids from [`tokenize`] with this model's tokenizer, to skip tokenizing them again. Tokenized here if not given.
 
         Returns:
             `Scores`: per text, the FP64 sum of its windows' log-probabilities, its token count, `tokens_cut` all 0, since no token is cut, and whether every token is the greedy one.
@@ -355,19 +378,20 @@ class ScoringModel:
         if not 1 <= window <= self.max_length:
             raise ValueError(f"window must be from 1 to max_length {self.max_length}, got {window}")
 
-        token_ids = self._tokenize(list(texts))
+        if token_ids is None:
+            token_ids = self.tokenize(list(texts))
         prefix = self._prefix_token()
         # Each text's windows, in order.
-        per_text: list[list[_Encoded]] = []
+        per_text: list[list[Encoded]] = []
         for text, ids in zip(texts, token_ids, strict=True):
             if not ids:
                 raise ValueError(f"text has no tokens: {text!r}")
-            text_windows = [([prefix], ids[:window])]
+            text_windows = [Encoded([prefix], ids[:window])]
             for start in range(window, len(ids), window):
                 end = min(start + window, len(ids))
                 # The input is the `window` tokens before `end`, so a last window that predicts
                 # fewer than `window` tokens conditions on the rest of the previous one.
-                text_windows.append((ids[end - window - 1 : start], ids[start:end]))
+                text_windows.append(Encoded(ids[end - window - 1 : start], ids[start:end]))
             per_text.append(text_windows)
         windows = list(itertools.chain.from_iterable(per_text))
 
@@ -400,7 +424,7 @@ class ScoringModel:
             greedy_by_window.all(-1),
         )
 
-    def _logprobs(self, encoded: list[_Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
+    def _logprobs(self, encoded: Sequence[Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
         """Each encoded request's summed continuation log-probability (FP32) and whether its continuation is the greedy one, in order on the model's device, scored longest first in batches of at most `batch_tokens` padded tokens."""
         input_lengths = [_input_length(pair, self.max_length) for pair in encoded]
         # Longest first, as lm-evaluation-harness sorts (`_collate` in `_loglikelihood_tokens`),
@@ -418,26 +442,26 @@ class ScoringModel:
 
         return logprob, is_greedy
 
-    def _encode(self, requests: Sequence[Request]) -> list[_Encoded]:
+    def encode_requests(self, requests: Sequence[Request]) -> list[Encoded]:
         """[`encode`] for many requests, with one tokenizer call for the distinct contexts and one for the joined texts."""
         pairs = [_move_whitespace(request) for request in requests]
         ids_by_context = self._tokenize_contexts([context for context, _ in pairs])
-        joined_ids = self._tokenize([context + continuation for context, continuation in pairs])
+        joined_ids = self.tokenize([context + continuation for context, continuation in pairs])
 
         encoded = []
         for (context, _), joined in zip(pairs, joined_ids, strict=True):
             if not context:
-                encoded.append(([self._prefix_token()], joined))
+                encoded.append(Encoded([self._prefix_token()], joined))
                 continue
 
             # As lm-evaluation-harness's `_encode_pair`: the continuation's ids are the joint ids
             # after as many leading ids as the context has when tokenized alone.
             context_ids = ids_by_context[context]
-            encoded.append((context_ids, joined[len(context_ids) :]))
+            encoded.append(Encoded(context_ids, joined[len(context_ids) :]))
 
         return encoded
 
-    def _tokenize(self, texts: list[str]) -> list[list[int]]:
+    def tokenize(self, texts: list[str]) -> list[list[int]]:
         """
         Each text's token ids, with no special tokens.
 
@@ -456,7 +480,7 @@ class ScoringModel:
         """
         distinct = sorted({context for context in contexts if context})
 
-        return dict(zip(distinct, self._tokenize(distinct), strict=True))
+        return dict(zip(distinct, self.tokenize(distinct), strict=True))
 
     def _prefix_token(self) -> int:
         """
@@ -477,7 +501,7 @@ class ScoringModel:
 
         return prefix
 
-    def _check_continuations(self, requests: Sequence[Request], encoded: list[_Encoded]) -> None:
+    def _check_continuations(self, requests: Sequence[Request], encoded: Sequence[Encoded]) -> None:
         """
         Checks that every continuation can be scored, as lm-evaluation-harness asserts in `_loglikelihood_tokens`.
 
@@ -503,7 +527,7 @@ class ScoringModel:
         if batch:
             yield batch
 
-    def _score(self, encoded: list[_Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
+    def _score(self, encoded: list[Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
         """One batch's summed continuation log-probabilities, and whether each continuation is the greedy one."""
         batch = _pad_batch(encoded, self.max_length)
         device = self.device
@@ -567,7 +591,7 @@ class _PaddedBatch:
         return self.targets.shape[1]
 
 
-def _pad_batch(encoded: list[_Encoded], max_length: int) -> _PaddedBatch:
+def _pad_batch(encoded: list[Encoded], max_length: int) -> _PaddedBatch:
     """
     Left-pads one batch of (context, continuation) token ids into model inputs, on the CPU.
 
@@ -635,14 +659,14 @@ def _target_logprobs(
     return token_logprob, token_is_argmax
 
 
-def _window_length(encoded: _Encoded) -> int:
+def _window_length(encoded: Encoded) -> int:
     """The token count of one request's context and continuation together, before truncation."""
     context, continuation = encoded
 
     return len(context) + len(continuation)
 
 
-def _input_length(encoded: _Encoded, max_length: int) -> int:
+def _input_length(encoded: Encoded, max_length: int) -> int:
     """The model-input length of one request after left truncation."""
     # A window holds at most `max_length + 1` tokens: the model's input, then one last token that
     # is only ever a target.

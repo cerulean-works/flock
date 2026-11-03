@@ -33,23 +33,25 @@ The run prints `perplexity`, and `results/fineweb-edu/results.json` holds all th
 
 ## Log `eval/loss` while training
 
-To score a checkpoint your training loop already holds, wrap the model and call [`~eval.run.score_task`], as [Evaluate a training checkpoint in memory](evaluate-checkpoint) shows:
+To score the model your training loop already holds, wrap it once at startup and prepare the task once: [`~eval.run.prepare_task`] loads the 5,000 documents and tokenizes them. Then call [`~eval.run.score_prepared`] every N steps. It runs only the forward passes, on the weights the model holds at that step.
 
 ```python
 from flock.eval.model import FlockCausalLM, ScoringModel
-from flock.eval.run import score_task
+from flock.eval.run import prepare_task, score_prepared
 from flock.eval.tasks import TASKS
 
+# At startup.
 tokenizer = model.get_hf_tokenizer()
 if tokenizer is None:
     raise ValueError("the model's config has no hf_repo, so it names no tokenizer")
 task = TASKS["fineweb_edu"]
 # At most one full window of padded tokens per forward pass keeps the logits small next to
 # the training state.
-scorer = ScoringModel(
-    FlockCausalLM(model), tokenizer, name=f"my-run@step-{step}", batch_tokens=task.window
-)
-result = score_task(scorer, task)
+scorer = ScoringModel(FlockCausalLM(model), tokenizer, name="my-run", batch_tokens=task.window)
+prepared = prepare_task(scorer, task)
+
+# Every N steps.
+result = score_prepared(scorer, prepared)
 run.log(
     {
         "eval/loss": result.metrics["loss_per_token"],
@@ -57,6 +59,16 @@ run.log(
     },
     step=step,
 )
+```
+
+The prepared task holds the token ids of its tokenizer object. A `ScoringModel` built around another tokenizer object, even an equal one, is refused with a `ValueError`. Load the tokenizer once and keep it.
+
+To score once without preparing, call [`~eval.run.score_task`], as [Evaluate a training checkpoint in memory](evaluate-checkpoint) shows. It gives the same result, but it loads and tokenizes the documents again at every call:
+
+```python
+from flock.eval.run import score_task
+
+result = score_task(scorer, TASKS["fineweb_edu"])
 ```
 
 BF16 is fine for checks during training. The ranked number is the FP32 one.

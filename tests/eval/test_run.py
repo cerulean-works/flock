@@ -112,7 +112,9 @@ def test_provenance_is_collected_before_scoring(offline_model, scorer, monkeypat
         Provenance, "collect", lambda **kwargs: events.append("provenance") or collect(**kwargs)
     )
     monkeypatch.setattr(
-        scorer, "loglikelihood", lambda requests: events.append("score") or loglikelihood(requests)
+        scorer,
+        "loglikelihood",
+        lambda *args: events.append("score") or loglikelihood(*args),
     )
 
     evaluate(EvalConfig(model="tiny@0", tasks=("toy",)))
@@ -299,8 +301,8 @@ def test_score_task_averages_greedy_match_over_gold_only_docs(scorer, monkeypatc
     gold_only = next(task for task in PROMPT_PATHS if task.name == "toy:gold_only")
     loglikelihood = scorer.loglikelihood
 
-    def second_doc_greedy(requests):
-        scores = loglikelihood(requests)
+    def second_doc_greedy(requests, encoded=None):
+        scores = loglikelihood(requests, encoded)
         return dataclasses.replace(scores, is_greedy=torch.tensor([False, True]))
 
     monkeypatch.setattr(scorer, "loglikelihood", second_doc_greedy)
