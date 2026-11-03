@@ -42,6 +42,7 @@ class StepClock:
         self.tokens: list[torch.Tensor] = []
         self.shapes: list[tuple[int, int]] = []
         self.peak_bytes: list[int] = []
+        self.peak_reserved_bytes: list[int] = []
         trainer.model.register_forward_pre_hook(self._start_step)
         trainer.optimizer.register_step_post_hook(self._end_step)
 
@@ -57,6 +58,8 @@ class StepClock:
         self._mark()
         if self.device.type == "cuda":
             self.peak_bytes.append(torch.cuda.max_memory_allocated(self.device))
+            # Reserved memory includes the allocator's cache and fragmentation: the OOM margin.
+            self.peak_reserved_bytes.append(torch.cuda.max_memory_reserved(self.device))
             torch.cuda.reset_peak_memory_stats(self.device)
 
     def _mark(self) -> None:
@@ -134,6 +137,8 @@ def memory_rows(tokenizer: TokenizersBackend, seq_len: int, count: int) -> list[
         if filled >= seq_len + 64:
             rows.append({"text": "\n\n".join(parts)})
             parts, filled = [], 0
+    if not rows:
+        raise ValueError(f"fineweb-edu-dev cannot fill one row of {seq_len} tokens")
     return [rows[index % len(rows)] for index in range(count)]
 
 
@@ -147,10 +152,12 @@ def main() -> int:
     parser.add_argument("--data", choices=("lance", "memory"), required=True)
     parser.add_argument("--out", type=Path, required=True, help="Directory for the result JSON.")
     args = parser.parse_args()
+    if args.batch_size < 1:
+        parser.error("--batch-size must be positive")
     if not 0 < args.warmup < args.steps:
         parser.error("--warmup must be positive and below --steps")
-    # MFU below divides by the H200's peak, so another device would get a wrong number.
-    if "H200" not in (torch.cuda.get_device_name() if torch.cuda.is_available() else ""):
+    # MFU below divides by the H200 SXM's peak; another device, even an H200 NVL, differs.
+    if not torch.cuda.is_available() or torch.cuda.get_device_name() != "NVIDIA H200":
         parser.error("this baseline measures an NVIDIA H200")
 
     logging.basicConfig(
@@ -228,6 +235,7 @@ def main() -> int:
         return 3
 
     seconds = clock.window_seconds
+    lengths = [length for _, length in clock.shapes]
     per_step_tokens = torch.stack(clock.tokens).tolist()
     losses = {str(window["global_step"]): window["train/loss_mean"] for window in metrics.windows}
     # PaLM (Chowdhery et al. 2022, App. B): MFU is the token rate times the model FLOPs per
@@ -242,8 +250,8 @@ def main() -> int:
     n_matmul = n_total - model.model.embed_tokens.weight.numel()
     result |= {
         "oom": False,
-        "sequence_length_max": max(length for _, length in clock.shapes),
-        "sequence_length_mean": statistics.fmean(length for _, length in clock.shapes),
+        "sequence_length_max": max(lengths[args.warmup :]),
+        "sequence_length_mean": statistics.fmean(lengths[args.warmup :]),
         "step_seconds_mean": statistics.fmean(seconds),
         "step_seconds_median": statistics.median(seconds),
         "step_seconds_min": min(seconds),
@@ -258,14 +266,19 @@ def main() -> int:
         / sum(seconds)
         / peak_flops,
         "peak_memory_bytes": max(clock.peak_bytes),
-        # Each logged loss is the token-weighted mean over the 10 steps ending at its key.
+        "peak_reserved_bytes": max(clock.peak_reserved_bytes),
+        # Each logged loss is the token-weighted mean over the steps since the previous key.
         "loss_windows": losses,
         # A step more than twice as long as the shortest one marks the run unstable.
         "stable": max(seconds) <= 2 * min(seconds)
+        # An empty log would make the loss check pass vacuously.
+        and len(losses) > 0
         and all(math.isfinite(loss) for loss in losses.values()),
         "per_step_seconds": clock.step_seconds,
         "per_step_tokens": per_step_tokens,
+        "per_step_lengths": lengths,
         "per_step_peak_bytes": clock.peak_bytes,
+        "per_step_peak_reserved_bytes": clock.peak_reserved_bytes,
     }
     path.write_text(json.dumps(result, indent=2) + "\n")
     trainer.run.summary.update(
