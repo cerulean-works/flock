@@ -4,7 +4,7 @@ Anyone with a public project's or dataset's link can read it, signed in or not, 
 
 ## What you need
 
-- To be an admin of the organization. Members can't change visibility.
+- To be an admin of the organization, or the member who created the project. Other members can't change visibility, and only admins can make a dataset private.
 - The project to share, or the dataset to keep private.
 
 ## Check for secrets first

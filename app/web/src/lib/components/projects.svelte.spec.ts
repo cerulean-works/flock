@@ -23,12 +23,13 @@ const project = (name: string, visibility: ProjectInfo['visibility']): ProjectIn
 	run_count: 3,
 	active_run_count: 0,
 	column_count: 0,
-	visibility
+	visibility,
+	created_by: 7
 });
 
-/** The page's viewer: what they may do in acme. */
-const viewing = (access: 'admin' | 'member' | 'public') =>
-	resetApp('http://flock.test/acme/bert', { shell: { access, me: null } });
+/** The page's viewer: what they may do in acme, signed in as user ``me``. */
+const viewing = (access: 'admin' | 'member' | 'public', me: number | null = null) =>
+	resetApp('http://flock.test/acme/bert', { shell: { access, me: me && { id: me } } });
 
 const sent = () => app.sent.map((s) => ({ action: s.action, ...Object.fromEntries(s.form) }));
 
@@ -81,11 +82,38 @@ describe('a project’s visibility', () => {
 		await expect.element(screen.getByRole('alertdialog')).not.toBeInTheDocument();
 	});
 
-	it('isn’t offered to members', async () => {
-		viewing('member');
+	it('isn’t offered to members who didn’t create the project', async () => {
+		viewing('member', 8);
 		render(ProjectDialog, { open: true, entity: 'acme', project: project('bert', 'private') });
 		await expect.element(screen.getByLabelText('Name')).toBeVisible();
 		await expect.element(screen.getByRole('group', { name: 'Visibility' })).not.toBeInTheDocument();
+	});
+
+	it('is set by the member who created the project, who can’t edit anything else', async () => {
+		viewing('member', 7);
+		render(ProjectDialog, { open: true, entity: 'acme', project: project('bert', 'private') });
+		await expect.element(screen.getByLabelText('Name')).toBeDisabled();
+		await expect.element(screen.getByLabelText(/Description/)).toBeDisabled();
+		await expect
+			.element(screen.getByText('Only admins of acme can rename it or change its description.'))
+			.toBeVisible();
+		await screen
+			.getByRole('group', { name: 'Visibility' })
+			.getByRole('radio', { name: /Public/ })
+			.click();
+		await screen.getByRole('button', { name: 'Save' }).click();
+		await screen.getByRole('alertdialog').getByRole('button', { name: 'Make public' }).click();
+		await vi.waitFor(() =>
+			expect(sent()).toEqual([
+				{
+					action: '/acme?/update',
+					project: 'bert',
+					from: 'list',
+					name: 'bert',
+					visibility: 'public'
+				}
+			])
+		);
 	});
 });
 

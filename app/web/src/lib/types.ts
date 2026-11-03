@@ -19,6 +19,8 @@ export interface ProjectInfo {
 	column_count: number;
 	/** Public projects can be read by anyone with the link (014, D110). */
 	visibility: Visibility;
+	/** The ID of the user who created it, who may change its visibility (D118); null if unknown. */
+	created_by: number | null;
 	/** What the caller may do with it; only the project's own GET says. */
 	access?: Access;
 }

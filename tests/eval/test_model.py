@@ -469,7 +469,7 @@ def test_batched_rows_do_not_see_each_other(scorer, monkeypatch):
 
     monkeypatch.setattr(scorer.model, "forward", embedded_forward)
     # `_score` runs one forward pass over all the requests, so there is exactly one input.
-    logprob, _ = scorer._score(scorer._encode(REQUESTS))
+    logprob, _ = scorer._score(scorer.encode_requests(REQUESTS))
     [(embedded, attention_mask)] = inputs
 
     for i in range(len(REQUESTS)):

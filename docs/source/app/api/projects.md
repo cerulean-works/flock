@@ -7,7 +7,7 @@ Endpoints for projects, single runs, bulk changes to runs, and run logs and file
 A project is returned as:
 
 ```json
-{"entity": "flock", "name": "llm-pretrain", "description": null, "created_at": 1792282202.83, "updated_at": 1792282202.83, "run_count": 1, "active_run_count": 0, "column_count": 21, "visibility": "private"}
+{"entity": "flock", "name": "llm-pretrain", "description": null, "created_at": 1792282202.83, "updated_at": 1792282202.83, "run_count": 1, "active_run_count": 0, "column_count": 21, "visibility": "private", "created_by": 3}
 ```
 
 | Field | Meaning |
@@ -19,6 +19,7 @@ A project is returned as:
 | `run_count`, `active_run_count` | How many runs it has, and how many of them are active. |
 | `column_count` | How many columns its run table has. |
 | `visibility` | `private`, for the organization's members only, or `public`, readable by anyone with its URL. See [Share projects and datasets publicly](../share-publicly). |
+| `created_by` | The ID of the user who created it, or `null` if unknown. Its creator may change its visibility. |
 | `access` | `GET` and `PATCH` of one project only: what you can do with it. `admin`, `member`, or `public` (read only, as an outsider). |
 
 | Endpoint | Who | Meaning |
@@ -27,7 +28,7 @@ A project is returned as:
 | `POST /projects` | members | Creates an empty project from `{"entity", "name", "description"}`. `description` is optional. Answers 201, or 409 if it exists. |
 | `GET /projects/{entity}/{project}` | members, anyone if public | One project. |
 | `GET /projects/{entity}/{project}/owners` | members, anyone if public | `{"owners": [{"id", "name", "email", "avatar_url"}]}`: the users who logged its runs, which the run table's `owner` column names by `id`. Outsiders get them without `email`. |
-| `PATCH /projects/{entity}/{project}` | org admins | Changes `name`, `description` and `visibility`. Fields you leave out don't change, and `"description": null` clears it. Returns the project. |
+| `PATCH /projects/{entity}/{project}` | org admins, its creator for `visibility` | Changes `name`, `description` and `visibility`. Fields you leave out don't change, and `"description": null` clears it. Returns the project. Its creator, if a member, may send only `visibility`, and other fields answer 403. |
 | `DELETE /projects/{entity}/{project}` | org admins | Deletes the project with all its runs, their history, logs and files. Answers 204. |
 
 Project names given here are 1 to 128 characters, with no spaces around them, no control characters and none of `/ \ # ? % :`. Other names answer 422. Names that arrive from the `wandb` SDK aren't checked.

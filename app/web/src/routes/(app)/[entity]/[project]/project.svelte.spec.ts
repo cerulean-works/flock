@@ -72,7 +72,8 @@ const project = (visibility: ProjectInfo['visibility']): ProjectInfo => ({
 	run_count: 1,
 	active_run_count: 0,
 	column_count: 0,
-	visibility
+	visibility,
+	created_by: null
 });
 
 /** The project's page, public or not, seen with `access`. */

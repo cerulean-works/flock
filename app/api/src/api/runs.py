@@ -413,7 +413,7 @@ async def move_runs(
     if body.dry_run:
         return changed([run.name for run in runs], dry_run=True)
     if target is None:
-        target = await store.ensure_project(project.entity, body.to)
+        target = await store.ensure_project(project.entity, body.to, creator=user.pk)
     try:
         return changed(await store.move_runs(project, runs, target))
     except NotFound as exc:
