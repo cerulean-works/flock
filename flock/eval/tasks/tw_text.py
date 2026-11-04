@@ -3,8 +3,8 @@
 from flock.eval.tasks.base import Dataset
 from flock.eval.tasks.suite import Suite, source_suite
 
-# Each source's domains, the `subdomain` values of its rows at the pinned revision, most
-# documents first (stage file 026, 026.D6). A source of one register lists its own name, the one
+# Each source's domains, the distinct `subdomain` values of its `test` rows at the pinned
+# revision, most documents first (stage file 026, 026.D6). A source of one register lists its own name, the one
 # value its rows carry. `bbc_zh_trad` is converted from Simplified script, so it isn't here
 # (026.D5).
 SOURCES: dict[str, tuple[str, ...]] = {

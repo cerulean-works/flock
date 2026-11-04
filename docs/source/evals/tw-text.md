@@ -8,7 +8,7 @@ The documents come from `cerulean-works/tw-text-v0` on the Hugging Face Hub, one
 
 | Source | Register | Domains (`subdomain`) |
 |---|---|---|
-| `judicial` | formal: court judgments | court level: 地方, 高等, 行政, 最高 |
+| `judicial` | formal: court judgments | court: 地方 (district), 高等 (high), 行政 (administrative), 最高 (supreme) |
 | `ly` | formal: Legislative Yuan records | 委員會紀錄, 院會紀錄, 質詢 |
 | `gov_press` | formal: Executive Yuan and ministry press releases | the issuing ministry |
 | `cna` | news: Central News Agency | one |
