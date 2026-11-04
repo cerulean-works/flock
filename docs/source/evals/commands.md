@@ -22,6 +22,7 @@ uv run flock eval run \
 | `--limit` | all docs | Score only each task's first N docs, for quick checks. Results with a limit aren't comparable to full runs. |
 | `--batch-tokens` | `32768` | The most padded tokens in one forward pass. Lower it if the GPU runs out of memory. Compare only runs with the same value. See [Batching and precision](scoring#batching-and-precision). |
 | `--dtype` | `bfloat16` | The weights' dtype, `bfloat16` or `float32`. Log-softmax runs in float32 either way. Compare only runs with the same value. |
+| `--add-bos` | off | Start every non-empty context with the tokenizer's BOS token. Set it for Gemma models, as OLMES does. Compare only runs with the same value. See [Tokenizing a request](scoring#tokenizing-a-request). |
 | `--device` | `cuda` if available, else `cpu` | The torch device. |
 | `--wandb-project` | off | Also log the run to this project through the `wandb` SDK. [Connect the SDK](../cli/sign-in#wandb-sdk) first so it goes to Flock. |
 | `--verbose` | off | Print every metric of each task, primary first, with its speed and the start of its task hash, then each suite with its members. |
