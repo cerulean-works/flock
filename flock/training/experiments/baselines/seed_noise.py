@@ -1,4 +1,5 @@
 import argparse
+import importlib.util
 import json
 import logging
 import math
@@ -122,6 +123,9 @@ def main() -> int:
     args = parser.parse_args()
     if args.hub_name is None and not args.train_only:
         parser.error("--hub-name is required unless --train-only")
+    # The upload needs flock-hub's models extra; without it a run would train, then fail.
+    if not args.train_only and importlib.util.find_spec("botocore") is None:
+        parser.error("saving to the hub needs boto3: uv sync --all-packages --all-extras")
     if args.out.exists() and any(args.out.iterdir()):
         parser.error(f"{args.out} is not empty")
     args.out.mkdir(parents=True, exist_ok=True)
@@ -198,7 +202,7 @@ def main() -> int:
     trained = int(targets)
     summary = {
         "seed": args.seed,
-        "model_config": {**asdict(config), "hf_repo": config.hf_repo},
+        "model_config": asdict(config),
         "parameters": sum(p.numel() for p in model.parameters()),
         "dataset": asdict(dataset_config),
         "rows": len(dataset),
