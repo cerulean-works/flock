@@ -6,7 +6,7 @@
 | Date | 2026-11-04 |
 | Builds on | [001](001-eval-core.md) (`ScoringModel`, `MCRequests`, metrics, results), [004](004-suites.md) (`Suite`), [022](022-prepared-tasks.md) (`Encoded`), [023](023-deterministic-scoring.md) (the SDPA pin) |
 | Keeps | every request, token id, score, task hash, `results.json` and predictions file; every existing public name and signature |
-| Result | `model.py`, `tasks/base.py`, `results.py` and `tasks/suite.py` lose their one-call helpers and formula helpers; `MCRequests.truncation` finds each request's doc directly; scores are byte-equal |
+| Result | `model.py` and `tasks/base.py` lose their one-call helpers and formula helpers, and `Suite.scale` is public; `MCRequests.truncation` finds each request's doc directly; scores are byte-equal |
 
 ## 1. Goal
 

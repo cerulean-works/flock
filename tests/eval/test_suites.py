@@ -36,9 +36,13 @@ def test_nested_suites_count_as_one_member_under_their_own_metric():
     bpb = Suite("bpb", (GOLD_ONLY, Suite("inner", (TASK, OTHER), metric="bpb")), metric="bpb")
     assert bpb.score(METRICS) == pytest.approx((4.0 + 1.5) / 2)
 
-    # A suite's scale is what its mean is on, read through a member suite when that comes first.
-    assert (outer.scale, inner.scale, bpb.scale) == ("accuracy", "accuracy", "bpb")
-    assert Suite("first", (Suite("inner", (TASK, OTHER), metric="bpb"), GOLD_ONLY)).scale == "bpb"
+
+def test_scale_is_what_a_scored_suites_mean_is_on():
+    inner = Suite("inner", (OTHER, THIRD), metric="acc_raw")
+    assert (Suite("rc", (TASK, inner)).scale, inner.scale) == ("accuracy", "accuracy")
+    # Read through a member suite when that comes first.
+    bpb_inner = Suite("inner", (TASK, OTHER), metric="bpb")
+    assert Suite("bpb", (bpb_inner, GOLD_ONLY)).scale == "bpb"
 
     # An unscored suite may mix scales, so it has none.
     with pytest.raises(ValueError, match="no scale"):

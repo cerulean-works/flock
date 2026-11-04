@@ -260,7 +260,7 @@ class MCRequests:
             valid_rows.append([True] * len(doc.choices) + [False] * padding)
             start += len(doc.choices)
         gather_index = torch.tensor(rows, dtype=torch.int64, device=device)
-        valid = torch.tensor(valid_rows, device=device)
+        valid = torch.tensor(valid_rows, dtype=torch.bool, device=device)
 
         # Counted on the conditional requests: the unconditional ones repeat the same continuations.
         continuations = [request.continuation for request in self.requests[:num_choices]]
