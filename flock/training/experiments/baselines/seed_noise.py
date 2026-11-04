@@ -129,12 +129,15 @@ def main() -> int:
     args = parser.parse_args()
     if args.hub_name is None and not args.train_only:
         parser.error("--hub-name is required unless --train-only")
+    # save_to_hub parses the name only after training, when a bad one would lose the model.
+    if args.hub_name is not None and (args.hub_name.count("/") != 1 or "@" in args.hub_name):
+        parser.error(f"--hub-name must be org/name, got {args.hub_name}")
     # The upload needs flock-hub's models extra; without it a run would train, then fail.
     missing = [name for name in ("boto3", "safetensors") if importlib.util.find_spec(name) is None]
     if missing and not args.train_only:
         parser.error(f"saving to the hub needs {missing}: uv sync --all-packages --all-extras")
-    if args.out.exists() and any(args.out.iterdir()):
-        parser.error(f"{args.out} is not empty")
+    if args.out.exists() and (not args.out.is_dir() or any(args.out.iterdir())):
+        parser.error(f"{args.out} is not an empty directory")
     args.out.mkdir(parents=True, exist_ok=True)
 
     logging.basicConfig(
@@ -169,8 +172,10 @@ def main() -> int:
 
     # The trainer's wandb.init takes no run name, and the default would be random.
     os.environ.setdefault("WANDB_NAME", f"seed-noise-190m-s{args.seed}")
-    # The OLMo 2 ladder's 190M: peak LR 9.7e-4, warmup of 363 steps of 524,288 tokens (190M
+    # From the OLMo 2 ladder's 190M: peak LR 9.7e-4, warmup of 363 steps of 524,288 tokens (190M
     # tokens), cosine decay to 10% of the peak over the run (arXiv 2412.04403, sec. 2.1, Table 1).
+    # Not the ladder's recipe as a whole: its LR here meets steps of about 49k tokens, not 524k,
+    # and the betas (flock's scaffold) and weight decay (torch's 0.01) are not OLMo 2's.
     warmup_steps = round(363 * 524_288 / (args.batch_size * targets_per_row))
     trainer_config = TrainerConfig(
         input_column="text",
@@ -189,6 +194,8 @@ def main() -> int:
         # The trainer only needs a map-style dataset, as its own tests rely on.
         dataset=cast(SafeLanceDataset, dataset),
     )
+    # The trainer's run has its name now; evaluate's run in model-evals must not inherit it.
+    os.environ.pop("WANDB_NAME", None)
 
     # Counted on the device as the trainer counts its loss tokens, read once at the end.
     targets = torch.zeros((), dtype=torch.int64, device=trainer.device)
@@ -203,6 +210,8 @@ def main() -> int:
     hook = trainer.model.register_forward_pre_hook(count_targets)
     # Read before training: a checkout that moves during a two-day run must not rename it.
     commit = flock_commit()
+    # evaluate reads the commit again after training; give it the one that trained.
+    os.environ["FLOCK_COMMIT"] = commit
     start = time.perf_counter()
     trainer.train()
     seconds = time.perf_counter() - start
@@ -231,7 +240,9 @@ def main() -> int:
         "tokens_per_second": trained / seconds,
         "peak_memory_bytes": torch.cuda.max_memory_allocated() if torch.cuda.is_available() else 0,
         "final_loss": window_mean[-1] if window_mean else None,
-        "finite": all(math.isfinite(value) for value in window_mean + window_max),
+        # No logged window means no evidence, not a healthy run.
+        "finite": bool(window_mean)
+        and all(math.isfinite(value) for value in window_mean + window_max),
         # The rule looks back 100 steps, whatever the logging interval.
         "spikes": spikes(window_max, history=100 // trainer_config.logging_steps),
         "windows": metrics.windows,
