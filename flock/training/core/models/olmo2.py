@@ -56,6 +56,19 @@ OLMO2_1B_CONFIG = Olmo2Config(
     hf_repo="allenai/OLMo-2-0425-1B",
 )
 
+# The OLMo 2 ladder's smallest model, "190M" (Bhagia et al. 2024, arXiv 2412.04403, Table 1:
+# 190,354,176 parameters, which counts one of the two embedding matrices; 267,424,512 in all).
+# DataDecide's "150M" (arXiv 2504.11393, Table 2) has the same shape with a smaller vocabulary.
+OLMO2_190M_CONFIG = Olmo2Config(
+    vocab_size=100352,
+    hidden_size=768,
+    intermediate_size=3072,
+    num_hidden_layers=12,
+    num_attention_heads=12,
+    num_key_value_heads=12,
+    hf_repo="allenai/OLMo-2-0425-1B",
+)
+
 OLMO2_7B_CONFIG = Olmo2Config(
     vocab_size=100352,
     hidden_size=4096,
