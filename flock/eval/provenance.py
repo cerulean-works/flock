@@ -35,6 +35,8 @@ class Provenance:
             The forward-pass budget in padded tokens.
         max_length (`int`):
             The model's input limit in tokens. Longer inputs lost tokens from the left.
+        add_bos (`bool`):
+            Whether every non-empty context started with the tokenizer's BOS token. Results files written before it was added have no `add_bos`: none added one.
         attention (`str`):
             The attention implementation (`sdpa`, `eager`, ...), which changes BF16 scores.
         sdpa_backend (`str` or `None`):
@@ -55,6 +57,7 @@ class Provenance:
     dtype: str
     batch_tokens: int
     max_length: int
+    add_bos: bool
     attention: str
     sdpa_backend: str | None
     torch: str
@@ -74,6 +77,7 @@ class Provenance:
         dtype: torch.dtype,
         batch_tokens: int,
         max_length: int,
+        add_bos: bool,
         attention: str,
         sdpa_backend: str | None,
         model_digest: str | None = None,
@@ -88,6 +92,7 @@ class Provenance:
             dtype=str(dtype).removeprefix("torch."),
             batch_tokens=batch_tokens,
             max_length=max_length,
+            add_bos=add_bos,
             attention=attention,
             sdpa_backend=sdpa_backend,
             torch=torch.__version__,

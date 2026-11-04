@@ -5,6 +5,7 @@ import pytest
 import torch
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import (
+    Gemma4AudioConfig,
     Gemma4Config,
     Gemma4ForConditionalGeneration,
     Gemma4TextConfig,
@@ -133,7 +134,8 @@ def test_from_pretrained_refuses_a_flock_model_without_a_tokenizer(monkeypatch):
 
 
 def test_a_multimodal_model_takes_max_length_from_its_text_config(tokenizer):
-    # As Gemma 4's: no top-level max_position_embeddings, and a vision config with its own.
+    # As Gemma 4's: no top-level max_position_embeddings, a vision config with its own, and an
+    # audio tower. The text config's length is short enough to cut some requests.
     text_config = Gemma4TextConfig(
         vocab_size=len(tokenizer),
         vocab_size_per_layer_input=len(tokenizer),
@@ -147,7 +149,7 @@ def test_a_multimodal_model_takes_max_length_from_its_text_config(tokenizer):
         num_attention_heads=4,
         num_key_value_heads=2,
         head_dim=8,
-        max_position_embeddings=64,
+        max_position_embeddings=24,
     )
     vision_config = Gemma4VisionConfig(
         hidden_size=16,
@@ -157,19 +159,30 @@ def test_a_multimodal_model_takes_max_length_from_its_text_config(tokenizer):
         num_key_value_heads=2,
         head_dim=8,
     )
-    config = Gemma4Config(text_config=text_config, vision_config=vision_config)
+    audio_config = Gemma4AudioConfig(
+        hidden_size=16, num_hidden_layers=1, num_attention_heads=2, output_proj_dims=32
+    )
+    config = Gemma4Config(
+        text_config=text_config, vision_config=vision_config, audio_config=audio_config
+    )
     assert not hasattr(config, "max_position_embeddings")
-    assert config.vision_config.max_position_embeddings != 64
+    assert config.vision_config.max_position_embeddings != 24
     torch.manual_seed(0)
     multimodal = Gemma4ForConditionalGeneration(config).eval()
+    towers_ran = []
+    for tower in (multimodal.model.vision_tower, multimodal.model.audio_tower):
+        tower.register_forward_hook(lambda *args: towers_ran.append(True))
 
     scorer = ScoringModel(multimodal, tokenizer, name="tiny-gemma4@0")
-    assert scorer.max_length == 64
+    assert scorer.max_length == 24
 
-    # The vision tower is loaded but never runs: text scores as the model's own forward pass.
+    # Cut to the text config's length, scored as the model's own unbatched forward pass, with
+    # neither tower running.
     scores = scorer.loglikelihood(REQUESTS)
     expected = torch.tensor([reference(scorer, request) for request in REQUESTS])
     torch.testing.assert_close(scores.logprob, expected, atol=1e-4, rtol=0)
+    assert scores.tokens_cut.max() > 0
+    assert towers_ran == []
 
 
 def test_a_wrapped_flock_model_scores_as_its_own_forward_pass(tokenizer):
@@ -640,6 +653,31 @@ def test_rolling_loglikelihood_is_batch_size_and_order_invariant(scorer, batch_t
     scorer.batch_tokens = batch_tokens
     backward = scorer.rolling_loglikelihood(TEXTS[::-1], window).logprob
     torch.testing.assert_close(backward, one_batch.flip(0), atol=1e-4, rtol=1e-5)
+
+
+def test_add_bos_starts_every_non_empty_context_with_bos(lm, tokenizer):
+    with_bos = copy.deepcopy(tokenizer)
+    with_bos.bos_token = "<|pad|>"
+    plain = ScoringModel(lm, with_bos, name="tiny@0")
+    bos = ScoringModel(lm, with_bos, name="tiny@0", add_bos=True)
+
+    for request in REQUESTS:
+        context, continuation = plain.encode(request)
+        if request.context:  # an empty context is one prefix token already, BOS here
+            context = [with_bos.bos_token_id, *context]
+        assert bos.encode(request) == (context, continuation)
+
+    expected = torch.tensor([reference(bos, request) for request in REQUESTS])
+    torch.testing.assert_close(bos.loglikelihood(REQUESTS).logprob, expected, atol=1e-4, rtol=1e-5)
+    # A rolling text's first window starts from BOS with or without it.
+    assert torch.equal(
+        bos.rolling_loglikelihood(TEXTS, 8).logprob, plain.rolling_loglikelihood(TEXTS, 8).logprob
+    )
+
+
+def test_add_bos_needs_a_bos_token(lm, tokenizer):
+    with pytest.raises(ValueError, match="add_bos is set, but the tokenizer has no BOS token"):
+        ScoringModel(lm, tokenizer, name="tiny@0", add_bos=True)
 
 
 def test_rolling_loglikelihood_starts_from_bos_when_there_is_one(lm, tokenizer, monkeypatch):
