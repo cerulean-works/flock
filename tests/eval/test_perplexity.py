@@ -264,7 +264,7 @@ def test_source_suite_names_a_task_per_domain():
 
 
 def test_a_source_listed_with_one_domain_is_one_task_over_that_domain(monkeypatch):
-    # tw_text's one-register sources: every row carries the source's name as its `subdomain`.
+    # tw_text's one-domain sources: every row carries one `subdomain`, the source's name or `other`.
     rows = [{**row, "subdomain": "cna"} for row in TEXT_ROWS]
     monkeypatch.setattr(Dataset, "load", lambda self, split=None: rows)
     dataset = Dataset(repo="cerulean-works/tw-text-v0", revision="0", subset="cna", split="test")
@@ -316,6 +316,9 @@ def test_tw_text_is_scored_over_ten_native_sources():
     cna = TASKS["tw_text_cna"]
     assert isinstance(cna, PerplexityTask)
     assert cna.domain == "cna"
+    zhwiki = TASKS["tw_text_zhwiki"]  # one domain named `other`, scored under the source's name
+    assert isinstance(zhwiki, PerplexityTask)
+    assert zhwiki.domain == "other"
 
 
 def test_fineweb_edu_is_the_labs_task_in_no_suite():

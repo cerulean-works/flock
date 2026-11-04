@@ -14,14 +14,14 @@ The documents come from `cerulean-works/tw-text-v0` on the Hugging Face Hub, one
 | `cna` | news: Central News Agency | one |
 | `pts` | news: Public Television Service | one |
 | `ltn` | news: Liberty Times | one |
-| `cnyes` | news: Anue (鉅亨網), finance | one, `other` |
+| `cnyes` | news: Anue (鉅亨網), finance | one (`other`) |
 | `twreporter` | news: The Reporter, long-form | one |
-| `zhwiki` | encyclopedic: zh-Wikipedia pages created in the window | one, `other` |
+| `zhwiki` | encyclopedic: zh-Wikipedia pages created in the window | one (`other`) |
 | `theses` | academic: full texts of master's and doctoral theses, with their English front matter | the university |
 
 `theses` is not held out in time. A thesis carries only its academic year (115, dated from 2026-08-01), so its text may predate the window, and it is in the `tw_text` mean all the same. Read its number with that in mind.
 
-The dataset merges every domain under 100,000 OLMo 2 tokens, Paloma's per-domain size, into one domain named `other`. `flock/eval/tasks/tw_text.py` pins the dataset's revision and lists every source's domains at that revision.
+The dataset merges every domain under 100,000 OLMo 2 tokens, Paloma's per-domain size, into one domain named `other`. `cnyes` and `zhwiki` are under that size in all, so their one domain, `other`, is smaller than 100,000 tokens. `flock/eval/tasks/tw_text.py` pins the dataset's revision and lists every source's domains at that revision.
 
 ## Access
 
