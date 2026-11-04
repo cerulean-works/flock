@@ -73,6 +73,8 @@ Every task scores its domain's whole `test` split in windows of 2048 tokens, wit
 
 `fineweb_edu` scores 5,000 documents of [FineWeb-Edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu), drawn with a fixed seed from one file of its newest dump, in windows of 8192 tokens, with `perplexity` as its primary metric. It reads the public dataset `cerulean-works/fineweb-edu-dev` and belongs to no suite. A model needs a context of at least 8192 tokens to run it. [Scoring the FineWeb-Edu dev set](fineweb-edu) defines the number and lists the ids training data must drop.
 
+The `fineweb` suite scores held-out web text in three languages, all in windows of 2048 tokens, which every model the project compares supports. `fineweb_en` reads the same 5,000 FineWeb-Edu documents as `fineweb_edu`. `fineweb_zh_hant` (3,383 documents) and `fineweb_zh_hans` (5,000) read FineWeb-2's held-out Chinese, split by script, from the private dataset `cerulean-works/fineweb-2-zh-dev`. [Scoring held-out web text in three languages](fineweb) defines each member and how to read it.
+
 ## Suites
 
 A suite's score is the unweighted mean of its members' scores, as OLMES's `macro` aggregate. A member task gives the suite's `metric`, or its own primary metric if the suite sets none. A member suite counts as one member, whatever its size, and gives its own score, so a suite that sets `metric` holds only suites that set the same one. A scored suite's members share one scale: all accuracies, or all one other metric such as `bpb` or perplexity `bits_per_byte`, since those don't average. `base_easy` has no score of its own: it groups suites whose scores don't average, so that one name runs them all.
@@ -101,6 +103,7 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `zh_tw:bpb` | `tmmluplus:bpb`, `drcd_bpb`, `tw_mock_exams:bpb` | `bpb` | none |
 | `paloma:<source>` | the source's tasks | `bits_per_byte` | OLMES's task `paloma_<source>::paloma`: the same number for a source with one domain, and its docs pooled instead of a mean of domains for a source with several |
 | `paloma` | the 9 `paloma:<source>` suites | unscored | none |
+| `fineweb` | `fineweb_en`, `fineweb_zh_hant`, `fineweb_zh_hans` | `bits_per_byte` | none |
 
 The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. OLMES groups ARC-Easy and ARC-Challenge into one suite with no metric of its own; here they are two members of `base_easy:qa_rc`. `basic_skills`, and so `base_easy:qa_rc`, averages our `acc_per_token`, which divides by the real token count. OLMES's equals its `acc_raw`, so these two scores differ from OLMES's by that member. In BF16, `lambada`'s `acc_greedy` can also differ by a few near-tie docs, since our argmax is taken over FP32 logits and OLMES's over its BF16 log-probabilities. See [Suites in results](results#suites) for when two suite scores compare.
 
