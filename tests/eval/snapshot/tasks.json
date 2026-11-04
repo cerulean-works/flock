@@ -948,10 +948,8 @@
     },
     "tw_text:gov_press": {
       "members": [
-        "tw_text_gov_press__文化部",
-        "tw_text_gov_press__行政院",
-        "tw_text_gov_press__金管會",
-        "tw_text_gov_press__農業部"
+        "tw_text_gov_press__other",
+        "tw_text_gov_press__文化部"
       ],
       "metric": "bits_per_byte",
       "scored": true
@@ -959,9 +957,7 @@
     "tw_text:judicial": {
       "members": [
         "tw_text_judicial__地方",
-        "tw_text_judicial__高等",
-        "tw_text_judicial__行政",
-        "tw_text_judicial__最高"
+        "tw_text_judicial__other"
       ],
       "metric": "bits_per_byte",
       "scored": true
@@ -10235,7 +10231,7 @@
     "tw_text_cna": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "cna"
@@ -10248,12 +10244,25 @@
     "tw_text_cnyes": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "cnyes"
       },
-      "domain": "cnyes",
+      "domain": "other",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_gov_press__other": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
+        "row_index": false,
+        "split": "test",
+        "subset": "gov_press"
+      },
+      "domain": "other",
       "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
@@ -10261,7 +10270,7 @@
     "tw_text_gov_press__文化部": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "gov_press"
@@ -10271,41 +10280,15 @@
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
-    "tw_text_gov_press__行政院": {
+    "tw_text_judicial__other": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
-        "subset": "gov_press"
+        "subset": "judicial"
       },
-      "domain": "行政院",
-      "primary_metric": "bits_per_byte",
-      "type": "flock.eval.tasks.perplexity.PerplexityTask",
-      "window": 2048
-    },
-    "tw_text_gov_press__農業部": {
-      "dataset": {
-        "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
-        "row_index": false,
-        "split": "test",
-        "subset": "gov_press"
-      },
-      "domain": "農業部",
-      "primary_metric": "bits_per_byte",
-      "type": "flock.eval.tasks.perplexity.PerplexityTask",
-      "window": 2048
-    },
-    "tw_text_gov_press__金管會": {
-      "dataset": {
-        "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
-        "row_index": false,
-        "split": "test",
-        "subset": "gov_press"
-      },
-      "domain": "金管會",
+      "domain": "other",
       "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
@@ -10313,7 +10296,7 @@
     "tw_text_judicial__地方": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "judicial"
@@ -10323,49 +10306,10 @@
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
-    "tw_text_judicial__最高": {
-      "dataset": {
-        "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
-        "row_index": false,
-        "split": "test",
-        "subset": "judicial"
-      },
-      "domain": "最高",
-      "primary_metric": "bits_per_byte",
-      "type": "flock.eval.tasks.perplexity.PerplexityTask",
-      "window": 2048
-    },
-    "tw_text_judicial__行政": {
-      "dataset": {
-        "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
-        "row_index": false,
-        "split": "test",
-        "subset": "judicial"
-      },
-      "domain": "行政",
-      "primary_metric": "bits_per_byte",
-      "type": "flock.eval.tasks.perplexity.PerplexityTask",
-      "window": 2048
-    },
-    "tw_text_judicial__高等": {
-      "dataset": {
-        "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
-        "row_index": false,
-        "split": "test",
-        "subset": "judicial"
-      },
-      "domain": "高等",
-      "primary_metric": "bits_per_byte",
-      "type": "flock.eval.tasks.perplexity.PerplexityTask",
-      "window": 2048
-    },
     "tw_text_ltn": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "ltn"
@@ -10378,7 +10322,7 @@
     "tw_text_ly__委員會紀錄": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "ly"
@@ -10391,7 +10335,7 @@
     "tw_text_ly__質詢": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "ly"
@@ -10404,7 +10348,7 @@
     "tw_text_ly__院會紀錄": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "ly"
@@ -10417,7 +10361,7 @@
     "tw_text_pts": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "pts"
@@ -10430,7 +10374,7 @@
     "tw_text_theses__NCHU": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "theses"
@@ -10443,7 +10387,7 @@
     "tw_text_theses__NCKU": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "theses"
@@ -10456,7 +10400,7 @@
     "tw_text_theses__NCU": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "theses"
@@ -10469,7 +10413,7 @@
     "tw_text_theses__NTNU": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "theses"
@@ -10482,7 +10426,7 @@
     "tw_text_theses__NYCU": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "theses"
@@ -10495,7 +10439,7 @@
     "tw_text_twreporter": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "twreporter"
@@ -10508,12 +10452,12 @@
     "tw_text_zhwiki": {
       "dataset": {
         "repo": "cerulean-works/tw-text-v0",
-        "revision": "24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+        "revision": "8741fe41c17dca60e773b642b755043a78a021a8",
         "row_index": false,
         "split": "test",
         "subset": "zhwiki"
       },
-      "domain": "zhwiki",
+      "domain": "other",
       "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048

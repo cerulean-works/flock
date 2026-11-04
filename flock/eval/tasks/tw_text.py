@@ -4,19 +4,20 @@ from flock.eval.tasks.base import Dataset
 from flock.eval.tasks.suite import Suite, source_suite
 
 # Each source's domains, the distinct `subdomain` values of its `test` rows at the pinned
-# revision, most documents first (stage file 026, 026.D6). A source of one register lists its own name, the one
-# value its rows carry. `bbc_zh_trad` is converted from Simplified script, so it isn't here
-# (026.D5).
+# revision, most documents first (stage file 026, 026.D6). Domains under 100,000 OLMo 2 tokens are
+# merged into `other` in the dataset, so a source with one value lists it: its name, or `other`
+# when the whole source is that small. `bbc_zh_trad` is converted from Simplified script, so it
+# isn't here (026.D5).
 SOURCES: dict[str, tuple[str, ...]] = {
-    "judicial": ("地方", "高等", "行政", "最高"),
+    "judicial": ("地方", "other"),
     "ly": ("委員會紀錄", "院會紀錄", "質詢"),
-    "gov_press": ("文化部", "行政院", "金管會", "農業部"),
+    "gov_press": ("other", "文化部"),
     "cna": ("cna",),
     "pts": ("pts",),
     "ltn": ("ltn",),
-    "cnyes": ("cnyes",),
+    "cnyes": ("other",),
     "twreporter": ("twreporter",),
-    "zhwiki": ("zhwiki",),
+    "zhwiki": ("other",),
     "theses": ("NYCU", "NTNU", "NCU", "NCKU", "NCHU"),
 }
 
@@ -29,7 +30,7 @@ TW_TEXT = Suite(
             "tw_text",
             Dataset(
                 repo="cerulean-works/tw-text-v0",
-                revision="24e735dfd6b5b9b730703c9da7c9237bdf4229a9",
+                revision="8741fe41c17dca60e773b642b755043a78a021a8",
                 subset=source,
                 split="test",
             ),

@@ -303,16 +303,16 @@ def test_tw_text_is_scored_over_ten_native_sources():
     assert [suite.name for suite in TW_TEXT.members] == [f"tw_text:{source}" for source in sources]
     assert [suite.metric for suite in TW_TEXT.suites] == ["bits_per_byte"] * 11
     assert TW_TEXT.scored
-    assert len(TW_TEXT.tasks) == 22
+    assert len(TW_TEXT.tasks) == 18
     assert not any("bbc" in task.name for task in TW_TEXT.tasks)  # converted text (026.D5)
 
-    supreme = TASKS["tw_text_judicial__最高"]
-    assert isinstance(supreme, PerplexityTask)
-    assert (supreme.dataset.repo, supreme.dataset.subset) == (
+    district = TASKS["tw_text_judicial__地方"]
+    assert isinstance(district, PerplexityTask)
+    assert (district.dataset.repo, district.dataset.subset) == (
         "cerulean-works/tw-text-v0",
         "judicial",
     )
-    assert (supreme.dataset.split, supreme.domain, supreme.window) == ("test", "最高", 2048)
+    assert (district.dataset.split, district.domain, district.window) == ("test", "地方", 2048)
     cna = TASKS["tw_text_cna"]
     assert isinstance(cna, PerplexityTask)
     assert cna.domain == "cna"
