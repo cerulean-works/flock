@@ -1,5 +1,3 @@
-"""Suites: named groups of tasks, scored as the unweighted mean of their members."""
-
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
@@ -82,7 +80,7 @@ class Suite:
                         )
                     if not member.scored:
                         raise ValueError(f"{self.name}: member {member.name} has no score")
-                    scales.add(member._scale)
+                    scales.add(member.scale)
                 else:
                     metric = self.metric or member.primary_metric
                     if metric not in member.reported_metrics:
@@ -103,11 +101,19 @@ class Suite:
             raise ValueError(f"{self.name}: {error}") from None
 
     @property
-    def _scale(self) -> str:
-        """What a scored suite's mean measures: `accuracy`, or the one other metric its members share. The first member stands for all."""
+    def scale(self) -> str:
+        """
+        The scale a scored suite's mean is on: `accuracy`, or the one other metric its members share.
+
+        Raises:
+            `ValueError`: if the suite is unscored, since its members may be on different scales.
+        """
+        if not self.scored:
+            raise ValueError(f"{self.name}: an unscored suite has no scale")
+        # Every member is on one scale, checked when the suite was built, so the first stands for all.
         first = self.members[0]
         if isinstance(first, Suite):
-            return first._scale
+            return first.scale
 
         return scale(self.metric or first.primary_metric)
 

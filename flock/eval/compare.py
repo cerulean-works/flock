@@ -8,7 +8,7 @@ from typing import Any, NamedTuple
 
 from flock.eval.metrics import scale
 
-# Another GPU type, kernel or library version reorders float32 sums, so a rerun on another
+# Another GPU type, kernel or library version reorders FP32 sums, so a rerun on another
 # stack moves scores slightly (013.D1). An accuracy may move by this many docs flipping, any
 # other metric, such as `bpb`, by this fraction of its banked value. Both are argued, not
 # measured: tighten them once a rerun on another stack shows the real drift.

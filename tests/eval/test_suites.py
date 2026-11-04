@@ -36,6 +36,14 @@ def test_nested_suites_count_as_one_member_under_their_own_metric():
     bpb = Suite("bpb", (GOLD_ONLY, Suite("inner", (TASK, OTHER), metric="bpb")), metric="bpb")
     assert bpb.score(METRICS) == pytest.approx((4.0 + 1.5) / 2)
 
+    # A suite's scale is what its mean is on, read through a member suite when that comes first.
+    assert (outer.scale, inner.scale, bpb.scale) == ("accuracy", "accuracy", "bpb")
+    assert Suite("first", (Suite("inner", (TASK, OTHER), metric="bpb"), GOLD_ONLY)).scale == "bpb"
+
+    # An unscored suite may mix scales, so it has none.
+    with pytest.raises(ValueError, match="no scale"):
+        _ = Suite("all", (inner, Suite("bpb_only", (GOLD_ONLY,))), scored=False).scale
+
 
 def test_a_suite_may_share_a_name_with_a_task():
     # The registries keep tasks and suites apart; `evaluate` refuses a run that reaches both
