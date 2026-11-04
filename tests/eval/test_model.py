@@ -663,7 +663,7 @@ def test_add_bos_starts_every_non_empty_context_with_bos(lm, tokenizer):
 
     for request in REQUESTS:
         context, continuation = plain.encode(request)
-        if request.context:  # an empty context is one prefix token already, BOS here
+        if request.context.strip():  # an empty context is one prefix token already, BOS here
             context = [with_bos.bos_token_id, *context]
         assert bos.encode(request) == (context, continuation)
 
@@ -678,6 +678,19 @@ def test_add_bos_starts_every_non_empty_context_with_bos(lm, tokenizer):
 def test_add_bos_needs_a_bos_token(lm, tokenizer):
     with pytest.raises(ValueError, match="add_bos is set, but the tokenizer has no BOS token"):
         ScoringModel(lm, tokenizer, name="tiny@0", add_bos=True)
+
+
+def test_from_pretrained_refuses_add_bos_before_the_weights_load(tokenizer, monkeypatch):
+    loaded = []
+    monkeypatch.setattr(model.AutoTokenizer, "from_pretrained", lambda *args, **kwargs: tokenizer)
+    monkeypatch.setattr(
+        model.AutoModelForCausalLM, "from_pretrained", lambda *args, **kwargs: loaded.append(1)
+    )
+
+    # A full commit hash resolves offline.
+    with pytest.raises(ValueError, match="add_bos is set, but the tokenizer has no BOS token"):
+        ScoringModel.from_pretrained(f"acme/tiny@{'0' * 40}", device="cpu", add_bos=True)
+    assert loaded == []
 
 
 def test_rolling_loglikelihood_starts_from_bos_when_there_is_one(lm, tokenizer, monkeypatch):

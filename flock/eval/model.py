@@ -256,11 +256,13 @@ class ScoringModel:
                 Where to put the weights. Defaults to CUDA when available, else the CPU.
             dtype (`torch.dtype`, *optional*, defaults to `torch.bfloat16`):
                 The weights' dtype. Log-softmax always runs in float32.
-            batch_tokens (`int`, *optional*), add_bos (`bool`, *optional*):
+            batch_tokens (`int`, *optional*):
+                Passed to [`ScoringModel`].
+            add_bos (`bool`, *optional*, defaults to `False`):
                 Passed to [`ScoringModel`].
 
         Raises:
-            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision` or `flock:org/name[@version]`, or a Flock model's config has no `hf_repo` to load its tokenizer from.
+            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision` or `flock:org/name[@version]`, or a Flock model's config has no `hf_repo` to load its tokenizer from, or `add_bos` is set and the tokenizer has no BOS token, before a Hugging Face model's weights load.
             [`~hub.models.ModelError`]: if the Flock registry has no such version, or refuses to load it.
         """
         # `__init__` checks it too, but only after the weights have loaded.
@@ -289,6 +291,9 @@ class ScoringModel:
 
         tokenizer = AutoTokenizer.from_pretrained(ref.repo, revision=ref.revision)
         assert tokenizer is not None  # The stubs allow None; loading raises instead.
+        # `__init__` checks it too, but only after the weights have loaded.
+        if add_bos and tokenizer.bos_token_id is None:
+            raise ValueError(f"{ref}: add_bos is set, but the tokenizer has no BOS token")
         model = AutoModelForCausalLM.from_pretrained(
             ref.repo, revision=ref.revision, dtype=dtype, device_map=device
         )
@@ -473,6 +478,13 @@ class ScoringModel:
         """[`encode`] for many requests, with one tokenizer call for the distinct contexts and one for the joined texts."""
         pairs = [_move_whitespace(request) for request in requests]
         ids_by_context = self._tokenize_contexts([context for context, _ in pairs])
+        # As OLMES's `tok_encode` with `add_bos_token`, which puts BOS before the context and the
+        # joined text alike, so only the context changes. Once per distinct context, so the
+        # requests of one few-shot context keep sharing one list.
+        starts = ids_by_context
+        if self.add_bos:
+            bos = self.tokenizer.bos_token_id
+            starts = {context: [bos, *ids] for context, ids in ids_by_context.items()}
         joined_ids = self.tokenize([context + continuation for context, continuation in pairs])
 
         encoded = []
@@ -483,13 +495,8 @@ class ScoringModel:
 
             # As lm-evaluation-harness's `_encode_pair`: the continuation's ids are the joint ids
             # after as many leading ids as the context has when tokenized alone.
-            context_ids = ids_by_context[context]
-            continuation_ids = joined[len(context_ids) :]
-            # As OLMES's `tok_encode` with `add_bos_token`, which puts BOS before both texts, so
-            # only the context changes.
-            if self.add_bos:
-                context_ids = [self.tokenizer.bos_token_id, *context_ids]
-            encoded.append(Encoded(context_ids, continuation_ids))
+            continuation_ids = joined[len(ids_by_context[context]) :]
+            encoded.append(Encoded(starts[context], continuation_ids))
 
         return encoded
 
