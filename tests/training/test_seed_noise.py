@@ -3,6 +3,8 @@ import pyarrow as pa
 import pytest
 import torch
 from lance.torch.data import SafeLanceDataset
+from tokenizers import Tokenizer, models, pre_tokenizers
+from transformers import TokenizersBackend
 
 from flock.training.core.data_utils import LanceBatchCollator
 from flock.training.core.models import OLMO2_190M_CONFIG, Olmo2
@@ -62,6 +64,31 @@ def test_packed_rows_tokenize_with_eos_between_documents_and_no_padding(tmp_path
     assert batch["input_ids"].tolist() == [[2, 3, 1, 4], [3, 2, 1, 5]]
     assert batch["labels"].tolist() == [[3, 1, 4, 5], [2, 1, 5, 4]]
     assert batch["attention_mask"].all()
+
+
+def test_full_rows_end_mid_document_only_without_an_appended_eos(tmp_path):
+    # OLMo 2's tokenizer appends EOS (add_eos_token=True) after truncation, as this one does.
+    backend = Tokenizer(models.WordLevel({"[UNK]": 0, "[EOS]": 1, "a": 2, "b": 3, "c": 4}, "[UNK]"))
+    backend.pre_tokenizer = pre_tokenizers.Whitespace()
+    tokenizer = TokenizersBackend(
+        tokenizer_object=backend,
+        eos_token="[EOS]",
+        pad_token="[EOS]",
+        model_max_length=4,
+        padding_side="left",
+        add_eos_token=True,
+    )
+    path = tmp_path / "long.lance"
+    lance.write_dataset(pa.table({"text": ["a b c a b c"]}), str(path))
+    packed = PackedDocs(
+        SafeLanceDataset(str(path)), rows=1, docs_per_row=1, max_chars=100, eos="[EOS]"
+    )
+    collator = LanceBatchCollator(tokenizer, "text")
+
+    # The cut row's last target would be a document end that isn't there.
+    assert collator.collate_fn([packed[0]])["labels"].tolist() == [[3, 4, 1]]
+    tokenizer.add_eos_token = False
+    assert collator.collate_fn([packed[0]])["labels"].tolist() == [[3, 4, 2]]
 
 
 def test_spikes_flag_a_window_above_the_running_maximum_of_the_ten_before():

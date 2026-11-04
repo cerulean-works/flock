@@ -12,6 +12,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from typing import cast
 
+import lance
 import torch
 from lance.torch.data import SafeLanceDataset
 from torch.utils.data import Dataset
@@ -33,7 +34,7 @@ from flock.training.core.models import OLMO2_190M_CONFIG, Olmo2
 class PackedDocs(Dataset):
     """Training rows of whole documents joined by the EOS token, the same rows whatever the seed.
 
-    Row `i` holds the `docs_per_row` consecutive documents from position `i * stride`, so the rows spread over the whole corpus, cut to their first `max_chars` characters. With `max_chars` above the model's length in characters, the collator truncates every row to full length and no position is padding, as pretraining's concatenate-then-split does (OLMo 3, arXiv 2512.13961, sec. 3.6.3). The tail past the cut is never trained on.
+    Row `i` holds the `docs_per_row` consecutive documents from position `i * stride`, so the rows spread over the whole corpus, cut to their first `max_chars` characters. With `max_chars` above the model's length in characters, the collator truncates every row to full length and no position is padding, as pretraining's concatenate-then-split does (OLMo 3, arXiv 2512.13961, sec. 3.6.3), provided the tokenizer appends no EOS of its own. The tail past the cut is never trained on. Only the text column is read.
     """
 
     def __init__(
@@ -59,6 +60,8 @@ class PackedDocs(Dataset):
         self.max_chars = max_chars
         self.eos = eos
         self.column = column
+        # Opened in each loader worker on first use, as SafeLanceDataset does.
+        self._dataset: lance.LanceDataset | None = None
 
     def __len__(self) -> int:
         return self.rows
@@ -74,7 +77,10 @@ class PackedDocs(Dataset):
                 raise IndexError(f"row {index} of {self.rows}")
             start = index * self.stride
             positions.extend(range(start, start + self.docs_per_row))
-        texts = [doc[self.column] for doc in self.docs.__getitems__(positions)]
+        # Only the text column: a DCLM row's other columns tripled the read time of a batch.
+        if self._dataset is None:
+            self._dataset = lance.dataset(self.docs.uri, **self.docs.dataset_options)
+        texts = self._dataset.take(positions, columns=[self.column])[self.column].to_pylist()
 
         rows = []
         for first in range(0, len(texts), self.docs_per_row):
@@ -124,8 +130,9 @@ def main() -> int:
     if args.hub_name is None and not args.train_only:
         parser.error("--hub-name is required unless --train-only")
     # The upload needs flock-hub's models extra; without it a run would train, then fail.
-    if not args.train_only and importlib.util.find_spec("botocore") is None:
-        parser.error("saving to the hub needs boto3: uv sync --all-packages --all-extras")
+    missing = [name for name in ("boto3", "safetensors") if importlib.util.find_spec(name) is None]
+    if missing and not args.train_only:
+        parser.error(f"saving to the hub needs {missing}: uv sync --all-packages --all-extras")
     if args.out.exists() and any(args.out.iterdir()):
         parser.error(f"{args.out} is not empty")
     args.out.mkdir(parents=True, exist_ok=True)
@@ -143,6 +150,8 @@ def main() -> int:
     model = Olmo2(config)
     tokenizer = model.get_hf_tokenizer()
     assert tokenizer is not None and tokenizer.eos_token is not None
+    # An EOS appended after truncation would end every full row with a false document end.
+    tokenizer.add_eos_token = False
 
     # A row trains on its first 2048 tokens: 2047 inputs, each with its next token as target.
     targets_per_row = config.max_position_embeddings - 1
@@ -192,6 +201,8 @@ def main() -> int:
         positions += labels.numel()
 
     hook = trainer.model.register_forward_pre_hook(count_targets)
+    # Read before training: a checkout that moves during a two-day run must not rename it.
+    commit = flock_commit()
     start = time.perf_counter()
     trainer.train()
     seconds = time.perf_counter() - start
@@ -221,12 +232,13 @@ def main() -> int:
         "peak_memory_bytes": torch.cuda.max_memory_allocated() if torch.cuda.is_available() else 0,
         "final_loss": window_mean[-1] if window_mean else None,
         "finite": all(math.isfinite(value) for value in window_mean + window_max),
-        "spikes": spikes(window_max),
+        # The rule looks back 100 steps, whatever the logging interval.
+        "spikes": spikes(window_max, history=100 // trainer_config.logging_steps),
         "windows": metrics.windows,
         "wandb_run": trainer.run.path,
         "host": socket.gethostname(),
         "device": torch.cuda.get_device_name() if torch.cuda.is_available() else "cpu",
-        "flock_commit": flock_commit(),
+        "flock_commit": commit,
         "torch": torch.__version__,
         "command": shlex.join(sys.argv),
     }
