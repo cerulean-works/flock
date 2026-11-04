@@ -114,10 +114,14 @@ def main() -> int:
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--tokens", type=float, default=15e9, help="Target tokens to train on.")
     parser.add_argument("--batch-size", type=int, required=True)
-    parser.add_argument("--hub-name", required=True, help="org/name of the model on the hub.")
+    parser.add_argument("--hub-name", help="org/name of the model on the hub.")
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--no-eval", action="store_true", help="Stop after training.")
+    parser.add_argument(
+        "--train-only", action="store_true", help="Stop after training: no upload, no eval."
+    )
     args = parser.parse_args()
+    if args.hub_name is None and not args.train_only:
+        parser.error("--hub-name is required unless --train-only")
     if args.out.exists() and any(args.out.iterdir()):
         parser.error(f"{args.out} is not empty")
     args.out.mkdir(parents=True, exist_ok=True)
@@ -223,6 +227,9 @@ def main() -> int:
         "command": shlex.join(sys.argv),
     }
     (args.out / "train.json").write_text(json.dumps(summary, indent=1))
+    if args.train_only:
+        trainer.run.finish()
+        return 0
 
     version = hub_models.save_to_hub(
         model,
@@ -235,8 +242,6 @@ def main() -> int:
     trainer.run.finish()
     summary["hub_version"] = str(version)
     (args.out / "train.json").write_text(json.dumps(summary, indent=1))
-    if args.no_eval:
-        return 0
 
     # Scored as the banked baselines were (FP32, 16384 batch tokens), from the saved weights.
     del trainer, model
