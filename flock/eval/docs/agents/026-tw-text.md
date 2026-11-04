@@ -24,7 +24,7 @@ The Traditional Chinese tasks on `main` are exams and reading comprehension (017
 
 ### 026.D1. One `source_suite` for Paloma and `tw_text`
 
-008 built a Paloma source as a suite of one task per domain in `tasks/paloma.py`. `tw_text` is the same construction over another dataset, so the function moves to `tasks/perplexity.py` and takes the benchmark's name and the source's dataset: `source_suite("paloma", dataset, domains)` builds exactly the suites and tasks it built before (the 309 hashes and the snapshot don't move). Task names keep 008's shape: `<benchmark>_<source>__<domain>`, and `<benchmark>_<source>` for a source with one domain.
+008 built a Paloma source as a suite of one task per domain in `tasks/paloma.py`. `tw_text` is the same construction over another dataset, so the function moves to `tasks/suite.py` and takes the benchmark's name and the source's dataset: `source_suite("paloma", dataset, domains)` builds exactly the suites and tasks it built before (the 309 hashes and the snapshot don't move). Task names keep 008's shape: `<benchmark>_<source>__<domain>`, and `<benchmark>_<source>` for a source with one domain.
 
 A one-domain source of Paloma has rows without `subdomain`. A one-domain source of `tw_text` has rows whose `subdomain` is the source's name. So a source listed with one domain is one task named by the source, filtered to that domain; a source listed with none is one task over rows without a domain. No Paloma source lists exactly one domain, so this changes no Paloma task.
 
@@ -52,7 +52,7 @@ The dataset's first sample has 11 configurations. `bbc_zh_trad` is text converte
 
 ## 3. Plan
 
-1. Move `source_suite` to `tasks/perplexity.py` with the benchmark and dataset as arguments; Paloma's tests and snapshot unchanged.
+1. Move `source_suite` to `tasks/suite.py` with the benchmark and dataset as arguments; Paloma's tests and snapshot unchanged.
 2. `tasks/tw_text.py`: the table, the sources and the suite, registered.
 3. Tests: the registered suite and its tasks, one-domain sources filtered to their domain, `bbc_zh_trad` absent.
 4. Snapshot regenerated: the new tasks and suites, nothing else.

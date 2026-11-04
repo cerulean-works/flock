@@ -9,6 +9,7 @@ from flock.eval.tasks.paloma import PALOMA
 from flock.eval.tasks.suite import Suite, Task, by_name
 from flock.eval.tasks.tmmluplus import TMMLUPLUS_ALL
 from flock.eval.tasks.tw_mock_exams import TW_MOCK_EXAMS_ALL
+from flock.eval.tasks.tw_text import TW_TEXT
 from flock.eval.tasks.zh_tw import ZH_TW, ZH_TW_BPB
 
 SUITES: dict[str, Suite] = by_name(
@@ -20,6 +21,7 @@ SUITES: dict[str, Suite] = by_name(
         *ZH_TW_BPB.suites,
         *PALOMA.suites,
         *FINEWEB.suites,
+        *TW_TEXT.suites,
     )
 )
 
@@ -34,5 +36,6 @@ TASKS: dict[str, Task] = by_name(
         *PALOMA.tasks,
         FINEWEB_EDU,
         *FINEWEB.tasks,
+        *TW_TEXT.tasks,
     )
 )

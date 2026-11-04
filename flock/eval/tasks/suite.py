@@ -4,7 +4,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from flock.eval.metrics import scale
-from flock.eval.tasks.base import MultipleChoiceTask
+from flock.eval.tasks.base import Dataset, MultipleChoiceTask
 from flock.eval.tasks.perplexity import PerplexityTask
 
 # Every kind of task a suite can hold and a run can score.
@@ -153,3 +153,36 @@ class Suite:
                 member_scores.append(metrics[member.name][self.metric or member.primary_metric])
 
         return sum(member_scores) / len(member_scores)
+
+
+def source_suite(benchmark: str, dataset: Dataset, domains: tuple[str, ...]) -> Suite:
+    """
+    Returns one source of a Paloma-style benchmark as a suite of one task per domain, scored as the unweighted mean of their `bits_per_byte`.
+
+    Paloma macro-averages a source's domains (sec. 4), averaging perplexity. The mean here is over bits per byte, the log of a per-byte perplexity, which has no precedent: it keeps one domain with a very high perplexity from dominating its source, and it is the scale every other suite averages on. The source is the dataset's configuration. A domain's task is named `<benchmark>_<source>__<domain>`, the shape of OLMES's domain key (`PerplexityMetric` in `oe_eval/metrics/perplexity.py`), and the suite `<benchmark>:<source>`. A source with one domain has the one task `<benchmark>_<source>`: listed with no domain, it scores rows without a `subdomain`, as Paloma's do; listed with one, it scores the rows of that domain.
+
+    Args:
+        benchmark (`str`):
+            The prefix of every name, such as `paloma`.
+        dataset (`Dataset`):
+            The source's split, with the source as its `subset`.
+        domains (`tuple[str, ...]`):
+            The `subdomain` values of the source's rows, one task each.
+
+    Raises:
+        `ValueError`: if the dataset has no `subset`.
+    """
+    source = dataset.subset
+    if source is None:
+        raise ValueError(f"{benchmark}: a source is a dataset configuration, and this has none")
+
+    if len(domains) > 1:
+        tasks = tuple(
+            PerplexityTask(f"{benchmark}_{source}__{domain}", dataset, domain=domain)
+            for domain in domains
+        )
+    else:
+        domain = domains[0] if domains else None
+        tasks = (PerplexityTask(f"{benchmark}_{source}", dataset, domain=domain),)
+
+    return Suite(f"{benchmark}:{source}", tasks, metric="bits_per_byte")
