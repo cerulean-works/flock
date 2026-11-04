@@ -4,6 +4,12 @@ from types import SimpleNamespace
 import pytest
 import torch
 from torch.nn.attention import SDPBackend, sdpa_kernel
+from transformers import (
+    Gemma4Config,
+    Gemma4ForConditionalGeneration,
+    Gemma4TextConfig,
+    Gemma4VisionConfig,
+)
 
 from flock.eval import model
 from flock.eval.model import FlockCausalLM, ModelRef, ScoringModel
@@ -124,6 +130,46 @@ def test_from_pretrained_refuses_a_flock_model_without_a_tokenizer(monkeypatch):
     monkeypatch.setattr(model, "_flock_hub", lambda: hub)
     with pytest.raises(ValueError, match="flock:acme/m@1: config has no hf_repo"):
         ScoringModel.from_pretrained("flock:acme/m", device="cpu")
+
+
+def test_a_multimodal_model_takes_max_length_from_its_text_config(tokenizer):
+    # As Gemma 4's: no top-level max_position_embeddings, and a vision config with its own.
+    text_config = Gemma4TextConfig(
+        vocab_size=len(tokenizer),
+        vocab_size_per_layer_input=len(tokenizer),
+        hidden_size=32,
+        hidden_size_per_layer_input=8,
+        intermediate_size=64,
+        num_hidden_layers=2,
+        layer_types=["sliding_attention", "full_attention"],
+        sliding_window=8,
+        num_kv_shared_layers=0,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        head_dim=8,
+        max_position_embeddings=64,
+    )
+    vision_config = Gemma4VisionConfig(
+        hidden_size=16,
+        intermediate_size=32,
+        num_hidden_layers=1,
+        num_attention_heads=2,
+        num_key_value_heads=2,
+        head_dim=8,
+    )
+    config = Gemma4Config(text_config=text_config, vision_config=vision_config)
+    assert not hasattr(config, "max_position_embeddings")
+    assert config.vision_config.max_position_embeddings != 64
+    torch.manual_seed(0)
+    multimodal = Gemma4ForConditionalGeneration(config).eval()
+
+    scorer = ScoringModel(multimodal, tokenizer, name="tiny-gemma4@0")
+    assert scorer.max_length == 64
+
+    # The vision tower is loaded but never runs: text scores as the model's own forward pass.
+    scores = scorer.loglikelihood(REQUESTS)
+    expected = torch.tensor([reference(scorer, request) for request in REQUESTS])
+    torch.testing.assert_close(scores.logprob, expected, atol=1e-4, rtol=0)
 
 
 def test_a_wrapped_flock_model_scores_as_its_own_forward_pass(tokenizer):

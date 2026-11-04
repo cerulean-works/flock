@@ -185,7 +185,7 @@ class ScoringModel:
         name (`str`):
             Labels the model in log messages. [`~eval.run.evaluate`] records it as the provenance's `model`, `repo@commit` or `flock:org/name@number`.
         max_length (`int`, *optional*):
-            The longest input the model sees. Defaults to the config's `max_position_embeddings`.
+            The longest input the model sees. Defaults to the `max_position_embeddings` of the config's text config, which for a multimodal model, such as Gemma 4, is a sub-config.
         batch_tokens (`int`, *optional*, defaults to 32768):
             The most padded tokens in one forward pass.
         digest (`str`, *optional*):
@@ -208,7 +208,12 @@ class ScoringModel:
         if batch_tokens < 1:
             raise ValueError(f"batch_tokens must be at least 1, got {batch_tokens}")
         if max_length is None:
-            max_length = getattr(model.config, "max_position_embeddings", None)
+            # A multimodal config, such as Gemma 4's, keeps the length in its text config. A
+            # text-only config is its own text config, and a Flock model's has no sub-configs.
+            config = model.config
+            if isinstance(model, PreTrainedModel):
+                config = config.get_text_config(decoder=True)
+            max_length = getattr(config, "max_position_embeddings", None)
         if max_length is None:
             raise ValueError(f"{name}: config has no max_position_embeddings; pass max_length")
         if max_length < 1:
