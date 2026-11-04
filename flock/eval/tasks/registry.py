@@ -3,6 +3,7 @@
 from flock.eval.tasks.arc import ARC_EASY
 from flock.eval.tasks.base_easy import BASE_EASY
 from flock.eval.tasks.drcd import DRCD_BPB
+from flock.eval.tasks.fineweb import FINEWEB
 from flock.eval.tasks.fineweb_edu import FINEWEB_EDU
 from flock.eval.tasks.paloma import PALOMA
 from flock.eval.tasks.suite import Suite, Task, by_name
@@ -18,6 +19,7 @@ SUITES: dict[str, Suite] = by_name(
         *ZH_TW.suites,
         *ZH_TW_BPB.suites,
         *PALOMA.suites,
+        *FINEWEB.suites,
     )
 )
 
@@ -31,5 +33,6 @@ TASKS: dict[str, Task] = by_name(
         DRCD_BPB,
         *PALOMA.tasks,
         FINEWEB_EDU,
+        *FINEWEB.tasks,
     )
 )

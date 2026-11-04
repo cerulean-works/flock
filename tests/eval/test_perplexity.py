@@ -271,6 +271,38 @@ def test_fineweb_edu_is_the_labs_task_in_no_suite():
     assert all(task not in suite.tasks for suite in SUITES.values())
 
 
+def test_the_fineweb_suite_scores_three_languages_at_one_window_by_bits_per_byte():
+    suite = SUITES["fineweb"]
+    names = [task.name for task in suite.tasks]
+    assert names == ["fineweb_en", "fineweb_zh_hant", "fineweb_zh_hans"]
+    assert suite.metric == "bits_per_byte"
+    for task in suite.tasks:
+        assert TASKS[task.name] is task
+        assert isinstance(task, PerplexityTask)
+        assert (task.window, task.primary_metric, task.domain) == (2048, "perplexity", None)
+
+    # English reads the FineWeb-Edu dev set, so training drops one list of ids for both tasks.
+    english, traditional, simplified = suite.tasks
+    assert english.dataset == TASKS["fineweb_edu"].dataset
+    for task, script in ((traditional, "zh_hant"), (simplified, "zh_hans")):
+        dataset = task.dataset
+        assert (dataset.repo, dataset.subset, dataset.split) == (
+            "cerulean-works/fineweb-2-zh-dev",
+            script,
+            "test",
+        )
+    # One instrument: both scripts come from one revision of the dataset.
+    assert traditional.dataset.revision == simplified.dataset.revision
+
+    # The suite averages bits per byte, never perplexity, which depends on the tokenizer.
+    metrics = {
+        "fineweb_en": {"bits_per_byte": 0.6, "perplexity": 9.0},
+        "fineweb_zh_hant": {"bits_per_byte": 0.9, "perplexity": 30.0},
+        "fineweb_zh_hans": {"bits_per_byte": 0.6, "perplexity": 20.0},
+    }
+    assert suite.score(metrics) == pytest.approx(0.7)
+
+
 def test_toy_texts_span_several_windows(tokenizer):
     lengths = [len(tokenizer.encode(row["text"], add_special_tokens=False)) for row in TEXT_ROWS]
     assert min(lengths) > TEXT_TASK.window

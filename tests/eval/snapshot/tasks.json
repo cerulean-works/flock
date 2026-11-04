@@ -112,6 +112,15 @@
       "metric": "bpb",
       "scored": true
     },
+    "fineweb": {
+      "members": [
+        "fineweb_en",
+        "fineweb_zh_hant",
+        "fineweb_zh_hans"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
     "mmlu": {
       "members": [
         "mmlu_abstract_algebra",
@@ -1264,6 +1273,45 @@
       "primary_metric": "perplexity",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 8192
+    },
+    "fineweb_en": {
+      "dataset": {
+        "repo": "cerulean-works/fineweb-edu-dev",
+        "revision": "2484afe000a6fdf442ba2396391a3bec12644903",
+        "row_index": false,
+        "split": "validation",
+        "subset": null
+      },
+      "domain": null,
+      "primary_metric": "perplexity",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "fineweb_zh_hans": {
+      "dataset": {
+        "repo": "cerulean-works/fineweb-2-zh-dev",
+        "revision": "6d54ae9ec544b822699267d615597649452d9eea",
+        "row_index": false,
+        "split": "test",
+        "subset": "zh_hans"
+      },
+      "domain": null,
+      "primary_metric": "perplexity",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "fineweb_zh_hant": {
+      "dataset": {
+        "repo": "cerulean-works/fineweb-2-zh-dev",
+        "revision": "6d54ae9ec544b822699267d615597649452d9eea",
+        "row_index": false,
+        "split": "test",
+        "subset": "zh_hant"
+      },
+      "domain": null,
+      "primary_metric": "perplexity",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
     },
     "hellaswag": {
       "dataset": {
