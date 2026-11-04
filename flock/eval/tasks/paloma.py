@@ -321,13 +321,13 @@ DOMAINS: dict[str, tuple[str, ...]] = {
 
 
 # One name runs every source. There is no score over all sources: Paloma defines none.
-# The `test` split, as OLMES's `paloma_<source>::paloma` tasks score it
-# (`oe_eval/configs/tasks.py`).
 PALOMA = Suite(
     "paloma",
     tuple(
         source_suite(
             "paloma",
+            # The `test` split, as OLMES's `paloma_<source>::paloma` tasks score it
+            # (`oe_eval/configs/tasks.py`).
             Dataset(
                 repo="allenai/paloma",
                 revision="65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",

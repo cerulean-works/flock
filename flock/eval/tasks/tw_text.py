@@ -1,4 +1,4 @@
-"""Taiwan Traditional Chinese text published after 2026-04-01, one source per register, scored as Paloma scores its sources."""
+"""Taiwan Traditional Chinese text published from 2026-04-01 on, one source per register, scored as Paloma scores its sources."""
 
 from flock.eval.tasks.base import Dataset
 from flock.eval.tasks.suite import Suite, source_suite
@@ -20,8 +20,8 @@ SOURCES: dict[str, tuple[str, ...]] = {
     "theses": ("NYCU", "NTNU", "NCU", "NCKU", "NCHU"),
 }
 
-# Paloma's window, which every compared model has (026.D4). Unlike `paloma`, the suite has a score:
-# the unweighted mean of its sources (026.D3).
+# Every task keeps `PerplexityTask`'s window of 2048 tokens, Paloma's, which every compared model
+# has (026.D4). Unlike `paloma`, the suite has a score: the unweighted mean of its sources (026.D3).
 TW_TEXT = Suite(
     "tw_text",
     tuple(

@@ -30,15 +30,15 @@ A one-domain source of Paloma has rows without `subdomain`. A one-domain source 
 
 ### 026.D2. A source is the unweighted mean of its domains, as in Paloma
 
-Paloma macro-averages a source's domains (sec. 4) and 008 does the same in `bits_per_byte`. `tw_text` follows it, so `tw_text:<source>` reads like `paloma:<source>`. The domains are the `subdomain` values the dataset gives: the court level of a judgment (地方, 高等, 行政, 最高), the kind of Legislative Yuan record (委員會紀錄, 院會紀錄, 質詢), the ministry of a press release, and the university of a thesis abstract. They are uneven: in the first sample, 3 abstracts are from NCHU and 150 from NYCU, and 4 judgments are from the Supreme Court. The mean gives each domain an equal say, as Paloma intends ("to tolerate variance equally for each domain", App. C.2.1), and a small domain makes its source's number noisier. Paloma samples about 100 thousand tokens per domain to limit that; this dataset caps tokens per source, not per domain.
+Paloma macro-averages a source's domains (sec. 4) and 008 does the same in `bits_per_byte`. `tw_text` follows it, so `tw_text:<source>` reads like `paloma:<source>`. The domains are the `subdomain` values the dataset gives: the court level of a judgment (地方, 高等, 行政, 最高), the kind of Legislative Yuan record (委員會紀錄, 院會紀錄, 質詢), the ministry of a press release, and the university of a thesis. They are uneven: in the first sample, 3 theses are from NCHU and 150 from NYCU, and 4 judgments are from the Supreme Court. The mean gives each domain an equal say, as Paloma intends ("to tolerate variance equally for each domain", App. C.2.1), and a small domain makes its source's number noisier. Paloma samples about 100 thousand tokens per domain to limit that; this dataset caps tokens per source, not per domain.
 
 ### 026.D3. `tw_text` is scored: the mean of its sources
 
-Paloma defines no score over its sources, so `paloma` is unscored. `tw_text` is one held-out set built for one purpose, comparing how well models fit Taiwan's text after their cutoff, so it has a score: the unweighted mean of the 10 source suites' `bits_per_byte`, as `zh_tw:bpb` averages its benchmarks (017). No prior work defines this mean. Each source counts once, whatever its size, so 30 thesis abstracts weigh as much as 190 news articles. Read the sources first; the mean ranks models.
+Paloma defines no score over its sources, so `paloma` is unscored. `tw_text` is one held-out set built for one purpose, comparing how well models fit Taiwan's text after their cutoff, so it has a score: the unweighted mean of the 10 source suites' `bits_per_byte`, as `zh_tw:bpb` averages its benchmarks (017). No prior work defines this mean. Each source counts once, whatever its size, so 38 Wikipedia pages weigh as much as 193 Reporter articles. `theses` is in the mean although it is not held out in time (a thesis is dated only by its academic year, 115), and the docs say so next to it. Read the sources first; the mean ranks models.
 
 ### 026.D4. Window 2048, Paloma's
 
-Every model the project compares has at least 2048 tokens of context, TAIDE-LX-7B (Llama 2, 4096) included. 2048 is Paloma's window (008) and `fineweb`'s (027.D4).
+Every model the project compares has at least 2048 tokens of context, TAIDE-LX-7B (Llama 2, 4096) included. 2048 is Paloma's window (008) and `PerplexityTask`'s default, which every `tw_text` task keeps.
 
 ### 026.D5. Ten sources, no converted text
 
@@ -63,4 +63,6 @@ The dataset's first sample has 11 configurations. `bbc_zh_trad` is text converte
 
 ## 4. How it was actually built
 
-- **Revision.** The tasks pin `24e735df`, the dataset's first sample of about 200 documents per source drawn before the crawler's final filter. In it the smallest domain is NCHU's 3 thesis abstracts (171,428 OLMo 2 tokens) and the Supreme Court's 4 judgments (8,607), and the largest is the Legislative Yuan's committee records (101 documents, 8.3 million tokens). The final revision replaces it in one commit with its table (026.D6).
+- **Revision.** The tasks pin `24e735df`, the dataset's first sample of about 200 documents per source drawn before the crawler's final filter. In it the smallest domain is NCHU's 3 theses (171,428 OLMo 2 tokens) and the Supreme Court's 4 judgments (8,607), and the largest is the Legislative Yuan's committee records (101 documents, 8.3 million tokens). The final revision replaces it in one commit with its table (026.D6).
+- **Theses are full texts.** The `theses` rows are whole theses with their front matter in English and Chinese (median 94 thousand characters), not abstracts. With `ly`, they are most of the suite's tokens and of its scoring time.
+- **The domain table is not checked against the split.** A task raises when its domain has no rows, but a row whose `subdomain` no task lists is never scored, as in Paloma, whose table is also copied from a census (`paloma_census.py`). A repin copies the table from a census of the new revision. A repin that leaves a source with one domain, or gives a one-domain source a second, renames its tasks, as Paloma's naming does.
