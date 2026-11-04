@@ -8,20 +8,20 @@ The documents come from `cerulean-works/tw-text-v0` on the Hugging Face Hub, one
 
 | Source | Register | Domains (`subdomain`) |
 |---|---|---|
-| `judicial` | formal: court judgments | court: 地方 (district), 高等 (high), 行政 (administrative), 最高 (supreme) |
+| `judicial` | formal: court judgments | 地方 (district courts), `other` (high, administrative and supreme courts) |
 | `ly` | formal: Legislative Yuan records | 委員會紀錄, 院會紀錄, 質詢 |
-| `gov_press` | formal: Executive Yuan and ministry press releases | the issuing ministry |
+| `gov_press` | formal: Executive Yuan and ministry press releases | 文化部 (Ministry of Culture), `other` (Executive Yuan, Financial Supervisory Commission, Ministry of Agriculture) |
 | `cna` | news: Central News Agency | one |
 | `pts` | news: Public Television Service | one |
 | `ltn` | news: Liberty Times | one |
-| `cnyes` | news: Anue (鉅亨網), finance | one |
+| `cnyes` | news: Anue (鉅亨網), finance | one, `other` |
 | `twreporter` | news: The Reporter, long-form | one |
-| `zhwiki` | encyclopedic: zh-Wikipedia pages created in the window | one |
+| `zhwiki` | encyclopedic: zh-Wikipedia pages created in the window | one, `other` |
 | `theses` | academic: full texts of master's and doctoral theses, with their English front matter | the university |
 
 `theses` is not held out in time. A thesis carries only its academic year (115, dated from 2026-08-01), so its text may predate the window, and it is in the `tw_text` mean all the same. Read its number with that in mind.
 
-`flock/eval/tasks/tw_text.py` pins the dataset's revision and lists every source's domains at that revision.
+The dataset merges every domain under 100,000 OLMo 2 tokens, Paloma's per-domain size, into one domain named `other`. `flock/eval/tasks/tw_text.py` pins the dataset's revision and lists every source's domains at that revision.
 
 ## Access
 
@@ -41,11 +41,11 @@ To score one source, pass its suite instead, such as `--suite tw_text:judicial`.
 
 ## Read the results
 
-Each domain is one [`~eval.tasks.PerplexityTask`]. It scores every document whole, in disjoint windows of 2048 tokens, and reports `bits_per_byte`, `loss_per_token` and `perplexity` over all of its documents (see [Metrics](metrics#perplexity)). Task names follow Paloma's: `tw_text_<source>__<domain>`, such as `tw_text_judicial__最高`, and `tw_text_<source>` for a source with one domain.
+Each domain is one [`~eval.tasks.PerplexityTask`]. It scores every document whole, in disjoint windows of 2048 tokens, and reports `bits_per_byte`, `loss_per_token` and `perplexity` over all of its documents (see [Metrics](metrics#perplexity)). Task names follow Paloma's: `tw_text_<source>__<domain>`, such as `tw_text_judicial__地方`, and `tw_text_<source>` for a source with one domain.
 
 Read the results per source, as for Paloma:
 
-- `tw_text:<source>` is the unweighted mean of its domains' `bits_per_byte`, as `paloma:<source>` is. Each domain counts once, whatever its size, so a small domain (a few Supreme Court judgments, a few theses from one university) moves its source's number as much as a large one.
+- `tw_text:<source>` is the unweighted mean of its domains' `bits_per_byte`, as `paloma:<source>` is. Each domain counts once, whatever its size, so a small domain (3 theses from one university) moves its source's number as much as a large one.
 - `tw_text` is the unweighted mean of the 10 sources. Paloma has no score over its sources, but this set was built for one comparison, so it has one. Each source counts once, so read the sources before the mean.
 
 Compare models on `bits_per_byte`, which divides by UTF-8 bytes rather than tokens and so works across tokenizers. `loss_per_token` and `perplexity` compare only models that share a tokenizer.
