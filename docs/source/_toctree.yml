@@ -38,6 +38,10 @@ guide:
     title: Compare with the regression bank
   - local: evals/fineweb-edu
     title: Scoring the FineWeb-Edu dev set
+  - local: evals/fineweb
+    title: Scoring held-out web text in three languages
+  - local: evals/tw-text
+    title: Scoring Taiwan Traditional Chinese text
 - title: App
   sections:
   - title: Using Cerulean Flock

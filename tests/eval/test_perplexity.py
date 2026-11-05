@@ -11,7 +11,9 @@ from flock.eval.requests import Scores
 from flock.eval.results import Results, perplexity_prediction_rows
 from flock.eval.run import EvalConfig, evaluate, score_task
 from flock.eval.tasks import SUITES, TASKS, Dataset, PerplexityTask, Suite, TextDoc
-from flock.eval.tasks.paloma import PALOMA, source_suite
+from flock.eval.tasks.paloma import PALOMA
+from flock.eval.tasks.suite import source_suite
+from flock.eval.tasks.tw_text import TW_TEXT
 
 from .toy import DOMAIN_ROWS, PROVENANCE, TASK, TEXT_ROWS, TEXT_TASK
 
@@ -252,12 +254,71 @@ def test_paloma_is_registered_as_sources_of_domain_tasks():
 
 
 def test_source_suite_names_a_task_per_domain():
-    suite = source_suite("c4_100_domains", ("00_a.org", "01_b.com"))
+    dataset = Dataset(repo="allenai/paloma", revision="0", subset="c4_100_domains", split="test")
+    suite = source_suite("paloma", dataset, ("00_a.org", "01_b.com"))
     assert suite.name == "paloma:c4_100_domains"
     names = [task.name for task in suite.tasks]
     assert names == ["paloma_c4_100_domains__00_a.org", "paloma_c4_100_domains__01_b.com"]
     domains = [task.domain for task in suite.tasks if isinstance(task, PerplexityTask)]
     assert domains == ["00_a.org", "01_b.com"]
+
+
+def test_a_source_listed_with_one_domain_is_one_task_over_that_domain(monkeypatch):
+    # tw_text's one-domain sources: every row carries one `subdomain`, the source's name or `other`.
+    rows = [{**row, "subdomain": "cna"} for row in TEXT_ROWS]
+    monkeypatch.setattr(Dataset, "load", lambda self, split=None: rows)
+    dataset = Dataset(repo="cerulean-works/tw-text-v0", revision="0", subset="cna", split="test")
+
+    (task,) = source_suite("tw_text", dataset, ("cna",)).tasks
+    assert isinstance(task, PerplexityTask)
+    assert (task.name, task.domain) == ("tw_text_cna", "cna")
+    assert len(task.load()) == 3
+
+    # Listed with no domain, as Paloma's one-domain sources are, the same rows are refused.
+    (unlisted,) = source_suite("tw_text", dataset, ()).tasks
+    with pytest.raises(ValueError, match="the rows have domains"):
+        unlisted.load()
+
+
+def test_source_suite_needs_a_dataset_configuration():
+    dataset = Dataset(repo="cerulean-works/tw-text-v0", revision="0", subset=None, split="test")
+    with pytest.raises(ValueError, match="tw_text: a source is a dataset configuration"):
+        source_suite("tw_text", dataset, ())
+
+
+def test_tw_text_is_scored_over_ten_native_sources():
+    assert SUITES["tw_text"] == TW_TEXT
+    sources = [
+        "judicial",
+        "ly",
+        "gov_press",
+        "cna",
+        "pts",
+        "ltn",
+        "cnyes",
+        "twreporter",
+        "zhwiki",
+        "theses",
+    ]
+    assert [suite.name for suite in TW_TEXT.members] == [f"tw_text:{source}" for source in sources]
+    assert [suite.metric for suite in TW_TEXT.suites] == ["bits_per_byte"] * 11
+    assert TW_TEXT.scored
+    assert len(TW_TEXT.tasks) == 18
+    assert not any("bbc" in task.name for task in TW_TEXT.tasks)  # converted text (026.D5)
+
+    district = TASKS["tw_text_judicial__地方"]
+    assert isinstance(district, PerplexityTask)
+    assert (district.dataset.repo, district.dataset.subset) == (
+        "cerulean-works/tw-text-v0",
+        "judicial",
+    )
+    assert (district.dataset.split, district.domain, district.window) == ("test", "地方", 2048)
+    cna = TASKS["tw_text_cna"]
+    assert isinstance(cna, PerplexityTask)
+    assert cna.domain == "cna"
+    zhwiki = TASKS["tw_text_zhwiki"]  # one domain named `other`, scored under the source's name
+    assert isinstance(zhwiki, PerplexityTask)
+    assert zhwiki.domain == "other"
 
 
 def test_fineweb_edu_is_the_labs_task_in_no_suite():
@@ -269,6 +330,38 @@ def test_fineweb_edu_is_the_labs_task_in_no_suite():
         "validation",
     )
     assert all(task not in suite.tasks for suite in SUITES.values())
+
+
+def test_the_fineweb_suite_scores_three_languages_at_one_window_by_bits_per_byte():
+    suite = SUITES["fineweb"]
+    names = [task.name for task in suite.tasks]
+    assert names == ["fineweb_en", "fineweb_zh_hant", "fineweb_zh_hans"]
+    assert suite.metric == "bits_per_byte"
+    for task in suite.tasks:
+        assert TASKS[task.name] is task
+        assert isinstance(task, PerplexityTask)
+        assert (task.window, task.primary_metric, task.domain) == (2048, "perplexity", None)
+
+    # English reads the FineWeb-Edu dev set, so training drops one list of ids for both tasks.
+    english, traditional, simplified = suite.tasks
+    assert english.dataset == TASKS["fineweb_edu"].dataset
+    for task, script in ((traditional, "zh_hant"), (simplified, "zh_hans")):
+        dataset = task.dataset
+        assert (dataset.repo, dataset.subset, dataset.split) == (
+            "cerulean-works/fineweb-2-zh-dev",
+            script,
+            "test",
+        )
+    # One instrument: both scripts come from one revision of the dataset.
+    assert traditional.dataset.revision == simplified.dataset.revision
+
+    # The suite averages bits per byte, never perplexity, which depends on the tokenizer.
+    metrics = {
+        "fineweb_en": {"bits_per_byte": 0.6, "perplexity": 9.0},
+        "fineweb_zh_hant": {"bits_per_byte": 0.9, "perplexity": 30.0},
+        "fineweb_zh_hans": {"bits_per_byte": 0.6, "perplexity": 20.0},
+    }
+    assert suite.score(metrics) == pytest.approx(0.7)
 
 
 def test_toy_texts_span_several_windows(tokenizer):
