@@ -30,6 +30,8 @@ from flock.training import (
 )
 from flock.training.core.models import OLMO2_190M_CONFIG, Olmo2
 
+logger = logging.getLogger(__name__)
+
 
 class PackedDocs(Dataset):
     """Training rows of whole documents joined by the EOS token, the same rows whatever the seed.
@@ -258,7 +260,7 @@ def main() -> int:
     (args.out / "train.json").write_text(json.dumps(summary, indent=1))
     # A run with no evidence or a non-finite window is not scored, and httpx refuses NaN metadata.
     if not summary["finite"]:
-        logging.error("Loss not finite or not logged: no upload, no eval. See train.json.")
+        logger.error("Loss not finite or not logged: no upload, no eval. See train.json.")
         trainer.run.finish(exit_code=1)
         return 1
     if args.train_only:
