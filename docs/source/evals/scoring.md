@@ -13,6 +13,8 @@ A request is a context and a continuation, and its score is the summed log-proba
 
 A continuation with no tokens raises an error, since scoring it as 0 would rank it above every real choice. So does a continuation longer than `max_length` on its own.
 
+A Hugging Face repo with `tokenizer.model` and no `tokenizer.json` at the pinned revision is tokenized by that SentencePiece model directly ([`~eval.tokenizer.SentencePieceTokenizer`]), because `AutoTokenizer` in transformers 5 would convert the model to one that segments text differently. Literal `<s>`, `</s>` or `<unk>` in a text are ordinary text on this path. The repo's files decide the path, so no flag changes it, and a repo's `add_bos_token` setting is not applied.
+
 ## Scoring a whole text
 
 A [`~eval.tasks.PerplexityTask`] scores each doc's text whole with [`~eval.model.ScoringModel.rolling_loglikelihood`], as lm-evaluation-harness's `loglikelihood_rolling` does:
