@@ -6,20 +6,17 @@ import re
 from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Literal, NamedTuple
 
 import torch
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, snapshot_download
 from torch.nn.attention import SDPBackend, sdpa_kernel
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    PreTrainedModel,
-    PreTrainedTokenizerBase,
-)
+from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
 
 from flock.eval.requests import Request, Scores
+from flock.eval.tokenizer import SentencePieceTokenizer, Tokenizer
 
 DEFAULT_BATCH_TOKENS = 32768
 # What a model id starts with when it names a version in the Flock registry.
@@ -121,6 +118,32 @@ def _flock_hub() -> Any:
     return cache
 
 
+def load_tokenizer(ref: ModelRef) -> Tokenizer:
+    """
+    Loads a Hugging Face model's tokenizer, chosen by the repo's files at the pinned revision.
+
+    A repo with `tokenizer.model` and no `tokenizer.json` gets [`~eval.tokenizer.SentencePieceTokenizer`], and `AutoTokenizer` never sees it, so installing `sentencepiece` can't switch it to a conversion. Any other repo goes to `AutoTokenizer`. One model id therefore always means one tokenizer.
+
+    Args:
+        ref (`ModelRef`):
+            The model, already resolved.
+    """
+    # Online this is the revision's file list. Offline it is the cached snapshot, so a pinned
+    # model still loads from the cache.
+    snapshot = Path(
+        snapshot_download(
+            ref.repo, revision=ref.revision, allow_patterns=["tokenizer.json", "tokenizer.model"]
+        )
+    )
+    if (snapshot / "tokenizer.model").exists() and not (snapshot / "tokenizer.json").exists():
+        return SentencePieceTokenizer(snapshot / "tokenizer.model")
+
+    tokenizer = AutoTokenizer.from_pretrained(ref.repo, revision=ref.revision)
+    assert tokenizer is not None  # The stubs allow None; loading raises instead.
+
+    return tokenizer
+
+
 class FlockCausalLM(torch.nn.Module):
     """
     A Flock model, such as `Olmo2`, wrapped to be called as [`ScoringModel`] calls a transformers causal LM.
@@ -180,7 +203,7 @@ class ScoringModel:
     Args:
         model (`PreTrainedModel` or `FlockCausalLM`):
             A causal LM, already on its device and in its dtype. Wrap a Flock model, such as `Olmo2`, in [`FlockCausalLM`].
-        tokenizer (`PreTrainedTokenizerBase`):
+        tokenizer (`PreTrainedTokenizerBase` or `SentencePieceTokenizer`):
             The model's tokenizer.
         name (`str`):
             Labels the model in log messages. [`~eval.run.evaluate`] records it as the provenance's `model`, `repo@commit` or `flock:org/name@number`.
@@ -198,7 +221,7 @@ class ScoringModel:
     def __init__(
         self,
         model: PreTrainedModel | FlockCausalLM,
-        tokenizer: PreTrainedTokenizerBase,
+        tokenizer: Tokenizer,
         *,
         name: str,
         max_length: int | None = None,
@@ -235,7 +258,7 @@ class ScoringModel:
 
         The revision is resolved to its commit hash, which becomes the model's `name`, so a branch or tag in `model_id` is recorded as the exact weights that were scored. A Flock version (a tag, `primary`, or none for the primary) is resolved to its number, so the model's `name` is `flock:org/name@number`, and its `digest` is the version's.
 
-        A Flock model is loaded with [`~hub.models.load_from_hub`] and wrapped in [`FlockCausalLM`]. Its tokenizer is the Hugging Face one its config's `hf_repo` names.
+        A Hugging Face model's tokenizer comes from [`load_tokenizer`]. A Flock model is loaded with [`~hub.models.load_from_hub`] and wrapped in [`FlockCausalLM`]. Its tokenizer is the Hugging Face one its config's `hf_repo` names.
 
         Args:
             model_id (`str`):
@@ -274,8 +297,7 @@ class ScoringModel:
                 digest=ref.digest,
             )
 
-        tokenizer = AutoTokenizer.from_pretrained(ref.repo, revision=ref.revision)
-        assert tokenizer is not None  # The stubs allow None; loading raises instead.
+        tokenizer = load_tokenizer(ref)
         model = AutoModelForCausalLM.from_pretrained(
             ref.repo, revision=ref.revision, dtype=dtype, device_map=device
         )

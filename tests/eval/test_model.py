@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 from torch.nn.attention import SDPBackend, sdpa_kernel
+from transformers import PreTrainedTokenizerBase
 
 from flock.eval import model
 from flock.eval.model import FlockCausalLM, ModelRef, ScoringModel
@@ -44,14 +45,16 @@ def greedy_reference(scorer: ScoringModel, request: Request) -> bool:
 def greedy_requests(scorer: ScoringModel) -> list[Request]:
     """`REQUESTS`, and after each non-empty context the text of the model's next one and two greedy tokens."""
     requests = list(REQUESTS)
+    tokenizer = scorer.tokenizer
+    assert isinstance(tokenizer, PreTrainedTokenizerBase)
     for context in dict.fromkeys(request.context for request in REQUESTS if request.context):
-        ids = scorer.tokenizer.encode(context, add_special_tokens=False)
+        ids = tokenizer.encode(context, add_special_tokens=False)
         start = len(ids)
         with torch.no_grad():
             for _ in range(2):
                 ids.append(scorer.model(torch.tensor([ids])).logits[0, -1].argmax().item())
                 generated = ids[start:]
-                text = scorer.tokenizer.decode(generated)
+                text = tokenizer.decode(generated)
                 assert isinstance(text, str)  # one sequence of ids decodes to one string
                 requests.append(Request(context, text))
     return requests

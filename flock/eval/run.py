@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Literal, get_args
 
 import torch
-from transformers import PreTrainedTokenizerBase
 
 from flock.eval.metrics import bits_per_byte, multiple_choice
 from flock.eval.model import DEFAULT_BATCH_TOKENS, Encoded, ScoringModel
@@ -33,6 +32,7 @@ from flock.eval.tasks import (
     Truncation,
 )
 from flock.eval.tasks.suite import by_name
+from flock.eval.tokenizer import Tokenizer
 
 # Why `evaluate` and `score_task` refuse an output that is already there, and what to do.
 _ONE_RUN = (
@@ -226,7 +226,7 @@ class PreparedMultipleChoice:
             The task.
         limit (`int` or `None`):
             The doc limit it was prepared with, `None` for every doc.
-        tokenizer (`PreTrainedTokenizerBase`):
+        tokenizer (`PreTrainedTokenizerBase` or `SentencePieceTokenizer`):
             The tokenizer `encoded` comes from.
         requests (`MCRequests`):
             The docs, their requests and the task hash.
@@ -236,7 +236,7 @@ class PreparedMultipleChoice:
 
     task: MultipleChoiceTask
     limit: int | None
-    tokenizer: PreTrainedTokenizerBase
+    tokenizer: Tokenizer
     requests: MCRequests
     encoded: tuple[Encoded, ...]
 
@@ -251,7 +251,7 @@ class PreparedPerplexity:
             The task.
         limit (`int` or `None`):
             The doc limit it was prepared with, `None` for every doc.
-        tokenizer (`PreTrainedTokenizerBase`):
+        tokenizer (`PreTrainedTokenizerBase` or `SentencePieceTokenizer`):
             The tokenizer `token_ids` comes from.
         docs (`tuple[TextDoc, ...]`):
             The scored docs, in order.
@@ -263,7 +263,7 @@ class PreparedPerplexity:
 
     task: PerplexityTask
     limit: int | None
-    tokenizer: PreTrainedTokenizerBase
+    tokenizer: Tokenizer
     docs: tuple[TextDoc, ...]
     task_hash: str
     token_ids: tuple[list[int], ...]
