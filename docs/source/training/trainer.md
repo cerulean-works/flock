@@ -50,6 +50,7 @@ Edit the recipe's configuration, or import the public classes from
 from flock.training import AdamWConfig, CosineConfig, TrainerConfig, WSDConfig
 
 config = TrainerConfig(
+    run_name="olmo2_dolma3",
     input_column="text",
     batch_size=2,
     optimizer_config=AdamWConfig(lr=1e-3, betas=(0.95, 0.99)),

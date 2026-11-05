@@ -2,24 +2,29 @@ import logging
 import math
 import random
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Literal, cast, overload
 
 import torch
 import torch.nn.functional as F
 import wandb
 from lance.torch.data import SafeLanceDataset
-from torch.nn import Module
 from torch.optim import AdamW, Muon, Optimizer
 from torch.utils.data import DataLoader
 from transformers import TokenizersBackend
 
+from flock.hub.models import save_to_hub
+from flock.hub.models.files import write_model
 from flock.training.core.data_utils import Batch, LanceBatchCollator
 from flock.training.core.lr_scheduler import LRSchedulerConfig, StepLRScheduler
+from flock.training.core.models import BaseModel
 from flock.training.core.optimization import AdamWConfig, MuonConfig, OptimizerConfig
 
 
 @dataclass(frozen=True, kw_only=True)
 class TrainerConfig:
+    run_name: str
+
     input_column: str
     batch_size: int
 
@@ -31,6 +36,12 @@ class TrainerConfig:
 
     wandb_project: str
     wandb_mode: Literal["online", "offline", "disabled", "shared"] = "online"
+
+    output_dir: str | None = None
+    save_steps: int | None = None
+    save_total_limit: int | None = None
+    save_to_hub_repo: str | None = None
+    overwrite_output_dir: bool = False
 
     # Master weights are always stored in FP32, but the model can be trained in BF16.
     model_dtype: torch.dtype = torch.bfloat16
@@ -44,10 +55,11 @@ class Trainer:
         self,
         *,
         config: TrainerConfig,
-        model: Module,
+        model: BaseModel,
         tokenizer: TokenizersBackend,
         dataset: SafeLanceDataset,
     ):
+        self.run_name = config.run_name
         self.seed = config.seed
         self.device = (
             torch.device("cuda:0")
@@ -56,6 +68,13 @@ class Trainer:
             if torch.mps.is_available()
             else torch.device("cpu")
         )
+
+        self.logger = logging.getLogger(__name__)
+        self.run = wandb.init(
+            project=config.wandb_project, mode=config.wandb_mode, config=asdict(config)
+        )
+        self.run.define_metric("global_step")
+        self.run.define_metric("train/*", step_metric="global_step")
 
         self.model = model.to(self.device)
         self.tokenizer = tokenizer
@@ -74,12 +93,31 @@ class Trainer:
         self.optimizer = self._get_optimizer(config.optimizer_config)
         self.lr_scheduler = self._get_lr_scheduler(config.lr_scheduler_config, self.total_steps)
 
-        self.logger = logging.getLogger(__name__)
-        self.run = wandb.init(
-            project=config.wandb_project, mode=config.wandb_mode, config=asdict(config)
+        self.output_dir: Path = (
+            Path(config.output_dir)
+            if config.output_dir is not None
+            else Path.cwd().joinpath(".training-checkpoints").joinpath(self.run_name)
         )
-        self.run.define_metric("global_step")
-        self.run.define_metric("train/*", step_metric="global_step")
+        self.save_steps = config.save_steps
+        self.save_total_limit = config.save_total_limit
+        self.save_to_hub_repo = config.save_to_hub_repo
+        self.overwrite_output_dir = config.overwrite_output_dir
+
+        if self.save_steps is not None and self.save_steps <= 0:
+            raise ValueError("save_steps must be a positive integer or None")
+        if self.save_total_limit is not None and self.save_total_limit <= 0:
+            raise ValueError("save_total_limit must be a positive integer or None")
+
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        if any(self.output_dir.iterdir()):
+            if self.overwrite_output_dir:
+                self.logger.warning(
+                    f"Save directory {self.output_dir} is not empty. Overwriting existing files."
+                )
+            else:
+                raise RuntimeError(
+                    f"Save directory {self.output_dir} is not empty. Please specify an empty directory."
+                )
 
     def _get_training_dataloader(self) -> DataLoader:
         collator = LanceBatchCollator(self.tokenizer, self.ds_input_column)
@@ -223,3 +261,35 @@ class Trainer:
                 grad_norm_max.zero_()
                 window_tokens.zero_()
                 window_steps.zero_()
+
+            if self.save_steps is None:
+                continue
+
+            if (idx + 1) % self.save_steps == 0 or (idx + 1) == self.total_steps:
+                self.logger.info(f"Saving model at step {idx + 1}")
+                self.save_model(idx + 1)
+
+    def save_model(self, step: int):
+        self.logger.info(f"Saving model at step {step}")
+        save_path = self.output_dir.joinpath(f"checkpoint-{step}")
+        if self.save_to_hub_repo is not None:
+            save_to_hub(self.model, self.save_to_hub_repo, run=self.run, step=step)
+        else:
+            write_model(
+                self.model,
+                save_path,
+                shard_size=5 * 2**30,
+                run=f"{self.run.entity}/{self.run.project}/{self.run.id}",
+                step=step,
+                training_state=None,
+            )
+        if self.save_total_limit is not None:
+            checkpoints = sorted(
+                self.output_dir.glob("checkpoint-*"), key=lambda p: p.stat().st_mtime
+            )
+            while len(checkpoints) > self.save_total_limit:
+                checkpoint_to_delete = checkpoints.pop(0)
+                self.logger.info(f"Deleting old checkpoint {checkpoint_to_delete}")
+                for file in checkpoint_to_delete.glob("*"):
+                    file.unlink()
+                checkpoint_to_delete.rmdir()

@@ -1,4 +1,5 @@
 import copy
+import json
 from dataclasses import dataclass, field
 from typing import cast
 
@@ -13,6 +14,7 @@ from torch.utils.data import DataLoader
 
 from flock.training.core.data_utils import LanceBatchCollator
 from flock.training.core.lr_scheduler import CosineConfig
+from flock.training.core.models import BaseModel
 from flock.training.core.models.olmo2 import Olmo2
 from flock.training.core.optimization import AdamWConfig, MuonConfig
 from flock.training.core.trainer import Trainer, TrainerConfig
@@ -20,6 +22,9 @@ from flock.training.core.trainer import Trainer, TrainerConfig
 
 @dataclass
 class RecordingRun:
+    entity: str = "flock"
+    project: str = "pretrain"
+    id: str = "run123"
     definitions: list = field(default_factory=list)
     metrics: list = field(default_factory=list)
 
@@ -31,7 +36,7 @@ class RecordingRun:
 
 
 @pytest.fixture
-def trainer_factory(config, tokenizer, monkeypatch):
+def trainer_factory(config, tokenizer, monkeypatch, tmp_path):
     # These tests must remain on CPU even when invoked on a developer GPU machine.
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     monkeypatch.setattr(torch.mps, "is_available", lambda: False)
@@ -53,6 +58,7 @@ def trainer_factory(config, tokenizer, monkeypatch):
             ]
         trainer = Trainer(
             config=TrainerConfig(
+                run_name="test-run",
                 input_column="text",
                 batch_size=2,
                 optimizer_config=AdamWConfig(lr=0.01, betas=(0.8, 0.9)),
@@ -61,6 +67,7 @@ def trainer_factory(config, tokenizer, monkeypatch):
                 dataloader_prefetch_factor=prefetch_factor,
                 wandb_project="offline-test",
                 wandb_mode="disabled",
+                output_dir=str(tmp_path / "checkpoints"),
                 max_norm=0.01,
                 logging_steps=logging_steps,
             ),
@@ -85,9 +92,17 @@ def test_trainer_initializes_schedule_and_metric_step(trainer_factory):
     ]
 
 
+def test_local_checkpoint_records_run_identity(trainer_factory):
+    trainer, _, _ = trainer_factory()
+    trainer.save_model(7)
+    metadata = json.loads((trainer.output_dir / "checkpoint-7" / "flock.json").read_text())
+    assert metadata["run"] == "flock/pretrain/run123"
+    assert metadata["step"] == 7
+
+
 def test_adamw_forwards_configuration_and_matches_torch_updates():
     trainer = object.__new__(Trainer)
-    trainer.model = nn.Linear(3, 2)
+    trainer.model = cast(BaseModel, nn.Linear(3, 2))
     reference = copy.deepcopy(trainer.model)
     optimizer = trainer._get_optimizer(AdamWConfig(lr=0.02, betas=(0.7, 0.95)))
     expected_optimizer = torch.optim.AdamW(reference.parameters(), lr=0.02, betas=(0.7, 0.95))
@@ -107,7 +122,7 @@ def test_adamw_forwards_configuration_and_matches_torch_updates():
 
 def test_muon_remains_explicitly_unsupported():
     trainer = object.__new__(Trainer)
-    trainer.model = nn.Linear(3, 2)
+    trainer.model = cast(BaseModel, nn.Linear(3, 2))
     with pytest.raises(NotImplementedError, match="Muon"):
         trainer._get_optimizer(MuonConfig(lr=0.01, momentum=0.9))
 
