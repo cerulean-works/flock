@@ -20,7 +20,6 @@ from torch.utils.data import Dataset
 from flock.eval.provenance import flock_commit
 from flock.eval.run import EvalConfig, evaluate
 from flock.hub import models as hub_models
-from flock.hub.models._common import Ref
 from flock.training import (
     AdamWConfig,
     CosineConfig,
@@ -133,9 +132,9 @@ def main() -> int:
     # save_to_hub parses the name only after training, when a bad one would lose the model.
     if args.hub_name is not None:
         try:
-            Ref.parse(args.hub_name, version=False)
+            hub_models.Ref.parse(args.hub_name, version=False)
         except ValueError as error:
-            parser.error(str(error))
+            parser.error(f"--hub-name: {error}")
     # The upload needs flock-hub's models extra; without it a run would train, then fail.
     missing = [name for name in ("boto3", "safetensors") if importlib.util.find_spec(name) is None]
     if missing and not args.train_only:
@@ -258,9 +257,13 @@ def main() -> int:
     }
     (args.out / "train.json").write_text(json.dumps(summary, indent=1))
     # A run with no evidence or a non-finite window is not scored, and httpx refuses NaN metadata.
-    if args.train_only or not summary["finite"]:
+    if not summary["finite"]:
+        logging.error("Loss not finite or not logged: no upload, no eval. See train.json.")
+        trainer.run.finish(exit_code=1)
+        return 1
+    if args.train_only:
         trainer.run.finish()
-        return 0 if summary["finite"] else 1
+        return 0
 
     version = hub_models.save_to_hub(
         model,

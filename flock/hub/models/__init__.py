@@ -12,7 +12,7 @@ Saving and loading models needs torch and safetensors (`flock-hub[models]`), imp
 when used. Everything signs in as [`~cli.credentials.resolve`] does.
 """
 
-from flock.hub.models._common import ModelError, ModelFile, ModelVersion
+from flock.hub.models._common import ModelError, ModelFile, ModelVersion, Ref
 from flock.hub.models.cache import download, load_from_hub, load_training_state
 from flock.hub.models.registry import list_models, set_primary, tag, untag, versions
 from flock.hub.models.upload import PendingUpload, resume_uploads, save_to_hub
@@ -22,6 +22,7 @@ __all__ = [
     "ModelFile",
     "ModelVersion",
     "PendingUpload",
+    "Ref",
     "download",
     "list_models",
     "load_from_hub",
