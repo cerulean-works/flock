@@ -31,7 +31,7 @@ class PerplexityTask:
     """
     A task that scores how well a model fits plain text, as Paloma does (Magnusson et al. 2023, arXiv 2312.10523): each doc whole, in disjoint windows (see [`~eval.model.ScoringModel.rolling_loglikelihood`]), reported as `bits_per_byte`, `loss_per_token` and `perplexity` over all of the task's docs.
 
-    Rows have Paloma's format: `id` and `text`, plus `subdomain` in a source with more than one domain.
+    Rows have Paloma's format: `id` and `text`, plus `subdomain` in a source with more than one domain. A source with one domain may also give every row the same `subdomain`.
 
     Args:
         name (`str`):
@@ -39,7 +39,7 @@ class PerplexityTask:
         dataset (`Dataset`):
             Where the scored rows come from.
         domain (`str`, *optional*):
-            Score only the rows whose `subdomain` is this. Leave it unset only for a source with one domain, whose rows have no `subdomain`.
+            Score only the rows whose `subdomain` is this. Leave it unset only for a source whose rows have no `subdomain`.
         window (`int`, *optional*, defaults to 2048):
             The most tokens in one model input. It is part of the task, not the model, so every model is scored with the same context. A model whose `max_length` is smaller raises.
         primary_metric (`str`, *optional*, defaults to `"bits_per_byte"`):

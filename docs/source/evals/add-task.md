@@ -46,7 +46,7 @@ uv run flock eval run \
 
 ## A perplexity task
 
-A [`~eval.tasks.PerplexityTask`] needs no row function: it reads each row's `id` and `text`, and keeps the rows whose `subdomain` is its `domain`. A Paloma source is one line in `DOMAINS` in `flock/eval/tasks/paloma.py`, with the domains `flock/eval/scripts/paloma_census.py` prints for it. `source_suite` makes one task per domain and the source's suite, and `PALOMA` registers them.
+A [`~eval.tasks.PerplexityTask`] needs no row function: it reads each row's `id` and `text`, and keeps the rows whose `subdomain` is its `domain`. A Paloma source is one line in `DOMAINS` in `flock/eval/tasks/paloma.py`, with the domains `flock/eval/scripts/paloma_census.py` prints for it. `source_suite` makes one task per domain and the source's suite, and `PALOMA` registers them. `tw_text` is built the same way from `SOURCES` in `flock/eval/tasks/tw_text.py`, whose rows always carry `subdomain`: list a source whose rows carry one value with that value, such as `"cna": ("cna",)` or `"zhwiki": ("other",)`, never with none, and list every distinct `subdomain` value of the other sources' `test` split.
 
 ## Check that it works
 
