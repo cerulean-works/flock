@@ -109,6 +109,14 @@ def test_bos_and_eos_come_from_the_processor_and_may_be_absent(model_file, tmp_p
     assert (bare.bos_token_id, bare.eos_token_id) == (None, None)
 
 
+def test_a_tokenizer_model_in_another_format_is_an_error_not_another_tokenization(tmp_path):
+    # Llama 3's `tokenizer.model` is a tiktoken file: base64 of a token, then its rank.
+    path = tmp_path / "tokenizer.model"
+    path.write_text("IQ== 0\nIg== 1\n")
+    with pytest.raises(RuntimeError):
+        SentencePieceTokenizer(path)
+
+
 def test_the_repos_files_choose_the_tokenizer(model_file, tmp_path, monkeypatch):
     ref = ModelRef("org/repo", "a" * 40)
     asked = []
