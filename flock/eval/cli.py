@@ -63,7 +63,7 @@ def main() -> None:
 @click.option(
     "--add-bos",
     is_flag=True,
-    help="Start every context with the tokenizer's BOS token, as OLMES does for Gemma.",
+    help="Start every non-empty context with the tokenizer's BOS token, as OLMES does for Gemma.",
 )
 @click.option("--device", help="Torch device (default: cuda if available).")
 @click.option("--wandb-project", help="Also log the summary to this tracker project.")

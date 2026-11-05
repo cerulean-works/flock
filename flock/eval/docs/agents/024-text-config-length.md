@@ -49,6 +49,8 @@ BOS changes every context, so it is part of the instrument, like `max_length`. `
 
 Before the full Gemma runs, OLMo 2 1B's smoke run (20 docs per task, FP32) was repeated after the text-config change and again after `add_bos`, and diffed with the run before both: the same `max_length`, task hashes and doc counts, and every metric equal. A tiny copy of Gemma 4 E2B's real config, built with random weights, took `ScoringModel`'s forward arguments on a left-padded batch and returned finite logits of the vocabulary's width.
 
+This branch was then merged with `main` after the core refactor (025), so BOS now sits on the inlined form of `encode_requests` that 025 left, with `_move_whitespace` and `_tokenize_contexts` gone.
+
 The first version had only the text-config change. Review found that Gemma would then load but be scored without BOS, which is how 024.D2 and D3 came in.
 
 ---
