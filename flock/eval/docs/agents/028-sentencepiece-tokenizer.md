@@ -63,6 +63,7 @@ No special tokens are added to tokenized text, as for every model, and no refere
 
 - **The loader is its own function,** not inlined in `from_pretrained`, so the tokenizer can be checked without loading weights.
 - **The dependency adds 30 lock lines.** It was added with uv 0.13.7, because uv 0.12.17 (CI's) rewrites the lockfile from revision 5 to revision 3 and churns its markers. CI only reads the lock (`--frozen`), so its version is unchanged.
+- **The docs workflows mock `sentencepiece`.** They build without flock's dependencies, and autodoc's import of `flock.eval.tokenizer` failed without it, so `mock_deps` gains it in `flock-docs.yml` and `flock-docs-pr.yml`.
 - **Checks.**
   - All 34,804 strings give the same ids as raw `encode`, the 4 with special-token text included.
   - OLMo 2 1B, Llama 3.2 1B, Qwen3.5 0.8B, Qwen3.5 4B and Gemma 4 E2B give the same ids on those strings with `sentencepiece` installed and through `load_tokenizer` as with neither.
