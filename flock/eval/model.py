@@ -344,7 +344,7 @@ class ScoringModel:
             requests (`Sequence[Request]`):
                 The requests to score.
             encoded (`Sequence[Encoded]`, *optional*):
-                The requests' token ids from [`encode_requests`] with this model's tokenizer, to skip tokenizing them again. Tokenized here if not given.
+                The requests' token ids from [`encode_requests`] with this model's tokenizer and `add_bos`, to skip tokenizing them again. Tokenized here if not given.
 
         Raises:
             `ValueError`: if a continuation has no tokens, or is longer than `max_length` on its own.

@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | in review |
 | Date | 2026-11-04 |
-| Builds on | [001](001-eval-core.md) (`ScoringModel`, tokenization), [013](013-score-compare.md) (`compare`), [014](014-run-provenance.md) (the results file), [022](022-prepared-tasks.md) (prepared tasks), [023](023-deterministic-scoring.md) (schema 7) |
+| Builds on | [001](001-eval-core.md) (`ScoringModel`, tokenization), [013](013-score-compare.md) (`compare`), [014](014-run-provenance.md) (the results file), [022](022-prepared-tasks.md) (prepared tasks), [023](023-deterministic-scoring.md) (schema 7), [025](025-core-style.md) (the inlined `encode_requests`) |
 | Keeps | Every task hash, every score of a run without `add_bos`, the `max_length` of every text-only model |
 | Result | `ScoringModel` reads `max_position_embeddings` from the text config, and `add_bos` (`--add-bos`) starts every non-empty context with BOS, recorded in the provenance (schema 8) and refused by `compare` when it differs |
 
@@ -49,9 +49,9 @@ BOS changes every context, so it is part of the instrument, like `max_length`. `
 
 Before the full Gemma runs, OLMo 2 1B's smoke run (20 docs per task, FP32) was repeated after the text-config change and again after `add_bos`, and diffed with the run before both: the same `max_length`, task hashes and doc counts, and every metric equal. A tiny copy of Gemma 4 E2B's real config, built with random weights, took `ScoringModel`'s forward arguments on a left-padded batch and returned finite logits of the vocabulary's width.
 
-This branch was then merged with `main` after the core refactor (025), so BOS now sits on the inlined form of `encode_requests` that 025 left, with `_move_whitespace` and `_tokenize_contexts` gone.
-
 The first version had only the text-config change. Review found that Gemma would then load but be scored without BOS, which is how 024.D2 and D3 came in.
+
+This branch was then merged with `main` after the core refactor (025), so BOS now sits on the inlined form of `encode_requests` that 025 left. Both smoke runs were repeated at the merged code, OLMo 2 1B without BOS and Gemma 4 E2B with it, and every metric of all 495 and 496 tasks was equal.
 
 ---
 
@@ -60,4 +60,5 @@ The first version had only the text-config change. Review found that Gemma would
 - **The towers load and sit idle.** In FP32 they take 1.9 GB of Gemma 4 E2B's 20.4 GB of weights. That fits an H200 with room for the default batches, so a text-only loader would only save memory, and it would be a second loading path for one family. If a larger multimodal model does not fit, that loader is the change to make.
 - **`attention` reads the top-level config.** It records `model.config._attn_implementation`. A model loaded with a different attention implementation per sub-config would record the top level's, not the text model's. `from_pretrained` never asks for that, so every model it loads has one value.
 - **`get_text_config` raises on an ambiguous config.** A config with two text sub-configs among `decoder`, `generator` and `text_config` makes transformers raise. No model scored today has one.
+- **Left truncation can cut BOS.** BOS is the context's first token, so a request longer than `max_length` loses it with the rest of the cut, and the provenance still says `add_bos`. OLMES cuts the same way (`oe_eval/models/eleuther_huggingface.py:383`, `(context_enc + continuation_enc)[-(self.max_length + 1) :]`, with BOS in `context_enc`). The truncation count shows the cut. Gemma 4 E2B's runs cut nothing.
 - **Nothing sets `add_bos` for you.** A Gemma run without `--add-bos` scores without BOS and records `add_bos: false`, so it can be told apart but not prevented.

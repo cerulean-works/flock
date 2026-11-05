@@ -661,14 +661,20 @@ def test_add_bos_starts_every_non_empty_context_with_bos(lm, tokenizer):
     plain = ScoringModel(lm, with_bos, name="tiny@0")
     bos = ScoringModel(lm, with_bos, name="tiny@0", add_bos=True)
 
-    for request in REQUESTS:
+    # Trailing whitespace moves to the continuation, and a whitespace-only context counts as empty.
+    requests = [*REQUESTS, Request("Answer: ", "Paris"), Request(" \n", " fox")]
+    for request in requests:
         context, continuation = plain.encode(request)
         if request.context.strip():  # an empty context is one prefix token already, BOS here
             context = [with_bos.bos_token_id, *context]
         assert bos.encode(request) == (context, continuation)
 
-    expected = torch.tensor([reference(bos, request) for request in REQUESTS])
-    torch.testing.assert_close(bos.loglikelihood(REQUESTS).logprob, expected, atol=1e-4, rtol=1e-5)
+    # The two requests of one context share one list, so a few-shot context is held once.
+    encoded = bos.encode_requests(requests)
+    assert encoded[0].context is encoded[1].context
+
+    expected = torch.tensor([reference(bos, request) for request in requests])
+    torch.testing.assert_close(bos.loglikelihood(requests).logprob, expected, atol=1e-4, rtol=1e-5)
     # A rolling text's first window starts from BOS with or without it.
     assert torch.equal(
         bos.rolling_loglikelihood(TEXTS, 8).logprob, plain.rolling_loglikelihood(TEXTS, 8).logprob
