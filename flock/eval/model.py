@@ -498,6 +498,13 @@ class ScoringModel:
         # Few-shot contexts repeat once per choice, so each distinct one is tokenized once.
         distinct = sorted({context for context in contexts if context})
         ids_by_context = dict(zip(distinct, self.tokenize(distinct), strict=True))
+        # As OLMES's `tok_encode` with `add_bos_token`, which puts BOS before the context and the
+        # joined text alike, so only the context changes. Once per distinct context, so the
+        # requests of one few-shot context keep sharing one list.
+        starts = ids_by_context
+        if self.add_bos:
+            bos = self.tokenizer.bos_token_id
+            starts = {context: [bos, *ids] for context, ids in ids_by_context.items()}
 
         encoded = []
         for context, joined in zip(contexts, joined_ids, strict=True):
