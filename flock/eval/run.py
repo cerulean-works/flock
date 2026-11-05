@@ -368,7 +368,7 @@ def score_prepared(
             f"{task.name} was prepared with another tokenizer than {model.name}'s; "
             "prepare it again with this model"
         )
-    # A perplexity task's windows never take the context BOS: they start from one already.
+    # A perplexity task is not checked: `add_bos` never changes its windows (024.D2).
     if isinstance(prepared, PreparedMultipleChoice) and model.add_bos != prepared.add_bos:
         raise ValueError(
             f"{task.name} was prepared with add_bos={prepared.add_bos}, but {model.name} has "
