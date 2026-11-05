@@ -40,7 +40,7 @@ _ONE_RUN = (
     "Pass a new out directory or delete this one."
 )
 
-# The weights' dtypes `run` loads. Log-softmax always runs in float32.
+# The weights' dtypes `run` loads. Log-softmax always runs in FP32.
 Dtype = Literal["bfloat16", "float32"]
 
 
@@ -61,7 +61,7 @@ class EvalConfig:
         batch_tokens (`int`, *optional*):
             Passed to [`~eval.model.ScoringModel`].
         dtype (`Dtype`, *optional*, defaults to `"bfloat16"`):
-            The weights' dtype, `"bfloat16"` or `"float32"`. Log-softmax always runs in float32.
+            The weights' dtype, `"bfloat16"` or `"float32"`. Log-softmax always runs in FP32.
         device (`str`, *optional*):
             Where to run. Defaults to CUDA when available.
         wandb_project (`str`, *optional*):
