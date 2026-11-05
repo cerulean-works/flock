@@ -20,6 +20,7 @@ from torch.utils.data import Dataset
 from flock.eval.provenance import flock_commit
 from flock.eval.run import EvalConfig, evaluate
 from flock.hub import models as hub_models
+from flock.hub.models._common import Ref
 from flock.training import (
     AdamWConfig,
     CosineConfig,
@@ -130,8 +131,11 @@ def main() -> int:
     if args.hub_name is None and not args.train_only:
         parser.error("--hub-name is required unless --train-only")
     # save_to_hub parses the name only after training, when a bad one would lose the model.
-    if args.hub_name is not None and (args.hub_name.count("/") != 1 or "@" in args.hub_name):
-        parser.error(f"--hub-name must be org/name, got {args.hub_name}")
+    if args.hub_name is not None:
+        try:
+            Ref.parse(args.hub_name, version=False)
+        except ValueError as error:
+            parser.error(str(error))
     # The upload needs flock-hub's models extra; without it a run would train, then fail.
     missing = [name for name in ("boto3", "safetensors") if importlib.util.find_spec(name) is None]
     if missing and not args.train_only:
@@ -174,8 +178,9 @@ def main() -> int:
     os.environ.setdefault("WANDB_NAME", f"seed-noise-190m-s{args.seed}")
     # From the OLMo 2 ladder's 190M: peak LR 9.7e-4, warmup of 363 steps of 524,288 tokens (190M
     # tokens), cosine decay to 10% of the peak over the run (arXiv 2412.04403, sec. 2.1, Table 1).
-    # Not the ladder's recipe as a whole: its LR here meets steps of about 49k tokens, not 524k,
-    # and the betas (flock's scaffold) and weight decay (torch's 0.01) are not OLMo 2's.
+    # Not the ladder's recipe as a whole: its LR here meets steps of batch_size x 2047 tokens
+    # (about 49k at batch 24), not 524k, and the betas (flock's scaffold) and weight decay
+    # (torch's 0.01) are not OLMo 2's.
     warmup_steps = round(363 * 524_288 / (args.batch_size * targets_per_row))
     trainer_config = TrainerConfig(
         input_column="text",
@@ -194,8 +199,6 @@ def main() -> int:
         # The trainer only needs a map-style dataset, as its own tests rely on.
         dataset=cast(SafeLanceDataset, dataset),
     )
-    # The trainer's run has its name now; evaluate's run in model-evals must not inherit it.
-    os.environ.pop("WANDB_NAME", None)
 
     # Counted on the device as the trainer counts its loss tokens, read once at the end.
     targets = torch.zeros((), dtype=torch.int64, device=trainer.device)
@@ -254,9 +257,10 @@ def main() -> int:
         "command": shlex.join(sys.argv),
     }
     (args.out / "train.json").write_text(json.dumps(summary, indent=1))
-    if args.train_only:
+    # A run with no evidence or a non-finite window is not scored, and httpx refuses NaN metadata.
+    if args.train_only or not summary["finite"]:
         trainer.run.finish()
-        return 0
+        return 0 if summary["finite"] else 1
 
     version = hub_models.save_to_hub(
         model,

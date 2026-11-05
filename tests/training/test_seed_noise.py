@@ -1,3 +1,5 @@
+import sys
+
 import lance
 import pyarrow as pa
 import pytest
@@ -8,7 +10,7 @@ from transformers import TokenizersBackend
 
 from flock.training.core.data_utils import LanceBatchCollator
 from flock.training.core.models import OLMO2_190M_CONFIG, Olmo2
-from flock.training.experiments.baselines.seed_noise import PackedDocs, spikes
+from flock.training.experiments.baselines.seed_noise import PackedDocs, main, spikes
 
 
 @pytest.fixture
@@ -97,3 +99,24 @@ def test_spikes_flag_a_window_above_the_running_maximum_of_the_ten_before():
     # The window maximum of the previous 100 steps falls as training does.
     assert spikes([9.0] + [4.0] * 10 + [6.1]) == [11]
     assert spikes([1.0, 100.0] + [100.0] * 8) == []  # no full history yet
+
+
+@pytest.mark.parametrize("name", ["olmo2", "org/", "/olmo2", "org/a/b", "org/olmo2@3"])
+def test_a_hub_name_save_to_hub_would_refuse_stops_before_training(
+    name, monkeypatch, tmp_path, capsys
+):
+    argv = ["seed_noise", "--seed", "0", "--batch-size", "1", "--out", str(tmp_path)]
+    monkeypatch.setattr(sys, "argv", [*argv, "--hub-name", name])
+    with pytest.raises(SystemExit):
+        main()
+    assert repr(name) in capsys.readouterr().err
+
+
+def test_an_out_that_is_a_file_stops_before_training(monkeypatch, tmp_path, capsys):
+    out = tmp_path / "file"
+    out.write_text("")
+    argv = ["seed_noise", "--seed", "0", "--batch-size", "1", "--out", str(out), "--train-only"]
+    monkeypatch.setattr(sys, "argv", argv)
+    with pytest.raises(SystemExit):
+        main()
+    assert "not an empty directory" in capsys.readouterr().err
