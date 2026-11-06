@@ -313,7 +313,7 @@ class ScoringModel:
             device (`str` or `torch.device`, *optional*):
                 Where to put the weights. Defaults to CUDA when available, else the CPU.
             dtype (`torch.dtype`, *optional*, defaults to `torch.bfloat16`):
-                The weights' dtype. Log-softmax always runs in float32.
+                The weights' dtype. Log-softmax always runs in FP32.
             batch_tokens (`int`, *optional*):
                 Passed to [`ScoringModel`].
 
@@ -402,11 +402,18 @@ class ScoringModel:
         """
         if encoded is None:
             encoded = self.encode_requests(requests)
-        self._check_continuations(requests, encoded)
-        input_lengths = [_input_length(pair, self.max_length) for pair in encoded]
-        tokens_cut = [
-            _window_length(pair) - 1 - length for pair, length in zip(encoded, input_lengths)
-        ]
+        # As lm-evaluation-harness asserts in `_loglikelihood_tokens`. An empty continuation would
+        # score 0, above every real choice.
+        for request, (_, continuation) in zip(requests, encoded, strict=True):
+            if not continuation:
+                raise ValueError(f"continuation has no tokens: {request}")
+            if len(continuation) > self.max_length:
+                raise ValueError(f"continuation longer than {self.max_length} tokens: {request}")
+
+        # A window holds at most `max_length + 1` tokens: the model's input, then one last token
+        # that is only ever a target. Anything beyond is cut from the left of the context.
+        totals = [len(context) + len(continuation) for context, continuation in encoded]
+        tokens_cut = [max(0, total - (self.max_length + 1)) for total in totals]
         # Left truncation changes what is scored, so it is never silent.
         truncated = sum(cut > 0 for cut in tokens_cut)
         if truncated:
@@ -503,7 +510,12 @@ class ScoringModel:
 
     def _logprobs(self, encoded: Sequence[Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
         """Each encoded request's summed continuation log-probability (FP32) and whether its continuation is the greedy one, in order on the model's device, scored longest first in batches of at most `batch_tokens` padded tokens."""
-        input_lengths = [_input_length(pair, self.max_length) for pair in encoded]
+        # The model's input is the window without its last token, the window being at most
+        # `max_length + 1` tokens (see `loglikelihood`).
+        input_lengths = [
+            min(len(context) + len(continuation), self.max_length + 1) - 1
+            for context, continuation in encoded
+        ]
         # Longest first, as lm-evaluation-harness sorts (`_collate` in `_loglikelihood_tokens`),
         # so the first request of each batch sets its padded width.
         order = sorted(range(len(encoded)), key=lambda i: -input_lengths[i])
@@ -532,12 +544,19 @@ class ScoringModel:
         Raises:
             `ValueError`: if the tokenizer is a [`~eval.tokenizer.SentencePieceTokenizer`] and a joined text's ids don't start with its context's.
         """
-        pairs = [_move_whitespace(request) for request in requests]
-        ids_by_context = self._tokenize_contexts([context for context, _ in pairs])
-        joined_ids = self.tokenize([context + continuation for context, continuation in pairs])
+        # The first step of lm-evaluation-harness's `_encode_pair`, which OLMES uses: whitespace at
+        # the end of the context moves to the start of the continuation, so `"Answer:"` +
+        # `" Paris"` and `"Answer: "` + `"Paris"` score the same tokens. Unlike
+        # lm-evaluation-harness, which checks for an empty context first, a whitespace-only
+        # context becomes empty and gets the prefix token.
+        contexts = [request.context.rstrip() for request in requests]
+        joined_ids = self.tokenize([request.context + request.continuation for request in requests])
+        # Few-shot contexts repeat once per choice, so each distinct one is tokenized once.
+        distinct = sorted({context for context in contexts if context})
+        ids_by_context = dict(zip(distinct, self.tokenize(distinct), strict=True))
 
         encoded = []
-        for request, (context, _), joined in zip(requests, pairs, joined_ids, strict=True):
+        for request, context, joined in zip(requests, contexts, joined_ids, strict=True):
             if not context:
                 encoded.append(Encoded([self._prefix_token()], joined))
                 continue
@@ -568,25 +587,8 @@ class ScoringModel:
 
         return self.tokenizer(texts, add_special_tokens=False)["input_ids"]
 
-    def _tokenize_contexts(self, contexts: list[str]) -> dict[str, list[int]]:
-        """
-        Each distinct non-empty context's own token ids.
-
-        Few-shot contexts repeat once per choice, so each is tokenized only once.
-        """
-        distinct = sorted({context for context in contexts if context})
-
-        return dict(zip(distinct, self.tokenize(distinct), strict=True))
-
     def _prefix_token(self) -> int:
-        """
-        The token an empty context becomes, and a rolling text's first window starts from: BOS if the tokenizer has one, else EOS, as lm-evaluation-harness's `prefix_token_id`.
-
-        It isn't padding: the first scored token needs one real token to be predicted from.
-
-        Raises:
-            `ValueError`: if the tokenizer has neither.
-        """
+        """The token an empty context becomes, and a rolling text's first window starts from: BOS if the tokenizer has one, else EOS, as lm-evaluation-harness's `prefix_token_id`. It isn't padding: the first scored token needs one real token to be predicted from."""
         prefix = self.tokenizer.bos_token_id
         if prefix is None:
             prefix = self.tokenizer.eos_token_id
@@ -596,19 +598,6 @@ class ScoringModel:
             )
 
         return prefix
-
-    def _check_continuations(self, requests: Sequence[Request], encoded: Sequence[Encoded]) -> None:
-        """
-        Checks that every continuation can be scored, as lm-evaluation-harness asserts in `_loglikelihood_tokens`.
-
-        Raises:
-            `ValueError`: if a continuation has no tokens (it would score 0, above every real choice), or is longer than `max_length` on its own.
-        """
-        for request, (_, continuation) in zip(requests, encoded, strict=True):
-            if not continuation:
-                raise ValueError(f"continuation has no tokens: {request}")
-            if len(continuation) > self.max_length:
-                raise ValueError(f"continuation longer than {self.max_length} tokens: {request}")
 
     def _batches(self, order: list[int], input_lengths: list[int]) -> Iterator[list[int]]:
         """Splits `order` (longest first) into runs whose padded size fits `batch_tokens`, given each request's model-input length."""
@@ -660,26 +649,17 @@ class ScoringModel:
 
 @dataclass(frozen=True, slots=True)
 class _PaddedBatch:
-    """
-    One batch of encoded requests as model inputs, left-padded so every continuation ends at the last position.
+    """One batch of encoded requests as model inputs, left-padded so every continuation ends at the last position."""
 
-    Args:
-        input_ids (`torch.Tensor`):
-            int64 `[rows, width]`, left padding, then each window without its last token.
-        attention_mask (`torch.Tensor`):
-            int64 `[rows, width]`, 0 at padding.
-        position_ids (`torch.Tensor`):
-            int64 `[rows, width]`, counting from 0 at each row's first real token.
-        targets (`torch.Tensor`):
-            int64 `[rows, keep]`, the token each of the last `keep` positions predicts.
-        scored (`torch.Tensor`):
-            bool `[rows, keep]`, True where that target is a continuation token.
-    """
-
+    # int64 `[rows, width]`: left padding, then each window without its last token.
     input_ids: torch.Tensor
+    # int64 `[rows, width]`: 0 at padding.
     attention_mask: torch.Tensor
+    # int64 `[rows, width]`: counting from 0 at each row's first real token.
     position_ids: torch.Tensor
+    # int64 `[rows, keep]`: the token each of the last `keep` positions predicts.
     targets: torch.Tensor
+    # bool `[rows, keep]`: True where that target is a continuation token.
     scored: torch.Tensor
 
     @property
@@ -689,14 +669,10 @@ class _PaddedBatch:
 
 
 def _pad_batch(encoded: list[Encoded], max_length: int) -> _PaddedBatch:
-    """
-    Left-pads one batch of (context, continuation) token ids into model inputs, on the CPU.
-
-    Inputs longer than `max_length` lose tokens from the left, keeping the whole continuation, as lm-evaluation-harness's `(context_enc + continuation_enc)[-(self.max_length + 1) :]` in `_loglikelihood_tokens`.
-    """
-    # Each window is one token longer than the model's input (see `_input_length`).
+    """Left-pads one batch of encoded requests into model inputs, on the CPU. Inputs longer than `max_length` lose tokens from the left, keeping the whole continuation, as lm-evaluation-harness's `(context_enc + continuation_enc)[-(self.max_length + 1) :]` in `_loglikelihood_tokens`."""
+    # Each window is one token longer than the model's input: its last token is only a target.
     windows = [(context + continuation)[-(max_length + 1) :] for context, continuation in encoded]
-    width = max(_input_length(pair, max_length) for pair in encoded)
+    width = max(len(window) - 1 for window in windows)
     keep = max(len(continuation) for _, continuation in encoded)
     # The pad id never matters: padding is masked out of attention and never scored. 0 is used
     # instead of `tokenizer.pad_token_id` because that can be None, or added after the
@@ -730,17 +706,9 @@ def _target_logprobs(
     logits: torch.Tensor, targets: torch.Tensor, chunk_positions: int = 4096
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    The FP32 log-softmax of `logits` `[rows, positions, vocab]` at `targets` `[rows, positions]`, and whether each target is its position's argmax, the first on a tie.
+    The FP32 log-softmax of `logits` `[rows, positions, vocab]`, in any dtype, at the int64 `targets` `[rows, positions]`, and whether each target is its position's argmax, the first on a tie.
 
-    OLMES runs `log_softmax` in the model's dtype and takes the argmax of its output (`oe_eval/models/eleuther_huggingface.py`). FP32 here is our choice, so BF16 rounding of the normalizer doesn't move scores, and the argmax is taken over the FP32 logits, which the normalizer doesn't reorder; in BF16 OLMES's rounded log-probabilities can tie where ours don't, so a near-tie can resolve differently. `logits` can hold `batch_tokens * vocab` values, so an FP32 copy of all of it would double peak memory: rows are converted a few at a time.
-
-    Args:
-        logits (`torch.Tensor`):
-            The model's logits, in any dtype.
-        targets (`torch.Tensor`):
-            int64, the token whose log-probability each position gives.
-        chunk_positions (`int`, *optional*, defaults to 4096):
-            The most positions (rows times positions per row) converted to float32 at once, about 1.6 GB for a 100k vocabulary. At least one row is always converted.
+    OLMES runs `log_softmax` in the model's dtype and takes the argmax of its output (`oe_eval/models/eleuther_huggingface.py`). FP32 here is our choice, so BF16 rounding of the normalizer doesn't move scores, and the argmax is taken over the FP32 logits, which the normalizer doesn't reorder; in BF16 OLMES's rounded log-probabilities can tie where ours don't, so a near-tie can resolve differently. `logits` can hold `batch_tokens * vocab` values, so an FP32 copy of all of it would double peak memory: rows are converted a few at a time, at most `chunk_positions` positions (rows times positions per row) and at least one row, about 1.6 GB in FP32 for a 100k vocabulary.
     """
     rows_per_chunk = max(1, chunk_positions // logits.shape[1])
     token_logprob = torch.empty(targets.shape, dtype=torch.float32, device=logits.device)
@@ -754,31 +722,6 @@ def _target_logprobs(
         token_is_argmax[rows] = chunk.argmax(-1) == targets[rows]
 
     return token_logprob, token_is_argmax
-
-
-def _window_length(encoded: Encoded) -> int:
-    """The token count of one request's context and continuation together, before truncation."""
-    context, continuation = encoded
-
-    return len(context) + len(continuation)
-
-
-def _input_length(encoded: Encoded, max_length: int) -> int:
-    """The model-input length of one request after left truncation."""
-    # A window holds at most `max_length + 1` tokens: the model's input, then one last token that
-    # is only ever a target.
-    return min(_window_length(encoded), max_length + 1) - 1
-
-
-def _move_whitespace(request: Request) -> tuple[str, str]:
-    """
-    The request's (context, continuation), with whitespace at the end of the context moved to the start of the continuation.
-
-    This is the first step of lm-evaluation-harness's `_encode_pair`, which OLMES uses, so `"Answer:"` + `" Paris"` and `"Answer: "` + `"Paris"` score the same tokens. Unlike lm-evaluation-harness, which checks for an empty context before moving whitespace, a whitespace-only context becomes empty and gets the prefix token.
-    """
-    context = request.context.rstrip()
-
-    return context, request.context[len(context) :] + request.continuation
 
 
 @contextmanager
