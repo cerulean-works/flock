@@ -1,13 +1,36 @@
 from abc import ABC, abstractmethod
 from collections.abc import Generator
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 import torch
+from huggingface_hub import try_to_load_from_cache
 from torch import nn
-from transformers import AutoTokenizer, TokenizersBackend
+from transformers import AutoTokenizer, PreTrainedTokenizerBase, TokenizersBackend
 
 from flock.training.core.data_utils import Batch
+
+# What the vocabulary file of a tokenizer class built on a SentencePiece model ends in.
+SENTENCEPIECE_SUFFIXES = {".model", ".spm"}
+
+
+def _converted_from_sentencepiece(repo: str, tokenizer: PreTrainedTokenizerBase) -> bool:
+    """
+    Whether `AutoTokenizer` just built `tokenizer` by converting a SentencePiece model in `repo`: its class is built on one, and no `tokenizer.json` is on disk for that load to have read.
+
+    Reads only the local folder or the cache, so it adds no Hub call.
+    """
+    if not any(
+        Path(name).suffix in SENTENCEPIECE_SUFFIXES for name in tokenizer.vocab_files_names.values()
+    ):
+        return False
+
+    folder = Path(repo)
+    if folder.is_dir():
+        return not (folder / "tokenizer.json").exists()
+
+    return not isinstance(try_to_load_from_cache(repo, "tokenizer.json"), str)
 
 
 class BaseModel(nn.Module, ABC):
@@ -69,6 +92,14 @@ class BaseModel(nn.Module, ABC):
             model_max_length=self.max_position_embeddings,
             add_eos_token=True,
         )
+        assert tokenizer is not None  # The stubs allow None; loading raises instead.
+        # The conversion segments text unlike the model it came from, which makes it a different
+        # tokenizer from the one the repo ships (eval stage 028).
+        if _converted_from_sentencepiece(self.hf_repo, tokenizer):
+            raise ValueError(
+                f"{self.hf_repo} loaded without tokenizer.json: {type(tokenizer).__name__} would be a "
+                "conversion of its SentencePiece model"
+            )
         if not isinstance(tokenizer, TokenizersBackend):
             raise TypeError(
                 f"Tokenizer from HF {self.hf_repo} did not produce a TokenizersBackend instance"

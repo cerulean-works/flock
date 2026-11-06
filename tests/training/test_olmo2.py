@@ -1,7 +1,9 @@
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 import torch
+from huggingface_hub import constants
 from torch.nn import functional as F
 
 from flock.training.core.data_utils import Batch, LanceBatchCollator
@@ -43,12 +45,74 @@ def test_causality_and_padding_invariance(config):
             torch.testing.assert_close(actual[:, start : start + 4], expected)
 
 
-def test_collated_training_batch(config, tokenizer, monkeypatch):
+@pytest.fixture
+def sentencepiece_class(monkeypatch):
+    """`AutoTokenizer` gives a tokenizer whose class is built on a SentencePiece model."""
+    tokenizer = SimpleNamespace(vocab_files_names={"vocab_file": "spiece.model"})
     monkeypatch.setattr(
         "flock.training.core.models.base.AutoTokenizer.from_pretrained",
         lambda repo, **kwargs: tokenizer,
     )
-    model = Olmo2(replace(config, hf_repo="offline"))
+
+
+def test_a_conversion_in_a_local_folder_is_refused(config, tmp_path, sentencepiece_class):
+    model = Olmo2(replace(config, hf_repo=str(tmp_path)))
+    with pytest.raises(ValueError, match="without tokenizer.json: SimpleNamespace would be"):
+        model.get_hf_tokenizer()
+
+
+@pytest.mark.parametrize("record", [False, True], ids=["unrecorded", "recorded"])
+def test_a_conversion_from_the_cache_is_refused(
+    config, tmp_path, monkeypatch, sentencepiece_class, record
+):
+    monkeypatch.setattr(constants, "HF_HUB_CACHE", str(tmp_path))
+    sha = "a" * 40
+    repo = tmp_path / "models--org--repo"
+    (repo / "refs").mkdir(parents=True)
+    (repo / "refs" / "main").write_text(sha)
+    (repo / "snapshots" / sha).mkdir(parents=True)
+    (repo / "snapshots" / sha / "spiece.model").write_bytes(b"")
+    if record:
+        (repo / ".no_exist" / sha).mkdir(parents=True)
+        (repo / ".no_exist" / sha / "tokenizer.json").touch()
+    model = Olmo2(replace(config, hf_repo="org/repo"))
+    with pytest.raises(ValueError, match="without tokenizer.json"):
+        model.get_hf_tokenizer()
+
+
+def test_a_sentencepiece_class_with_tokenizer_json_is_not_a_conversion(
+    config, tokenizer, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(
+        "flock.training.core.models.base.AutoTokenizer.from_pretrained",
+        lambda repo, **kwargs: tokenizer,
+    )
+    assert tokenizer.vocab_files_names["vocab_file"].endswith(".model")
+    (tmp_path / "tokenizer.json").write_text("{}")
+    model = Olmo2(replace(config, hf_repo=str(tmp_path)))
+    assert model.get_hf_tokenizer() is tokenizer
+
+
+def test_a_class_with_other_vocabulary_files_is_not_a_conversion(config, tmp_path, monkeypatch):
+    # GPT-2's class, beside a stray `tokenizer.model` it doesn't read. The type check is next.
+    tokenizer = SimpleNamespace(vocab_files_names={"vocab_file": "vocab.json"})
+    monkeypatch.setattr(
+        "flock.training.core.models.base.AutoTokenizer.from_pretrained",
+        lambda repo, **kwargs: tokenizer,
+    )
+    (tmp_path / "tokenizer.model").write_bytes(b"")
+    model = Olmo2(replace(config, hf_repo=str(tmp_path)))
+    with pytest.raises(TypeError, match="did not produce a TokenizersBackend"):
+        model.get_hf_tokenizer()
+
+
+def test_collated_training_batch(config, tokenizer, tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "flock.training.core.models.base.AutoTokenizer.from_pretrained",
+        lambda repo, **kwargs: tokenizer,
+    )
+    (tmp_path / "tokenizer.json").write_text("{}")
+    model = Olmo2(replace(config, hf_repo=str(tmp_path)))
     tokenizer = model.get_hf_tokenizer()
     assert tokenizer is not None
     tokenizer.padding_side = "left"
@@ -115,7 +179,7 @@ def test_invalid_input_shapes(config):
         model(make_batch(ids, attention_mask=torch.ones(1, 4)))
 
 
-def test_tokenizer_config(config, tokenizer, monkeypatch):
+def test_tokenizer_config(config, tokenizer, tmp_path, monkeypatch):
     calls = []
     tokenizer.pad_token = None
 
@@ -125,11 +189,12 @@ def test_tokenizer_config(config, tokenizer, monkeypatch):
 
     monkeypatch.setattr("flock.training.core.models.base.AutoTokenizer.from_pretrained", load)
     assert Olmo2(config).get_hf_tokenizer() is None
-    model = Olmo2(replace(config, hf_repo="offline"))
+    (tmp_path / "tokenizer.json").write_text("{}")
+    model = Olmo2(replace(config, hf_repo=str(tmp_path)))
     assert model.get_hf_tokenizer() is tokenizer
     assert tokenizer.pad_token_id == tokenizer.eos_token_id
     assert calls == [
-        ("offline", {"padding_side": "left", "model_max_length": 16, "add_eos_token": True})
+        (str(tmp_path), {"padding_side": "left", "model_max_length": 16, "add_eos_token": True})
     ]
 
 

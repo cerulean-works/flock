@@ -1,3 +1,5 @@
+"""A SentencePiece model's own tokenization, and the type of every tokenizer scoring accepts."""
+
 from pathlib import Path
 
 from sentencepiece import SentencePieceProcessor
@@ -35,4 +37,4 @@ class SentencePieceTokenizer:
         return {"input_ids": self.processor.encode(texts)}
 
 
-Tokenizer = PreTrainedTokenizerBase | SentencePieceTokenizer
+type Tokenizer = PreTrainedTokenizerBase | SentencePieceTokenizer

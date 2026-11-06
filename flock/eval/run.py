@@ -32,7 +32,7 @@ from flock.eval.tasks import (
     Truncation,
 )
 from flock.eval.tasks.suite import by_name
-from flock.eval.tokenizer import Tokenizer
+from flock.eval.tokenizer import SentencePieceTokenizer, Tokenizer
 
 # Why `evaluate` and `score_task` refuse an output that is already there, and what to do.
 _ONE_RUN = (
@@ -150,6 +150,16 @@ def evaluate(config: EvalConfig) -> Results:
                 f"{task.name}: window {task.window} is above {model.name}'s max_length "
                 f"{model.max_length}"
             )
+        # Refused requests fail the same way, not after the tasks before them. Tokenizing twice
+        # costs less than holding every task's tokens at once, and only this tokenizer refuses.
+        if isinstance(model.tokenizer, SentencePieceTokenizer) and not isinstance(
+            task, PerplexityTask
+        ):
+            docs, shots = task.load(config.limit)
+            try:
+                model.encode_requests(task.requests(docs, shots).requests)
+            except ValueError as error:
+                raise ValueError(f"{task.name}: {error}") from error
     # Collected before scoring, so the commit's dirty flag describes the tree as scoring starts
     # and `created_at` is when scoring started, as lm-evaluation-harness records `start_date`.
     provenance = Provenance.collect(

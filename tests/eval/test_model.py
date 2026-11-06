@@ -193,7 +193,7 @@ def test_rejects_non_positive_batch_tokens(lm, tokenizer, batch_tokens):
 
 
 def test_from_pretrained_rejects_batch_tokens_before_loading(monkeypatch):
-    monkeypatch.setattr(model, "AutoTokenizer", None)  # any load would fail on None
+    monkeypatch.setattr(model, "load_tokenizer", None)  # any load would fail on None
     with pytest.raises(ValueError, match="batch_tokens must be at least 1"):
         ScoringModel.from_pretrained("org/repo@" + "a" * 40, batch_tokens=0)
 

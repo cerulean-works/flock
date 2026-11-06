@@ -13,7 +13,19 @@ A request is a context and a continuation, and its score is the summed log-proba
 
 A continuation with no tokens raises an error, since scoring it as 0 would rank it above every real choice. So does a continuation longer than `max_length` on its own.
 
-A Hugging Face repo with `tokenizer.model` and no `tokenizer.json` at the pinned revision is tokenized by that SentencePiece model directly ([`~eval.tokenizer.SentencePieceTokenizer`]), because `AutoTokenizer` in transformers 5 would convert the model to one that segments text differently. Literal `<s>`, `</s>` or `<unk>` in a text are ordinary text on this path. The repo's files decide the path, so no flag changes it, and a repo's `add_bos_token` setting is not applied.
+A Hugging Face repo with `tokenizer.model` and no `tokenizer.json` at the pinned revision is tokenized by that SentencePiece model directly ([`~eval.tokenizer.SentencePieceTokenizer`]), because `AutoTokenizer` in transformers 5 would convert the model to one that segments text differently. On this path:
+
+- Literal `<s>`, `</s>` or `<unk>` in a text are ordinary text.
+- A repo's `add_bos_token` setting is not applied.
+- A request raises an error if adding its continuation changes the context's tokens, since the split above would then score the wrong tokens. [`~eval.run.evaluate`] checks every multiple-choice task's requests before it scores any task. Other tokenizers keep the reference behavior, with no check.
+
+The repo's files decide the path, so no flag changes it. Three related cases fail instead of loading a converted tokenizer:
+
+| Case | What happens |
+|---|---|
+| A repo has no `tokenizer.json`, and `AutoTokenizer` gives a tokenizer class built on a SentencePiece model under another name, such as `spiece.model` | [`~eval.model.load_tokenizer`] raises `ValueError`. These classes can remap the model's ids. |
+| A Flock model's `hf_repo` gives such a tokenizer, `tokenizer.model` included | `get_hf_tokenizer` raises `ValueError`, in training and in scoring. |
+| Offline, `tokenizer.model` is cached and the cache doesn't record whether the repo has `tokenizer.json` | [`~eval.model.load_tokenizer`] raises `LocalEntryNotFoundError`, so an interrupted download can't change the tokenizer. Load the model once online to record it. |
 
 ## Scoring a whole text
 

@@ -1,10 +1,15 @@
 import io
+import json
 import math
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 import torch
+from huggingface_hub import constants
+from huggingface_hub.errors import LocalEntryNotFoundError, RemoteEntryNotFoundError
 from sentencepiece import SentencePieceProcessor, SentencePieceTrainer
 from transformers import LlamaConfig, LlamaForCausalLM
 
@@ -117,37 +122,135 @@ def test_a_tokenizer_model_in_another_format_is_an_error_not_another_tokenizatio
         SentencePieceTokenizer(path)
 
 
-def test_the_repos_files_choose_the_tokenizer(model_file, tmp_path, monkeypatch):
-    ref = ModelRef("org/repo", "a" * 40)
+SHA = "a" * 40
+REF = ModelRef("org/repo", SHA)
+SENTINEL = SimpleNamespace(vocab_files_names={"tokenizer_file": "tokenizer.json"})
+
+
+@pytest.fixture
+def auto(monkeypatch) -> list[tuple[str, str]]:
+    """Stands in for `AutoTokenizer`, and returns what it was asked to load."""
     asked = []
 
-    def snapshot(repo, revision, allow_patterns):
+    def from_pretrained(repo, revision):
         asked.append((repo, revision))
-        return str(folder)
+        return SENTINEL
 
-    monkeypatch.setattr(model, "snapshot_download", snapshot)
+    monkeypatch.setattr(model, "AutoTokenizer", SimpleNamespace(from_pretrained=from_pretrained))
+    return asked
 
-    # Only `tokenizer.model`: `AutoTokenizer` must not be reached, so a load through it fails.
-    folder = model_file.parent
-    monkeypatch.setattr(model, "AutoTokenizer", None)
-    assert isinstance(load_tokenizer(ref), SentencePieceTokenizer)
-    assert asked == [("org/repo", "a" * 40)]
 
-    sentinel = SimpleNamespace()
-    auto = SimpleNamespace(from_pretrained=lambda repo, revision: sentinel)
-    monkeypatch.setattr(model, "AutoTokenizer", auto)
+@pytest.fixture
+def offline_cache(tmp_path, monkeypatch) -> Callable[..., None]:
+    """Returns a function that writes `org/repo` into an empty Hub cache, with the Hub unreachable: `cached` files are in the snapshot, and `absent` ones are recorded as not in the repo, as a 404 records them."""
+    monkeypatch.setattr(constants, "HF_HUB_CACHE", str(tmp_path))
+    monkeypatch.setattr(constants, "HF_HUB_OFFLINE", True)
 
-    # Both files, as Gemma's repos ship: `tokenizer.json` wins, as it does today.
-    folder = tmp_path / "both"
-    folder.mkdir()
-    (folder / "tokenizer.model").write_bytes(model_file.read_bytes())
-    (folder / "tokenizer.json").write_text("{}")
-    assert load_tokenizer(ref) is sentinel
+    def write(cached: Sequence[str] = (), absent: Sequence[str] = (), source: Path | None = None):
+        repo = tmp_path / "models--org--repo"
+        (repo / "snapshots" / SHA).mkdir(parents=True, exist_ok=True)
+        (repo / ".no_exist" / SHA).mkdir(parents=True, exist_ok=True)
+        for name in cached:
+            path = repo / "snapshots" / SHA / name
+            path.write_bytes(source.read_bytes() if source and name.endswith(".model") else b"{}")
+        for name in absent:
+            (repo / ".no_exist" / SHA / name).touch()
 
-    # Neither file: the choice stays `AutoTokenizer`'s.
-    folder = tmp_path / "neither"
-    folder.mkdir()
-    assert load_tokenizer(ref) is sentinel
+    return write
+
+
+def test_a_repo_recorded_without_tokenizer_json_gets_sentencepiece(model_file, offline_cache, auto):
+    offline_cache(["tokenizer.model"], ["tokenizer.json"], model_file)
+    assert isinstance(load_tokenizer(REF), SentencePieceTokenizer)
+    assert auto == []
+
+
+def test_an_interrupted_download_does_not_look_like_a_sentencepiece_only_repo(
+    model_file, offline_cache, auto
+):
+    # `tokenizer.model` landed, and nothing says the repo has no `tokenizer.json`.
+    offline_cache(["tokenizer.model"], source=model_file)
+    with pytest.raises(LocalEntryNotFoundError):
+        load_tokenizer(REF)
+    assert auto == []
+
+
+def test_tokenizer_json_decides_without_fetching_tokenizer_model(offline_cache, auto):
+    # Offline, asking for the uncached `tokenizer.model` would raise.
+    offline_cache(["tokenizer.json"])
+    assert load_tokenizer(REF) is SENTINEL
+    assert auto == [("org/repo", SHA)]
+
+
+def test_a_repo_with_neither_file_goes_to_auto_tokenizer(offline_cache, auto):
+    # Nothing records `tokenizer.model`: only transformers has loaded this repo.
+    offline_cache(["vocab.json", "merges.txt"], ["tokenizer.json"])
+    assert load_tokenizer(REF) is SENTINEL
+
+
+def test_an_unrecorded_cache_without_tokenizer_model_goes_to_auto_tokenizer(offline_cache, auto):
+    # As `hf download` leaves such a repo: no records at all.
+    offline_cache(["vocab.json", "merges.txt"])
+    assert load_tokenizer(REF) is SENTINEL
+
+
+def test_a_file_the_hub_answers_404_for_is_absent(model_file, monkeypatch, auto):
+    def download(repo, filename, revision):
+        if filename == "tokenizer.model":
+            return str(model_file)
+        raise RemoteEntryNotFoundError("404", response=Mock())
+
+    monkeypatch.setattr(model, "hf_hub_download", download)
+    assert isinstance(load_tokenizer(REF), SentencePieceTokenizer)
+    assert auto == []
+
+
+@pytest.mark.parametrize(
+    ("tokenizer_class", "name"),
+    [
+        ("RemBertTokenizer", "sentencepiece.model"),
+        ("T5Tokenizer", "spiece.model"),
+        ("T5Tokenizer", "sp.model"),
+        ("XLMRobertaTokenizer", "sentencepiece.bpe.model"),
+        ("SpeechT5Tokenizer", "spm_char.model"),
+    ],
+)
+def test_a_conversion_under_another_name_is_refused(tokenizer_class, name, model_file, tmp_path):
+    (tmp_path / name).write_bytes(model_file.read_bytes())
+    (tmp_path / "tokenizer_config.json").write_text(
+        json.dumps({"tokenizer_class": tokenizer_class})
+    )
+    with pytest.raises(ValueError, match=f"{tokenizer_class} is built on a SentencePiece model"):
+        load_tokenizer(ModelRef(str(tmp_path), SHA))
+
+
+def test_another_name_beside_tokenizer_json_goes_to_auto_tokenizer(tmp_path, auto):
+    (tmp_path / "spiece.model").write_bytes(b"")
+    (tmp_path / "tokenizer.json").write_text("{}")
+    assert load_tokenizer(ModelRef(str(tmp_path), SHA)) is SENTINEL
+
+
+def test_a_local_folder_chooses_by_its_own_files(model_file, tmp_path, auto):
+    # Not a valid Hub repo id, so reaching the Hub would raise.
+    assert isinstance(load_tokenizer(ModelRef(str(model_file.parent), SHA)), SentencePieceTokenizer)
+
+    (tmp_path / "tokenizer.model").write_bytes(model_file.read_bytes())
+    (tmp_path / "tokenizer.json").write_text("{}")
+    assert load_tokenizer(ModelRef(str(tmp_path), SHA)) is SENTINEL
+
+
+def test_a_resegmented_context_is_refused(scorer, model_file, monkeypatch):
+    tokenizer = SentencePieceTokenizer(model_file)
+    # A unigram model does this: the added text merges the context's last pieces into one.
+    ids = {"黃色": [5, 6], "黃色的": [7], "黃色的花": [7, 8], "紅": [9], "紅色": [9, 10]}
+    processor = SimpleNamespace(encode=lambda texts: [ids[text] for text in texts])
+    monkeypatch.setattr(tokenizer, "processor", processor)
+    resegmented = ScoringModel(scorer.model, tokenizer, name="tiny@0")
+
+    assert resegmented.encode(Request("紅", "色")) == ([9], [10])
+    for continuation in ("的", "的花"):
+        with pytest.raises(ValueError, match="changes the context's tokens"):
+            resegmented.encode(Request("黃色", continuation))
 
 
 def test_a_multiple_choice_request_scores_end_to_end(scorer):

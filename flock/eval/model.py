@@ -11,7 +11,8 @@ from types import SimpleNamespace
 from typing import Any, Literal, NamedTuple
 
 import torch
-from huggingface_hub import HfApi, snapshot_download
+from huggingface_hub import _CACHED_NO_EXIST, HfApi, hf_hub_download, try_to_load_from_cache
+from huggingface_hub.errors import LocalEntryNotFoundError, RemoteEntryNotFoundError
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
 
@@ -21,6 +22,8 @@ from flock.eval.tokenizer import SentencePieceTokenizer, Tokenizer
 DEFAULT_BATCH_TOKENS = 32768
 # What a model id starts with when it names a version in the Flock registry.
 FLOCK = "flock:"
+# What the vocabulary file of a tokenizer class built on a SentencePiece model ends in.
+SENTENCEPIECE_SUFFIXES = {".model", ".spm"}
 
 logger = logging.getLogger(__name__)
 
@@ -118,28 +121,72 @@ def _flock_hub() -> Any:
     return cache
 
 
+def _repo_file(ref: ModelRef, filename: str) -> Path | None:
+    """
+    The path of `filename` at the pinned revision, downloading it if needed, or `None` if the repo doesn't have it.
+
+    `ref.repo` is a local folder if one exists there, as for `AutoTokenizer`. Only the Hub's answer, or the cache's record of it, counts as "doesn't have it": a file that merely isn't cached doesn't.
+
+    Raises:
+        `LocalEntryNotFoundError`: if the Hub can't be reached and the cache doesn't know.
+    """
+    folder = Path(ref.repo)
+    if folder.is_dir():
+        path = folder / filename
+        return path if path.exists() else None
+
+    if try_to_load_from_cache(ref.repo, filename, revision=ref.revision) is _CACHED_NO_EXIST:
+        return None
+    try:
+        return Path(hf_hub_download(ref.repo, filename, revision=ref.revision))
+    except RemoteEntryNotFoundError:
+        return None
+
+
 def load_tokenizer(ref: ModelRef) -> Tokenizer:
     """
     Loads a Hugging Face model's tokenizer, chosen by the repo's files at the pinned revision.
 
-    A repo with `tokenizer.model` and no `tokenizer.json` gets [`~eval.tokenizer.SentencePieceTokenizer`], and `AutoTokenizer` never sees it, so installing `sentencepiece` can't switch it to a conversion. Any other repo goes to `AutoTokenizer`. One model id therefore always means one tokenizer.
+    A repo with `tokenizer.json` goes to `AutoTokenizer`, without fetching anything else to choose. A repo with `tokenizer.model` and no `tokenizer.json` gets [`~eval.tokenizer.SentencePieceTokenizer`], and `AutoTokenizer` never sees it, so installing `sentencepiece` can't switch it to a conversion. Any other repo goes to `AutoTokenizer`, which must not build its tokenizer from a SentencePiece model under another name. One model id therefore always means one tokenizer.
 
     Args:
         ref (`ModelRef`):
-            The model, already resolved.
+            The model, already resolved. Its repo can be a local folder.
+
+    Raises:
+        `ValueError`: if the repo has no `tokenizer.json` and `AutoTokenizer` gives a tokenizer class built on a SentencePiece model, which is a conversion, and whose ids the raw model may not match.
+        `LocalEntryNotFoundError`: if the Hub can't be reached, `tokenizer.model` is cached, and the cache doesn't record whether the repo has `tokenizer.json`. Loading the model once online records it.
     """
-    # Online this is the revision's file list. Offline it is the cached snapshot, so a pinned
-    # model still loads from the cache.
-    snapshot = Path(
-        snapshot_download(
-            ref.repo, revision=ref.revision, allow_patterns=["tokenizer.json", "tokenizer.model"]
-        )
-    )
-    if (snapshot / "tokenizer.model").exists() and not (snapshot / "tokenizer.json").exists():
-        return SentencePieceTokenizer(snapshot / "tokenizer.model")
+    try:
+        tokenizer_json = _repo_file(ref, "tokenizer.json")
+    except LocalEntryNotFoundError:
+        # Beside `tokenizer.model` this may be an interrupted download of a repo with both files.
+        # Otherwise nothing depends on it: `AutoTokenizer` can only read what is on disk.
+        if isinstance(
+            try_to_load_from_cache(ref.repo, "tokenizer.model", revision=ref.revision), str
+        ):
+            raise
+        tokenizer_json = None
+
+    if tokenizer_json is None:
+        try:
+            model_file = _repo_file(ref, "tokenizer.model")
+        except LocalEntryNotFoundError:
+            # Not on disk, so nothing here can read it.
+            model_file = None
+        if model_file is not None:
+            return SentencePieceTokenizer(model_file)
 
     tokenizer = AutoTokenizer.from_pretrained(ref.repo, revision=ref.revision)
     assert tokenizer is not None  # The stubs allow None; loading raises instead.
+
+    if tokenizer_json is None and any(
+        Path(name).suffix in SENTENCEPIECE_SUFFIXES for name in tokenizer.vocab_files_names.values()
+    ):
+        raise ValueError(
+            f"{ref}: no tokenizer.json, and {type(tokenizer).__name__} is built on a "
+            "SentencePiece model, whose ids the raw model may not match"
+        )
 
     return tokenizer
 
@@ -258,11 +305,11 @@ class ScoringModel:
 
         The revision is resolved to its commit hash, which becomes the model's `name`, so a branch or tag in `model_id` is recorded as the exact weights that were scored. A Flock version (a tag, `primary`, or none for the primary) is resolved to its number, so the model's `name` is `flock:org/name@number`, and its `digest` is the version's.
 
-        A Hugging Face model's tokenizer comes from [`load_tokenizer`]. A Flock model is loaded with [`~hub.models.load_from_hub`] and wrapped in [`FlockCausalLM`]. Its tokenizer is the Hugging Face one its config's `hf_repo` names.
+        A Hugging Face model's tokenizer comes from [`load_tokenizer`]. A Flock model is loaded with [`~hub.models.load_from_hub`] and wrapped in [`FlockCausalLM`]. Its tokenizer is the Hugging Face one its config's `hf_repo` names, through `AutoTokenizer`.
 
         Args:
             model_id (`str`):
-                The model as `repo@revision`, for example `allenai/OLMo-2-0425-1B@main`, or as `flock:org/name[@version]`, for example `flock:acme/olmo2-1b@12`. Pin a full 40-character commit hash to load a Hugging Face model offline from the cache.
+                The model as `repo@revision`, for example `allenai/OLMo-2-0425-1B@main`, or as `flock:org/name[@version]`, for example `flock:acme/olmo2-1b@12`. Pin a full 40-character commit hash to load a Hugging Face model offline from the cache. A repo with `tokenizer.model` needs one earlier online load, which records whether it has `tokenizer.json`.
             device (`str` or `torch.device`, *optional*):
                 Where to put the weights. Defaults to CUDA when available, else the CPU.
             dtype (`torch.dtype`, *optional*, defaults to `torch.bfloat16`):
@@ -271,7 +318,7 @@ class ScoringModel:
                 Passed to [`ScoringModel`].
 
         Raises:
-            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision` or `flock:org/name[@version]`, or a Flock model's config has no `hf_repo` to load its tokenizer from.
+            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision` or `flock:org/name[@version]`, or a Flock model's config has no `hf_repo` to load its tokenizer from or names a repo whose tokenizer `AutoTokenizer` would convert from a SentencePiece model, or [`load_tokenizer`] refuses the repo.
             [`~hub.models.ModelError`]: if the Flock registry has no such version, or refuses to load it.
         """
         # `__init__` checks it too, but only after the weights have loaded.
@@ -479,13 +526,18 @@ class ScoringModel:
         return logprob, is_greedy
 
     def encode_requests(self, requests: Sequence[Request]) -> list[Encoded]:
-        """[`encode`] for many requests, with one tokenizer call for the distinct contexts and one for the joined texts."""
+        """
+        [`encode`] for many requests, with one tokenizer call for the distinct contexts and one for the joined texts.
+
+        Raises:
+            `ValueError`: if the tokenizer is a [`~eval.tokenizer.SentencePieceTokenizer`] and a joined text's ids don't start with its context's.
+        """
         pairs = [_move_whitespace(request) for request in requests]
         ids_by_context = self._tokenize_contexts([context for context, _ in pairs])
         joined_ids = self.tokenize([context + continuation for context, continuation in pairs])
 
         encoded = []
-        for (context, _), joined in zip(pairs, joined_ids, strict=True):
+        for request, (context, _), joined in zip(requests, pairs, joined_ids, strict=True):
             if not context:
                 encoded.append(Encoded([self._prefix_token()], joined))
                 continue
@@ -493,6 +545,14 @@ class ScoringModel:
             # As lm-evaluation-harness's `_encode_pair`: the continuation's ids are the joint ids
             # after as many leading ids as the context has when tokenized alone.
             context_ids = ids_by_context[context]
+            # SentencePiece segments a whole string at once, so added text can resegment the
+            # context, and the slice below would score the wrong tokens. Other tokenizers keep
+            # lm-evaluation-harness's behavior, so their scores don't move.
+            if (
+                isinstance(self.tokenizer, SentencePieceTokenizer)
+                and joined[: len(context_ids)] != context_ids
+            ):
+                raise ValueError(f"the continuation changes the context's tokens: {request}")
             encoded.append(Encoded(context_ids, joined[len(context_ids) :]))
 
         return encoded
