@@ -269,6 +269,25 @@ def test_a_resegmented_context_is_refused(scorer, model_file, monkeypatch):
             resegmented.encode(Request("黃色", continuation))
 
 
+def test_add_bos_starts_the_context_and_the_split_check_ignores_it(scorer, model_file, monkeypatch):
+    tokenizer = SentencePieceTokenizer(model_file)
+    ids = {"黃色": [5, 6], "黃色的": [7], "紅": [9], "紅色": [9, 10]}
+    processor = SimpleNamespace(encode=lambda texts: [ids[text] for text in texts])
+    monkeypatch.setattr(tokenizer, "processor", processor)
+    with_bos = ScoringModel(scorer.model, tokenizer, name="tiny@0", add_bos=True)
+
+    # BOS joins the context only: the joined ids have none, so a check against it would always fail.
+    assert with_bos.encode(Request("紅", "色")) == ([tokenizer.bos_token_id, 9], [10])
+    with pytest.raises(ValueError, match="changes the context's tokens"):
+        with_bos.encode(Request("黃色", "的"))
+
+
+def test_add_bos_needs_a_bos_token_in_the_sentencepiece_model(scorer, tmp_path):
+    no_bos = SentencePieceTokenizer(train(tmp_path / "tokenizer.model", bos_id=-1))
+    with pytest.raises(ValueError, match="add_bos is set, but the tokenizer has no BOS token"):
+        ScoringModel(scorer.model, no_bos, name="tiny@0", add_bos=True)
+
+
 def test_a_context_that_tokenizes_to_nothing_gets_the_prefix_token(scorer, model_file, monkeypatch):
     tokenizer = SentencePieceTokenizer(model_file)
     ids = {"\u200b": [], "\u200b Paris": [5, 6]}
