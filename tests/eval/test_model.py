@@ -10,6 +10,7 @@ from transformers import (
     Gemma4ForConditionalGeneration,
     Gemma4TextConfig,
     Gemma4VisionConfig,
+    PreTrainedTokenizerBase,
 )
 
 from flock.eval import model
@@ -51,14 +52,16 @@ def greedy_reference(scorer: ScoringModel, request: Request) -> bool:
 def greedy_requests(scorer: ScoringModel) -> list[Request]:
     """`REQUESTS`, and after each non-empty context the text of the model's next one and two greedy tokens."""
     requests = list(REQUESTS)
+    tokenizer = scorer.tokenizer
+    assert isinstance(tokenizer, PreTrainedTokenizerBase)
     for context in dict.fromkeys(request.context for request in REQUESTS if request.context):
-        ids = scorer.tokenizer.encode(context, add_special_tokens=False)
+        ids = tokenizer.encode(context, add_special_tokens=False)
         start = len(ids)
         with torch.no_grad():
             for _ in range(2):
                 ids.append(scorer.model(torch.tensor([ids])).logits[0, -1].argmax().item())
                 generated = ids[start:]
-                text = scorer.tokenizer.decode(generated)
+                text = tokenizer.decode(generated)
                 assert isinstance(text, str)  # one sequence of ids decodes to one string
                 requests.append(Request(context, text))
     return requests
@@ -249,7 +252,7 @@ def test_rejects_non_positive_batch_tokens(lm, tokenizer, batch_tokens):
 
 
 def test_from_pretrained_rejects_batch_tokens_before_loading(monkeypatch):
-    monkeypatch.setattr(model, "AutoTokenizer", None)  # any load would fail on None
+    monkeypatch.setattr(model, "load_tokenizer", None)  # any load would fail on None
     with pytest.raises(ValueError, match="batch_tokens must be at least 1"):
         ScoringModel.from_pretrained("org/repo@" + "a" * 40, batch_tokens=0)
 
@@ -681,6 +684,25 @@ def test_add_bos_starts_every_non_empty_context_with_bos(lm, tokenizer):
     )
 
 
+def test_a_context_with_no_ids_never_scores_from_a_padding_logit(scorer, monkeypatch):
+    tokenize = scorer.tokenize
+    monkeypatch.setattr(
+        scorer,
+        "tokenize",
+        lambda texts: [
+            tokenize([t.removeprefix("\u200b")])[0] if t != "\u200b" else [] for t in texts
+        ],
+    )
+
+    # Beside a longer request, left padding would put a padding position where its logit is read.
+    no_ids, longer = Request("\u200b", " fox"), Request("The quick brown fox", " jumps")
+    assert scorer.encode(no_ids).context == [scorer.tokenizer.eos_token_id]
+    expected = torch.tensor([reference(scorer, no_ids), reference(scorer, longer)])
+    torch.testing.assert_close(
+        scorer.loglikelihood([no_ids, longer]).logprob, expected, atol=1e-4, rtol=1e-5
+    )
+
+
 def test_add_bos_needs_a_bos_token(lm, tokenizer):
     with pytest.raises(ValueError, match="add_bos is set, but the tokenizer has no BOS token"):
         ScoringModel(lm, tokenizer, name="tiny@0", add_bos=True)
@@ -688,7 +710,7 @@ def test_add_bos_needs_a_bos_token(lm, tokenizer):
 
 def test_from_pretrained_refuses_add_bos_before_the_weights_load(tokenizer, monkeypatch):
     loaded = []
-    monkeypatch.setattr(model.AutoTokenizer, "from_pretrained", lambda *args, **kwargs: tokenizer)
+    monkeypatch.setattr(model, "load_tokenizer", lambda ref: tokenizer)
     monkeypatch.setattr(
         model.AutoModelForCausalLM, "from_pretrained", lambda *args, **kwargs: loaded.append(1)
     )

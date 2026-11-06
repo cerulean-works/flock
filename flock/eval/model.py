@@ -6,20 +6,24 @@ import re
 from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Literal, NamedTuple
 
 import torch
-from huggingface_hub import HfApi
-from torch.nn.attention import SDPBackend, sdpa_kernel
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    PreTrainedModel,
-    PreTrainedTokenizerBase,
+from huggingface_hub import (
+    _CACHED_NO_EXIST,
+    HfApi,
+    hf_hub_download,
+    is_offline_mode,
+    try_to_load_from_cache,
 )
+from huggingface_hub.errors import LocalEntryNotFoundError, RemoteEntryNotFoundError
+from torch.nn.attention import SDPBackend, sdpa_kernel
+from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
 
 from flock.eval.requests import Request, Scores
+from flock.eval.tokenizer import SentencePieceTokenizer, Tokenizer
 
 DEFAULT_BATCH_TOKENS = 32768
 # What a model id starts with when it names a version in the Flock registry.
@@ -121,6 +125,72 @@ def _flock_hub() -> Any:
     return cache
 
 
+def _repo_file(ref: ModelRef, filename: str) -> Path | None:
+    """
+    The path of `filename` at the pinned revision, downloading it if needed, or `None` if the repo doesn't have it.
+
+    `ref.repo` is a local folder if one exists there, as for `AutoTokenizer`. Only the Hub's answer, or the cache's record of it, counts as "doesn't have it": a file that merely isn't cached doesn't.
+
+    Raises:
+        `LocalEntryNotFoundError`: if the Hub can't be reached and the cache doesn't know.
+    """
+    folder = Path(ref.repo)
+    if folder.is_dir():
+        path = folder / filename
+        return path if path.exists() else None
+
+    if try_to_load_from_cache(ref.repo, filename, revision=ref.revision) is _CACHED_NO_EXIST:
+        return None
+    try:
+        return Path(hf_hub_download(ref.repo, filename, revision=ref.revision))
+    except RemoteEntryNotFoundError:
+        return None
+
+
+def load_tokenizer(ref: ModelRef) -> Tokenizer:
+    """
+    Loads a Hugging Face model's tokenizer, chosen by the repo's files at the pinned revision.
+
+    A repo with `tokenizer.json` goes to `AutoTokenizer`, without fetching anything else to choose. A repo with `tokenizer.model` and no `tokenizer.json` gets [`~eval.tokenizer.SentencePieceTokenizer`], and `AutoTokenizer` never sees it, so installing `sentencepiece` can't switch it to a conversion. Any other repo goes to `AutoTokenizer`, which must not build its tokenizer from a SentencePiece model under another name. One model id therefore always means one tokenizer.
+
+    Args:
+        ref (`ModelRef`):
+            The model, already resolved. Its repo can be a local folder.
+
+    Raises:
+        `ValueError`: if the repo has no `tokenizer.json` and `AutoTokenizer` gives a tokenizer class built on a SentencePiece model, which is a conversion, and whose ids the raw model may not match.
+        `LocalEntryNotFoundError`: if a request to the Hub fails, so the repo's files are unknown, or offline if `tokenizer.model` is cached and the cache doesn't record whether the repo has `tokenizer.json`. Loading the model once online records it.
+    """
+    try:
+        tokenizer_json = _repo_file(ref, "tokenizer.json")
+        model_file = None if tokenizer_json else _repo_file(ref, "tokenizer.model")
+    except LocalEntryNotFoundError:
+        # Online the Hub failed, and the next request may succeed and choose differently. Offline,
+        # a cached `tokenizer.model` may be an interrupted download of a repo with both files.
+        if not is_offline_mode() or isinstance(
+            try_to_load_from_cache(ref.repo, "tokenizer.model", revision=ref.revision), str
+        ):
+            raise
+        # With no `tokenizer.model` on disk, `AutoTokenizer` can only read what else is there.
+        tokenizer_json = model_file = None
+
+    if model_file is not None:
+        return SentencePieceTokenizer(model_file)
+
+    tokenizer = AutoTokenizer.from_pretrained(ref.repo, revision=ref.revision)
+    assert tokenizer is not None  # The stubs allow None; loading raises instead.
+
+    if tokenizer_json is None and any(
+        Path(name).suffix in {".model", ".spm"} for name in tokenizer.vocab_files_names.values()
+    ):
+        raise ValueError(
+            f"{ref}: no tokenizer.json, and {type(tokenizer).__name__} is built on a "
+            "SentencePiece model, whose ids the raw model may not match"
+        )
+
+    return tokenizer
+
+
 class FlockCausalLM(torch.nn.Module):
     """
     A Flock model, such as `Olmo2`, wrapped to be called as [`ScoringModel`] calls a transformers causal LM.
@@ -180,7 +250,7 @@ class ScoringModel:
     Args:
         model (`PreTrainedModel` or `FlockCausalLM`):
             A causal LM, already on its device and in its dtype. Wrap a Flock model, such as `Olmo2`, in [`FlockCausalLM`].
-        tokenizer (`PreTrainedTokenizerBase`):
+        tokenizer (`PreTrainedTokenizerBase` or `SentencePieceTokenizer`):
             The model's tokenizer.
         name (`str`):
             Labels the model in log messages. [`~eval.run.evaluate`] records it as the provenance's `model`, `repo@commit` or `flock:org/name@number`.
@@ -200,7 +270,7 @@ class ScoringModel:
     def __init__(
         self,
         model: PreTrainedModel | FlockCausalLM,
-        tokenizer: PreTrainedTokenizerBase,
+        tokenizer: Tokenizer,
         *,
         name: str,
         max_length: int | None = None,
@@ -247,11 +317,11 @@ class ScoringModel:
 
         The revision is resolved to its commit hash, which becomes the model's `name`, so a branch or tag in `model_id` is recorded as the exact weights that were scored. A Flock version (a tag, `primary`, or none for the primary) is resolved to its number, so the model's `name` is `flock:org/name@number`, and its `digest` is the version's.
 
-        A Flock model is loaded with [`~hub.models.load_from_hub`] and wrapped in [`FlockCausalLM`]. Its tokenizer is the Hugging Face one its config's `hf_repo` names.
+        A Hugging Face model's tokenizer comes from [`load_tokenizer`]. A Flock model is loaded with [`~hub.models.load_from_hub`] and wrapped in [`FlockCausalLM`]. Its tokenizer is the Hugging Face one its config's `hf_repo` names, through `AutoTokenizer`.
 
         Args:
             model_id (`str`):
-                The model as `repo@revision`, for example `allenai/OLMo-2-0425-1B@main`, or as `flock:org/name[@version]`, for example `flock:acme/olmo2-1b@12`. Pin a full 40-character commit hash to load a Hugging Face model offline from the cache.
+                The model as `repo@revision`, for example `allenai/OLMo-2-0425-1B@main`, or as `flock:org/name[@version]`, for example `flock:acme/olmo2-1b@12`. Pin a full 40-character commit hash to load a Hugging Face model offline from the cache. A repo with `tokenizer.model` needs one earlier online load, which records whether it has `tokenizer.json`.
             device (`str` or `torch.device`, *optional*):
                 Where to put the weights. Defaults to CUDA when available, else the CPU.
             dtype (`torch.dtype`, *optional*, defaults to `torch.bfloat16`):
@@ -262,7 +332,7 @@ class ScoringModel:
                 Passed to [`ScoringModel`].
 
         Raises:
-            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision` or `flock:org/name[@version]`, or a Flock model's config has no `hf_repo` to load its tokenizer from, or `add_bos` is set and the tokenizer has no BOS token, before a Hugging Face model's weights load.
+            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision` or `flock:org/name[@version]`, or a Flock model's config has no `hf_repo` to load its tokenizer from or names a repo whose tokenizer `AutoTokenizer` would convert from a SentencePiece model, [`load_tokenizer`] refuses the repo, or `add_bos` is set and the tokenizer has no BOS token, before a Hugging Face model's weights load.
             [`~hub.models.ModelError`]: if the Flock registry has no such version, or refuses to load it.
         """
         # `__init__` checks it too, but only after the weights have loaded.
@@ -289,8 +359,7 @@ class ScoringModel:
                 add_bos=add_bos,
             )
 
-        tokenizer = AutoTokenizer.from_pretrained(ref.repo, revision=ref.revision)
-        assert tokenizer is not None  # The stubs allow None; loading raises instead.
+        tokenizer = load_tokenizer(ref)
         # `__init__` checks it too, but only after the weights have loaded.
         if add_bos and tokenizer.bos_token_id is None:
             raise ValueError(f"{ref}: add_bos is set, but the tokenizer has no BOS token")
@@ -327,7 +396,7 @@ class ScoringModel:
         """
         Returns the (context, continuation) token ids the model scores for `request`.
 
-        An empty or whitespace-only context becomes one token: the tokenizer's beginning-of-sequence (BOS) token, or its end-of-sequence (EOS) token if it has no BOS. With `add_bos`, any other context starts with BOS.
+        An empty or whitespace-only context, or one that tokenizes to no ids, becomes one token: the tokenizer's beginning-of-sequence (BOS) token, or its end-of-sequence (EOS) token if it has no BOS. With `add_bos`, any other context starts with BOS.
         """
         return self.encode_requests([request])[0]
 
@@ -347,7 +416,7 @@ class ScoringModel:
                 The requests' token ids from [`encode_requests`] with this model's tokenizer and `add_bos`, to skip tokenizing them again. Tokenized here if not given.
 
         Raises:
-            `ValueError`: if a continuation has no tokens, or is longer than `max_length` on its own.
+            `ValueError`: if a continuation has no tokens or is longer than `max_length` on its own, or, when `encoded` isn't given, [`encode_requests`] raises.
         """
         if encoded is None:
             encoded = self.encode_requests(requests)
@@ -487,7 +556,12 @@ class ScoringModel:
         return logprob, is_greedy
 
     def encode_requests(self, requests: Sequence[Request]) -> list[Encoded]:
-        """[`encode`] for many requests, with one tokenizer call for the distinct contexts and one for the joined texts."""
+        """
+        [`encode`] for many requests, with one tokenizer call for the distinct contexts and one for the joined texts.
+
+        Raises:
+            `ValueError`: if the tokenizer is a [`~eval.tokenizer.SentencePieceTokenizer`] and a joined text's ids don't start with its context's, or a context is empty or has no ids and the tokenizer has neither BOS nor EOS.
+        """
         # The first step of lm-evaluation-harness's `_encode_pair`, which OLMES uses: whitespace at
         # the end of the context moves to the start of the continuation, so `"Answer:"` +
         # `" Paris"` and `"Answer: "` + `"Paris"` score the same tokens. Unlike
@@ -504,18 +578,31 @@ class ScoringModel:
         starts = ids_by_context
         if self.add_bos:
             bos = self.tokenizer.bos_token_id
+            assert bos is not None  # `__init__` refuses `add_bos` without one.
             starts = {context: [bos, *ids] for context, ids in ids_by_context.items()}
 
         encoded = []
-        for context, joined in zip(contexts, joined_ids, strict=True):
-            if not context:
+        for request, context, joined in zip(requests, contexts, joined_ids, strict=True):
+            # A context can tokenize to nothing, such as a zero-width space under a normalizer that
+            # drops it. For every tokenizer it starts as an empty context does, because the first
+            # continuation token has no logit otherwise. OLMES's `assert len(context_enc) > 0`
+            # refuses this case instead.
+            context_ids = ids_by_context[context] if context else []
+            if not context_ids:
                 encoded.append(Encoded([self._prefix_token()], joined))
                 continue
 
             # As lm-evaluation-harness's `_encode_pair`: the continuation's ids are the joint ids
             # after as many leading ids as the context has when tokenized alone.
-            continuation_ids = joined[len(ids_by_context[context]) :]
-            encoded.append(Encoded(starts[context], continuation_ids))
+            # SentencePiece segments a whole string at once, so added text can resegment the
+            # context, and the slice below would score the wrong tokens. Other tokenizers keep
+            # lm-evaluation-harness's slice with no check, so this refusal can't move their scores.
+            if (
+                isinstance(self.tokenizer, SentencePieceTokenizer)
+                and joined[: len(context_ids)] != context_ids
+            ):
+                raise ValueError(f"the continuation changes the context's tokens: {request}")
+            encoded.append(Encoded(starts[context], joined[len(context_ids) :]))
 
         return encoded
 
@@ -531,7 +618,7 @@ class ScoringModel:
         return self.tokenizer(texts, add_special_tokens=False)["input_ids"]
 
     def _prefix_token(self) -> int:
-        """The token an empty context becomes, and a rolling text's first window starts from: BOS if the tokenizer has one, else EOS, as lm-evaluation-harness's `prefix_token_id`. It isn't padding: the first scored token needs one real token to be predicted from."""
+        """The token an empty context, or one with no ids, becomes, and a rolling text's first window starts from: BOS if the tokenizer has one, else EOS, as lm-evaluation-harness's `prefix_token_id`. It isn't padding: the first scored token needs one real token to be predicted from."""
         prefix = self.tokenizer.bos_token_id
         if prefix is None:
             prefix = self.tokenizer.eos_token_id

@@ -11,6 +11,7 @@ import pytest
 import tokenizers
 import torch
 from click.testing import CliRunner
+from sentencepiece import SentencePieceTrainer
 
 from flock.eval import cli, run
 from flock.eval.metrics import ChoiceScores
@@ -19,6 +20,7 @@ from flock.eval.provenance import Provenance
 from flock.eval.results import Results, SuiteResult, prediction_rows, write_predictions
 from flock.eval.run import EvalConfig, evaluate, score_task
 from flock.eval.tasks import MCDoc, Suite, cloze
+from flock.eval.tokenizer import SentencePieceTokenizer
 
 from .toy import PROMPT_PATHS, PROVENANCE, TASK, task_result
 
@@ -104,6 +106,31 @@ def test_predictions_recompute_every_metric_and_the_truncation(
     assert task.truncation.requests == sum(sum(n > 0 for n in cut) for cut in cuts) > 0
     assert task.truncation.docs == sum(any(cut) for cut in cuts)
     assert task.truncation.max_tokens_cut == max(max(cut) for cut in cuts)
+
+
+def resegmenting_scorer(lm, monkeypatch, tmp_path) -> ScoringModel:
+    """A scorer on a SentencePiece tokenizer whose joined texts never start with their contexts."""
+    SentencePieceTrainer.train(
+        sentence_iterator=iter(["the quick brown fox", "jumps over the lazy dog"]),
+        model_prefix=str(tmp_path / "sp"),
+        vocab_size=30,
+        hard_vocab_limit=False,
+        num_threads=1,
+    )
+    tokenizer = SentencePieceTokenizer(tmp_path / "sp.model")
+    processor = SimpleNamespace(encode=lambda texts: [[len(text) % 7, 1] for text in texts])
+    monkeypatch.setattr(tokenizer, "processor", processor)
+    return ScoringModel(lm, tokenizer, name="tiny@0", max_length=16)
+
+
+def test_a_refused_request_fails_before_any_task_scores(offline_model, lm, monkeypatch, tmp_path):
+    scorer = resegmenting_scorer(lm, monkeypatch, tmp_path)
+    monkeypatch.setattr(ScoringModel, "from_pretrained", lambda *args, **kwargs: scorer)
+    monkeypatch.setattr(ScoringModel, "loglikelihood", None)  # scoring would fail on None
+    out = tmp_path / "out"
+    with pytest.raises(ValueError, match="toy: the continuation changes the context's tokens"):
+        evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=out))
+    assert not (out / "predictions" / "toy.jsonl").exists()
 
 
 def test_provenance_is_collected_before_scoring(offline_model, scorer, monkeypatch):

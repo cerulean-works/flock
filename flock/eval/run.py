@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Literal, get_args
 
 import torch
-from transformers import PreTrainedTokenizerBase
 
 from flock.eval.metrics import bits_per_byte, multiple_choice
 from flock.eval.model import DEFAULT_BATCH_TOKENS, Encoded, ScoringModel
@@ -33,6 +32,7 @@ from flock.eval.tasks import (
     Truncation,
 )
 from flock.eval.tasks.suite import by_name
+from flock.eval.tokenizer import SentencePieceTokenizer, Tokenizer
 
 # Why `evaluate` and `score_task` refuse an output that is already there, and what to do.
 _ONE_RUN = (
@@ -112,7 +112,7 @@ def evaluate(config: EvalConfig) -> Results:
 
     Raises:
         `KeyError`: if a task or suite name isn't in its registry.
-        `ValueError`: if two different tasks, or two different suites, to run share a name, a task and a suite share a name, a task is named `suites`, or a perplexity task's window is above the model's `max_length`.
+        `ValueError`: if two different tasks, or two different suites, to run share a name, a task and a suite share a name, a task is named `suites`, a perplexity task's window is above the model's `max_length`, or a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
         `FileExistsError`: if `config.out` exists and isn't an empty directory.
     """
     _check_names("tasks", config.tasks, TASKS)
@@ -146,14 +146,24 @@ def evaluate(config: EvalConfig) -> Results:
         batch_tokens=config.batch_tokens,
         add_bos=config.add_bos,
     )
-    # Checked before scoring, so a model too short for a perplexity task fails in seconds rather
-    # than after every task before it.
+    # Checked before scoring, so a model too short for a perplexity task fails before any is scored
+    # rather than after every task before it.
     for task in tasks:
         if isinstance(task, PerplexityTask) and task.window > model.max_length:
             raise ValueError(
                 f"{task.name}: window {task.window} is above {model.name}'s max_length "
                 f"{model.max_length}"
             )
+        # A resegmented context fails the same way, not after the tasks before it. Tokenizing twice
+        # costs less than holding every task's tokens at once, and only this tokenizer refuses.
+        if isinstance(model.tokenizer, SentencePieceTokenizer) and not isinstance(
+            task, PerplexityTask
+        ):
+            docs, shots = task.load(config.limit)
+            try:
+                model.encode_requests(task.requests(docs, shots).requests)
+            except ValueError as error:
+                raise ValueError(f"{task.name}: {error}") from error
     # Collected before scoring, so the commit's dirty flag describes the tree as scoring starts
     # and `created_at` is when scoring started, as lm-evaluation-harness records `start_date`.
     provenance = Provenance.collect(
@@ -231,7 +241,7 @@ class PreparedMultipleChoice:
             The task.
         limit (`int` or `None`):
             The doc limit it was prepared with, `None` for every doc.
-        tokenizer (`PreTrainedTokenizerBase`):
+        tokenizer (`PreTrainedTokenizerBase` or `SentencePieceTokenizer`):
             The tokenizer `encoded` comes from.
         add_bos (`bool`):
             Whether `encoded`'s contexts start with BOS, as the model's `add_bos` said.
@@ -243,7 +253,7 @@ class PreparedMultipleChoice:
 
     task: MultipleChoiceTask
     limit: int | None
-    tokenizer: PreTrainedTokenizerBase
+    tokenizer: Tokenizer
     add_bos: bool
     requests: MCRequests
     encoded: tuple[Encoded, ...]
@@ -259,7 +269,7 @@ class PreparedPerplexity:
             The task.
         limit (`int` or `None`):
             The doc limit it was prepared with, `None` for every doc.
-        tokenizer (`PreTrainedTokenizerBase`):
+        tokenizer (`PreTrainedTokenizerBase` or `SentencePieceTokenizer`):
             The tokenizer `token_ids` comes from.
         docs (`tuple[TextDoc, ...]`):
             The scored docs, in order.
@@ -271,7 +281,7 @@ class PreparedPerplexity:
 
     task: PerplexityTask
     limit: int | None
-    tokenizer: PreTrainedTokenizerBase
+    tokenizer: Tokenizer
     docs: tuple[TextDoc, ...]
     task_hash: str
     token_ids: tuple[list[int], ...]
@@ -298,6 +308,7 @@ def score_task(
             Write per-doc scores to `out/predictions/<task>.jsonl`. A training loop gives each step its own `out`. No `results.json` is written: that is [`evaluate`]'s job.
 
     Raises:
+        `ValueError`: if `limit` is less than 1, or a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
         `FileExistsError`: if the predictions file already exists, before anything is scored.
     """
     return score_prepared(model, prepare_task(model, task, limit), out)
@@ -316,7 +327,7 @@ def prepare_task(model: ScoringModel, task: Task, limit: int | None = None) -> P
             Prepare only the first `limit` docs.
 
     Raises:
-        `ValueError`: if `limit` is less than 1.
+        `ValueError`: if `limit` is less than 1, or a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
     """
     if isinstance(task, PerplexityTask):
         docs = task.load(limit)

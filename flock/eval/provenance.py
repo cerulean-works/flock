@@ -42,7 +42,7 @@ class Provenance:
         sdpa_backend (`str` or `None`):
             The SDPA kernel scoring was pinned to, `"EFFICIENT_ATTENTION"` on CUDA with `sdpa` attention, or `None` where no pin applied (a device other than CUDA, other attention). Results files written before the pin have no `sdpa_backend`: PyTorch chose the kernel per batch, which changes BF16 scores run to run.
         torch (`str`), transformers (`str`), tokenizers (`str`), datasets (`str`), python (`str`):
-            Library and interpreter versions. `tokenizers` decides token boundaries, and `datasets` reads the rows.
+            Library and interpreter versions. `tokenizers` decides token boundaries, except for a repo tokenized by [`~eval.tokenizer.SentencePieceTokenizer`], where `sentencepiece` does. Its version isn't recorded: an install from the lockfile at `flock_commit` has the version pinned there. `datasets` reads the rows.
         created_at (`str`):
             When `collect` ran, in ISO 8601 UTC. [`~eval.run.evaluate`] calls it once the model has loaded, just before scoring starts.
     """

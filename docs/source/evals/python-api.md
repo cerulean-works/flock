@@ -26,6 +26,10 @@ The entry points for running evaluations, and the model wrapper they score with.
 
 [[autodoc]] eval.model.FlockCausalLM
 
+[[autodoc]] eval.model.load_tokenizer
+
+[[autodoc]] eval.tokenizer.SentencePieceTokenizer
+
 [[autodoc]] eval.requests.Request
 
 [[autodoc]] eval.requests.Scores
