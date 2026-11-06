@@ -13,7 +13,7 @@ from flock.eval.run import EvalConfig, evaluate, score_task
 from flock.eval.tasks import SUITES, TASKS, Dataset, PerplexityTask, Suite, TextDoc
 from flock.eval.tasks.paloma import PALOMA
 from flock.eval.tasks.suite import source_suite
-from flock.eval.tasks.tw_text import TW_TEXT
+from flock.eval.tasks.tw_text import SOURCES, TW_TEXT
 
 from .toy import DOMAIN_ROWS, PROVENANCE, TASK, TEXT_ROWS, TEXT_TASK
 
@@ -305,7 +305,7 @@ def test_tw_text_is_scored_over_eleven_native_sources():
     assert [suite.metric for suite in TW_TEXT.suites] == ["bits_per_byte"] * 12
     assert TW_TEXT.scored
     assert len(TW_TEXT.tasks) == 24
-    assert not any(task.name.endswith("__other") for task in TW_TEXT.tasks)  # 029.D2
+    assert not any("other" in domains for domains in SOURCES.values())  # 029.D2
     assert not any("bbc" in task.name for task in TW_TEXT.tasks)  # converted text (026.D5)
 
     district = TASKS["tw_text_judicial__地方"]

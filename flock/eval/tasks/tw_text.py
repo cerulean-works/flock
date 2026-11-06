@@ -1,4 +1,4 @@
-"""Taiwan Traditional Chinese text published from 2026-04-01 on, one source per register, scored as Paloma scores its sources."""
+"""Taiwan Traditional Chinese text published from 2026-04-01 on (theses are the exception), one source per register, scored as Paloma scores its sources."""
 
 from flock.eval.tasks.base import Dataset
 from flock.eval.tasks.suite import Suite, source_suite

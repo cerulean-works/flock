@@ -1,10 +1,10 @@
 # Scoring Taiwan Traditional Chinese text
 
-The `tw_text` suite scores how well a model fits Traditional Chinese as it is written in Taiwan: judgments, legislative records, press releases, news, forum posts, Wikipedia and theses, all published from 2026-04-01 on. It is scored the way [Paloma](https://arxiv.org/abs/2312.10523) is: a task per domain, a suite per source, in windows of 2048 tokens. This page says what the set holds, how to get access, how to run it and how to read its numbers.
+The `tw_text` suite scores how well a model fits Traditional Chinese as it is written in Taiwan: judgments, legislative records, press releases, news, forum posts, Wikipedia and theses, published from 2026-04-01 on, with theses the one exception. It is scored the way [Paloma](https://arxiv.org/abs/2312.10523) is: a task per domain, a suite per source, in windows of 2048 tokens. This page says what the set holds, how to get access, how to run it and how to read its numbers.
 
 ## What the set is
 
-The documents come from `cerulean-works/tw-text-v0` on the Hugging Face Hub, one configuration per source, split `test`. Each document is dated by its source between 2026-04-01 and 2026-10-31, with two exceptions below: `judicial` and `theses`. Every model the project compares was released before that window, and Cerulean's training data drops it, so no compared model has seen the text. Each document has at least 200 Han characters and passes a check for Simplified-only characters and mainland wording. Text converted from Simplified script isn't in the suite: converted text gets a task name of its own, never a native one.
+The documents come from `cerulean-works/tw-text-v0` on the Hugging Face Hub, one configuration per source, split `test`. Each document is dated by its source between 2026-04-01 and 2026-10-31, except `theses`, and `judicial` stops early at 2026-08-31. Every model the project compares was released before that window, or in Gemma 4's case (released 2026-04-02) states a training cutoff before it, and Cerulean's training data drops it, so no compared model has seen the text. Each document has at least 200 Han characters and passes a check for Simplified-only characters and mainland wording. Text converted from Simplified script isn't in the suite: converted text gets a task name of its own, never a native one.
 
 | Source | Register | Domains (`subdomain`) |
 |---|---|---|

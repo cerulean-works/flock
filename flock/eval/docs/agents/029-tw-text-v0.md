@@ -20,7 +20,7 @@
 
 ### 029.D1. The revision and the domain table move in one commit
 
-026.D6 requires this: a task whose domain has no rows raises, so a table and a revision that disagree fail. The table is copied from a census of the pinned revision (`subdomain` values of each source's `test` rows, most documents first). A second count of the same revision, made when the dataset was sampled, gives the same 24 domains, document counts and token counts.
+026.D6 requires this: a task whose domain has no rows raises. The check runs one way only: a row whose `subdomain` the table doesn't list is never scored and nothing raises, as 026 records. So the census is what keeps the table whole. The table is copied from a census of the pinned revision (`subdomain` values of each source's `test` rows, most documents first). A second count of the same revision, made when the dataset was sampled, gives the same 24 domains, document counts and token counts.
 
 ### 029.D2. A domain under the floor merges into `other`, and an `other` still under it leaves the sample
 
@@ -30,7 +30,7 @@ The sample lost 40 judgments (90,438 tokens: 23 administrative, 8 supreme court 
 
 ### 029.D3. `ptt` joins as the eleventh source, so `v0` doesn't compare with `sample-2`
 
-`ptt` is forum text, a register no other source has, and it has eight boards as domains. `tw_text` is the unweighted mean of its sources (026.D3), so the mean's members changed, along with the documents of every source. A number at `v0` and a number at `sample-2` are two different measurements and never appear in one comparison. `compare` lists such tasks as changed and doesn't compare them, since their task hashes differ.
+`ptt` is forum text, a register no other source has, and it has eight boards as domains. `tw_text` is the unweighted mean of its sources (026.D3), so the mean's members changed, along with the documents of every source. A number at `v0` and a number at `sample-2` are two different measurements and aren't read together. `compare` doesn't compare them: a task in both files is listed in `changed`, since its hash differs, and a task in one file is listed in `only_new` or `only_banked`. The suite's score is listed in `changed` as well.
 
 ### 029.D4. What every table of these numbers carries
 
@@ -51,9 +51,10 @@ Two sources differ from the rest in time. `judicial` covers 2026-04-01 to 2026-0
 
 - **Removed tasks (6).** `tw_text_gov_press__other`, `tw_text_judicial__other`, `tw_text_ly__質詢`, `tw_text_theses__NCHU`, `tw_text_theses__NCKU`, `tw_text_theses__NCU`.
 - **Added tasks (12) and one suite.** `tw_text_gov_press__{行政院,金管會,農業部}`, `tw_text_judicial__高等`, `tw_text_ptt__{Stock,movie,Tech_Job,MobileComm,WomenTalk,Baseball,Gossiping,HatePolitics}`, and suite `tw_text:ptt`. The tasks go from 18 to 24.
+- **Domains depend on the draw.** The floor removed `tw_text_theses__NCKU` only. NCU and NCHU were not drawn by the sample's seed at `v0`, so they never reached the floor, and a source's domains follow from the seed as well as from the crawl.
 - **Same name, new domain.** `tw_text_cnyes` and `tw_text_zhwiki` now read the domains `cnyes` and `zhwiki`, not `other`. Both clear the floor: 1,193,110 and 2,001,359 tokens.
 - **Same name, new rows.** Every task that keeps its name reads the new revision, so its hash moves with the revision, as at the repin in 026.
 - **Size.** 11,643 documents and 20,762,474 OLMo 2 tokens. Each source is sampled to about 2 million tokens, or all it has where that is less (`cnyes`, `twreporter`). `ly` holds 25 documents in those tokens and `theses` 34.
 - **Locks.** On a tiny Llama model, every scorer output, `results.json` and predictions file is byte-equal to `main`, and the 309 Paloma hashes and `fineweb_edu`'s are unchanged. The snapshot diff is the `tw_text` tasks and suites and nothing else.
-- **Smoke** at `v0` (one H200, OLMo 2 1B `a1847dff`, FP32, `batch_tokens` 16384, 1377 s for the suite, at `03c0181`). Every task's metrics are finite and no window is truncated. `tw_text` scores 1.6874 bits per byte. By source: `judicial` 1.6578, `ly` 1.4599, `gov_press` 1.6660, `cna` 1.7930, `pts` 1.8660, `ltn` 1.7873, `cnyes` 1.7363, `twreporter` 1.7653, `ptt` 1.8965, `zhwiki` 1.6668, `theses` 1.2671. `ptt` is the highest source and `theses` the lowest. These don't compare with 026's numbers at `sample-2` (029.D3).
+- **Smoke** at `v0` (one H200, `allenai/OLMo-2-0425-1B@a1847dff`, FP32, `batch_tokens` 16384, 1377 s for the suite, at `03c0181`). Every task's metrics are finite and no window is truncated. `tw_text` scores 1.6874 bits per byte. By source: `judicial` 1.6578, `ly` 1.4599, `gov_press` 1.6660, `cna` 1.7930, `pts` 1.8660, `ltn` 1.7873, `cnyes` 1.7363, `twreporter` 1.7653, `ptt` 1.8965, `zhwiki` 1.6668, `theses` 1.2671. `ptt` is the highest source and `theses` the lowest. `judicial` covers 2026-04-01 to 2026-08-31 and `theses` is not held out in time (029.D4). These don't compare with 026's numbers at `sample-2` (029.D3).
 - **A slow node gives the same bytes.** The `--limit 20` run on a node whose GPU was held at about 150 W by a power brake took 2026 s against 304 s and wrote the same 24 predictions files byte for byte, with every metric equal. This covers one model and 20 documents per task, not every run on that node.
