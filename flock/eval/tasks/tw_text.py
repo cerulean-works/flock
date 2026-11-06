@@ -4,21 +4,31 @@ from flock.eval.tasks.base import Dataset
 from flock.eval.tasks.suite import Suite, source_suite
 
 # Each source's domains, the distinct `subdomain` values of its `test` rows at the pinned
-# revision, most documents first (stage file 026, 026.D6). Domains under 100,000 OLMo 2 tokens are
-# merged into `other` in the dataset, so a source with one value lists it: its name, or `other`
-# when the whole source is that small. `bbc_zh_trad` is converted from Simplified script, so it
-# isn't here (026.D5).
+# revision, most documents first (stage file 026, 026.D6). A domain under 100,000 OLMo 2 tokens in
+# the sample is merged into `other`, and an `other` still under that size leaves the sample, so
+# `v0` has no domain named `other` (029.D2). A source with one value lists it. `bbc_zh_trad` is
+# converted from Simplified script, so it isn't here (026.D5).
 SOURCES: dict[str, tuple[str, ...]] = {
-    "judicial": ("地方", "other"),
-    "ly": ("委員會紀錄", "院會紀錄", "質詢"),
-    "gov_press": ("other", "文化部"),
+    "judicial": ("地方", "高等"),
+    "ly": ("院會紀錄", "委員會紀錄"),
+    "gov_press": ("文化部", "行政院", "金管會", "農業部"),
     "cna": ("cna",),
     "pts": ("pts",),
     "ltn": ("ltn",),
-    "cnyes": ("other",),
+    "cnyes": ("cnyes",),
     "twreporter": ("twreporter",),
-    "zhwiki": ("other",),
-    "theses": ("NYCU", "NTNU", "NCU", "NCKU", "NCHU"),
+    "ptt": (
+        "Stock",
+        "movie",
+        "Tech_Job",
+        "MobileComm",
+        "WomenTalk",
+        "Baseball",
+        "Gossiping",
+        "HatePolitics",
+    ),
+    "zhwiki": ("zhwiki",),
+    "theses": ("NYCU", "NTNU"),
 }
 
 # Every task keeps `PerplexityTask`'s window of 2048 tokens, Paloma's, which every compared model
@@ -30,7 +40,7 @@ TW_TEXT = Suite(
             "tw_text",
             Dataset(
                 repo="cerulean-works/tw-text-v0",
-                revision="8741fe41c17dca60e773b642b755043a78a021a8",
+                revision="1786e787a4ab786d1ed021994007ef3c9590e497",
                 subset=source,
                 split="test",
             ),
