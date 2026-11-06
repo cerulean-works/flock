@@ -416,7 +416,7 @@ class ScoringModel:
                 The requests' token ids from [`encode_requests`] with this model's tokenizer and `add_bos`, to skip tokenizing them again. Tokenized here if not given.
 
         Raises:
-            `ValueError`: if a continuation has no tokens, is longer than `max_length` on its own, or changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
+            `ValueError`: if a continuation has no tokens or is longer than `max_length` on its own, or, when `encoded` isn't given, [`encode_requests`] raises.
         """
         if encoded is None:
             encoded = self.encode_requests(requests)
@@ -560,7 +560,7 @@ class ScoringModel:
         [`encode`] for many requests, with one tokenizer call for the distinct contexts and one for the joined texts.
 
         Raises:
-            `ValueError`: if the tokenizer is a [`~eval.tokenizer.SentencePieceTokenizer`] and a joined text's ids don't start with its context's.
+            `ValueError`: if the tokenizer is a [`~eval.tokenizer.SentencePieceTokenizer`] and a joined text's ids don't start with its context's, or a context is empty or has no ids and the tokenizer has neither BOS nor EOS.
         """
         # The first step of lm-evaluation-harness's `_encode_pair`, which OLMES uses: whitespace at
         # the end of the context moves to the start of the continuation, so `"Answer:"` +
@@ -583,8 +583,10 @@ class ScoringModel:
 
         encoded = []
         for request, context, joined in zip(requests, contexts, joined_ids, strict=True):
-            # A context can tokenize to nothing, such as a lone zero-width space. With no ids it has
-            # no logit to score from, so for every tokenizer it starts as an empty context does.
+            # A context can tokenize to nothing, such as a zero-width space under a normalizer that
+            # drops it. For every tokenizer it starts as an empty context does, because the first
+            # continuation token has no logit otherwise. OLMES's `assert len(context_enc) > 0`
+            # refuses this case instead.
             context_ids = ids_by_context[context] if context else []
             if not context_ids:
                 encoded.append(Encoded([self._prefix_token()], joined))
@@ -594,7 +596,7 @@ class ScoringModel:
             # after as many leading ids as the context has when tokenized alone.
             # SentencePiece segments a whole string at once, so added text can resegment the
             # context, and the slice below would score the wrong tokens. Other tokenizers keep
-            # lm-evaluation-harness's behavior, so their scores don't move.
+            # lm-evaluation-harness's slice with no check, so this refusal can't move their scores.
             if (
                 isinstance(self.tokenizer, SentencePieceTokenizer)
                 and joined[: len(context_ids)] != context_ids
@@ -616,7 +618,7 @@ class ScoringModel:
         return self.tokenizer(texts, add_special_tokens=False)["input_ids"]
 
     def _prefix_token(self) -> int:
-        """The token an empty context becomes, and a rolling text's first window starts from: BOS if the tokenizer has one, else EOS, as lm-evaluation-harness's `prefix_token_id`. It isn't padding: the first scored token needs one real token to be predicted from."""
+        """The token an empty context, or one with no ids, becomes, and a rolling text's first window starts from: BOS if the tokenizer has one, else EOS, as lm-evaluation-harness's `prefix_token_id`. It isn't padding: the first scored token needs one real token to be predicted from."""
         prefix = self.tokenizer.bos_token_id
         if prefix is None:
             prefix = self.tokenizer.eos_token_id

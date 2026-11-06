@@ -12,7 +12,7 @@
 
 `taide/TAIDE-LX-7B` ships `tokenizer.model` and no `tokenizer.json`, so `flock eval` can't load it: with neither `sentencepiece` nor `tiktoken` installed, transformers 5.20.1 raises `ValueError: tiktoken is required to read a tiktoken file`. Adding `sentencepiece` alone would make it load, with the wrong tokens. This stage loads such a repo with its SentencePiece model and makes the conversion unreachable.
 
-**Out of scope:** scoring TAIDE; any other model's tokenizer path; changing how `add_bos` works; a provenance or schema field for the tokenizer kind; the chat TAIDE models.
+**Out of scope:** scoring TAIDE; any other model's tokenizer path, apart from 028.D8; changing how `add_bos` works; a provenance or schema field for the tokenizer kind; the chat TAIDE models.
 
 ---
 
@@ -33,7 +33,7 @@ The conversion's effect on any score is unmeasured. It is refused because a diff
 
 ### 028.D2. The repo's files choose the path, so one model id always means one tokenizer
 
-A repo with `tokenizer.model` and no `tokenizer.json` at the pinned revision gets `SentencePieceTokenizer`. Every other repo takes the `AutoTokenizer` line as before, including a repo with both files, as Gemma's has. No flag and no model name is involved, so two runs of one model id can't differ in tokenizer, and the rule needs no schema field. `sentencepiece` in the lockfile can't switch a repo to the conversion, because `AutoTokenizer` is not called for one.
+A repo with `tokenizer.model` and no `tokenizer.json` at the pinned revision gets `SentencePieceTokenizer`. Every other repo takes the `AutoTokenizer` line as before, including a repo with both files, as Gemma 3's has. No flag and no model name is involved, so two runs of one model id can't differ in tokenizer, and the rule needs no schema field. `sentencepiece` in the lockfile can't switch a repo to the conversion, because `AutoTokenizer` is not called for one.
 
 The choice asks for `tokenizer.json` first, and for `tokenizer.model` only if the repo has no `tokenizer.json`, with `hf_hub_download`, not `HfApi.list_repo_files`. A repo with `tokenizer.json` therefore fetches nothing else to choose, and a pinned model still loads offline from the cache as `from_pretrained` documents, which a file-list call would break for every model.
 
@@ -55,7 +55,7 @@ No special tokens are added to tokenized text unless `add_bos` is set (024.D2), 
 
 `encode_requests` takes the continuation's ids as the joined text's ids after as many as the context has alone, which assumes the joined ids start with the context's. SentencePiece segments a whole string at once, so added text can break that: a tiny unigram model gave `黃色` as `▁黃`, `色` and `黃色的` as `▁黃色的`. The slice then gives an empty continuation, or, with longer text, silently drops characters and scores the wrong tokens.
 
-On this path that raises `ValueError` from `encode_requests`. `evaluate` encodes every multiple-choice task's requests before it scores any task, so a resegmented request can't lose the tasks before it, or leave predictions a rerun would refuse to overwrite. A continuation with no tokens still raises during scoring, as for every tokenizer. That tokenizes these tasks twice, which costs less than holding every task's tokens at once. Encoding the two parts separately was rejected, because it departs from the suite's rule that the two are tokenized together. Other tokenizers keep lm-evaluation-harness's behavior with no check, so their scores can't move.
+On this path that raises `ValueError` from `encode_requests`. `evaluate` encodes every multiple-choice task's requests before it scores any task, so a resegmented request can't lose the tasks before it, or leave predictions a rerun would refuse to overwrite. A continuation with no tokens still raises during scoring, as for every tokenizer. That tokenizes these tasks twice, which costs less than holding every task's tokens at once. Encoding the two parts separately was rejected, because it departs from the suite's rule that the two are tokenized together. Other tokenizers keep lm-evaluation-harness's slice with no check, so this refusal can't move their scores.
 
 TAIDE's own model never hits this on the current suite: 0 mismatches over all 972,271 requests of all 186 tasks in the registry's suites, with no `--limit`. That includes continuations with no leading whitespace, about half of the 25,886 requests at `--limit 20`, such as `答案：` + `五氯酚`. A future task or another model can raise it, which stops the run rather than scoring it wrongly.
 
@@ -73,7 +73,9 @@ The check reads only the cache or the local folder, which the load has just fill
 
 ### 028.D8. A context that tokenizes to no ids starts from the prefix token, for every tokenizer
 
-A non-empty context can tokenize to nothing, such as a lone zero-width space. With no context tokens, the first continuation token has no logit of its own to be scored from, so such a context now starts as an empty context does. Before this stage it raised when alone in a batch, and beside a longer request it silently scored that token from a padding position's logit, so this does change such a score, on a tiny model from -6.80 to -6.97. This is the suite's own choice, and no reference covers the case. 0 of TAIDE's 972,271 requests hit it. It isn't counted for other models, where a context would have to hold only characters their tokenizer drops.
+A non-empty context can tokenize to nothing, such as a zero-width space under a normalizer that drops it, as this stage's tiny test model does. TAIDE-LX-7B's model and OLMo 2 1B's tokenizer give that character tokens. With no context tokens, the first continuation token has no logit of its own, so such a context now starts as an empty context does.
+
+Before this stage it raised when alone in a batch, and beside a longer request it silently scored that token from a padding position's logit. So this does change such a score: from -6.80 to -6.97 with a tiny random model and a stub tokenizer. OLMES refuses the case with `assert len(context_enc) > 0`, so this departs from the reference, which raising would not. It was chosen to treat the case as the empty context it is to the model, and no precedent backs that. 0 of TAIDE's 972,271 requests hit it. It isn't counted for other models.
 
 ---
 
@@ -98,11 +100,11 @@ A non-empty context can tokenize to nothing, such as a lone zero-width space. Wi
   - With `HF_HUB_OFFLINE=1`, `load_tokenizer` picks the same class from the cache for TAIDE-LX-7B, OLMo 2 1B, Llama 3.2 1B and Gemma 4 E2B.
   - 0 of TAIDE-LX-7B's 972,271 multiple-choice requests resegment their context, with no `--limit`, and 0 of 25,886 at `--limit 20`. No context or continuation tokenizes to no ids. 288,025 continuations have no leading whitespace, so the check does more than pass on spaces.
   - No task hash moved among all 517 registered tasks, and the scorer and output locks show no mismatch against `main`.
-- **Two merges with `main` while in review.** The first brought the core refactor (025) under `load_tokenizer` without conflict. The second brought `add_bos` (024), with conflicts in `model.py`, `run.py` and `test_model.py`. Both behaviors stay: BOS goes on the encoded context only, and the resegmentation check and the slice read the ids without BOS, because the joined text has none. A test holds that for this tokenizer.
-- **Smoke at the second merge.** TAIDE-LX-7B at `--limit 20` on `base_easy` and `paloma`, FP32, batch tokens 16384, one H200: 418 tasks, all 1,445 task metrics finite, no request truncated. Every metric, task hash and truncation count equals the smoke before the second merge, so `add_bos` left off moves nothing. Later commits changed only docs, comments, tests and how one error string is wrapped.
+- **Three merges with `main` while in review.** The first brought the core refactor (025), with a conflict in `model.py`'s `encode_requests`, resolved by hand so the resegmentation check stays on the inlined form. The second brought `add_bos` (024), with conflicts in `model.py`, `run.py` and `test_model.py`. Both behaviors stay: BOS goes on the encoded context only, and the resegmentation check and the slice read the ids without BOS, because the joined text has none. A test holds that for this tokenizer. The third brought the `tw_text` repin (029), without conflict.
+- **Smoke at the second merge.** TAIDE-LX-7B at `--limit 20` on `base_easy` and `paloma`, FP32, batch tokens 16384, one H200: 418 tasks, all 1,445 task metrics finite, no request truncated. Every metric, task hash and truncation count equals the smoke before the second merge, so `add_bos` left off moves nothing. Later commits changed only docs, comments, tests, how one error string is wrapped, and `tw_text`, which those suites don't run.
 
 ### Known gaps
 
 - **`sentencepiece`'s version isn't in the provenance.** `tokenizers` is, and the lockfile pins this one at the recorded commit. A field for it would be a schema change.
 - **The refusals read a tokenizer's class, and only some repos are caught.** With a SentencePiece model and no `tokenizer.json`, a config naming a class that declares no `.model` or `.spm` file, such as `GemmaTokenizer` or `GPT2Tokenizer`, passes `load_tokenizer` and `get_hf_tokenizer` and gets whatever that class builds. A repo with `tokenizer.model` whose config names a class that remaps ids, such as `CamembertTokenizer`, gets raw ids, because `tokenizer_config.json` isn't read. Both need a repo whose config disagrees with its files or its family, and no model the suite scores has one.
-- **BOS and EOS come only from the SentencePiece file.** `tokenizer_config.json` isn't read (028.D4), so a repo that names a `bos_token` there and not in the model starts empty contexts and rolling texts from EOS, or raises if it has neither. TAIDE's file has both.
+- **BOS and EOS come only from the SentencePiece file.** `tokenizer_config.json` isn't read (028.D4), so a repo that names a `bos_token` there and not in the model starts empty contexts and rolling texts from EOS, or raises if it has neither, and `add_bos` is refused for it. TAIDE's file has both.
