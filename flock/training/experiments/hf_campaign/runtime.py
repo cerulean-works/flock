@@ -26,7 +26,13 @@ class CpuExperiment:
         total_targets: int = 64,
         warmup_targets: int = 2,
     ) -> None:
-        if config.hidden_size > 64 or config.num_hidden_layers > 2:
+        if (
+            config.hidden_size > 64
+            or config.num_hidden_layers > 2
+            or config.intermediate_size > 256
+            or config.vocab_size > 256
+            or config.max_position_embeddings > 256
+        ):
             raise ValueError("CPU harness accepts tiny synthetic configurations only")
         if not 0 < warmup_targets < total_targets:
             raise ValueError("warmup must precede the finite target endpoint")
@@ -36,6 +42,8 @@ class CpuExperiment:
             json.dumps(
                 {
                     "model": config.to_dict(),
+                    "attention_backend": config._attn_implementation,
+                    "precision": "FP32 CPU",
                     "stream": stream.contract,
                     "total": total_targets,
                     "warmup": warmup_targets,

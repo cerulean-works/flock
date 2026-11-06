@@ -191,12 +191,14 @@ def test_optimizer_resume_prefetch_corruption_and_export(tmp_path):
     experiment = CpuExperiment(tiny_config(), stream(), seed=17)
     experiment.update(tc_targets=5, en_targets=5)
     experiment.checkpoint(tmp_path / "checkpoint")
+    expected_random = torch.rand(3)
     # Uncommitted prefetch must neither enter the checkpoint nor skip next-update data.
     experiment.stream.blocks("tc", 3)
     expected_loss, expected_blocks = experiment.update(tc_targets=3, en_targets=3)
     expected = {k: v.clone() for k, v in experiment.model.state_dict().items()}
     restored = CpuExperiment(tiny_config(), stream(), seed=999)
     restored.resume(tmp_path / "checkpoint")
+    torch.testing.assert_close(torch.rand(3), expected_random, rtol=0, atol=0)
     actual_loss, actual_blocks = restored.update(tc_targets=3, en_targets=3)
     assert actual_loss == expected_loss
     assert actual_blocks == expected_blocks
@@ -208,6 +210,16 @@ def test_optimizer_resume_prefetch_corruption_and_export(tmp_path):
         restored.optimizer.state_dict()["param_groups"]
         == experiment.optimizer.state_dict()["param_groups"]
     )
+    expected_optimizer = experiment.optimizer.state_dict()["state"]
+    for parameter, state in restored.optimizer.state_dict()["state"].items():
+        for key, value in state.items():
+            torch.testing.assert_close(value, expected_optimizer[parameter][key], rtol=0, atol=0)
+    changed = CpuExperiment(tiny_config(), stream(), total_targets=128)
+    with pytest.raises(ValueError, match="contract"):
+        changed.resume(tmp_path / "checkpoint")
+    (tmp_path / "interrupted.incomplete").mkdir()
+    with pytest.raises(FileExistsError):
+        restored.checkpoint(tmp_path / "interrupted")
     tokenizer_backend = Tokenizer(WordLevel({"[UNK]": 0, "[EOS]": 1, "2": 2}, unk_token="[UNK]"))
     tokenizer_backend.pre_tokenizer = Whitespace()
     tokenizer = PreTrainedTokenizerFast(
@@ -268,3 +280,41 @@ def test_aligned_loss_uses_every_target_and_exact_terminal_budget():
     assert experiment.targets == 10
     with pytest.raises(ValueError, match="overshoot"):
         experiment.update(tc_targets=1, en_targets=1)
+
+
+def test_nullable_mixed_schema_and_missing_converted_original_quarantine():
+    encoder = FixtureEncoder()
+    native = Dataset.from_list([record("native", "2 3", original_text=None)])
+    converted = Dataset.from_list(
+        [
+            record(
+                "missing",
+                "4 5",
+                original_text=None,
+                original_sha256="invalid",
+                conversion_receipt="c",
+            ),
+            {**record("bad-text", "6"), "text": None},
+            record(
+                "valid",
+                "7 8",
+                original_text="7 8",
+                original_sha256=hashlib.sha256(b"7 8").hexdigest(),
+                conversion_receipt="c",
+            ),
+        ]
+    )
+    producer = TargetStream(
+        [Pool("native", "tc_native", native, 1), Pool("converted", "tc_converted", converted, 2)],
+        encoder,
+        eos_id=1,
+        block_size=2,
+        manifest_hash="m",
+        exclusion_hash="e",
+        tokenizer_hash="t",
+        forbidden_spans=("99",),
+    )
+    blocks = producer.blocks("tc", 3)
+    assert sum(len(b.labels) for b in blocks) == 3
+    assert encoder.calls == ["7 8", "2 3"]
+    assert producer.state_dict()["rejected"] == 2

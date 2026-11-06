@@ -108,9 +108,12 @@ class TargetStream:
                 raise RuntimeError(f"source exhausted: {name}; no implicit repetition")
             row = pool.rows[index]
             self.state["positions"][name] += 1
-            text = row["text"]
+            text = row.get("text")
+            if not isinstance(text, str):
+                self.state["rejected"] += 1
+                continue
             # Every rejection happens before tokenizer admission, including derivatives.
-            originals = [text, row.get("original_text", text)]
+            originals = [text]
             eligible = (
                 row.get("admitted") is True
                 and row.get("split") == "train"
@@ -131,6 +134,8 @@ class TargetStream:
                     and row.get("original_sha256")
                     == hashlib.sha256(row["original_text"].encode()).hexdigest()
                 )
+                if isinstance(row.get("original_text"), str):
+                    originals.append(row["original_text"])
             contaminated = any(span in view for span in self.forbidden_spans for view in originals)
             if not eligible or contaminated:
                 self.state["rejected"] += 1
@@ -156,7 +161,7 @@ class TargetStream:
             raise RuntimeError("requested language quota exceeds remaining approved source targets")
         blocks = []
         while targets:
-            # Scheduling occurs at block boundaries, never interleaving document tokens.
+            # Switch sources only at block boundaries; a long document may resume after another pool.
             active = [n for n in names if self.state["consumed"][n] < self.pools[n].targets]
             name = min(
                 active,
