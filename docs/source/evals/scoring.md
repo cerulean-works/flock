@@ -8,8 +8,8 @@ A request is a context and a continuation, and its score is the summed log-proba
 
 1. Whitespace at the end of the context moves to the start of the continuation.
 2. The context and the continuation are tokenized together. The continuation's tokens are the ones after the context's own tokenization, so a token that spans the boundary counts as continuation.
-3. No special tokens are added. An empty context becomes the beginning-of-sequence (BOS) token, or the end-of-sequence (EOS) token if the tokenizer has no BOS. A whitespace-only context counts as empty once its whitespace has moved. lm-evaluation-harness checks for an empty context before moving whitespace, so this one case differs from it.
-4. An input longer than the model's `max_length` loses tokens from the left, so the context is cut and the continuation is scored in full. The results file counts the cuts per task ([Truncation](results#truncation)).
+3. No special tokens are added, unless you set `add_bos` (`--add-bos`): then every non-empty context starts with the beginning-of-sequence (BOS) token, as OLMES does for the models it configures with `add_bos_token`, all of them Gemma. Set it for Gemma models, which score poorly without BOS. An empty context becomes the BOS token, or the end-of-sequence (EOS) token if the tokenizer has no BOS. A whitespace-only context counts as empty once its whitespace has moved. lm-evaluation-harness checks for an empty context before moving whitespace, so this one case differs from it.
+4. An input longer than the model's `max_length` loses tokens from the left, so the context is cut and the continuation is scored in full. The results file counts the cuts per task ([Truncation](results#truncation)). `max_length` defaults to the `max_position_embeddings` of the model's text config. For a multimodal checkpoint such as Gemma 4, that is the language model's, and the vision and audio parts load but never run on text.
 
 A continuation with no tokens raises an error, since scoring it as 0 would rank it above every real choice. So does a continuation longer than `max_length` on its own.
 
@@ -37,6 +37,7 @@ So compare runs only when they used the same:
 - `batch_tokens` and `limit`, which decide the batches
 - dtype, attention implementation and SDPA kernel, which change BF16 arithmetic
 - `max_length`, which decides where long inputs are cut
+- `add_bos`, which changes every context
 
 `results.json` records all of them: `limit` with each task, and the rest in its provenance. See [Results files](results#provenance).
 

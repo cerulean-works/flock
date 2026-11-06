@@ -34,13 +34,14 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
     results = evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path))
 
     data = json.loads((tmp_path / "results.json").read_text())
-    assert data["schema_version"] == 7
+    assert data["schema_version"] == 8
     assert data["provenance"]["model"] == "tiny@0"
     assert data["provenance"]["model_digest"] is None  # only a Flock version has one
     assert data["provenance"]["flock_commit"] == "abc123"
     assert data["provenance"]["command"] is None  # the Python API names no command
     assert data["provenance"]["dtype"] == "float32"
     assert data["provenance"]["max_length"] == 128
+    assert data["provenance"]["add_bos"] is False
     assert data["provenance"]["attention"] == "sdpa"
     assert data["provenance"]["sdpa_backend"] is None  # no pin on the CPU
     assert data["provenance"]["tokenizers"] == tokenizers.__version__
@@ -416,6 +417,23 @@ def test_run_loads_the_weights_in_the_dtype_asked_for(offline_model, scorer, mon
     assert loaded == [torch.bfloat16, torch.float32]  # bfloat16 unless asked
     with pytest.raises(ValueError, match="dtype must be bfloat16 or float32"):
         EvalConfig(model="tiny@0", tasks=("arc_easy",), dtype="float16")  # ty: ignore[invalid-argument-type]
+
+
+def test_run_passes_add_bos_to_the_model(offline_model, scorer, monkeypatch, tmp_path):
+    asked = []
+
+    def from_pretrained(*args, **kwargs):
+        asked.append(kwargs["add_bos"])
+        return scorer
+
+    monkeypatch.setattr(ScoringModel, "from_pretrained", from_pretrained)
+    monkeypatch.setitem(run.TASKS, "arc_easy", TASK)
+    argv = ["run", "--model", "tiny@0", "--task", "arc_easy", "--out", str(tmp_path)]
+
+    evaluate(EvalConfig(model="tiny@0", tasks=("arc_easy",)))
+    CliRunner().invoke(cli.main, [*argv, "--add-bos"], catch_exceptions=False)
+
+    assert asked == [False, True]  # no BOS unless asked
 
 
 def test_cli_needs_a_task_or_suite():

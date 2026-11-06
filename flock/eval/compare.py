@@ -59,7 +59,7 @@ def compare(banked: Path, new: Path) -> Comparison:
     Each task in both files is compared on `num_docs` and every entry of `metrics` and `truncation`, and each suite in both on `members` and `score`. Timing is not compared. An accuracy may move by `FLIPPED_DOCS` docs out of `num_docs`, any other metric by `RELATIVE_TOLERANCE` of its banked value, and a suite's score by its members' tolerances combined as independent errors. Counts and `members` must be equal. A task or suite scored differently in the two runs is listed in `changed` and not compared.
 
     Raises:
-        `ValueError`: if the runs are different instruments (another model or `model_digest`, `dtype`, `batch_tokens`, `max_length` or `attention`, or another `sdpa_backend` when both files record one), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
+        `ValueError`: if the runs are different instruments (another model or `model_digest`, `dtype`, `batch_tokens`, `max_length`, `add_bos` or `attention`, or another `sdpa_backend` when both files record one), if no task is in both, or if a file isn't JSON or lacks a key `compare` reads, or has the wrong type there.
     """
     files = {}
     for path in (banked, new):
@@ -85,6 +85,14 @@ def compare(banked: Path, new: Path) -> Comparison:
             raise ValueError(
                 f"different instrument: provenance.model_digest is {digests[0]!r} in {banked}, "
                 f"{digests[1]!r} in {new}"
+            )
+        # BOS before every context changes every score (024.D3). A file older than the field
+        # added none, so it reads as False.
+        bos = bank["provenance"].get("add_bos", False), rerun["provenance"].get("add_bos", False)
+        if bos[0] != bos[1]:
+            raise ValueError(
+                f"different instrument: provenance.add_bos is {bos[0]!r} in {banked}, "
+                f"{bos[1]!r} in {new}"
             )
         # The pinned SDPA kernel changes BF16 scores (023.D3). A file older than the field has an
         # unknown kernel, not none, so only two files that both record it can refuse: the FP32
