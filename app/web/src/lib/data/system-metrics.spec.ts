@@ -82,12 +82,12 @@ describe('systemCharts', () => {
 		const nvlink = byId(charts, 'gpu.nvlinkTxBytes');
 		expect(nvlink).toEqual({
 			id: 'gpu.nvlinkTxBytes',
-			title: 'GPU NVLink Tx Bytes',
+			title: 'GPU NVLink Tx',
 			group: 'GPU',
-			format: 'si',
+			format: 'bytes',
 			series: Array.from({ length: 8 }, (_, i) => ({
 				key: `system.gpu.${i}.nvlinkTxBytes`,
-				label: `GPU ${i} NVLink Tx (bytes)`
+				label: `GPU ${i} NVLink Tx`
 			}))
 		});
 		for (const c of charts.filter((c) => c.group === 'GPU')) expect(c.series).toHaveLength(8);
@@ -112,9 +112,9 @@ describe('systemCharts', () => {
 			'GPU'
 		]);
 		expect(summary('gpu.memoryAllocatedBytes')).toEqual([
-			'GPU Memory Allocated (Bytes)',
-			'GPU 0 Memory Allocated (bytes)',
-			'si',
+			'GPU Memory Allocated',
+			'GPU 0 Memory Allocated',
+			'bytes',
 			'GPU'
 		]);
 		expect(summary('gpu.temp')).toEqual([
@@ -154,9 +154,9 @@ describe('systemCharts', () => {
 			'Process'
 		]);
 		expect(summary('proc.cpu.threads')[0]).toBe('Process CPU Threads In Use');
-		expect(summary('proc.memory.rssMB')[0]).toBe('Process Memory In Use (MB)');
+		expect(summary('proc.memory.rssMB')[0]).toBe('Process Memory In Use');
 		expect(summary('proc.memory.percent')[0]).toBe('Process Memory In Use (%)');
-		expect(summary('proc.memory.availableMB')[0]).toBe('Process Memory Available (MB)');
+		expect(summary('proc.memory.availableMB')[0]).toBe('Process Memory Available');
 		expect(summary('memory_percent')).toEqual([
 			'System Memory Utilization (%)',
 			'System Memory Utilization (%)',
@@ -169,24 +169,25 @@ describe('systemCharts', () => {
 			'pct',
 			'Disk'
 		]);
-		expect(summary('disk.usageGB')[0]).toBe('Disk Utilization (GB)');
+		expect(summary('disk.usageGB')).toEqual(['Disk Space Used', 'Disk / Space Used', 'gb', 'Disk']);
+		expect(summary('proc.memory.rssMB')[2]).toBe('mb');
 	});
 
 	it('puts related keys in one chart', () => {
 		const charts = systemCharts(EIGHT_GPUS);
 		expect(byId(charts, 'network.traffic')).toEqual({
 			id: 'network.traffic',
-			title: 'Network Traffic (Bytes)',
+			title: 'Network Traffic',
 			group: 'Network',
-			format: 'si',
+			format: 'bytes',
 			series: [
-				{ key: 'system.network.recv', label: 'Network Traffic Received (bytes)' },
-				{ key: 'system.network.sent', label: 'Network Traffic Sent (bytes)' }
+				{ key: 'system.network.recv', label: 'Network Traffic Received' },
+				{ key: 'system.network.sent', label: 'Network Traffic Sent' }
 			]
 		});
 		expect(byId(charts, 'disk.io').series).toEqual([
-			{ key: 'system.disk.in', label: 'Disk Read (MB)' },
-			{ key: 'system.disk.out', label: 'Disk Write (MB)' }
+			{ key: 'system.disk.in', label: 'Disk Read' },
+			{ key: 'system.disk.out', label: 'Disk Write' }
 		]);
 
 		const cores = systemCharts([
@@ -223,17 +224,17 @@ describe('systemCharts', () => {
 			'system.disk.nvme1n1.in'
 		]);
 		expect(byId(charts, 'disk.usageGB').series).toEqual([
-			{ key: 'system.disk./.usageGB', label: 'Disk / Utilization (GB)' },
-			{ key: 'system.disk./mnt/data.usageGB', label: 'Disk /mnt/data Utilization (GB)' }
+			{ key: 'system.disk./.usageGB', label: 'Disk / Space Used' },
+			{ key: 'system.disk./mnt/data.usageGB', label: 'Disk /mnt/data Space Used' }
 		]);
 		expect(byId(charts, 'disk.usagePercent').series.map((s) => s.label)).toEqual([
 			'Disk / Utilization (%)',
 			'Disk /mnt/v1.2 Utilization (%)'
 		]);
 		expect(byId(charts, 'disk.io').series.map((s) => s.label)).toEqual([
-			'Disk nvme1n1 Read (MB)',
-			'Disk nvme1n1 Write (MB)',
-			'Disk nvme10n1 Read (MB)'
+			'Disk nvme1n1 Read',
+			'Disk nvme1n1 Write',
+			'Disk nvme10n1 Read'
 		]);
 		expect(charts.map((c) => c.id)).toEqual(['disk.usagePercent', 'disk.usageGB', 'disk.io']);
 	});
