@@ -11,18 +11,15 @@ from transformers import AutoTokenizer, PreTrainedTokenizerBase, TokenizersBacke
 
 from flock.training.core.data_utils import Batch
 
-# What the vocabulary file of a tokenizer class built on a SentencePiece model ends in.
-SENTENCEPIECE_SUFFIXES = {".model", ".spm"}
-
 
 def _converted_from_sentencepiece(repo: str, tokenizer: PreTrainedTokenizerBase) -> bool:
     """
     Whether `AutoTokenizer` just built `tokenizer` by converting a SentencePiece model in `repo`: its class is built on one, and no `tokenizer.json` is on disk for that load to have read.
 
-    Reads only the local folder or the cache, so it adds no Hub call.
+    Reads only the local folder or the cache, so it adds no Hub call. A class that names no such file passes, whatever it was built from.
     """
     if not any(
-        Path(name).suffix in SENTENCEPIECE_SUFFIXES for name in tokenizer.vocab_files_names.values()
+        Path(name).suffix in {".model", ".spm"} for name in tokenizer.vocab_files_names.values()
     ):
         return False
 

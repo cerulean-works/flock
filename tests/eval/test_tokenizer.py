@@ -205,6 +205,22 @@ def test_a_file_the_hub_answers_404_for_is_absent(model_file, monkeypatch, auto)
     assert auto == []
 
 
+@pytest.mark.parametrize("failing", ["tokenizer.json", "tokenizer.model"])
+def test_a_failed_hub_request_chooses_nothing(failing, model_file, monkeypatch, auto):
+    def download(repo, filename, revision):
+        if filename == failing:
+            raise LocalEntryNotFoundError("timed out")
+        if filename == "tokenizer.model":
+            return str(model_file)
+        raise RemoteEntryNotFoundError("404", response=Mock())
+
+    monkeypatch.setattr(model, "hf_hub_download", download)
+    # The next request may succeed and choose differently, so this one doesn't fall through.
+    with pytest.raises(LocalEntryNotFoundError):
+        load_tokenizer(REF)
+    assert auto == []
+
+
 @pytest.mark.parametrize(
     ("tokenizer_class", "name"),
     [
@@ -251,6 +267,16 @@ def test_a_resegmented_context_is_refused(scorer, model_file, monkeypatch):
     for continuation in ("的", "的花"):
         with pytest.raises(ValueError, match="changes the context's tokens"):
             resegmented.encode(Request("黃色", continuation))
+
+
+def test_a_context_that_tokenizes_to_nothing_gets_the_prefix_token(scorer, model_file, monkeypatch):
+    tokenizer = SentencePieceTokenizer(model_file)
+    ids = {"\u200b": [], "\u200b Paris": [5, 6]}
+    processor = SimpleNamespace(encode=lambda texts: [ids[text] for text in texts])
+    monkeypatch.setattr(tokenizer, "processor", processor)
+    empty = ScoringModel(scorer.model, tokenizer, name="tiny@0")
+
+    assert empty.encode(Request("\u200b", " Paris")) == ([tokenizer.bos_token_id], [5, 6])
 
 
 def test_a_multiple_choice_request_scores_end_to_end(scorer):

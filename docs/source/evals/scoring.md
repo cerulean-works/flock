@@ -19,12 +19,13 @@ A Hugging Face repo with `tokenizer.model` and no `tokenizer.json` at the pinned
 - A repo's `add_bos_token` setting is not applied.
 - A request raises an error if adding its continuation changes the context's tokens, since the split above would then score the wrong tokens. [`~eval.run.evaluate`] checks every multiple-choice task's requests before it scores any task. Other tokenizers keep the reference behavior, with no check.
 
-The repo's files decide the path, so no flag changes it. Three related cases fail instead of loading a converted tokenizer:
+The repo's files decide the path, so no flag changes it. Four related cases fail instead of loading a converted tokenizer:
 
 | Case | What happens |
 |---|---|
 | A repo has no `tokenizer.json`, and `AutoTokenizer` gives a tokenizer class built on a SentencePiece model under another name, such as `spiece.model` | [`~eval.model.load_tokenizer`] raises `ValueError`. These classes can remap the model's ids. |
 | A Flock model's `hf_repo` gives such a tokenizer, `tokenizer.model` included | `get_hf_tokenizer` raises `ValueError`, in training and in scoring. |
+| A request to the Hub fails while choosing | [`~eval.model.load_tokenizer`] raises `LocalEntryNotFoundError`, so a failed request can't change the tokenizer. |
 | Offline, `tokenizer.model` is cached and the cache doesn't record whether the repo has `tokenizer.json` | [`~eval.model.load_tokenizer`] raises `LocalEntryNotFoundError`, so an interrupted download can't change the tokenizer. Load the model once online to record it. |
 
 ## Scoring a whole text

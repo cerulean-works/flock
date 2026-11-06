@@ -109,7 +109,7 @@ def evaluate(config: EvalConfig) -> Results:
 
     Raises:
         `KeyError`: if a task or suite name isn't in its registry.
-        `ValueError`: if two different tasks, or two different suites, to run share a name, a task and a suite share a name, a task is named `suites`, or a perplexity task's window is above the model's `max_length`.
+        `ValueError`: if two different tasks, or two different suites, to run share a name, a task and a suite share a name, a task is named `suites`, a perplexity task's window is above the model's `max_length`, or a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
         `FileExistsError`: if `config.out` exists and isn't an empty directory.
     """
     _check_names("tasks", config.tasks, TASKS)
@@ -150,7 +150,7 @@ def evaluate(config: EvalConfig) -> Results:
                 f"{task.name}: window {task.window} is above {model.name}'s max_length "
                 f"{model.max_length}"
             )
-        # Refused requests fail the same way, not after the tasks before them. Tokenizing twice
+        # A resegmented context fails the same way, not after the tasks before it. Tokenizing twice
         # costs less than holding every task's tokens at once, and only this tokenizer refuses.
         if isinstance(model.tokenizer, SentencePieceTokenizer) and not isinstance(
             task, PerplexityTask
@@ -318,7 +318,7 @@ def prepare_task(model: ScoringModel, task: Task, limit: int | None = None) -> P
             Prepare only the first `limit` docs.
 
     Raises:
-        `ValueError`: if `limit` is less than 1.
+        `ValueError`: if `limit` is less than 1, or a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
     """
     if isinstance(task, PerplexityTask):
         docs = task.load(limit)

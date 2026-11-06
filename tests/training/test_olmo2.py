@@ -94,7 +94,7 @@ def test_a_sentencepiece_class_with_tokenizer_json_is_not_a_conversion(
 
 
 def test_a_class_with_other_vocabulary_files_is_not_a_conversion(config, tmp_path, monkeypatch):
-    # GPT-2's class, beside a stray `tokenizer.model` it doesn't read. The type check is next.
+    # The check reads the class, so one naming no SentencePiece file passes. The type check is next.
     tokenizer = SimpleNamespace(vocab_files_names={"vocab_file": "vocab.json"})
     monkeypatch.setattr(
         "flock.training.core.models.base.AutoTokenizer.from_pretrained",

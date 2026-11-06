@@ -11,7 +11,13 @@ from types import SimpleNamespace
 from typing import Any, Literal, NamedTuple
 
 import torch
-from huggingface_hub import _CACHED_NO_EXIST, HfApi, hf_hub_download, try_to_load_from_cache
+from huggingface_hub import (
+    _CACHED_NO_EXIST,
+    HfApi,
+    hf_hub_download,
+    is_offline_mode,
+    try_to_load_from_cache,
+)
 from huggingface_hub.errors import LocalEntryNotFoundError, RemoteEntryNotFoundError
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
@@ -22,8 +28,6 @@ from flock.eval.tokenizer import SentencePieceTokenizer, Tokenizer
 DEFAULT_BATCH_TOKENS = 32768
 # What a model id starts with when it names a version in the Flock registry.
 FLOCK = "flock:"
-# What the vocabulary file of a tokenizer class built on a SentencePiece model ends in.
-SENTENCEPIECE_SUFFIXES = {".model", ".spm"}
 
 logger = logging.getLogger(__name__)
 
@@ -155,33 +159,29 @@ def load_tokenizer(ref: ModelRef) -> Tokenizer:
 
     Raises:
         `ValueError`: if the repo has no `tokenizer.json` and `AutoTokenizer` gives a tokenizer class built on a SentencePiece model, which is a conversion, and whose ids the raw model may not match.
-        `LocalEntryNotFoundError`: if the Hub can't be reached, `tokenizer.model` is cached, and the cache doesn't record whether the repo has `tokenizer.json`. Loading the model once online records it.
+        `LocalEntryNotFoundError`: if a request to the Hub fails, so the repo's files are unknown, or offline if `tokenizer.model` is cached and the cache doesn't record whether the repo has `tokenizer.json`. Loading the model once online records it.
     """
     try:
         tokenizer_json = _repo_file(ref, "tokenizer.json")
+        model_file = None if tokenizer_json else _repo_file(ref, "tokenizer.model")
     except LocalEntryNotFoundError:
-        # Beside `tokenizer.model` this may be an interrupted download of a repo with both files.
-        # Otherwise nothing depends on it: `AutoTokenizer` can only read what is on disk.
-        if isinstance(
+        # Online the Hub failed, and the next request may succeed and choose differently. Offline,
+        # a cached `tokenizer.model` may be an interrupted download of a repo with both files.
+        if not is_offline_mode() or isinstance(
             try_to_load_from_cache(ref.repo, "tokenizer.model", revision=ref.revision), str
         ):
             raise
-        tokenizer_json = None
+        # With no `tokenizer.model` on disk, `AutoTokenizer` can only read what else is there.
+        tokenizer_json = model_file = None
 
-    if tokenizer_json is None:
-        try:
-            model_file = _repo_file(ref, "tokenizer.model")
-        except LocalEntryNotFoundError:
-            # Not on disk, so nothing here can read it.
-            model_file = None
-        if model_file is not None:
-            return SentencePieceTokenizer(model_file)
+    if model_file is not None:
+        return SentencePieceTokenizer(model_file)
 
     tokenizer = AutoTokenizer.from_pretrained(ref.repo, revision=ref.revision)
     assert tokenizer is not None  # The stubs allow None; loading raises instead.
 
     if tokenizer_json is None and any(
-        Path(name).suffix in SENTENCEPIECE_SUFFIXES for name in tokenizer.vocab_files_names.values()
+        Path(name).suffix in {".model", ".spm"} for name in tokenizer.vocab_files_names.values()
     ):
         raise ValueError(
             f"{ref}: no tokenizer.json, and {type(tokenizer).__name__} is built on a "
@@ -557,13 +557,14 @@ class ScoringModel:
 
         encoded = []
         for request, context, joined in zip(requests, contexts, joined_ids, strict=True):
-            if not context:
+            # A context can tokenize to nothing, such as a lone zero-width space.
+            context_ids = ids_by_context[context] if context else []
+            if not context_ids:
                 encoded.append(Encoded([self._prefix_token()], joined))
                 continue
 
             # As lm-evaluation-harness's `_encode_pair`: the continuation's ids are the joint ids
             # after as many leading ids as the context has when tokenized alone.
-            context_ids = ids_by_context[context]
             # SentencePiece segments a whole string at once, so added text can resegment the
             # context, and the slice below would score the wrong tokens. Other tokenizers keep
             # lm-evaluation-harness's behavior, so their scores don't move.
