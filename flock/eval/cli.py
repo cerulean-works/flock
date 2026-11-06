@@ -60,6 +60,11 @@ def main() -> None:
     show_default=True,
     help="The weights' dtype.",
 )
+@click.option(
+    "--add-bos",
+    is_flag=True,
+    help="Start every non-empty context with the tokenizer's BOS token, as OLMES does for Gemma.",
+)
 @click.option("--device", help="Torch device (default: cuda if available).")
 @click.option("--wandb-project", help="Also log the summary to this tracker project.")
 @click.option(
@@ -75,6 +80,7 @@ def run(
     limit: int | None,
     batch_tokens: int,
     dtype: Dtype,
+    add_bos: bool,
     device: str | None,
     wandb_project: str | None,
     verbose: bool,
@@ -89,6 +95,7 @@ def run(
             limit=limit,
             batch_tokens=batch_tokens,
             dtype=dtype,
+            add_bos=add_bos,
             device=device,
             wandb_project=wandb_project,
             # The program's name as invoked (`flock` for the script) and its arguments.

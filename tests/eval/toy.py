@@ -188,6 +188,7 @@ PROVENANCE = Provenance(
     dtype="float32",
     batch_tokens=64,
     max_length=128,
+    add_bos=False,
     attention="eager",
     sdpa_backend=None,
     torch="2.8.0",

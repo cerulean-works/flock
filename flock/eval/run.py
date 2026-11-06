@@ -70,6 +70,8 @@ class EvalConfig:
             The command line recorded in the provenance, or `None` if not given. The CLI passes its own command line.
         suites (`tuple[str, ...]`, *optional*):
             Registry names of the suites to run. Their tasks run after `tasks`, each task once, and each suite and the suites it holds are scored.
+        add_bos (`bool`, *optional*, defaults to `False`):
+            Passed to [`~eval.model.ScoringModel`]. Set it for Gemma models, as OLMES does.
 
     Raises:
         `ValueError`: if no task or suite is given, a task or suite repeats, or `limit` or `batch_tokens` is less than 1, or `dtype` is not `"bfloat16"` or `"float32"`, before any model loads.
@@ -85,6 +87,7 @@ class EvalConfig:
     wandb_project: str | None = None
     command: str | None = None
     suites: tuple[str, ...] = ()
+    add_bos: bool = False
 
     def __post_init__(self) -> None:
         if not self.tasks and not self.suites:
@@ -141,6 +144,7 @@ def evaluate(config: EvalConfig) -> Results:
         device=config.device,
         dtype=getattr(torch, config.dtype),
         batch_tokens=config.batch_tokens,
+        add_bos=config.add_bos,
     )
     # Checked before scoring, so a model too short for a perplexity task fails in seconds rather
     # than after every task before it.
@@ -170,6 +174,7 @@ def evaluate(config: EvalConfig) -> Results:
         dtype=model.dtype,
         batch_tokens=model.batch_tokens,
         max_length=model.max_length,
+        add_bos=model.add_bos,
         attention=model.attention,
         sdpa_backend=model.sdpa_backend,
     )
@@ -238,6 +243,8 @@ class PreparedMultipleChoice:
             The doc limit it was prepared with, `None` for every doc.
         tokenizer (`PreTrainedTokenizerBase` or `SentencePieceTokenizer`):
             The tokenizer `encoded` comes from.
+        add_bos (`bool`):
+            Whether `encoded`'s contexts start with BOS, as the model's `add_bos` said.
         requests (`MCRequests`):
             The docs, their requests and the task hash.
         encoded (`tuple[Encoded, ...]`):
@@ -247,6 +254,7 @@ class PreparedMultipleChoice:
     task: MultipleChoiceTask
     limit: int | None
     tokenizer: Tokenizer
+    add_bos: bool
     requests: MCRequests
     encoded: tuple[Encoded, ...]
 
@@ -311,7 +319,7 @@ def prepare_task(model: ScoringModel, task: Task, limit: int | None = None) -> P
 
     Args:
         model (`ScoringModel`):
-            The model whose tokenizer to use. Any model with the same tokenizer object can score the result.
+            The model whose tokenizer and `add_bos` to use. Any model with the same tokenizer object and `add_bos` can score the result.
         task (`MultipleChoiceTask` or `PerplexityTask`):
             The task.
         limit (`int`, *optional*):
@@ -337,6 +345,7 @@ def prepare_task(model: ScoringModel, task: Task, limit: int | None = None) -> P
         task=task,
         limit=limit,
         tokenizer=model.tokenizer,
+        add_bos=model.add_bos,
         requests=requests,
         encoded=tuple(model.encode_requests(requests.requests)),
     )
@@ -350,14 +359,14 @@ def score_prepared(
 
     Args:
         model (`ScoringModel`):
-            The model to score. Its tokenizer must be the object the task was prepared with.
+            The model to score. Its tokenizer must be the object the task was prepared with, and its `add_bos` the same.
         prepared (`PreparedMultipleChoice` or `PreparedPerplexity`):
             The prepared task. It can be scored any number of times.
         out (`Path`, *optional*):
             Write per-doc scores to `out/predictions/<task>.jsonl`. A training loop gives each step its own `out`.
 
     Raises:
-        `ValueError`: if `model`'s tokenizer isn't the one the task was prepared with.
+        `ValueError`: if `model`'s tokenizer isn't the one the task was prepared with, or a multiple-choice task was prepared with another `add_bos`.
         `FileExistsError`: if the predictions file already exists, before anything is scored.
     """
     task = prepared.task
@@ -368,6 +377,12 @@ def score_prepared(
         raise ValueError(
             f"{task.name} was prepared with another tokenizer than {model.name}'s; "
             "prepare it again with this model"
+        )
+    # A perplexity task is not checked: `add_bos` never changes its windows (024.D2).
+    if isinstance(prepared, PreparedMultipleChoice) and model.add_bos != prepared.add_bos:
+        raise ValueError(
+            f"{task.name} was prepared with add_bos={prepared.add_bos}, but {model.name} has "
+            f"add_bos={model.add_bos}; prepare it again with this model"
         )
     predictions = out / "predictions" / f"{task.name}.jsonl" if out is not None else None
     if predictions is not None and predictions.exists():

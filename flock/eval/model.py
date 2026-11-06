@@ -255,14 +255,16 @@ class ScoringModel:
         name (`str`):
             Labels the model in log messages. [`~eval.run.evaluate`] records it as the provenance's `model`, `repo@commit` or `flock:org/name@number`.
         max_length (`int`, *optional*):
-            The longest input the model sees. Defaults to the config's `max_position_embeddings`.
+            The longest input the model sees. Defaults to the `max_position_embeddings` of the config's text config, which for a multimodal model, such as Gemma 4, is a sub-config.
         batch_tokens (`int`, *optional*, defaults to 32768):
             The most padded tokens in one forward pass.
         digest (`str`, *optional*):
             The digest of the Flock version the weights are, which [`~eval.run.evaluate`] records as the provenance's `model_digest`. `None` for any other model.
+        add_bos (`bool`, *optional*, defaults to `False`):
+            Start every non-empty context with the tokenizer's beginning-of-sequence (BOS) token, as OLMES does for the models it configures with `add_bos_token`, all of them Gemma. A model trained to always see BOS, such as Gemma, scores poorly without it.
 
     Raises:
-        `ValueError`: if `batch_tokens` or `max_length` is less than 1, or `max_length` isn't given and the config has no `max_position_embeddings`.
+        `ValueError`: if `batch_tokens` or `max_length` is less than 1, `max_length` isn't given and the text config has no `max_position_embeddings`, or `add_bos` is set and the tokenizer has no BOS token.
     """
 
     def __init__(
@@ -274,15 +276,23 @@ class ScoringModel:
         max_length: int | None = None,
         batch_tokens: int = DEFAULT_BATCH_TOKENS,
         digest: str | None = None,
+        add_bos: bool = False,
     ) -> None:
         if batch_tokens < 1:
             raise ValueError(f"batch_tokens must be at least 1, got {batch_tokens}")
         if max_length is None:
-            max_length = getattr(model.config, "max_position_embeddings", None)
+            # A multimodal config, such as Gemma 4's, keeps the length in its text config. A
+            # text-only config is its own text config, and a Flock model's has no sub-configs.
+            config = model.config
+            if isinstance(model, PreTrainedModel):
+                config = config.get_text_config(decoder=True)
+            max_length = getattr(config, "max_position_embeddings", None)
         if max_length is None:
-            raise ValueError(f"{name}: config has no max_position_embeddings; pass max_length")
+            raise ValueError(f"{name}: text config has no max_position_embeddings; pass max_length")
         if max_length < 1:
             raise ValueError(f"max_length must be at least 1, got {max_length}")
+        if add_bos and tokenizer.bos_token_id is None:
+            raise ValueError(f"{name}: add_bos is set, but the tokenizer has no BOS token")
 
         self.model = model
         self.tokenizer = tokenizer
@@ -290,6 +300,7 @@ class ScoringModel:
         self.max_length = max_length
         self.batch_tokens = batch_tokens
         self.digest = digest
+        self.add_bos = add_bos
 
     @classmethod
     def from_pretrained(
@@ -299,6 +310,7 @@ class ScoringModel:
         device: str | torch.device | None = None,
         dtype: torch.dtype = torch.bfloat16,
         batch_tokens: int = DEFAULT_BATCH_TOKENS,
+        add_bos: bool = False,
     ) -> ScoringModel:
         """
         Loads `repo@revision` from the Hugging Face Hub, or `flock:org/name@version` from the Flock registry.
@@ -316,9 +328,11 @@ class ScoringModel:
                 The weights' dtype. Log-softmax always runs in FP32.
             batch_tokens (`int`, *optional*):
                 Passed to [`ScoringModel`].
+            add_bos (`bool`, *optional*, defaults to `False`):
+                Passed to [`ScoringModel`].
 
         Raises:
-            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision` or `flock:org/name[@version]`, or a Flock model's config has no `hf_repo` to load its tokenizer from or names a repo whose tokenizer `AutoTokenizer` would convert from a SentencePiece model, or [`load_tokenizer`] refuses the repo.
+            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision` or `flock:org/name[@version]`, or a Flock model's config has no `hf_repo` to load its tokenizer from or names a repo whose tokenizer `AutoTokenizer` would convert from a SentencePiece model, [`load_tokenizer`] refuses the repo, or `add_bos` is set and the tokenizer has no BOS token.
             [`~hub.models.ModelError`]: if the Flock registry has no such version, or refuses to load it.
         """
         # `__init__` checks it too, but only after the weights have loaded.
@@ -342,14 +356,18 @@ class ScoringModel:
                 name=str(ref),
                 batch_tokens=batch_tokens,
                 digest=ref.digest,
+                add_bos=add_bos,
             )
 
         tokenizer = load_tokenizer(ref)
+        # `__init__` checks it too, but only after the weights have loaded.
+        if add_bos and tokenizer.bos_token_id is None:
+            raise ValueError(f"{ref}: add_bos is set, but the tokenizer has no BOS token")
         model = AutoModelForCausalLM.from_pretrained(
             ref.repo, revision=ref.revision, dtype=dtype, device_map=device
         )
 
-        return cls(model, tokenizer, name=str(ref), batch_tokens=batch_tokens)
+        return cls(model, tokenizer, name=str(ref), batch_tokens=batch_tokens, add_bos=add_bos)
 
     @property
     def device(self) -> torch.device:
@@ -378,7 +396,7 @@ class ScoringModel:
         """
         Returns the (context, continuation) token ids the model scores for `request`.
 
-        An empty or whitespace-only context becomes one token: the tokenizer's beginning-of-sequence (BOS) token, or its end-of-sequence (EOS) token if it has no BOS.
+        An empty or whitespace-only context becomes one token: the tokenizer's beginning-of-sequence (BOS) token, or its end-of-sequence (EOS) token if it has no BOS. With `add_bos`, any other context starts with BOS.
         """
         return self.encode_requests([request])[0]
 
@@ -395,7 +413,7 @@ class ScoringModel:
             requests (`Sequence[Request]`):
                 The requests to score.
             encoded (`Sequence[Encoded]`, *optional*):
-                The requests' token ids from [`encode_requests`] with this model's tokenizer, to skip tokenizing them again. Tokenized here if not given.
+                The requests' token ids from [`encode_requests`] with this model's tokenizer and `add_bos`, to skip tokenizing them again. Tokenized here if not given.
 
         Raises:
             `ValueError`: if a continuation has no tokens, or is longer than `max_length` on its own.
@@ -554,6 +572,14 @@ class ScoringModel:
         # Few-shot contexts repeat once per choice, so each distinct one is tokenized once.
         distinct = sorted({context for context in contexts if context})
         ids_by_context = dict(zip(distinct, self.tokenize(distinct), strict=True))
+        # As OLMES's `tok_encode` with `add_bos_token`, which puts BOS before the context and the
+        # joined text alike, so only the context changes. Once per distinct context, so the
+        # requests of one few-shot context keep sharing one list.
+        starts = ids_by_context
+        if self.add_bos:
+            bos = self.tokenizer.bos_token_id
+            assert bos is not None  # `__init__` refuses `add_bos` without one.
+            starts = {context: [bos, *ids] for context, ids in ids_by_context.items()}
 
         encoded = []
         for request, context, joined in zip(requests, contexts, joined_ids, strict=True):
@@ -573,7 +599,7 @@ class ScoringModel:
                 and joined[: len(context_ids)] != context_ids
             ):
                 raise ValueError(f"the continuation changes the context's tokens: {request}")
-            encoded.append(Encoded(context_ids, joined[len(context_ids) :]))
+            encoded.append(Encoded(starts[context], joined[len(context_ids) :]))
 
         return encoded
 
@@ -581,7 +607,7 @@ class ScoringModel:
         """
         Each text's token ids, with no special tokens.
 
-        OLMES adds none (`add_bos_token: False` in `oe_eval/default_configs.py`) except for models configured with one, such as Gemma.
+        OLMES adds none (`add_bos_token: False` in `oe_eval/default_configs.py`) except for the models it configures with `add_bos_token`, all of them Gemma. [`encode_requests`] adds that BOS when `add_bos` is set.
         """
         if not texts:
             return []

@@ -67,6 +67,22 @@ def test_a_prepared_task_refuses_a_model_with_another_tokenizer(lm, tokenizer, s
     assert untimed(score_prepared(same, prepared)) == untimed(score_prepared(scorer, prepared))
 
 
+def test_a_prepared_task_refuses_a_model_with_another_add_bos(lm, tokenizer):
+    with_bos = copy.deepcopy(tokenizer)
+    with_bos.bos_token = "<|pad|>"
+    plain = ScoringModel(lm, with_bos, name="plain@0")
+    prepared = prepare_task(plain, TASK)
+    bos = ScoringModel(lm, with_bos, name="bos@0", add_bos=True)
+
+    # The same tokenizer object, so only `add_bos` tells the encodings apart.
+    with pytest.raises(ValueError, match="prepared with add_bos=False, but bos@0 has add_bos=True"):
+        score_prepared(bos, prepared)
+    # Its windows start from BOS either way, so a perplexity task needs no check.
+    assert untimed(score_prepared(bos, prepare_task(plain, TEXT_TASK))) == untimed(
+        score_prepared(plain, prepare_task(plain, TEXT_TASK))
+    )
+
+
 def test_the_scoring_models_max_length_is_checked_at_every_call(lm, tokenizer, scorer):
     prepared = prepare_task(scorer, TEXT_TASK)
     short = ScoringModel(lm, tokenizer, name="tiny@0", max_length=4)
