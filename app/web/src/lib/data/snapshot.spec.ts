@@ -342,6 +342,67 @@ describe('metric sections', () => {
 		expect(metrics[2].label).toBe('train/a');
 	});
 
+	it('orders a section by how many runs logged each metric, then by nesting', () => {
+		const keys = [
+			'train/a/deep',
+			'train/b',
+			'train/c/deep',
+			'train/d',
+			'train/e' // logged by fewer runs
+		];
+		const runs = [3, 3, 3, 3, 1];
+		const { panels, sections } = metricSections(keys, [], new Set(), (m) => runs[m]);
+		const train = sections.find((s) => s.key === 'train')!;
+		expect(train.panels.map((p) => panels[p].id)).toEqual([
+			'train/b',
+			'train/d',
+			'train/a/deep',
+			'train/c/deep',
+			'train/e'
+		]);
+	});
+
+	it('puts loss, gradient norm and learning rate first', () => {
+		const keys = [
+			'train/accuracy',
+			'train/learning_rate',
+			'train/grad_norm',
+			'train/loss_ema',
+			'train/lrfoo',
+			'train/loss',
+			'train/lr',
+			'loss'
+		];
+		const runs = [5, 1, 1, 1, 5, 1, 1, 1];
+		const { panels, sections } = metricSections(keys, [], new Set(), (m) => runs[m]);
+		const ids = (key: string) =>
+			sections.find((s) => s.key === key)!.panels.map((p) => panels[p].id);
+		expect(ids('train')).toEqual([
+			'train/loss_ema',
+			'train/loss',
+			'train/grad_norm',
+			'train/learning_rate',
+			'train/lr',
+			'train/accuracy',
+			'train/lrfoo'
+		]);
+		expect(ids('charts')).toEqual(['loss']);
+	});
+
+	it('orders logged panels in the system section without moving system charts', () => {
+		const { panels, sections } = metricSections(
+			['system/a/deep', 'system/b'],
+			['system.cpu'],
+			new Set(),
+			() => 1
+		);
+		expect(sections.at(-1)!.panels.map((p) => panels[p].id)).toEqual([
+			'system/b',
+			'system/a/deep',
+			'system:cpu'
+		]);
+	});
+
 	it('puts system metrics last, even after a logged system/ prefix', () => {
 		const { sections } = metricSections(['system/step_time', 'zeta/x'], ['system.cpu']);
 		expect(sections).toEqual([

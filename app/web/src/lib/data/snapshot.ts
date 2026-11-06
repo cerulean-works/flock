@@ -109,8 +109,17 @@ export function columnGroups(columns: ColumnDef[]): ColumnGroupSpan[] {
 }
 
 /**
+ * What a training run is watched by, in order: its loss, gradient norm and learning rate. A
+ * metric whose name (after its section) starts with one of them leads its section.
+ */
+const KEY_METRICS = [/^loss/, /^grad_?norm/, /^(learning_?rate|lr)(?![a-z])/];
+
+/**
  * Charts for a page's metrics. Logged metrics are a panel each, grouped into sections by the
- * prefix before the first `/`, with unprefixed ones under "charts", which comes first. System
+ * prefix before the first `/`, with unprefixed ones under "charts", which comes first. Within a
+ * section, loss, gradient norm and learning rate come first (`KEY_METRICS`), then those more of
+ * the page's runs logged (`runs`, by metric index), then the less nested (`train/loss` before
+ * `train/throughput/window`), then in key order. System
  * metrics are grouped into W&B's charts (one line per GPU, core, disk...), in a "system"
  * section last; any no chart claims get a panel each.
  *
@@ -121,7 +130,8 @@ export function columnGroups(columns: ColumnDef[]): ColumnGroupSpan[] {
 export function metricSections(
 	keys: string[],
 	systemKeys: string[] = [],
-	hidden: ReadonlySet<string> = new Set()
+	hidden: ReadonlySet<string> = new Set(),
+	runs: (metric: number) => number = () => 0
 ): { metrics: MetricDef[]; panels: PanelDef[]; sections: SectionDef[] } {
 	const metrics: MetricDef[] = [
 		...keys.map((key): MetricDef => {
@@ -192,6 +202,27 @@ export function metricSections(
 		if (!s) byKey.set(p.section, (s = { key: p.section, panels: [] }));
 		s.panels.push(i);
 	});
+	const depth = (key: string) => key.split('/').length;
+	const rank = (key: string) => {
+		const name = key.slice(key.indexOf('/') + 1).toLowerCase();
+		const at = KEY_METRICS.findIndex((re) => re.test(name));
+		return at === -1 ? KEY_METRICS.length : at;
+	};
+	for (const s of byKey.values()) {
+		// Logged metrics only, in their own places: system charts keep W&B's order. A stable
+		// sort, so ties keep key order.
+		const logged = s.panels.filter((p) => panels[p].stream === 'history');
+		const sorted = logged.toSorted((a, b) => {
+			const [pa, pb] = [panels[a], panels[b]];
+			return (
+				rank(pa.id) - rank(pb.id) ||
+				runs(pb.metrics[0]) - runs(pa.metrics[0]) ||
+				depth(pa.id) - depth(pb.id)
+			);
+		});
+		let next = 0;
+		s.panels = s.panels.map((p) => (panels[p].stream === 'history' ? sorted[next++] : p));
+	}
 	const first = byKey.get('charts');
 	const last = byKey.get('system');
 	const sections = [...byKey.values()].filter((s) => s !== first && s !== last);
@@ -273,14 +304,17 @@ export function decodeWorkspace(buf: ArrayBuffer, query: RunQuery): WorkspaceDat
 	// No panel for a metric none of the page's runs has points of (a key the server lists, but
 	// whose every curve came back empty): it would only say "No runs plotted".
 	const hidden = hiddenMetrics(header.metrics, defs);
-	header.metrics.forEach((key, m) => {
-		for (let r = 0; r < R; r++) if (series[r * M + m]?.n) return;
-		hidden.add(key);
+	const runs = header.metrics.map((key, m) => {
+		let n = 0;
+		for (let r = 0; r < R; r++) if (series[r * M + m]?.n) n++;
+		if (!n) hidden.add(key);
+		return n;
 	});
 	const { metrics, panels, sections } = metricSections(
 		header.metrics,
 		header.system_metrics,
-		hidden
+		hidden,
+		(m) => runs[m] ?? 0
 	);
 	return {
 		meta: {

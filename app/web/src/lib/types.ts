@@ -703,7 +703,12 @@ export interface ColumnDef {
 	width: number;
 }
 
-export type MetricFormat = 'num' | 'exp' | 'pct' | 'int' | 'si';
+/**
+ * How a metric's values read. The byte formats show a unit sized to the values (`512MB`,
+ * `40GB`); `mb` and `gb` are for values logged in those units.
+ */
+export type MetricFormat = 'num' | 'exp' | 'pct' | 'int' | 'si' | ByteFormat;
+export type ByteFormat = 'bytes' | 'bytes/s' | 'mb' | 'gb';
 
 /**
  * Where a metric comes from: what the run logged (plotted against `_step`), or the system

@@ -41,7 +41,8 @@ import {
 	mergeOrder,
 	migrateOrder,
 	moveKey,
-	parseLayout
+	parseLayout,
+	pinFirst
 } from './layout.ts';
 import { resolvePanel, type PanelView } from './panels.ts';
 
@@ -237,6 +238,13 @@ export class Workspace {
 	 * rest of a panel's settings are kept in its layout (`panelConfig`).
 	 */
 	readonly zoom = new SvelteMap<string, Zoom>();
+	/**
+	 * Id of a pinned panel being moved: it goes where it's put, even past unpinned panels, until
+	 * it's let go (and the viewer says whether to unpin it, see `unpinAsk`).
+	 */
+	loosePanel = $state<string | null>(null);
+	/** A pinned panel left past unpinned ones, waiting on the viewer to unpin it or put it back. */
+	unpinAsk = $state.raw<{ section: string; panel: number; from: number } | null>(null);
 	/** Id of the panel open in the panel editor. */
 	editing = $state<string | null>(null);
 	readonly collapsed = new SvelteSet<string>();
@@ -631,15 +639,32 @@ export class Workspace {
 		return saved && aliases.size ? migrateOrder(saved, (k) => aliases.get(k)) : (saved ?? []);
 	}
 
-	/** Sections in the viewer's order, with their panels in the viewer's order. */
+	/** Ids of the pinned panels. */
+	pinnedPanels = $derived.by((): ReadonlySet<string> => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- rebuilt, never mutated
+		return new Set(this.layout.pinned);
+	});
+
+	/**
+	 * Sections in the viewer's order, with their panels in the viewer's order: pinned ones first
+	 * (but one being moved, `loosePanel`).
+	 */
 	sections = $derived.by((): SectionDef[] => {
 		const { order, sections } = this.layout;
 		const panels = this.meta.panels;
-		return arrange(this.meta.sections, (s) => s.key, sections).map((sec) =>
-			order[sec.key]
-				? { ...sec, panels: arrange(sec.panels, (p) => panels[p].id, this.#orderOf(sec.key)) }
-				: sec
-		);
+		const pinned = this.pinnedPanels;
+		const loose = this.loosePanel;
+		return arrange(this.meta.sections, (s) => s.key, sections).map((sec) => {
+			let of = order[sec.key]
+				? arrange(sec.panels, (p) => panels[p].id, this.#orderOf(sec.key))
+				: sec.panels;
+			if (sec.panels.some((p) => pinned.has(panels[p].id))) {
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a lookup, never rendered
+				const index = new Map(of.map((p) => [panels[p].id, p]));
+				of = pinFirst([...index.keys()], pinned, loose).map((id) => index.get(id)!);
+			}
+			return of === sec.panels ? sec : { ...sec, panels: of };
+		});
 	});
 
 	/**
@@ -665,19 +690,67 @@ export class Workspace {
 		if (persist) store(key, layout);
 	}
 
-	/** Move a panel to `to`, an index into its section's (arranged) panels. */
-	movePanel(section: string, panel: number, to: number) {
+	/**
+	 * Move a panel to `to`, an index into its section's (arranged) panels. An unpinned panel
+	 * stays behind the pinned ones; a pinned one stays with them unless it's `loosePanel`.
+	 * Whether it moved.
+	 */
+	movePanel(section: string, panel: number, to: number): boolean {
 		const sec = this.sections.find((s) => s.key === section);
-		if (!sec) return;
+		if (!sec) return false;
 		const ids = sec.panels.map((p) => this.meta.panels[p].id);
+		const id = this.meta.panels[panel].id;
+		const pins = ids.filter((k) => k !== id && this.pinnedPanels.has(k)).length;
+		if (!this.pinnedPanels.has(id)) to = Math.max(to, pins);
+		else if (this.loosePanel !== id) to = Math.min(to, pins);
 		const from = sec.panels.indexOf(panel);
 		const moved = moveKey(ids, from, to);
-		if (from === -1 || moved[from] === ids[from]) return;
+		if (from === -1 || moved[from] === ids[from]) return false;
 		// Saved in today's ids, so metric keys of an older layout are replaced as it's saved.
 		this.#saveLayout({
 			...this.layout,
 			order: { ...this.layout.order, [section]: mergeOrder(this.#orderOf(section), moved) }
 		});
+		return true;
+	}
+
+	isPinned(panel: number) {
+		return this.pinnedPanels.has(this.meta.panels[panel].id);
+	}
+
+	/** Pin a panel to the front of its section, or unpin it (it goes behind those still pinned). */
+	togglePinned(panel: number) {
+		const { id, section } = this.meta.panels[panel];
+		const pinned = this.layout.pinned.filter((k) => k !== id);
+		if (pinned.length === this.layout.pinned.length) {
+			this.#saveLayout({ ...this.layout, pinned: [...pinned, id] });
+			this.movePanel(section, panel, 0);
+		} else this.#saveLayout({ ...this.layout, pinned });
+	}
+
+	/**
+	 * Once a pinned panel being moved (`loosePanel`) is let go: kept where it is if no unpinned
+	 * panel is before it; otherwise the viewer is asked to unpin it (`unpinAsk`). `from` is where
+	 * it was, to put it back.
+	 */
+	settlePinned(section: string, panel: number, from: number) {
+		const panels = this.sections.find((s) => s.key === section)?.panels ?? [];
+		const at = panels.indexOf(panel);
+		const past = panels.slice(0, at).some((p) => !this.isPinned(p));
+		if (past) this.unpinAsk = { section, panel, from };
+		else this.loosePanel = null;
+	}
+
+	/** Answer `unpinAsk`: unpin the panel where it was left, or put it back with the pinned. */
+	answerUnpin(unpin: boolean) {
+		const ask = this.unpinAsk;
+		if (!ask) return;
+		if (unpin) {
+			const id = this.meta.panels[ask.panel].id;
+			this.#saveLayout({ ...this.layout, pinned: this.layout.pinned.filter((k) => k !== id) });
+		} else this.movePanel(ask.section, ask.panel, ask.from);
+		this.loosePanel = null;
+		this.unpinAsk = null;
 	}
 
 	/** Move a section to `to`, an index into the (arranged) sections. */
