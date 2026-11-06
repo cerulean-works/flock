@@ -94,8 +94,8 @@ class BaseModel(nn.Module, ABC):
         # tokenizer from the one the repo ships (eval stage 028).
         if _converted_from_sentencepiece(self.hf_repo, tokenizer):
             raise ValueError(
-                f"{self.hf_repo} loaded without tokenizer.json: {type(tokenizer).__name__} would be a "
-                "conversion of its SentencePiece model"
+                f"{self.hf_repo} loaded without tokenizer.json: {type(tokenizer).__name__} would "
+                "be a conversion of its SentencePiece model"
             )
         if not isinstance(tokenizer, TokenizersBackend):
             raise TypeError(
