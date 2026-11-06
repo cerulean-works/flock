@@ -288,14 +288,13 @@ def test_add_bos_needs_a_bos_token_in_the_sentencepiece_model(scorer, tmp_path):
         ScoringModel(scorer.model, no_bos, name="tiny@0", add_bos=True)
 
 
-def test_a_context_that_tokenizes_to_nothing_gets_the_prefix_token(scorer, model_file, monkeypatch):
-    tokenizer = SentencePieceTokenizer(model_file)
-    ids = {"\u200b": [], "\u200b Paris": [5, 6]}
-    processor = SimpleNamespace(encode=lambda texts: [ids[text] for text in texts])
-    monkeypatch.setattr(tokenizer, "processor", processor)
-    empty = ScoringModel(scorer.model, tokenizer, name="tiny@0")
+def test_a_context_that_tokenizes_to_nothing_gets_the_prefix_token(scorer):
+    tokenizer = scorer.tokenizer
+    # The tiny model's default normalizer drops this character.
+    assert tokenizer(["\u200b"], add_special_tokens=False)["input_ids"] == [[]]
 
-    assert empty.encode(Request("\u200b", " Paris")) == ([tokenizer.bos_token_id], [5, 6])
+    joined = tokenizer(["\u200b Paris"], add_special_tokens=False)["input_ids"][0]
+    assert scorer.encode(Request("\u200b", " Paris")) == ([tokenizer.bos_token_id], joined)
 
 
 def test_a_multiple_choice_request_scores_end_to_end(scorer):

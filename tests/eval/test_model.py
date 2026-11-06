@@ -684,6 +684,25 @@ def test_add_bos_starts_every_non_empty_context_with_bos(lm, tokenizer):
     )
 
 
+def test_a_context_with_no_ids_never_scores_from_a_padding_logit(scorer, monkeypatch):
+    tokenize = scorer.tokenize
+    monkeypatch.setattr(
+        scorer,
+        "tokenize",
+        lambda texts: [
+            tokenize([t.removeprefix("\u200b")])[0] if t != "\u200b" else [] for t in texts
+        ],
+    )
+
+    # Beside a longer request, left padding would put a padding position where its logit is read.
+    no_ids, longer = Request("\u200b", " fox"), Request("The quick brown fox", " jumps")
+    assert scorer.encode(no_ids).context == [scorer.tokenizer.eos_token_id]
+    expected = torch.tensor([reference(scorer, no_ids), reference(scorer, longer)])
+    torch.testing.assert_close(
+        scorer.loglikelihood([no_ids, longer]).logprob, expected, atol=1e-4, rtol=1e-5
+    )
+
+
 def test_add_bos_needs_a_bos_token(lm, tokenizer):
     with pytest.raises(ValueError, match="add_bos is set, but the tokenizer has no BOS token"):
         ScoringModel(lm, tokenizer, name="tiny@0", add_bos=True)
