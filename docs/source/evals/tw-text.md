@@ -4,7 +4,7 @@ The `tw_text` suite scores how well a model fits Traditional Chinese as it is wr
 
 ## What the set is
 
-The documents come from `cerulean-works/tw-text-v0` on the Hugging Face Hub, one configuration per source, split `test`. Each document is dated by its source between 2026-04-01 and 2026-10-31, except `theses`, and `judicial` stops early at 2026-08-31. Every model the project compares was released before that window, or in Gemma 4's case (released 2026-04-02) states a training cutoff before it, and Cerulean's training data drops it, so no compared model has seen the text. Each document has at least 200 Han characters and passes a check for Simplified-only characters and mainland wording. Text converted from Simplified script isn't in the suite: converted text gets a task name of its own, never a native one.
+The documents come from `cerulean-works/tw-text-v0` on the Hugging Face Hub, one configuration per source, split `test`. Each document is dated by its source between 2026-04-01 and 2026-10-31, except `theses`, and `judicial` stops early at 2026-08-31. Every model the project compares was released before that window, or in Gemma 4's case (released 2026-04-02) states a training cutoff before it, and Cerulean's training data drops it, so no compared model has seen the text of the dated sources. Each document has at least 200 Han characters and passes a check for Simplified-only characters and mainland wording. Text converted from Simplified script isn't in the suite: converted text gets a task name of its own, never a native one.
 
 | Source | Register | Domains (`subdomain`) |
 |---|---|---|
@@ -24,7 +24,7 @@ The documents come from `cerulean-works/tw-text-v0` on the Hugging Face Hub, one
 
 `zhwiki` holds only pages that passed the check above. The check kept 40.3 percent of the pages fetched in the window (2,317 of 5,755). That share describes the crawl, not the sample.
 
-Each source is sampled to about 2 million OLMo 2 tokens, or all it has where that is less (`cnyes`, `twreporter`). Inside that sample, a domain under 100,000 OLMo 2 tokens, Paloma's per-domain size, merges into `other`, and an `other` still under that size leaves the sample. So every domain here holds at least 100,000 tokens and none is named `other`. The sample lost 40 judgments (31 of them from the administrative and supreme courts), 1 interpellation record of `ly` and 1 NCKU thesis this way. `flock/eval/tasks/tw_text.py` pins the dataset's revision and lists every source's domains at that revision.
+Each source is sampled to about 2 million OLMo 2 tokens, or all that was crawled where that is less (`twreporter`, and `cnyes`, whose crawl stopped at a fixed time before reaching that size). Inside that sample, a domain under 100,000 OLMo 2 tokens, Paloma's per-domain size, merges into `other`, and an `other` still under that size leaves the sample. So every domain here holds at least 100,000 tokens. At this revision every merged `other` fell under that size, so none is named `other`. The sample lost 40 judgments (31 of them from the administrative and supreme courts), 1 interpellation record of `ly` and 1 NCKU thesis this way. `flock/eval/tasks/tw_text.py` pins the dataset's revision and lists every source's domains at that revision.
 
 ## Access
 
