@@ -146,8 +146,8 @@ def evaluate(config: EvalConfig) -> Results:
         batch_tokens=config.batch_tokens,
         add_bos=config.add_bos,
     )
-    # Checked before scoring, so a model too short for a perplexity task fails in seconds rather
-    # than after every task before it.
+    # Checked before scoring, so a model too short for a perplexity task fails before any is scored
+    # rather than after every task before it.
     for task in tasks:
         if isinstance(task, PerplexityTask) and task.window > model.max_length:
             raise ValueError(
@@ -308,6 +308,7 @@ def score_task(
             Write per-doc scores to `out/predictions/<task>.jsonl`. A training loop gives each step its own `out`. No `results.json` is written: that is [`evaluate`]'s job.
 
     Raises:
+        `ValueError`: if a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
         `FileExistsError`: if the predictions file already exists, before anything is scored.
     """
     return score_prepared(model, prepare_task(model, task, limit), out)

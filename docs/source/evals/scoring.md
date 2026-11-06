@@ -8,7 +8,7 @@ A request is a context and a continuation, and its score is the summed log-proba
 
 1. Whitespace at the end of the context moves to the start of the continuation.
 2. The context and the continuation are tokenized together. The continuation's tokens are the ones after the context's own tokenization, so a token that spans the boundary counts as continuation.
-3. No special tokens are added, unless you set `add_bos` (`--add-bos`): then every non-empty context starts with the beginning-of-sequence (BOS) token, as OLMES does for the models it configures with `add_bos_token`, all of them Gemma. Set it for Gemma models, which score poorly without BOS. An empty context becomes the BOS token, or the end-of-sequence (EOS) token if the tokenizer has no BOS. A whitespace-only context counts as empty once its whitespace has moved. lm-evaluation-harness checks for an empty context before moving whitespace, so this one case differs from it.
+3. No special tokens are added, unless you set `add_bos` (`--add-bos`): then every non-empty context starts with the beginning-of-sequence (BOS) token, as OLMES does for the models it configures with `add_bos_token`, all of them Gemma. Set it for Gemma models, which score poorly without BOS. An empty context becomes the BOS token, or the end-of-sequence (EOS) token if the tokenizer has no BOS. A whitespace-only context counts as empty once its whitespace has moved. lm-evaluation-harness checks for an empty context before moving whitespace, so this one case differs from it. A context that tokenizes to no tokens, such as a lone zero-width space, is treated the same way, because it has no logit to score from. No reference covers this case.
 4. An input longer than the model's `max_length` loses tokens from the left, so the context is cut and the continuation is scored in full. The results file counts the cuts per task ([Truncation](results#truncation)). `max_length` defaults to the `max_position_embeddings` of the model's text config. For a multimodal checkpoint such as Gemma 4, that is the language model's, and the vision and audio parts load but never run on text.
 
 A continuation with no tokens raises an error, since scoring it as 0 would rank it above every real choice. So does a continuation longer than `max_length` on its own.
@@ -16,7 +16,7 @@ A continuation with no tokens raises an error, since scoring it as 0 would rank 
 A Hugging Face repo with `tokenizer.model` and no `tokenizer.json` at the pinned revision is tokenized by that SentencePiece model directly ([`~eval.tokenizer.SentencePieceTokenizer`]), because `AutoTokenizer` in transformers 5 would convert the model to one that segments text differently. On this path:
 
 - Literal `<s>`, `</s>` or `<unk>` in a text are ordinary text.
-- A repo's `add_bos_token` setting is not applied.
+- A repo's `add_bos_token` setting is not applied. `add_bos` (`--add-bos`) works as for any tokenizer, with the SentencePiece model's BOS token.
 - A request raises an error if adding its continuation changes the context's tokens, since the split above would then score the wrong tokens. [`~eval.run.evaluate`] checks every multiple-choice task's requests before it scores any task. Other tokenizers keep the reference behavior, with no check.
 
 The repo's files decide the path, so no flag changes it. Four related cases fail instead of loading a converted tokenizer:

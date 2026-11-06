@@ -332,7 +332,7 @@ class ScoringModel:
                 Passed to [`ScoringModel`].
 
         Raises:
-            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision` or `flock:org/name[@version]`, or a Flock model's config has no `hf_repo` to load its tokenizer from or names a repo whose tokenizer `AutoTokenizer` would convert from a SentencePiece model, [`load_tokenizer`] refuses the repo, or `add_bos` is set and the tokenizer has no BOS token.
+            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision` or `flock:org/name[@version]`, or a Flock model's config has no `hf_repo` to load its tokenizer from or names a repo whose tokenizer `AutoTokenizer` would convert from a SentencePiece model, [`load_tokenizer`] refuses the repo, or `add_bos` is set and the tokenizer has no BOS token, before a Hugging Face model's weights load.
             [`~hub.models.ModelError`]: if the Flock registry has no such version, or refuses to load it.
         """
         # `__init__` checks it too, but only after the weights have loaded.
@@ -396,7 +396,7 @@ class ScoringModel:
         """
         Returns the (context, continuation) token ids the model scores for `request`.
 
-        An empty or whitespace-only context becomes one token: the tokenizer's beginning-of-sequence (BOS) token, or its end-of-sequence (EOS) token if it has no BOS. With `add_bos`, any other context starts with BOS.
+        An empty or whitespace-only context, or one that tokenizes to no ids, becomes one token: the tokenizer's beginning-of-sequence (BOS) token, or its end-of-sequence (EOS) token if it has no BOS. With `add_bos`, any other context starts with BOS.
         """
         return self.encode_requests([request])[0]
 
@@ -416,7 +416,7 @@ class ScoringModel:
                 The requests' token ids from [`encode_requests`] with this model's tokenizer and `add_bos`, to skip tokenizing them again. Tokenized here if not given.
 
         Raises:
-            `ValueError`: if a continuation has no tokens, or is longer than `max_length` on its own.
+            `ValueError`: if a continuation has no tokens, is longer than `max_length` on its own, or changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
         """
         if encoded is None:
             encoded = self.encode_requests(requests)
@@ -583,7 +583,8 @@ class ScoringModel:
 
         encoded = []
         for request, context, joined in zip(requests, contexts, joined_ids, strict=True):
-            # A context can tokenize to nothing, such as a lone zero-width space.
+            # A context can tokenize to nothing, such as a lone zero-width space. With no ids it has
+            # no logit to score from, so for every tokenizer it starts as an empty context does.
             context_ids = ids_by_context[context] if context else []
             if not context_ids:
                 encoded.append(Encoded([self._prefix_token()], joined))

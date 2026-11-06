@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | in review |
 | Date | 2026-11-05 |
-| Builds on | [001](001-eval-core.md) (`ScoringModel`, tokenization), [022](022-prepared-tasks.md) (prepared tasks hold one tokenizer object) |
+| Builds on | [001](001-eval-core.md) (`ScoringModel`, tokenization), [022](022-prepared-tasks.md) (prepared tasks hold one tokenizer object), [024](024-text-config-length.md) (`add_bos`) |
 | Keeps | Every task hash, the schema, and `AutoTokenizer` for every repo that ships `tokenizer.json` |
 | Result | `load_tokenizer` gives a repo with `tokenizer.model` and no `tokenizer.json` a `SentencePieceTokenizer`, whose ids equal raw `SentencePieceProcessor.encode` on all 34,804 strings TAIDE-LX-7B tokenizes at `--limit 20` |
 
@@ -12,7 +12,7 @@
 
 `taide/TAIDE-LX-7B` ships `tokenizer.model` and no `tokenizer.json`, so `flock eval` can't load it: with neither `sentencepiece` nor `tiktoken` installed, transformers 5.20.1 raises `ValueError: tiktoken is required to read a tiktoken file`. Adding `sentencepiece` alone would make it load, with the wrong tokens. This stage loads such a repo with its SentencePiece model and makes the conversion unreachable.
 
-**Out of scope:** scoring TAIDE; any other model's tokenizer path; `add_bos`; a provenance or schema field for the tokenizer kind; the chat TAIDE models.
+**Out of scope:** scoring TAIDE; any other model's tokenizer path; changing how `add_bos` works; a provenance or schema field for the tokenizer kind; the chat TAIDE models.
 
 ---
 
@@ -49,7 +49,7 @@ A document that contains `<unk>` holds those five characters. Raw SentencePiece 
 
 ### 028.D4. TAIDE's `add_bos_token: true` is not applied
 
-No special tokens are added to tokenized text, as for every model, and no reference config for this family is cited that would set one. The repo's `tokenizer_config.json` isn't read on this path. An empty context and a rolling text's first window still start from the tokenizer's BOS, id 1, as for any tokenizer with one.
+No special tokens are added to tokenized text unless `add_bos` is set (024.D2), as for every model. `add_bos` works on this path, with the SentencePiece model's BOS, but TAIDE runs without it: no reference config for this family is cited that would set it. The repo's `tokenizer_config.json` isn't read on this path. An empty context and a rolling text's first window still start from the tokenizer's BOS, id 1, as for any tokenizer with one.
 
 ### 028.D5. A continuation that resegments the context is refused on this path
 
@@ -70,6 +70,10 @@ The test reads the loaded class's `vocab_files_names`, for a file ending in `.mo
 `BaseModel.get_hf_tokenizer` raises `ValueError` if its tokenizer's class is built on a SentencePiece model and no `tokenizer.json` is on disk, by the test in 028.D6. It is the one place training, `from_pretrained` and a checkpoint's scoring all pass through. A Flock model doesn't get `SentencePieceTokenizer` instead, because training needs a Tokenizers tokenizer, and a model scored with a different tokenizer from the one it trained with would be silently wrong.
 
 The check reads only the cache or the local folder, which the load has just filled, so it adds no Hub call. It lives in `flock.training`, which can't import `flock.eval`, so the suffixes are written in both.
+
+### 028.D8. A context that tokenizes to no ids starts from the prefix token, for every tokenizer
+
+A non-empty context can tokenize to nothing, such as a lone zero-width space. With no context tokens, the first continuation token has no logit of its own to be scored from, so such a context now starts as an empty context does. Before this stage it raised when alone in a batch, and beside a longer request it silently scored that token from a padding position's logit, so this does change such a score, on a tiny model from -6.80 to -6.97. This is the suite's own choice, and no reference covers the case. 0 of TAIDE's 972,271 requests hit it. It isn't counted for other models, where a context would have to hold only characters their tokenizer drops.
 
 ---
 
