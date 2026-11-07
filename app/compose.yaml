@@ -100,6 +100,28 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Answers the API domain while `api` is being recreated (off unless started with
+  # `--profile standby`). Without it, Traefik answers 404 for the gap, which the wandb SDK
+  # treats as fatal: it stops uploading for the rest of the run, and the run ends up crashed.
+  # A 503 it retries. Its router has the lowest priority, so it only gets traffic while `api`
+  # has no router. Its config never changes, so redeploys leave it running.
+  flock-api-standby:
+    image: nginx:1.29.3-alpine
+    profiles: [standby]
+    configs:
+      - source: api-standby
+        target: /etc/nginx/conf.d/default.conf
+    networks: [default, ingress]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${FLOCK_INGRESS_NETWORK:-dokploy-network}
+      traefik.http.routers.flock-api-standby.rule: Host(`${FLOCK_API_HOST:-}`)
+      traefik.http.routers.flock-api-standby.priority: "1"
+      traefik.http.routers.flock-api-standby.entrypoints: ${FLOCK_TRAEFIK_ENTRYPOINT:-websecure}
+      traefik.http.routers.flock-api-standby.tls: "true"
+      traefik.http.services.flock-api-standby.loadbalancer.server.port: "8080"
+    restart: unless-stopped
+
   postgres:
     image: postgres:18.4
     environment:
@@ -122,6 +144,24 @@ services:
       timeout: 3s
       retries: 30
     restart: unless-stopped
+
+configs:
+  api-standby:
+    content: |
+      server {
+          listen 8080 default_server;
+          default_type application/json;
+          location / {
+              add_header Retry-After 5 always;
+              return 503 '{"error": "Flock is restarting, retry shortly"}';
+          }
+      }
+
+networks:
+  # The reverse proxy's network, used only by the standby profile.
+  ingress:
+    name: ${FLOCK_INGRESS_NETWORK:-dokploy-network}
+    external: true
 
 volumes:
   postgres-data:

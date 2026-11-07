@@ -111,6 +111,40 @@ Use `flock-s3`, rather than the generic service name `s3`, as the reverse proxy 
 
 [Settings](configuration#s3-settings) covers regions, prefixes and trash storage. [S3 behavior](s3-behavior) explains key limits and supported operations. The upstream administrative key is for the server; users receive Flock-scoped keys.
 
+## Keep runs logging through redeploys
+
+Answer the API domain with a retryable error while Compose recreates the `api` container, so active runs keep logging.
+
+When Compose recreates `api`, Traefik has no route for the API domain until the new container passes its healthcheck. During that gap Traefik answers `404`. The wandb SDK treats a `404` as permanent: it stops uploading for the rest of the run, and after `FLOCK_CRASH_TIMEOUT` the run is marked `crashed`. The `standby` Compose profile starts `flock-api-standby`, which answers `503` with `Retry-After: 5` instead. The SDK retries a `503`, so the run carries on once the new `api` is up.
+
+You need a deployment behind Traefik that discovers containers through Docker labels, as Dokploy does, and the name of the Docker network Traefik uses.
+
+### Enable the standby
+
+1. Add the API's host name to `app/.env`, or to your deployment service's environment:
+
+   ```dotenv
+   FLOCK_API_HOST=api.flock.example.com
+   ```
+
+   It is the host of `FLOCK_API_PUBLIC_URL`, without the scheme. Set `FLOCK_INGRESS_NETWORK` if Traefik's network isn't `dokploy-network`, and `FLOCK_TRAEFIK_ENTRYPOINT` if its HTTPS entry point isn't `websecure`.
+
+2. Start the stack with the `standby` profile, from `app`:
+
+   ```bash
+   docker compose --profile standby up -d --build
+   ```
+
+   In Dokploy, add `COMPOSE_PROFILES=standby` to the environment instead. With S3 enabled, list both profiles, as in `COMPOSE_PROFILES=s3,standby`. Keep the profile enabled in later deployments.
+
+3. Check that the standby is running:
+
+   ```bash
+   docker compose --profile standby ps flock-api-standby
+   ```
+
+The standby's route has priority `1`, the lowest, so Traefik sends it requests only while `api` has no route. Its configuration never changes, so a redeploy leaves it running while `api` is replaced. Runs that stopped uploading before you enabled it can still be uploaded with `wandb sync` from the training machine.
+
 ## Enable Google sign-in
 
 Let invited users sign in with their Google accounts.
