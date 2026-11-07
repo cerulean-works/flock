@@ -1,5 +1,7 @@
 import { isHttpError, redirect } from '@sveltejs/kit';
+import { browser } from '$app/env';
 import { loadRunPage } from '#lib/data/cache.ts';
+import { rememberFilters } from '#lib/workspace/remembered.ts';
 import { applyRunQuery, loginHref, readRunQuery } from '#lib/workspace/url.ts';
 import type { PageLoad } from './$types';
 
@@ -8,6 +10,17 @@ import type { PageLoad } from './$types';
 // and `filters` are read, so SvelteKit re-runs this load for those params alone; view switches and full-screen panels
 // (`view`, `panel`) are free navigations.
 export const load: PageLoad = async ({ fetch, params, url, parent }) => {
+	// Arriving at a project left filtered: back to its filters, before loading it unfiltered.
+	// The server can't know them; the page brings them back once it's hydrated.
+	if (browser) {
+		const filters = rememberFilters(params.entity, params.project, url.searchParams);
+		if (filters) {
+			const search = new URLSearchParams(url.search);
+			search.set('filters', filters);
+			search.delete('page');
+			redirect(307, `${url.pathname}?${search}`);
+		}
+	}
 	const query = readRunQuery(url.searchParams);
 	const { meta, page } = await loadRunPage(fetch, params.entity, params.project, query).catch(
 		async (err: unknown) => {

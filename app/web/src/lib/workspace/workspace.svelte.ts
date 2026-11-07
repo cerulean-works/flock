@@ -162,6 +162,10 @@ export const MAX_PLOT_H = 720;
 
 const layoutKey = (entity: string, project: string) => `flock:panels:${entity}/${project}`;
 const columnsKey = (entity: string, project: string) => `flock:columns:${entity}/${project}`;
+const hiddenKey = (entity: string, project: string) => `flock:hidden:${entity}/${project}`;
+
+/** Hidden runs kept per project, the latest hidden last: enough for any sweep. */
+const HIDDEN_MAX = 5000;
 
 /** A value this browser kept, or null when there's none (or storage is blocked or unreadable). */
 function readStored(key: string): unknown {
@@ -202,8 +206,13 @@ export class Workspace {
 	#page: () => RunPage;
 	#members: () => readonly Owner[];
 
-	/** Run ids hidden from charts. Kept across pages so a hidden run stays hidden. */
+	/**
+	 * Run ids hidden from charts. Kept across pages so a hidden run stays hidden, and in this
+	 * browser per project (see `restoreLayout`).
+	 */
 	readonly hidden = new SvelteSet<string>();
+	/** The project `hidden` was read for. */
+	#hiddenFor: string | null = null;
 	/** Run ids selected in the table, for changing several at once. */
 	readonly selected = new SvelteSet<string>();
 	/** The open run dialog, if any. */
@@ -496,6 +505,7 @@ export class Workspace {
 
 	toggleRun(row: number) {
 		toggle(this.hidden, this.page.runs[row].id);
+		this.#saveHidden();
 	}
 
 	/** Show every run on the page, or hide every run if all are already shown. */
@@ -506,6 +516,13 @@ export class Workspace {
 			if (allShown) this.hidden.add(id);
 			else this.hidden.delete(id);
 		}
+		this.#saveHidden();
+	}
+
+	/** Keep the hidden runs, when they were read for this project (not on a run's page). */
+	#saveHidden() {
+		const key = hiddenKey(this.meta.entity, this.meta.project);
+		if (this.#hiddenFor === key) store(key, [...this.hidden].slice(-HIDDEN_MAX));
 	}
 
 	togglePin(row: number) {
@@ -668,14 +685,23 @@ export class Workspace {
 	});
 
 	/**
-	 * Read this project's layout and column settings from the browser. Called after hydration,
-	 * so the page the server rendered (in the default layout) is what hydrates.
+	 * Read this project's layout, column settings and hidden runs from the browser. Called after hydration,
+	 * so the page the server rendered (in the default layout) is what hydrates. A run's own page
+	 * (`hidden` false) leaves out the hidden runs, so the run it shows is never hidden.
 	 */
-	restoreLayout() {
+	restoreLayout({ hidden: withHidden = true } = {}) {
 		const { entity, project } = this.meta;
 		const key = layoutKey(entity, project);
 		if (!(key in this.layouts))
 			this.layouts = { ...this.layouts, [key]: parseLayout(readStored(key)) };
+		const hidden = hiddenKey(entity, project);
+		if (withHidden && this.#hiddenFor !== hidden) {
+			this.#hiddenFor = hidden;
+			this.hidden.clear();
+			const saved = readStored(hidden);
+			if (Array.isArray(saved))
+				for (const id of saved) if (typeof id === 'string') this.hidden.add(id);
+		}
 		const cols = columnsKey(entity, project);
 		if (!(cols in this.columnsByProject))
 			this.columnsByProject = {

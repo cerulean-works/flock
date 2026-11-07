@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, untrack } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { goto, refreshAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -34,6 +34,7 @@
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { clearRunPages, prefetchRunPage } from '#lib/data/cache.ts';
 	import { LiveConnection, type ProjectEvent } from '#lib/data/live.ts';
+	import { leftWorkspace, rememberFilters, showingProject } from '#lib/workspace/remembered.ts';
 	import { entityHref, workspaceHrefWith } from '#lib/workspace/url.ts';
 	import { Workspace, setWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import { lastView, rememberView, type ProjectView } from '#lib/workspace/project-view.svelte.ts';
@@ -51,6 +52,19 @@
 
 	// Lets performance tooling measure navigation-start → interactive.
 	onMount(() => performance.mark('workspace:hydrated'));
+
+	// Opened from the server (no load ran here to bring back the filters it was left with): the
+	// same once hydrated.
+	onMount(() => {
+		const { entity, project } = page.params as { entity: string; project: string };
+		if (showingProject(entity, project)) return;
+		const filters = rememberFilters(entity, project, page.url.searchParams);
+		if (filters)
+			void goto(workspaceHrefWith(entity, project, page.url.search, { filters, page: null }), {
+				replaceState: true
+			});
+	});
+	onDestroy(leftWorkspace);
 
 	// The viewer's panel arrangement for this project, once hydrated (the server can't know it).
 	$effect(() => {
