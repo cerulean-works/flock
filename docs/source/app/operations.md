@@ -37,6 +37,9 @@ The SDK needs the API's wandb routes, including `/graphql`, `/files/...` and `/s
 | `POSTGRES_PASSWORD` | `flock` | Password of the Compose database user. Compose uses it for PostgreSQL and constructs the API's `FLOCK_DATABASE_URL` from it. Change it before first deployment. On an existing volume, changing this variable alone does not rotate the stored database password. |
 | `FLOCK_VERSION` | `latest` | Shared image tag for `flock-api` and `flock-ui`; both images come from the same release. |
 | `FLOCK_S3_WORKERS` | `4` | Worker processes in the `flock-s3` service. Each one uses at most one CPU core, so raise it for heavy upload or download traffic. Each worker also opens up to `FLOCK_POOL_SIZE` database connections plus one, so keep the total under PostgreSQL's `max_connections`. |
+| `FLOCK_API_HOST` | none | Host name of the public API, used by the `standby` profile's Traefik route. Required with that profile. See [Keep runs logging through redeploys](deploy#keep-runs-logging-through-redeploys). |
+| `FLOCK_INGRESS_NETWORK` | `dokploy-network` | External Docker network that Traefik reaches the `standby` profile's container on. |
+| `FLOCK_TRAEFIK_ENTRYPOINT` | `websecure` | Traefik entry point of the `standby` profile's route. |
 | `POSTGRES_SHARED_BUFFERS` | `1GB` | PostgreSQL's shared buffer allocation. |
 | `POSTGRES_EFFECTIVE_CACHE_SIZE` | `3GB` | PostgreSQL's estimate of memory available for caching; it does not allocate that amount. |
 
@@ -184,6 +187,8 @@ Flock has no Helm chart. A deployment needs:
 ## Shutting down
 
 On `SIGTERM` or `SIGINT`, a replica starts failing `/readyz`, so the load balancer stops sending it requests, and ends every open event stream, because otherwise the server would wait for them forever. Dashboards reconnect to another replica, or to this one when it's back, and replay what they missed. Requests in flight finish. Compose gives Flock 15 seconds to stop.
+
+With a single replica, nothing serves the API while it restarts. The wandb SDK retries `5xx` responses and connection errors, but a `404` stops a run's uploads for good. Traefik answers `404` for a domain with no healthy container, so run the [standby profile](deploy#keep-runs-logging-through-redeploys) behind Traefik.
 
 
 ## Health checks and logs
