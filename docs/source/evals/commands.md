@@ -46,6 +46,23 @@ Compares a new `results.json` with a banked one and exits non-zero if any score 
 uv run flock eval compare tests/eval/regression/olmo-2-0425-1b-float32.json results/regression/results.json
 ```
 
+## `flock eval hub pull`
+
+Stages one pinned dataset from Flock for jobs that can't reach the network. See [Run where there is no network](run-evaluation#run-where-there-is-no-network).
+
+```bash
+uv run flock eval hub pull acme/allenai/ai2_arc@210d026faf9955653af8916fad021475a3f00453 --to /shared/eval-hub
+```
+
+| Argument or option | Default | Description |
+|---|---|---|
+| `ORG/OWNER/NAME@COMMIT` | required | The organization that holds the copy, the Hugging Face repo and its pinned commit, as the task's definition names them. The copy is the version of `eval/OWNER/NAME` tagged with the commit. |
+| `--to` | `$FLOCK_EVAL_HUB` | The staging folder. The copy is written to `<folder>/OWNER/NAME/COMMIT`. A copy already there from the same version is kept, and one from an earlier version of the tag is replaced, so don't pull while a job reads that folder. |
+
+| Environment variable | Effect |
+|---|---|
+| `FLOCK_EVAL_HUB` | `flock eval run` reads every dataset from the copies staged in this folder, and fails on a missing one instead of downloading it. |
+
 ## Tracker runs
 
 With `--wandb-project`, each `flock eval run` logs one run with job type `eval`:
