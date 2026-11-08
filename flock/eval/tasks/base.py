@@ -3,14 +3,17 @@
 import dataclasses
 import hashlib
 import json
+import os
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import datasets
 import torch
 
+from flock.eval import hub
 from flock.eval.metrics import MULTIPLE_CHOICE_METRICS, ChoiceScores
 from flock.eval.requests import Request, Scores
 
@@ -18,7 +21,7 @@ from flock.eval.requests import Request, Scores
 @dataclass(frozen=True, slots=True)
 class Dataset:
     """
-    A Hugging Face dataset pinned to a revision.
+    A Hugging Face dataset pinned to a revision. Rows come from the Hugging Face Hub, or from a copy staged from the Flock hub under `$FLOCK_EVAL_HUB` when that is set (stage 034); either way the rows and the task hashes are the same.
 
     Args:
         repo (`str`):
@@ -45,10 +48,19 @@ class Dataset:
 
         Raises:
             `ValueError`: if `row_index` is set and the rows already have an `"index"` column.
+            `FileNotFoundError`, `ValueError`, `KeyError`: if `$FLOCK_EVAL_HUB` is set and the pin isn't staged there, isn't a commit or doesn't hold the split (see [`~eval.hub.staged_rows`]).
         """
-        rows = datasets.load_dataset(
-            self.repo, self.subset, revision=self.revision, split=split or self.split
-        )
+        # A job on a node with no network reads a staged copy; the variable makes that a
+        # requirement, so a missing copy fails instead of falling back to the network.
+        root = os.environ.get("FLOCK_EVAL_HUB")
+        if root:
+            rows = hub.staged_rows(
+                Path(root), self.repo, self.revision, self.subset, split or self.split
+            )
+        else:
+            rows = datasets.load_dataset(
+                self.repo, self.subset, revision=self.revision, split=split or self.split
+            )
         if not self.row_index:
             return list(rows)
 

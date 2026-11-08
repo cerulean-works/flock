@@ -1,5 +1,6 @@
 """The `flock eval` command line."""
 
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -7,6 +8,7 @@ from typing import get_args
 
 import click
 
+from flock.eval import hub
 from flock.eval.compare import Comparison, compare
 from flock.eval.model import DEFAULT_BATCH_TOKENS
 from flock.eval.results import Results
@@ -121,6 +123,42 @@ def compare_command(banked: Path, new: Path) -> None:
     click.echo(format_comparison(comparison))
     # A changed task or suite still fails the check, as the refusal it replaces did (021.D1).
     sys.exit(2 if comparison.changed else 1 if comparison.breaches else 0)
+
+
+@main.group(name="hub")
+def hub_group() -> None:
+    """Copies of the evaluation datasets on the Flock hub."""
+
+
+@hub_group.command(name="pull")
+@click.argument("ref")
+@click.option(
+    "--to",
+    "root",
+    envvar="FLOCK_EVAL_HUB",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="The staging folder jobs read with FLOCK_EVAL_HUB set (default: $FLOCK_EVAL_HUB).",
+)
+def pull_command(ref: str, root: Path) -> None:
+    """Stage one pinned dataset, ORG/OWNER/NAME@COMMIT, from the Flock hub, for jobs that can't reach the network. Prints the staged folder."""
+    org, _, pinned = ref.partition("/")
+    repo, _, revision = pinned.partition("@")
+    # A staged copy is read by the commit a task pins, never by a branch or tag.
+    if not org or not re.fullmatch(r"[^/]+/[^/]+", repo) or not hub.COMMIT.fullmatch(revision):
+        raise click.UsageError(
+            f"expected ORG/OWNER/NAME@COMMIT with a 40-digit commit, got {ref!r}"
+        )
+
+    from flock.hub import s3
+
+    try:
+        s3.get_process(org, read_only=True)
+        click.echo(hub.pull(f"s3://flock-datasets/eval/{repo}", revision, root))
+    # Not signed in or refused; no such copy or tag, or a tag on another revision; a staging
+    # folder that can't be written.
+    except (s3.S3Error, ValueError, OSError) as error:
+        raise click.ClickException(str(error)) from None
 
 
 def format_comparison(comparison: Comparison) -> str:

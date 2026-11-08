@@ -66,6 +66,8 @@ def scorer(lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast) -> ScoringM
 def offline_rows(monkeypatch):
     """Every task in every eval test reads `toy.ROWS` by split instead of downloading. A test that loads another task must patch `Dataset.load` with rows in that task's format."""
     monkeypatch.setattr(Dataset, "load", toy.load)
+    # A developer's own staging root must not send `real_load` tests to staged copies.
+    monkeypatch.delenv("FLOCK_EVAL_HUB", raising=False)
     # Perplexity tasks keep the last split they loaded. Cleared so a test that patches
     # `Dataset.load` again never reads another test's rows.
     _docs_by_domain.cache_clear()
