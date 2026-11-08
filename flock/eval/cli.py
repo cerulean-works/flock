@@ -1,4 +1,4 @@
-"""The `flock-eval` command line."""
+"""The `flock eval` command line."""
 
 import shlex
 import sys
@@ -60,6 +60,11 @@ def main() -> None:
     show_default=True,
     help="The weights' dtype.",
 )
+@click.option(
+    "--add-bos",
+    is_flag=True,
+    help="Start every non-empty context with the tokenizer's BOS token, as OLMES does for Gemma.",
+)
 @click.option("--device", help="Torch device (default: cuda if available).")
 @click.option("--wandb-project", help="Also log the summary to this tracker project.")
 @click.option(
@@ -75,6 +80,7 @@ def run(
     limit: int | None,
     batch_tokens: int,
     dtype: Dtype,
+    add_bos: bool,
     device: str | None,
     wandb_project: str | None,
     verbose: bool,
@@ -89,9 +95,11 @@ def run(
             limit=limit,
             batch_tokens=batch_tokens,
             dtype=dtype,
+            add_bos=add_bos,
             device=device,
             wandb_project=wandb_project,
-            command=shlex.join(["flock-eval", *sys.argv[1:]]),
+            # The program's name as invoked (`flock` for the script) and its arguments.
+            command=shlex.join([Path(sys.argv[0]).name, *sys.argv[1:]]),
         )
     except ValueError as error:
         raise click.UsageError(str(error)) from None
@@ -103,7 +111,7 @@ def run(
 @click.argument("banked", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.argument("new", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 def compare_command(banked: Path, new: Path) -> None:
-    """Compare a new results.json with a banked one. Exits 1 if any score moved past its tolerance, 2 if the runs are different instruments."""
+    """Compare a new results.json with a banked one. Exits 2 if the runs are different instruments or a task or suite in both was scored differently, else 1 if any score moved past its tolerance."""
     try:
         comparison = compare(banked, new)
     except ValueError as error:
@@ -111,11 +119,12 @@ def compare_command(banked: Path, new: Path) -> None:
         sys.exit(2)
 
     click.echo(format_comparison(comparison))
-    sys.exit(1 if comparison.breaches else 0)
+    # A changed task or suite still fails the check, as the refusal it replaces did (021.D1).
+    sys.exit(2 if comparison.changed else 1 if comparison.breaches else 0)
 
 
 def format_comparison(comparison: Comparison) -> str:
-    """Formats the provenance fields that differ, the one-sided tasks and suites, one line per breach, then a count."""
+    """Formats the provenance fields that differ, the one-sided and the changed tasks and suites, one line per breach, then a count."""
     lines = []
     for key, (banked, new) in comparison.provenance.items():
         lines.append(f"{key}  {banked}  ->  {new}")
@@ -123,6 +132,9 @@ def format_comparison(comparison: Comparison) -> str:
         lines.append(f"only in the bank: {', '.join(comparison.only_banked)}")
     if comparison.only_new:
         lines.append(f"only in the new run: {', '.join(comparison.only_new)}")
+    if comparison.changed:
+        names = ", ".join(f"{name} ({field})" for name, field in comparison.changed)
+        lines.append(f"changed, not compared: {names}")
 
     for breach in comparison.breaches:
         line = f"{breach.name}  {breach.field}  {breach.banked}  ->  {breach.new}"

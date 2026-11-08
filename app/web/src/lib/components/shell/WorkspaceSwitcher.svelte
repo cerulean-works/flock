@@ -19,7 +19,7 @@
 	import OrgMark from './OrgMark.svelte';
 
 	interface Props {
-		/** The organization in view, by ID. */
+		/** The organization in view, by ID; null for none, or one the viewer isn't in. */
 		org: string | null;
 		orgs: OrgEntry[];
 		/** Where switching lands: this page (home, account) or the org's own runs. */
@@ -30,7 +30,8 @@
 
 	let { org, orgs, stay, compact = false }: Props = $props();
 
-	const me = $derived(page.data.shell!.me);
+	// Shown only to someone signed in.
+	const me = $derived(page.data.shell!.me!);
 	const session = $derived(!!page.data.user);
 	const current = $derived(orgs.find((o) => o.name === org));
 	// What people call it; its ID only shows in URLs and settings.
@@ -84,7 +85,7 @@
 			<span class="grid min-w-0 flex-1 leading-tight">
 				<span class="truncate font-medium">{label ?? me.name}</span>
 				<span class="truncate text-xs text-muted-foreground">
-					{label ? me.name : 'No organization yet'}
+					{label ? me.name : orgs.length ? me.email : 'No organization yet'}
 				</span>
 			</span>
 			<ChevronsUpDownIcon class="size-4 flex-none text-muted-foreground" />

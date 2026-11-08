@@ -5,7 +5,7 @@ import type { RequestHandler } from './$types';
 
 /** The dataset routes the browser may reach through here (D94). */
 const ROUTES =
-	/^(at|info|rows|cell|versions|readme|delete|rename|trash|trash\/\d+(\/restore)?|tags\/[^/]+)$/;
+	/^(at|info|rows|cell|versions|readme|public|delete|rename|trash|trash\/\d+(\/restore)?|tags\/[^/]+)$/;
 
 /**
  * The org's dataset routes, for the dataset page's tabs and dialogs and the org page's trash:

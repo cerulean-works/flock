@@ -37,6 +37,9 @@
 
 	const ws = getWorkspace();
 	const runs = $derived(ws.page.runs);
+	/** Outside the org nothing can be changed: no selecting, no run menus (D116). */
+	const readonly = $derived(appPage.data.shell?.access === 'public');
+	const selectable = $derived(mode === 'table' && !readonly);
 	// The columns the viewer shows: `shown[c]` is shown column c's index into the project's
 	// columns (and the page's cells); everything below indexes shown columns.
 	const shown = $derived(ws.shownColumns);
@@ -282,7 +285,7 @@
 			style:height="{HEAD_H}px"
 		>
 			<div class={[NAME_CELL, 'bg-background']}>
-				{#if mode === 'table'}
+				{#if selectable}
 					<Checkbox
 						checked={allSelected}
 						indeterminate={ws.selectedRows.length > 0 && !allSelected}
@@ -290,7 +293,8 @@
 						aria-label={allSelected ? 'Deselect all runs' : 'Select all runs on this page'}
 					/>
 				{:else}
-					<!-- The checkbox's place stays, so names don't shift between the table and charts. -->
+					<!-- The checkbox's place stays, so names don't shift between the table and charts
+					     (or between members and outsiders). -->
 					<span class="size-4 flex-none"></span>
 				{/if}
 				<RunEye
@@ -383,7 +387,7 @@
 								: 'bg-background group-hover/row:bg-muted'
 					]}
 				>
-					{#if mode === 'table'}
+					{#if selectable}
 						<Checkbox
 							checked={selected}
 							onCheckedChange={() => ws.toggleSelected(r)}
@@ -422,7 +426,7 @@
 							Live
 						</Badge>
 					{/if}
-					<RunMenu row={r} />
+					{#if !readonly}<RunMenu row={r} />{/if}
 				</div>
 				<div class="flex-none" style:width="{offsets[colStart]}px"></div>
 				{#each visibleCols as c (c)}

@@ -15,6 +15,7 @@ from app.api.src.api.deps import (
     StoreDep,
     SuperadminDep,
     UserDep,
+    ViewerDep,
     app_link,
     rest_user,
 )
@@ -23,6 +24,8 @@ from app.api.src.core.store import Org, Store
 from app.api.src.core.wandb_source import WandbAuthError, WandbError, WandbNotFound, WandbSource
 
 router = APIRouter(prefix="/api/v1", tags=["organizations"], dependencies=[Depends(rest_user)])
+# What outsiders may read of an org with public projects or datasets (D114).
+public = APIRouter(prefix="/api/v1", tags=["organizations"])
 
 Role = Literal["admin", "member"]
 
@@ -169,9 +172,24 @@ async def create_org(body: OrgCreate, user: SuperadminDep, store: StoreDep) -> R
     return JSONResponse(info, status_code=201)
 
 
-@router.get("/orgs/{org}")
-async def get_org(org: OrgDep, user: UserDep, store: StoreDep) -> Response:
-    return JSONResponse(await org_info(store, org, user))
+@public.get("/orgs/{org}")
+async def get_org(org: str, viewer: ViewerDep, store: StoreDep) -> Response:
+    """The organization. Outsiders get only its name, display name and avatar (``role``
+    null), when it has a public project or dataset; otherwise the same 404 as for unknown
+    organizations (D114)."""
+    found = await store.find_org(org)
+    if found is not None and viewer is not None and store.accounts.role(viewer, found):
+        return JSONResponse(await org_info(store, found, viewer))
+    if found is None or not await store.has_public(found):
+        raise APIError(404, f"organization {org} not found")
+    return JSONResponse(
+        {
+            "name": found.name,
+            "display_name": found.display_name,
+            "avatar_url": store.avatars.url(found.avatar),
+            "role": None,
+        }
+    )
 
 
 @router.patch("/orgs/{org}")

@@ -132,6 +132,8 @@ def test_0002_upgrades_existing_data(postgres, make_flock, tmp_path):
         "0013_postgres_only",
         "0014_datasets",
         "0015_models",
+        "0016_public_projects",
+        "0017_project_creators",
     ]
 
     server = make_flock(database_url=url)  # the backfill rebuilds system metrics' chunks
@@ -216,6 +218,8 @@ def test_0003_creates_projects_from_runs(postgres, make_flock, tmp_path):
         "0013_postgres_only",
         "0014_datasets",
         "0015_models",
+        "0016_public_projects",
+        "0017_project_creators",
     ]
 
     api = make_flock(database_url=url).client()
@@ -266,6 +270,8 @@ def test_0004_creates_orgs_from_entities(postgres, make_flock, tmp_path):
         "0013_postgres_only",
         "0014_datasets",
         "0015_models",
+        "0016_public_projects",
+        "0017_project_creators",
     ]
 
     async def rows() -> list:
@@ -342,6 +348,8 @@ def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(postgres, make_floc
         "0013_postgres_only",
         "0014_datasets",
         "0015_models",
+        "0016_public_projects",
+        "0017_project_creators",
     ]
     # Flock's first files directory (see ``Flocks``) already holds the upload.
     metadata = tmp_path / "flock-files-0" / str(run_pk) / "wandb-metadata.json"
@@ -389,6 +397,8 @@ def test_0008_shows_existing_orgs_by_their_name(postgres, make_flock, tmp_path):
         "0013_postgres_only",
         "0014_datasets",
         "0015_models",
+        "0016_public_projects",
+        "0017_project_creators",
     ]
 
     async def nullable() -> str:
@@ -450,6 +460,8 @@ def test_0009_keeps_the_spend_of_projects_deleted_before_it(postgres, make_flock
         "0013_postgres_only",
         "0014_datasets",
         "0015_models",
+        "0016_public_projects",
+        "0017_project_creators",
     ]
     api = make_flock(database_url=url).client()
     (deleted,) = api.get("/api/v1/orgs/flock/budget/deleted-projects").json()["deleted_projects"]
@@ -492,6 +504,8 @@ def test_0012_refuses_an_org_named_storage(postgres, tmp_path):
         "0013_postgres_only",
         "0014_datasets",
         "0015_models",
+        "0016_public_projects",
+        "0017_project_creators",
     ]
 
 
@@ -558,6 +572,8 @@ def test_0013_moves_runs_into_the_run_table_and_series_chunks(postgres, make_flo
         "0013_postgres_only",
         "0014_datasets",
         "0015_models",
+        "0016_public_projects",
+        "0017_project_creators",
     ]
 
     reports = []
@@ -665,7 +681,12 @@ def test_0014_refuses_an_org_named_datasets(postgres, tmp_path):
     with pytest.raises(asyncpg.RaiseError, match='named "datasets"'):
         asyncio.run(Migrations().apply(url))
     asyncio.run(execute("UPDATE orgs SET name = 'data-team' WHERE name = 'datasets'"))
-    assert asyncio.run(Migrations().apply(url)) == ["0014_datasets", "0015_models"]
+    assert asyncio.run(Migrations().apply(url)) == [
+        "0014_datasets",
+        "0015_models",
+        "0016_public_projects",
+        "0017_project_creators",
+    ]
 
 
 def test_0015_refuses_an_org_named_models(postgres, tmp_path):
@@ -693,4 +714,95 @@ def test_0015_refuses_an_org_named_models(postgres, tmp_path):
     with pytest.raises(asyncpg.RaiseError, match='named "models"'):
         asyncio.run(Migrations().apply(url))
     asyncio.run(execute("UPDATE orgs SET name = 'model-team' WHERE name = 'models'"))
-    assert asyncio.run(Migrations().apply(url)) == ["0015_models"]
+    assert asyncio.run(Migrations().apply(url)) == [
+        "0015_models",
+        "0016_public_projects",
+        "0017_project_creators",
+    ]
+
+
+def test_0016_leaves_existing_projects_and_datasets_private(postgres, tmp_path):
+    url = postgres.create(migrated=False)
+    before = tmp_path / "before"
+    before.mkdir()
+    for path in Migrations().files()[:15]:
+        shutil.copy(path, before)
+    asyncio.run(Migrations(before).apply(url))
+
+    async def run(query: str) -> list:
+        conn = await asyncpg.connect(url)
+        try:
+            return await conn.fetch(query)
+        finally:
+            await conn.close()
+
+    asyncio.run(
+        run(
+            "WITH o AS (INSERT INTO orgs (name, display_name, created_at, updated_at) "
+            "VALUES ('lab', 'Lab', now(), now()) RETURNING pk) "
+            "INSERT INTO projects (org_pk, name, created_at, updated_at) "
+            "SELECT pk, name, now(), now() FROM o, unnest(ARRAY['a', 'b']) AS name"
+        )
+    )
+    assert asyncio.run(Migrations().apply(url)) == ["0016_public_projects", "0017_project_creators"]
+    rows = asyncio.run(run("SELECT name, visibility FROM projects ORDER BY name"))
+    assert [tuple(row) for row in rows] == [("a", "private"), ("b", "private")]
+    assert asyncio.run(run("SELECT * FROM private_datasets")) == []
+    # Existing orgs are closed until their datasets are flagged private; new ones start open.
+    asyncio.run(
+        run(
+            "INSERT INTO orgs (name, display_name, created_at, updated_at) "
+            "VALUES ('new', 'New', now(), now())"
+        )
+    )
+    rows = asyncio.run(run("SELECT name, open_datasets FROM orgs ORDER BY name"))
+    assert [tuple(row) for row in rows] == [("lab", False), ("new", True)]
+
+
+def test_0017_credits_each_project_to_its_earliest_runs_owner(postgres, tmp_path):
+    url = postgres.create(migrated=False)
+    before = tmp_path / "before"
+    before.mkdir()
+    for path in Migrations().files()[:16]:
+        shutil.copy(path, before)
+    asyncio.run(Migrations(before).apply(url))
+
+    async def run(query: str) -> list:
+        conn = await asyncpg.connect(url)
+        try:
+            return await conn.fetch(query)
+        finally:
+            await conn.close()
+
+    # Project a: ann's run, then bob's; b: only an ownerless run; c: no runs.
+    asyncio.run(
+        run(
+            """
+            WITH o AS (
+                INSERT INTO orgs (name, display_name, created_at, updated_at)
+                VALUES ('lab', 'Lab', now(), now()) RETURNING pk
+            ), u AS (
+                INSERT INTO users (email, name, created_at)
+                VALUES ('ann@x.io', 'ann', now()), ('bob@x.io', 'bob', now()) RETURNING pk, name
+            ), p AS (
+                INSERT INTO projects (org_pk, name, created_at, updated_at)
+                SELECT o.pk, name, now(), now() FROM o, unnest(ARRAY['a', 'b', 'c']) AS name
+                RETURNING pk, name
+            )
+            INSERT INTO runs (project_pk, name, state, created_at, updated_at, heartbeat_at,
+                              owner_pk)
+            SELECT p.pk, r.run, 'finished', r.at, r.at, r.at, u.pk
+            FROM (VALUES ('a', 'r2', 'bob', now()), ('a', 'r1', 'ann', now() - interval '1 day'),
+                         ('b', 'r1', NULL, now())) AS r (project, run, owner, at)
+            JOIN p ON p.name = r.project LEFT JOIN u ON u.name = r.owner
+            """
+        )
+    )
+    assert asyncio.run(Migrations().apply(url)) == ["0017_project_creators"]
+    rows = asyncio.run(
+        run(
+            "SELECT p.name, u.name FROM projects p LEFT JOIN users u ON u.pk = p.created_by "
+            "ORDER BY p.name"
+        )
+    )
+    assert [tuple(row) for row in rows] == [("a", "ann"), ("b", None), ("c", None)]

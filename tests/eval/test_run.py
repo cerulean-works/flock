@@ -2,6 +2,7 @@ import dataclasses
 import hashlib
 import json
 import math
+import shlex
 import sys
 from types import SimpleNamespace
 
@@ -10,6 +11,7 @@ import pytest
 import tokenizers
 import torch
 from click.testing import CliRunner
+from sentencepiece import SentencePieceTrainer
 
 from flock.eval import cli, run
 from flock.eval.metrics import ChoiceScores
@@ -18,6 +20,7 @@ from flock.eval.provenance import Provenance
 from flock.eval.results import Results, SuiteResult, prediction_rows, write_predictions
 from flock.eval.run import EvalConfig, evaluate, score_task
 from flock.eval.tasks import MCDoc, Suite, cloze
+from flock.eval.tokenizer import SentencePieceTokenizer
 
 from .toy import PROMPT_PATHS, PROVENANCE, TASK, task_result
 
@@ -33,14 +36,16 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
     results = evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path))
 
     data = json.loads((tmp_path / "results.json").read_text())
-    assert data["schema_version"] == 6
+    assert data["schema_version"] == 8
     assert data["provenance"]["model"] == "tiny@0"
     assert data["provenance"]["model_digest"] is None  # only a Flock version has one
     assert data["provenance"]["flock_commit"] == "abc123"
     assert data["provenance"]["command"] is None  # the Python API names no command
     assert data["provenance"]["dtype"] == "float32"
     assert data["provenance"]["max_length"] == 128
+    assert data["provenance"]["add_bos"] is False
     assert data["provenance"]["attention"] == "sdpa"
+    assert data["provenance"]["sdpa_backend"] is None  # no pin on the CPU
     assert data["provenance"]["tokenizers"] == tokenizers.__version__
     assert data["provenance"]["datasets"] == datasets.__version__
     [task] = data["tasks"]
@@ -103,6 +108,31 @@ def test_predictions_recompute_every_metric_and_the_truncation(
     assert task.truncation.max_tokens_cut == max(max(cut) for cut in cuts)
 
 
+def resegmenting_scorer(lm, monkeypatch, tmp_path) -> ScoringModel:
+    """A scorer on a SentencePiece tokenizer whose joined texts never start with their contexts."""
+    SentencePieceTrainer.train(
+        sentence_iterator=iter(["the quick brown fox", "jumps over the lazy dog"]),
+        model_prefix=str(tmp_path / "sp"),
+        vocab_size=30,
+        hard_vocab_limit=False,
+        num_threads=1,
+    )
+    tokenizer = SentencePieceTokenizer(tmp_path / "sp.model")
+    processor = SimpleNamespace(encode=lambda texts: [[len(text) % 7, 1] for text in texts])
+    monkeypatch.setattr(tokenizer, "processor", processor)
+    return ScoringModel(lm, tokenizer, name="tiny@0", max_length=16)
+
+
+def test_a_refused_request_fails_before_any_task_scores(offline_model, lm, monkeypatch, tmp_path):
+    scorer = resegmenting_scorer(lm, monkeypatch, tmp_path)
+    monkeypatch.setattr(ScoringModel, "from_pretrained", lambda *args, **kwargs: scorer)
+    monkeypatch.setattr(ScoringModel, "loglikelihood", None)  # scoring would fail on None
+    out = tmp_path / "out"
+    with pytest.raises(ValueError, match="toy: the continuation changes the context's tokens"):
+        evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=out))
+    assert not (out / "predictions" / "toy.jsonl").exists()
+
+
 def test_provenance_is_collected_before_scoring(offline_model, scorer, monkeypatch):
     events = []
     collect = Provenance.collect
@@ -111,7 +141,9 @@ def test_provenance_is_collected_before_scoring(offline_model, scorer, monkeypat
         Provenance, "collect", lambda **kwargs: events.append("provenance") or collect(**kwargs)
     )
     monkeypatch.setattr(
-        scorer, "loglikelihood", lambda requests: events.append("score") or loglikelihood(requests)
+        scorer,
+        "loglikelihood",
+        lambda *args: events.append("score") or loglikelihood(*args),
     )
 
     evaluate(EvalConfig(model="tiny@0", tasks=("toy",)))
@@ -298,8 +330,8 @@ def test_score_task_averages_greedy_match_over_gold_only_docs(scorer, monkeypatc
     gold_only = next(task for task in PROMPT_PATHS if task.name == "toy:gold_only")
     loglikelihood = scorer.loglikelihood
 
-    def second_doc_greedy(requests):
-        scores = loglikelihood(requests)
+    def second_doc_greedy(requests, encoded=None):
+        scores = loglikelihood(requests, encoded)
         return dataclasses.replace(scores, is_greedy=torch.tensor([False, True]))
 
     monkeypatch.setattr(scorer, "loglikelihood", second_doc_greedy)
@@ -382,8 +414,9 @@ def test_cli_runs_and_prints_each_tasks_primary_metric(offline_model, tmp_path, 
     # `--task` only accepts registered names, fixed when the CLI is imported, so the toy task
     # runs under the name `arc_easy`.
     monkeypatch.setitem(run.TASKS, "arc_easy", TASK)
-    # The CLI records `sys.argv`, which `CliRunner` leaves alone.
-    monkeypatch.setattr(sys, "argv", ["flock-eval", *argv])
+    # The CLI records `sys.argv`, which `CliRunner` leaves alone, so it is set as the `flock`
+    # script sees it.
+    monkeypatch.setattr(sys, "argv", ["/venv/bin/flock", "eval", *argv])
 
     result = CliRunner().invoke(cli.main, argv, catch_exceptions=False)
 
@@ -391,7 +424,7 @@ def test_cli_runs_and_prints_each_tasks_primary_metric(offline_model, tmp_path, 
     assert out[0] == "model tiny@0  flock abc123"
     assert out[1].split()[2:] == ["acc_per_char", "docs", "2"]
     data = json.loads((tmp_path / "results.json").read_text())
-    assert data["provenance"]["command"] == "flock-eval " + " ".join(argv)
+    assert data["provenance"]["command"] == shlex.join(["flock", "eval", *argv])
 
 
 def test_run_loads_the_weights_in_the_dtype_asked_for(offline_model, scorer, monkeypatch, tmp_path):
@@ -413,6 +446,23 @@ def test_run_loads_the_weights_in_the_dtype_asked_for(offline_model, scorer, mon
         EvalConfig(model="tiny@0", tasks=("arc_easy",), dtype="float16")  # ty: ignore[invalid-argument-type]
 
 
+def test_run_passes_add_bos_to_the_model(offline_model, scorer, monkeypatch, tmp_path):
+    asked = []
+
+    def from_pretrained(*args, **kwargs):
+        asked.append(kwargs["add_bos"])
+        return scorer
+
+    monkeypatch.setattr(ScoringModel, "from_pretrained", from_pretrained)
+    monkeypatch.setitem(run.TASKS, "arc_easy", TASK)
+    argv = ["run", "--model", "tiny@0", "--task", "arc_easy", "--out", str(tmp_path)]
+
+    evaluate(EvalConfig(model="tiny@0", tasks=("arc_easy",)))
+    CliRunner().invoke(cli.main, [*argv, "--add-bos"], catch_exceptions=False)
+
+    assert asked == [False, True]  # no BOS unless asked
+
+
 def test_cli_needs_a_task_or_suite():
     result = CliRunner().invoke(cli.main, ["run", "--model", "m@0", "--out", "o"])
 
@@ -425,7 +475,7 @@ def test_cli_prints_suite_scores(toy_suites, tmp_path, monkeypatch):
     # a registered name.
     monkeypatch.setitem(run.SUITES, "base_easy", dataclasses.replace(GROUP, name="base_easy"))
     argv = ["run", "--model", "tiny@0", "--suite", "base_easy", "--out", str(tmp_path)]
-    monkeypatch.setattr(sys, "argv", ["flock-eval", *argv])
+    monkeypatch.setattr(sys, "argv", ["/venv/bin/flock", "eval", *argv])
 
     result = CliRunner().invoke(cli.main, argv, catch_exceptions=False)
 

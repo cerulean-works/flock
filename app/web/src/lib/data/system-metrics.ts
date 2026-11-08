@@ -85,10 +85,10 @@ const GPU: [string, string, string, MetricFormat][] = [
 	['memoryClock', 'GPU Memory Clock Speed (MHz)', 'Memory Clock Speed (MHz)', 'int'],
 	['graphicsClock', 'GPU Graphics Clock Speed (MHz)', 'Graphics Clock Speed (MHz)', 'int'],
 	['freq', 'GPU Frequency (MHz)', 'Frequency (MHz)', 'int'],
-	['memoryAllocatedBytes', 'GPU Memory Allocated (Bytes)', 'Memory Allocated (bytes)', 'si'],
+	['memoryAllocatedBytes', 'GPU Memory Allocated', 'Memory Allocated', 'bytes'],
 	['memoryAllocated', 'GPU Memory Allocated (%)', 'Memory Allocated (%)', 'pct'],
-	['memoryUsed', 'GPU Memory Used (Bytes)', 'Memory Used (bytes)', 'si'],
-	['memoryUsedBytes', 'GPU Memory Used (Bytes)', 'Memory Used (bytes)', 'si'],
+	['memoryUsed', 'GPU Memory Used', 'Memory Used', 'bytes'],
+	['memoryUsedBytes', 'GPU Memory Used', 'Memory Used', 'bytes'],
 	['memory', 'GPU Time Spent Accessing Memory (%)', 'Time Spent Accessing Memory (%)', 'pct'],
 	[
 		'memoryReadWriteActivity',
@@ -109,10 +109,10 @@ const GPU: [string, string, string, MetricFormat][] = [
 	['pcieLinkWidth', 'GPU PCIe Link Width', 'PCIe Link Width', 'int'],
 	['maxPcieLinkWidth', 'GPU Max PCIe Link Width', 'Max PCIe Link Width', 'int'],
 	// NVML GPM / DCGM profiling metrics: titles from the key, as W&B derives them.
-	['pcieTxBytes', 'GPU PCIe Tx Bytes', 'PCIe Tx (bytes)', 'si'],
-	['pcieRxBytes', 'GPU PCIe Rx Bytes', 'PCIe Rx (bytes)', 'si'],
-	['nvlinkTxBytes', 'GPU NVLink Tx Bytes', 'NVLink Tx (bytes)', 'si'],
-	['nvlinkRxBytes', 'GPU NVLink Rx Bytes', 'NVLink Rx (bytes)', 'si'],
+	['pcieTxBytes', 'GPU PCIe Tx', 'PCIe Tx', 'bytes'],
+	['pcieRxBytes', 'GPU PCIe Rx', 'PCIe Rx', 'bytes'],
+	['nvlinkTxBytes', 'GPU NVLink Tx', 'NVLink Tx', 'bytes'],
+	['nvlinkRxBytes', 'GPU NVLink Rx', 'NVLink Rx', 'bytes'],
 	['smActive', 'GPU SM Active', 'SM Active (%)', 'pct'],
 	['smOccupancy', 'GPU SM Occupancy', 'SM Occupancy (%)', 'pct'],
 	['dramActive', 'GPU DRAM Active', 'DRAM Active (%)', 'pct'],
@@ -167,9 +167,9 @@ define('memory_percent', 'System Memory Utilization (%)', 'Memory', 'pct', [
 	['memory_percent', () => 'System Memory Utilization (%)'],
 	['memory', () => 'System Memory Utilization (%)']
 ]);
-single('memory.used', 'System Memory Used (Bytes)', 'Memory', 'si');
+single('memory.used', 'System Memory Used', 'Memory', 'bytes');
 single('memory.used_percent', 'System Memory Used (%)', 'Memory', 'pct');
-single('swap.used', 'Swap Used (Bytes)', 'Memory', 'si');
+single('swap.used', 'Swap Used', 'Memory', 'bytes');
 single('swap.used_percent', 'Swap Used (%)', 'Memory', 'pct');
 
 // `disk` is what wandb logged before per-path usage.
@@ -177,47 +177,47 @@ define('disk.usagePercent', 'Disk Utilization (%)', 'Disk', 'pct', [
 	['disk', () => 'Disk Utilization (%)'],
 	['disk.*.usagePercent', (d) => `Disk ${d} Utilization (%)`]
 ]);
-define('disk.usageGB', 'Disk Utilization (GB)', 'Disk', 'num', [
-	['disk.*.usageGB', (d) => `Disk ${d} Utilization (GB)`]
+define('disk.usageGB', 'Disk Space Used', 'Disk', 'gb', [
+	['disk.*.usageGB', (d) => `Disk ${d} Space Used`]
 ]);
-define('disk.io', 'Disk I/O Utilization (MB)', 'Disk', 'num', [
-	['disk.in', () => 'Disk Read (MB)'],
-	['disk.out', () => 'Disk Write (MB)'],
-	['disk.*.in', (d) => `Disk ${d} Read (MB)`],
-	['disk.*.out', (d) => `Disk ${d} Write (MB)`]
+define('disk.io', 'Disk I/O', 'Disk', 'mb', [
+	['disk.in', () => 'Disk Read'],
+	['disk.out', () => 'Disk Write'],
+	['disk.*.in', (d) => `Disk ${d} Read`],
+	['disk.*.out', (d) => `Disk ${d} Write`]
 ]);
-define('disk.ioRate', 'Disk I/O Rate (bytes/s)', 'Disk', 'si', [
-	['disk.*.readBps', (d) => `Disk ${d} Read (bytes/s)`],
-	['disk.*.writeBps', (d) => `Disk ${d} Write (bytes/s)`]
+define('disk.ioRate', 'Disk I/O Rate', 'Disk', 'bytes/s', [
+	['disk.*.readBps', (d) => `Disk ${d} Read`],
+	['disk.*.writeBps', (d) => `Disk ${d} Write`]
 ]);
 
-define('network.traffic', 'Network Traffic (Bytes)', 'Network', 'si', [
-	['network.recv', () => 'Network Traffic Received (bytes)'],
-	['network.sent', () => 'Network Traffic Sent (bytes)']
+define('network.traffic', 'Network Traffic', 'Network', 'bytes', [
+	['network.recv', () => 'Network Traffic Received'],
+	['network.sent', () => 'Network Traffic Sent']
 ]);
-define('network.rate', 'Network Traffic Rate (bytes/s)', 'Network', 'si', [
-	['network.recvBps', () => 'Network Traffic Received (bytes/s)'],
-	['network.sentBps', () => 'Network Traffic Sent (bytes/s)']
+define('network.rate', 'Network Traffic Rate', 'Network', 'bytes/s', [
+	['network.recvBps', () => 'Network Traffic Received'],
+	['network.sentBps', () => 'Network Traffic Sent']
 ]);
 single('network.tcpRetransmits', 'Network TCP Retransmits', 'Network', 'int');
 
 single('cpu', 'Process CPU Utilization (%)', 'Process', 'pct');
 single('proc.cpu.threads', 'Process CPU Threads In Use', 'Process', 'int');
 single('proc.cpu.throttledPercent', 'Process CPU Throttled (%)', 'Process', 'pct');
-single('proc.memory.rssMB', 'Process Memory In Use (MB)', 'Process', 'num');
+single('proc.memory.rssMB', 'Process Memory In Use', 'Process', 'mb');
 single('proc.memory.percent', 'Process Memory In Use (%)', 'Process', 'pct');
-single('proc.memory.availableMB', 'Process Memory Available (MB)', 'Process', 'num');
+single('proc.memory.availableMB', 'Process Memory Available', 'Process', 'mb');
 single('proc.memory.oomKills', 'Process OOM Kills', 'Process', 'int');
 single('wandb.cpu', 'W&B CPU Utilization (%)', 'Process', 'pct');
-single('wandb.memory.rssMB', 'W&B Memory In Use (MB)', 'Process', 'num');
+single('wandb.memory.rssMB', 'W&B Memory In Use', 'Process', 'mb');
 
 single('system.powerWatts', 'System Power Usage (W)', 'Other', 'num');
 single('ane.power', 'Neural Engine Power Usage (W)', 'Other', 'num');
 for (const [metric, title, label, format] of [
 	['tensorcoreUtilization', 'TPU TensorCore Utilization (%)', 'TensorCore Utilization (%)', 'pct'],
 	['dutyCycle', 'TPU Duty Cycle (%)', 'Duty Cycle (%)', 'pct'],
-	['hbmCapacityUsage', 'TPU HBM Usage (Bytes)', 'HBM Usage (bytes)', 'si'],
-	['hbmCapacityTotal', 'TPU HBM Capacity (Bytes)', 'HBM Capacity (bytes)', 'si']
+	['hbmCapacityUsage', 'TPU HBM Usage', 'HBM Usage', 'bytes'],
+	['hbmCapacityTotal', 'TPU HBM Capacity', 'HBM Capacity', 'bytes']
 ] as const)
 	define(`tpu.${metric}`, title, 'Other', format, [
 		[`tpu.#.${metric}`, (d) => `TPU ${d} ${label}`]
@@ -279,7 +279,10 @@ export function humanize(s: string): string {
 /** A format for a key nothing describes. */
 function guessFormat(metric: string): MetricFormat {
 	if (/percent|utili[sz]ation/i.test(metric)) return 'pct';
-	if (/bytes$/i.test(metric)) return 'si';
+	if (/bytes$/i.test(metric)) return 'bytes';
+	if (/Bps$/.test(metric)) return 'bytes/s';
+	if (/MB$/.test(metric)) return 'mb';
+	if (/GB$/.test(metric)) return 'gb';
 	return 'num';
 }
 

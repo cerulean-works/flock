@@ -29,9 +29,9 @@ class TextDoc:
 @dataclass(frozen=True, slots=True)
 class PerplexityTask:
     """
-    A task that scores how well a model fits plain text, as Paloma does (Magnusson et al. 2023, arXiv 2312.10523): each doc whole, in disjoint windows (see [`~eval.model.ScoringModel.rolling_loglikelihood`]), reported as `bits_per_byte` over all of the task's docs.
+    A task that scores how well a model fits plain text, as Paloma does (Magnusson et al. 2023, arXiv 2312.10523): each doc whole, in disjoint windows (see [`~eval.model.ScoringModel.rolling_loglikelihood`]), reported as `bits_per_byte`, `loss_per_token` and `perplexity` over all of the task's docs.
 
-    Rows have Paloma's format: `id` and `text`, plus `subdomain` in a source with more than one domain.
+    Rows have Paloma's format: `id` and `text`, plus `subdomain` in a source with more than one domain. A source with one domain may also give every row the same `subdomain`.
 
     Args:
         name (`str`):
@@ -39,32 +39,32 @@ class PerplexityTask:
         dataset (`Dataset`):
             Where the scored rows come from.
         domain (`str`, *optional*):
-            Score only the rows whose `subdomain` is this. Leave it unset only for a source with one domain, whose rows have no `subdomain`.
+            Score only the rows whose `subdomain` is this. Leave it unset only for a source whose rows have no `subdomain`.
         window (`int`, *optional*, defaults to 2048):
             The most tokens in one model input. It is part of the task, not the model, so every model is scored with the same context. A model whose `max_length` is smaller raises.
+        primary_metric (`str`, *optional*, defaults to `"bits_per_byte"`):
+            The metric to read first, one of `reported_metrics`. It changes no request, so the task hash leaves it out.
 
     Raises:
-        `ValueError`: if `window` is less than 1.
+        `ValueError`: if `window` is less than 1 or `primary_metric` isn't reported.
     """
 
     name: str
     dataset: Dataset
     domain: str | None = None
     window: int = 2048
+    primary_metric: str = "bits_per_byte"
 
     def __post_init__(self) -> None:
         if self.window < 1:
             raise ValueError(f"{self.name}: window must be at least 1, got {self.window}")
-
-    @property
-    def primary_metric(self) -> str:
-        """The metric reported first, `bits_per_byte`."""
-        return "bits_per_byte"
+        if self.primary_metric not in self.reported_metrics:
+            raise ValueError(f"{self.name}: primary_metric must be one of {self.reported_metrics}")
 
     @property
     def reported_metrics(self) -> tuple[str, ...]:
-        """The metrics the task reports: `bits_per_byte` only."""
-        return ("bits_per_byte",)
+        """The metrics the task reports, each over all of its docs: `bits_per_byte`, `loss_per_token` in nats, and `perplexity`, its `exp`."""
+        return ("bits_per_byte", "loss_per_token", "perplexity")
 
     def load(self, limit: int | None = None) -> list[TextDoc]:
         """
@@ -90,7 +90,11 @@ class PerplexityTask:
 
     def task_hash(self, docs: Sequence[TextDoc]) -> str:
         """Returns the sha256 of the definition and every doc's id and text, as [Results files](results#the-task-hash) defines it."""
-        digest = hashlib.sha256(json.dumps(dataclasses.asdict(self), sort_keys=True).encode())
+        # The hash covers what decides the requests. Which metric is read first changes none, and
+        # leaving it out keeps the hashes of tasks defined before the field existed.
+        definition = dataclasses.asdict(self)
+        del definition["primary_metric"]
+        digest = hashlib.sha256(json.dumps(definition, sort_keys=True).encode())
         for doc in docs:
             digest.update(json.dumps([doc.id, doc.text]).encode())
 

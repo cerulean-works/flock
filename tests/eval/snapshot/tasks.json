@@ -112,6 +112,15 @@
       "metric": "bpb",
       "scored": true
     },
+    "fineweb": {
+      "members": [
+        "fineweb_en",
+        "fineweb_zh_hant",
+        "fineweb_zh_hans"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
     "mmlu": {
       "members": [
         "mmlu_abstract_algebra",
@@ -907,6 +916,113 @@
       "metric": "bpb",
       "scored": true
     },
+    "tw_text": {
+      "members": [
+        "tw_text:judicial",
+        "tw_text:ly",
+        "tw_text:gov_press",
+        "tw_text:cna",
+        "tw_text:pts",
+        "tw_text:ltn",
+        "tw_text:cnyes",
+        "tw_text:twreporter",
+        "tw_text:ptt",
+        "tw_text:zhwiki",
+        "tw_text:theses"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text:cna": {
+      "members": [
+        "tw_text_cna"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text:cnyes": {
+      "members": [
+        "tw_text_cnyes"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text:gov_press": {
+      "members": [
+        "tw_text_gov_press__文化部",
+        "tw_text_gov_press__行政院",
+        "tw_text_gov_press__金管會",
+        "tw_text_gov_press__農業部"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text:judicial": {
+      "members": [
+        "tw_text_judicial__地方",
+        "tw_text_judicial__高等"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text:ltn": {
+      "members": [
+        "tw_text_ltn"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text:ly": {
+      "members": [
+        "tw_text_ly__院會紀錄",
+        "tw_text_ly__委員會紀錄"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text:pts": {
+      "members": [
+        "tw_text_pts"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text:ptt": {
+      "members": [
+        "tw_text_ptt__Stock",
+        "tw_text_ptt__movie",
+        "tw_text_ptt__Tech_Job",
+        "tw_text_ptt__MobileComm",
+        "tw_text_ptt__WomenTalk",
+        "tw_text_ptt__Baseball",
+        "tw_text_ptt__Gossiping",
+        "tw_text_ptt__HatePolitics"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text:theses": {
+      "members": [
+        "tw_text_theses__NYCU",
+        "tw_text_theses__NTNU"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text:twreporter": {
+      "members": [
+        "tw_text_twreporter"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text:zhwiki": {
+      "members": [
+        "tw_text_zhwiki"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
     "zh_tw": {
       "members": [
         "tmmluplus",
@@ -1251,6 +1367,58 @@
       "to_doc": "flock.eval.tasks.gen2mc.drop_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
+    },
+    "fineweb_edu": {
+      "dataset": {
+        "repo": "cerulean-works/fineweb-edu-dev",
+        "revision": "2484afe000a6fdf442ba2396391a3bec12644903",
+        "row_index": false,
+        "split": "validation",
+        "subset": null
+      },
+      "domain": null,
+      "primary_metric": "perplexity",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 8192
+    },
+    "fineweb_en": {
+      "dataset": {
+        "repo": "cerulean-works/fineweb-edu-dev",
+        "revision": "2484afe000a6fdf442ba2396391a3bec12644903",
+        "row_index": false,
+        "split": "validation",
+        "subset": null
+      },
+      "domain": null,
+      "primary_metric": "perplexity",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "fineweb_zh_hans": {
+      "dataset": {
+        "repo": "cerulean-works/fineweb-2-zh-dev",
+        "revision": "6d54ae9ec544b822699267d615597649452d9eea",
+        "row_index": false,
+        "split": "test",
+        "subset": "zh_hans"
+      },
+      "domain": null,
+      "primary_metric": "perplexity",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "fineweb_zh_hant": {
+      "dataset": {
+        "repo": "cerulean-works/fineweb-2-zh-dev",
+        "revision": "6d54ae9ec544b822699267d615597649452d9eea",
+        "row_index": false,
+        "split": "test",
+        "subset": "zh_hant"
+      },
+      "domain": null,
+      "primary_metric": "perplexity",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
     },
     "hellaswag": {
       "dataset": {
@@ -3785,6 +3953,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "100_www.ign.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3797,6 +3966,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "10_www.eventbrite.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3809,6 +3979,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "11_link.springer.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3821,6 +3992,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "12_www.chicagotribune.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3833,6 +4005,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "13_www.foxnews.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3845,6 +4018,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "14_www.aljazeera.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3857,6 +4031,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "15_www.dailymail.co.uk",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3869,6 +4044,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "16_www.ncbi.nlm.nih.gov",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3881,6 +4057,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "17_www.express.co.uk",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3893,6 +4070,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "18_en.m.wikipedia.org",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3905,6 +4083,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "19_www.cnet.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3917,6 +4096,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "1_www.nytimes.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3929,6 +4109,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "20_www.telegraph.co.uk",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3941,6 +4122,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "21_www.theatlantic.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3953,6 +4135,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "22_forums.macrumors.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3965,6 +4148,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "23_www.oreilly.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3977,6 +4161,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "24_www.washingtonpost.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -3989,6 +4174,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "25_www.zdnet.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4001,6 +4187,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "26_www.foxbusiness.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4013,6 +4200,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "27_www.reuters.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4025,6 +4213,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "28_www.ibtimes.co.uk",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4037,6 +4226,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "29_www.rt.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4049,6 +4239,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "2_en.wikipedia.org",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4061,6 +4252,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "30_www.prweb.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4073,6 +4265,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "31_www.deviantart.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4085,6 +4278,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "32_www.si.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4097,6 +4291,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "33_www.bbc.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4109,6 +4304,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "34_github.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4121,6 +4317,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "35_nypost.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4133,6 +4330,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "36_itunes.apple.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4145,6 +4343,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "37_www.instructables.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4157,6 +4356,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "38_www.youtube.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4169,6 +4369,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "39_www.booking.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4181,6 +4382,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "40_www.etsy.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4193,6 +4395,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "41_www.marketwired.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4205,6 +4408,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "42_sites.google.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4217,6 +4421,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "43_www.baltimoresun.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4229,6 +4434,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "44_www.agreatertown.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4241,6 +4447,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "45_www.npr.org",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4253,6 +4460,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "46_www.fool.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4265,6 +4473,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "47_www.tripadvisor.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4277,6 +4486,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "48_www.bbc.co.uk",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4289,6 +4499,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "49_lists.w3.org",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4301,6 +4512,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "4_www.latimes.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4313,6 +4525,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "50_mashable.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4325,6 +4538,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "51_disneyparksmomspanel.disney.go.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4337,6 +4551,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "52_www.cnbc.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4349,6 +4564,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "53_answers.sap.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4361,6 +4577,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "54_homestars.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4373,6 +4590,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "55_www.hindustantimes.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4385,6 +4603,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "56_www.reference.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4397,6 +4616,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "57_www.city-data.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4409,6 +4629,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "58_medium.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4421,6 +4642,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "59_app-wiringdiagram.herokuapp.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4433,6 +4655,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "5_www.theguardian.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4445,6 +4668,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "60_www.csmonitor.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4457,6 +4681,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "61_www.adweek.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4469,6 +4694,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "62_docs.microsoft.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4481,6 +4707,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "63_www.yahoo.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4493,6 +4720,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "64_www.thesun.co.uk",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4505,6 +4733,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "65_www.nydailynews.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4517,6 +4746,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "66_www.dailystar.co.uk",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4529,6 +4759,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "67_fineartamerica.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4541,6 +4772,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "68_www.kickstarter.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4553,6 +4785,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "69_uk.reuters.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4565,6 +4798,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "6_www.huffpost.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4577,6 +4811,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "70_www.insiderpages.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4589,6 +4824,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "71_www.inquisitr.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4601,6 +4837,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "72_lists.debian.org",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4613,6 +4850,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "73_www.straitstimes.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4625,6 +4863,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "74_www.cbsnews.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4637,6 +4876,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "75_simple.wikipedia.org",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4649,6 +4889,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "76_deadline.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4661,6 +4902,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "77_www.androidheadlines.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4673,6 +4915,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "78_www.wired.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4685,6 +4928,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "79_www.bustle.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4697,6 +4941,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "7_patents.google.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4709,6 +4954,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "80_premium.wpmudev.org",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4721,6 +4967,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "81_www.librarything.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4733,6 +4980,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "82_mail-archives.apache.org",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4745,6 +4993,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "83_scholars.duke.edu",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4757,6 +5006,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "84_www.glassdoor.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4769,6 +5019,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "85_www.pcworld.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4781,6 +5032,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "86_www.shutterstock.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4793,6 +5045,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "87_myemail.constantcontact.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4805,6 +5058,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "88_www.eventbrite.co.uk",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4817,6 +5071,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "89_www.fastcompany.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4829,6 +5084,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "8_www.businessinsider.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4841,6 +5097,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "90_www.firstpost.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4853,6 +5110,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "91_www.entrepreneur.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4865,6 +5123,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "92_www.breitbart.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4877,6 +5136,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "93_techcrunch.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4889,6 +5149,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "94_www.nme.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4901,6 +5162,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "95_www.ndtv.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4913,6 +5175,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "96_finance.yahoo.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4925,6 +5188,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "97_archives.lib.state.ma.us",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4937,6 +5201,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "98_www.gsmarena.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4949,6 +5214,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "99_www.lonelyplanet.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4961,6 +5227,7 @@
         "subset": "c4_100_domains"
       },
       "domain": "9_www.forbes.com",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4973,6 +5240,7 @@
         "subset": "c4_en"
       },
       "domain": null,
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4985,6 +5253,7 @@
         "subset": "dolma-v1_5"
       },
       "domain": "common-crawl",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -4997,6 +5266,7 @@
         "subset": "dolma-v1_5"
       },
       "domain": "pes2o",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5009,6 +5279,7 @@
         "subset": "dolma-v1_5"
       },
       "domain": "reddit_uniform",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5021,6 +5292,7 @@
         "subset": "dolma-v1_5"
       },
       "domain": "stack_uniform",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5033,6 +5305,7 @@
         "subset": "dolma-v1_5"
       },
       "domain": "wiki",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5045,6 +5318,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "00_text",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5057,6 +5331,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "01_markdown",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5069,6 +5344,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "02_c",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5081,6 +5357,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "03_php",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5093,6 +5370,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "04_java",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5105,6 +5383,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "05_c++",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5117,6 +5396,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "06_python",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5129,6 +5409,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "07_javascript",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5141,6 +5422,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "08_html",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5153,6 +5435,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "09_c#",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5165,6 +5448,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "10_yaml",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5177,6 +5461,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "11_go",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5189,6 +5474,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "12_typescript",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5201,6 +5487,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "13_xml",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5213,6 +5500,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "14_css",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5225,6 +5513,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "15_jupyter-notebook",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5237,6 +5526,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "16_rust",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5249,6 +5539,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "17_unity3d-asset",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5261,6 +5552,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "18_gettext-catalog",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5273,6 +5565,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "19_ruby",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5285,6 +5578,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "20_vue",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5297,6 +5591,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "21_sql",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5309,6 +5604,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "22_swift",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5321,6 +5617,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "23_kotlin",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5333,6 +5630,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "24_scala",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5345,6 +5643,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "25_scss",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5357,6 +5656,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "26_tex",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5369,6 +5669,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "27_dart",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5381,6 +5682,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "28_kicad",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5393,6 +5695,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "29_shell",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5405,6 +5708,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "30_smali",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5417,6 +5721,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "31_lua",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5429,6 +5734,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "32_restructuredtext",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5441,6 +5747,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "33_perl",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5453,6 +5760,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "34_diff",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5465,6 +5773,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "35_ini",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5477,6 +5786,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "36_jsx",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5489,6 +5799,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "37_haskell",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5501,6 +5812,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "38_gnuplot",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5513,6 +5825,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "39_postscript",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5525,6 +5838,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "40_groff",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5537,6 +5851,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "41_turtle",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5549,6 +5864,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "42_fortran",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5561,6 +5877,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "43_makefile",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5573,6 +5890,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "44_mathematica",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5585,6 +5903,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "45_pascal",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5597,6 +5916,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "46_common-lisp",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5609,6 +5929,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "47_gas",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5621,6 +5942,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "48_vhdl",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5633,6 +5955,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "49_julia",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5645,6 +5968,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "50_edn",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5657,6 +5981,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "51_visual-basic",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5669,6 +5994,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "52_powershell",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5681,6 +6007,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "53_g-code",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5693,6 +6020,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "54_ocaml",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5705,6 +6033,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "55_java-server-pages",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5717,6 +6046,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "56_solidity",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5729,6 +6059,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "57_graphviz-dot",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5741,6 +6072,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "58_less",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5753,6 +6085,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "59_twig",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5765,6 +6098,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "60_asciidoc",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5777,6 +6111,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "61_groovy",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5789,6 +6124,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "62_llvm",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5801,6 +6137,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "63_hcl",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5813,6 +6150,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "64_html+erb",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5825,6 +6163,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "65_erlang",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5837,6 +6176,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "66_elixir",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5849,6 +6189,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "67_eagle",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5861,6 +6202,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "68_arduino",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5873,6 +6215,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "69_coffeescript",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5885,6 +6228,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "70_toml",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5897,6 +6241,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "71_cuda",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5909,6 +6254,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "72_nix",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5921,6 +6267,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "73_smalltalk",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5933,6 +6280,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "74_cmake",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5945,6 +6293,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "75_actionscript",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5957,6 +6306,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "76_glsl",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5969,6 +6319,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "77_systemverilog",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5981,6 +6332,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "78_haxe",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -5993,6 +6345,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "79_f#",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6005,6 +6358,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "80_max",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6017,6 +6371,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "81_objective-c++",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6029,6 +6384,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "82_standard-ml",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6041,6 +6397,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "83_dockerfile",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6053,6 +6410,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "84_emacs-lisp",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6065,6 +6423,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "85_scheme",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6077,6 +6436,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "86_clojure",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6089,6 +6449,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "87_handlebars",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6101,6 +6462,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "88_smarty",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6113,6 +6475,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "89_logos",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6125,6 +6488,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "90_stata",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6137,6 +6501,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "91_yacc",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6149,6 +6514,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "92_nimrod",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6161,6 +6527,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "93_tcl",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6173,6 +6540,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "94_viml",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6185,6 +6553,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "95_asp",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6197,6 +6566,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "96_protocol-buffer",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6209,6 +6579,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "97_r",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6221,6 +6592,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "98_cython",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6233,6 +6605,7 @@
         "subset": "dolma_100_programing_languages"
       },
       "domain": "99_mediawiki",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6245,6 +6618,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "00_AskReddit",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6257,6 +6631,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "01_politics",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6269,6 +6644,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "02_AmItheAsshole",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6281,6 +6657,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "03_worldnews",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6293,6 +6670,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "04_relationships",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6305,6 +6683,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "05_relationship_advice",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6317,6 +6696,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "06_news",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6329,6 +6709,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "07_leagueoflegends",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6341,6 +6722,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "08_todayilearned",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6353,6 +6735,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "09_TwoXChromosomes",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6365,6 +6748,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "10_personalfinance",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6377,6 +6761,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "11_changemyview",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6389,6 +6774,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "12_unpopularopinion",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6401,6 +6787,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "13_movies",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6413,6 +6800,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "14_Games",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6425,6 +6813,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "15_nba",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6437,6 +6826,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "16_pics",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6449,6 +6839,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "17_gaming",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6461,6 +6852,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "18_soccer",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6473,6 +6865,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "19_nfl",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6485,6 +6878,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "20_explainlikeimfive",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6497,6 +6891,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "21_conspiracy",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6509,6 +6904,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "22_atheism",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6521,6 +6917,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "23_AskMen",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6533,6 +6930,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "24_videos",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6545,6 +6943,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "25_sex",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6557,6 +6956,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "26_raisedbynarcissists",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6569,6 +6969,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "27_NoStupidQuestions",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6581,6 +6982,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "28_DestinyTheGame",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6593,6 +6995,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "29_anime",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6605,6 +7008,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "30_DnD",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6617,6 +7021,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "31_ukpolitics",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6629,6 +7034,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "32_funny",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6641,6 +7047,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "33_europe",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6653,6 +7060,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "34_canada",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6665,6 +7073,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "35_Christianity",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6677,6 +7086,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "36_SquaredCircle",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6689,6 +7099,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "37_AskWomen",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6701,6 +7112,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "38_legaladvice",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6713,6 +7125,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "39_JUSTNOMIL",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6725,6 +7138,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "40_technology",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6737,6 +7151,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "41_IAmA",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6749,6 +7164,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "42_wow",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6761,6 +7177,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "43_Parenting",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6773,6 +7190,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "44_exmormon",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6785,6 +7203,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "45_AdviceAnimals",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6797,6 +7216,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "46_childfree",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6809,6 +7229,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "47_unitedkingdom",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6821,6 +7242,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "48_ffxiv",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6833,6 +7255,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "49_dndnext",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6845,6 +7268,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "50_ADHD",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6857,6 +7281,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "51_loseit",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6869,6 +7294,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "52_asoiaf",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6881,6 +7307,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "53_BabyBumps",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6893,6 +7320,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "54_Advice",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6905,6 +7333,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "55_australia",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6917,6 +7346,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "56_CFB",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6929,6 +7359,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "57_offmychest",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6941,6 +7372,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "58_PublicFreakout",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6953,6 +7385,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "59_TrueOffMyChest",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6965,6 +7398,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "60_science",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6977,6 +7411,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "61_magicTCG",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -6989,6 +7424,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "62_asktransgender",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7001,6 +7437,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "63_DotA2",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7013,6 +7450,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "64_neoliberal",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7025,6 +7463,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "65_whowouldwin",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7037,6 +7476,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "66_depression",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7049,6 +7489,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "67_WTF",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7061,6 +7502,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "68_pathofexile",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7073,6 +7515,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "69_PoliticalDiscussion",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7085,6 +7528,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "70_Libertarian",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7097,6 +7541,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "71_PurplePillDebate",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7109,6 +7554,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "72_Fitness",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7121,6 +7567,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "73_books",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7133,6 +7580,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "74_dogs",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7145,6 +7593,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "75_pcmasterrace",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7157,6 +7606,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "76_teenagers",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7169,6 +7619,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "77_stopdrinking",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7181,6 +7632,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "78_Overwatch",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7193,6 +7645,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "79_television",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7205,6 +7658,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "80_buildapc",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7217,6 +7671,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "81_askscience",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7229,6 +7684,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "82_programming",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7241,6 +7697,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "83_Guildwars2",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7253,6 +7710,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "84_cars",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7265,6 +7723,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "85_formula1",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7277,6 +7736,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "86_sysadmin",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7289,6 +7749,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "87_hockey",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7301,6 +7762,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "88_india",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7313,6 +7775,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "89_SubredditDrama",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7325,6 +7788,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "90_DMAcademy",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7337,6 +7801,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "91_dating_advice",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7349,6 +7814,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "92_Catholicism",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7361,6 +7827,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "93_Drugs",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7373,6 +7840,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "94_trees",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7385,6 +7853,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "95_boardgames",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7397,6 +7866,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "96_Conservative",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7409,6 +7879,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "97_Futurology",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7421,6 +7892,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "98_beyondthebump",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7433,6 +7905,7 @@
         "subset": "dolma_100_subreddits"
       },
       "domain": "99_weddingplanning",
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7445,6 +7918,7 @@
         "subset": "falcon-refinedweb"
       },
       "domain": null,
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7457,6 +7931,7 @@
         "subset": "mc4"
       },
       "domain": null,
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7469,6 +7944,7 @@
         "subset": "ptb"
       },
       "domain": null,
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -7481,6 +7957,7 @@
         "subset": "wikitext_103"
       },
       "domain": null,
+      "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
     },
@@ -9763,6 +10240,318 @@
       "to_doc": "flock.eval.tasks.tw_mock_exams.chinese_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "答案："
+    },
+    "tw_text_cna": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "cna"
+      },
+      "domain": "cna",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_cnyes": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "cnyes"
+      },
+      "domain": "cnyes",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_gov_press__文化部": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "gov_press"
+      },
+      "domain": "文化部",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_gov_press__行政院": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "gov_press"
+      },
+      "domain": "行政院",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_gov_press__農業部": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "gov_press"
+      },
+      "domain": "農業部",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_gov_press__金管會": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "gov_press"
+      },
+      "domain": "金管會",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_judicial__地方": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "judicial"
+      },
+      "domain": "地方",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_judicial__高等": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "judicial"
+      },
+      "domain": "高等",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_ltn": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "ltn"
+      },
+      "domain": "ltn",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_ly__委員會紀錄": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "ly"
+      },
+      "domain": "委員會紀錄",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_ly__院會紀錄": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "ly"
+      },
+      "domain": "院會紀錄",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_pts": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "pts"
+      },
+      "domain": "pts",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_ptt__Baseball": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "Baseball",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_ptt__Gossiping": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "Gossiping",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_ptt__HatePolitics": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "HatePolitics",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_ptt__MobileComm": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "MobileComm",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_ptt__Stock": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "Stock",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_ptt__Tech_Job": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "Tech_Job",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_ptt__WomenTalk": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "WomenTalk",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_ptt__movie": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "movie",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_theses__NTNU": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "theses"
+      },
+      "domain": "NTNU",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_theses__NYCU": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "theses"
+      },
+      "domain": "NYCU",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_twreporter": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "twreporter"
+      },
+      "domain": "twreporter",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_zhwiki": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "row_index": false,
+        "split": "test",
+        "subset": "zhwiki"
+      },
+      "domain": "zhwiki",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
     },
     "winogrande": {
       "dataset": {

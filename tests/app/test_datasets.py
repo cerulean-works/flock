@@ -694,8 +694,10 @@ def test_delete_for_good_and_who_may(flock: S3Flock, writer: Writer):
     assert get(api, f"{DATASETS}/trash").json()["entries"] == []
     assert api.delete(f"{DATASETS}/trash/{pk}").status == 404
 
-    # Someone outside the org gets 404 everywhere.
+    # Someone outside the org reads a public dataset, and gets 404 everywhere once it is private.
     writer.write("e", table(0, 1))
+    assert get(olga.api, f"{DATASETS}/info", path="e").status == 200
+    assert make_private(api, "e").status == 204
     for method, path, body in [
         ("GET", f"{DATASETS}/at", None),
         ("GET", query(f"{DATASETS}/info", path="e"), None),
@@ -953,3 +955,149 @@ def test_tags(flock: S3Flock, writer: Writer):
         "best",
         "x" * 100,
     ]
+
+
+# ---------------------------------------------------------------------- public datasets (D115)
+
+
+def make_public(client: Client, path: str) -> Any:
+    return client.request("PUT", query(f"{DATASETS}/public", path=path))
+
+
+def make_private(client: Client, path: str) -> Any:
+    return client.request("DELETE", query(f"{DATASETS}/public", path=path))
+
+
+def private_paths(flock: S3Flock) -> list[str]:
+    return [r["path"] for r in sql(flock, "SELECT path FROM private_datasets ORDER BY path")]
+
+
+def test_datasets_are_public_unless_made_private(flock: S3Flock, writer: Writer):
+    path = "eval/mmlu"
+    writer.write(path, table(0, 10))
+    writer.write(path, table(10, 10), mode="append")
+    writer.write("eval/sibling", table(0, 1))
+    put(flock, f"{path}/README.md", b"# card")
+    api = flock.client()
+    tagged = api.request("PUT", f"{DATASETS}/tags/v1.0", body={"path": path, "version": 1})
+    assert tagged.status == 200, tagged.body
+    member = flock.add_user("m@x.io")
+    assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
+    outsider = flock.add_user("o@x.io", org="lab").api
+    anon = flock.anonymous()
+    reads = [
+        ("info", {}),
+        ("info", {"version": "1"}),
+        ("info", {"version": "v1.0"}),
+        ("rows", {"version": "v1.0"}),
+        ("cell", {"row": 0, "column": "text"}),
+        ("versions", {}),
+        ("readme", {}),
+    ]
+    assert get(api, f"{DATASETS}/info", path=path).json()["public"] is True
+    for client in (outsider, anon):
+        for route, params in reads:
+            resp = get(client, f"{DATASETS}/{route}", path=path, **params)
+            assert resp.status == 200, (route, params, resp.body)
+        assert get(client, f"{DATASETS}/info", path=path, version="v1.0").json()["version"] == 1
+        assert get(client, f"{DATASETS}/rows", path=path).json()["total"] == 20
+        assert get(client, f"{DATASETS}/readme", path=path).json()["text"] == "# card"
+        assert get(client, f"{DATASETS}/info", path="eval/sibling").status == 200
+        # Datasets only: folders, the trash and listings stay members-only, and a public
+        # dataset doesn't open the org's page (D114).
+        assert get(client, f"{DATASETS}/info", path="eval").status == 404
+        assert get(client, f"{DATASETS}/at", path="eval").status in (401, 404)
+        assert get(client, f"{DATASETS}/trash").status in (401, 404)
+        assert client.get("/api/v1/orgs/flock").status == 404
+    assert anon.post(f"{DATASETS}/rename", {"path": path, "to": "x"}).status == 401
+    assert outsider.post(f"{DATASETS}/delete", {"path": path}).status == 404
+
+    # Admins only.
+    assert make_private(member.api, path).status == 403
+    assert make_private(outsider, path).status == 404
+    assert make_private(api, path).status == 204
+    assert make_private(api, path).status == 204  # already private
+    assert get(api, f"{DATASETS}/info", path=path).json()["public"] is False
+    assert get(member.api, f"{DATASETS}/rows", path=path).status == 200
+    for client in (outsider, anon):
+        for route, params in reads:
+            assert get(client, f"{DATASETS}/{route}", path=path, **params).status == 404, route
+        # Only the exact path.
+        assert get(client, f"{DATASETS}/info", path="eval/sibling").status == 200
+
+    assert make_public(member.api, path).status == 403
+    made = make_public(api, path)
+    assert made.status == 200, made.body
+    assert made.json() == {"path": path, "public": True}
+    assert get(anon, f"{DATASETS}/info", path=path).status == 200
+    events = sql(
+        flock,
+        "SELECT kind, path, from_visibility, to_visibility FROM visibility_events ORDER BY pk",
+    )
+    assert [tuple(e) for e in events] == [
+        ("dataset_visibility", path, "public", "private"),
+        ("dataset_visibility", path, "private", "public"),
+    ]
+
+
+def test_a_path_made_private_ahead_is_private_from_its_first_version(
+    flock: S3Flock, writer: Writer
+):
+    api = flock.client()
+    anon = flock.anonymous()
+    assert make_private(api, "exam/v1").status == 204
+    writer.write("exam/v1", table(0, 3))
+    assert get(anon, f"{DATASETS}/info", path="exam/v1").status == 404
+    assert get(api, f"{DATASETS}/info", path="exam/v1").json()["public"] is False
+
+
+def test_private_follows_renames_and_outlives_deletes(flock: S3Flock, writer: Writer):
+    writer.write("a", table(0, 3))
+    writer.write("open", table(0, 3))
+    api = flock.client()
+    anon = flock.anonymous()
+    assert make_private(api, "a").status == 204
+    renamed = api.post(f"{DATASETS}/rename", {"path": "a", "to": "b/c"})
+    assert renamed.status == 200, renamed.body
+    assert get(anon, f"{DATASETS}/info", path="b/c").status == 404
+    assert private_paths(flock) == ["b/c"]
+
+    # A deleted dataset's flag stays: it comes back private, and so does a new one at its path.
+    deleted = api.post(f"{DATASETS}/delete", {"path": "b/c"})
+    assert deleted.status == 200, deleted.body
+    writer.write("b/c", table(0, 1))
+    assert get(anon, f"{DATASETS}/info", path="b/c").status == 404
+    restored = api.post(f"{DATASETS}/trash/{deleted.json()['id']}/restore", {"to": "d"})
+    assert restored.status == 200, restored.body
+    assert get(anon, f"{DATASETS}/info", path="d").status == 404
+    assert get(api, f"{DATASETS}/info", path="d").json()["rows"] == 3
+
+    # A public dataset renamed onto a private path becomes private.
+    assert make_private(api, "e").status == 204
+    renamed = api.post(f"{DATASETS}/rename", {"path": "open", "to": "e"})
+    assert renamed.status == 200, renamed.body
+    assert get(anon, f"{DATASETS}/info", path="e").status == 404
+    assert private_paths(flock) == ["b/c", "d", "e"]
+
+
+def test_orgs_from_before_keep_their_datasets_private(flock: S3Flock, writer: Writer):
+    # Orgs made before datasets became public by default (migration 0016) start closed: every
+    # dataset they hold is flagged private before any is public.
+    for path in ("old", "eval/mmlu", "eval/deep/set"):
+        writer.write(path, table(0, 2))
+    put(flock, "eval/notes.txt", b"not a dataset")
+    sql(flock, "UPDATE orgs SET open_datasets = false WHERE name = 'flock'")
+    api = flock.client()
+    anon = flock.anonymous()
+    assert get(anon, f"{DATASETS}/info", path="old").status == 404
+    assert make_public(api, "old").status == 409
+
+    assert flock.call(datasets(flock).close_existing()) == 3
+    assert private_paths(flock) == ["eval/deep/set", "eval/mmlu", "old"]
+    assert flock.call(datasets(flock).close_existing()) == 0
+    for path in ("old", "eval/mmlu", "eval/deep/set"):
+        assert get(anon, f"{DATASETS}/info", path=path).status == 404, path
+    writer.write("new", table(0, 2))
+    assert get(anon, f"{DATASETS}/info", path="new").status == 200
+    assert make_public(api, "old").status == 200
+    assert get(anon, f"{DATASETS}/info", path="old").status == 200

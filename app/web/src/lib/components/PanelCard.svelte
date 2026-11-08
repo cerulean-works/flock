@@ -1,6 +1,8 @@
 <script lang="ts">
 	import GripVerticalIcon from '@lucide/svelte/icons/grip-vertical';
 	import Maximize2Icon from '@lucide/svelte/icons/maximize-2';
+	import PinIcon from '@lucide/svelte/icons/pin';
+	import PinOffIcon from '@lucide/svelte/icons/pin-off';
 	import type { ResolvedPathname } from '$app/types';
 	import { downloadCsv, downloadPng } from '#lib/chart/export.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -40,6 +42,7 @@
 	const section = $derived(view.section);
 
 	const zoomed = $derived(ws.zoomOf(panel) != null);
+	const pinned = $derived(ws.isPinned(panel));
 	// Panels of a section share one height, so its rows stay even.
 	const height = $derived(ws.heightOf(section));
 
@@ -117,6 +120,9 @@
 				<span class="font-normal text-muted-foreground">{view.title.slice(0, view.prefix)}</span
 				>{view.title.slice(view.prefix)}
 			</span>
+			{#if pinned}
+				<PinIcon class="ml-1.5 size-3 flex-none text-muted-foreground" aria-label="Pinned" />
+			{/if}
 		</Card.Title>
 		<Card.Action
 			class={[
@@ -128,6 +134,16 @@
 			{#if zoomed}
 				<Button variant="link" size="xs" onclick={() => ws.setZoom(panel, null)}>Reset zoom</Button>
 			{/if}
+			<Button
+				variant="ghost"
+				size="icon-sm"
+				onclick={() => ws.togglePinned(panel)}
+				title={pinned ? 'Unpin' : 'Pin to the front'}
+				aria-label={pinned ? `Unpin ${view.title}` : `Pin ${view.title} to the front`}
+				aria-pressed={pinned}
+			>
+				{#if pinned}<PinOffIcon />{:else}<PinIcon />{/if}
+			</Button>
 			<Button
 				variant="ghost"
 				size="icon-sm"

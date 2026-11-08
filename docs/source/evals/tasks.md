@@ -53,7 +53,7 @@ A few behaviours follow OLMES for parity and are worth knowing:
 
 ### Perplexity tasks
 
-A perplexity task scores each doc's text whole and reports `bits_per_byte` over all of its docs (see [Metrics](metrics#perplexity)). Each [Paloma](https://arxiv.org/abs/2312.10523) domain is one task, scored on its whole `test` split in windows of 2048 tokens.
+A perplexity task scores each doc's text whole and reports `bits_per_byte`, `loss_per_token` and `perplexity` over all of its docs (see [Metrics](metrics#perplexity)). Each [Paloma](https://arxiv.org/abs/2312.10523) domain is one task, scored on its whole `test` split in windows of 2048 tokens.
 
 The first version has 9 of [Paloma](https://huggingface.co/datasets/allenai/paloma)'s 16 sources: those licensed under AI2's ImpACT Low Risk license or CC BY-SA, without the fringe sources. A source with one domain has one task, `paloma_<source>`. A source with several has one task per domain, `paloma_<source>__<domain>`, and `flock/eval/tasks/paloma.py` lists the domains.
 
@@ -70,6 +70,12 @@ The first version has 9 of [Paloma](https://huggingface.co/datasets/allenai/palo
 | `dolma_100_programing_languages` | `paloma_dolma_100_programing_languages__<domain>` | 100 | 7,832 | ImpACT LR |
 
 Every task scores its domain's whole `test` split in windows of 2048 tokens, with `bits_per_byte` as its primary metric. `ptb` is one document of 98,844 OLMo 2 tokens. Paloma is gated: accept its terms on the dataset page before the first run.
+
+`fineweb_edu` scores 5,000 documents of [FineWeb-Edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu), drawn with a fixed seed from one file of its newest dump, in windows of 8192 tokens, with `perplexity` as its primary metric. It reads the public dataset `cerulean-works/fineweb-edu-dev` and belongs to no suite. A model needs a context of at least 8192 tokens to run it. [Scoring the FineWeb-Edu dev set](fineweb-edu) defines the number and lists the ids training data must drop.
+
+The `fineweb` suite scores held-out web text in three languages, all in windows of 2048 tokens, which every model the project compares supports. `fineweb_en` reads the same 5,000 FineWeb-Edu documents as `fineweb_edu`. `fineweb_zh_hant` (3,383 documents) and `fineweb_zh_hans` (5,000) read FineWeb-2's held-out Chinese, split by script, from the private dataset `cerulean-works/fineweb-2-zh-dev`. [Scoring held-out web text in three languages](fineweb) defines each member and how to read it.
+
+`tw_text` scores Traditional Chinese text written in Taiwan and published from 2026-04-01 on, in Paloma's shape: one task per domain of each source, `tw_text_<source>__<domain>`, or `tw_text_<source>` for a source with one domain, each over its domain's rows of the `test` split in windows of 2048 tokens with `bits_per_byte` as its primary metric. Its 11 sources are `judicial`, `ly`, `gov_press`, `cna`, `pts`, `ltn`, `cnyes`, `twreporter`, `ptt`, `zhwiki` and `theses`, and `flock/eval/tasks/tw_text.py` lists their domains. `theses` is not held out in time: a thesis carries only its academic year (115, dated from 2026-08-01), so its text may predate the window. `judicial` covers 2026-04-01 to 2026-08-31 only. For `zhwiki`, the check for Simplified-only characters and mainland wording kept 40.3 percent of the pages fetched (2,317 of 5,755), and the sample holds only pages that passed it. The dataset, `cerulean-works/tw-text-v0`, is private. [Scoring Taiwan Traditional Chinese text](tw-text) describes the set and how to get access.
 
 ## Suites
 
@@ -99,6 +105,9 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `zh_tw:bpb` | `tmmluplus:bpb`, `drcd_bpb`, `tw_mock_exams:bpb` | `bpb` | none |
 | `paloma:<source>` | the source's tasks | `bits_per_byte` | OLMES's task `paloma_<source>::paloma`: the same number for a source with one domain, and its docs pooled instead of a mean of domains for a source with several |
 | `paloma` | the 9 `paloma:<source>` suites | unscored | none |
+| `fineweb` | `fineweb_en`, `fineweb_zh_hant`, `fineweb_zh_hans` | `bits_per_byte` | none |
+| `tw_text:<source>` | the source's tasks | `bits_per_byte` | none |
+| `tw_text` | the 11 `tw_text:<source>` suites | `bits_per_byte` | none |
 
 The Base Easy suites hold only the tasks that exist so far, so their scores change as tasks are added. OLMES groups ARC-Easy and ARC-Challenge into one suite with no metric of its own; here they are two members of `base_easy:qa_rc`. `basic_skills`, and so `base_easy:qa_rc`, averages our `acc_per_token`, which divides by the real token count. OLMES's equals its `acc_raw`, so these two scores differ from OLMES's by that member. In BF16, `lambada`'s `acc_greedy` can also differ by a few near-tie docs, since our argmax is taken over FP32 logits and OLMES's over its BF16 log-probabilities. See [Suites in results](results#suites) for when two suite scores compare.
 
@@ -109,6 +118,8 @@ The mock exam tasks read `cerulean-works/tw-mock-exams`, a private dataset: the 
 `zh_tw` and `zh_tw:bpb` give one Traditional Chinese number of each kind, next to the Base Easy suites. No benchmark suite to follow exists: OLMo 3's Base Easy is English only, and TMLU and TMMLU+ each average only their own subjects. Each benchmark is one member through its own suite, so TMMLU+ (66 subjects) and the exam set (10) each count as one member. `drcd_bpb` reports only `bpb`, so it is in `zh_tw:bpb` alone. The exam set's `english` subject is an English exam, so a small part of both scores measures English. Use `zh_tw:bpb` for small checkpoints, whose accuracy is still near chance, and `zh_tw` for larger models. Run both with `--suite zh_tw --suite zh_tw:bpb`; the tasks they share run once. Both read the private exam set, so they need the access described above.
 
 A Paloma source is a suite of its domains, scored as their unweighted mean, as the paper averages a source's domains. OLMES instead reports a source's bits per byte over all of its docs together, so a source with several domains differs from OLMES's number. `paloma` has no score, since Paloma defines none over all sources.
+
+A `tw_text` source is a suite of its domains, scored as their unweighted mean, as a Paloma source is. Unlike `paloma`, `tw_text` has a score: the unweighted mean of its 11 sources, so each source counts once whatever its size.
 
 ## Classes
 

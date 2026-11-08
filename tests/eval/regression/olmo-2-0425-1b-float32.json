@@ -1,8 +1,8 @@
 {
   "provenance": {
     "model": "allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf",
-    "flock_commit": "d23f66846b528327acbeb38fc6ce90279fd8bd79",
-    "command": "flock-eval run --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf --suite base_easy --dtype float32 --out /work/harrychang08/eval-lab/022/bank",
+    "flock_commit": "b75c96abb37e259ef00fba8c16212efadf91d630",
+    "command": "flock-eval eval run --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf --suite base_easy --dtype float32 --out /work/harrychang08/eval-lab/026/bank",
     "device": "NVIDIA H200",
     "dtype": "float32",
     "batch_tokens": 32768,
@@ -10,13 +10,22 @@
     "attention": "sdpa",
     "torch": "2.14.1+cu130",
     "transformers": "5.20.1",
+    "tokenizers": "0.23.3",
+    "datasets": "5.1.0",
     "python": "3.14.7",
-    "created_at": "2026-10-27T10:26:55+00:00"
+    "created_at": "2026-11-01T05:47:53+00:00"
   },
   "tasks": [
     {
       "task": "arc_easy",
       "task_hash": "ad683d6e1cd5c9f42d3bdb32a0278f3b347112a780f3df1aeb9247007a295856",
+      "dataset": {
+        "repo": "allenai/ai2_arc",
+        "revision": "210d026faf9955653af8916fad021475a3f00453",
+        "subset": "ARC-Easy",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.75,
@@ -28,17 +37,24 @@
       },
       "num_docs": 2376,
       "limit": null,
-      "seconds": 86.97490788903087,
+      "seconds": 86.14116206672043,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 27.318223814982126
+      "docs_per_second": 27.58263230950698
     },
     {
       "task": "arc_challenge",
       "task_hash": "be1051582e766bb1c93ef0252132ae2a5df9e1fdc670c993fe2ce05e731cc167",
+      "dataset": {
+        "repo": "allenai/ai2_arc",
+        "revision": "210d026faf9955653af8916fad021475a3f00453",
+        "subset": "ARC-Challenge",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "acc_uncond",
       "metrics": {
         "acc_raw": 0.4129692614078522,
@@ -50,17 +66,24 @@
       },
       "num_docs": 1172,
       "limit": null,
-      "seconds": 47.61050525307655,
+      "seconds": 47.619514600373805,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 24.61641593110937
+      "docs_per_second": 24.6117586421345
     },
     {
       "task": "csqa",
       "task_hash": "3755da25be6385a9801962ec2798686fb8f22e68f8a6057eced18f3909151ba4",
+      "dataset": {
+        "repo": "tau/commonsense_qa",
+        "revision": "94630fe30dad47192a8546eb75f094926d47e155",
+        "subset": null,
+        "split": "validation",
+        "row_index": false
+      },
       "primary_metric": "acc_uncond",
       "metrics": {
         "acc_raw": 0.6355446577072144,
@@ -72,17 +95,24 @@
       },
       "num_docs": 1221,
       "limit": null,
-      "seconds": 39.78713401500136,
+      "seconds": 39.84403064288199,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 30.68831244642134
+      "docs_per_second": 30.644490035250183
     },
     {
       "task": "hellaswag",
       "task_hash": "fd4a7e122ebabcddb0f31053b4e788aa96820184a00a0f1e4815514799828a1e",
+      "dataset": {
+        "repo": "allenai/hellaswag",
+        "revision": "55aa56627db098098f50549e650a00be2684f4bf",
+        "subset": null,
+        "split": "validation",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.5033857822418213,
@@ -94,17 +124,24 @@
       },
       "num_docs": 10042,
       "limit": null,
-      "seconds": 935.7393031660467,
+      "seconds": 929.240685692057,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.731621474082775
+      "docs_per_second": 10.806672754025149
     },
     {
       "task": "winogrande",
       "task_hash": "5d0efe0919910ecd898bbcde7a3605c905a5e670e1087ce45e0b5c8d028e68c0",
+      "dataset": {
+        "repo": "allenai/winogrande",
+        "revision": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
+        "subset": "winogrande_xl",
+        "split": "validation",
+        "row_index": true
+      },
       "primary_metric": "acc_raw",
       "metrics": {
         "acc_raw": 0.6582478284835815,
@@ -115,17 +152,24 @@
       },
       "num_docs": 1267,
       "limit": null,
-      "seconds": 15.214503335999325,
+      "seconds": 15.085369011387229,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 83.27580414683187
+      "docs_per_second": 83.98866471503626
     },
     {
       "task": "socialiqa",
       "task_hash": "02df1ce68f5e0d507913876a5fbcc6cb099202da5055354b2293552e7adf96d0",
+      "dataset": {
+        "repo": "allenai/social_i_qa",
+        "revision": "537a2ec8ec565adc0b70b70752893e59e024df26",
+        "subset": null,
+        "split": "validation",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.5005117654800415,
@@ -137,17 +181,24 @@
       },
       "num_docs": 1954,
       "limit": null,
-      "seconds": 59.72115955199115,
+      "seconds": 59.41870387457311,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 32.718721717030895
+      "docs_per_second": 32.8852679810165
     },
     {
       "task": "piqa",
       "task_hash": "5e50f46bbe7f1e0c957b5ae39dda7ec783bce41ebdc1c9383a5237e436b31b0b",
+      "dataset": {
+        "repo": "ybisk/piqa",
+        "revision": "142c51238b3ca2bc61e9a075913871b8b600e8e1",
+        "subset": null,
+        "split": "validation",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.7584330439567566,
@@ -159,17 +210,24 @@
       },
       "num_docs": 1838,
       "limit": null,
-      "seconds": 42.34854436619207,
+      "seconds": 42.17513677291572,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 43.40172791080211
+      "docs_per_second": 43.58017876495276
     },
     {
       "task": "sciq",
       "task_hash": "f85730f92fb09c0846fabf9f3085259813a2faea85b1061aba2f44d9eef898ef",
+      "dataset": {
+        "repo": "allenai/sciq",
+        "revision": "2c94ad3e1aafab77146f384e23536f97a4849815",
+        "subset": null,
+        "split": "validation",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.8740000128746033,
@@ -181,17 +239,24 @@
       },
       "num_docs": 1000,
       "limit": null,
-      "seconds": 28.731730476021767,
+      "seconds": 28.618908062577248,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 34.80472576598043
+      "docs_per_second": 34.94193411619444
     },
     {
       "task": "qasper_yesno",
       "task_hash": "94708da07342a93480929cfc14b6e84c84f9dbda89ab2e3e2c20792f0edf401d",
+      "dataset": {
+        "repo": "allenai/qasper-yesno",
+        "revision": "f47a392e5444515c600ab595bf7227f8710a8c68",
+        "subset": null,
+        "split": "train",
+        "row_index": false
+      },
       "primary_metric": "acc_raw",
       "metrics": {
         "acc_raw": 0.6489028334617615,
@@ -203,17 +268,24 @@
       },
       "num_docs": 319,
       "limit": null,
-      "seconds": 31.27839780598879,
+      "seconds": 31.108725951984525,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.198732108296223
+      "docs_per_second": 10.254357587397434
     },
     {
       "task": "sciriff_yesno",
       "task_hash": "8ef0b3766511bdaab3f419c60b944515aa078f5bf67a65b8b4ca690f00208382",
+      "dataset": {
+        "repo": "allenai/sciriff-yesno",
+        "revision": "c5ce62cb03b2b6052ff9fd24817444ea79e66bd4",
+        "subset": null,
+        "split": "train",
+        "row_index": false
+      },
       "primary_metric": "acc_raw",
       "metrics": {
         "acc_raw": 0.8508217930793762,
@@ -225,17 +297,24 @@
       },
       "num_docs": 1582,
       "limit": null,
-      "seconds": 351.66789439483546,
+      "seconds": 349.4790652152151,
       "truncation": {
         "requests": 10,
         "docs": 5,
         "max_tokens_cut": 467
       },
-      "docs_per_second": 4.498562493805045
+      "docs_per_second": 4.526737528686526
     },
     {
       "task": "lab_bench_dbqa",
       "task_hash": "2d6a873f6b767c54db5b45aecb0475db3c1609269cc06cc4ea07291d9071c7ca",
+      "dataset": {
+        "repo": "futurehouse/lab-bench",
+        "revision": "5c77cec648430f30611808808861eb86f81d5eaa",
+        "subset": "DbQA",
+        "split": "train",
+        "row_index": false
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.3153846263885498,
@@ -247,17 +326,24 @@
       },
       "num_docs": 520,
       "limit": null,
-      "seconds": 67.66440615500323,
+      "seconds": 67.36168759036809,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 7.684985793103723
+      "docs_per_second": 7.719521564871746
     },
     {
       "task": "lab_bench_protocolqa",
       "task_hash": "c4276fcf093590a5837503a46beea4f3d6985f826e1ccbc7396697d99ef067ea",
+      "dataset": {
+        "repo": "futurehouse/lab-bench",
+        "revision": "5c77cec648430f30611808808861eb86f81d5eaa",
+        "subset": "ProtocolQA",
+        "split": "train",
+        "row_index": false
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.26851850748062134,
@@ -269,17 +355,24 @@
       },
       "num_docs": 108,
       "limit": null,
-      "seconds": 6.983275320846587,
+      "seconds": 6.936718293465674,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 15.465522271132091
+      "docs_per_second": 15.569321894149143
     },
     {
       "task": "medmcqa",
       "task_hash": "8b3c2f0d3a142dac0deca276a9e2b39e23932748212935368841335a01cab8b4",
+      "dataset": {
+        "repo": "openlifescienceai/medmcqa",
+        "revision": "91c6572c454088bf71b679ad90aa8dffcd0d5868",
+        "subset": null,
+        "split": "validation",
+        "row_index": false
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.27468323707580566,
@@ -291,17 +384,24 @@
       },
       "num_docs": 4183,
       "limit": null,
-      "seconds": 115.98341244505718,
+      "seconds": 115.36787151079625,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 36.06550205600771
+      "docs_per_second": 36.257928184178645
     },
     {
       "task": "medqa_en",
       "task_hash": "d4030e109a8374714e9fe971c105bb9e6e04bf7748bba48705230c0c10cda203",
+      "dataset": {
+        "repo": "davidheineman/medqa-en",
+        "revision": "a9cc2ff94f0444e1970fd785c986f4b1571239c0",
+        "subset": null,
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.28043991327285767,
@@ -312,17 +412,24 @@
       },
       "num_docs": 1273,
       "limit": null,
-      "seconds": 349.53042214387096,
+      "seconds": 346.7577193295583,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.6420291893105023
+      "docs_per_second": 3.671151149745975
     },
     {
       "task": "coqa",
       "task_hash": "7bc676a7fa19cf91c4845ca63c19fd1da4a0f38476db39dfba5d4970c091af9d",
+      "dataset": {
+        "repo": "allenai/coqa-gen2mc",
+        "revision": "5e0394a08cc63398a22b745541e5cedf9c171bf3",
+        "subset": null,
+        "split": "validation",
+        "row_index": false
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.8333333730697632,
@@ -334,17 +441,24 @@
       },
       "num_docs": 7728,
       "limit": null,
-      "seconds": 750.932366078021,
+      "seconds": 746.8796524619684,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.291206437620868
+      "docs_per_second": 10.347048516485748
     },
     {
       "task": "drop",
       "task_hash": "658af15617f028abe6bed07786369d7a276cb5c341446e4a583f56bc47d36045",
+      "dataset": {
+        "repo": "allenai/drop-gen2mc",
+        "revision": "33191ccb7014f77bc6dc3f59792acd43f658eb06",
+        "subset": null,
+        "split": "validation",
+        "row_index": false
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.48890215158462524,
@@ -356,17 +470,24 @@
       },
       "num_docs": 8380,
       "limit": null,
-      "seconds": 2841.8135961268563,
+      "seconds": 2826.065042098053,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.9488211371151185
+      "docs_per_second": 2.965253762800428
     },
     {
       "task": "jeopardy",
       "task_hash": "89491e85f017cce0cdb3f7625b19f19843365ff187e2f612fb3463bb9940343b",
+      "dataset": {
+        "repo": "allenai/jeopardy-gen2mc",
+        "revision": "0bbd389863e56b304b22b66106caf72566144aa8",
+        "subset": null,
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.7956169247627258,
@@ -378,17 +499,24 @@
       },
       "num_docs": 2099,
       "limit": null,
-      "seconds": 91.66632941900752,
+      "seconds": 90.89715528767556,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 22.89826606239958
+      "docs_per_second": 23.09203179524141
     },
     {
       "task": "naturalqs",
       "task_hash": "c64d899ec069a7fa8a9d9fae2b6fd2648d5c71f82c1c853c4531cd545146a7c8",
+      "dataset": {
+        "repo": "allenai/nq-gen2mc",
+        "revision": "a7e553744f28cb673bf25b734513c41e3f413840",
+        "subset": null,
+        "split": "validation",
+        "row_index": false
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.46401458978652954,
@@ -400,17 +528,24 @@
       },
       "num_docs": 3293,
       "limit": null,
-      "seconds": 74.7936213510111,
+      "seconds": 74.30085226893425,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 44.02781868985521
+      "docs_per_second": 44.31981463793826
     },
     {
       "task": "squad",
       "task_hash": "5068125af5a78e51938b5c2b468f7777b044f84ef15234ed3b9bfd13be742722",
+      "dataset": {
+        "repo": "allenai/squad-gen2mc",
+        "revision": "e80f601243d8ed28732c5073cea1092aa4b8bc09",
+        "subset": null,
+        "split": "validation",
+        "row_index": false
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.8967172503471375,
@@ -422,17 +557,24 @@
       },
       "num_docs": 10205,
       "limit": null,
-      "seconds": 2312.8762212689035,
+      "seconds": 2298.8911518463865,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.412255141955359
+      "docs_per_second": 4.439096645269052
     },
     {
       "task": "mmlu_abstract_algebra",
       "task_hash": "2ea632c4044a32d93a1a4de23f71080df8d1b9a52b6982017a333d4ea553ca30",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "abstract_algebra",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.23999999463558197,
@@ -444,17 +586,24 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 6.497625611023977,
+      "seconds": 6.658025197684765,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 15.390237293810584
+      "docs_per_second": 15.019468540727903
     },
     {
       "task": "mmlu_anatomy",
       "task_hash": "9acf17c4fcd4bd3e0ab2098f1289f2844b4c35d8ae7d93fb729b7d49de9e98a3",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "anatomy",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.46666666865348816,
@@ -466,17 +615,24 @@
       },
       "num_docs": 135,
       "limit": null,
-      "seconds": 5.379344982095063,
+      "seconds": 5.370668971911073,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 25.09599225358146
+      "docs_per_second": 25.136533401343158
     },
     {
       "task": "mmlu_astronomy",
       "task_hash": "9df62e2f387450f83f01ef00e89c4181899c22690ef94567943f0cc6e10cdfeb",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "astronomy",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.4013157784938812,
@@ -488,17 +644,24 @@
       },
       "num_docs": 152,
       "limit": null,
-      "seconds": 8.691213968209922,
+      "seconds": 8.63783205114305,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 17.48892623699915
+      "docs_per_second": 17.597008033964464
     },
     {
       "task": "mmlu_business_ethics",
       "task_hash": "9b78853607bef910e069e330e520783ff54786f918405b1cc92933982ab62cdc",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "business_ethics",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.6499999761581421,
@@ -510,17 +673,24 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 8.19048884883523,
+      "seconds": 8.136156448163092,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 12.209283456166478
+      "docs_per_second": 12.290815772424963
     },
     {
       "task": "mmlu_clinical_knowledge",
       "task_hash": "8eed55816470cb1591f3d87f31992d57e063c6f5d8f833f0c01c56f480adf95d",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "clinical_knowledge",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.3396226465702057,
@@ -532,17 +702,24 @@
       },
       "num_docs": 265,
       "limit": null,
-      "seconds": 12.003270724089816,
+      "seconds": 11.949631267227232,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 22.077315932578404
+      "docs_per_second": 22.17641649971096
     },
     {
       "task": "mmlu_college_biology",
       "task_hash": "fe365292e02ade8b3797e05cc19ae43ed901753f30895f562ee43e77f24bab3d",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "college_biology",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.4513888955116272,
@@ -554,17 +731,24 @@
       },
       "num_docs": 144,
       "limit": null,
-      "seconds": 8.853040779940784,
+      "seconds": 8.791397899389267,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 16.26559772844096
+      "docs_per_second": 16.379647656489713
     },
     {
       "task": "mmlu_college_chemistry",
       "task_hash": "466aa56f805c8c2c990908d4cfdb243c9f43cceb89668af8d76ecb59060e00b1",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "college_chemistry",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.35999998450279236,
@@ -576,17 +760,24 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 8.218753591179848,
+      "seconds": 8.187238312326372,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 12.167295063732947
+      "docs_per_second": 12.214130844273102
     },
     {
       "task": "mmlu_college_computer_science",
       "task_hash": "981a9877fac290f43176f9824c60a590f0e7d9cd930fa7587e5e19363adea3cc",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "college_computer_science",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.3100000023841858,
@@ -598,17 +789,24 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 14.937270315829664,
+      "seconds": 14.836189825087786,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 6.69466360892095
+      "docs_per_second": 6.740275042241737
     },
     {
       "task": "mmlu_college_mathematics",
       "task_hash": "126b06522acf5b3ca6d0f8a71f9d2e662dd5397bdf25aff30a4dbb2ccf78dc8e",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "college_mathematics",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.1599999964237213,
@@ -620,17 +818,24 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 10.226510227192193,
+      "seconds": 9.935899646952748,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.778506819863237
+      "docs_per_second": 10.064513889355666
     },
     {
       "task": "mmlu_college_medicine",
       "task_hash": "a85402f4c0a0dde9ca3cf308e126464131ab47285a9481cbcf7db27b4a88af25",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "college_medicine",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.34682080149650574,
@@ -642,17 +847,24 @@
       },
       "num_docs": 173,
       "limit": null,
-      "seconds": 11.743949834024534,
+      "seconds": 11.701145582832396,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 14.7309893557945
+      "docs_per_second": 14.784877153722531
     },
     {
       "task": "mmlu_college_physics",
       "task_hash": "e154074e8342a6a3aae6c96dd6af5181250a84c0a0d5e9b058ff96e4288eb01a",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "college_physics",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.2450980544090271,
@@ -664,17 +876,24 @@
       },
       "num_docs": 102,
       "limit": null,
-      "seconds": 8.29959217691794,
+      "seconds": 8.258351278491318,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 12.289760487710828
+      "docs_per_second": 12.35113360528228
     },
     {
       "task": "mmlu_computer_security",
       "task_hash": "ed5c61841e6bc0a80767781ab085d3f2aa90fbf4866e7337a1cc8f6ee1e6b2e3",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "computer_security",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.5,
@@ -686,17 +905,24 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 5.100472467020154,
+      "seconds": 5.068060178309679,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 19.606026823319553
+      "docs_per_second": 19.731415271661678
     },
     {
       "task": "mmlu_conceptual_physics",
       "task_hash": "dd78315485deb4ed237923d56a2b2021e4c344bf63ee9ce83de452439cb44ec8",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "conceptual_physics",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.4723404049873352,
@@ -708,17 +934,24 @@
       },
       "num_docs": 235,
       "limit": null,
-      "seconds": 8.766012132866308,
+      "seconds": 8.731414676643908,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 26.80808518606964
+      "docs_per_second": 26.914309845873326
     },
     {
       "task": "mmlu_econometrics",
       "task_hash": "08f11ce94680aa840269db4d8408e4d1c04ff6f914e04407f360cc9cbe95c652",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "econometrics",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.2982456088066101,
@@ -730,17 +963,24 @@
       },
       "num_docs": 114,
       "limit": null,
-      "seconds": 11.605533621972427,
+      "seconds": 11.51778110023588,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.822900326114006
+      "docs_per_second": 9.897739764967866
     },
     {
       "task": "mmlu_electrical_engineering",
       "task_hash": "2938e269f42505c9455ccabb4831089e245754ebc8b311c3559d6537559c2ca8",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "electrical_engineering",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.30344825983047485,
@@ -752,17 +992,24 @@
       },
       "num_docs": 145,
       "limit": null,
-      "seconds": 9.771577975945547,
+      "seconds": 9.701730783097446,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 14.8389543998874
+      "docs_per_second": 14.945786812866626
     },
     {
       "task": "mmlu_elementary_mathematics",
       "task_hash": "df4bc498b1290c6aceec149365ff2202aa61637ef9f04baceafb5c00e5a06764",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "elementary_mathematics",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.4920634627342224,
@@ -774,17 +1021,24 @@
       },
       "num_docs": 378,
       "limit": null,
-      "seconds": 24.365730857942253,
+      "seconds": 24.19886357616633,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 15.51359169990943
+      "docs_per_second": 15.62056824735751
     },
     {
       "task": "mmlu_formal_logic",
       "task_hash": "708bba99c20ff103feac5ccad1db998135a049264e797a9e4f1131dff82186a6",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "formal_logic",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.3571428656578064,
@@ -796,17 +1050,24 @@
       },
       "num_docs": 126,
       "limit": null,
-      "seconds": 10.4919399919454,
+      "seconds": 10.429640122689307,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 12.009218514090763
+      "docs_per_second": 12.080953754664222
     },
     {
       "task": "mmlu_global_facts",
       "task_hash": "fc3645f68a19e844957990dff4b53052fa6fa9fa879b97b6c2193d2959c52254",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "global_facts",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.38999998569488525,
@@ -818,17 +1079,24 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 5.301323928171769,
+      "seconds": 5.263936169445515,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 18.863212539907238
+      "docs_per_second": 18.9971908436978
     },
     {
       "task": "mmlu_high_school_biology",
       "task_hash": "46e68f2cb29bd9bbb3807d527d390d9038f6eef8a8e9b0d52e3ec0bf17ef3fca",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "high_school_biology",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.39032256603240967,
@@ -840,17 +1108,24 @@
       },
       "num_docs": 310,
       "limit": null,
-      "seconds": 19.016107789007947,
+      "seconds": 18.894569461233914,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 16.301969016982124
+      "docs_per_second": 16.406830578279575
     },
     {
       "task": "mmlu_high_school_chemistry",
       "task_hash": "821e6503d65833c1e4d22e435e0f79ec78da52eb116714b2395f0b2d13be4197",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "high_school_chemistry",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.21674875915050507,
@@ -862,17 +1137,24 @@
       },
       "num_docs": 203,
       "limit": null,
-      "seconds": 15.189959638984874,
+      "seconds": 15.136438463814557,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 13.364090808971119
+      "docs_per_second": 13.411345111684989
     },
     {
       "task": "mmlu_high_school_computer_science",
       "task_hash": "53e5e10901890fc934371839d4279d910e86f0c1ef80e403d377d01cdaacc70e",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "high_school_computer_science",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.3400000035762787,
@@ -884,17 +1166,24 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 12.056150530930609,
+      "seconds": 11.98869002982974,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.29452151774693
+      "docs_per_second": 8.34119488878137
     },
     {
       "task": "mmlu_high_school_european_history",
       "task_hash": "4ebc58557934f0b2abb428e9a48342811268024a3a43f6cd3130a77c22e5f5d7",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "high_school_european_history",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.3636363446712494,
@@ -906,17 +1195,24 @@
       },
       "num_docs": 165,
       "limit": null,
-      "seconds": 93.81750007905066,
+      "seconds": 93.27355900313705,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.7587337102456464
+      "docs_per_second": 1.7689900735368165
     },
     {
       "task": "mmlu_high_school_geography",
       "task_hash": "23cfa1621afdc6953a0f2fdae9530a90c792939c6337e3dae7a29a09c7422ad2",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "high_school_geography",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.44949495792388916,
@@ -928,17 +1224,24 @@
       },
       "num_docs": 198,
       "limit": null,
-      "seconds": 8.527417334029451,
+      "seconds": 8.489692549221218,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 23.219222449669797
+      "docs_per_second": 23.32239935098275
     },
     {
       "task": "mmlu_high_school_government_and_politics",
       "task_hash": "2e392577d7c1d50d5608cd758eb1d9da70bdfaaed2658260cc2d19549cae0947",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "high_school_government_and_politics",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.48704662919044495,
@@ -950,17 +1253,24 @@
       },
       "num_docs": 193,
       "limit": null,
-      "seconds": 10.317810925189406,
+      "seconds": 10.240089549683034,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 18.705518195610573
+      "docs_per_second": 18.847491427062177
     },
     {
       "task": "mmlu_high_school_macroeconomics",
       "task_hash": "18c9f6c3297db593753607efbe870eed8cad153f1fe9f0270c686615ccaf0a8d",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "high_school_macroeconomics",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.34871795773506165,
@@ -972,17 +1282,24 @@
       },
       "num_docs": 390,
       "limit": null,
-      "seconds": 15.606697492068633,
+      "seconds": 15.53006547037512,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 24.989271445685358
+      "docs_per_second": 25.112579257567017
     },
     {
       "task": "mmlu_high_school_mathematics",
       "task_hash": "eac01d1384073066625b591025ceac1bf14ce17d7abfa5a55f1ae4428540ff66",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "high_school_mathematics",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.19629628956317902,
@@ -994,17 +1311,24 @@
       },
       "num_docs": 270,
       "limit": null,
-      "seconds": 22.82858342002146,
+      "seconds": 22.702533436007798,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 11.827277892468818
+      "docs_per_second": 11.892945814221827
     },
     {
       "task": "mmlu_high_school_microeconomics",
       "task_hash": "67ab1270a07d45628cc87339cabb6d1b0837d567792ac0fdde0e17342631670c",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "high_school_microeconomics",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.3907563090324402,
@@ -1016,17 +1340,24 @@
       },
       "num_docs": 238,
       "limit": null,
-      "seconds": 10.524441492045298,
+      "seconds": 10.376526637934148,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 22.61402661413319
+      "docs_per_second": 22.936384042992557
     },
     {
       "task": "mmlu_high_school_physics",
       "task_hash": "d5d8229b22848b34676c4ef73f78a07cdc0e4d02d8118e3d15f1b0edded6b154",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "high_school_physics",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.25827813148498535,
@@ -1038,17 +1369,24 @@
       },
       "num_docs": 151,
       "limit": null,
-      "seconds": 12.566047570900992,
+      "seconds": 12.44752440508455,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 12.01650711156533
+      "docs_per_second": 12.130926205560979
     },
     {
       "task": "mmlu_high_school_psychology",
       "task_hash": "b61ac1e23da37d6d94543afbec8b8ebca4270b4c04f5a531d3a27e693bf65166",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "high_school_psychology",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.6036697030067444,
@@ -1060,17 +1398,24 @@
       },
       "num_docs": 545,
       "limit": null,
-      "seconds": 32.50711522507481,
+      "seconds": 32.230035321787,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 16.765560285078962
+      "docs_per_second": 16.909692917140198
     },
     {
       "task": "mmlu_high_school_statistics",
       "task_hash": "d0758f7f5d426597da716278b589a186fb04d9ae029dcca3067637f2037178e3",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "high_school_statistics",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.29629629850387573,
@@ -1082,17 +1427,24 @@
       },
       "num_docs": 216,
       "limit": null,
-      "seconds": 24.01054875086993,
+      "seconds": 23.773329094052315,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.996045956349668
+      "docs_per_second": 9.085812052046155
     },
     {
       "task": "mmlu_high_school_us_history",
       "task_hash": "3cc88feb0cb9ac874eccb4d16a75adac74d10dc0a312b36d5a42f44672e1557b",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "high_school_us_history",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.4215686321258545,
@@ -1104,17 +1456,24 @@
       },
       "num_docs": 204,
       "limit": null,
-      "seconds": 90.86387308407575,
+      "seconds": 90.38533315714449,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.24511671224096
+      "docs_per_second": 2.257003353025478
     },
     {
       "task": "mmlu_high_school_world_history",
       "task_hash": "ab2d269cdebd098a1e98d35c6ebbc39efc75723961b0b4d8d8ed3fd353d5f513",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "high_school_world_history",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.37552741169929504,
@@ -1126,17 +1485,24 @@
       },
       "num_docs": 237,
       "limit": null,
-      "seconds": 62.72480987291783,
+      "seconds": 62.241998319514096,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.7784092208516604
+      "docs_per_second": 3.8077183637867846
     },
     {
       "task": "mmlu_human_aging",
       "task_hash": "33e085c6dd2d027d906ae57be4c89368fbb2643bc3d6268aea1def2cd7a7dbc1",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "human_aging",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.4798206388950348,
@@ -1148,17 +1514,24 @@
       },
       "num_docs": 223,
       "limit": null,
-      "seconds": 8.72360698506236,
+      "seconds": 8.660178081132472,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 25.56282056056035
+      "docs_per_second": 25.750047852461574
     },
     {
       "task": "mmlu_human_sexuality",
       "task_hash": "0c8b010c2391c3115864f21f4d249cc8229fe354a6bf48b1335f8b761dfea4b2",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "human_sexuality",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.42748090624809265,
@@ -1170,17 +1543,24 @@
       },
       "num_docs": 131,
       "limit": null,
-      "seconds": 6.518390927929431,
+      "seconds": 6.478095782920718,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 20.09698427854375
+      "docs_per_second": 20.221991830589644
     },
     {
       "task": "mmlu_international_law",
       "task_hash": "cb5ed3ead2c8dedc5450c579c225461d6647331ec72b7b325f69e1b054a72427",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "international_law",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.24793387949466705,
@@ -1192,17 +1572,24 @@
       },
       "num_docs": 121,
       "limit": null,
-      "seconds": 8.534611065173522,
+      "seconds": 8.486966299824417,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 14.177564633701312
+      "docs_per_second": 14.257155705037183
     },
     {
       "task": "mmlu_jurisprudence",
       "task_hash": "e946f25b35e85e2814b642f1fa888be931e80f7386380753fbae282b401f82b4",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "jurisprudence",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.2777777910232544,
@@ -1214,17 +1601,24 @@
       },
       "num_docs": 108,
       "limit": null,
-      "seconds": 5.549256392056122,
+      "seconds": 5.4890798246487975,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 19.462067053633398
+      "docs_per_second": 19.675428933466105
     },
     {
       "task": "mmlu_logical_fallacies",
       "task_hash": "965902c38128c898dfc9a5d35aab684272036e4927a2a464c9f6ebe9a6163640",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "logical_fallacies",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.3987729847431183,
@@ -1236,17 +1630,24 @@
       },
       "num_docs": 163,
       "limit": null,
-      "seconds": 10.043325142934918,
+      "seconds": 9.975902534089983,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 16.229684659234998
+      "docs_per_second": 16.339373750193634
     },
     {
       "task": "mmlu_machine_learning",
       "task_hash": "c9cd145c2999f86c92587602cacc5077369571241d39263ce2a567ea7f3edd0f",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "machine_learning",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.2142857313156128,
@@ -1258,17 +1659,24 @@
       },
       "num_docs": 112,
       "limit": null,
-      "seconds": 10.26817711116746,
+      "seconds": 10.178246312774718,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.907486186442098
+      "docs_per_second": 11.003860248442681
     },
     {
       "task": "mmlu_management",
       "task_hash": "7301ccb113a74e7f43c3c9d0394f072ad5bd2338babcbcba1846f7e694f27045",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "management",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.42718446254730225,
@@ -1280,17 +1688,24 @@
       },
       "num_docs": 103,
       "limit": null,
-      "seconds": 3.5497211469337344,
+      "seconds": 3.5224238662049174,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 29.016363747043027
+      "docs_per_second": 29.2412281747832
     },
     {
       "task": "mmlu_marketing",
       "task_hash": "f8ee545c860e1df2dc7d6ea2295dd33773001c2b3f5d5d40d31616f4ffcf15bb",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "marketing",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.5940171480178833,
@@ -1302,17 +1717,24 @@
       },
       "num_docs": 234,
       "limit": null,
-      "seconds": 11.687128545017913,
+      "seconds": 11.59246155899018,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 20.02202671927926
+      "docs_per_second": 20.185531675843983
     },
     {
       "task": "mmlu_medical_genetics",
       "task_hash": "3bce75ae72b11bd538d04c0abc4c5826ceb9bc4e90dd90856918d906a25ac4a6",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "medical_genetics",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.429999977350235,
@@ -1324,17 +1746,24 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 3.67638469603844,
+      "seconds": 3.6497918143868446,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 27.200635479675714
+      "docs_per_second": 27.398823024868815
     },
     {
       "task": "mmlu_miscellaneous",
       "task_hash": "293e0feab819159d8d777d09ff3e7f1d0eed7862f0ec15dbc79b5ce63d03efcc",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "miscellaneous",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.6079182624816895,
@@ -1346,17 +1775,24 @@
       },
       "num_docs": 783,
       "limit": null,
-      "seconds": 26.388236213009804,
+      "seconds": 26.25086856726557,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 29.67231283210846
+      "docs_per_second": 29.827584485200195
     },
     {
       "task": "mmlu_moral_disputes",
       "task_hash": "e8a2474313714717ca2dcc14839628027a081bef602d2f5d7c81a77ed8de8767",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "moral_disputes",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.338150292634964,
@@ -1368,17 +1804,24 @@
       },
       "num_docs": 346,
       "limit": null,
-      "seconds": 18.977113887900487,
+      "seconds": 18.90024178661406,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 18.232487934880563
+      "docs_per_second": 18.306644111032043
     },
     {
       "task": "mmlu_moral_scenarios",
       "task_hash": "ce52e373a12faf75666e812f841dee29f8d367279f2b3e1df2953d6031dda5cb",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "moral_scenarios",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.25251394510269165,
@@ -1390,17 +1833,24 @@
       },
       "num_docs": 895,
       "limit": null,
-      "seconds": 88.60533713991754,
+      "seconds": 88.28604077547789,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.100971667053159
+      "docs_per_second": 10.137502963532974
     },
     {
       "task": "mmlu_nutrition",
       "task_hash": "331a8983db96240381f925259948a9115b16f88075d9e6076c847f85ea304b75",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "nutrition",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.33986929059028625,
@@ -1412,17 +1862,24 @@
       },
       "num_docs": 306,
       "limit": null,
-      "seconds": 19.58895888295956,
+      "seconds": 19.443839426152408,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 15.62104458068925
+      "docs_per_second": 15.737632537143
     },
     {
       "task": "mmlu_philosophy",
       "task_hash": "568bf5328d91cac7fa11260ede4e235b756c0dd89dcfbde102b202de1208b40f",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "philosophy",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.36012861132621765,
@@ -1434,17 +1891,24 @@
       },
       "num_docs": 311,
       "limit": null,
-      "seconds": 13.841229081852362,
+      "seconds": 13.524378369562328,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 22.46910286368724
+      "docs_per_second": 22.99551162365657
     },
     {
       "task": "mmlu_prehistory",
       "task_hash": "35842b5af8670571d93e3de32745d110dc34b5797af7676759dd3d669c92ff8d",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "prehistory",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.4753086566925049,
@@ -1456,17 +1920,24 @@
       },
       "num_docs": 324,
       "limit": null,
-      "seconds": 17.1092119240202,
+      "seconds": 17.0202522771433,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 18.93716679873054
+      "docs_per_second": 19.0361455708329
     },
     {
       "task": "mmlu_professional_accounting",
       "task_hash": "9a631a88bd3de6056e75f19f27d9d61b3a0b05da3b4091d02fd3ed9301bc02f9",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "professional_accounting",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.27659574151039124,
@@ -1478,17 +1949,24 @@
       },
       "num_docs": 282,
       "limit": null,
-      "seconds": 30.431996342958882,
+      "seconds": 30.19247917458415,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.266562627766842
+      "docs_per_second": 9.34007434001597
     },
     {
       "task": "mmlu_professional_law",
       "task_hash": "2efda5abe49b71db42c0462f1eb6e799695f4af89222ca703e1f051ffe802016",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "professional_law",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.2548891603946686,
@@ -1500,17 +1978,24 @@
       },
       "num_docs": 1534,
       "limit": null,
-      "seconds": 396.43332641595043,
+      "seconds": 393.4898060420528,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.8695031365513364
+      "docs_per_second": 3.8984491502584424
     },
     {
       "task": "mmlu_professional_medicine",
       "task_hash": "86bf8ba43fa7f18628c1d6bb2c5474fe4724bb564c1481ec44da014140f5e8be",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "professional_medicine",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.3345588147640228,
@@ -1522,17 +2007,24 @@
       },
       "num_docs": 272,
       "limit": null,
-      "seconds": 53.48505220212974,
+      "seconds": 53.35158747714013,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 5.0855330377553445
+      "docs_per_second": 5.098255044735931
     },
     {
       "task": "mmlu_professional_psychology",
       "task_hash": "846cbea3f42d0a2add5993643418bde1972ebbb89a36dc741feb91dc5dfdb943",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "professional_psychology",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.3480392098426819,
@@ -1544,17 +2036,24 @@
       },
       "num_docs": 612,
       "limit": null,
-      "seconds": 39.6205698789563,
+      "seconds": 39.20755651034415,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 15.446521891777532
+      "docs_per_second": 15.609235934877395
     },
     {
       "task": "mmlu_public_relations",
       "task_hash": "4ebb00b50576dd43eb3ebb200dc905eb39d328436d9a86f31011295a137e2d5a",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "public_relations",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.4727272689342499,
@@ -1566,17 +2065,24 @@
       },
       "num_docs": 110,
       "limit": null,
-      "seconds": 6.472522160969675,
+      "seconds": 6.435195406898856,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 16.994920567953752
+      "docs_per_second": 17.0934980283698
     },
     {
       "task": "mmlu_security_studies",
       "task_hash": "efe32830eed91fb1dec199055a84aaac5351ed22ab9ccfc0314336607962b69c",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "security_studies",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.3346938490867615,
@@ -1588,17 +2094,24 @@
       },
       "num_docs": 245,
       "limit": null,
-      "seconds": 22.17711418494582,
+      "seconds": 22.007038502953947,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 11.047424744122475
+      "docs_per_second": 11.132801897316366
     },
     {
       "task": "mmlu_sociology",
       "task_hash": "61196c4d6369ff72ec78a4308dcf2d84e3d4df635e08f081525954e370e737a5",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "sociology",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.3432835638523102,
@@ -1610,17 +2123,24 @@
       },
       "num_docs": 201,
       "limit": null,
-      "seconds": 9.191830141004175,
+      "seconds": 9.135419009253383,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 21.867244815953644
+      "docs_per_second": 22.002274859686736
     },
     {
       "task": "mmlu_us_foreign_policy",
       "task_hash": "939e8502842a1263c09fcbf5e39e4b23f139b7058e7654976ff006e7e942415f",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "us_foreign_policy",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.41999998688697815,
@@ -1632,17 +2152,24 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 5.129028309136629,
+      "seconds": 5.101607541553676,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 19.496870356879164
+      "docs_per_second": 19.601664609729145
     },
     {
       "task": "mmlu_virology",
       "task_hash": "71e17985395d4bcc179155cbd3e15b3b55c253440b5f41dd5ac1e5232d9cabb2",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "virology",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.3012048006057739,
@@ -1654,17 +2181,24 @@
       },
       "num_docs": 166,
       "limit": null,
-      "seconds": 8.157464073970914,
+      "seconds": 8.128345746546984,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 20.34946136381745
+      "docs_per_second": 20.422359625944644
     },
     {
       "task": "mmlu_world_religions",
       "task_hash": "252e786c01f9598b1aa9daa45e72d231633080c2229ec03727648b1f66340347",
+      "dataset": {
+        "repo": "cais/mmlu",
+        "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
+        "subset": "world_religions",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "acc_per_char",
       "metrics": {
         "acc_raw": 0.6783626079559326,
@@ -1676,17 +2210,24 @@
       },
       "num_docs": 171,
       "limit": null,
-      "seconds": 6.472834426909685,
+      "seconds": 6.424597594887018,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 26.418101981582783
+      "docs_per_second": 26.616453011172162
     },
     {
       "task": "basic_skills_arithmetic",
       "task_hash": "0e24eebba242b68eacd58317044512b7b033c9ad5c9af70f672fea43608c4feb",
+      "dataset": {
+        "repo": "cerulean-works/basic-skills",
+        "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
+        "subset": "arithmetic",
+        "split": "validation",
+        "row_index": false
+      },
       "primary_metric": "acc_per_token",
       "metrics": {
         "acc_raw": 0.622731626033783,
@@ -1698,17 +2239,24 @@
       },
       "num_docs": 1047,
       "limit": null,
-      "seconds": 30.28526258794591,
+      "seconds": 30.238518729805946,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 34.57127033188496
+      "docs_per_second": 34.62471192307372
     },
     {
       "task": "basic_skills_coding",
       "task_hash": "b75e494a5d87f57dd54d427ed88329f3c8bfffc7b1c4c5d4d8eda0bfb7da4ad0",
+      "dataset": {
+        "repo": "cerulean-works/basic-skills",
+        "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
+        "subset": "coding",
+        "split": "validation",
+        "row_index": false
+      },
       "primary_metric": "acc_per_token",
       "metrics": {
         "acc_raw": 0.47727274894714355,
@@ -1720,17 +2268,24 @@
       },
       "num_docs": 1012,
       "limit": null,
-      "seconds": 46.01741238194518,
+      "seconds": 46.023370414972305,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 21.991675490146765
+      "docs_per_second": 21.98882852071122
     },
     {
       "task": "basic_skills_common_knowledge",
       "task_hash": "84076ba9681854eccefd6cdd416a12306a4b4639c9e5ec27709b71a0e94991c6",
+      "dataset": {
+        "repo": "cerulean-works/basic-skills",
+        "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
+        "subset": "common_knowledge",
+        "split": "validation",
+        "row_index": false
+      },
       "primary_metric": "acc_per_token",
       "metrics": {
         "acc_raw": 0.9479267001152039,
@@ -1742,17 +2297,24 @@
       },
       "num_docs": 1037,
       "limit": null,
-      "seconds": 21.673617974855006,
+      "seconds": 21.33386510424316,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 47.846187987768914
+      "docs_per_second": 48.60816335591003
     },
     {
       "task": "basic_skills_logical_reasoning",
       "task_hash": "e595e562f17bfac48cf59404a247bc864f5f1d24ca05f90f05c402c1957e5e67",
+      "dataset": {
+        "repo": "cerulean-works/basic-skills",
+        "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
+        "subset": "logical_reasoning",
+        "split": "validation",
+        "row_index": false
+      },
       "primary_metric": "acc_per_token",
       "metrics": {
         "acc_raw": 0.9194990992546082,
@@ -1764,17 +2326,24 @@
       },
       "num_docs": 1118,
       "limit": null,
-      "seconds": 31.362982359016314,
+      "seconds": 31.162880221381783,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 35.64712013679382
+      "docs_per_second": 35.876016339237694
     },
     {
       "task": "basic_skills_string_operations",
       "task_hash": "0fb8021b569e795aaa1e1f86b5e1e7532f818309d1991bb62e64b3975f547b38",
+      "dataset": {
+        "repo": "cerulean-works/basic-skills",
+        "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
+        "subset": "string_operations",
+        "split": "validation",
+        "row_index": false
+      },
       "primary_metric": "acc_per_token",
       "metrics": {
         "acc_raw": 0.3330598771572113,
@@ -1786,17 +2355,24 @@
       },
       "num_docs": 1219,
       "limit": null,
-      "seconds": 31.138290244154632,
+      "seconds": 30.995634796097875,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 39.14794262760892
+      "docs_per_second": 39.32811855666409
     },
     {
       "task": "basic_skills_pattern",
       "task_hash": "fde63838949f4eea1683bf1434bc6e60e09857b62cd6601921a5c611144a1dba",
+      "dataset": {
+        "repo": "cerulean-works/basic-skills",
+        "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
+        "subset": "pattern",
+        "split": "validation",
+        "row_index": false
+      },
       "primary_metric": "acc_per_token",
       "metrics": {
         "acc_raw": 0.7340824007987976,
@@ -1808,477 +2384,668 @@
       },
       "num_docs": 534,
       "limit": null,
-      "seconds": 5.366666988935322,
+      "seconds": 5.1267162365838885,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 99.50309961489502
+      "docs_per_second": 104.16024124553907
     },
     {
       "task": "lambada",
-      "task_hash": "2fbcb961926feff33aa7b67c94f89a2ef0f552182f1a74687a88b53c2c6c2ab2",
-      "primary_metric": "bpb",
+      "task_hash": "147d9b4cc207df1d6d8c30d492ac237300c08b6add15a416c7a1026adfe5eafb",
+      "dataset": {
+        "repo": "EleutherAI/lambada_openai",
+        "revision": "900124bf3b8235c6daf21033af9948b3f07346c4",
+        "subset": null,
+        "split": "test",
+        "row_index": true
+      },
+      "primary_metric": "acc_greedy",
       "metrics": {
+        "acc_greedy": 0.6019794344902039,
         "bpb": 0.4381837546825409
       },
       "num_docs": 5153,
       "limit": null,
-      "seconds": 20.043578472919762,
+      "seconds": 19.89763771276921,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 257.0898209100762
+      "docs_per_second": 258.9754660520876
     },
     {
       "task": "minerva_math_algebra",
       "task_hash": "39dfc110cc99c2a1c5ad4ece37a4e417f0fd6da3d1b822d89744f14da9950b1b",
+      "dataset": {
+        "repo": "EleutherAI/hendrycks_math",
+        "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "subset": "algebra",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.5453245639801025
       },
       "num_docs": 1187,
       "limit": null,
-      "seconds": 51.33532196097076,
+      "seconds": 50.69014593306929,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 23.12248087004213
+      "docs_per_second": 23.41678008911834
     },
     {
       "task": "minerva_math_counting_and_probability",
       "task_hash": "42207c8f9d004bd51f9f9f58513ad0574896b543c750b1b15a07c7df12d49616",
+      "dataset": {
+        "repo": "EleutherAI/hendrycks_math",
+        "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "subset": "counting_and_probability",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.5248324275016785
       },
       "num_docs": 474,
       "limit": null,
-      "seconds": 21.760491390014067,
+      "seconds": 21.54285538662225,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 21.7825963350037
+      "docs_per_second": 22.002654313612762
     },
     {
       "task": "minerva_math_geometry",
       "task_hash": "5c041550dc23054b75ecc4bb4954ea40888c5cbda53fc7bb4d2415e84819689d",
+      "dataset": {
+        "repo": "EleutherAI/hendrycks_math",
+        "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "subset": "geometry",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.5237168073654175
       },
       "num_docs": 479,
       "limit": null,
-      "seconds": 27.49596347194165,
+      "seconds": 27.119301431812346,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 17.42073888368368
+      "docs_per_second": 17.66269685096343
     },
     {
       "task": "minerva_math_intermediate_algebra",
       "task_hash": "c55dc4c24a9c3f7b1a9c4264133c472606700a6cf4998dd92e6f9f20eaa9fa8b",
+      "dataset": {
+        "repo": "EleutherAI/hendrycks_math",
+        "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "subset": "intermediate_algebra",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.5163050293922424
       },
       "num_docs": 903,
       "limit": null,
-      "seconds": 49.49953194800764,
+      "seconds": 49.23798615857959,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 18.242596737045425
+      "docs_per_second": 18.339499042298964
     },
     {
       "task": "minerva_math_number_theory",
       "task_hash": "38ceacbbe26be47f1b9b1ab9e3999e86a44a00743c1b1d9620e71d49b58b7cba",
+      "dataset": {
+        "repo": "EleutherAI/hendrycks_math",
+        "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "subset": "number_theory",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.6019933223724365
       },
       "num_docs": 540,
       "limit": null,
-      "seconds": 24.346667599165812,
+      "seconds": 24.24568433035165,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 22.179626751814773
+      "docs_per_second": 22.272004891361547
     },
     {
       "task": "minerva_math_prealgebra",
       "task_hash": "dc57e97f6aa926b8b1d8412b72c7f5085a242ad047448f296cb120309135d030",
+      "dataset": {
+        "repo": "EleutherAI/hendrycks_math",
+        "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "subset": "prealgebra",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.5146699547767639
       },
       "num_docs": 871,
       "limit": null,
-      "seconds": 36.90876081818715,
+      "seconds": 36.93665407691151,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 23.5987332192092
+      "docs_per_second": 23.580912288004118
     },
     {
       "task": "minerva_math_precalculus",
       "task_hash": "91ad3ae3e47ab2f43947ef1eeb9dfafa0166e25abdebb630bf7947fb236fe130",
+      "dataset": {
+        "repo": "EleutherAI/hendrycks_math",
+        "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
+        "subset": "precalculus",
+        "split": "test",
+        "row_index": true
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.3883899748325348
       },
       "num_docs": 546,
       "limit": null,
-      "seconds": 32.12341659003869,
+      "seconds": 32.01047189440578,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 16.996946712365332
+      "docs_per_second": 17.056918179810406
     },
     {
       "task": "humaneval",
       "task_hash": "165426f5a1e0ccc691388206caf83d97a30add54a02a1becaa77f3445e673b13",
+      "dataset": {
+        "repo": "openai/openai_humaneval",
+        "revision": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544",
+        "subset": null,
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.5522783994674683
       },
       "num_docs": 164,
       "limit": null,
-      "seconds": 6.194819981930777,
+      "seconds": 6.149137237109244,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 26.47373135593282
+      "docs_per_second": 26.670408168853562
     },
     {
       "task": "mbpp",
       "task_hash": "db2a554b7c8fcaf4e9d1205b60a439d36d833e882344d62bf5ce607dbaba40af",
+      "dataset": {
+        "repo": "google-research-datasets/mbpp",
+        "revision": "4bb6404fdc6cacfda99d4ac4205087b89d32030c",
+        "subset": "full",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.6956456899642944
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 8.487568294862285,
+      "seconds": 8.239128398709,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 58.909687984797856
+      "docs_per_second": 60.68603082801158
     },
     {
       "task": "mt_mbpp_bash",
       "task_hash": "2ee09e1de4d6e1fa8909e26194f83a88cb5f512336370010b49e74424e9d45dd",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "bash",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.574123740196228
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 10.966106910957024,
+      "seconds": 10.907775966450572,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 45.59503240848529
+      "docs_per_second": 45.838858584725934
     },
     {
       "task": "mt_mbpp_c",
       "task_hash": "7c303aa27000494bc67e9aa02b6af4d4da6e2fc7cbabb28f973fce1f0b4dd0d6",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "c",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.3671846389770508
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 22.36042171018198,
+      "seconds": 22.192033720202744,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 22.360937842792175
+      "docs_per_second": 22.53060743796635
     },
     {
       "task": "mt_mbpp_cpp",
       "task_hash": "a3dc3b14faca5bb18335a308363afdece3150e0fc221e3210d66c5085b87f4a1",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "cpp",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.3626273274421692
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 13.680691595887765,
+      "seconds": 13.57440092973411,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 36.54785991596312
+      "docs_per_second": 36.834038024084926
     },
     {
       "task": "mt_mbpp_csharp",
       "task_hash": "a0b2034de08696a736fb9df3c5ffd5e15faf30a146372c7030c008e2bebb25df",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "csharp",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.30115023255348206
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 12.701411742018536,
+      "seconds": 12.58914521150291,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 39.36570281757821
+      "docs_per_second": 39.716755315773284
     },
     {
       "task": "mt_mbpp_go",
       "task_hash": "619df528850a3ee4907e8406ca81f8c224f4ece0bb1b30f99c940d2e6e6dd453",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "go",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.3966333866119385
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 16.331000719917938,
+      "seconds": 16.218197878450155,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 30.61661735096124
+      "docs_per_second": 30.829565883172037
     },
     {
       "task": "mt_mbpp_haskell",
       "task_hash": "04d8755a574616e6a96f67e1339d01f098cbe1dffaed85cc21332f6af632974f",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "haskell",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.5923982262611389
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 9.065847107907757,
+      "seconds": 9.021725103259087,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 55.152044155241825
+      "docs_per_second": 55.42177291783981
     },
     {
       "task": "mt_mbpp_java",
       "task_hash": "987af8cc9d79ef964c95f92909c96f31c2e1b1cdd50bdcb6aed54eb4da4c4c27",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "java",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.2674088776111603
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 12.701941859908402,
+      "seconds": 12.62248875014484,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 39.36405988269936
+      "docs_per_second": 39.61183962190203
     },
     {
       "task": "mt_mbpp_javascript",
       "task_hash": "e50d883cfbedf213ea21b0d86aff90b161ef8b4bd4865a916669ae850ae93757",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "javascript",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.45726436376571655
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 17.878972284961492,
+      "seconds": 17.799957904964685,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 27.965813248704688
+      "docs_per_second": 28.089954070090368
     },
     {
       "task": "mt_mbpp_matlab",
       "task_hash": "faba3b27fbe300724e3c1a823a0539dad2baebdbb49dd94b19a74c67787a7b65",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "matlab",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.57746821641922
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 8.724389288108796,
+      "seconds": 8.692197365686297,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 57.31060174968259
+      "docs_per_second": 57.522853999360635
     },
     {
       "task": "mt_mbpp_php",
       "task_hash": "f1c879dc4a72ebfa90ffb7d8b57c6aa5b20a6e8482226e0aa44a29a6f4149577",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "php",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.4057673513889313
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 11.914636610075831,
+      "seconds": 11.846900719217956,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 41.96519091292854
+      "docs_per_second": 42.20513127023202
     },
     {
       "task": "mt_mbpp_python",
       "task_hash": "b6a39c403a4b876626451309c30d099d38a350d6374cce94b9e7a919508b2f94",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "python",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.6955448389053345
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 8.28774124616757,
+      "seconds": 8.217123851180077,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 60.33006885093218
+      "docs_per_second": 60.84854129686679
     },
     {
       "task": "mt_mbpp_r",
       "task_hash": "2f014c7f4bb691a1ed77f95c83c91e1c2c70bd385cd56ed937fa749db92730cd",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "r",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.5633040070533752
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 9.22990616899915,
+      "seconds": 9.166548340581357,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 54.171731634647564
+      "docs_per_second": 54.546158643645924
     },
     {
       "task": "mt_mbpp_ruby",
       "task_hash": "5a7d1932c217e9629afd6c9b7f30eca4ca375b14b035cc476a2904dd46ba7c7d",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "ruby",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.6529707312583923
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 7.718102332903072,
+      "seconds": 7.685063531622291,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 64.78276374601151
+      "docs_per_second": 65.06127085906493
     },
     {
       "task": "mt_mbpp_rust",
       "task_hash": "7bb6b31503ce2c49b321d2801559aba697b3f598dc9239300a280222c4a777c4",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "rust",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.48690512776374817
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 11.384822252904996,
+      "seconds": 11.318518846295774,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 43.91812088874888
+      "docs_per_second": 44.175391390865215
     },
     {
       "task": "mt_mbpp_scala",
       "task_hash": "dc6424a04739491ba6a1c5507d3292985019456c0136fdb949efa8c65f2a6fa5",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "scala",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.5576241612434387
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 10.455488336039707,
+      "seconds": 10.365056672133505,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 47.821773974584936
+      "docs_per_second": 48.239003009433794
     },
     {
       "task": "mt_mbpp_swift",
       "task_hash": "1556255d2904140b14d6b7881dd5c2c208d7023c0715f6e049f88a7548c4ea36",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "swift",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.4559977352619171
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 20.89078844501637,
+      "seconds": 20.782951488159597,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 23.933993746381468
+      "docs_per_second": 24.058180585411968
     },
     {
       "task": "mt_mbpp_typescript",
       "task_hash": "4e0b007b0d3eac761fe9d40ac8befd59d652943e776ebb49a6abfab26017fa1d",
+      "dataset": {
+        "repo": "allenai/multilingual_mbpp",
+        "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
+        "subset": "typescript",
+        "split": "test",
+        "row_index": false
+      },
       "primary_metric": "bpb",
       "metrics": {
         "bpb": 0.409159392118454
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 22.340370666934177,
+      "seconds": 22.24874867592007,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 22.38100734559639
+      "docs_per_second": 22.47317398758486
     }
   ],
   "suites": [
     {
       "suite": "mmlu",
+      "suite_hash": "448e8825fd371ce6b01fe0b4171017b72711b2d40776ab0922f69118e05ff825",
       "members": [
         "mmlu_abstract_algebra",
         "mmlu_anatomy",
@@ -2343,6 +3110,7 @@
     },
     {
       "suite": "basic_skills",
+      "suite_hash": "7e0bc6fa83365699baeecbbcee6502548d73f89115ce613c787baf79e4e14826",
       "members": [
         "basic_skills_arithmetic",
         "basic_skills_coding",
@@ -2356,6 +3124,7 @@
     },
     {
       "suite": "base_easy:qa_rc",
+      "suite_hash": "9d544f2656a709926f111d0e752b8f753bce9676353c856f606556dd945a93b7",
       "members": [
         "arc_easy",
         "arc_challenge",
@@ -2377,13 +3146,15 @@
         "naturalqs",
         "squad",
         "mmlu",
-        "basic_skills"
+        "basic_skills",
+        "lambada"
       ],
       "metric": null,
-      "score": 0.5967264635396581
+      "score": 0.5969652349465011
     },
     {
       "suite": "mmlu:bpb",
+      "suite_hash": "821b356dbc33b4aebcd55f9c9dd7288fb1a91969ce294656429d6461ec2b8a53",
       "members": [
         "mmlu_abstract_algebra",
         "mmlu_anatomy",
@@ -2448,6 +3219,7 @@
     },
     {
       "suite": "basic_skills:bpb",
+      "suite_hash": "1e467069d66765b1bad27dd11f0c4b1025000e271c2f045879767d3aa19fe9f9",
       "members": [
         "basic_skills_arithmetic",
         "basic_skills_coding",
@@ -2461,6 +3233,7 @@
     },
     {
       "suite": "base_easy:qa_bpb",
+      "suite_hash": "c433d63bfd2c355aec6053bb1a573505e9da5dbdf0f0a6f5d712139050ca9721",
       "members": [
         "arc_easy",
         "arc_challenge",
@@ -2490,6 +3263,7 @@
     },
     {
       "suite": "base_easy:math_bpb",
+      "suite_hash": "96f5713b99db135e4d18fa648543d46872b5a386367a95a08c818c45f8580874",
       "members": [
         "minerva_math_algebra",
         "minerva_math_counting_and_probability",
@@ -2504,6 +3278,7 @@
     },
     {
       "suite": "mt_mbpp",
+      "suite_hash": "78729cd2c7252befecbdcf10a828df7192ec54a92c48ca22661244c688f9fcfc",
       "members": [
         "mt_mbpp_bash",
         "mt_mbpp_c",
@@ -2528,6 +3303,7 @@
     },
     {
       "suite": "base_easy:code_bpb",
+      "suite_hash": "4987afeeea92db815bca80bc5dbfff65ba75ffd929d0907423e74c31c8eb3754",
       "members": [
         "humaneval",
         "mbpp",
@@ -2538,6 +3314,7 @@
     },
     {
       "suite": "base_easy",
+      "suite_hash": "cef61385948933dd22fd6bf5a10ae7ec5db8ac3e2d35eb8979deddb953ec8443",
       "members": [
         "base_easy:qa_rc",
         "base_easy:qa_bpb",
@@ -2548,5 +3325,5 @@
       "score": null
     }
   ],
-  "schema_version": 4
+  "schema_version": 6
 }

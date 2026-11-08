@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -11,7 +12,7 @@ from typing import Literal, get_args
 import torch
 
 from flock.eval.metrics import bits_per_byte, multiple_choice
-from flock.eval.model import DEFAULT_BATCH_TOKENS, ScoringModel
+from flock.eval.model import DEFAULT_BATCH_TOKENS, Encoded, ScoringModel
 from flock.eval.provenance import Provenance
 from flock.eval.results import (
     Results,
@@ -20,8 +21,18 @@ from flock.eval.results import (
     write_perplexity_predictions,
     write_predictions,
 )
-from flock.eval.tasks import SUITES, TASKS, PerplexityTask, Task, Truncation
+from flock.eval.tasks import (
+    SUITES,
+    TASKS,
+    MCRequests,
+    MultipleChoiceTask,
+    PerplexityTask,
+    Task,
+    TextDoc,
+    Truncation,
+)
 from flock.eval.tasks.suite import by_name
+from flock.eval.tokenizer import SentencePieceTokenizer, Tokenizer
 
 # Why `evaluate` and `score_task` refuse an output that is already there, and what to do.
 _ONE_RUN = (
@@ -29,7 +40,7 @@ _ONE_RUN = (
     "Pass a new out directory or delete this one."
 )
 
-# The weights' dtypes `run` loads. Log-softmax always runs in float32.
+# The weights' dtypes `run` loads. Log-softmax always runs in FP32.
 Dtype = Literal["bfloat16", "float32"]
 
 
@@ -50,7 +61,7 @@ class EvalConfig:
         batch_tokens (`int`, *optional*):
             Passed to [`~eval.model.ScoringModel`].
         dtype (`Dtype`, *optional*, defaults to `"bfloat16"`):
-            The weights' dtype, `"bfloat16"` or `"float32"`. Log-softmax always runs in float32.
+            The weights' dtype, `"bfloat16"` or `"float32"`. Log-softmax always runs in FP32.
         device (`str`, *optional*):
             Where to run. Defaults to CUDA when available.
         wandb_project (`str`, *optional*):
@@ -59,6 +70,8 @@ class EvalConfig:
             The command line recorded in the provenance, or `None` if not given. The CLI passes its own command line.
         suites (`tuple[str, ...]`, *optional*):
             Registry names of the suites to run. Their tasks run after `tasks`, each task once, and each suite and the suites it holds are scored.
+        add_bos (`bool`, *optional*, defaults to `False`):
+            Passed to [`~eval.model.ScoringModel`]. Set it for Gemma models, as OLMES does.
 
     Raises:
         `ValueError`: if no task or suite is given, a task or suite repeats, or `limit` or `batch_tokens` is less than 1, or `dtype` is not `"bfloat16"` or `"float32"`, before any model loads.
@@ -74,6 +87,7 @@ class EvalConfig:
     wandb_project: str | None = None
     command: str | None = None
     suites: tuple[str, ...] = ()
+    add_bos: bool = False
 
     def __post_init__(self) -> None:
         if not self.tasks and not self.suites:
@@ -98,7 +112,7 @@ def evaluate(config: EvalConfig) -> Results:
 
     Raises:
         `KeyError`: if a task or suite name isn't in its registry.
-        `ValueError`: if two different tasks, or two different suites, to run share a name, a task and a suite share a name, a task is named `suites`, or a perplexity task's window is above the model's `max_length`.
+        `ValueError`: if two different tasks, or two different suites, to run share a name, a task and a suite share a name, a task is named `suites`, a perplexity task's window is above the model's `max_length`, or a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
         `FileExistsError`: if `config.out` exists and isn't an empty directory.
     """
     _check_names("tasks", config.tasks, TASKS)
@@ -130,15 +144,26 @@ def evaluate(config: EvalConfig) -> Results:
         device=config.device,
         dtype=getattr(torch, config.dtype),
         batch_tokens=config.batch_tokens,
+        add_bos=config.add_bos,
     )
-    # Checked before scoring, so a model too short for a perplexity task fails in seconds rather
-    # than after every task before it.
+    # Checked before scoring, so a model too short for a perplexity task fails before any is scored
+    # rather than after every task before it.
     for task in tasks:
         if isinstance(task, PerplexityTask) and task.window > model.max_length:
             raise ValueError(
                 f"{task.name}: window {task.window} is above {model.name}'s max_length "
                 f"{model.max_length}"
             )
+        # A resegmented context fails the same way, not after the tasks before it. Tokenizing twice
+        # costs less than holding every task's tokens at once, and only this tokenizer refuses.
+        if isinstance(model.tokenizer, SentencePieceTokenizer) and not isinstance(
+            task, PerplexityTask
+        ):
+            docs, shots = task.load(config.limit)
+            try:
+                model.encode_requests(task.requests(docs, shots).requests)
+            except ValueError as error:
+                raise ValueError(f"{task.name}: {error}") from error
     # Collected before scoring, so the commit's dirty flag describes the tree as scoring starts
     # and `created_at` is when scoring started, as lm-evaluation-harness records `start_date`.
     provenance = Provenance.collect(
@@ -149,7 +174,9 @@ def evaluate(config: EvalConfig) -> Results:
         dtype=model.dtype,
         batch_tokens=model.batch_tokens,
         max_length=model.max_length,
+        add_bos=model.add_bos,
         attention=model.attention,
+        sdpa_backend=model.sdpa_backend,
     )
     task_results = [score_task(model, task, config.limit, config.out) for task in tasks]
 
@@ -179,8 +206,8 @@ def evaluate(config: EvalConfig) -> Results:
     if config.out is not None:
         results.write(config.out)
     if config.wandb_project is not None:
-        # Imported here so importing this module, as training loops do for `score_task`, doesn't
-        # import wandb.
+        # Imported here so importing this module, as training loops do for `prepare_task` and
+        # `score_prepared`, doesn't import wandb.
         from flock.eval.tracking import log_to_tracker
 
         log_to_tracker(results, config.wandb_project)
@@ -204,11 +231,71 @@ def _check_out(out: Path | None) -> None:
         raise FileExistsError(f"{out} is not an empty directory: {_ONE_RUN}")
 
 
+@dataclass(frozen=True, slots=True)
+class PreparedMultipleChoice:
+    """
+    A multiple-choice task's requests and their token ids, built once by [`prepare_task`].
+
+    Args:
+        task (`MultipleChoiceTask`):
+            The task.
+        limit (`int` or `None`):
+            The doc limit it was prepared with, `None` for every doc.
+        tokenizer (`PreTrainedTokenizerBase` or `SentencePieceTokenizer`):
+            The tokenizer `encoded` comes from.
+        add_bos (`bool`):
+            Whether `encoded`'s contexts start with BOS, as the model's `add_bos` said.
+        requests (`MCRequests`):
+            The docs, their requests and the task hash.
+        encoded (`tuple[Encoded, ...]`):
+            Each request's token ids, in request order.
+    """
+
+    task: MultipleChoiceTask
+    limit: int | None
+    tokenizer: Tokenizer
+    add_bos: bool
+    requests: MCRequests
+    encoded: tuple[Encoded, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedPerplexity:
+    """
+    A perplexity task's docs and their token ids, built once by [`prepare_task`].
+
+    Args:
+        task (`PerplexityTask`):
+            The task.
+        limit (`int` or `None`):
+            The doc limit it was prepared with, `None` for every doc.
+        tokenizer (`PreTrainedTokenizerBase` or `SentencePieceTokenizer`):
+            The tokenizer `token_ids` comes from.
+        docs (`tuple[TextDoc, ...]`):
+            The scored docs, in order.
+        task_hash (`str`):
+            The task hash over `docs`.
+        token_ids (`tuple[list[int], ...]`):
+            Each doc's token ids, in doc order.
+    """
+
+    task: PerplexityTask
+    limit: int | None
+    tokenizer: Tokenizer
+    docs: tuple[TextDoc, ...]
+    task_hash: str
+    token_ids: tuple[list[int], ...]
+
+
+# What `prepare_task` returns for each kind of task.
+type PreparedTask = PreparedMultipleChoice | PreparedPerplexity
+
+
 def score_task(
     model: ScoringModel, task: Task, limit: int | None = None, out: Path | None = None
 ) -> TaskResult:
     """
-    Scores one task with an already loaded model, as training loops do between steps.
+    Scores one task with an already loaded model. A training loop that scores the same task at many steps calls [`prepare_task`] once and [`score_prepared`] at each step instead, which gives the same result.
 
     Args:
         model (`ScoringModel`):
@@ -221,20 +308,93 @@ def score_task(
             Write per-doc scores to `out/predictions/<task>.jsonl`. A training loop gives each step its own `out`. No `results.json` is written: that is [`evaluate`]'s job.
 
     Raises:
+        `ValueError`: if `limit` is less than 1, or a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
         `FileExistsError`: if the predictions file already exists, before anything is scored.
     """
+    return score_prepared(model, prepare_task(model, task, limit), out)
+
+
+def prepare_task(model: ScoringModel, task: Task, limit: int | None = None) -> PreparedTask:
+    """
+    Loads a task's docs and tokenizes everything it scores with `model`'s tokenizer, for [`score_prepared`] to score at every evaluation step without loading or tokenizing again.
+
+    Args:
+        model (`ScoringModel`):
+            The model whose tokenizer and `add_bos` to use. Any model with the same tokenizer object and `add_bos` can score the result.
+        task (`MultipleChoiceTask` or `PerplexityTask`):
+            The task.
+        limit (`int`, *optional*):
+            Prepare only the first `limit` docs.
+
+    Raises:
+        `ValueError`: if `limit` is less than 1, or a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
+    """
+    if isinstance(task, PerplexityTask):
+        docs = task.load(limit)
+        return PreparedPerplexity(
+            task=task,
+            limit=limit,
+            tokenizer=model.tokenizer,
+            docs=tuple(docs),
+            task_hash=task.task_hash(docs),
+            token_ids=tuple(model.tokenize([doc.text for doc in docs])),
+        )
+
+    docs, shots = task.load(limit)
+    requests = task.requests(docs, shots)
+    return PreparedMultipleChoice(
+        task=task,
+        limit=limit,
+        tokenizer=model.tokenizer,
+        add_bos=model.add_bos,
+        requests=requests,
+        encoded=tuple(model.encode_requests(requests.requests)),
+    )
+
+
+def score_prepared(
+    model: ScoringModel, prepared: PreparedTask, out: Path | None = None
+) -> TaskResult:
+    """
+    Scores a task from [`prepare_task`] with an already loaded model, as training loops do between steps. The result is the one [`score_task`] gives.
+
+    Args:
+        model (`ScoringModel`):
+            The model to score. Its tokenizer must be the object the task was prepared with, and its `add_bos` the same.
+        prepared (`PreparedMultipleChoice` or `PreparedPerplexity`):
+            The prepared task. It can be scored any number of times.
+        out (`Path`, *optional*):
+            Write per-doc scores to `out/predictions/<task>.jsonl`. A training loop gives each step its own `out`.
+
+    Raises:
+        `ValueError`: if `model`'s tokenizer isn't the one the task was prepared with, or a multiple-choice task was prepared with another `add_bos`.
+        `FileExistsError`: if the predictions file already exists, before anything is scored.
+    """
+    task = prepared.task
+    # The token ids are this tokenizer's: another one would score other tokens without an error.
+    # Identity, not equality: comparing two vocabularies at every step would cost more than the
+    # tokenizing this skips.
+    if model.tokenizer is not prepared.tokenizer:
+        raise ValueError(
+            f"{task.name} was prepared with another tokenizer than {model.name}'s; "
+            "prepare it again with this model"
+        )
+    # A perplexity task is not checked: `add_bos` never changes its windows (024.D2).
+    if isinstance(prepared, PreparedMultipleChoice) and model.add_bos != prepared.add_bos:
+        raise ValueError(
+            f"{task.name} was prepared with add_bos={prepared.add_bos}, but {model.name} has "
+            f"add_bos={model.add_bos}; prepare it again with this model"
+        )
     predictions = out / "predictions" / f"{task.name}.jsonl" if out is not None else None
     if predictions is not None and predictions.exists():
         raise FileExistsError(f"{predictions} exists: {_ONE_RUN}")
-    if isinstance(task, PerplexityTask):
-        return _score_perplexity(model, task, limit, predictions)
+    if isinstance(prepared, PreparedPerplexity):
+        return _score_perplexity(model, prepared, predictions)
 
-    docs, shots = task.load(limit)
-    prepared = task.requests(docs, shots)
-
+    requests = prepared.requests
     start = time.perf_counter()
-    request_scores = model.loglikelihood(prepared.requests)
-    scores = prepared.choice_scores(request_scores)
+    request_scores = model.loglikelihood(requests.requests, prepared.encoded)
+    scores = requests.choice_scores(request_scores)
     reported = task.reported_metrics
     per_doc = {name: values for name, values in multiple_choice(scores).items() if name in reported}
     # One host copy for every metric's mean. It also waits for the GPU, so `seconds` times the
@@ -243,55 +403,68 @@ def score_task(
     seconds = time.perf_counter() - start
     # `means` follows the order of `per_doc`'s keys.
     metrics = dict(zip(per_doc, means, strict=True))
-    truncation = prepared.truncation(request_scores)
+    truncation = requests.truncation(request_scores)
 
     if predictions is not None:
-        write_predictions(predictions, prepared.docs, scores)
+        write_predictions(predictions, requests.docs, scores)
 
     return TaskResult(
         task=task.name,
-        task_hash=prepared.hash,
+        task_hash=requests.hash,
         dataset=task.dataset,
         primary_metric=task.primary_metric,
         metrics=metrics,
-        num_docs=len(prepared.docs),
-        limit=limit,
+        num_docs=len(requests.docs),
+        limit=prepared.limit,
         seconds=seconds,
         truncation=truncation,
     )
 
 
 def _score_perplexity(
-    model: ScoringModel, task: PerplexityTask, limit: int | None, predictions: Path | None
+    model: ScoringModel, prepared: PreparedPerplexity, predictions: Path | None
 ) -> TaskResult:
-    """[`score_task`] for a perplexity task, writing its rows to `predictions` if given."""
-    docs = task.load(limit)
+    """[`score_prepared`] for a perplexity task, writing its rows to `predictions` if given."""
+    task, docs = prepared.task, prepared.docs
     texts = [doc.text for doc in docs]
     # Each whole text's UTF-8 bytes, as OLMES's `num_bytes` (`loglikelihood_rolling_verbose` in
     # `oe_eval/models/eleuther_huggingface.py`).
     num_bytes = [len(text.encode()) for text in texts]
 
     start = time.perf_counter()
-    scores = model.rolling_loglikelihood(texts, task.window)
+    scores = model.rolling_loglikelihood(texts, task.window, prepared.token_ids)
     # Summed over all of the task's docs before dividing, as Paloma defines bits per byte
     # (App. B) and OLMES computes it per domain (`PerplexityMetric`), so a doc counts by its
-    # bytes. The byte count stays on the host, so `.item()` is the task's one wait for the GPU,
-    # and `seconds` times the scoring.
+    # bytes, and the loss is averaged over tokens as a trainer averages it over a batch. Every
+    # token is predicted once, so a doc's token count is its number of predictions. One host
+    # copy for both is the task's one wait for the GPU, so `seconds` times the scoring.
+    logprob = scores.logprob.sum()
     total_bytes = torch.tensor(sum(num_bytes))
-    metric = bits_per_byte(scores.logprob.sum(), total_bytes).item()
+    loss = -logprob / scores.num_tokens.sum()
+    bpb, loss_per_token = torch.stack([bits_per_byte(logprob, total_bytes), loss]).tolist()
     seconds = time.perf_counter() - start
+    # `math.exp` raises past about 709.78 nats, which a diverged checkpoint can reach. Its
+    # perplexity is infinite, so the run keeps its other results; OLMES writes `1e30`.
+    try:
+        perplexity = math.exp(loss_per_token)
+    except OverflowError:
+        perplexity = math.inf
 
     if predictions is not None:
         write_perplexity_predictions(predictions, docs, scores, num_bytes, task.window)
 
     return TaskResult(
         task=task.name,
-        task_hash=task.task_hash(docs),
+        task_hash=prepared.task_hash,
         dataset=task.dataset,
         primary_metric=task.primary_metric,
-        metrics={"bits_per_byte": metric},
+        metrics={
+            "bits_per_byte": bpb,
+            "loss_per_token": loss_per_token,
+            "perplexity": perplexity,
+        },
         num_docs=len(docs),
-        limit=limit,
+        limit=prepared.limit,
         seconds=seconds,
         # Every token is predicted once, in windows that fit the model, so nothing is cut.
         truncation=Truncation(requests=0, docs=0, max_tokens_cut=0),

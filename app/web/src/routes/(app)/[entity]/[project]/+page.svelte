@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, untrack } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { goto, refreshAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -20,6 +20,7 @@
 	import Pager from '#lib/components/Pager.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import PlotSettings from '#lib/components/PlotSettings.svelte';
+	import PublicBadge from '#lib/components/PublicBadge.svelte';
 	import RunFilters from '#lib/components/RunFilters.svelte';
 	import { describeFilters } from '#lib/workspace/filters.ts';
 	import RunSearch from '#lib/components/RunSearch.svelte';
@@ -33,6 +34,7 @@
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { clearRunPages, prefetchRunPage } from '#lib/data/cache.ts';
 	import { LiveConnection, type ProjectEvent } from '#lib/data/live.ts';
+	import { leftWorkspace, rememberFilters, showingProject } from '#lib/workspace/remembered.ts';
 	import { entityHref, workspaceHrefWith } from '#lib/workspace/url.ts';
 	import { Workspace, setWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import { lastView, rememberView, type ProjectView } from '#lib/workspace/project-view.svelte.ts';
@@ -44,12 +46,25 @@
 	const ws = new Workspace(
 		() => data.meta,
 		() => data.runs,
-		() => data.members
+		() => data.people
 	);
 	setWorkspace(ws);
 
 	// Lets performance tooling measure navigation-start → interactive.
 	onMount(() => performance.mark('workspace:hydrated'));
+
+	// Opened from the server (no load ran here to bring back the filters it was left with): the
+	// same once hydrated.
+	onMount(() => {
+		const { entity, project } = page.params as { entity: string; project: string };
+		if (showingProject(entity, project)) return;
+		const filters = rememberFilters(entity, project, page.url.searchParams);
+		if (filters)
+			void goto(workspaceHrefWith(entity, project, page.url.search, { filters, page: null }), {
+				replaceState: true
+			});
+	});
+	onDestroy(leftWorkspace);
 
 	// The viewer's panel arrangement for this project, once hydrated (the server can't know it).
 	$effect(() => {
@@ -63,6 +78,14 @@
 	// The same toast id as the dialogs' own, so a change made here isn't announced twice.
 	function onproject(e: ProjectEvent) {
 		const { entity, project } = ws.meta;
+		if (e.visibility === 'private') {
+			// Made private while an outsider watched: reading it again sends them to sign in, or
+			// to the 404 page.
+			toast(`${project} is no longer public`, { id: 'project' });
+			clearRunPages();
+			void refreshAll();
+			return;
+		}
 		if (e.deleted) {
 			toast(`${project} was deleted`, { id: 'project' });
 			void goto(entityHref(entity), { replaceState: true });
@@ -81,6 +104,9 @@
 		live.connect(ws.meta, ws.page);
 		return () => live.close();
 	});
+
+	/** Outside the org: read-only, with no run actions (D116). */
+	const readonly = $derived(data.shell.access === 'public');
 
 	let refreshing = $state(false);
 	async function showNewRuns() {
@@ -252,10 +278,13 @@
 		created_at: data.project?.created_at ?? 0,
 		updated_at: data.project?.updated_at ?? 0,
 		column_count: ws.meta.columns.length,
+		visibility: data.project?.visibility ?? 'private',
 		run_count: ws.page.projectTotal,
 		active_run_count: ws.activeRuns
 	});
 </script>
+
+{#snippet publicBadge()}<PublicBadge what="its runs" />{/snippet}
 
 <svelte:head>
 	<title>{ws.meta.project} · {data.shell.orgName ?? ws.meta.entity}</title>
@@ -264,7 +293,11 @@
 <svelte:window {onkeydown} />
 
 <Page width="full" data-sveltekit-reset={false} style="--name-w: {nameW}px">
-	<PageHeader title={ws.meta.project} subtitleTitle={projectInfo.description ?? undefined}>
+	<PageHeader
+		title={ws.meta.project}
+		subtitleTitle={projectInfo.description ?? undefined}
+		badges={projectInfo.visibility === 'public' ? publicBadge : undefined}
+	>
 		{#snippet subtitle()}
 			{#if projectInfo.description}
 				<span class="description">{projectInfo.description}</span>
@@ -294,7 +327,7 @@
 			</Tabs.Root>
 			<Separator orientation="vertical" class="mx-1.5 h-5! data-vertical:self-center" />
 
-			{#if view === 'table' && ws.selectedRows.length}
+			{#if view === 'table' && ws.selectedRows.length && !readonly}
 				<span class="selection-count mr-1 text-[13px] font-medium tabular-nums" role="status">
 					{ws.selectedRows.length} selected
 				</span>
@@ -368,18 +401,24 @@
 				title="No runs yet"
 			>
 				{#snippet lead()}
-					The SDK needs a wandb key: <a
-						class="text-link underline-offset-3 hover:underline"
-						href={resolve('/(app)/account')}>create one</a
-					>.
+					{#if readonly}
+						Nothing has been logged to this project.
+					{:else}
+						The SDK needs a wandb key: <a
+							class="text-link underline-offset-3 hover:underline"
+							href={resolve('/(app)/account')}>create one</a
+						>.
+					{/if}
 				{/snippet}
-				<pre
-					class="mt-4 overflow-x-auto rounded-lg bg-muted px-4 py-3.5 font-mono text-[13px] leading-relaxed"><code
-						>import wandb
+				{#if !readonly}
+					<pre
+						class="mt-4 overflow-x-auto rounded-lg bg-muted px-4 py-3.5 font-mono text-[13px] leading-relaxed"><code
+							>import wandb
 
 run = wandb.init(entity="{ws.meta.entity}", project="{ws.meta.project}")
 run.log(&lbrace;"loss": 0.5&rbrace;)</code
-					></pre>
+						></pre>
+				{/if}
 			</EmptyState>
 		{:else}
 			<Pager />
@@ -409,7 +448,9 @@ run.log(&lbrace;"loss": 0.5&rbrace;)</code
 {/if}
 
 <PanelEditor />
-<EditRunDialog />
-<TagRunsDialog />
-<MoveRunsDialog />
-<DeleteRunsDialog />
+{#if !readonly}
+	<EditRunDialog />
+	<TagRunsDialog />
+	<MoveRunsDialog />
+	<DeleteRunsDialog />
+{/if}

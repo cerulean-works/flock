@@ -10,6 +10,14 @@ The entry points for running evaluations, and the model wrapper they score with.
 
 [[autodoc]] eval.run.score_task
 
+[[autodoc]] eval.run.prepare_task
+
+[[autodoc]] eval.run.score_prepared
+
+[[autodoc]] eval.run.PreparedMultipleChoice
+
+[[autodoc]] eval.run.PreparedPerplexity
+
 ## Scoring
 
 [[autodoc]] eval.model.ScoringModel
@@ -17,6 +25,10 @@ The entry points for running evaluations, and the model wrapper they score with.
 [[autodoc]] eval.model.ModelRef
 
 [[autodoc]] eval.model.FlockCausalLM
+
+[[autodoc]] eval.model.load_tokenizer
+
+[[autodoc]] eval.tokenizer.SentencePieceTokenizer
 
 [[autodoc]] eval.requests.Request
 

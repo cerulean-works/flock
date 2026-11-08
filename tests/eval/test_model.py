@@ -3,6 +3,15 @@ from types import SimpleNamespace
 
 import pytest
 import torch
+from torch.nn.attention import SDPBackend, sdpa_kernel
+from transformers import (
+    Gemma4AudioConfig,
+    Gemma4Config,
+    Gemma4ForConditionalGeneration,
+    Gemma4TextConfig,
+    Gemma4VisionConfig,
+    PreTrainedTokenizerBase,
+)
 
 from flock.eval import model
 from flock.eval.model import FlockCausalLM, ModelRef, ScoringModel
@@ -43,14 +52,16 @@ def greedy_reference(scorer: ScoringModel, request: Request) -> bool:
 def greedy_requests(scorer: ScoringModel) -> list[Request]:
     """`REQUESTS`, and after each non-empty context the text of the model's next one and two greedy tokens."""
     requests = list(REQUESTS)
+    tokenizer = scorer.tokenizer
+    assert isinstance(tokenizer, PreTrainedTokenizerBase)
     for context in dict.fromkeys(request.context for request in REQUESTS if request.context):
-        ids = scorer.tokenizer.encode(context, add_special_tokens=False)
+        ids = tokenizer.encode(context, add_special_tokens=False)
         start = len(ids)
         with torch.no_grad():
             for _ in range(2):
                 ids.append(scorer.model(torch.tensor([ids])).logits[0, -1].argmax().item())
                 generated = ids[start:]
-                text = scorer.tokenizer.decode(generated)
+                text = tokenizer.decode(generated)
                 assert isinstance(text, str)  # one sequence of ids decodes to one string
                 requests.append(Request(context, text))
     return requests
@@ -125,6 +136,58 @@ def test_from_pretrained_refuses_a_flock_model_without_a_tokenizer(monkeypatch):
         ScoringModel.from_pretrained("flock:acme/m", device="cpu")
 
 
+def test_a_multimodal_model_takes_max_length_from_its_text_config(tokenizer):
+    # As Gemma 4's: no top-level max_position_embeddings, a vision config with its own, and an
+    # audio tower. The text config's length is short enough to cut some requests.
+    text_config = Gemma4TextConfig(
+        vocab_size=len(tokenizer),
+        vocab_size_per_layer_input=len(tokenizer),
+        hidden_size=32,
+        hidden_size_per_layer_input=8,
+        intermediate_size=64,
+        num_hidden_layers=2,
+        layer_types=["sliding_attention", "full_attention"],
+        sliding_window=8,
+        num_kv_shared_layers=0,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        head_dim=8,
+        max_position_embeddings=24,
+    )
+    vision_config = Gemma4VisionConfig(
+        hidden_size=16,
+        intermediate_size=32,
+        num_hidden_layers=1,
+        num_attention_heads=2,
+        num_key_value_heads=2,
+        head_dim=8,
+    )
+    audio_config = Gemma4AudioConfig(
+        hidden_size=16, num_hidden_layers=1, num_attention_heads=2, output_proj_dims=32
+    )
+    config = Gemma4Config(
+        text_config=text_config, vision_config=vision_config, audio_config=audio_config
+    )
+    assert not hasattr(config, "max_position_embeddings")
+    assert config.vision_config.max_position_embeddings != 24
+    torch.manual_seed(0)
+    multimodal = Gemma4ForConditionalGeneration(config).eval()
+    towers_ran = []
+    for tower in (multimodal.model.vision_tower, multimodal.model.audio_tower):
+        tower.register_forward_hook(lambda *args: towers_ran.append(True))
+
+    scorer = ScoringModel(multimodal, tokenizer, name="tiny-gemma4@0")
+    assert scorer.max_length == 24
+
+    # Cut to the text config's length, scored as the model's own unbatched forward pass, with
+    # neither tower running.
+    scores = scorer.loglikelihood(REQUESTS)
+    expected = torch.tensor([reference(scorer, request) for request in REQUESTS])
+    torch.testing.assert_close(scores.logprob, expected, atol=1e-4, rtol=0)
+    assert scores.tokens_cut.max() > 0
+    assert towers_ran == []
+
+
 def test_a_wrapped_flock_model_scores_as_its_own_forward_pass(tokenizer):
     flock_model = Olmo2(
         Olmo2Config(
@@ -189,7 +252,7 @@ def test_rejects_non_positive_batch_tokens(lm, tokenizer, batch_tokens):
 
 
 def test_from_pretrained_rejects_batch_tokens_before_loading(monkeypatch):
-    monkeypatch.setattr(model, "AutoTokenizer", None)  # any load would fail on None
+    monkeypatch.setattr(model, "load_tokenizer", None)  # any load would fail on None
     with pytest.raises(ValueError, match="batch_tokens must be at least 1"):
         ScoringModel.from_pretrained("org/repo@" + "a" * 40, batch_tokens=0)
 
@@ -288,6 +351,95 @@ def test_loglikelihood_restores_each_module_mode(scorer):
         scorer.model.eval()
 
 
+@pytest.mark.parametrize(
+    ("device", "attention", "backend"),
+    [("cuda", "sdpa", "EFFICIENT_ATTENTION"), ("cuda", "eager", None), ("cpu", "sdpa", None)],
+)
+def test_sdpa_backend_is_set_on_cuda_with_sdpa_attention_only(
+    scorer, monkeypatch, device, attention, backend
+):
+    # On the CPU there is no efficient kernel and no cuDNN to pin away, so CPU scores, which CI
+    # checks against unbatched references, run unpinned as before.
+    monkeypatch.setattr(ScoringModel, "device", property(lambda self: torch.device(device)))
+    monkeypatch.setattr(ScoringModel, "attention", property(lambda self: attention))
+
+    assert scorer.sdpa_backend == backend
+
+
+def sdpa_flags() -> tuple[bool, bool, bool, bool]:
+    """Which SDPA kernels PyTorch may pick: efficient, cuDNN, flash and math."""
+    return (
+        torch.backends.cuda.mem_efficient_sdp_enabled(),
+        torch.backends.cuda.cudnn_sdp_enabled(),
+        torch.backends.cuda.flash_sdp_enabled(),
+        torch.backends.cuda.math_sdp_enabled(),
+    )
+
+
+def test_every_forward_pass_runs_pinned_and_the_flags_come_back(scorer, monkeypatch):
+    monkeypatch.setattr(ScoringModel, "sdpa_backend", property(lambda self: "EFFICIENT_ATTENTION"))
+    forward = scorer.model.forward
+    seen = []
+
+    def recording_forward(**kwargs):
+        seen.append(sdpa_flags())
+        # The CPU has no efficient kernel, so the pass itself runs on the math one. This inner
+        # pin gives the outer one back on exit.
+        with sdpa_kernel(SDPBackend.MATH):
+            return forward(**kwargs)
+
+    monkeypatch.setattr(scorer.model, "forward", recording_forward)
+    before = sdpa_flags()
+    scorer.loglikelihood(REQUESTS)
+    scorer.rolling_loglikelihood(TEXTS, 8)
+    # Prepared inputs, as a training loop passes them, take the same path.
+    scorer.loglikelihood(REQUESTS, scorer.encode_requests(REQUESTS))
+    scorer.rolling_loglikelihood(TEXTS, 8, scorer.tokenize(list(TEXTS)))
+
+    assert len(seen) >= 4
+    assert set(seen) == {(True, False, False, False)}  # only the efficient kernel, in both paths
+    assert sdpa_flags() == before  # a training step after scoring gets its own choice back
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="the pin applies on CUDA only")
+@pytest.mark.parametrize("flock", [False, True], ids=["transformers", "flock"])
+def test_on_cuda_scoring_runs_pinned_and_repeats_in_bf16(lm, tokenizer, monkeypatch, flock):
+    # Both models have grouped-query attention (4 heads, 2 key-value heads), which Flock's
+    # attention hands to SDPA as `enable_gqa`: the pinned kernel must run it.
+    if flock:
+        config = Olmo2Config(
+            vocab_size=len(tokenizer),
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            max_position_embeddings=128,
+        )
+        cuda_model = FlockCausalLM(Olmo2(config).to("cuda", torch.bfloat16))
+    else:
+        cuda_model = copy.deepcopy(lm).to("cuda", torch.bfloat16)
+    scorer = ScoringModel(cuda_model, tokenizer, name="tiny@0")
+    forward = cuda_model.forward
+    seen = []
+
+    def recording_forward(**kwargs):
+        seen.append(sdpa_flags())
+        return forward(**kwargs)
+
+    monkeypatch.setattr(cuda_model, "forward", recording_forward)
+    first = scorer.loglikelihood(REQUESTS).logprob
+    second = scorer.loglikelihood(REQUESTS).logprob
+    # The rolling path too: full windows, no padding.
+    rolling = [scorer.rolling_loglikelihood(TEXTS, 8).logprob for _ in range(2)]
+
+    assert scorer.sdpa_backend == "EFFICIENT_ATTENTION"
+    assert set(seen) == {(True, False, False, False)}
+    assert torch.equal(first, second)
+    assert torch.equal(rolling[0], rolling[1])
+    assert first.isfinite().all() and rolling[0].isfinite().all()
+
+
 def test_score_rejects_a_model_that_ignores_logits_to_keep(scorer, monkeypatch):
     forward = scorer.model.forward
     monkeypatch.setattr(
@@ -382,7 +534,7 @@ def test_batched_rows_do_not_see_each_other(scorer, monkeypatch):
 
     monkeypatch.setattr(scorer.model, "forward", embedded_forward)
     # `_score` runs one forward pass over all the requests, so there is exactly one input.
-    logprob, _ = scorer._score(scorer._encode(REQUESTS))
+    logprob, _ = scorer._score(scorer.encode_requests(REQUESTS))
     [(embedded, attention_mask)] = inputs
 
     for i in range(len(REQUESTS)):
@@ -504,6 +656,69 @@ def test_rolling_loglikelihood_is_batch_size_and_order_invariant(scorer, batch_t
     scorer.batch_tokens = batch_tokens
     backward = scorer.rolling_loglikelihood(TEXTS[::-1], window).logprob
     torch.testing.assert_close(backward, one_batch.flip(0), atol=1e-4, rtol=1e-5)
+
+
+def test_add_bos_starts_every_non_empty_context_with_bos(lm, tokenizer):
+    with_bos = copy.deepcopy(tokenizer)
+    with_bos.bos_token = "<|pad|>"
+    plain = ScoringModel(lm, with_bos, name="tiny@0")
+    bos = ScoringModel(lm, with_bos, name="tiny@0", add_bos=True)
+
+    # Trailing whitespace moves to the continuation, and a whitespace-only context counts as empty.
+    requests = [*REQUESTS, Request("Answer: ", "Paris"), Request(" \n", " fox")]
+    for request in requests:
+        context, continuation = plain.encode(request)
+        if request.context.strip():  # an empty context is one prefix token already, BOS here
+            context = [with_bos.bos_token_id, *context]
+        assert bos.encode(request) == (context, continuation)
+
+    # The two requests of one context share one list, so a few-shot context is held once.
+    encoded = bos.encode_requests(requests)
+    assert encoded[0].context is encoded[1].context
+
+    expected = torch.tensor([reference(bos, request) for request in requests])
+    torch.testing.assert_close(bos.loglikelihood(requests).logprob, expected, atol=1e-4, rtol=1e-5)
+    # A rolling text's first window starts from BOS with or without it.
+    assert torch.equal(
+        bos.rolling_loglikelihood(TEXTS, 8).logprob, plain.rolling_loglikelihood(TEXTS, 8).logprob
+    )
+
+
+def test_a_context_with_no_ids_never_scores_from_a_padding_logit(scorer, monkeypatch):
+    tokenize = scorer.tokenize
+    monkeypatch.setattr(
+        scorer,
+        "tokenize",
+        lambda texts: [
+            tokenize([t.removeprefix("\u200b")])[0] if t != "\u200b" else [] for t in texts
+        ],
+    )
+
+    # Beside a longer request, left padding would put a padding position where its logit is read.
+    no_ids, longer = Request("\u200b", " fox"), Request("The quick brown fox", " jumps")
+    assert scorer.encode(no_ids).context == [scorer.tokenizer.eos_token_id]
+    expected = torch.tensor([reference(scorer, no_ids), reference(scorer, longer)])
+    torch.testing.assert_close(
+        scorer.loglikelihood([no_ids, longer]).logprob, expected, atol=1e-4, rtol=1e-5
+    )
+
+
+def test_add_bos_needs_a_bos_token(lm, tokenizer):
+    with pytest.raises(ValueError, match="add_bos is set, but the tokenizer has no BOS token"):
+        ScoringModel(lm, tokenizer, name="tiny@0", add_bos=True)
+
+
+def test_from_pretrained_refuses_add_bos_before_the_weights_load(tokenizer, monkeypatch):
+    loaded = []
+    monkeypatch.setattr(model, "load_tokenizer", lambda ref: tokenizer)
+    monkeypatch.setattr(
+        model.AutoModelForCausalLM, "from_pretrained", lambda *args, **kwargs: loaded.append(1)
+    )
+
+    # A full commit hash resolves offline.
+    with pytest.raises(ValueError, match="add_bos is set, but the tokenizer has no BOS token"):
+        ScoringModel.from_pretrained(f"acme/tiny@{'0' * 40}", device="cpu", add_bos=True)
+    assert loaded == []
 
 
 def test_rolling_loglikelihood_starts_from_bos_when_there_is_one(lm, tokenizer, monkeypatch):

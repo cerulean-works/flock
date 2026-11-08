@@ -8,7 +8,15 @@ A gold-only task, such as math, code or LAMBADA, has one choice per doc, so it r
 
 ## Perplexity
 
-A [`~eval.tasks.PerplexityTask`] reports one metric, `bits_per_byte`: the summed log-probability of all of the task's docs, negated and divided by their total UTF-8 bytes, in base 2 (Paloma, App. B). It is a ratio of sums, not a mean over docs, so a long doc counts by its length. Multiple-choice `bpb` is a mean over docs, which is why the two have different names and never share a suite. Lower is better.
+A [`~eval.tasks.PerplexityTask`] reports three metrics, each a ratio of sums over all of the task's docs, not a mean over docs, so a long doc counts by its length. Lower is better for all three.
+
+| Metric | Formula |
+|---|---|
+| `bits_per_byte` | the summed log-probability of all docs, negated and divided by their total UTF-8 bytes, in base 2 (Paloma, App. B) |
+| `loss_per_token` | the summed log-probability of all docs, negated and divided by their total tokens, in nats: the token-averaged cross-entropy a trainer reports as its loss |
+| `perplexity` | `exp(loss_per_token)`, or infinity if that overflows a float (above about 709.78 nats), which `results.json` writes as `null` |
+
+Every token is predicted exactly once (see [Scoring behavior](scoring#scoring-a-whole-text)), so the token count is the docs' own token count, without the prefix token. `loss_per_token` and `perplexity` depend on the tokenizer, so they compare models only when the models share one. `bits_per_byte` doesn't. The task's `primary_metric` says which one to read first: `bits_per_byte` for Paloma, `perplexity` for `fineweb_edu` and the `fineweb` members. The `fineweb` suite still averages their `bits_per_byte`: see [Suites](tasks#suites). Multiple-choice `bpb` is a mean over docs, which is why it has a different name and never shares a suite with `bits_per_byte`.
 
 ## Functions
 

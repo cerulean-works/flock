@@ -18,6 +18,8 @@ guide:
     title: Authenticate an unattended job
 - title: Hub
   sections:
+  - local: hub/use-datasets
+    title: Use datasets
   - local: hub/store-models
     title: Store and load models
 - title: Training
@@ -34,6 +36,12 @@ guide:
     title: Add an evaluation task
   - local: evals/compare-regression
     title: Compare with the regression bank
+  - local: evals/fineweb-edu
+    title: Scoring the FineWeb-Edu dev set
+  - local: evals/fineweb
+    title: Scoring held-out web text in three languages
+  - local: evals/tw-text
+    title: Scoring Taiwan Traditional Chinese text
 - title: App
   sections:
   - title: Using Cerulean Flock
@@ -48,6 +56,8 @@ guide:
       title: Browse storage and datasets
     - local: app/browse-models
       title: Browse and manage models
+    - local: app/share-publicly
+      title: Share projects and datasets publicly
     - local: app/import-wandb
       title: Import W&B runs
     - local: app/configure-budgets

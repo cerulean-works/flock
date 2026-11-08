@@ -14,7 +14,7 @@ import { slotOf, type Series } from '#lib/chart/series.ts';
 import {
 	LIVE_STATES,
 	type MetricStream,
-	type Person,
+	type Owner,
 	type ProjectMeta,
 	type RunPage,
 	type SectionDef
@@ -41,7 +41,8 @@ import {
 	mergeOrder,
 	migrateOrder,
 	moveKey,
-	parseLayout
+	parseLayout,
+	pinFirst
 } from './layout.ts';
 import { resolvePanel, type PanelView } from './panels.ts';
 
@@ -161,6 +162,10 @@ export const MAX_PLOT_H = 720;
 
 const layoutKey = (entity: string, project: string) => `flock:panels:${entity}/${project}`;
 const columnsKey = (entity: string, project: string) => `flock:columns:${entity}/${project}`;
+const hiddenKey = (entity: string, project: string) => `flock:hidden:${entity}/${project}`;
+
+/** Hidden runs kept per project, the latest hidden last: enough for any sweep. */
+const HIDDEN_MAX = 5000;
 
 /** A value this browser kept, or null when there's none (or storage is blocked or unreadable). */
 function readStored(key: string): unknown {
@@ -199,10 +204,15 @@ export interface RunDialog {
 export class Workspace {
 	#meta: () => ProjectMeta;
 	#page: () => RunPage;
-	#members: () => readonly Person[];
+	#members: () => readonly Owner[];
 
-	/** Run ids hidden from charts. Kept across pages so a hidden run stays hidden. */
+	/**
+	 * Run ids hidden from charts. Kept across pages so a hidden run stays hidden, and in this
+	 * browser per project (see `restoreLayout`).
+	 */
 	readonly hidden = new SvelteSet<string>();
+	/** The project `hidden` was read for. */
+	#hiddenFor: string | null = null;
 	/** Run ids selected in the table, for changing several at once. */
 	readonly selected = new SvelteSet<string>();
 	/** The open run dialog, if any. */
@@ -237,6 +247,13 @@ export class Workspace {
 	 * rest of a panel's settings are kept in its layout (`panelConfig`).
 	 */
 	readonly zoom = new SvelteMap<string, Zoom>();
+	/**
+	 * Id of a pinned panel being moved: it goes where it's put, even past unpinned panels, until
+	 * it's let go (and the viewer says whether to unpin it, see `unpinAsk`).
+	 */
+	loosePanel = $state<string | null>(null);
+	/** A pinned panel left past unpinned ones, waiting on the viewer to unpin it or put it back. */
+	unpinAsk = $state.raw<{ section: string; panel: number; from: number } | null>(null);
 	/** Id of the panel open in the panel editor. */
 	editing = $state<string | null>(null);
 	readonly collapsed = new SvelteSet<string>();
@@ -268,7 +285,7 @@ export class Workspace {
 	constructor(
 		meta: () => ProjectMeta,
 		page: () => RunPage,
-		members: () => readonly Person[] = () => []
+		members: () => readonly Owner[] = () => []
 	) {
 		this.#meta = meta;
 		this.#page = page;
@@ -284,7 +301,10 @@ export class Workspace {
 		return this.#page();
 	}
 
-	/** The org's members by id: who logged the runs, as the `owner` column has them. */
+	/**
+	 * Who logged the runs, by id, as the `owner` column has them: the org's members, or the
+	 * project's owners for a viewer outside the org.
+	 */
 	people: People = $derived.by(
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- rebuilt, never mutated
 		() => new Map(this.#members().map((m) => [m.id, m]))
@@ -485,6 +505,7 @@ export class Workspace {
 
 	toggleRun(row: number) {
 		toggle(this.hidden, this.page.runs[row].id);
+		this.#saveHidden();
 	}
 
 	/** Show every run on the page, or hide every run if all are already shown. */
@@ -495,6 +516,13 @@ export class Workspace {
 			if (allShown) this.hidden.add(id);
 			else this.hidden.delete(id);
 		}
+		this.#saveHidden();
+	}
+
+	/** Keep the hidden runs, when they were read for this project (not on a run's page). */
+	#saveHidden() {
+		const key = hiddenKey(this.meta.entity, this.meta.project);
+		if (this.#hiddenFor === key) store(key, [...this.hidden].slice(-HIDDEN_MAX));
 	}
 
 	togglePin(row: number) {
@@ -628,26 +656,52 @@ export class Workspace {
 		return saved && aliases.size ? migrateOrder(saved, (k) => aliases.get(k)) : (saved ?? []);
 	}
 
-	/** Sections in the viewer's order, with their panels in the viewer's order. */
-	sections = $derived.by((): SectionDef[] => {
-		const { order, sections } = this.layout;
-		const panels = this.meta.panels;
-		return arrange(this.meta.sections, (s) => s.key, sections).map((sec) =>
-			order[sec.key]
-				? { ...sec, panels: arrange(sec.panels, (p) => panels[p].id, this.#orderOf(sec.key)) }
-				: sec
-		);
+	/** Ids of the pinned panels. */
+	pinnedPanels = $derived.by((): ReadonlySet<string> => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- rebuilt, never mutated
+		return new Set(this.layout.pinned);
 	});
 
 	/**
-	 * Read this project's layout and column settings from the browser. Called after hydration,
-	 * so the page the server rendered (in the default layout) is what hydrates.
+	 * Sections in the viewer's order, with their panels in the viewer's order: pinned ones first
+	 * (but one being moved, `loosePanel`).
 	 */
-	restoreLayout() {
+	sections = $derived.by((): SectionDef[] => {
+		const { order, sections } = this.layout;
+		const panels = this.meta.panels;
+		const pinned = this.pinnedPanels;
+		const loose = this.loosePanel;
+		return arrange(this.meta.sections, (s) => s.key, sections).map((sec) => {
+			let of = order[sec.key]
+				? arrange(sec.panels, (p) => panels[p].id, this.#orderOf(sec.key))
+				: sec.panels;
+			if (sec.panels.some((p) => pinned.has(panels[p].id))) {
+				// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a lookup, never rendered
+				const index = new Map(of.map((p) => [panels[p].id, p]));
+				of = pinFirst([...index.keys()], pinned, loose).map((id) => index.get(id)!);
+			}
+			return of === sec.panels ? sec : { ...sec, panels: of };
+		});
+	});
+
+	/**
+	 * Read this project's layout, column settings and hidden runs from the browser. Called after hydration,
+	 * so the page the server rendered (in the default layout) is what hydrates. A run's own page
+	 * (`hidden` false) leaves out the hidden runs, so the run it shows is never hidden.
+	 */
+	restoreLayout({ hidden: withHidden = true } = {}) {
 		const { entity, project } = this.meta;
 		const key = layoutKey(entity, project);
 		if (!(key in this.layouts))
 			this.layouts = { ...this.layouts, [key]: parseLayout(readStored(key)) };
+		const hidden = hiddenKey(entity, project);
+		if (withHidden && this.#hiddenFor !== hidden) {
+			this.#hiddenFor = hidden;
+			this.hidden.clear();
+			const saved = readStored(hidden);
+			if (Array.isArray(saved))
+				for (const id of saved) if (typeof id === 'string') this.hidden.add(id);
+		}
 		const cols = columnsKey(entity, project);
 		if (!(cols in this.columnsByProject))
 			this.columnsByProject = {
@@ -662,19 +716,67 @@ export class Workspace {
 		if (persist) store(key, layout);
 	}
 
-	/** Move a panel to `to`, an index into its section's (arranged) panels. */
-	movePanel(section: string, panel: number, to: number) {
+	/**
+	 * Move a panel to `to`, an index into its section's (arranged) panels. An unpinned panel
+	 * stays behind the pinned ones; a pinned one stays with them unless it's `loosePanel`.
+	 * Whether it moved.
+	 */
+	movePanel(section: string, panel: number, to: number): boolean {
 		const sec = this.sections.find((s) => s.key === section);
-		if (!sec) return;
+		if (!sec) return false;
 		const ids = sec.panels.map((p) => this.meta.panels[p].id);
+		const id = this.meta.panels[panel].id;
+		const pins = ids.filter((k) => k !== id && this.pinnedPanels.has(k)).length;
+		if (!this.pinnedPanels.has(id)) to = Math.max(to, pins);
+		else if (this.loosePanel !== id) to = Math.min(to, pins);
 		const from = sec.panels.indexOf(panel);
 		const moved = moveKey(ids, from, to);
-		if (from === -1 || moved[from] === ids[from]) return;
+		if (from === -1 || moved[from] === ids[from]) return false;
 		// Saved in today's ids, so metric keys of an older layout are replaced as it's saved.
 		this.#saveLayout({
 			...this.layout,
 			order: { ...this.layout.order, [section]: mergeOrder(this.#orderOf(section), moved) }
 		});
+		return true;
+	}
+
+	isPinned(panel: number) {
+		return this.pinnedPanels.has(this.meta.panels[panel].id);
+	}
+
+	/** Pin a panel to the front of its section, or unpin it (it goes behind those still pinned). */
+	togglePinned(panel: number) {
+		const { id, section } = this.meta.panels[panel];
+		const pinned = this.layout.pinned.filter((k) => k !== id);
+		if (pinned.length === this.layout.pinned.length) {
+			this.#saveLayout({ ...this.layout, pinned: [...pinned, id] });
+			this.movePanel(section, panel, 0);
+		} else this.#saveLayout({ ...this.layout, pinned });
+	}
+
+	/**
+	 * Once a pinned panel being moved (`loosePanel`) is let go: kept where it is if no unpinned
+	 * panel is before it; otherwise the viewer is asked to unpin it (`unpinAsk`). `from` is where
+	 * it was, to put it back.
+	 */
+	settlePinned(section: string, panel: number, from: number) {
+		const panels = this.sections.find((s) => s.key === section)?.panels ?? [];
+		const at = panels.indexOf(panel);
+		const past = panels.slice(0, at).some((p) => !this.isPinned(p));
+		if (past) this.unpinAsk = { section, panel, from };
+		else this.loosePanel = null;
+	}
+
+	/** Answer `unpinAsk`: unpin the panel where it was left, or put it back with the pinned. */
+	answerUnpin(unpin: boolean) {
+		const ask = this.unpinAsk;
+		if (!ask) return;
+		if (unpin) {
+			const id = this.meta.panels[ask.panel].id;
+			this.#saveLayout({ ...this.layout, pinned: this.layout.pinned.filter((k) => k !== id) });
+		} else this.movePanel(ask.section, ask.panel, ask.from);
+		this.loosePanel = null;
+		this.unpinAsk = null;
 	}
 
 	/** Move a section to `to`, an index into the (arranged) sections. */

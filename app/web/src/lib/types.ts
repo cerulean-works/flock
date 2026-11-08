@@ -17,9 +17,23 @@ export interface ProjectInfo {
 	run_count: number;
 	active_run_count: number;
 	column_count: number;
+	/** Public projects can be read by anyone with the link (014, D110). */
+	visibility: Visibility;
+	/** The ID of the user who created it, who may change its visibility (D118); null if unknown. */
+	created_by: number | null;
+	/** What the caller may do with it; only the project's own GET says. */
+	access?: Access;
 }
 
+export type Visibility = 'private' | 'public';
+
 export type Role = 'admin' | 'member';
+
+/**
+ * What the viewer may do in an org's projects and datasets (D111): `public` is someone outside
+ * the org, signed in or not, who can only read what was made public.
+ */
+export type Access = Role | 'public';
 
 /** An organization (a wandb entity), with the caller's role in it. */
 export interface OrgInfo {
@@ -258,6 +272,8 @@ export interface DatasetInfo {
 		indices: { name: string; type: string; columns: string[] }[];
 	};
 	tags: { name: string; version: number }[];
+	/** Anyone with the link can open it (D115). */
+	public?: boolean;
 }
 
 /** A cell, rendered by the API for display (D90). */
@@ -537,6 +553,17 @@ export interface Person {
 	avatar_url: string | null;
 }
 
+/**
+ * Someone who logged runs, as a project's owners and a run's details name them: without their
+ * email for viewers outside the org (D113).
+ */
+export interface Owner {
+	id: number;
+	name: string;
+	email?: string;
+	avatar_url: string | null;
+}
+
 export type FeedKind =
 	'run_started' | 'run_finished' | 'run_failed' | 'run_crashed' | 'project_created';
 
@@ -676,7 +703,12 @@ export interface ColumnDef {
 	width: number;
 }
 
-export type MetricFormat = 'num' | 'exp' | 'pct' | 'int' | 'si';
+/**
+ * How a metric's values read. The byte formats show a unit sized to the values (`512MB`,
+ * `40GB`); `mb` and `gb` are for values logged in those units.
+ */
+export type MetricFormat = 'num' | 'exp' | 'pct' | 'int' | 'si' | ByteFormat;
+export type ByteFormat = 'bytes' | 'bytes/s' | 'mb' | 'gb';
 
 /**
  * Where a metric comes from: what the run logged (plotted against `_step`), or the system
@@ -830,6 +862,8 @@ export interface RunDetail {
 	exitcode: number | null;
 	/** The account that logged it. */
 	owner: number | null;
+	/** That account, named; null for runs from before accounts. */
+	owner_user?: Owner | null;
 	/** In effect: set by hand, else detected. */
 	gpu_type: string | null;
 	gpu_count: number | null;
@@ -837,8 +871,8 @@ export interface RunDetail {
 	gpu_detected: { type: string | null; count: number | null };
 	gpu_hours: number;
 	runtime: number;
-	/** What its GPU hours cost at the org's prices, in its currency. */
-	cost: number;
+	/** What its GPU hours cost at the org's prices, in its currency; null outside the org. */
+	cost: number | null;
 	config: Record<string, unknown>;
 	summary: Record<string, unknown>;
 	/** Flocks from before metric definitions were read send none. */

@@ -18,7 +18,7 @@ from app.api.src.core.errors import Conflict, Forbidden, NotFound, TooManyAttemp
 if TYPE_CHECKING:
     import asyncpg
 
-    from app.api.src.core.store import Org, Store
+    from app.api.src.core.store import Org, Project, Store
 
 log = logging.getLogger(__name__)
 
@@ -244,9 +244,18 @@ class Accounts:
         """Every account, oldest first."""
         return await self._users("true")
 
-    def role(self, user: User, org: Org) -> str | None:
-        """``"admin"``, ``"member"``, or None for users outside the org."""
+    def role(self, user: User | None, org: Org) -> str | None:
+        """``"admin"``, ``"member"``, or None for users outside the org (and anonymous
+        viewers, ``None``)."""
+        if user is None:
+            return None
         return "admin" if user.is_superadmin else user.roles.get(org.pk)
+
+    def access(self, viewer: User | None, project: Project) -> str | None:
+        """What ``viewer`` (None: anonymous) can do with ``project`` (D111): ``"admin"``,
+        ``"member"``, ``"public"`` (read only, as anyone outside its org) or None (it's
+        private to them)."""
+        return self.role(viewer, project.org) or ("public" if project.public else None)
 
     async def default_org(self, user: User) -> Org | None:
         store = self.store
@@ -296,8 +305,10 @@ class Accounts:
             "avatar_url": self.store.avatars.url(user.avatar),
         }
 
-    async def briefs(self, pks: Iterable[int | None]) -> dict[int, dict[str, Any]]:
-        """``brief`` of each user of ``pks`` that exists, by pk."""
+    async def briefs(
+        self, pks: Iterable[int | None], public: bool = False
+    ) -> dict[int, dict[str, Any]]:
+        """``brief`` of each user of ``pks`` that exists, by pk (``public``: without email)."""
         wanted = list({pk for pk in pks if pk is not None})
         if not wanted:
             return {}
@@ -308,7 +319,7 @@ class Accounts:
             pk: {
                 "id": pk,
                 "name": name,
-                "email": email,
+                **({} if public else {"email": email}),
                 "avatar_url": self.store.avatars.url(bytes(avatar) if avatar else None),
             }
             for pk, name, email, avatar in records

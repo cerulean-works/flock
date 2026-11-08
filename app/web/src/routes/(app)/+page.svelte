@@ -66,7 +66,11 @@
 			</section>
 
 			<aside class="order-first min-w-0 xl:order-none">
-				<BudgetPanel budget={data.budget} thisMonth={data.thisMonth} admin={data.shell.admin} />
+				<BudgetPanel
+					budget={data.budget}
+					thisMonth={data.thisMonth}
+					admin={data.shell.access === 'admin'}
+				/>
 			</aside>
 		</div>
 	{:else}

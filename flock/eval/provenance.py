@@ -35,10 +35,14 @@ class Provenance:
             The forward-pass budget in padded tokens.
         max_length (`int`):
             The model's input limit in tokens. Longer inputs lost tokens from the left.
+        add_bos (`bool`):
+            Whether every non-empty context started with the tokenizer's BOS token. Results files written before it was added have no `add_bos`: none added one.
         attention (`str`):
-            The attention implementation (`sdpa`, `eager`, ...), which changes bfloat16 scores.
+            The attention implementation (`sdpa`, `eager`, ...), which changes BF16 scores.
+        sdpa_backend (`str` or `None`):
+            The SDPA kernel scoring was pinned to, `"EFFICIENT_ATTENTION"` on CUDA with `sdpa` attention, or `None` where no pin applied (a device other than CUDA, other attention). Results files written before the pin have no `sdpa_backend`: PyTorch chose the kernel per batch, which changes BF16 scores run to run.
         torch (`str`), transformers (`str`), tokenizers (`str`), datasets (`str`), python (`str`):
-            Library and interpreter versions. `tokenizers` decides token boundaries, and `datasets` reads the rows.
+            Library and interpreter versions. `tokenizers` decides token boundaries, except for a repo tokenized by [`~eval.tokenizer.SentencePieceTokenizer`], where `sentencepiece` does. Its version isn't recorded: an install from the lockfile at `flock_commit` has the version pinned there. `datasets` reads the rows.
         created_at (`str`):
             When `collect` ran, in ISO 8601 UTC. [`~eval.run.evaluate`] calls it once the model has loaded, just before scoring starts.
     """
@@ -53,7 +57,9 @@ class Provenance:
     dtype: str
     batch_tokens: int
     max_length: int
+    add_bos: bool
     attention: str
+    sdpa_backend: str | None
     torch: str
     transformers: str
     tokenizers: str
@@ -71,7 +77,9 @@ class Provenance:
         dtype: torch.dtype,
         batch_tokens: int,
         max_length: int,
+        add_bos: bool,
         attention: str,
+        sdpa_backend: str | None,
         model_digest: str | None = None,
     ) -> Provenance:
         """Collects provenance for a run on this machine, now."""
@@ -84,7 +92,9 @@ class Provenance:
             dtype=str(dtype).removeprefix("torch."),
             batch_tokens=batch_tokens,
             max_length=max_length,
+            add_bos=add_bos,
             attention=attention,
+            sdpa_backend=sdpa_backend,
             torch=torch.__version__,
             transformers=transformers.__version__,
             tokenizers=tokenizers.__version__,

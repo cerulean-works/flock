@@ -5,7 +5,8 @@ import {
 	mergeOrder,
 	migrateOrder,
 	moveKey,
-	pageAt,
+	pageStart,
+	pinFirst,
 	parseLayout,
 	parsePanelConfig
 } from './layout.ts';
@@ -18,7 +19,8 @@ describe('parseLayout', () => {
 			order: { train: ['train/loss', 'train/acc'] },
 			height: { train: 240 },
 			rows: {},
-			panels: {}
+			panels: {},
+			pinned: []
 		});
 	});
 
@@ -49,7 +51,8 @@ describe('parseLayout', () => {
 			order: { b: ['m'] },
 			height: { b: 300 },
 			rows: {},
-			panels: {}
+			panels: {},
+			pinned: []
 		});
 	});
 
@@ -201,21 +204,46 @@ describe('mergeOrder', () => {
 	});
 });
 
-describe('pageAt', () => {
-	it('is the page showing the panel at `start`', () => {
-		expect(pageAt(0, 8, 20)).toBe(0);
-		expect(pageAt(8, 8, 20)).toBe(1);
-		expect(pageAt(12, 8, 20)).toBe(1);
+describe('pageStart', () => {
+	it('starts the page at `start`', () => {
+		expect(pageStart(0, 8, 20)).toBe(0);
+		expect(pageStart(8, 8, 20)).toBe(8);
 	});
 
 	it('keeps the first panel shown when pages grow or shrink', () => {
-		// Left at 13–18 of 108: 9–16 at 8 a page, 13–16 at 4.
-		expect(pageAt(12, 8, 108)).toBe(1);
-		expect(pageAt(12, 4, 108)).toBe(3);
+		expect(pageStart(12, 8, 108)).toBe(12);
+		expect(pageStart(12, 4, 108)).toBe(12);
+	});
+
+	it('fills the last page with panels from the one before', () => {
+		// 17–20 of 20 at 8 a page shows 13–20.
+		expect(pageStart(16, 8, 20)).toBe(12);
+		expect(pageStart(16, 12, 20)).toBe(8);
+		expect(pageStart(16, 4, 20)).toBe(16);
 	});
 
 	it('stays in range when there are fewer panels than it was left at', () => {
-		expect(pageAt(40, 8, 20)).toBe(2);
-		expect(pageAt(5, 8, 0)).toBe(0);
+		expect(pageStart(40, 8, 20)).toBe(12);
+		expect(pageStart(5, 8, 3)).toBe(0);
+		expect(pageStart(5, 8, 0)).toBe(0);
+	});
+});
+
+describe('pinFirst', () => {
+	const pinned = new Set(['c', 'e']);
+
+	it('puts pinned keys first, each part in its own order', () => {
+		expect(pinFirst(['a', 'b', 'c', 'd', 'e'], pinned)).toEqual(['c', 'e', 'a', 'b', 'd']);
+	});
+
+	it('leaves a loose key where it is', () => {
+		expect(pinFirst(['a', 'b', 'c', 'd', 'e'], pinned, 'e')).toEqual(['c', 'a', 'b', 'd', 'e']);
+		expect(pinFirst(['e', 'a', 'c'], pinned, 'e')).toEqual(['e', 'c', 'a']);
+	});
+});
+
+describe('parseLayout pins', () => {
+	it('keeps pinned ids once each', () => {
+		expect(parseLayout({ pinned: ['a', 'b', 'a', 3] }).pinned).toEqual(['a', 'b']);
 	});
 });

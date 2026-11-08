@@ -212,3 +212,23 @@ describe('avatarFileError', () => {
 		['a larger image', file(1024 * 1024 + 1, 'image/png')]
 	])('refuses %s', (_, f) => expect(avatarFileError(f)).toBeTypeOf('string'));
 });
+
+describe('byte formats', () => {
+	it('labels ticks in a unit sized to their spacing', () => {
+		expect(formatTick(40e9, 20e9, 'bytes')).toBe('40GB');
+		expect(formatTick(1.5e9, 0.5e9, 'bytes')).toBe('1.5GB');
+		expect(formatTick(150e6, 50e6, 'bytes')).toBe('150MB');
+		expect(formatTick(2e6, 1e6, 'bytes/s')).toBe('2MB/s');
+		expect(formatTick(4000, 2000, 'mb')).toBe('4GB');
+		expect(formatTick(200, 100, 'gb')).toBe('0.2TB');
+		expect(formatTick(40, 20, 'gb')).toBe('40GB');
+	});
+
+	it('reads out values in at least one of their unit', () => {
+		expect(formatMetric(81_559_000_000, 'bytes')).toBe('81.56 GB');
+		expect(formatMetric(512e6, 'bytes')).toBe('512 MB');
+		expect(formatMetric(999, 'bytes')).toBe('999 B');
+		expect(formatMetric(2048, 'mb')).toBe('2.048 GB');
+		expect(formatMetric(3e6, 'bytes/s')).toBe('3 MB/s');
+	});
+});

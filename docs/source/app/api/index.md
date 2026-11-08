@@ -21,6 +21,16 @@ This API refuses wandb keys, however they're sent, with 401 and the error "wandb
 
 For CI and other machines nobody signs in on, use a person's CLI token, from `flock token`, as `FLOCK_TOKEN`.
 
+### Anonymous reads[[anonymous-reads]]
+
+[Public projects and datasets](../share-publicly) can be read with no credential at all. These endpoints answer a request without an `Authorization` header as an outsider, and so does a signed-in user who isn't a member:
+
+- `GET /orgs/{org}` and `GET /projects?entity={org}`
+- on a public project: `GET /projects/{entity}/{project}`, `GET .../owners`, `GET .../columns`, `GET .../runs`, `POST .../runs/query`, `GET .../history`, `POST .../history/query`, `GET .../runs/{run}`, `GET .../runs/{run}/history`, `GET .../runs/{run}/logs`, `GET .../runs/{run}/files`, `GET .../runs/{run}/files/{name}`, `GET .../workspace` and `GET .../stream`
+- on a public dataset: `GET /orgs/{org}/datasets/info`, `rows`, `cell`, `versions` and `readme`
+
+Private projects and datasets answer 404, as unknown ones do. A credential that's present but invalid or expired still answers 401, rather than the public view, so a client knows to sign in again. A wandb key still answers 401. No client wraps anonymous reads: `wandb.Api()` and the `flock` command still need credentials.
+
 ## Conventions
 
 - **Bodies** are JSON, sent with `Content-Type: application/json`. Most bodies reject fields they don't know, with 422.
@@ -62,7 +72,8 @@ All paths are relative to `/api/v1`. In paths, `{entity}` is an organization's I
 | `GET /orgs/{org}/invites`, `POST /orgs/{org}/invites`, `DELETE /orgs/{org}/invites/{id}` | Pending invitations. | [Organizations](orgs#invitations) |
 | `GET /invites/{token}`, `POST /invites/{token}/accept` | Inspect and accept an invitation. Public. | [Organizations](orgs#invitation-links) |
 | `GET /projects`, `POST /projects` | Your projects, and creating one. | [Projects](projects#projects) |
-| `GET /projects/{entity}/{project}`, `PATCH ...`, `DELETE ...` | One project. | [Projects](projects#projects) |
+| `GET /projects/{entity}/{project}`, `PATCH ...`, `DELETE ...` | One project, and its visibility. | [Projects](projects#projects) |
+| `GET .../owners` | The users who logged a project's runs. | [Projects](projects#projects) |
 | `GET .../runs/{run}`, `PATCH .../runs/{run}`, `DELETE .../runs/{run}` | One run. | [Projects](projects#runs) |
 | `POST .../runs/update`, `POST .../runs/delete`, `POST .../runs/move` | Change many runs. | [Projects](projects#bulk-operations) |
 | `GET .../runs/{run}/logs` | A run's console output. | [Projects](projects#run-logs) |
@@ -81,6 +92,7 @@ All paths are relative to `/api/v1`. In paths, `{entity}` is an organization's I
 | `GET /me/s3-keys`, `POST /me/s3-keys`, `DELETE /me/s3-keys/{id}` | Your S3 keys. | [S3](s3#keys) |
 | `GET /orgs/{org}/buckets`, `POST ...`, `GET /orgs/{org}/buckets/{name}`, `DELETE ...` | The organization's S3 buckets. | [S3](s3#buckets) |
 | `GET /orgs/{org}/datasets/...` and the rest | The Lance datasets in `flock-datasets`. | [Datasets](datasets) |
+| `PUT /orgs/{org}/datasets/public`, `DELETE ...` | Make a dataset public or private. | [Datasets](datasets#public) |
 | `GET /orgs/{org}/models`, `GET /orgs/{org}/models/{name}`, `DELETE ...` | The organization's models. | [Models](models#models-and-versions) |
 | `GET .../models/{name}/versions`, `GET .../models/{name}/resolve` | A model's versions. | [Models](models#models-and-versions) |
 | `PUT .../models/{name}/primary`, `PUT .../models/{name}/tags/{tag}`, `DELETE ...` | The primary version and tags. | [Models](models#tags-and-primary) |

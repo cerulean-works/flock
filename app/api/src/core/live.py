@@ -35,9 +35,13 @@ def event_message(project: int, run: str | None, event: str, data: Any) -> str:
     return orjson.dumps(message, option=orjson.OPT_SERIALIZE_NUMPY).decode()
 
 
-def close_message(project: int) -> str:
-    """End every stream of ``project`` (renamed or deleted), after the events before it."""
-    return orjson.dumps({"p": project, "close": True}).decode()
+def close_message(project: int, outsiders: bool = False) -> str:
+    """End every stream of ``project`` (renamed or deleted), or only outsiders' (made private,
+    D110: they get a ``project`` event saying so first), after the events before it."""
+    message: dict[str, Any] = {"p": project, "close": True}
+    if outsiders:
+        message["outsiders"] = True
+    return orjson.dumps(message).decode()
 
 
 async def publish(conn: asyncpg.Connection, messages: Sequence[str]) -> None:
@@ -60,14 +64,15 @@ async def publish(conn: asyncpg.Connection, messages: Sequence[str]) -> None:
 class Subscriber:
     """One dashboard connection: the runs it shows and a bounded queue of encoded events."""
 
-    __slots__ = ("closed", "queue", "runs", "system")
+    __slots__ = ("closed", "outsider", "queue", "runs", "system")
 
     # Events a subscriber may fall behind by before it is disconnected (and reconnects).
     QUEUE_SIZE = 512
 
-    def __init__(self, runs: Iterable[str], system: bool = False) -> None:
+    def __init__(self, runs: Iterable[str], system: bool = False, outsider: bool = False) -> None:
         self.runs = frozenset(runs)
         self.system = system  # also wants system metric samples
+        self.outsider = outsider  # reads the project only because it's public (D111)
         self.queue: asyncio.Queue[bytes | None] = asyncio.Queue(self.QUEUE_SIZE)
         self.closed = False
 
@@ -123,9 +128,11 @@ class Hub:
         series = {key: {"rows": rows, "x": x, "y": y} for key, (rows, x, y) in points.items()}
         return Hub.event(stream, {"run": run, "lines": lines, "series": series})
 
-    def subscribe(self, project: int, runs: Iterable[str], system: bool = False) -> Subscriber:
+    def subscribe(
+        self, project: int, runs: Iterable[str], system: bool = False, outsider: bool = False
+    ) -> Subscriber:
         """Subscribe to runs of the project with primary key ``project``."""
-        sub = Subscriber(runs, system)
+        sub = Subscriber(runs, system, outsider)
         self._subscribers.setdefault(project, set()).add(sub)
         return sub
 
@@ -145,10 +152,19 @@ class Hub:
         for sub in self._subscribers.get(project, ()):
             sub.push(event)
 
-    def close_project(self, project: int) -> None:
-        """End every stream of a project (after it was renamed or deleted)."""
-        for sub in self._subscribers.pop(project, ()):
+    def close_project(self, project: int, outsiders: bool = False) -> None:
+        """End every stream of a project (after it was renamed or deleted), or only outsiders'
+        (after it was made private)."""
+        if not outsiders:
+            for sub in self._subscribers.pop(project, ()):
+                sub.close()
+            return
+        # Only they are told why: members' streams carry on.
+        event = Hub.event("project", {"visibility": "private"})
+        for sub in [s for s in self._subscribers.get(project, ()) if s.outsider]:
+            sub.push(event)
             sub.close()
+            self.unsubscribe(project, sub)
 
     def close(self) -> None:
         for subs in self._subscribers.values():
@@ -216,7 +232,7 @@ class Relay:
         message = orjson.loads(payload)
         project = message["p"]
         if message.get("close"):
-            self.hub.close_project(project)
+            self.hub.close_project(project, message.get("outsiders", False))
         elif "s" in message:
             await self._points(project, message)
         elif message["r"] is None:

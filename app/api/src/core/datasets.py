@@ -428,6 +428,14 @@ class Datasets:
         except Exception:
             log.exception("could not create the trash bucket %s", self.trash)
         await self.store.s3.ensure_all_managed()
+        await self._close_existing()
+
+    async def _close_existing(self) -> None:
+        try:
+            if closed := await self.close_existing():
+                log.info("flagged %d existing datasets private", closed)
+        except Exception:
+            log.exception("flagging existing datasets private failed: their orgs stay closed")
 
     async def _ensure_trash(self) -> str:
         upstream = self._upstream()
@@ -906,6 +914,108 @@ class Datasets:
         text = data[: self.README_BYTES].decode("utf-8", errors="replace")
         return {"text": text, "truncated": truncated}
 
+    # ------------------------------------------------------------------ public datasets (D115)
+
+    async def is_public(self, org: Org, path: str) -> bool:
+        """Whether the dataset at exactly ``path`` is public: unless it was made private, once the org is open (``close_existing``)."""
+        return await self.store.db.fetchval(
+            "SELECT open_datasets AND NOT EXISTS (SELECT FROM private_datasets "
+            "WHERE org_pk = $1 AND path = $2) FROM orgs WHERE pk = $1",
+            org.pk,
+            path,
+        )
+
+    async def set_public(self, org: Org, path: str, public: bool, user: User) -> None:
+        """Make the dataset at ``path`` public or private. A path can be made private before anything is written there, so a dataset is private from its first version. ``Conflict`` while the org's existing datasets aren't flagged yet (``close_existing``)."""
+        bucket = await self.bucket(org)
+        check_path(path)
+        async with self._locked(bucket.upstream_name, [path]) as conn:
+            if not await conn.fetchval("SELECT open_datasets FROM orgs WHERE pk = $1", org.pk):
+                raise Conflict(
+                    "This organization's datasets are still being marked private. "
+                    "Try again in a few minutes."
+                )
+            if public:
+                changed = await conn.fetchval(
+                    "DELETE FROM private_datasets WHERE org_pk = $1 AND path = $2 RETURNING true",
+                    org.pk,
+                    path,
+                )
+            else:
+                changed = await conn.fetchval(
+                    "INSERT INTO private_datasets (org_pk, path, made_by) VALUES ($1, $2, $3) "
+                    "ON CONFLICT DO NOTHING RETURNING true",
+                    org.pk,
+                    path,
+                    user.pk,
+                )
+            if changed:
+                old, new = ("private", "public") if public else ("public", "private")
+                await conn.execute(
+                    "INSERT INTO visibility_events (org_pk, path, kind, from_visibility, "
+                    "to_visibility, user_pk) VALUES ($1, $2, 'dataset_visibility', $3, $4, $5)",
+                    org.pk,
+                    path,
+                    old,
+                    new,
+                    user.pk,
+                )
+
+    async def close_existing(self) -> int:
+        """Flag private every dataset of the orgs that aren't open yet, then open them (D115): orgs made before datasets became public by default keep what they wrote private until an admin makes it public. Returns how many datasets were flagged. Safe on several replicas at once."""
+        closed = 0
+        pks = await self.store.db.fetch("SELECT pk FROM orgs WHERE NOT open_datasets")
+        for org in await self.store.orgs([pk for (pk,) in pks]):
+            bucket = await self.store.s3.managed_bucket(org)
+            paths = await self._all_datasets(bucket.upstream_name) if bucket else []
+            async with self.store.db.pool.acquire() as conn, conn.transaction():
+                if await conn.fetchval(
+                    "SELECT open_datasets FROM orgs WHERE pk = $1 FOR UPDATE", org.pk
+                ):
+                    continue
+                closed += len(
+                    await conn.fetch(
+                        "INSERT INTO private_datasets (org_pk, path) SELECT $1, unnest($2::text[]) "
+                        "ON CONFLICT DO NOTHING RETURNING path",
+                        org.pk,
+                        paths,
+                    )
+                )
+                await conn.execute("UPDATE orgs SET open_datasets = true WHERE pk = $1", org.pk)
+        return closed
+
+    async def _all_datasets(self, bucket: str) -> list[str]:
+        """The path of every dataset in ``bucket``: each folder holding a ``_versions/`` (D87), without looking inside datasets."""
+        upstream = self._upstream()
+        found: list[str] = []
+        folders = [""]
+        while folders:
+            folder = folders.pop()
+            token = None
+            subfolders: list[str] = []
+            while True:
+                page = await self._call(upstream.list_objects(bucket, folder, "/", token))
+                subfolders += page.prefixes
+                token = page.cursor
+                if token is None:
+                    break
+            if f"{folder}{VERSIONS}" in subfolders:
+                found.append(folder.removesuffix("/"))
+            else:
+                folders += subfolders
+        return sorted(found)
+
+    async def _copy_private(self, org: Org, path: str, to: str) -> None:
+        """Flag ``to`` private if ``path`` is, committed at once: a dataset moving to ``to`` mustn't be readable there before its flag is."""
+        await self.store.db.execute(
+            "INSERT INTO private_datasets (org_pk, path, made_by, created_at) "
+            "SELECT org_pk, $3, made_by, created_at FROM private_datasets "
+            "WHERE org_pk = $1 AND path = $2 ON CONFLICT DO NOTHING",
+            org.pk,
+            path,
+            to,
+        )
+
     # ------------------------------------------------------------------ moving objects
 
     @contextlib.asynccontextmanager
@@ -1005,9 +1115,17 @@ class Datasets:
         check_new_path(to)
         if to == path or to.startswith(f"{path}/"):
             raise Invalid("The new path can't be inside the dataset.")
-        async with self._locked(name, [path, to]):
+        async with self._locked(name, [path, to]) as conn:
             before = await self.resolve(name, path, None)
             await self._check_target(name, to)
+            # The flag follows the dataset (D115), and one already at ``to`` (a path made
+            # private ahead, or a deleted dataset's) stays: either makes the moved dataset
+            # private. ``to``'s is committed before any object lands there; if the move fails,
+            # it only leaves ``to`` private. The source's goes with the move's commit.
+            await self._copy_private(org, path, to)
+            await conn.execute(
+                "DELETE FROM private_datasets WHERE org_pk = $1 AND path = $2", org.pk, path
+            )
             objects = await self._call(
                 self._upstream().list_all(name, f"{path}/", self.MOVE_OBJECTS)
             )
@@ -1140,6 +1258,8 @@ class Datasets:
                 sum(o.size for o in objects),
             )
             await conn.execute("SELECT 1 FROM dataset_trash WHERE pk = $1 FOR UPDATE", pk)
+            # A private flag stays at ``path`` (D115): the dataset comes back private, and
+            # whatever is written there meanwhile starts private.
             prefix = self._trash_prefix(org.pk, pk)
             await self._copy_all(objects, name, f"{path}/", trash, prefix)
             await self._delete_all(name, [o.key for o in objects], f"{path}/")
@@ -1192,6 +1312,8 @@ class Datasets:
             target = to if to is not None else record[1]
             async with self._locked(name, [target]):
                 await self._check_target(name, target)
+                # Committed before any object lands at ``target`` (D115).
+                await self._copy_private(org, record[1], target)
                 prefix = self._trash_prefix(org.pk, pk)
                 objects = await self._call(self._upstream().list_all(trash, prefix))
                 await self._copy_all(objects, trash, prefix, name, f"{target}/")
@@ -1316,6 +1438,7 @@ class Datasets:
     async def _sweep_loop(self) -> None:
         while True:
             await asyncio.sleep(self.SWEEP_INTERVAL)
+            await self._close_existing()
             try:
                 done = await self.sweep()
                 if any(done.values()):

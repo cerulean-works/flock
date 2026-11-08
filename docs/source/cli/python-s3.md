@@ -1,6 +1,6 @@
 # Python S3 API
 
-`flock.hub.s3` exchanges a Flock sign-in for storage access to one organization. Start with [Access storage from Python](use-python-storage) or [Write a Lance dataset](use-python-storage#write-a-lance-dataset).
+`flock.hub.s3` exchanges a Flock sign-in for storage access to one organization. Start with [Access storage from Python](use-python-storage) or [Use datasets](../hub/use-datasets).
 
 ## Renewal and client lifetimes
 
@@ -83,7 +83,7 @@ Each call creates a private temporary directory with permissions `0700`. Its fil
 
 The CLI token is kept in `flock.json`; it is not placed in the command arguments or AWS profile. No issued S3 key is written to these files. Your existing AWS config remains unchanged. The temporary directories stay available for the interpreter's lifetime and are removed on normal interpreter shutdown.
 
-Spawned DataLoader workers inherit the environment and read these same files. Each worker opens its own Lance dataset and obtains credentials through the native provider. Persistent workers can renew keys without reopening their dataset. Keep setup in the parent, before starting workers, as in the [PyTorch example](use-python-storage#read-with-pytorch).
+Spawned DataLoader workers inherit the environment and read these same files. Each worker opens its own Lance dataset and obtains credentials through the native provider. Persistent workers can renew keys without reopening their dataset. Keep setup in the parent, before starting workers, as in the [PyTorch example](../hub/use-datasets#read-from-worker-processes).
 
 The training `get_dataset` helper calls `get_process(org="cerulean-labs", read_only=True)` automatically for `s3://`, `s3a://` and `s3n://` URIs. Local dataset paths skip Flock setup. See [Train with Flock](../training/trainer).
 

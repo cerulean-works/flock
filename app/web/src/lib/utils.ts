@@ -1,4 +1,4 @@
-import type { MetricFormat } from './types.ts';
+import type { ByteFormat, MetricFormat } from './types.ts';
 
 export { cn } from 'cn';
 
@@ -185,6 +185,31 @@ function si(v: number, digits = 3) {
 	return String(+v.toPrecision(digits));
 }
 
+const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+/** Index into `BYTE_UNITS` of the unit a byte format's values are logged in. */
+const BYTE_BASE: Record<ByteFormat, number> = { bytes: 0, 'bytes/s': 0, mb: 2, gb: 3 };
+
+const isBytes = (format: MetricFormat): format is ByteFormat => format in BYTE_BASE;
+
+/**
+ * The (decimal) unit to show a byte format's values in: the largest one `size` is at least a
+ * tenth of, so an axis reads `0.5GB` rather than `500MB`, but `50MB` rather than `0.05GB`.
+ * Never below the unit they were logged in.
+ */
+function byteUnit(size: number, format: ByteFormat) {
+	let u = BYTE_BASE[format];
+	let scale = 1;
+	while (u < BYTE_UNITS.length - 1 && Math.abs(size) >= scale * 100) {
+		u++;
+		scale *= 1000;
+	}
+	return { scale, unit: BYTE_UNITS[u] + (format === 'bytes/s' ? '/s' : '') };
+}
+
+/** Decimals that tell apart ticks `step` apart. */
+const tickDecimals = (step: number) =>
+	Math.max(0, Math.min(6, -Math.floor(Math.log10(step) + 1e-9)));
+
 /** A metric value for chart tooltips: precise but compact. */
 export function formatMetric(v: number, format: MetricFormat): string {
 	if (!Number.isFinite(v)) return '–';
@@ -197,6 +222,14 @@ export function formatMetric(v: number, format: MetricFormat): string {
 			return si(v, 4);
 		case 'int':
 			return group(String(Math.round(v)));
+		case 'bytes':
+		case 'bytes/s':
+		case 'mb':
+		case 'gb': {
+			// At least one of the unit shown: `512 MB`, `1.5 GB`.
+			const { scale, unit } = byteUnit(v / 10, format);
+			return `${+(v / scale).toPrecision(4)} ${unit}`;
+		}
 		default:
 			return formatNumber(v);
 	}
@@ -205,11 +238,14 @@ export function formatMetric(v: number, format: MetricFormat): string {
 /** Axis tick label; `step` is the tick spacing and decides the precision. */
 export function formatTick(v: number, step: number, format: MetricFormat): string {
 	if (v === 0) return '0';
+	if (isBytes(format)) {
+		const { scale, unit } = byteUnit(step, format);
+		return `${(v / scale).toFixed(tickDecimals(step / scale))}${unit}`;
+	}
 	const a = Math.abs(v);
 	if (format === 'exp' || a < 1e-3 || (a >= 1e9 && format !== 'si')) return expo(v, 1);
 	if (format === 'si' || a >= 1e4) return si(v, 3);
-	const decimals = Math.max(0, Math.min(6, -Math.floor(Math.log10(step) + 1e-9)));
-	const s = v.toFixed(decimals);
+	const s = v.toFixed(tickDecimals(step));
 	return format === 'pct' ? `${s}%` : s;
 }
 

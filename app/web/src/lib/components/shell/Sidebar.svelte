@@ -8,6 +8,7 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import ActivityIcon from '@lucide/svelte/icons/activity';
+	import LogInIcon from '@lucide/svelte/icons/log-in';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import LogoMark from '#lib/components/LogoMark.svelte';
@@ -17,8 +18,9 @@
 	import { datasetsHref } from '#lib/datasets.ts';
 	import { modelsHref } from '#lib/models.ts';
 	import { storageHref } from '#lib/storage.ts';
-	import type { OrgEntry, ProjectInfo } from '#lib/types.ts';
-	import { entityHref, projectHref } from '#lib/workspace/url.ts';
+	import type { Access, OrgEntry, ProjectInfo } from '#lib/types.ts';
+	import { entityHref, loginHref, projectHref } from '#lib/workspace/url.ts';
+	import OrgMark from './OrgMark.svelte';
 	import WorkspaceSwitcher from './WorkspaceSwitcher.svelte';
 
 	interface Props {
@@ -28,11 +30,33 @@
 		projects: ProjectInfo[];
 		/** Whether the server has S3 storage: the Datasets, Models and Storage items show only then. */
 		s3?: boolean;
+		/**
+		 * What the viewer may do in the org. From outside it (`public`), the sidebar shows the org
+		 * itself at the top, its public projects, and none of its members' pages (D116).
+		 */
+		access?: Access;
+		/** The org as outsiders see it: what it's called, and its picture. */
+		orgName?: string | null;
+		orgAvatar?: string | null;
+		/** Someone is signed in: without that, a Sign in button stands for the account menu. */
+		signedIn?: boolean;
 		/** Hide the sidebar (wide windows only: the drawer closes by itself). */
 		oncollapse?: () => void;
 	}
 
-	let { org, orgs, projects, s3 = false, oncollapse }: Props = $props();
+	let {
+		org,
+		orgs,
+		projects,
+		s3 = false,
+		access = 'member',
+		orgName = null,
+		orgAvatar = null,
+		signedIn = true,
+		oncollapse
+	}: Props = $props();
+
+	const outside = $derived(access === 'public');
 
 	/** Inside an org (its runs, a project, its members, its datasets, models and storage), where switching
 	 * orgs leaves the page. */
@@ -87,15 +111,29 @@
 	</div>
 
 	<nav class="min-h-0 flex-1 overflow-y-auto px-2 py-3" aria-label="Main">
-		<div class="grid gap-0.5">
+		{#if outside && org}
+			<!-- The org being visited, in place of the switcher's: it isn't one of the viewer's. -->
 			<a
-				class={ITEM}
-				href={resolve('/(app)')}
-				aria-current={route === '/(app)' ? 'page' : undefined}
+				class="mb-2 flex items-center gap-2.5 rounded-lg px-1 py-1 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 aria-[current=page]:bg-muted"
+				href={entityHref(org)}
+				aria-current={route === '/(app)/[entity]' ? 'page' : undefined}
+				title={org}
 			>
-				<HouseIcon /> Home
+				<OrgMark name={orgName ?? org} src={orgAvatar} />
+				<span class="min-w-0 flex-1 truncate text-[13.5px] font-medium">{orgName ?? org}</span>
 			</a>
-			{#if org}
+		{/if}
+		<div class="grid gap-0.5">
+			{#if signedIn}
+				<a
+					class={ITEM}
+					href={resolve('/(app)')}
+					aria-current={route === '/(app)' ? 'page' : undefined}
+				>
+					<HouseIcon /> Home
+				</a>
+			{/if}
+			{#if org && !outside}
 				<a
 					class={ITEM}
 					href={entityHref(org)}
@@ -132,7 +170,9 @@
 		{#if org}
 			<div class="mx-2 mt-4 border-t border-divider pt-3">
 				<div class="flex h-7 items-center gap-1">
-					<h2 class="flex-1 text-xs font-medium text-muted-foreground">Projects</h2>
+					<h2 class="flex-1 text-xs font-medium text-muted-foreground">
+						{outside ? 'Public projects' : 'Projects'}
+					</h2>
 					<Button
 						variant="ghost"
 						size="icon-xs"
@@ -147,16 +187,18 @@
 					>
 						<SearchIcon />
 					</Button>
-					<Button
-						variant="ghost"
-						size="icon-xs"
-						class="text-muted-foreground"
-						aria-label="New project"
-						title="New project"
-						onclick={() => (creating = true)}
-					>
-						<PlusIcon />
-					</Button>
+					{#if !outside}
+						<Button
+							variant="ghost"
+							size="icon-xs"
+							class="text-muted-foreground"
+							aria-label="New project"
+							title="New project"
+							onclick={() => (creating = true)}
+						>
+							<PlusIcon />
+						</Button>
+					{/if}
 				</div>
 			</div>
 			{#if searching}
@@ -198,18 +240,24 @@
 								{/if}
 							</span>
 						</a>
-						<div class="absolute inset-y-0 right-1 flex items-center">
-							<ProjectMenu
-								entity={org}
-								project={p}
-								from={here ? 'project' : 'list'}
-								class="text-muted-foreground opacity-0 group-focus-within/project:opacity-100 group-hover/project:opacity-100 aria-expanded:opacity-100"
-							/>
-						</div>
+						{#if !outside}
+							<div class="absolute inset-y-0 right-1 flex items-center">
+								<ProjectMenu
+									entity={org}
+									project={p}
+									from={here ? 'project' : 'list'}
+									class="text-muted-foreground opacity-0 group-focus-within/project:opacity-100 group-hover/project:opacity-100 aria-expanded:opacity-100"
+								/>
+							</div>
+						{/if}
 					</li>
 				{:else}
 					<li class="px-2 py-1 text-[13px] text-muted-foreground">
-						{query.trim() ? 'No matching projects' : 'No projects yet'}
+						{query.trim()
+							? 'No matching projects'
+							: outside
+								? 'No public projects'
+								: 'No projects yet'}
 					</li>
 				{/each}
 			</ul>
@@ -225,8 +273,15 @@
 	</nav>
 
 	<div class="flex-none border-t border-divider p-2">
-		<WorkspaceSwitcher {org} {orgs} stay={!inOrg} />
+		{#if signedIn}
+			<!-- From outside the org, the switcher names only the viewer's own. -->
+			<WorkspaceSwitcher org={outside ? null : org} {orgs} stay={!inOrg} />
+		{:else}
+			<Button variant="outline" class="w-full" href={loginHref(page.url)} data-sveltekit-reload>
+				<LogInIcon /> Sign in
+			</Button>
+		{/if}
 	</div>
 </div>
 
-{#if org}<ProjectDialog bind:open={creating} entity={org} />{/if}
+{#if org && !outside}<ProjectDialog bind:open={creating} entity={org} />{/if}

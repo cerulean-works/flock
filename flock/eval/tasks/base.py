@@ -248,12 +248,28 @@ class MCRequests:
         """
         num_choices = self._check_layout()
         device = scores.logprob.device
-        index = self._choice_index().to(device)
-        valid = index >= 0
-        # Padded cells read request 0. Every metric masks them out with `valid`.
-        gather_index = index.clamp(min=0)
 
-        num_chars, num_bytes = self._continuation_lengths(num_choices, device)
+        # Each doc's choices are consecutive requests, right after the previous doc's. Cells past
+        # a doc's last choice read request 0, and every metric masks them out with `valid`.
+        width = max(len(doc.choices) for doc in self.docs)
+        rows, valid_rows = [], []
+        start = 0
+        for doc in self.docs:
+            padding = width - len(doc.choices)
+            rows.append(list(range(start, start + len(doc.choices))) + [0] * padding)
+            valid_rows.append([True] * len(doc.choices) + [False] * padding)
+            start += len(doc.choices)
+        gather_index = torch.tensor(rows, dtype=torch.int64, device=device)
+        valid = torch.tensor(valid_rows, dtype=torch.bool, device=device)
+
+        # Counted on the conditional requests: the unconditional ones repeat the same continuations.
+        continuations = [request.continuation for request in self.requests[:num_choices]]
+        num_chars = torch.tensor(
+            [len(text) for text in continuations], dtype=torch.int64, device=device
+        )
+        num_bytes = torch.tensor(
+            [len(text.encode()) for text in continuations], dtype=torch.int64, device=device
+        )
         gold = torch.tensor([doc.gold for doc in self.docs], dtype=torch.int64, device=device)
 
         logprob_uncond = tokens_cut_uncond = None
@@ -282,20 +298,18 @@ class MCRequests:
         Raises:
             `ValueError`: if there are no docs, or not one request per choice (two with `has_uncond`).
         """
-        num_choices = self._check_layout()
+        self._check_layout()
         tokens_cut = scores.tokens_cut
         device = tokens_cut.device
 
-        # Each conditional request's doc, read off the same layout `choice_scores` uses.
-        choice_index = self._choice_index()
-        valid = choice_index >= 0
-        docs_of_cells = torch.arange(len(self.docs))[:, None].expand_as(choice_index)
-        doc_index = torch.empty(num_choices, dtype=torch.int64)
-        doc_index[choice_index[valid]] = docs_of_cells[valid]
+        # The doc of each request. Each doc's choices are consecutive requests, and the
+        # unconditional requests follow all conditional ones, in the same order.
+        doc_of_request = []
+        for position, doc in enumerate(self.docs):
+            doc_of_request += [position] * len(doc.choices)
         if self.has_uncond:
-            # The unconditional requests follow all conditional ones, in the same order.
-            doc_index = doc_index.repeat(2)
-        index = doc_index.to(device, non_blocking=True)
+            doc_of_request *= 2
+        index = torch.tensor(doc_of_request, dtype=torch.int64).to(device, non_blocking=True)
 
         truncated = tokens_cut > 0
         per_doc = torch.zeros(len(self.docs), dtype=torch.int64, device=device)
@@ -307,12 +321,7 @@ class MCRequests:
         return Truncation(requests=requests, docs=docs, max_tokens_cut=max_tokens_cut)
 
     def _check_layout(self) -> int:
-        """
-        Returns the number of choices over all docs, after checking that there is one request per choice (two with `has_uncond`).
-
-        Raises:
-            `ValueError`: if there are no docs, or the request count doesn't match the choices.
-        """
+        """The number of choices over all docs, after checking that there are docs and one request per choice (two with `has_uncond`)."""
         if not self.docs:
             raise ValueError("no docs to score")
         num_choices = sum(len(doc.choices) for doc in self.docs)
@@ -320,35 +329,6 @@ class MCRequests:
             raise ValueError(f"{len(self.requests)} requests for {num_choices} choices")
 
         return num_choices
-
-    def _continuation_lengths(
-        self, num_choices: int, device: torch.device
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Returns each choice's character and UTF-8 byte counts as int64 `[num_choices]`, in request order."""
-        # Counted on the conditional requests: the unconditional ones repeat the same continuations.
-        continuations = [request.continuation for request in self.requests[:num_choices]]
-
-        num_chars = torch.tensor(
-            [len(text) for text in continuations], dtype=torch.int64, device=device
-        )
-        num_bytes = torch.tensor(
-            [len(text.encode()) for text in continuations], dtype=torch.int64, device=device
-        )
-
-        return num_chars, num_bytes
-
-    def _choice_index(self) -> torch.Tensor:
-        """Returns the request index of every choice as int64 `[docs, max_choices]`, -1 past a doc's last choice."""
-        width = max(len(doc.choices) for doc in self.docs)
-        rows = []
-        start = 0
-        for doc in self.docs:
-            # Each doc's choices are consecutive requests, right after the previous doc's.
-            end = start + len(doc.choices)
-            rows.append(list(range(start, end)) + [-1] * (width - len(doc.choices)))
-            start = end
-
-        return torch.tensor(rows, dtype=torch.int64)
 
 
 @dataclass(frozen=True, slots=True)
@@ -393,11 +373,6 @@ class MultipleChoiceTask:
     keep: Callable[[dict[str, Any]], bool] | None = None
 
     def __post_init__(self) -> None:
-        self._check_metrics()
-        self._check_fewshot()
-
-    def _check_metrics(self) -> None:
-        """Raises `ValueError` if `metrics` or `primary_metric` names something the task won't report."""
         if self.metrics is not None:
             if not self.metrics:
                 raise ValueError(
@@ -411,22 +386,20 @@ class MultipleChoiceTask:
         if self.primary_metric not in self.reported_metrics:
             raise ValueError(f"{self.name}: primary_metric must be one of {self.reported_metrics}")
 
-    def _check_fewshot(self) -> None:
-        """Raises `ValueError` if a written-out example lacks the index a numbered dataset reads, or `num_shots` would drop a doc's own example by an id from another split."""
-        if self.fewshot is None:
-            return
-        # Written-out examples skip `load`, so they carry the index themselves.
-        if self.dataset.row_index and any("index" not in row for row in self.fewshot.rows):
-            raise ValueError(f"{self.name}: row_index needs an index in each written-out example")
-        if self.fewshot.num_shots is None:
-            return
-        # Ids are unique within a split only. Across splits, a doc that shares an id with an
-        # example would lose that example.
-        if self.fewshot.split != self.dataset.split:
-            raise ValueError(
-                f"{self.name}: num_shots needs examples from the scored split "
-                f"{self.dataset.split!r}, not {self.fewshot.split!r}"
-            )
+        if self.fewshot is not None:
+            # Written-out examples skip `load`, so they carry the index themselves.
+            rows = self.fewshot.rows
+            if self.dataset.row_index and any("index" not in row for row in rows):
+                raise ValueError(
+                    f"{self.name}: row_index needs an index in each written-out example"
+                )
+            # Ids are unique within a split only. Across splits, a doc that shares an id with an
+            # example would lose that example.
+            if self.fewshot.num_shots is not None and self.fewshot.split != self.dataset.split:
+                raise ValueError(
+                    f"{self.name}: num_shots needs examples from the scored split "
+                    f"{self.dataset.split!r}, not {self.fewshot.split!r}"
+                )
 
     @property
     def reported_metrics(self) -> tuple[str, ...]:
@@ -467,12 +440,7 @@ class MultipleChoiceTask:
         return docs, self._load_shots()
 
     def _load_shots(self) -> list[MCDoc]:
-        """
-        Returns the few-shot examples in `fewshot`'s order, or none if the task is zero-shot.
-
-        Raises:
-            `KeyError`: if a few-shot id isn't in its split.
-        """
+        """The few-shot examples in `fewshot`'s order, or none if the task is zero-shot."""
         if self.fewshot is None:
             return []
         if self.fewshot.rows:
@@ -491,7 +459,9 @@ class MultipleChoiceTask:
         """Builds every request needed to score `docs`, with a hash of exactly what is scored."""
         conditional = []
         for doc in docs:
-            head = self._head(self._shots_for(doc, shots))
+            # `description`, then each example followed by a blank line.
+            examples = self._shots_for(doc, shots)
+            head = self.description + "".join(f"{shot.example_text}\n\n" for shot in examples)
             for choice in doc.choices:
                 conditional.append(Request(head + choice.context, choice.continuation))
 
@@ -500,8 +470,8 @@ class MultipleChoiceTask:
             for request in conditional:
                 unconditional.append(Request(self.unconditional_context, request.continuation))
 
-        # `MCRequests.choice_scores` relies on this order: all conditional requests, then the
-        # unconditional ones in the same order.
+        # `MCRequests.choice_scores` and `truncation` rely on this order: each doc's choices in
+        # turn, then the unconditional requests in the same order.
         requests = tuple(conditional + unconditional)
 
         return MCRequests(
@@ -510,14 +480,6 @@ class MultipleChoiceTask:
             hash=self._hash(docs, requests),
             has_uncond=self.unconditional_context is not None,
         )
-
-    def _head(self, shots: Sequence[MCDoc]) -> str:
-        """Renders `description`, then each example followed by a blank line."""
-        head = self.description
-        for shot in shots:
-            head += f"{shot.example_text}\n\n"
-
-        return head
 
     def _shots_for(self, doc: MCDoc, shots: Sequence[MCDoc]) -> Sequence[MCDoc]:
         """

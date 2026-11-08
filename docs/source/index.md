@@ -15,11 +15,12 @@ Approve the code in your browser and accept the SDK setup to log experiments. [S
 | Module | What you can do |
 |---|---|
 | CLI | [Manage access](cli/sign-in), [use S3 storage](cli/s3-access), [access storage from Python](cli/use-python-storage), or [authenticate a job](cli/authenticate-jobs). |
+| Hub | [Read and write datasets](hub/use-datasets) or [store and load models](hub/store-models). |
 | Training | [Run and configure the trainer](training/trainer). |
 | Evals | [Evaluate a model and read its scores](evals/run-evaluation), [score a checkpoint during training](evals/evaluate-checkpoint), or [add a task](evals/add-task). |
 | App | [Set up your account](app/accounts), [track an experiment](app/log-runs), [compare runs](app/explore-runs), or [browse storage and datasets](app/storage-and-datasets). |
 
-The guides introduce the concepts you need as part of each workflow. **Reference** groups CLI, Evals and App details for complete commands, APIs and technical behavior.
+The guides introduce the concepts you need as part of each workflow. **Reference** groups CLI, Hub, Evals and App details for complete commands, APIs and technical behavior.
 
 ## Developing or hosting Flock
 

@@ -4,10 +4,10 @@ from typing import Annotated, Any
 
 import numpy as np
 import orjson
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response, StreamingResponse
 
-from app.api.src.api.deps import ProjectDep, StoreDep, rest_user
+from app.api.src.api.deps import APIError, ReadableProjectDep, StoreDep, ViewerDep
 from app.api.src.api.runs import RunSelection
 from app.api.src.core import query
 from app.api.src.core.history import History
@@ -15,7 +15,8 @@ from app.api.src.core.live import Hub
 from app.api.src.core.metric_defs import step_metrics
 from app.api.src.core.store import Project, Store
 
-router = APIRouter(prefix="/api/v1", tags=["dashboard"], dependencies=[Depends(rest_user)])
+# The dashboard's reads answer outsiders too, on public projects (D112).
+public = APIRouter(prefix="/api/v1", tags=["dashboard"])
 
 
 class Snapshot:
@@ -265,9 +266,9 @@ class Snapshot:
         return x, y
 
 
-@router.get("/projects/{entity}/{project}/workspace")
+@public.get("/projects/{entity}/{project}/workspace")
 async def get_workspace(
-    project: ProjectDep,
+    project: ReadableProjectDep,
     store: StoreDep,
     sort: Annotated[str | None, Query(description="e.g. -created_at or summary.loss")] = None,
     filter: Annotated[str | None, Query(description="Mongo-style filter as JSON")] = None,
@@ -285,11 +286,12 @@ async def get_workspace(
     return Response(body, media_type="application/octet-stream")
 
 
-@router.get("/projects/{entity}/{project}/stream")
+@public.get("/projects/{entity}/{project}/stream")
 async def stream(
-    project: ProjectDep,
+    project: ReadableProjectDep,
     request: Request,
     store: StoreDep,
+    viewer: ViewerDep,
     runs: Annotated[str, Query(description="runs to watch: id:lines[:system_lines],...")] = "",
     system: Annotated[bool, Query(description="also stream system metric samples")] = False,
     ping_seconds: Annotated[
@@ -303,6 +305,9 @@ async def stream(
     only with ``system=true``), ``run`` (state, line count and changed ``summary.*`` columns) and
     ``created`` (a new run in the project). Comment lines keep idle connections open, every
     ``ping_seconds``.
+
+    ``project`` events say the project was renamed (``renamed_to``) or its ``visibility``
+    changed; outsiders' streams end once it's private (D110).
     """
     # "id:lines:system_lines,id,..." -> {id: (lines, system_lines)}; a missing count means the
     # stream is watched without replay.
@@ -315,7 +320,15 @@ async def stream(
     # Subscribe before computing the replay: anything published from now on is queued, so the
     # replay and the stream overlap rather than leave a gap. Clients drop points they already
     # have by line number.
-    sub = store.live.subscribe(project.pk, cursors, system)
+    outsider = store.accounts.access(viewer, project) == "public"
+    sub = store.live.subscribe(project.pk, cursors, system, outsider)
+    if outsider:
+        # Made private after the project was read but before this subscribed: its close
+        # message went to no one, so look again now that any later one would reach us.
+        now = await store.project(project.entity, project.name)
+        if now is None or not now.public:
+            store.live.unsubscribe(project.pk, sub)
+            raise APIError(404, f"project {project.entity}/{project.name} not found")
 
     async def events():
         try:

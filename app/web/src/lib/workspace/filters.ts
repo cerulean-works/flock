@@ -1,4 +1,4 @@
-import type { ColumnKind, Person } from '#lib/types.ts';
+import type { ColumnKind, Owner } from '#lib/types.ts';
 
 // Run filters: what the workspace's Filter popover edits, how they travel in its URL
 // (`?filters=[["state","eq","running"],{"any":[["config.lr","lt",0.01],["config.opt","eq","adam"]]}]`)
@@ -35,8 +35,11 @@ export type RunFilter = RunCondition | RunFilterGroup;
 
 export const isGroup = (f: RunFilter): f is RunFilterGroup => 'match' in f;
 
-/** The org's members by id: who the values of `user` columns (user ids) are. */
-export type People = ReadonlyMap<number, Person>;
+/**
+ * Who the values of `user` columns (user ids) are, by id: the org's members, or the project's
+ * owners (without emails) for a viewer outside the org.
+ */
+export type People = ReadonlyMap<number, Owner>;
 
 const NOBODY: People = new Map();
 
@@ -102,7 +105,7 @@ export function parseValue(
 			if (Number.isInteger(number)) return { value: number };
 			const q = raw.toLowerCase();
 			const members = [...people.values()];
-			const byEmail = members.find((p) => p.email.toLowerCase() === q);
+			const byEmail = members.find((p) => p.email?.toLowerCase() === q);
 			if (byEmail) return { value: byEmail.id };
 			const named = members.filter((p) => p.name.toLowerCase() === q);
 			if (named.length === 1) return { value: named[0].id };
@@ -126,7 +129,10 @@ export function parseValue(
 	}
 }
 
-/** How a filter's value reads back in its input: users as their email, if they're in `people`. */
+/**
+ * How a filter's value reads back in its input: users as their email if they're in `people`
+ * (their name, when it doesn't say their email).
+ */
 export function valueText(
 	value: FilterValue | null,
 	kind: ColumnKind | undefined,
@@ -136,7 +142,7 @@ export function valueText(
 	if (kind === 'time' && typeof value === 'number')
 		return new Date(value * 1000).toISOString().slice(0, 10);
 	if (kind === 'user' && typeof value === 'number')
-		return people.get(value)?.email ?? String(value);
+		return people.get(value)?.email ?? people.get(value)?.name ?? String(value);
 	return String(value);
 }
 

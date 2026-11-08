@@ -30,7 +30,7 @@ class TaskResult:
         primary_metric (`str`):
             The metric to read first.
         metrics (`dict[str, float]`):
-            Each metric over the task's docs: a mean over docs for multiple choice, and a ratio of sums over all docs for `bits_per_byte`.
+            Each metric over the task's docs: a mean over docs for multiple choice, and a ratio of sums over all docs for a perplexity task.
         num_docs (`int`):
             How many docs were scored.
         limit (`int`, *optional*):
@@ -87,7 +87,7 @@ class Results:
     """
     Every task's scores from one run, and its provenance.
 
-    `schema_version`, 6, is the version of the file's layout, bumped when a field changes. It isn't an argument, so a file can't claim a layout it doesn't have.
+    `schema_version`, 8, is the version of the file's layout, bumped when a field changes. It isn't an argument, so a file can't claim a layout it doesn't have.
 
     Args:
         provenance (`Provenance`):
@@ -101,7 +101,7 @@ class Results:
     provenance: Provenance
     tasks: list[TaskResult]
     suites: list[SuiteResult] = field(default_factory=list)
-    schema_version: int = field(default=6, init=False)
+    schema_version: int = field(default=8, init=False)
 
     def to_dict(self) -> dict[str, Any]:
         """Returns the results as plain JSON-ready data, with each task's `docs_per_second` added."""
@@ -118,8 +118,19 @@ class Results:
         Raises:
             `FileExistsError`: if `out` already holds a `results.json`, so two runs never write one file.
         """
+        # JSON has no Infinity or NaN (RFC 8259 sec. 6), so a non-finite metric, such as a
+        # diverged checkpoint's perplexity, is written as null and stays non-finite in memory.
+        data = self.to_dict()
+        for entry in data["tasks"]:
+            metrics = entry["metrics"]
+            for name, value in metrics.items():
+                metrics[name] = value if math.isfinite(value) else None
+        for entry in data["suites"]:
+            if entry["score"] is not None and not math.isfinite(entry["score"]):
+                entry["score"] = None
+
         # Serialized before the file is created, so a failure leaves no empty file to block a rerun.
-        text = json.dumps(self.to_dict(), indent=2) + "\n"
+        text = json.dumps(data, indent=2, allow_nan=False) + "\n"
         out.mkdir(parents=True, exist_ok=True)
         path = out / "results.json"
         with path.open("x") as f:
@@ -197,7 +208,7 @@ def perplexity_prediction_rows(
     docs: Sequence[TextDoc], scores: Scores, num_bytes: Sequence[int], window: int
 ) -> list[dict[str, Any]]:
     """
-    Returns one row per doc with its id, summed log-probability, token and UTF-8 byte counts, number of windows and whether every token is the greedy one, so any domain's `bits_per_byte` can be recomputed.
+    Returns one row per doc with its id, summed log-probability, token and UTF-8 byte counts, number of windows and whether every token is the greedy one, so any domain's `bits_per_byte`, `loss_per_token` and `perplexity` can be recomputed.
 
     Raises:
         `ValueError`: if `scores` or `num_bytes` doesn't hold one entry per doc.

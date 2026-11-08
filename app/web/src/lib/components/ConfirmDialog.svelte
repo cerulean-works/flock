@@ -16,6 +16,8 @@
 		pending: string;
 		/** Toast once it's done. */
 		success: string;
+		/** Called once it's done, after the dialog closes. */
+		done?: () => void;
 	}
 
 	let {
@@ -26,13 +28,20 @@
 		fields,
 		confirm,
 		pending,
-		success
+		success,
+		done
 	}: Props = $props();
 
-	const mutation = new Mutation({ success: () => success, done: () => (open = false) });
+	const mutation = new Mutation({
+		success: () => success,
+		done: () => {
+			open = false;
+			done?.();
+		}
+	});
 </script>
 
-<!-- A destructive change, confirmed. -->
+<!-- A destructive or risky change, confirmed. -->
 <AlertDialog.Root bind:open onOpenChange={(o) => o || mutation.reset()}>
 	<AlertDialog.Content class="sm:max-w-md">
 		<AlertDialog.Header>

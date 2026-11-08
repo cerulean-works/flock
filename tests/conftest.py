@@ -11,6 +11,13 @@ from typing import Any
 
 import pytest
 
+# Thread pools size themselves from the core count, so on a many-core login node that caps a
+# user's threads, a few workers can exhaust the cap. Set before any test imports torch or a
+# tokenizer, so every process and worker is bounded; a value set in the shell wins.
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("RAYON_NUM_THREADS", "4")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 
 def pytest_xdist_auto_num_workers() -> int:
     """Bound local resource use; explicit ``-n N`` still overrides auto detection."""

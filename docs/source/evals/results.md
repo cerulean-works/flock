@@ -42,11 +42,11 @@ A run with an output directory writes `results.json` and one predictions file pe
       "score": null
     }
   ],
-  "schema_version": 6
+  "schema_version": 8
 }
 ```
 
-`flock eval run` prints only a summary of this file (each suite's score and the primary metric of each task outside a scored suite, or every metric with `--verbose`), so read the file for the rest. The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.results.TaskResult`] plus its `docs_per_second`, which is `null` if the clock measured no time, each entry of `suites` is a [`~eval.results.SuiteResult`], and `provenance` is described below. The class docstrings at the end of this page define every field.
+`flock eval run` prints only a summary of this file (each suite's score and the primary metric of each task outside a scored suite, or every metric with `--verbose`), so read the file for the rest. The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.results.TaskResult`] plus its `docs_per_second`, which is `null` if the clock measured no time. A metric or suite score that isn't finite, such as a diverged checkpoint's `perplexity`, is written as `null`, since JSON has no infinity (RFC 8259, sec. 6). Each entry of `suites` is a [`~eval.results.SuiteResult`], and `provenance` is described below. The class docstrings at the end of this page define every field.
 
 ### The task hash
 
@@ -64,9 +64,13 @@ A context too long for the model loses tokens from the left, and the continuatio
 
 ## Provenance
 
-`provenance` records what produced the run, so a number can be traced to the exact model, code and settings: [`~eval.provenance.Provenance`] at the end of this page defines each field. It is collected once the model has loaded and before any task is scored, so `created_at` is when scoring started, as lm-evaluation-harness records its start date. `command` is the CLI-supplied invocation label, and `null` for a Python API call that passes none. The current CLI retains a legacy executable label in this field; use the recorded settings and commits when reconstructing a run. `flock_commit` is `"unknown"` when the installed package isn't a flock checkout, and ends in `-dirty` when tracked files changed or new files appeared under `flock/`.
+`provenance` records what produced the run, so a number can be traced to the exact model, code and settings: [`~eval.provenance.Provenance`] at the end of this page defines each field. It is collected once the model has loaded and before any task is scored, so `created_at` is when scoring started, as lm-evaluation-harness records its start date. `command` is the command line that started the run, the program's name followed by its arguments (for example `flock eval run --model ... --task arc_easy --out ...`), and `null` for a Python API call that passes none. Older files record the CLI's former name instead: `flock-eval run ...` from the standalone script, and `flock-eval eval run ...` from `flock eval` before the provenance caught up. `flock_commit` is `"unknown"` when the installed package isn't a flock checkout, and ends in `-dirty` when tracked files changed or new files appeared under `flock/`.
 
-`model` is `repo@commit` for a Hugging Face model, and `flock:org/name@{number}` for a version stored in Flock. `model_digest` is that version's digest, the sha256 of its file list, which names its exact files. It's `null` for a Hugging Face model, whose commit already names the files. Files written before schema version 6 have no `model_digest`, and read as `null`.
+`model` is `repo@commit` for a Hugging Face model, and `flock:org/name@{number}` for a version stored in Flock. `model_digest` is that version's digest, the sha256 of its file list, which names its exact files. It's `null` for a Hugging Face model, whose commit already names the files. Files written before `model_digest` was added, including some at schema version 6, have no `model_digest`, and read as `null`.
+
+`attention` is the model's attention implementation, and `sdpa_backend` the SDPA kernel scoring was pinned to: `"EFFICIENT_ATTENTION"` on CUDA with `sdpa` attention, `null` on the CPU or another non-CUDA device, where PyTorch still picks the kernel, or with other attention (see [Batching and precision](scoring#batching-and-precision)). Files written before schema version 7 have no `sdpa_backend`: PyTorch chose the kernel for each batch, so their BF16 scores don't repeat exactly.
+
+`add_bos` says whether every non-empty context started with the tokenizer's BOS token (see [Tokenizing a request](scoring#tokenizing-a-request)). Files written before schema version 8 have no `add_bos`: none of them added BOS.
 
 ## Predictions
 
@@ -87,7 +91,7 @@ Each line of `predictions/<task>.jsonl` is one doc, with enough to recompute eve
 
 [Metrics](metrics) gives each metric's formula over these fields.
 
-A perplexity task's line has other fields, enough to recompute `bits_per_byte` over any set of docs:
+A perplexity task's line has other fields, enough to recompute each of its metrics over any set of docs:
 
 | Field | Meaning |
 |---|---|

@@ -13,7 +13,7 @@ import asyncpg
 import orjson
 
 from app.api.src.core import gpus, live, values
-from app.api.src.core.accounts import Accounts
+from app.api.src.core.accounts import Accounts, User
 from app.api.src.core.avatars import Avatars
 from app.api.src.core.budgets import Budgets
 from app.api.src.core.bus import Bus
@@ -48,7 +48,7 @@ ORG_COLUMNS = """
 # The columns ``Project.load`` reads, of ``projects`` aliased ``p`` (and its org's).
 PROJECT_COLUMNS = f"""
     p.pk, p.name, p.description, extract(epoch FROM p.created_at)::float8,
-    extract(epoch FROM p.updated_at)::float8, {ORG_COLUMNS}
+    extract(epoch FROM p.updated_at)::float8, {ORG_COLUMNS}, p.visibility, p.created_by
 """
 # The columns ``Run.load`` reads, of ``runs`` aliased ``r``.
 RUN_COLUMNS = """
@@ -275,6 +275,8 @@ class Project:
         description: str | None = None,
         created_at: float = 0.0,
         updated_at: float = 0.0,
+        visibility: str = "private",
+        created_by: int | None = None,
     ) -> None:
         self.pk = pk
         self.org = org
@@ -282,12 +284,20 @@ class Project:
         self.description = description
         self.created_at = created_at
         self.updated_at = updated_at
+        self.visibility = visibility  # "private" or "public" (D110)
+        self.created_by = created_by  # the creator's user pk, who may change visibility (D118)
 
     @classmethod
     def load(cls, record: Any, offset: int = 0) -> Self:
         """A project from ``PROJECT_COLUMNS`` at ``offset`` in ``record``."""
         pk, name, description, created_at, updated_at = record[offset : offset + 5]
-        return cls(pk, Org.load(record, offset + 5), name, description, created_at, updated_at)
+        org = Org.load(record, offset + 5)
+        visibility, created_by = record[offset + 15 : offset + 17]
+        return cls(pk, org, name, description, created_at, updated_at, visibility, created_by)
+
+    @property
+    def public(self) -> bool:
+        return self.visibility == "public"
 
     @property
     def entity(self) -> str:
@@ -475,6 +485,14 @@ class Store:
         )
         return [Org.load(record) for record in records]
 
+    async def has_public(self, org: Org) -> bool:
+        """Whether ``org`` has a public project, which outsiders may see it for (D114). Public datasets don't count: they're reached by URL, not listed."""
+        return await self.db.fetchval(
+            "SELECT EXISTS (SELECT FROM projects WHERE org_pk = $1 AND deleted_at IS NULL "
+            "AND visibility = 'public')",
+            org.pk,
+        )
+
     async def org_by_pk(self, pk: int) -> Org | None:
         found = await self.orgs([pk])
         return found[0] if found else None
@@ -540,6 +558,8 @@ class Store:
                     "run_count": runs,
                     "active_run_count": active,
                     "column_count": columns.get(project.pk, 0),
+                    "visibility": project.visibility,
+                    "created_by": project.created_by,
                 }
             )
         return out
@@ -730,7 +750,7 @@ class Store:
         if await self.discarding(entity, project_name, name):
             raise Discarded(project_name, name)
         while True:
-            project = await self.ensure_project(entity, project_name)
+            project = await self.ensure_project(entity, project_name, creator=owner)
             try:
                 async with self.db.pool.acquire() as conn, conn.transaction():
                     # Shared: deleting, renaming or moving runs out of it waits for this.
@@ -1298,15 +1318,18 @@ class Store:
         name: str,
         description: str | None = None,
         created_at: float | None = None,
+        *,
+        creator: int | None = None,
     ) -> Project | None:
-        """Insert a project row (with ``org`` locked); None if the name is taken.
+        """Insert a project row (with ``org`` locked), created by the user ``creator``; None if
+        the name is taken.
 
         ``created_at`` is for projects copied from elsewhere, which keep their creation time."""
         # Stamped with this process's clock, like runs: the database's can run ahead of it, which
         # would date a project created by a run's upload after that run started.
         record = await conn.fetchrow(
-            "INSERT INTO projects (org_pk, name, description, created_at, updated_at) "
-            "VALUES ($1, $2, $3, to_timestamp($4), to_timestamp($4)) "
+            "INSERT INTO projects (org_pk, name, description, created_at, updated_at, created_by) "
+            "VALUES ($1, $2, $3, to_timestamp($4), to_timestamp($4), $5) "
             "ON CONFLICT (org_pk, name) WHERE deleted_at IS NULL DO NOTHING "
             "RETURNING pk, name, description, "
             "extract(epoch FROM created_at)::float8, extract(epoch FROM updated_at)::float8",
@@ -1314,19 +1337,20 @@ class Store:
             name,
             description,
             time.time() if created_at is None else created_at,
+            creator,
         )
         if record is None:
             return None
         pk, *rest = record
-        return Project(pk, org, *rest)
+        return Project(pk, org, *rest, created_by=creator)
 
     async def create_project(
-        self, entity: str, name: str, description: str | None = None
+        self, entity: str, name: str, description: str | None = None, *, creator: int | None = None
     ) -> Project:
         org = await self.org(entity)
         async with self.db.pool.acquire() as conn, conn.transaction():
             await self._lock_org(conn, org)
-            project = await self._insert_project(conn, org, name, description)
+            project = await self._insert_project(conn, org, name, description, creator=creator)
         if project is None:
             raise Conflict(f"project {entity}/{name} already exists")
         return project
@@ -1337,8 +1361,11 @@ class Store:
         name: str,
         description: str | None = None,
         created_at: float | None = None,
+        *,
+        creator: int | None = None,
     ) -> Project:
-        """The project ``entity/name``, created if it doesn't exist (as ``wandb.init`` does).
+        """The project ``entity/name``, created by the user ``creator`` if it doesn't exist (as
+        ``wandb.init`` does).
 
         Organizations are never created implicitly: an unknown ``entity`` is ``NotFound``.
         """
@@ -1349,20 +1376,32 @@ class Store:
             org = await self.org(entity)
             async with self.db.pool.acquire() as conn, conn.transaction():
                 await self._lock_org(conn, org)
-                project = await self._insert_project(conn, org, name, description, created_at)
+                project = await self._insert_project(
+                    conn, org, name, description, created_at, creator=creator
+                )
             if project is not None:
                 return project
             # Another request created it meanwhile: read that one.
 
-    async def update_project(self, project: Project, fields: dict[str, Any]) -> Project:
-        """Rename a project or change its description; returns it as it now is."""
-        name = fields.get("name") or project.name
-        renamed = name != project.name
-        description = fields.get("description", project.description)
+    async def update_project(
+        self, project: Project, fields: dict[str, Any], user: User | None = None
+    ) -> Project:
+        """Rename a project, change its description or its visibility (D110, by ``user``);
+        returns it as it now is."""
         now = time.time()
         async with self.db.pool.acquire() as conn, conn.transaction():
             await self._lock_org(conn, project.org)
             await self._lock_projects(conn, [project], update=True)
+            # The locked row's: another admin may have changed it since the request read it,
+            # and a field this request leaves alone must keep that change.
+            row = await conn.fetchrow(
+                "SELECT name, description, visibility FROM projects WHERE pk = $1", project.pk
+            )
+            old = row["visibility"]
+            name = fields.get("name") or row["name"]
+            renamed = name != row["name"]
+            description = fields.get("description", row["description"])
+            visibility = fields.get("visibility") or old
             if renamed:
                 active = await self.active_runs(project)
                 if active:
@@ -1370,15 +1409,29 @@ class Store:
                     raise Conflict("cannot rename a project with active runs", active)
             try:
                 await conn.execute(
-                    "UPDATE projects SET name = $2, description = $3, "
+                    "UPDATE projects SET name = $2, description = $3, visibility = $5, "
                     "updated_at = to_timestamp($4) WHERE pk = $1",
                     project.pk,
                     name,
                     description,
                     now,
+                    visibility,
                 )
             except asyncpg.UniqueViolationError:
                 raise Conflict(f"project {project.entity}/{name} already exists") from None
+            if old != visibility:
+                await conn.execute(
+                    "INSERT INTO visibility_events (org_pk, project_pk, kind, from_visibility, "
+                    "to_visibility, user_pk) VALUES ($1, $2, 'visibility', $3, $4, $5)",
+                    project.org.pk,
+                    project.pk,
+                    old,
+                    visibility,
+                    user.pk if user is not None else None,
+                )
+                if visibility == "private":
+                    # Outsiders' streams end, with an event saying why; members' carry on.
+                    await live.publish(conn, [live.close_message(project.pk, outsiders=True)])
             if renamed:
                 # Dashboards address the project by name: tell them, then end their streams.
                 event = {"renamed_to": name}
@@ -1389,7 +1442,16 @@ class Store:
                         live.close_message(project.pk),
                     ],
                 )
-        return Project(project.pk, project.org, name, description, project.created_at, now)
+        return Project(
+            project.pk,
+            project.org,
+            name,
+            description,
+            project.created_at,
+            now,
+            visibility,
+            project.created_by,
+        )
 
     async def delete_project(self, project: Project, force: bool = False) -> None:
         """Delete a project with all its runs; refused while runs are active unless ``force``.
@@ -1463,10 +1525,16 @@ class Store:
     # ------------------------------------------------------------------ imports
 
     async def import_project(
-        self, org: Org, name: str, description: str | None, created_at: float | None
+        self,
+        org: Org,
+        name: str,
+        description: str | None,
+        created_at: float | None,
+        creator: int | None = None,
     ) -> Project:
-        """The project ``name`` of ``org``, created with the given creation time if missing."""
-        return await self.ensure_project(org.name, name, description, created_at)
+        """The project ``name`` of ``org``, created with the given creation time (by the user
+        ``creator``) if missing."""
+        return await self.ensure_project(org.name, name, description, created_at, creator=creator)
 
     async def import_run(self, project: Project, data: ImportedRun) -> Run | None:
         """Add a finished run copied from elsewhere, with its timestamps, series, logs and
