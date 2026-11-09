@@ -4,8 +4,9 @@
 | --- | --- |
 | Status | in review |
 | Date | 2026-11-06 |
-| Builds on | 013 score comparison, 018 refreshed bank, 021 changed suites, 023 SDPA pin |
+| Builds on | [013](013-score-compare.md) (`compare` and the bank), [018](018-bank-schema6.md) (the refreshed bank), [021](021-compare-changed-suites.md) (the Paloma bank), [023](023-deterministic-scoring.md) (the SDPA pin and its refusal) |
 | Keeps | Every task, request, metric, comparison tolerance and kernel refusal |
+| Result | OLMo 2 1B banked in BF16 on `base_easy`, byte-equal on a second H200; both FP32 banks refreshed with every score unchanged |
 
 ## 1. Goal
 

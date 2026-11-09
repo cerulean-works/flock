@@ -12,7 +12,7 @@ Use an installed checkout and a GPU machine with enough memory for OLMo 2 1B in 
 | `tests/eval/regression/olmo-2-0425-1b-paloma-float32.json` | `paloma` | FP32 |
 | `tests/eval/regression/olmo-2-0425-1b-bfloat16.json` | `base_easy` | BF16 |
 
-The steps below use the FP32 `base_easy` bank. For Paloma, run `--suite paloma` and compare with the Paloma bank. For BF16, run `--dtype bfloat16` and compare with the BF16 bank. A run on CPU records no kernel, so `compare` refuses it against these banks.
+The steps below use the FP32 `base_easy` bank. For Paloma, run `--suite paloma` and compare with the Paloma bank. For BF16, run `--dtype bfloat16` and compare with the BF16 bank. Its scores were repeatable byte for byte on two H200 nodes with the locked libraries. Another GPU type is not refused, and BF16 scores on one have not been measured against the bank. A run that records no kernel, on CPU or with attention other than `sdpa`, is refused against these banks with exit `2`.
 
 ## Run the check
 

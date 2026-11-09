@@ -436,13 +436,15 @@ def test_a_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(
         fields["dataset"] = Dataset(**fields["dataset"])
         tasks.append(TaskResult(**fields))
     suites = [SuiteResult(**suite) for suite in data["suites"]]
+    # Every bank records the pinned kernel, which `compare` refuses to mix across files.
+    assert data["provenance"]["sdpa_backend"] == "EFFICIENT_ATTENTION"
+    assert data["provenance"]["dtype"] == dtype
+    # Every bank records today's provenance fields. A field added later needs a default here
+    # until the banks are refreshed, as `add_bos` and `sdpa_backend` had.
     rewritten = Results(Provenance(**data["provenance"]), tasks, suites)
 
     comparison = compare(bank, write("rewritten", rewritten))
 
-    # Every bank records the pinned kernel, which `compare` refuses to mix across files.
-    assert data["provenance"]["sdpa_backend"] == "EFFICIENT_ATTENTION"
-    assert data["provenance"]["dtype"] == dtype
     assert suite in comparison.suites
     assert comparison.changed == []
     assert comparison.breaches == []
