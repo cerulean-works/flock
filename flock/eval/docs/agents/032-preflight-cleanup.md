@@ -5,7 +5,7 @@
 | Status | in review |
 | Date | 2026-11-09 |
 | Builds on | [022](022-prepared-tasks.md) (`prepare_task`), [028](028-sentencepiece-tokenizer.md) (the resegmentation refusal and its preflight, 028.D5) |
-| Keeps | Every task hash, every request and its token ids, every score, the schema and every error message |
+| Keeps | Every task hash, every request and its token ids, every score, the schema and the refusal's message |
 | Result | A model too short for a perplexity task fails before any task is tokenized again; the preflight calls `prepare_task`; the rule that decides which tokenizers check is one property, `ScoringModel.checks_resegmentation` |
 
 ## 1. Goal
@@ -24,7 +24,7 @@ The window check is a comparison of two integers per task, so it runs in its own
 
 ### 032.D2. The preflight calls `prepare_task` and discards the result
 
-The preflight now runs exactly what scoring will run, so it can't drift from it. The result is discarded, for 028.D5's reason: holding every task's tokens at once costs more than tokenizing them twice. A refusal still names its task, because the preflight adds the name to the error as before.
+The preflight now runs exactly what scoring will run, so it can't drift from it. The result is discarded, for 028.D5's reason: holding every task's tokens at once costs more than tokenizing them twice. A refusal still names its task, because the preflight adds the name to the error as before. Loading and building the requests now sit inside that `try` too, so on a model that checks, a `ValueError` from a task's docs also names the task, which it doesn't on other models. That error fails the run either way, and the name helps; wrapping only the encode step would mean copying `prepare_task` again.
 
 ### 032.D3. Which tokenizers check resegmentation is one property of the model
 
