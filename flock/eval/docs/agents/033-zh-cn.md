@@ -2,13 +2,13 @@
 
 | | |
 | --- | --- |
-| Status | design, in review |
+| Status | built; at parity with lm-evaluation-harness in FP32 |
 | Date | 2026-11-09 |
 | Builds on | [005](005-tmmluplus.md) (the Chinese cloze format, row ids, few-shot rule and parity method), [017](017-zh-tw-suite.md) (one member per benchmark) |
 | Keeps | every existing task, request, task hash, suite and score; `zh_tw` and `zh_tw:bpb` unchanged |
-| Result | (design) 119 subject tasks from C-Eval and CMMLU, their suites, and `zh_cn` and `zh_cn:bpb` |
+| Result | 119 subject tasks from C-Eval and CMMLU (23,922 docs), 24 benchmark suites, and `zh_cn` and `zh_cn:bpb` |
 
-The file number and the decision numbers are provisional. The file takes the next free number when its PR is opened, and decisions `033.D1` to `033.D7` take the next free global numbers after every stage merged before it.
+The file number and the decision numbers are provisional. The file takes the next free number when its PR is opened, and decisions `033.D1` to `033.D8` take the next free global numbers after every stage merged before it.
 
 ## 1. Goal
 
@@ -91,9 +91,9 @@ The code adds `SIMPLIFIED_QUESTION_PREFIX = "问题："` beside 005's `CHINESE_Q
 
 As on TMMLU+, a space increases average tokens per choice and is often a token of its own, so no space stays. Unlike TMMLU+ (100% under OLMo 2 and Qwen2.5), the boundary isn't clean for every choice. Under the first four tokenizers 610 choices merge with the colon, 600 of them opening with `“` (`：“` is one token); under Gemma 4, 2,091 do, adding 1,449 that open with `《`, mostly law titles such as `《中华人民共和国个人所得税法》`, and 33 with `（`. For those, 001's encoding (as lm-evaluation-harness's `_encode_pair`) takes the continuation as the joint ids after the context's length, so the opening quote falls on the context's side and isn't scored, while `acc_per_char` and `bpb` still count its character and bytes.
 
-The intended design keeps the format and reports the rate for non-empty continuations. Exact CPU verification also finds choices whose encoded continuation is empty. `ScoringModel.loglikelihood` refuses those requests, so unchanged encoding is a build and parity blocker, not an established parity pass. Resolving it requires an explicit design ruling before scoring: no choice exclusion, format change or core encoding change is authorized here. The frozen parity prediction stays unchanged.
+The format stays, and the docs page states the merge rate per tokenizer, since a run's `results.json` can't show it. Two choices merge so completely that they encode to no token at all; [033.D8](#033d8-two-docs-no-model-can-score-are-left-out-by-name) leaves their two docs out.
 
-The `results.json` of a run cannot show the merge rate, so the docs page states it per tokenizer. The `SentencePieceTokenizer` path refuses a changed context boundary outright (`model.py`). Its existing synthetic refusal tests pass, but no Cerulean checkpoint tokenizer identity is supplied for this design. Real SentencePiece lengths, boundary rates and compatibility remain blocked until a pinned tokenizer is checked.
+The `SentencePieceTokenizer` path refuses a changed context boundary outright (`model.py`), so a checkpoint with that tokenizer can score these tasks only once its own merge rate on them has been measured.
 
 ### 033.D2. Each benchmark's own header
 
@@ -129,7 +129,7 @@ The zip's CSV files are converted to parquet, one config per subject with `test`
 
 ### 033.D6. Docs are identified by their row index
 
-CMMLU's CSV files have an unnamed index column and C-Eval has an `id` column; both number rows from 0 within each split, but neither name is one `Dataset` reads. As TMMLU+ (005.D3), `Dataset(row_index=True)` gives every doc its position in its split, so both sets work the same way and no new field is needed. The build asserts that C-Eval's `id` equals the row index.
+CMMLU's CSV files have an unnamed index column and C-Eval has an `id` column; both number rows from 0 within each split, but neither name is one `Dataset` reads. As TMMLU+ (005.D3), `Dataset(row_index=True)` gives every doc its position in its split, so both sets work the same way and no new field is needed. C-Eval's `id` was checked equal to the row index at the pinned revision, on both splits.
 
 ### 033.D7. `zh_cn` and `zh_cn:bpb`, one member per benchmark
 
@@ -139,6 +139,12 @@ CMMLU's CSV files have an unnamed index column and C-Eval has an `id` column; bo
 | `zh_cn:bpb` | `ceval:bpb`, `cmmlu:bpb` | `bpb` |
 
 As 017.D2: the benchmarks' scored suites, weighed equally, so neither set's subject count decides the mix. `zh_cn` reads public data, but CMMLU's mirror is private, so it runs with access to the Cerulean organization, as `zh_tw` does for the exam set. A model's `zh_tw` and `zh_cn` are then read side by side; how a milestone uses them is decided outside this stage.
+
+### 033.D8. Two docs no model can score are left out by name
+
+A non-gold choice of two test docs is a lone symbol that merges into `答案：`: C-Eval `operating_system` row 32, choice A `<`, and CMMLU `computer_science` row 108, choice C `%`. Under the OLMo 2, Qwen2.5, Llama 3.2 and Qwen3.5 tokenizers both encode to no continuation token, in the conditional and the unconditional request; Gemma 4 keeps a token for `<` but not for `%`. `ScoringModel.loglikelihood` refuses an empty continuation before any forward pass, and lm-evaluation-harness asserts against one (`_loglikelihood_tokens`), so neither side can score these docs.
+
+The two tasks leave the rows out with a `keep` function each, `keep_ceval_operating_system` and `keep_cmmlu_computer_science`, named in `tasks/zh_cn.py` as 005.D7 names its repeats. Every other subject keeps every row. The parity reference drops the same rows with `process_docs`, so they are outside all three checks and listed with the results. Two alternatives were set aside: an encoding that falls back to the choice's own tokens would change every task's requests, and a space after `答案：` would change the reference rendering (033.D1).
 
 ---
 
@@ -163,7 +169,7 @@ A miss is handled as earlier stages handled theirs: a request over 1e-3 nats is 
 3. **Tasks:** `tasks/ceval.py` and `tasks/cmmlu.py` with their subject tables and suites, `tasks/zh_cn.py` with the two suites, and their registration.
 4. **Snapshot:** `tasks.json` gains 119 tasks and the new suites with no existing entry changed; a toy task pins the Simplified prefix's requests.
 5. **Docs:** a section on the tasks page with both sets, the suites, the licence and the boundary rate of 033.D1.
-6. **Parity** (section 5), then the baseline models scored on `zh_cn` and `zh_cn:bpb` in FP32 at the batch budget their other suites used.
+6. **Parity** (section 5). Scoring the baseline models on `zh_cn` and `zh_cn:bpb` follows in its own run, in FP32 at the batch budget their other suites used.
 
 ---
 
@@ -172,6 +178,7 @@ A miss is handled as earlier stages handled theirs: a request over 1e-3 nats is 
 On CPU with tiny random models:
 - **Rendering:** a fixture row of each set renders to the exact header, `问题：`, `答案：` and few-shot strings above, with stripped choices and no space before the answer.
 - **Few-shot:** five `dev` examples in file order; a test doc equal to a dev row's question and gold answer sees four.
+- **Left-out rows:** `ceval_operating_system` drops row 32 of `test` and no example, and no other subject has a `keep` (033.D8).
 - **Suites:** `ceval` and `cmmlu` are means over subjects, not over categories, and `zh_cn` weighs the two benchmarks equally, on hand values.
 - **Tables:** 52 and 67 distinct subjects in four categories each, and 15 China specific subjects, all inside CMMLU's table.
 - **Snapshot:** the new tasks and suites are pinned, and no existing task hash or request changes.
@@ -180,28 +187,19 @@ On CPU with tiny random models:
 
 ## 8. Open questions
 
-- Whether the boundary merge of 033.D1 also occurs on TMMLU+ under the Llama 3.2, Qwen3.5 and Gemma 4 tokenizers, which 005 checked only under OLMo 2 and Qwen2.5.
 - Whether a letter-scored (`MC`) variant, which is how both papers and the baselines score these sets, is worth a separately named task once models score above chance on the cloze one.
+- A checkpoint scored through `SentencePieceTokenizer` needs its own merge count on both sets first (033.D1).
 
+---
 
-## 9. Exact CPU verification and remaining blockers
+## 9. How it was actually built
 
-All test choices, conditional and unconditional, were rendered with the benchmark headers,
-five dev examples, 005.D7 and configured BOS. Maximum complete lengths (C-Eval / CMMLU)
-are OLMo 2 1B 1,530 / 852, Qwen2.5 0.5B 861 / 609, Llama 3.2 1B 1,053 / 586,
-Qwen3.5 0.8B 843 / 590 and Gemma 4 E2B 897 / 555 (including BOS).
-No request truncates at an input limit of 2,048 or 4,096. These are tokenizer checks,
-not scoring parity. The original space-tokenization statistics reproduce byte for byte.
+As planned, with one decision added before the build ([033.D8](#033d8-two-docs-no-model-can-score-are-left-out-by-name)) and the three task modules folded into one.
 
-Two non-gold choices require a design ruling before the build: C-Eval `operating_system`
-row 32, choice A (`<`), and CMMLU `computer_science` row 108, choice C (`%`). Each has an
-empty encoded continuation in both conditional and unconditional requests under the first
-four tokenizers. Gemma keeps a token for `<` but not for `%`. The actual scoring guard
-raises `ValueError: continuation has no tokens` before any model call. Dropping a distractor
-would change the task, so no exclusion is applied. The frozen parity prediction stays intact.
-
-The complete request hashes agree across tokenizers. Only `college_chemistry/196` and
-`college_law/99` lose their repeated dev example. Cerulean SentencePiece compatibility
-remains blocked on a pinned checkpoint tokenizer; synthetic guard tests do not resolve it.
-Scored and few-shot inputs must join training-admission references before results guide
-training. Milestone metrics remain pending parity and appropriate noise evidence.
+- **Request lengths, before the build.** Every test choice of both sets was rendered in full, conditional and unconditional, with the benchmark headers, five dev examples, 005.D7 and each tokenizer's configured BOS. The longest complete request (C-Eval / CMMLU) is 1,530 / 852 tokens under OLMo 2 1B, 861 / 609 under Qwen2.5 0.5B, 1,053 / 586 under Llama 3.2 1B, 843 / 590 under Qwen3.5 0.8B and 897 / 555 under Gemma 4 E2B, so none is truncated at a 2,048-token input. The same rendering found the two empty continuations of 033.D8. Only `college_chemistry` 196 and `college_law` 99 lose an example to 005.D7.
+- **Core.** `SIMPLIFIED_QUESTION_PREFIX = "问题："` sits beside 005's constants in `tasks/base.py` and is exported from `flock.eval.tasks`. Nothing else in the core changed.
+- **Tasks.** `tasks/zh_cn.py` holds both benchmarks, as two `Benchmark` values: repo, revision, header, row function and the `Subject` table by category. `Benchmark.task` builds one subject's task and `Benchmark.suites` its suites, so the two sets share one code path and differ only in data. The plan's three modules would have repeated that code. The row functions and the two `keep` functions are module-level functions rather than methods or lambdas, because the task snapshot (012) pins each task's functions by their qualified names. `cmmlu_doc` renames CMMLU's capitalized `Question` and `Answer` columns and calls `ceval_doc`. `ceval_doc` repeats `tmmluplus_doc` with the Simplified prefix rather than sharing it through a parameter, for the same reason: a `partial` has no name the snapshot can pin. Neither `keep` function is in the task hash, so their row numbers were checked against the pinned data: C-Eval `operating_system` row 32 has choice A `<`, CMMLU `computer_science` row 108 has choice C `%`, and each task's docs are its full rendering minus exactly that row. C-Eval's `id` equals the row index on every `test` and `dev` row, checked once against the pinned revision (033.D6).
+- **Mirror.** `cerulean-works/cmmlu` at `46bb6edee95673e17186965063d2fba50ec23e00` is private, created before its first write. A check read every subject and split back through `datasets` at that revision and compared all 71,502 cells with the zip's CSV text, with no difference. Cells are read with the `csv` module, not with pandas as the loading script does, so `college_actuarial_science`'s numeric dev choices keep their spelling, which here is the same either way. The zip also holds an empty `test/.zip`, which isn't a subject.
+- **Requests against the design.** Each task's requests over every test row, that is with `keep` removed, hash equal to the full rendering of the length check above, and each task's own requests are those minus exactly its 033.D8 rows. The snapshot gains the 119 tasks, the 26 suites and one toy task, `toy:simplified`; no existing entry changed.
+- **TMMLU+ under the newer tokenizers** (the open question of the design). Of TMMLU+'s 78,584 test choices, none encodes to an empty continuation under any of the five tokenizers. Two merge with `答案：` under OLMo 2, Qwen2.5 and Qwen3.5 (one opens with `<`, one with `%`, each with more text after it), 306 under Llama 3.2 (304 open with `「`) and 495 under Gemma 4 (304 `「`, 149 `《`, 42 `（`). So `tmmluplus` is scorable under all five, with the same partial merge as 033.D1 describes.
+- **Parity (section 5).** The reference configs drop the two 033.D8 rows with `process_docs`. Built without a model, the reference's requests equal ours on all 95,688 conditional requests of 23,922 docs, except the 8 of the two 005.D7 repeats, as the rule names. In FP32 on `Qwen/Qwen2.5-0.5B`, on the other 23,920 docs, both accuracies agree to 0.000 points, `bpb` to 1e-7 and the predicted choice on every doc, for `ceval`, `cmmlu`, every category, `cmmlu:china_specific`, `zh_cn` and `zh_cn:bpb`. The largest per-request difference is 4.7e-4 nats, under the 1e-3 bound, so no request needed scoring alone. Qwen scores `zh_cn` 0.386 `acc_per_char` (`ceval` 0.380, `cmmlu` 0.391; chance is 0.25) and `zh_cn:bpb` 1.032. BF16 is reported, as 005 reports it: choice agreement is 97.5% to 98.4% and accuracy gaps reach 0.65 points (`cmmlu:humanities`). Our own BF16 drift from the reference's FP32 answer is up to 0.50 points of accuracy and 1.0e-3 of `bpb` per unit, the reference's up to 0.35 points and 9.1e-4. BF16 moves a unit's accuracy by up to half a point, so models are compared on these suites in FP32.
