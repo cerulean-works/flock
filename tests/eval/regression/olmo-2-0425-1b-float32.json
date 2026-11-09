@@ -1,19 +1,22 @@
 {
   "provenance": {
     "model": "allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf",
-    "flock_commit": "b75c96abb37e259ef00fba8c16212efadf91d630",
-    "command": "flock-eval eval run --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf --suite base_easy --dtype float32 --out /work/harrychang08/eval-lab/026/bank",
+    "model_digest": null,
+    "flock_commit": "74836d6c6da24c1a9df5f2ae760dd3442a7bd5c5",
+    "command": "flock eval run --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf --suite base_easy --dtype float32 --out /work/harrychang08/eval-lab/023/fp32-base",
     "device": "NVIDIA H200",
     "dtype": "float32",
     "batch_tokens": 32768,
     "max_length": 4096,
+    "add_bos": false,
     "attention": "sdpa",
+    "sdpa_backend": "EFFICIENT_ATTENTION",
     "torch": "2.14.1+cu130",
     "transformers": "5.20.1",
     "tokenizers": "0.23.3",
     "datasets": "5.1.0",
     "python": "3.14.7",
-    "created_at": "2026-11-01T05:47:53+00:00"
+    "created_at": "2026-11-06T10:15:29+00:00"
   },
   "tasks": [
     {
@@ -37,13 +40,13 @@
       },
       "num_docs": 2376,
       "limit": null,
-      "seconds": 86.14116206672043,
+      "seconds": 85.24839751189575,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 27.58263230950698
+      "docs_per_second": 27.871491656701792
     },
     {
       "task": "arc_challenge",
@@ -66,13 +69,13 @@
       },
       "num_docs": 1172,
       "limit": null,
-      "seconds": 47.619514600373805,
+      "seconds": 46.98589920299128,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 24.6117586421345
+      "docs_per_second": 24.94365373187083
     },
     {
       "task": "csqa",
@@ -95,13 +98,13 @@
       },
       "num_docs": 1221,
       "limit": null,
-      "seconds": 39.84403064288199,
+      "seconds": 39.22817818261683,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 30.644490035250183
+      "docs_per_second": 31.12558514229094
     },
     {
       "task": "hellaswag",
@@ -124,13 +127,13 @@
       },
       "num_docs": 10042,
       "limit": null,
-      "seconds": 929.240685692057,
+      "seconds": 922.864881338086,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.806672754025149
+      "docs_per_second": 10.881332904812503
     },
     {
       "task": "winogrande",
@@ -152,13 +155,13 @@
       },
       "num_docs": 1267,
       "limit": null,
-      "seconds": 15.085369011387229,
+      "seconds": 14.893716969992965,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 83.98866471503626
+      "docs_per_second": 85.06942911246946
     },
     {
       "task": "socialiqa",
@@ -181,13 +184,13 @@
       },
       "num_docs": 1954,
       "limit": null,
-      "seconds": 59.41870387457311,
+      "seconds": 58.91672411933541,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 32.8852679810165
+      "docs_per_second": 33.165455636029364
     },
     {
       "task": "piqa",
@@ -210,13 +213,13 @@
       },
       "num_docs": 1838,
       "limit": null,
-      "seconds": 42.17513677291572,
+      "seconds": 41.77298825420439,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 43.58017876495276
+      "docs_per_second": 43.99972510501467
     },
     {
       "task": "sciq",
@@ -239,13 +242,13 @@
       },
       "num_docs": 1000,
       "limit": null,
-      "seconds": 28.618908062577248,
+      "seconds": 28.352870550006628,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 34.94193411619444
+      "docs_per_second": 35.26979739974745
     },
     {
       "task": "qasper_yesno",
@@ -268,13 +271,13 @@
       },
       "num_docs": 319,
       "limit": null,
-      "seconds": 31.108725951984525,
+      "seconds": 30.830297350883484,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.254357587397434
+      "docs_per_second": 10.346964752542636
     },
     {
       "task": "sciriff_yesno",
@@ -297,13 +300,13 @@
       },
       "num_docs": 1582,
       "limit": null,
-      "seconds": 349.4790652152151,
+      "seconds": 346.2517583039589,
       "truncation": {
         "requests": 10,
         "docs": 5,
         "max_tokens_cut": 467
       },
-      "docs_per_second": 4.526737528686526
+      "docs_per_second": 4.568929866953146
     },
     {
       "task": "lab_bench_dbqa",
@@ -326,13 +329,13 @@
       },
       "num_docs": 520,
       "limit": null,
-      "seconds": 67.36168759036809,
+      "seconds": 66.9892599270679,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 7.719521564871746
+      "docs_per_second": 7.762438345581529
     },
     {
       "task": "lab_bench_protocolqa",
@@ -355,13 +358,13 @@
       },
       "num_docs": 108,
       "limit": null,
-      "seconds": 6.936718293465674,
+      "seconds": 6.87913145404309,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 15.569321894149143
+      "docs_per_second": 15.699656376899858
     },
     {
       "task": "medmcqa",
@@ -384,13 +387,13 @@
       },
       "num_docs": 4183,
       "limit": null,
-      "seconds": 115.36787151079625,
+      "seconds": 113.80801510997117,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 36.257928184178645
+      "docs_per_second": 36.75488054121691
     },
     {
       "task": "medqa_en",
@@ -412,13 +415,13 @@
       },
       "num_docs": 1273,
       "limit": null,
-      "seconds": 346.7577193295583,
+      "seconds": 344.67253095656633,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.671151149745975
+      "docs_per_second": 3.69336075743273
     },
     {
       "task": "coqa",
@@ -441,13 +444,13 @@
       },
       "num_docs": 7728,
       "limit": null,
-      "seconds": 746.8796524619684,
+      "seconds": 739.9948869957589,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.347048516485748
+      "docs_per_second": 10.443315400967482
     },
     {
       "task": "drop",
@@ -470,13 +473,13 @@
       },
       "num_docs": 8380,
       "limit": null,
-      "seconds": 2826.065042098053,
+      "seconds": 2802.8902089800686,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.965253762800428
+      "docs_per_second": 2.989771048880777
     },
     {
       "task": "jeopardy",
@@ -499,13 +502,13 @@
       },
       "num_docs": 2099,
       "limit": null,
-      "seconds": 90.89715528767556,
+      "seconds": 90.02912337565795,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 23.09203179524141
+      "docs_per_second": 23.314677754237994
     },
     {
       "task": "naturalqs",
@@ -528,13 +531,13 @@
       },
       "num_docs": 3293,
       "limit": null,
-      "seconds": 74.30085226893425,
+      "seconds": 73.31794444704428,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 44.31981463793826
+      "docs_per_second": 44.913970581628234
     },
     {
       "task": "squad",
@@ -557,13 +560,13 @@
       },
       "num_docs": 10205,
       "limit": null,
-      "seconds": 2298.8911518463865,
+      "seconds": 2279.707539148163,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.439096645269052
+      "docs_per_second": 4.476451397714466
     },
     {
       "task": "mmlu_abstract_algebra",
@@ -586,13 +589,13 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 6.658025197684765,
+      "seconds": 6.35860379319638,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 15.019468540727903
+      "docs_per_second": 15.726722917851658
     },
     {
       "task": "mmlu_anatomy",
@@ -615,13 +618,13 @@
       },
       "num_docs": 135,
       "limit": null,
-      "seconds": 5.370668971911073,
+      "seconds": 5.316639699973166,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 25.136533401343158
+      "docs_per_second": 25.391978320569923
     },
     {
       "task": "mmlu_astronomy",
@@ -644,13 +647,13 @@
       },
       "num_docs": 152,
       "limit": null,
-      "seconds": 8.63783205114305,
+      "seconds": 8.577856943942606,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 17.597008033964464
+      "docs_per_second": 17.72004371177317
     },
     {
       "task": "mmlu_business_ethics",
@@ -673,13 +676,13 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 8.136156448163092,
+      "seconds": 8.073484731838107,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 12.290815772424963
+      "docs_per_second": 12.386225195378897
     },
     {
       "task": "mmlu_clinical_knowledge",
@@ -702,13 +705,13 @@
       },
       "num_docs": 265,
       "limit": null,
-      "seconds": 11.949631267227232,
+      "seconds": 11.85884911287576,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 22.17641649971096
+      "docs_per_second": 22.346181950512882
     },
     {
       "task": "mmlu_college_biology",
@@ -731,13 +734,13 @@
       },
       "num_docs": 144,
       "limit": null,
-      "seconds": 8.791397899389267,
+      "seconds": 8.743073206860572,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 16.379647656489713
+      "docs_per_second": 16.470181204362458
     },
     {
       "task": "mmlu_college_chemistry",
@@ -760,13 +763,13 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 8.187238312326372,
+      "seconds": 8.13027610303834,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 12.214130844273102
+      "docs_per_second": 12.299705290774726
     },
     {
       "task": "mmlu_college_computer_science",
@@ -789,13 +792,13 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 14.836189825087786,
+      "seconds": 14.746909006964415,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 6.740275042241737
+      "docs_per_second": 6.781082052704993
     },
     {
       "task": "mmlu_college_mathematics",
@@ -818,13 +821,13 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 9.935899646952748,
+      "seconds": 9.875873898155987,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.064513889355666
+      "docs_per_second": 10.1256861955955
     },
     {
       "task": "mmlu_college_medicine",
@@ -847,13 +850,13 @@
       },
       "num_docs": 173,
       "limit": null,
-      "seconds": 11.701145582832396,
+      "seconds": 11.618814073968679,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 14.784877153722531
+      "docs_per_second": 14.889643546977577
     },
     {
       "task": "mmlu_college_physics",
@@ -876,13 +879,13 @@
       },
       "num_docs": 102,
       "limit": null,
-      "seconds": 8.258351278491318,
+      "seconds": 8.206591472029686,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 12.35113360528228
+      "docs_per_second": 12.429033460194036
     },
     {
       "task": "mmlu_computer_security",
@@ -905,13 +908,13 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 5.068060178309679,
+      "seconds": 5.03350914362818,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 19.731415271661678
+      "docs_per_second": 19.866855735543467
     },
     {
       "task": "mmlu_conceptual_physics",
@@ -934,13 +937,13 @@
       },
       "num_docs": 235,
       "limit": null,
-      "seconds": 8.731414676643908,
+      "seconds": 8.66299133375287,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 26.914309845873326
+      "docs_per_second": 27.12688850147981
     },
     {
       "task": "mmlu_econometrics",
@@ -963,13 +966,13 @@
       },
       "num_docs": 114,
       "limit": null,
-      "seconds": 11.51778110023588,
+      "seconds": 11.469121816102415,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.897739764967866
+      "docs_per_second": 9.93973225046283
     },
     {
       "task": "mmlu_electrical_engineering",
@@ -992,13 +995,13 @@
       },
       "num_docs": 145,
       "limit": null,
-      "seconds": 9.701730783097446,
+      "seconds": 9.639486278872937,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 14.945786812866626
+      "docs_per_second": 15.042295388479314
     },
     {
       "task": "mmlu_elementary_mathematics",
@@ -1021,13 +1024,13 @@
       },
       "num_docs": 378,
       "limit": null,
-      "seconds": 24.19886357616633,
+      "seconds": 24.050577610731125,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 15.62056824735751
+      "docs_per_second": 15.716878243761606
     },
     {
       "task": "mmlu_formal_logic",
@@ -1050,13 +1053,13 @@
       },
       "num_docs": 126,
       "limit": null,
-      "seconds": 10.429640122689307,
+      "seconds": 10.353904417250305,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 12.080953754664222
+      "docs_per_second": 12.169322308024736
     },
     {
       "task": "mmlu_global_facts",
@@ -1079,13 +1082,13 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 5.263936169445515,
+      "seconds": 5.221738175023347,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 18.9971908436978
+      "docs_per_second": 19.15071124751537
     },
     {
       "task": "mmlu_high_school_biology",
@@ -1108,13 +1111,13 @@
       },
       "num_docs": 310,
       "limit": null,
-      "seconds": 18.894569461233914,
+      "seconds": 18.74831720208749,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 16.406830578279575
+      "docs_per_second": 16.53481732032375
     },
     {
       "task": "mmlu_high_school_chemistry",
@@ -1137,13 +1140,13 @@
       },
       "num_docs": 203,
       "limit": null,
-      "seconds": 15.136438463814557,
+      "seconds": 15.01848142594099,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 13.411345111684989
+      "docs_per_second": 13.516679499257757
     },
     {
       "task": "mmlu_high_school_computer_science",
@@ -1166,13 +1169,13 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 11.98869002982974,
+      "seconds": 11.91453231824562,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.34119488878137
+      "docs_per_second": 8.393111649616534
     },
     {
       "task": "mmlu_high_school_european_history",
@@ -1195,13 +1198,13 @@
       },
       "num_docs": 165,
       "limit": null,
-      "seconds": 93.27355900313705,
+      "seconds": 92.7029565218836,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.7689900735368165
+      "docs_per_second": 1.7798785086325681
     },
     {
       "task": "mmlu_high_school_geography",
@@ -1224,13 +1227,13 @@
       },
       "num_docs": 198,
       "limit": null,
-      "seconds": 8.489692549221218,
+      "seconds": 8.41863107169047,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 23.32239935098275
+      "docs_per_second": 23.51926320489554
     },
     {
       "task": "mmlu_high_school_government_and_politics",
@@ -1253,13 +1256,13 @@
       },
       "num_docs": 193,
       "limit": null,
-      "seconds": 10.240089549683034,
+      "seconds": 10.181648029014468,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 18.847491427062177
+      "docs_per_second": 18.955673919390183
     },
     {
       "task": "mmlu_high_school_macroeconomics",
@@ -1282,13 +1285,13 @@
       },
       "num_docs": 390,
       "limit": null,
-      "seconds": 15.53006547037512,
+      "seconds": 15.421645608730614,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 25.112579257567017
+      "docs_per_second": 25.28912996024305
     },
     {
       "task": "mmlu_high_school_mathematics",
@@ -1311,13 +1314,13 @@
       },
       "num_docs": 270,
       "limit": null,
-      "seconds": 22.702533436007798,
+      "seconds": 22.56491728266701,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 11.892945814221827
+      "docs_per_second": 11.965477055278084
     },
     {
       "task": "mmlu_high_school_microeconomics",
@@ -1340,13 +1343,13 @@
       },
       "num_docs": 238,
       "limit": null,
-      "seconds": 10.376526637934148,
+      "seconds": 10.294968091882765,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 22.936384042992557
+      "docs_per_second": 23.11809010730737
     },
     {
       "task": "mmlu_high_school_physics",
@@ -1369,13 +1372,13 @@
       },
       "num_docs": 151,
       "limit": null,
-      "seconds": 12.44752440508455,
+      "seconds": 12.377496219240129,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 12.130926205560979
+      "docs_per_second": 12.199559371731329
     },
     {
       "task": "mmlu_high_school_psychology",
@@ -1398,13 +1401,13 @@
       },
       "num_docs": 545,
       "limit": null,
-      "seconds": 32.230035321787,
+      "seconds": 32.103000338189304,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 16.909692917140198
+      "docs_per_second": 16.97660636883448
     },
     {
       "task": "mmlu_high_school_statistics",
@@ -1427,13 +1430,13 @@
       },
       "num_docs": 216,
       "limit": null,
-      "seconds": 23.773329094052315,
+      "seconds": 23.668485634960234,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.085812052046155
+      "docs_per_second": 9.126059154412095
     },
     {
       "task": "mmlu_high_school_us_history",
@@ -1456,13 +1459,13 @@
       },
       "num_docs": 204,
       "limit": null,
-      "seconds": 90.38533315714449,
+      "seconds": 89.62980463868007,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.257003353025478
+      "docs_per_second": 2.2760286137225725
     },
     {
       "task": "mmlu_high_school_world_history",
@@ -1485,13 +1488,13 @@
       },
       "num_docs": 237,
       "limit": null,
-      "seconds": 62.241998319514096,
+      "seconds": 61.86937633482739,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.8077183637867846
+      "docs_per_second": 3.8306511886816677
     },
     {
       "task": "mmlu_human_aging",
@@ -1514,13 +1517,13 @@
       },
       "num_docs": 223,
       "limit": null,
-      "seconds": 8.660178081132472,
+      "seconds": 8.573484005406499,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 25.750047852461574
+      "docs_per_second": 26.010429349302413
     },
     {
       "task": "mmlu_human_sexuality",
@@ -1543,13 +1546,13 @@
       },
       "num_docs": 131,
       "limit": null,
-      "seconds": 6.478095782920718,
+      "seconds": 6.436646572779864,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 20.221991830589644
+      "docs_per_second": 20.352212680744348
     },
     {
       "task": "mmlu_international_law",
@@ -1572,13 +1575,13 @@
       },
       "num_docs": 121,
       "limit": null,
-      "seconds": 8.486966299824417,
+      "seconds": 8.430668407585472,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 14.257155705037183
+      "docs_per_second": 14.352361420255903
     },
     {
       "task": "mmlu_jurisprudence",
@@ -1601,13 +1604,13 @@
       },
       "num_docs": 108,
       "limit": null,
-      "seconds": 5.4890798246487975,
+      "seconds": 5.46108637098223,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 19.675428933466105
+      "docs_per_second": 19.77628491170982
     },
     {
       "task": "mmlu_logical_fallacies",
@@ -1630,13 +1633,13 @@
       },
       "num_docs": 163,
       "limit": null,
-      "seconds": 9.975902534089983,
+      "seconds": 9.917820387985557,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 16.339373750193634
+      "docs_per_second": 16.435062707674977
     },
     {
       "task": "mmlu_machine_learning",
@@ -1659,13 +1662,13 @@
       },
       "num_docs": 112,
       "limit": null,
-      "seconds": 10.178246312774718,
+      "seconds": 10.128447939641774,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 11.003860248442681
+      "docs_per_second": 11.057962746853123
     },
     {
       "task": "mmlu_management",
@@ -1688,13 +1691,13 @@
       },
       "num_docs": 103,
       "limit": null,
-      "seconds": 3.5224238662049174,
+      "seconds": 3.4969971706159413,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 29.2412281747832
+      "docs_per_second": 29.453841388684385
     },
     {
       "task": "mmlu_marketing",
@@ -1717,13 +1720,13 @@
       },
       "num_docs": 234,
       "limit": null,
-      "seconds": 11.59246155899018,
+      "seconds": 11.557774339802563,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 20.185531675843983
+      "docs_per_second": 20.24611254038356
     },
     {
       "task": "mmlu_medical_genetics",
@@ -1746,13 +1749,13 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 3.6497918143868446,
+      "seconds": 3.611652015708387,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 27.398823024868815
+      "docs_per_second": 27.68816031142083
     },
     {
       "task": "mmlu_miscellaneous",
@@ -1775,13 +1778,13 @@
       },
       "num_docs": 783,
       "limit": null,
-      "seconds": 26.25086856726557,
+      "seconds": 26.05373506480828,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 29.827584485200195
+      "docs_per_second": 30.053272517445162
     },
     {
       "task": "mmlu_moral_disputes",
@@ -1804,13 +1807,13 @@
       },
       "num_docs": 346,
       "limit": null,
-      "seconds": 18.90024178661406,
+      "seconds": 18.754759604111314,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 18.306644111032043
+      "docs_per_second": 18.448650225522048
     },
     {
       "task": "mmlu_moral_scenarios",
@@ -1833,13 +1836,13 @@
       },
       "num_docs": 895,
       "limit": null,
-      "seconds": 88.28604077547789,
+      "seconds": 87.54633904015645,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.137502963532974
+      "docs_per_second": 10.223157356579746
     },
     {
       "task": "mmlu_nutrition",
@@ -1862,13 +1865,13 @@
       },
       "num_docs": 306,
       "limit": null,
-      "seconds": 19.443839426152408,
+      "seconds": 19.32287518493831,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 15.737632537143
+      "docs_per_second": 15.836152594853958
     },
     {
       "task": "mmlu_philosophy",
@@ -1891,13 +1894,13 @@
       },
       "num_docs": 311,
       "limit": null,
-      "seconds": 13.524378369562328,
+      "seconds": 13.423864091746509,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 22.99551162365657
+      "docs_per_second": 23.16769581950806
     },
     {
       "task": "mmlu_prehistory",
@@ -1920,13 +1923,13 @@
       },
       "num_docs": 324,
       "limit": null,
-      "seconds": 17.0202522771433,
+      "seconds": 16.90127103123814,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 19.0361455708329
+      "docs_per_second": 19.17015586586121
     },
     {
       "task": "mmlu_professional_accounting",
@@ -1949,13 +1952,13 @@
       },
       "num_docs": 282,
       "limit": null,
-      "seconds": 30.19247917458415,
+      "seconds": 30.018252035137266,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.34007434001597
+      "docs_per_second": 9.394284506303382
     },
     {
       "task": "mmlu_professional_law",
@@ -1978,13 +1981,13 @@
       },
       "num_docs": 1534,
       "limit": null,
-      "seconds": 393.4898060420528,
+      "seconds": 391.26779320975766,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.8984491502584424
+      "docs_per_second": 3.9205884732189715
     },
     {
       "task": "mmlu_professional_medicine",
@@ -2007,13 +2010,13 @@
       },
       "num_docs": 272,
       "limit": null,
-      "seconds": 53.35158747714013,
+      "seconds": 52.88034042483196,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 5.098255044735931
+      "docs_per_second": 5.143688520436834
     },
     {
       "task": "mmlu_professional_psychology",
@@ -2036,13 +2039,13 @@
       },
       "num_docs": 612,
       "limit": null,
-      "seconds": 39.20755651034415,
+      "seconds": 38.86044244095683,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 15.609235934877395
+      "docs_per_second": 15.74866269033995
     },
     {
       "task": "mmlu_public_relations",
@@ -2065,13 +2068,13 @@
       },
       "num_docs": 110,
       "limit": null,
-      "seconds": 6.435195406898856,
+      "seconds": 6.3819102719426155,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 17.0934980283698
+      "docs_per_second": 17.236218516515848
     },
     {
       "task": "mmlu_security_studies",
@@ -2094,13 +2097,13 @@
       },
       "num_docs": 245,
       "limit": null,
-      "seconds": 22.007038502953947,
+      "seconds": 21.89886988606304,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 11.132801897316366
+      "docs_per_second": 11.187791939707528
     },
     {
       "task": "mmlu_sociology",
@@ -2123,13 +2126,13 @@
       },
       "num_docs": 201,
       "limit": null,
-      "seconds": 9.135419009253383,
+      "seconds": 9.067378788720816,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 22.002274859686736
+      "docs_per_second": 22.167376557603387
     },
     {
       "task": "mmlu_us_foreign_policy",
@@ -2152,13 +2155,13 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 5.101607541553676,
+      "seconds": 5.048953870777041,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 19.601664609729145
+      "docs_per_second": 19.806083113334104
     },
     {
       "task": "mmlu_virology",
@@ -2181,13 +2184,13 @@
       },
       "num_docs": 166,
       "limit": null,
-      "seconds": 8.128345746546984,
+      "seconds": 8.083073921967298,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 20.422359625944644
+      "docs_per_second": 20.53674154196008
     },
     {
       "task": "mmlu_world_religions",
@@ -2210,13 +2213,13 @@
       },
       "num_docs": 171,
       "limit": null,
-      "seconds": 6.424597594887018,
+      "seconds": 6.383791320025921,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 26.616453011172162
+      "docs_per_second": 26.78658988485007
     },
     {
       "task": "basic_skills_arithmetic",
@@ -2239,13 +2242,13 @@
       },
       "num_docs": 1047,
       "limit": null,
-      "seconds": 30.238518729805946,
+      "seconds": 29.88325140438974,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 34.62471192307372
+      "docs_per_second": 35.03634814805324
     },
     {
       "task": "basic_skills_coding",
@@ -2268,13 +2271,13 @@
       },
       "num_docs": 1012,
       "limit": null,
-      "seconds": 46.023370414972305,
+      "seconds": 45.441664420068264,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 21.98882852071122
+      "docs_per_second": 22.270311022170077
     },
     {
       "task": "basic_skills_common_knowledge",
@@ -2297,13 +2300,13 @@
       },
       "num_docs": 1037,
       "limit": null,
-      "seconds": 21.33386510424316,
+      "seconds": 21.121805203147233,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 48.60816335591003
+      "docs_per_second": 49.09618235876368
     },
     {
       "task": "basic_skills_logical_reasoning",
@@ -2326,13 +2329,13 @@
       },
       "num_docs": 1118,
       "limit": null,
-      "seconds": 31.162880221381783,
+      "seconds": 30.857701202854514,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 35.876016339237694
+      "docs_per_second": 36.23082590146341
     },
     {
       "task": "basic_skills_string_operations",
@@ -2355,13 +2358,13 @@
       },
       "num_docs": 1219,
       "limit": null,
-      "seconds": 30.995634796097875,
+      "seconds": 30.566673532128334,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 39.32811855666409
+      "docs_per_second": 39.880034663200135
     },
     {
       "task": "basic_skills_pattern",
@@ -2384,13 +2387,13 @@
       },
       "num_docs": 534,
       "limit": null,
-      "seconds": 5.1267162365838885,
+      "seconds": 5.070567074231803,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 104.16024124553907
+      "docs_per_second": 105.31366456303147
     },
     {
       "task": "lambada",
@@ -2409,13 +2412,13 @@
       },
       "num_docs": 5153,
       "limit": null,
-      "seconds": 19.89763771276921,
+      "seconds": 19.608425188809633,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 258.9754660520876
+      "docs_per_second": 262.7951990219375
     },
     {
       "task": "minerva_math_algebra",
@@ -2433,13 +2436,13 @@
       },
       "num_docs": 1187,
       "limit": null,
-      "seconds": 50.69014593306929,
+      "seconds": 50.389752220362425,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 23.41678008911834
+      "docs_per_second": 23.556376995248154
     },
     {
       "task": "minerva_math_counting_and_probability",
@@ -2457,13 +2460,13 @@
       },
       "num_docs": 474,
       "limit": null,
-      "seconds": 21.54285538662225,
+      "seconds": 21.455934555269778,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 22.002654313612762
+      "docs_per_second": 22.09178997908442
     },
     {
       "task": "minerva_math_geometry",
@@ -2481,13 +2484,13 @@
       },
       "num_docs": 479,
       "limit": null,
-      "seconds": 27.119301431812346,
+      "seconds": 26.956884185317904,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 17.66269685096343
+      "docs_per_second": 17.769115922562293
     },
     {
       "task": "minerva_math_intermediate_algebra",
@@ -2505,13 +2508,13 @@
       },
       "num_docs": 903,
       "limit": null,
-      "seconds": 49.23798615857959,
+      "seconds": 48.87645319197327,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 18.339499042298964
+      "docs_per_second": 18.475154006230042
     },
     {
       "task": "minerva_math_number_theory",
@@ -2529,13 +2532,13 @@
       },
       "num_docs": 540,
       "limit": null,
-      "seconds": 24.24568433035165,
+      "seconds": 24.057434215210378,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 22.272004891361547
+      "docs_per_second": 22.446283970656502
     },
     {
       "task": "minerva_math_prealgebra",
@@ -2553,13 +2556,13 @@
       },
       "num_docs": 871,
       "limit": null,
-      "seconds": 36.93665407691151,
+      "seconds": 36.44304114812985,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 23.580912288004118
+      "docs_per_second": 23.900310527314407
     },
     {
       "task": "minerva_math_precalculus",
@@ -2577,13 +2580,13 @@
       },
       "num_docs": 546,
       "limit": null,
-      "seconds": 32.01047189440578,
+      "seconds": 31.7871160521172,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 17.056918179810406
+      "docs_per_second": 17.176770585440806
     },
     {
       "task": "humaneval",
@@ -2601,13 +2604,13 @@
       },
       "num_docs": 164,
       "limit": null,
-      "seconds": 6.149137237109244,
+      "seconds": 6.097787922713906,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 26.670408168853562
+      "docs_per_second": 26.89499898628969
     },
     {
       "task": "mbpp",
@@ -2625,13 +2628,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 8.239128398709,
+      "seconds": 8.184685790911317,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 60.68603082801158
+      "docs_per_second": 61.08970005363247
     },
     {
       "task": "mt_mbpp_bash",
@@ -2649,13 +2652,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 10.907775966450572,
+      "seconds": 10.836598301772028,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 45.838858584725934
+      "docs_per_second": 46.13994042007064
     },
     {
       "task": "mt_mbpp_c",
@@ -2673,13 +2676,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 22.192033720202744,
+      "seconds": 22.065115769859403,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 22.53060743796635
+      "docs_per_second": 22.660202883820443
     },
     {
       "task": "mt_mbpp_cpp",
@@ -2697,13 +2700,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 13.57440092973411,
+      "seconds": 13.505813794676214,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 36.834038024084926
+      "docs_per_second": 37.021093849012814
     },
     {
       "task": "mt_mbpp_csharp",
@@ -2721,13 +2724,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 12.58914521150291,
+      "seconds": 12.51896026590839,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 39.716755315773284
+      "docs_per_second": 39.93941903958263
     },
     {
       "task": "mt_mbpp_go",
@@ -2745,13 +2748,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 16.218197878450155,
+      "seconds": 16.071224302984774,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 30.829565883172037
+      "docs_per_second": 31.11150653949489
     },
     {
       "task": "mt_mbpp_haskell",
@@ -2769,13 +2772,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 9.021725103259087,
+      "seconds": 8.955131282098591,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 55.42177291783981
+      "docs_per_second": 55.83391066521891
     },
     {
       "task": "mt_mbpp_java",
@@ -2793,13 +2796,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 12.62248875014484,
+      "seconds": 12.51051866915077,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 39.61183962190203
+      "docs_per_second": 39.96636855935731
     },
     {
       "task": "mt_mbpp_javascript",
@@ -2817,13 +2820,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 17.799957904964685,
+      "seconds": 17.651069052051753,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 28.089954070090368
+      "docs_per_second": 28.32689615147589
     },
     {
       "task": "mt_mbpp_matlab",
@@ -2841,13 +2844,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 8.692197365686297,
+      "seconds": 8.625495678279549,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 57.522853999360635
+      "docs_per_second": 57.96768309316811
     },
     {
       "task": "mt_mbpp_php",
@@ -2865,13 +2868,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 11.846900719217956,
+      "seconds": 11.768063480965793,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 42.20513127023202
+      "docs_per_second": 42.487874135682816
     },
     {
       "task": "mt_mbpp_python",
@@ -2889,13 +2892,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 8.217123851180077,
+      "seconds": 8.17450451431796,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 60.84854129686679
+      "docs_per_second": 61.16578676104842
     },
     {
       "task": "mt_mbpp_r",
@@ -2913,13 +2916,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 9.166548340581357,
+      "seconds": 9.111571980640292,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 54.546158643645924
+      "docs_per_second": 54.875273011327714
     },
     {
       "task": "mt_mbpp_ruby",
@@ -2937,13 +2940,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 7.685063531622291,
+      "seconds": 7.625726509839296,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 65.06127085906493
+      "docs_per_second": 65.5675232195728
     },
     {
       "task": "mt_mbpp_rust",
@@ -2961,13 +2964,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 11.318518846295774,
+      "seconds": 11.223746056202799,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 44.175391390865215
+      "docs_per_second": 44.5484063427892
     },
     {
       "task": "mt_mbpp_scala",
@@ -2985,13 +2988,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 10.365056672133505,
+      "seconds": 10.29588013375178,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 48.239003009433794
+      "docs_per_second": 48.563113935340844
     },
     {
       "task": "mt_mbpp_swift",
@@ -3009,13 +3012,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 20.782951488159597,
+      "seconds": 20.61147752404213,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 24.058180585411968
+      "docs_per_second": 24.258328856666296
     },
     {
       "task": "mt_mbpp_typescript",
@@ -3033,13 +3036,13 @@
       },
       "num_docs": 500,
       "limit": null,
-      "seconds": 22.24874867592007,
+      "seconds": 22.082289844751358,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 22.47317398758486
+      "docs_per_second": 22.64257934821206
     }
   ],
   "suites": [
@@ -3325,5 +3328,5 @@
       "score": null
     }
   ],
-  "schema_version": 6
+  "schema_version": 8
 }
