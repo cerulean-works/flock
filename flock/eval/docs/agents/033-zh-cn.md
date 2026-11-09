@@ -24,7 +24,7 @@ The file number and the decision numbers are provisional. The file takes the nex
 
 ## 2. What the baselines report in Chinese
 
-What each baseline's report or model card says about Chinese, for the models we score. Every number below is for a post-trained model, generated with sampling; none is for the base models we score, and none uses our format. They are context for a reader, not a target for our numbers.
+What each baseline's report or model card says about Chinese, for the models we score. The Qwen3 predecessor row reports base-model results. Other published figures are from post-trained models, with generation conditions stated where available; Gemma establishes thinking mode but not sampling settings. None is for the base models we score in our format. They are context for a reader, not a target for our numbers.
 
 | Model we score | Chinese set reported | Shots, metric, setting | Published number | Source |
 | --- | --- | --- | --- | --- |
@@ -35,9 +35,11 @@ What each baseline's report or model card says about Chinese, for the models we 
 | Qwen3.5 4B (post-trained) | MMMLU, INCLUDE | as above | 76.1, 71.0 | same card |
 | Qwen3.5 family | C-Eval, post-trained Plus and Omni models only | | 92.3 (Plus), 86.0 (Omni-Flash), 92.0 (Omni-Plus) | Qwen3.5-Omni report (2604.15804), p.10 Table 4 |
 | Qwen3 base models (predecessor, for the protocol) | MMMLU and INCLUDE, no Chinese-only set | "MMMLU (OpenAI, 2024) (5-shot), INCLUDE (Romanou et al., 2024) (5-shot)" | Qwen3-0.6B Base: MMMLU 50.16, INCLUDE 34.26 | Qwen3 report (2505.09388), p.4 to 5 sec. 3.3 and p.8; C-Eval appears only in its post-training evaluation (p.13) |
-| Llama 3.2 1B | none | the multilingual table covers Portuguese, Spanish, Italian, German, French, Hindi and Thai; Chinese is not among the supported "English, German, French, Italian, Portuguese, Hindi, Spanish, and Thai" | | `meta-llama/Llama-3.2-1B` card at `4e20de36` |
+| Llama 3.2 1B | no Chinese-specific result | the multilingual table covers Portuguese, Spanish, Italian, German, French, Hindi and Thai; Chinese is not among the supported "English, German, French, Italian, Portuguese, Hindi, Spanish, and Thai" | | `meta-llama/Llama-3.2-1B` card at `4e20de36` |
 | Gemma 4 E2B | MMMLU only (instruction-tuned, thinking mode) | "All models are in thinking mode unless explicitly stated" | 67.4 | Gemma 4 report (2607.02770), p.5 Table 5; same row on the `google/gemma-4-E2B` card at `d29ff6b4` |
 | OLMo 2 1B | none | | | `allenai/OLMo-2-0425-1B` card at `a1847dff` |
+
+Llama's card also reports an instruction-tuned MGSM aggregate without its language composition; it is not a Chinese-specific score.
 
 So C-Eval is the one Chinese-only set a baseline reports, and only Qwen reports it. CMMLU is in no baseline's report for these models; it is the other widely used native Simplified exam set, so it joins as the second member so that `zh_cn` doesn't rest on one benchmark, as `zh_tw` rests on two.
 
@@ -55,7 +57,7 @@ So C-Eval is the one Chinese-only set a baseline reports, and only Qwen reports 
 | Shots | `dev`, 5 per subject, 260 | `dev`, 5 per subject, 335 |
 | Categories | STEM 20, Humanities 11, Social Science 10, Other 11 (`subject_mapping.json`, `hkust-nlp/ceval` at `cba65ae9`) | STEM 17, Humanities 13, Social Science 22, Other 15; 15 also tagged China specific (`src/categories.py`, `haonan-li/CMMLU` at `d6e7b716`) |
 
-- **C-Eval's test labels are public now.** The paper withheld them for its leaderboard; the dataset card says "[2025.7.27] We have released the complete C-Eval test set to the community!". At the pin all 12,342 test rows carry an answer letter; at `b4b16302` (March 2025) none did. lm-evaluation-harness v0.4.3's `ceval-valid` scores the 1,346-doc `val` split because it predates the release. We score `test`, nine times as many docs, which is the split C-Eval's paper and leaderboard report (p.5: "obtain the test accuracy, where a public leaderboard is maintained").
+- **C-Eval's test labels are public now.** The paper withheld them for its leaderboard; the dataset card says "[2025.7.27] We have released the complete C-Eval test set to the community!". At the pin all 12,342 test rows carry an answer letter; a spot check at `b4b16302` (March 2025) found no labels in the 171 `computer_network` test rows. Other subjects at that old pin were not checked. lm-evaluation-harness v0.4.3's `ceval-valid` scores the 1,346-doc `val` split because it predates the release. We score `test`, nine times as many docs, which is the split C-Eval's paper and leaderboard report (p.5: "obtain the test accuracy, where a public leaderboard is maintained").
 - **CMMLU is a loading-script dataset.** Its repository holds `cmmlu.py` and a zip of CSV files, and `datasets` 4 refuses dataset scripts, so it can't be read as TMMLU+ is. [033.D5](#033d5-cmmlu-is-read-from-a-private-parquet-mirror) mirrors it.
 - **CMMLU's counts differ from its paper.** The paper (p.4) says "CMMLU contains 11,528 questions across 67 subjects"; v1.0.1 holds 11,582 test and 335 dev rows. It also says 16 tasks are China specific; its own mapping file tags 15. We follow the files.
 - **Quirks kept as they are:** 153 C-Eval and 132 CMMLU test questions repeat an earlier question within their subject; 6 C-Eval and 343 CMMLU choices have outer whitespace, which 005.D1 strips. No choice is empty after stripping. One test doc per set repeats a dev row's question and gold answer (C-Eval `college_chemistry` 196, CMMLU `college_law` 99), which 005.D7 already handles.
@@ -117,11 +119,11 @@ Each subject is a `MultipleChoiceTask` named `ceval_<subject>` or `cmmlu_<subjec
 
 ### 033.D4. Five examples from `dev`, in file order, with 005.D7
 
-Each subject shows its five `dev` rows in file order (`first_n`, as lm-evaluation-harness's `ceval` and `cmmlu` and as 005.D4), answer only: C-Eval's `explanation` field is for chain of thought and isn't shown. Every subject of both sets has exactly five `dev` rows, so `k` is 5 throughout. 005.D7 applies unchanged and drops one example for each of the two repeats in section 3. CMMLU's paper drops "the longest examples" when a context is too long; at 5 shots the longest context with its longest choice is 1,534 tokens (OLMo 2, C-Eval `logic`), against a 4,096-token window for the smallest model we score, so no example is dropped; the build rechecks it on the rendered requests.
+Each subject shows its five `dev` rows in file order (`first_n`, as lm-evaluation-harness's `ceval` and `cmmlu` and as 005.D4), answer only: C-Eval's `explanation` field is for chain of thought and isn't shown. Every subject of both sets has exactly five `dev` rows, so `k` is 5 throughout. 005.D7 applies unchanged and drops one example for each of the two repeats in section 3. CMMLU's paper drops "the longest examples" when a context is too long; the original approximate survey does not establish maximum actual request length or absence of truncation. Exact verification must include the real headers, all choices, 005.D7 and configured BOS.
 
 ### 033.D5. CMMLU is read from a private parquet mirror
 
-The zip's CSV files are converted to parquet, one config per subject with `test` and `dev` splits, every row and column kept in order, and uploaded with the original card and licence to a Cerulean repository on the Hugging Face Hub, pinned by revision, as DRCD's mirror (010). The repository is private before its first write: the text is under a non-commercial licence, and making it public is a separate decision. The conversion script and the zip's SHA-256 are recorded with the mirror, and a check reads both and compares every cell. C-Eval is read from its own repository.
+The zip's CSV files are converted to parquet, one config per subject with `test` and `dev` splits, every row and column kept in order, and uploaded with the original card and licence to a private `cerulean-works` repository on the Hugging Face Hub, pinned by revision, as DRCD's mirror (010). The repository is private before its first write: the text is under a non-commercial licence, and making it public is a separate decision. The conversion script and the zip's SHA-256 are recorded with the mirror, and a check reads both and compares every cell. C-Eval is read from its own repository.
 
 ### 033.D6. Docs are identified by their row index
 
