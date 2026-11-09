@@ -26,6 +26,18 @@ def by_name[T: Task | Suite](items: Iterable[T]) -> dict[str, T]:
     return named
 
 
+def pins(tasks: Iterable[Task]) -> dict[tuple[str, str], set[tuple[str | None, str]]]:
+    """The (subset, split) pairs `tasks` read, scored or few-shot, by pinned `(repo, revision)`."""
+    pinned: dict[tuple[str, str], set[tuple[str | None, str]]] = {}
+    for task in tasks:
+        dataset = task.dataset
+        pairs = pinned.setdefault((dataset.repo, dataset.revision), set())
+        pairs.add((dataset.subset, dataset.split))
+        if isinstance(task, MultipleChoiceTask) and task.fewshot and task.fewshot.split:
+            pairs.add((dataset.subset, task.fewshot.split))
+    return pinned
+
+
 @dataclass(frozen=True, slots=True)
 class Suite:
     """

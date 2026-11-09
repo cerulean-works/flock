@@ -154,7 +154,7 @@ def pull_command(ref: str, root: Path) -> None:
 
     try:
         s3.get_process(org, read_only=True)
-        click.echo(hub.pull(org, f"s3://flock-datasets/eval/{repo}", revision, root))
+        click.echo(hub.pull(org, repo, revision, root))
     # Not signed in or refused; no such copy or tag, or a tag on another revision; a staging
     # folder that can't be written.
     except (s3.S3Error, ValueError, OSError) as error:

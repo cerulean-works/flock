@@ -2,6 +2,7 @@
 
 import itertools
 import logging
+import re
 from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
@@ -21,7 +22,6 @@ from huggingface_hub.errors import LocalEntryNotFoundError, RemoteEntryNotFoundE
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
 
-from flock.eval.hub import COMMIT
 from flock.eval.requests import Request, Scores
 from flock.eval.tokenizer import SentencePieceTokenizer, Tokenizer
 
@@ -102,7 +102,8 @@ class ModelRef:
                 f"{version.org}/{version.name}", str(version.number), "flock", version.digest
             )
 
-        if COMMIT.fullmatch(self.revision):
+        # 40 lowercase hex characters is how the Hub writes a full commit hash.
+        if re.fullmatch(r"[0-9a-f]{40}", self.revision):
             return self
 
         sha = HfApi().model_info(self.repo, revision=self.revision).sha

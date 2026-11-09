@@ -3,6 +3,7 @@
 import hashlib
 import json
 import math
+import os
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -11,6 +12,7 @@ from typing import Literal, get_args
 
 import torch
 
+from flock.eval import hub
 from flock.eval.metrics import bits_per_byte, multiple_choice
 from flock.eval.model import DEFAULT_BATCH_TOKENS, Encoded, ScoringModel
 from flock.eval.provenance import Provenance
@@ -31,7 +33,7 @@ from flock.eval.tasks import (
     TextDoc,
     Truncation,
 )
-from flock.eval.tasks.suite import by_name
+from flock.eval.tasks.suite import by_name, pins
 from flock.eval.tokenizer import SentencePieceTokenizer, Tokenizer
 
 # Why `evaluate` and `score_task` refuse an output that is already there, and what to do.
@@ -114,6 +116,7 @@ def evaluate(config: EvalConfig) -> Results:
         `KeyError`: if a task or suite name isn't in its registry.
         `ValueError`: if two different tasks, or two different suites, to run share a name, a task and a suite share a name, a task is named `suites`, a perplexity task's window is above the model's `max_length`, or a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
         `FileExistsError`: if `config.out` exists and isn't an empty directory.
+        `FileNotFoundError`: if `FLOCK_EVAL_HUB` is set and a dataset a task reads isn't staged there (see [`~eval.hub.check_staged`]).
     """
     _check_names("tasks", config.tasks, TASKS)
     _check_names("suites", config.suites, SUITES)
@@ -138,6 +141,11 @@ def evaluate(config: EvalConfig) -> Results:
     clashes = sorted({task.name for task in tasks} & {suite.name for suite in held})
     if clashes:
         raise ValueError(f"a task and a suite share the names {clashes}")
+
+    # Every staged copy the run reads is checked before the model loads, so a missing one costs
+    # no GPU time and no tasks scored for nothing.
+    if root := os.environ.get("FLOCK_EVAL_HUB"):
+        hub.check_staged(Path(root), pins(tasks))
 
     model = ScoringModel.from_pretrained(
         config.model,

@@ -8,9 +8,7 @@ Each dataset goes to `eval/<owner>/<name>` in ORG's `flock-datasets` bucket, hol
 """
 
 import json
-import os
 import sys
-from collections import defaultdict
 
 import click
 import datasets
@@ -20,6 +18,7 @@ import lance
 from flock.cli import credentials
 from flock.eval import hub
 from flock.eval.tasks import TASKS
+from flock.eval.tasks.suite import pins
 from flock.hub import s3
 
 
@@ -28,21 +27,9 @@ from flock.hub import s3
 @click.argument("repos", nargs=-1)
 def main(org: str, repos: tuple[str, ...]) -> None:
     """Mirror REPOS (default: every repo the registry reads) to ORG's hub, private."""
-    # The copy must come from the Hugging Face Hub, not from an earlier staged copy.
-    if os.environ.get("FLOCK_EVAL_HUB"):
-        raise click.UsageError("unset FLOCK_EVAL_HUB: the mirror reads the Hugging Face Hub")
-
     # Every (subset, split) some task reads, scored or few-shot, per pinned repo.
-    pins: dict[tuple[str, str], set[tuple[str | None, str]]] = defaultdict(set)
-    for task in TASKS.values():
-        dataset = task.dataset
-        pairs = pins[(dataset.repo, dataset.revision)]
-        pairs.add((dataset.subset, dataset.split))
-        fewshot = getattr(task, "fewshot", None)
-        if fewshot is not None and fewshot.split is not None:
-            pairs.add((dataset.subset, fewshot.split))
-
-    unknown = set(repos) - {repo for repo, _ in pins}
+    pinned = pins(TASKS.values())
+    unknown = set(repos) - {repo for repo, _ in pinned}
     if unknown:
         raise click.UsageError(f"not read by any task: {sorted(unknown)}")
 
@@ -57,11 +44,11 @@ def main(org: str, repos: tuple[str, ...]) -> None:
     anonymous = httpx.Client(base_url=api.base_url, timeout=60)
     s3.get_process(org)
 
-    for (repo, revision), pairs in sorted(pins.items(), key=lambda pin: pin[0][0].lower()):
+    for (repo, revision), pairs in sorted(pinned.items(), key=lambda pin: pin[0][0].lower()):
         if repos and repo not in repos:
             continue
-        path = f"eval/{repo}"
-        uri = f"s3://flock-datasets/{path}"
+        path = hub.path(repo)
+        uri = f"{hub.BUCKET}/{path}"
 
         # Private before the first write, and checked, since the hub's default is public.
         api.delete("/public", params={"path": path}).raise_for_status()
@@ -76,11 +63,11 @@ def main(org: str, repos: tuple[str, ...]) -> None:
         if revision in tags:
             version = tags[revision]["version"]
             properties = hub.recorded(lance.dataset(uri, version=version))
-            source = (properties.get("source_repo"), properties.get("source_revision"))
-            if source != (repo, revision) or "pairs" not in properties:
-                raise click.ClickException(f"{path} tag {revision} is on a version of {source}")
-            for pair in json.loads(properties["pairs"]):
-                held.add((pair["subset"], pair["split"]))
+            try:
+                recorded = hub.check(properties, repo, revision, f"{path} tag {revision}")
+            except ValueError as error:
+                raise click.ClickException(str(error)) from None
+            held = {(pair["subset"], pair["split"]) for pair in recorded}
         if version is None or not pairs <= held:
             # Configurations and splits sort with no configuration first.
             splits = {
