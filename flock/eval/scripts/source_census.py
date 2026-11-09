@@ -35,7 +35,10 @@ def count_source(
     Raises:
         `ValueError`: if a file is in another format.
     """
-    totals: Counter[str] = Counter()
+    # Every total is written, at 0 for a source whose files are all empty.
+    totals: Counter[str] = Counter(
+        {key: 0 for key in ("docs", "bytes", "tokens", "empty_texts", f"over_{window}", "windows")}
+    )
     domain_docs: Counter[str] = Counter()
     domain_bytes: Counter[str] = Counter()
     domain_tokens: Counter[str] = Counter()
@@ -46,7 +49,11 @@ def count_source(
             with gzip.open(file, "rt", encoding="utf-8") as f:
                 rows = [json.loads(line) for line in f]
         elif file.suffix == ".parquet":
-            rows = pq.read_table(file).to_pylist()
+            # Only the columns a task reads: other columns can be large, and a source with one
+            # domain may have no `subdomain`.
+            names = pq.read_schema(file).names
+            columns = [column for column in ("id", "text", "subdomain") if column in names]
+            rows = pq.read_table(file, columns=columns).to_pylist()
         else:
             raise ValueError(f"{file.name}: the census reads .jsonl.gz and .parquet files only")
         if not rows:
@@ -120,13 +127,22 @@ def main(suite_name: str, out: Path) -> None:
     # A source is a configuration of the dataset, and its split is the files `datasets` resolves
     # for it, as `Dataset.load` reads them: `hf://datasets/<repo>@<revision>/<file>` each.
     sources = sorted(datasets.get_dataset_config_names(repo, revision=revision))
+    prefix = f"hf://datasets/{repo}@{revision}/"
     census = {}
     for source in sources:
-        builder = datasets.load_dataset_builder(repo, source, revision=revision)
-        resolved = (builder.config.data_files or {}).get(split, [])
+        try:
+            builder = datasets.load_dataset_builder(repo, source, revision=revision)
+        except FileNotFoundError:
+            # A pattern of a source the suite leaves out may match no file; it is reported as
+            # left out. A listed source's raises, as its tasks' loads would.
+            if source in listed:
+                raise
+            continue
         files = []
-        for url in resolved:
-            file = url.removeprefix(f"hf://datasets/{repo}@{revision}/")
+        for url in (builder.config.data_files or {}).get(split, []):
+            if not url.startswith(prefix):
+                raise ValueError(f"{url}: datasets resolved a file outside {repo}@{revision}")
+            file = url.removeprefix(prefix)
             files.append(Path(hf_hub_download(repo, file, repo_type="dataset", revision=revision)))
         if files:
             census[source] = count_source(tokenizer, window, files)
@@ -161,9 +177,12 @@ def main(suite_name: str, out: Path) -> None:
     out.write_text(census_json + "\n", encoding="utf-8")
 
     # Printed after the file is written, so a terminal that can't show a domain loses no counts.
-    for source, counts in census.items():
-        domains = [domain for domain in counts["domain_docs"] if domain]
-        print(f"{source!r}: {tuple(domains)!r},")
+    # The listed sources come first, in the suite's order, ready to paste over its table. The
+    # sources it leaves out follow, and the line after them names them.
+    for source in [*listed, *unlisted]:
+        if source in census:
+            domains = [domain for domain in census[source]["domain_docs"] if domain]
+            print(f"{source!r}: {tuple(domains)!r},")
     if unlisted:
         print(f"Sources {suite_name} leaves out: {', '.join(unlisted)}")
     for source, difference in differences.items():

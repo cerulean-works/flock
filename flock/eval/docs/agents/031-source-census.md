@@ -30,7 +30,7 @@ The census takes a registered suite's name, `paloma` or `tw_text`, and compares 
 
 ### 031.D3. A source's files are the ones `datasets` resolves; its rows are read raw
 
-Paloma keeps a source's split as `<source>/test/*.jsonl.gz`, and tw-text as `data/<source>/test.parquet`. Both declare each source as a configuration of the dataset whose splits are file patterns. The census asks `datasets` for the configurations and for each one's files in the scored split (`load_dataset_builder`, which reads no rows), so it checks the files `Dataset.load` reads, with `datasets`' own rules for patterns and hidden files, and one rule covers both layouts. It reads the rows of those files itself, as 008's census did, so the counts don't depend on how a `datasets` version parses them. A configuration with no files in the split is still a source the suite may leave out, and is reported as one.
+Paloma keeps a source's split as `<source>/test/*.jsonl.gz`, and tw-text as `data/<source>/test.parquet`. Both declare each source as a configuration of the dataset whose splits are file patterns. The census asks `datasets` for the configurations and for each one's files in the scored split (`load_dataset_builder`, which reads no rows), so it checks the files `Dataset.load` reads, with `datasets`' own rules for patterns and hidden files, and one rule covers both layouts. It reads the rows of those files itself, as 008's census did, so the counts don't depend on how a `datasets` version parses them. A configuration with no files in the split, or whose pattern matches no file, is still a source the suite may leave out, and is reported as one. A file `datasets` resolves outside the pinned revision raises.
 
 ### 031.D4. A source the suite leaves out is reported, not failed
 
@@ -38,7 +38,7 @@ Paloma has 16 sources and `paloma` scores 9 (008). `tw_text` left out `bbc_zh_tr
 
 ### 031.D5. Domains print in each table's order
 
-The census prints each source's domains in the table's format, ready to paste. Domains with Paloma's rank prefix come in rank order, as 008 lists them, and others with the most documents first, as `tw_text` lists them (026.D6), then by name. Paloma's `dolma-v1_5`, whose domains have no rank, is listed by name in `DOMAINS`, so its printed line orders the same five domains differently. The check compares sets, so the order doesn't affect it. Pasting that line would reorder the suite's members and move its hash; a repin moves every hash anyway, but outside one `DOMAINS` keeps its order.
+The census prints each source's domains in the table's format, the listed sources first and in the suite's order, ready to paste, then the sources it leaves out. Domains with Paloma's rank prefix come in rank order, as 008 lists them, and others with the most documents first, as `tw_text` lists them (026.D6), then by name. Paloma's `dolma-v1_5`, whose domains have no rank, is listed by name in `DOMAINS`, so its printed line orders the same five domains differently. The check compares sets, so the order doesn't affect it. Pasting that line would reorder the suite's members and move its hash; a repin moves every hash anyway, but outside one `DOMAINS` keeps its order.
 
 ---
 

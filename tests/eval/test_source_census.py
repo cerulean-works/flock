@@ -16,8 +16,8 @@ from flock.eval.tasks.suite import source_suite
 from .toy import DOMAIN_ROWS, TEXT_ROWS
 
 # A dataset card in the shape of Paloma's and tw-text's: one configuration per source, each
-# split a pattern, or a list of them, over the repo's files. `forum` is a source the toy suite
-# leaves out.
+# split a pattern, or a list of them, over the repo's files. `forum` and `draft` are sources the
+# toy suite leaves out, and `draft`'s pattern matches no file.
 README = """---
 configs:
 - config_name: news
@@ -38,6 +38,10 @@ configs:
   data_files:
   - split: test
     path: data/forum/test.parquet
+- config_name: draft
+  data_files:
+  - split: test
+    path: data/draft/test.parquet
 ---
 """
 
@@ -169,6 +173,15 @@ def test_count_source_counts_rows_without_a_subdomain_under_the_empty_domain(tmp
     assert counts["domain_docs"] == {"news": 2, "": 2, "exam": 1}
 
 
+def test_count_source_writes_every_total_for_a_source_of_empty_files(tmp_path, tokenizer):
+    write_jsonl_gz(tmp_path / "test.jsonl.gz", [])
+
+    counts = source_census.count_source(tokenizer, 4, [tmp_path / "test.jsonl.gz"])
+
+    assert counts["docs"] == counts["tokens"] == counts["windows"] == counts["over_4"] == 0
+    assert counts["empty_files"] == ["test.jsonl.gz"]
+
+
 def test_count_source_rejects_another_format(tmp_path, tokenizer):
     (tmp_path / "test.csv").write_text("id,text\n")
     with pytest.raises(ValueError, match="reads .jsonl.gz and .parquet files only"):
@@ -185,16 +198,19 @@ def test_the_census_passes_when_the_suite_lists_every_domain_and_reports_left_ou
 
     census = json.loads(out.read_text())
     assert census["differences"] == {}
-    assert census["unlisted_sources"] == ["forum"]
+    assert census["unlisted_sources"] == ["draft", "forum"]
     # The scored split only: wiki's `val` file and its hidden file aren't counted.
     assert census["sources"]["wiki"]["docs"] == 3
     assert census["sources"]["news"]["domain_docs"] == {"news": 2, "exam": 1}
     assert census["sources"]["cna"]["domain_docs"] == {"cna": 2}  # both files of the list
-    printed = capsys.readouterr().out
-    assert "'news': ('news', 'exam'),\n" in printed
-    assert "'wiki': (),\n" in printed
-    assert "'cna': ('cna',),\n" in printed
-    assert "Sources toy leaves out: forum" in printed
+    # The listed sources in the suite's order, then the ones it leaves out.
+    assert capsys.readouterr().out.splitlines() == [
+        "'news': ('news', 'exam'),",
+        "'wiki': (),",
+        "'cna': ('cna',),",
+        "'forum': ('news', 'exam'),",
+        "Sources toy leaves out: draft, forum",
+    ]
 
 
 def test_the_census_fails_when_a_domain_is_not_listed_or_not_in_the_split(
