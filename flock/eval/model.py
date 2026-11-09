@@ -386,6 +386,11 @@ class ScoringModel:
         return self.model.config._attn_implementation
 
     @property
+    def checks_resegmentation(self) -> bool:
+        """Whether [`encode_requests`] refuses a continuation that changes its context's tokens: only on a [`~eval.tokenizer.SentencePieceTokenizer`], which segments a whole string at once. Other tokenizers keep lm-evaluation-harness's slice with no check, so the refusal can't move their scores."""
+        return isinstance(self.tokenizer, SentencePieceTokenizer)
+
+    @property
     def sdpa_backend(self) -> str | None:
         """The SDPA kernel scoring is pinned to, `"EFFICIENT_ATTENTION"` on CUDA with `sdpa` attention, else `None`: the CPU has no such kernel, and other attention never calls SDPA."""
         if self.device.type == "cuda" and self.attention == "sdpa":
@@ -593,14 +598,9 @@ class ScoringModel:
                 continue
 
             # As lm-evaluation-harness's `_encode_pair`: the continuation's ids are the joint ids
-            # after as many leading ids as the context has when tokenized alone.
-            # SentencePiece segments a whole string at once, so added text can resegment the
-            # context, and the slice below would score the wrong tokens. Other tokenizers keep
-            # lm-evaluation-harness's slice with no check, so this refusal can't move their scores.
-            if (
-                isinstance(self.tokenizer, SentencePieceTokenizer)
-                and joined[: len(context_ids)] != context_ids
-            ):
+            # after as many leading ids as the context has when tokenized alone. Where the added
+            # text can resegment the context, the slice would score the wrong tokens.
+            if self.checks_resegmentation and joined[: len(context_ids)] != context_ids:
                 raise ValueError(f"the continuation changes the context's tokens: {request}")
             encoded.append(Encoded(starts[context], joined[len(context_ids) :]))
 
