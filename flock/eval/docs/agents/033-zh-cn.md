@@ -182,3 +182,26 @@ On CPU with tiny random models:
 
 - Whether the boundary merge of 033.D1 also occurs on TMMLU+ under the Llama 3.2, Qwen3.5 and Gemma 4 tokenizers, which 005 checked only under OLMo 2 and Qwen2.5.
 - Whether a letter-scored (`MC`) variant, which is how both papers and the baselines score these sets, is worth a separately named task once models score above chance on the cloze one.
+
+
+## 9. Exact CPU verification and remaining blockers
+
+All test choices, conditional and unconditional, were rendered with the benchmark headers,
+five dev examples, 005.D7 and configured BOS. Maximum complete lengths (C-Eval / CMMLU)
+are OLMo 2 1B 1,530 / 852, Qwen2.5 0.5B 861 / 609, Llama 3.2 1B 1,053 / 586,
+Qwen3.5 0.8B 843 / 590 and Gemma 4 E2B 897 / 555 (including BOS).
+No request truncates at an input limit of 2,048 or 4,096. These are tokenizer checks,
+not scoring parity. The original space-tokenization statistics reproduce byte for byte.
+
+Two non-gold choices require a design ruling before the build: C-Eval `operating_system`
+row 32, choice A (`<`), and CMMLU `computer_science` row 108, choice C (`%`). Each has an
+empty encoded continuation in both conditional and unconditional requests under the first
+four tokenizers. Gemma keeps a token for `<` but not for `%`. The actual scoring guard
+raises `ValueError: continuation has no tokens` before any model call. Dropping a distractor
+would change the task, so no exclusion is applied. The frozen parity prediction stays intact.
+
+The complete request hashes agree across tokenizers. Only `college_chemistry/196` and
+`college_law/99` lose their repeated dev example. Cerulean SentencePiece compatibility
+remains blocked on a pinned checkpoint tokenizer; synthetic guard tests do not resolve it.
+Scored and few-shot inputs must join training-admission references before results guide
+training. Milestone metrics remain pending parity and appropriate noise evidence.
