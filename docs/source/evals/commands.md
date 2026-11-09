@@ -57,7 +57,7 @@ uv run flock eval hub pull acme/allenai/ai2_arc@210d026faf9955653af8916fad021475
 | Argument or option | Default | Description |
 |---|---|---|
 | `ORG/OWNER/NAME@COMMIT` | required | The organization that holds the copy, the Hugging Face repo and its pinned commit, as the task's definition names them. The copy is the version of `eval/OWNER/NAME` tagged with the commit. |
-| `--to` | `$FLOCK_EVAL_HUB` | The staging folder. The copy is written to `<folder>/OWNER/NAME/COMMIT`. A copy already there from the same version is kept, and one from an earlier version of the tag is replaced, so don't pull while a job reads that folder. |
+| `--to` | `$FLOCK_EVAL_HUB` | The staging folder. The copy is written to `<folder>/OWNER/NAME/COMMIT`. A copy already there from the same version is kept, and one from another version of the tag is replaced, so don't pull a newer version while a job reads that folder. Copies take the folder's permissions, and a missing folder is made readable by you only. |
 
 | Environment variable | Effect |
 |---|---|

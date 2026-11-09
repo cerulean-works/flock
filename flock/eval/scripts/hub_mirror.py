@@ -103,8 +103,12 @@ def main(org: str, repos: tuple[str, ...]) -> None:
             "member_info": api.get("/info", params={"path": path}).status_code,
         }
         print(json.dumps(record), flush=True)
-        if record["anonymous_info"] != 404:
-            sys.exit(f"{path} answers anonymous readers with {record['anonymous_info']}")
+        # A missing path answers 404 too, so a private copy is an anonymous 404 and a member 200.
+        if (record["anonymous_info"], record["member_info"]) != (404, 200):
+            sys.exit(
+                f"{path} answers anonymous readers with {record['anonymous_info']} and members "
+                f"with {record['member_info']}, not 404 and 200"
+            )
 
 
 if __name__ == "__main__":

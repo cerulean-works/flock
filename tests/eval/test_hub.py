@@ -1,7 +1,9 @@
+import os
 import shutil
 
 import datasets
 import lance
+import pyarrow as pa
 import pytest
 
 from flock.eval import hub
@@ -88,7 +90,7 @@ def test_a_staged_copy_gives_the_rows_the_hugging_face_hub_gives(staged, monkeyp
     from_hf = {pair: Dataset(REPO, FIRST, pair[0], pair[1]).load() for pair in splits}
     numbered_hf = Dataset(REPO, FIRST, "qa", "test", row_index=True).load()
 
-    folder = hub.pull(uri, FIRST, root)
+    folder = hub.pull("acme", uri, FIRST, root)
     assert folder == root / REPO / FIRST
     monkeypatch.setenv("FLOCK_EVAL_HUB", str(root))
     monkeypatch.setattr(datasets, "load_dataset", None)  # the staged path never calls it
@@ -100,13 +102,13 @@ def test_a_staged_copy_gives_the_rows_the_hugging_face_hub_gives(staged, monkeyp
     assert Dataset(REPO, FIRST, "qa", "test").load("train") == from_hf[("qa", "train")]
 
     # A second pull of the same pin leaves the staged copy as it is.
-    assert hub.pull(uri, FIRST, root) == folder
+    assert hub.pull("acme", uri, FIRST, root) == folder
 
 
 def test_each_pin_stages_its_own_tagged_version(staged):
     uri, root, _ = staged
-    first = hub.pull(uri, FIRST, root)
-    second = hub.pull(uri, SECOND, root)
+    first = hub.pull("acme", uri, FIRST, root)
+    second = hub.pull("acme", uri, SECOND, root)
 
     assert first != second
     for folder, revision in ((first, FIRST), (second, SECOND)):
@@ -121,7 +123,7 @@ def test_a_pull_refuses_a_tag_on_a_version_of_another_revision(staged):
     lance.dataset(uri).tags.create("3" * 40, 1)  # version 1 holds FIRST
 
     with pytest.raises(ValueError, match="which records revision '1111"):
-        hub.pull(uri, "3" * 40, root)
+        hub.pull("acme", uri, "3" * 40, root)
     assert not root.exists()
 
 
@@ -142,7 +144,7 @@ def test_an_unstaged_pin_names_the_pull_command(staged, monkeypatch):
 
 def test_a_staged_copy_of_another_pin_is_refused(staged, monkeypatch):
     uri, root, _ = staged
-    shutil.copytree(hub.pull(uri, FIRST, root), root / REPO / SECOND)
+    shutil.copytree(hub.pull("acme", uri, FIRST, root), root / REPO / SECOND)
     monkeypatch.setenv("FLOCK_EVAL_HUB", str(root))
 
     with pytest.raises(ValueError, match=f"holds {REPO}@{FIRST}, not {REPO}@{SECOND}"):
@@ -151,7 +153,7 @@ def test_a_staged_copy_of_another_pin_is_refused(staged, monkeypatch):
 
 def test_a_split_the_copy_does_not_hold_is_refused(staged, monkeypatch):
     uri, root, _ = staged
-    hub.pull(uri, FIRST, root)
+    hub.pull("acme", uri, FIRST, root)
     monkeypatch.setenv("FLOCK_EVAL_HUB", str(root))
 
     with pytest.raises(KeyError, match="no split 'validation' of subset 'qa'"):
@@ -173,7 +175,7 @@ def test_hub_pull_takes_an_org_a_repo_and_a_commit(monkeypatch, tmp_path):
 
     pulled = []
     monkeypatch.setattr(s3, "get_process", lambda org, read_only: pulled.append(org))
-    monkeypatch.setattr(hub, "pull", lambda uri, revision, root: pulled.append(uri) or root)
+    monkeypatch.setattr(hub, "pull", lambda org, uri, revision, root: pulled.append(uri) or root)
     runner = CliRunner()
 
     refs = (
@@ -191,7 +193,7 @@ def test_hub_pull_takes_an_org_a_repo_and_a_commit(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert pulled == ["acme", f"s3://flock-datasets/eval/{REPO}"]
 
-    def refuse(uri, revision, root):
+    def refuse(org, uri, revision, root):
         raise ValueError("tag on another revision")
 
     monkeypatch.setattr(hub, "pull", refuse)
@@ -207,14 +209,14 @@ def test_a_pull_replaces_a_copy_staged_from_an_earlier_version_of_the_tag(
     root = tmp_path / "staged"
     version = hub.write(uri, REPO, FIRST, {("qa", "test"): splits[("qa", "test")]})
     lance.dataset(uri).tags.create(FIRST, version)
-    hub.pull(uri, FIRST, root)
+    hub.pull("acme", uri, FIRST, root)
 
     # A task now reads the few-shot split too: the mirror writes both and moves the tag.
     version = hub.write(
         uri, REPO, FIRST, {pair: splits[pair] for pair in (("qa", "test"), ("qa", "train"))}
     )
     lance.dataset(uri).tags.update(FIRST, version)
-    hub.pull(uri, FIRST, root)
+    hub.pull("acme", uri, FIRST, root)
 
     monkeypatch.setattr(Dataset, "load", real_load)
     monkeypatch.setenv("FLOCK_EVAL_HUB", str(root))
@@ -227,7 +229,7 @@ def test_a_pull_refuses_a_copy_of_another_repo(tmp_path):
     version = hub.write(uri, REPO, FIRST, {("qa", "test"): toy_splits()[("qa", "test")]})
     lance.dataset(uri).tags.create(FIRST, version)
     with pytest.raises(ValueError, match="holds a copy of 'cerulean/toy'"):
-        hub.pull(uri, FIRST, tmp_path / "staged")
+        hub.pull("acme", uri, FIRST, tmp_path / "staged")
 
 
 def test_the_writer_writes_the_rows_a_filtered_dataset_gives(tmp_path, monkeypatch, real_load):
@@ -235,7 +237,7 @@ def test_the_writer_writes_the_rows_a_filtered_dataset_gives(tmp_path, monkeypat
     uri = str(tmp_path / "hub" / "eval" / REPO)
     version = hub.write(uri, REPO, FIRST, {(None, "test"): rows, (None, "train"): rows})
     lance.dataset(uri).tags.create(FIRST, version)
-    hub.pull(uri, FIRST, tmp_path / "staged")
+    hub.pull("acme", uri, FIRST, tmp_path / "staged")
 
     monkeypatch.setattr(Dataset, "load", real_load)
     monkeypatch.setenv("FLOCK_EVAL_HUB", str(tmp_path / "staged"))
@@ -243,11 +245,91 @@ def test_the_writer_writes_the_rows_a_filtered_dataset_gives(tmp_path, monkeypat
 
 
 def test_a_staged_copy_is_as_readable_as_its_staging_root(tmp_path):
-    root = tmp_path / "staged"
-    (root / REPO).mkdir(parents=True)
-    (root / REPO).chmod(0o755)  # the repo's folder, which every pin of it shares
     uri = str(tmp_path / "hub" / "eval" / REPO)
     version = hub.write(uri, REPO, FIRST, {("qa", "test"): toy_splits()[("qa", "test")]})
     lance.dataset(uri).tags.create(FIRST, version)
 
-    assert hub.pull(uri, FIRST, root).stat().st_mode & 0o777 == 0o755
+    # A missing root is made readable by its owner only, whatever the umask.
+    made = tmp_path / "made"
+    hub.pull("acme", uri, FIRST, made)
+    assert {path.stat().st_mode & 0o777 for path in made.rglob("*") if path.is_dir()} == {0o700}
+
+    # An existing root's mode reaches every folder and file below it, not the umask's.
+    root = tmp_path / "shared"
+    root.mkdir()
+    root.chmod(0o750)
+    previous = os.umask(0o077)
+    try:
+        hub.pull("acme", uri, FIRST, root)
+    finally:
+        os.umask(previous)
+    modes = {path.stat().st_mode & 0o777 for path in root.rglob("*") if path.is_dir()}
+    assert modes == {0o750}
+    files = {path.stat().st_mode & 0o777 for path in root.rglob("*") if path.is_file()}
+    assert files == {0o640}
+
+
+def test_a_pull_keeps_a_copy_another_pull_staged_meanwhile(staged, monkeypatch):
+    uri, root, _ = staged
+    set_mode = hub._set_mode
+    others = []
+
+    def another_pull_finishes_first(folder, mode):
+        set_mode(folder, mode)
+        monkeypatch.setattr(hub, "_set_mode", set_mode)
+        other = hub.pull("acme", uri, FIRST, root)
+        others.append((other, (other / "_versions").stat().st_ino))
+
+    monkeypatch.setattr(hub, "_set_mode", another_pull_finishes_first)
+    folder = hub.pull("acme", uri, FIRST, root)
+
+    # The other pull's copy, which a job may already read, is the one left, with nothing beside it.
+    assert others == [(folder, (folder / "_versions").stat().st_ino)]
+    assert [path.name for path in (root / REPO).iterdir()] == [FIRST]
+
+
+def test_a_failed_pull_leaves_nothing_and_a_broken_copy_is_replaced(staged, monkeypatch, real_load):
+    uri, root, splits = staged
+    folder = root / REPO / FIRST
+    folder.mkdir(parents=True)
+    (folder / "half-copied").write_text("")
+
+    def fail(folder, mode):
+        raise OSError("disk full")
+
+    with monkeypatch.context() as patched:
+        patched.setattr(hub, "_set_mode", fail)
+        with pytest.raises(OSError, match="disk full"):
+            hub.pull("acme", uri, FIRST, root)
+    assert [path.name for path in (root / REPO).iterdir()] == [FIRST]
+
+    assert hub.pull("acme", uri, FIRST, root) == folder
+    monkeypatch.setattr(Dataset, "load", real_load)
+    monkeypatch.setenv("FLOCK_EVAL_HUB", str(root))
+    assert Dataset(REPO, FIRST, "qa", "train").load() == list(splits[("qa", "train")])
+
+
+def test_a_pull_refuses_a_version_that_records_no_pairs(tmp_path):
+    uri = str(tmp_path / "hub" / "eval" / REPO)
+    written = lance.write_dataset(
+        pa.table({"n": [1]}),
+        uri,
+        transaction_properties={"source_repo": REPO, "source_revision": FIRST},
+    )
+    lance.dataset(uri).tags.create(FIRST, written.version)
+    with pytest.raises(ValueError, match="records no pairs"):
+        hub.pull("acme", uri, FIRST, tmp_path / "staged")
+    assert not (tmp_path / "staged").exists()
+
+
+def test_a_copy_staged_from_another_org_is_replaced(staged):
+    uri, root, _ = staged
+    folder = hub.pull("acme", uri, FIRST, root)
+    before = (folder / "_versions").stat().st_ino
+
+    assert hub.pull("acme", uri, FIRST, root) == folder
+    assert (folder / "_versions").stat().st_ino == before  # the same org's copy is kept
+
+    hub.pull("other", uri, FIRST, root)
+    assert (folder / "_versions").stat().st_ino != before
+    assert hub.recorded(lance.dataset(str(folder)))["hub_org"] == "other"

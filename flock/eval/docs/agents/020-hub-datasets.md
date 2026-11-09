@@ -2,11 +2,11 @@
 
 | | |
 | --- | --- |
-| Status | design |
+| Status | superseded in part by [034](034-hub-copies.md) |
 | Date | 2026-11-01, amended 2026-11-02 with the hub owner's answers (#68) |
 | Builds on | [001](001-eval-core.md) (`Dataset` pinned to a revision), [009](009-tw-mock-exams.md) (the private exam set), [014](014-run-provenance.md) (D6: `dataset` in each task result); the hub's `013-datasets-tab.md` (D85 to D96) and `014-model-registry.md` (`flock:` ids) in `app/api/docs/agents/`; public datasets (#69, `docs/source/app/share-publicly.md` at `2df0700`) |
 | Keeps | every task hash on `main`, `results.json` schema 6 |
-| Result | none yet: design for review |
+| Result | not built as written: 034 amends D1 to D3 and D5 and builds D4 and D6 |
 
 ## 1. Goal
 
@@ -68,3 +68,7 @@ Asked in #68. The answers so far are in D1, D3 and D4.
 1. **The org (partly answered).** Eval sets go under Flock's `eval/` route. Is that the `flock` org's `flock-datasets` bucket, so a set is `flock:flock/eval/<name>`?
 2. **The dev set's ids out of training (partly answered).** The hub's FineWeb-Edu keeps FineWeb-Edu's `id` column. Drop the 5,000 dev ids with one Lance delete (`delete("id IN (...)")`), which makes a version whose history shows the delete and its row count, and pin that version in the lab's training config, or filter them in the training loader? We lean to the delete. Either way we would read the pinned version's `id` column and bank the count of dev ids found (expected zero), and exclusion by id leaves near-duplicates from other CommonCrawl dumps, since FineWeb-Edu deduplicates within each dump (Penedo et al. 2024).
 3. **A dataset pull (D6).** Is there, or could there be, a `flock` command that writes one dataset version to a folder, as `flock models pull --to` does for a model? If not, the loader's PR adds a short one over `flock.hub.s3`.
+
+## 5. How it was actually built
+
+Not as planned here. Stage [034](034-hub-copies.md) builds the move with these changes: a hub copy is keyed by its Hugging Face pin rather than a `flock:` repo, so no task hash moves (034.D1, amending D1 and D5); the version is found by a tag holding the pin's commit and checked against recorded provenance (034.D2, amending D3); a copy holds only the configurations and splits some task reads, under `hf_subset` and `hf_split` (034.D3, amending D2); every copy is private, including the sets D5 keeps public on Hugging Face (034.D4); and jobs read a copy staged under `$FLOCK_EVAL_HUB` as D6 proposed (034.D5). The `flock:` prefix and the move of the exam set off Hugging Face (plan steps 1 and 5) aren't built. Of the questions in section 4, the org is whichever one the mirror is given, under `eval/` (034.D2), the dev set's ids stay open, and `flock eval hub pull` is the dataset pull.

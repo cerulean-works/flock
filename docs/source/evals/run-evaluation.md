@@ -80,7 +80,7 @@ A job on a machine that can't reach the Hugging Face Hub reads its datasets from
 With `FLOCK_EVAL_HUB` set, every dataset must be staged. A missing one fails when its task loads, after the tasks before it have been scored, so stage every dataset the run reads first. The error prints the `pull` command to run. The staged copy gives the same rows as the Hugging Face Hub, so the task hashes and scores don't depend on where the rows came from. A pin's commit is in its task's definition, and `pull` refuses a copy whose recorded commit differs.
 
 > [!IMPORTANT]
-> A staged copy takes the permissions of its staging folder, and some copies (exam sets, crawled text) are private on Flock. Choose a staging folder that only the people allowed to read them can open.
+> A staged copy takes the permissions of its staging folder, whatever your umask, and some copies (exam sets, crawled text) are private on Flock. Choose a staging folder that only the people allowed to read them can open. A staging folder that doesn't exist yet is made readable by you only.
 
 ## Read the results
 

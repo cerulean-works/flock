@@ -98,14 +98,16 @@ def write(
     return written.version
 
 
-def pull(uri: str, revision: str, root: Path) -> Path:
+def pull(org: str, uri: str, revision: str, root: Path) -> Path:
     """
-    Stages the version of the hub copy at `uri` (`.../eval/<owner>/<name>`) tagged `revision` under `root`, where [`staged_rows`] finds it, and returns its folder.
+    Stages the version of `org`'s hub copy at `uri` (`.../eval/<owner>/<name>`) tagged `revision` under `root`, where [`staged_rows`] finds it, and returns its folder.
 
-    The copy is written to a temporary folder and renamed, so an interrupted pull leaves nothing a job could read. A pin already staged from the tagged version, or staged meanwhile by another pull, is left as it is; one staged from an earlier version is replaced.
+    The copy is written to a temporary folder and renamed, so an interrupted pull leaves nothing a job could read, and a failed one removes its temporary folder. A pin already staged from the tagged version of `org`'s copy, or staged meanwhile by another pull, is left as it is; one staged from another version, or that can't be read, is replaced.
+
+    Every folder and file the pull makes takes the mode of `root` (files without execute bits), so the staging root's permissions decide who reads every copy in it, private sets included. A missing `root` is made readable by its owner only.
 
     Raises:
-        `ValueError`: if the tagged version records another revision, or a repo other than the one `uri` names.
+        `ValueError`: if the tagged version records another revision, a repo other than the one `uri` names, or no pairs.
     """
     import lance
 
@@ -120,41 +122,73 @@ def pull(uri: str, revision: str, root: Path) -> Path:
     repo = properties.get("source_repo") or ""
     if not repo or not uri.endswith(f"/eval/{repo}"):
         raise ValueError(f"{uri} tag {revision} holds a copy of {repo!r}")
+    if "pairs" not in properties:
+        raise ValueError(
+            f"{uri} tag {revision} is on version {source.version}, which records no pairs"
+        )
 
+    # URIs are alike across orgs, so the org is recorded beside the hub version.
+    staged = {**properties, "hub_org": org, "hub_uri": uri, "hub_version": str(source.version)}
+    folder = root / repo / revision
     # A copy staged from an earlier version under the tag is replaced: the mirror moves the tag
     # when a task starts reading another split of the pin.
-    folder = root / repo / revision
-    if folder.exists():
-        staged_from = recorded(lance.dataset(str(folder)))
-        if (staged_from.get("hub_uri"), staged_from.get("hub_version")) == (
-            uri,
-            str(source.version),
-        ):
-            return folder
+    if _staged(folder) == staged:
+        return folder
 
-    folder.parent.mkdir(parents=True, exist_ok=True)
+    mode = _make_folders(root, folder.parent)
     partial = Path(tempfile.mkdtemp(dir=folder.parent, prefix=f".{revision}.", suffix=".partial"))
-    # `mkdtemp` makes a folder only its owner reads. The copy takes its parent's mode instead, so
-    # the staging root's permissions decide who reads every copy in it, private sets included.
-    partial.chmod(folder.parent.stat().st_mode & 0o777)
-    lance.write_dataset(
-        source.to_batches(),
-        str(partial),
-        schema=source.schema,
-        mode="overwrite",
-        transaction_properties={**properties, "hub_uri": uri, "hub_version": str(source.version)},
-    )
-    if folder.exists():
-        stale = partial.with_suffix(".stale")
-        folder.rename(stale)
-        shutil.rmtree(stale)
     try:
-        partial.rename(folder)
-    except OSError:
-        if not folder.exists():
+        lance.write_dataset(
+            source.to_batches(),
+            str(partial),
+            schema=source.schema,
+            mode="overwrite",
+            transaction_properties=staged,
+        )
+        _set_mode(partial, mode)
+        # Another pull of the same version may have finished meanwhile, and a job may be
+        # reading its copy already.
+        if _staged(folder) != staged:
+            if folder.exists():
+                stale = partial.with_suffix(".stale")
+                folder.rename(stale)
+                shutil.rmtree(stale)
+            partial.rename(folder)
+    except Exception:
+        if _staged(folder) != staged:
             raise
-        shutil.rmtree(partial)  # another pull of the pin finished first
+        # Another pull of the same version renamed its copy in first.
+    finally:
+        shutil.rmtree(partial, ignore_errors=True)
     return folder
+
+
+def _staged(folder: Path) -> dict[str, str] | None:
+    """What the copy staged in `folder` records, or `None` if there is none or it can't be read."""
+    import lance
+
+    try:
+        return recorded(lance.dataset(str(folder)))
+    except ValueError, OSError:
+        return None
+
+
+def _make_folders(root: Path, folder: Path) -> int:
+    """Makes `folder` and the folders between it and `root` with `root`'s mode, and returns that mode. A missing `root` is made with mode 0o700."""
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    mode = root.stat().st_mode & 0o777
+    for path in [*reversed(folder.parents[: len(folder.relative_to(root).parts) - 1]), folder]:
+        if not path.exists():
+            path.mkdir(exist_ok=True)
+            path.chmod(mode)
+    return mode
+
+
+def _set_mode(folder: Path, mode: int) -> None:
+    """Gives `folder` and every folder in it `mode`, and every file in it `mode` without execute bits."""
+    folder.chmod(mode)
+    for path in folder.rglob("*"):
+        path.chmod(mode if path.is_dir() else mode & 0o666)
 
 
 def staged_rows(
