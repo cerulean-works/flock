@@ -51,7 +51,7 @@
 	// The project's panel arrangement applies here too.
 	$effect(() => {
 		void [ws.meta.entity, ws.meta.project];
-		untrack(() => ws.restoreLayout());
+		untrack(() => ws.restoreLayout({ hidden: false }));
 	});
 
 	/** Outside the org: read-only, with no run actions (D116). */

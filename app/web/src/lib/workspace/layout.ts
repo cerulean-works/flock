@@ -54,6 +54,8 @@ export interface PanelLayout {
 	rows: Readonly<Record<string, number>>;
 	/** By panel id. */
 	panels: Readonly<Record<string, PanelConfig>>;
+	/** Ids of the panels pinned to the front of their sections. */
+	pinned: readonly string[];
 }
 
 export const EMPTY_LAYOUT: PanelLayout = {
@@ -61,7 +63,8 @@ export const EMPTY_LAYOUT: PanelLayout = {
 	order: {},
 	height: {},
 	rows: {},
-	panels: {}
+	panels: {},
+	pinned: []
 };
 
 export const SMOOTHING_MAX = 0.99;
@@ -119,7 +122,8 @@ export function parsePanelConfig(raw: unknown): PanelConfig | null {
  * A layout read back from storage. Anything malformed is dropped rather than trusted; layouts
  * saved before sections could be moved (no `sections`) keep the default section order, those
  * saved before panels had settings (no `panels`) have none, and those saved before sections
- * could be resized to more rows (no `rows`) show the default number of rows.
+ * could be resized to more rows (no `rows`) show the default number of rows, and those saved
+ * before panels could be pinned (no `pinned`) have none pinned.
  */
 export function parseLayout(raw: unknown): PanelLayout {
 	if (!isRecord(raw)) return EMPTY_LAYOUT;
@@ -138,7 +142,14 @@ export function parseLayout(raw: unknown): PanelLayout {
 			const config = parsePanelConfig(v);
 			if (config) panels[k] = config;
 		}
-	return { sections: strings(raw.sections), order, height, rows, panels };
+	return {
+		sections: strings(raw.sections),
+		order,
+		height,
+		rows,
+		panels,
+		pinned: [...new Set(strings(raw.pinned))]
+	};
 }
 
 /**
@@ -173,13 +184,30 @@ export function arrange<T>(
 }
 
 /**
- * The page, of `count` panels `per` to a page, that shows the panel at `start`: kept rather
- * than a page number, so the panels in view stay in view when pages hold more or fewer of
- * them. Within the pages there are.
+ * Index of the first of the `per` panels shown, of `count`, for a page left at `start`: kept
+ * rather than a page number, so the panels in view stay in view when pages hold more or fewer
+ * of them. Pages are always full: the last one ends at the last panel, sharing some with the
+ * one before when they don't divide evenly, so a section keeps its height from page to page
+ * and resizing it on any page shows more or fewer rows.
  */
-export function pageAt(start: number, per: number, count: number) {
-	const pages = Math.max(1, Math.ceil(count / per));
-	return Math.max(0, Math.min(Math.floor(start / per), pages - 1));
+export function pageStart(start: number, per: number, count: number) {
+	return Math.max(0, Math.min(Math.floor(start), count - per));
+}
+
+/**
+ * `keys` with the pinned ones first, each part in its own order. `loose` (a pinned key being
+ * moved) keeps its place, wherever that is.
+ */
+export function pinFirst(
+	keys: readonly string[],
+	pinned: ReadonlySet<string>,
+	loose: string | null = null
+): string[] {
+	const at = loose == null ? -1 : keys.indexOf(loose);
+	const rest = at === -1 ? keys : keys.filter((k) => k !== loose);
+	const out = [...rest.filter((k) => pinned.has(k)), ...rest.filter((k) => !pinned.has(k))];
+	if (at !== -1) out.splice(at, 0, loose!);
+	return out;
 }
 
 /** `keys` with the one at `from` moved to `to` (clamped to the list). */

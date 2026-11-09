@@ -7,9 +7,10 @@
 	import { flip } from 'svelte/animate';
 	import { prefersReducedMotion } from 'svelte/motion';
 	import type { ResolvedPathname } from '$app/types';
+	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { pageAt, ROWS_MAX, ROWS_MIN } from '#lib/workspace/layout.ts';
+	import { pageStart, ROWS_MAX, ROWS_MIN } from '#lib/workspace/layout.ts';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
 	import PanelCard from './PanelCard.svelte';
 	import { BAND_H, HEAD_H } from './RunsTable.svelte';
@@ -55,6 +56,16 @@
 
 	/** Panels to a page of a section: as many rows as it shows, of as many as the grid fits. */
 	const perPage = (key: string) => columns * ws.sectionRows(key);
+
+	const countOf = (key: string) => ws.sections.find((s) => s.key === key)?.panels.length ?? 0;
+
+	/** Index of the first panel a section's page shows. */
+	const firstShown = (key: string) =>
+		pageStart(ws.sectionStart[key] ?? 0, perPage(key), countOf(key));
+
+	/** Show the page of a section's panels from `start`, as it will be shown (`pageStart`). */
+	const showFrom = (key: string, start: number) =>
+		ws.setSectionStart(key, pageStart(start, perPage(key), countOf(key)));
 
 	// ------------------------------------------------------------------------------------------
 	// Moving panels and sections. What's dragged follows the pointer while the others make room
@@ -205,19 +216,36 @@
 					const to = ws.sections
 						.find((s) => s.key === section)!
 						.panels.indexOf(Number(el.dataset.panel));
+					// An unpinned panel over a pinned one stays put, and so is still there to follow.
+					if (!ws.movePanel(section, panel, to)) return;
 					rearrange();
-					ws.movePanel(section, panel, to);
 					void tick().then(follow);
 					return;
 				}
 			}
 		}
 
+		// A pinned panel goes wherever it's put; past an unpinned one, the viewer is asked
+		// whether to unpin it once it's let go.
+		const id = ws.meta.panels[panel].id;
+		let cancelled = false;
 		const pointer = track(e, {
-			begin: () => (drag = { panel, x: 0, y: 0 }),
+			begin: () => {
+				drag = { panel, x: 0, y: 0 };
+				if (ws.isPinned(panel)) ws.loosePanel = id;
+			},
 			follow,
-			end: () => (drag = null),
-			cancel: () => (rearrange(), ws.movePanel(section, panel, from))
+			end: () => {
+				drag = null;
+				if (ws.loosePanel !== id) return;
+				if (cancelled) ws.loosePanel = null;
+				else ws.settlePinned(section, panel, from);
+			},
+			cancel: () => {
+				cancelled = true;
+				rearrange();
+				ws.movePanel(section, panel, from);
+			}
 		});
 	}
 
@@ -226,12 +254,17 @@
 		const panels = ws.sections.find((s) => s.key === section)!.panels;
 		const i = panels.indexOf(panel);
 		if (i + by < 0 || i + by >= panels.length) return;
+		// An unpinned panel stays behind the pinned ones.
+		const pinned = ws.isPinned(panel);
+		if (!pinned && ws.isPinned(panels[i + by])) return;
 		// A panel moved past its page's edge goes to the next (or previous) page with it.
 		const per = perPage(section);
-		if (Math.floor(i / per) !== Math.floor((i + by) / per))
-			ws.setSectionStart(section, Math.floor((i + by) / per) * per);
+		const from = firstShown(section);
+		if (i + by < from || i + by >= from + per) showFrom(section, from + by * per);
 		rearrange();
+		if (pinned) ws.loosePanel = ws.meta.panels[panel].id;
 		ws.movePanel(section, panel, i + by);
+		if (pinned) ws.settlePinned(section, panel, i);
 		await tick();
 		root?.querySelector<HTMLElement>(`[data-panel="${panel}"] [data-grip]`)?.focus();
 	}
@@ -314,6 +347,8 @@
 		const max = rowsFor(count);
 		const y0 = e.clientY;
 		const scroll0 = pane.scrollTop;
+		// Kept as shown, so the panels at the top stay there as rows come and go.
+		showFrom(key, firstShown(key));
 
 		/** Rows nearest the pointer: whole ones, so the edge snaps from one to the next. */
 		function follow() {
@@ -388,9 +423,7 @@
 		{#each ws.sections as sec (sec.key)}
 			{@const count = sec.panels.length}
 			{@const per = perPage(sec.key)}
-			{@const page = pageAt(ws.sectionStart[sec.key] ?? 0, per, count)}
-			{@const pages = Math.ceil(count / per)}
-			{@const from = page * per}
+			{@const from = pageStart(ws.sectionStart[sec.key] ?? 0, per, count)}
 			{@const slice = sec.panels.slice(from, from + per)}
 			{@const open = !ws.collapsed.has(sec.key)}
 			{@const moving = sectionDrag?.key === sec.key}
@@ -439,7 +472,7 @@
 						<h2 class="text-[22px] font-normal tracking-[-0.01em]">{sec.key}</h2>
 						<Badge variant="secondary" class="text-muted-foreground">{count}</Badge>
 					</Button>
-					{#if open && pages > 1}
+					{#if open && count > per}
 						<span class="mr-1 text-[13px] text-muted-foreground tabular-nums">
 							{from + 1}–{from + slice.length} of {count}
 						</span>
@@ -447,8 +480,8 @@
 							variant="ghost"
 							size="icon-sm"
 							aria-label="Previous panels"
-							disabled={page === 0}
-							onclick={() => ws.setSectionStart(sec.key, (page - 1) * per)}
+							disabled={from === 0}
+							onclick={() => showFrom(sec.key, from - per)}
 						>
 							<ChevronLeftIcon />
 						</Button>
@@ -456,8 +489,8 @@
 							variant="ghost"
 							size="icon-sm"
 							aria-label="Next panels"
-							disabled={page >= pages - 1}
-							onclick={() => ws.setSectionStart(sec.key, (page + 1) * per)}
+							disabled={from + per >= count}
+							onclick={() => showFrom(sec.key, from + per)}
 						>
 							<ChevronRightIcon />
 						</Button>
@@ -539,3 +572,26 @@
 		{/each}
 	</div>
 </div>
+
+<!-- A pinned panel left past unpinned ones. Closing it any other way puts the panel back. -->
+<AlertDialog.Root
+	open={ws.unpinAsk != null}
+	onOpenChange={(open) => {
+		if (!open) ws.answerUnpin(false);
+	}}
+>
+	<AlertDialog.Content class="sm:max-w-md">
+		<AlertDialog.Header>
+			<AlertDialog.Title>Unpin this panel?</AlertDialog.Title>
+			<AlertDialog.Description>
+				{#if ws.unpinAsk}
+					Moving {ws.panels[ws.unpinAsk.panel].title} after panels that aren't pinned will unpin it.
+				{/if}
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Cancel>Keep pinned</AlertDialog.Cancel>
+			<Button onclick={() => ws.answerUnpin(true)}>Unpin</Button>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>
