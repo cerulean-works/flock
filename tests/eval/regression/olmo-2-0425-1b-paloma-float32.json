@@ -2,19 +2,21 @@
   "provenance": {
     "model": "allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf",
     "model_digest": null,
-    "flock_commit": "53f4fb6d1838e60ba6a66d43bb0f9801197eb05d",
-    "command": "flock eval run --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf --suite paloma --dtype float32 --out /work/harrychang08/eval-lab/034/paloma-fp32-r3",
+    "flock_commit": "74836d6c6da24c1a9df5f2ae760dd3442a7bd5c5",
+    "command": "flock eval run --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf --suite paloma --dtype float32 --out /work/harrychang08/eval-lab/023/fp32-paloma",
     "device": "NVIDIA H200",
     "dtype": "float32",
     "batch_tokens": 32768,
     "max_length": 4096,
+    "add_bos": false,
     "attention": "sdpa",
+    "sdpa_backend": "EFFICIENT_ATTENTION",
     "torch": "2.14.1+cu130",
     "transformers": "5.20.1",
     "tokenizers": "0.23.3",
     "datasets": "5.1.0",
     "python": "3.14.7",
-    "created_at": "2026-11-02T15:53:20+00:00"
+    "created_at": "2026-11-06T10:36:10+00:00"
   },
   "tasks": [
     {
@@ -35,13 +37,13 @@
       },
       "num_docs": 2124,
       "limit": null,
-      "seconds": 413.31962946709245,
+      "seconds": 64.030921747908,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 5.138880054495713
+      "docs_per_second": 33.17147312609778
     },
     {
       "task": "paloma_mc4",
@@ -61,13 +63,13 @@
       },
       "num_docs": 1202,
       "limit": null,
-      "seconds": 409.49536897195503,
+      "seconds": 63.57015350786969,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.935320130768856
+      "docs_per_second": 18.908244414593053
     },
     {
       "task": "paloma_wikitext_103",
@@ -87,13 +89,13 @@
       },
       "num_docs": 61,
       "limit": null,
-      "seconds": 129.9383317641914,
+      "seconds": 20.147077478002757,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.4694534643610876
+      "docs_per_second": 3.0277344228512453
     },
     {
       "task": "paloma_ptb",
@@ -113,13 +115,13 @@
       },
       "num_docs": 1,
       "limit": null,
-      "seconds": 39.843433354981244,
+      "seconds": 5.914194541983306,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.025098238675633096
+      "docs_per_second": 0.16908473214759234
     },
     {
       "task": "paloma_falcon-refinedweb",
@@ -139,13 +141,13 @@
       },
       "num_docs": 1711,
       "limit": null,
-      "seconds": 423.4711057259701,
+      "seconds": 65.77862009359524,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.04041734339059
+      "docs_per_second": 26.011491234772762
     },
     {
       "task": "paloma_dolma-v1_5__common-crawl",
@@ -165,13 +167,13 @@
       },
       "num_docs": 846,
       "limit": null,
-      "seconds": 218.55323468288407,
+      "seconds": 33.89208924071863,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.870910449930093
+      "docs_per_second": 24.96157713947002
     },
     {
       "task": "paloma_dolma-v1_5__pes2o",
@@ -191,13 +193,13 @@
       },
       "num_docs": 238,
       "limit": null,
-      "seconds": 225.8519608550705,
+      "seconds": 35.117043633945286,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.0537876186637358
+      "docs_per_second": 6.777335885129618
     },
     {
       "task": "paloma_dolma-v1_5__reddit_uniform",
@@ -217,13 +219,13 @@
       },
       "num_docs": 2230,
       "limit": null,
-      "seconds": 193.97236665291712,
+      "seconds": 30.165028258692473,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 11.496482919086265
+      "docs_per_second": 73.92666702897566
     },
     {
       "task": "paloma_dolma-v1_5__stack_uniform",
@@ -243,13 +245,13 @@
       },
       "num_docs": 328,
       "limit": null,
-      "seconds": 188.4616256142035,
+      "seconds": 29.124427433125675,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.7404073584266064
+      "docs_per_second": 11.262023974656335
     },
     {
       "task": "paloma_dolma-v1_5__wiki",
@@ -269,13 +271,13 @@
       },
       "num_docs": 839,
       "limit": null,
-      "seconds": 225.18007161887363,
+      "seconds": 34.92662193533033,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.725906977328089
+      "docs_per_second": 24.021790643065373
     },
     {
       "task": "paloma_c4_100_domains__1_www.nytimes.com",
@@ -295,13 +297,13 @@
       },
       "num_docs": 99,
       "limit": null,
-      "seconds": 49.47981498716399,
+      "seconds": 7.596002475824207,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.0008158887757057
+      "docs_per_second": 13.033171107445956
     },
     {
       "task": "paloma_c4_100_domains__2_en.wikipedia.org",
@@ -321,13 +323,13 @@
       },
       "num_docs": 57,
       "limit": null,
-      "seconds": 53.445386685896665,
+      "seconds": 8.216433857101947,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.0665092636525229
+      "docs_per_second": 6.937316236134676
     },
     {
       "task": "paloma_c4_100_domains__4_www.latimes.com",
@@ -347,13 +349,13 @@
       },
       "num_docs": 111,
       "limit": null,
-      "seconds": 50.74081630818546,
+      "seconds": 7.794133230112493,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.1875879829330533
+      "docs_per_second": 14.241480960468254
     },
     {
       "task": "paloma_c4_100_domains__5_www.theguardian.com",
@@ -373,13 +375,13 @@
       },
       "num_docs": 106,
       "limit": null,
-      "seconds": 50.67604613909498,
+      "seconds": 7.794473216868937,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.0917180418743113
+      "docs_per_second": 13.599379592528834
     },
     {
       "task": "paloma_c4_100_domains__6_www.huffpost.com",
@@ -399,13 +401,13 @@
       },
       "num_docs": 120,
       "limit": null,
-      "seconds": 48.36539251031354,
+      "seconds": 7.418725781608373,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.481112915074781
+      "docs_per_second": 16.175284480454824
     },
     {
       "task": "paloma_c4_100_domains__7_patents.google.com",
@@ -425,13 +427,13 @@
       },
       "num_docs": 15,
       "limit": null,
-      "seconds": 45.89706594636664,
+      "seconds": 7.081498862244189,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.3268182767397019
+      "docs_per_second": 2.1181956379283196
     },
     {
       "task": "paloma_c4_100_domains__8_www.businessinsider.com",
@@ -451,13 +453,13 @@
       },
       "num_docs": 133,
       "limit": null,
-      "seconds": 49.71334835002199,
+      "seconds": 7.629473426844925,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.6753377998917505
+      "docs_per_second": 17.432395731536158
     },
     {
       "task": "paloma_c4_100_domains__9_www.forbes.com",
@@ -477,13 +479,13 @@
       },
       "num_docs": 108,
       "limit": null,
-      "seconds": 47.409525078721344,
+      "seconds": 7.294418902136385,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.278023241546313
+      "docs_per_second": 14.80584011542976
     },
     {
       "task": "paloma_c4_100_domains__10_www.eventbrite.com",
@@ -503,13 +505,13 @@
       },
       "num_docs": 189,
       "limit": null,
-      "seconds": 47.71346427081153,
+      "seconds": 7.324923744890839,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.9611460389309814
+      "docs_per_second": 25.802316390232484
     },
     {
       "task": "paloma_c4_100_domains__11_link.springer.com",
@@ -529,13 +531,13 @@
       },
       "num_docs": 104,
       "limit": null,
-      "seconds": 52.96027100319043,
+      "seconds": 8.103882031980902,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.963736174872195
+      "docs_per_second": 12.833355617662956
     },
     {
       "task": "paloma_c4_100_domains__12_www.chicagotribune.com",
@@ -555,13 +557,13 @@
       },
       "num_docs": 112,
       "limit": null,
-      "seconds": 48.89226637594402,
+      "seconds": 7.503909968305379,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.2907508344736143
+      "docs_per_second": 14.925552208523252
     },
     {
       "task": "paloma_c4_100_domains__13_www.foxnews.com",
@@ -581,13 +583,13 @@
       },
       "num_docs": 138,
       "limit": null,
-      "seconds": 47.54292901372537,
+      "seconds": 7.303996169008315,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.902639842828367
+      "docs_per_second": 18.89376675545774
     },
     {
       "task": "paloma_c4_100_domains__14_www.aljazeera.com",
@@ -607,13 +609,13 @@
       },
       "num_docs": 148,
       "limit": null,
-      "seconds": 48.37740627024323,
+      "seconds": 7.428075877018273,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.0592793498115727
+      "docs_per_second": 19.924406057549476
     },
     {
       "task": "paloma_c4_100_domains__15_www.dailymail.co.uk",
@@ -633,13 +635,13 @@
       },
       "num_docs": 160,
       "limit": null,
-      "seconds": 48.793550176080316,
+      "seconds": 7.49280192097649,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.2791219212910554
+      "docs_per_second": 21.35382753841012
     },
     {
       "task": "paloma_c4_100_domains__16_www.ncbi.nlm.nih.gov",
@@ -659,13 +661,13 @@
       },
       "num_docs": 117,
       "limit": null,
-      "seconds": 54.16743352683261,
+      "seconds": 8.306896531023085,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.15996942040908
+      "docs_per_second": 14.084682475946305
     },
     {
       "task": "paloma_c4_100_domains__17_www.express.co.uk",
@@ -685,13 +687,13 @@
       },
       "num_docs": 198,
       "limit": null,
-      "seconds": 44.38650731276721,
+      "seconds": 6.810468868818134,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.4608150536559075
+      "docs_per_second": 29.07288819813081
     },
     {
       "task": "paloma_c4_100_domains__18_en.m.wikipedia.org",
@@ -711,13 +713,13 @@
       },
       "num_docs": 47,
       "limit": null,
-      "seconds": 54.7680356958881,
+      "seconds": 8.417913328390568,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.8581647927082527
+      "docs_per_second": 5.583331422703777
     },
     {
       "task": "paloma_c4_100_domains__19_www.cnet.com",
@@ -737,13 +739,13 @@
       },
       "num_docs": 140,
       "limit": null,
-      "seconds": 49.326045834925026,
+      "seconds": 7.5748605648986995,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.8382571039350126
+      "docs_per_second": 18.482188391526154
     },
     {
       "task": "paloma_c4_100_domains__20_www.telegraph.co.uk",
@@ -763,13 +765,13 @@
       },
       "num_docs": 132,
       "limit": null,
-      "seconds": 48.37004069285467,
+      "seconds": 7.4423462972044945,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.7289619382002988
+      "docs_per_second": 17.736342106196005
     },
     {
       "task": "paloma_c4_100_domains__21_www.theatlantic.com",
@@ -789,13 +791,13 @@
       },
       "num_docs": 83,
       "limit": null,
-      "seconds": 50.28187736496329,
+      "seconds": 7.732286856975406,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.6506941337443952
+      "docs_per_second": 10.734211176493602
     },
     {
       "task": "paloma_c4_100_domains__22_forums.macrumors.com",
@@ -815,13 +817,13 @@
       },
       "num_docs": 124,
       "limit": null,
-      "seconds": 52.28744024410844,
+      "seconds": 8.054981722962111,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.371506415710834
+      "docs_per_second": 15.3942000447396
     },
     {
       "task": "paloma_c4_100_domains__23_www.oreilly.com",
@@ -841,13 +843,13 @@
       },
       "num_docs": 188,
       "limit": null,
-      "seconds": 48.793885211925954,
+      "seconds": 7.511581425089389,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.852941801692192
+      "docs_per_second": 25.028018650248843
     },
     {
       "task": "paloma_c4_100_domains__24_www.washingtonpost.com",
@@ -867,13 +869,13 @@
       },
       "num_docs": 103,
       "limit": null,
-      "seconds": 49.82844138983637,
+      "seconds": 7.666119205299765,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.0670925505008704
+      "docs_per_second": 13.435742028221231
     },
     {
       "task": "paloma_c4_100_domains__25_www.zdnet.com",
@@ -893,13 +895,13 @@
       },
       "num_docs": 143,
       "limit": null,
-      "seconds": 48.23251349711791,
+      "seconds": 7.422877966891974,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.9648050584911947
+      "docs_per_second": 19.264765046363195
     },
     {
       "task": "paloma_c4_100_domains__26_www.foxbusiness.com",
@@ -919,13 +921,13 @@
       },
       "num_docs": 124,
       "limit": null,
-      "seconds": 46.56825114693493,
+      "seconds": 7.142374413087964,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.6627583588816295
+      "docs_per_second": 17.361173305725558
     },
     {
       "task": "paloma_c4_100_domains__27_www.reuters.com",
@@ -945,13 +947,13 @@
       },
       "num_docs": 166,
       "limit": null,
-      "seconds": 49.11376288020983,
+      "seconds": 7.547595532145351,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.3799079985966407
+      "docs_per_second": 21.993759375817486
     },
     {
       "task": "paloma_c4_100_domains__28_www.ibtimes.co.uk",
@@ -971,13 +973,13 @@
       },
       "num_docs": 200,
       "limit": null,
-      "seconds": 47.28054326726124,
+      "seconds": 7.2633923082612455,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.2300698380191255
+      "docs_per_second": 27.535343199419888
     },
     {
       "task": "paloma_c4_100_domains__29_www.rt.com",
@@ -997,13 +999,13 @@
       },
       "num_docs": 183,
       "limit": null,
-      "seconds": 46.47063400875777,
+      "seconds": 7.13607492716983,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.937970804648634
+      "docs_per_second": 25.644349571393565
     },
     {
       "task": "paloma_c4_100_domains__30_www.prweb.com",
@@ -1023,13 +1025,13 @@
       },
       "num_docs": 183,
       "limit": null,
-      "seconds": 46.09647108614445,
+      "seconds": 7.081681219860911,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.9699351314336435
+      "docs_per_second": 25.841321335782215
     },
     {
       "task": "paloma_c4_100_domains__31_www.deviantart.com",
@@ -1049,13 +1051,13 @@
       },
       "num_docs": 142,
       "limit": null,
-      "seconds": 51.398194247856736,
+      "seconds": 7.908880783710629,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.762742973327731
+      "docs_per_second": 17.954499996063603
     },
     {
       "task": "paloma_c4_100_domains__32_www.si.com",
@@ -1075,13 +1077,13 @@
       },
       "num_docs": 151,
       "limit": null,
-      "seconds": 50.70791819272563,
+      "seconds": 7.806310493964702,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.9778386765178206
+      "docs_per_second": 19.34332488013931
     },
     {
       "task": "paloma_c4_100_domains__33_www.bbc.com",
@@ -1101,13 +1103,13 @@
       },
       "num_docs": 131,
       "limit": null,
-      "seconds": 47.62615146767348,
+      "seconds": 7.29799959808588,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.7505896647751813
+      "docs_per_second": 17.950124310003893
     },
     {
       "task": "paloma_c4_100_domains__34_github.com",
@@ -1127,13 +1129,13 @@
       },
       "num_docs": 129,
       "limit": null,
-      "seconds": 48.53201882587746,
+      "seconds": 7.4618736412376165,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.6580390249749244
+      "docs_per_second": 17.287883204975344
     },
     {
       "task": "paloma_c4_100_domains__35_nypost.com",
@@ -1153,13 +1155,13 @@
       },
       "num_docs": 183,
       "limit": null,
-      "seconds": 44.0580344023183,
+      "seconds": 6.77783726202324,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.15361244509743
+      "docs_per_second": 26.99976304024936
     },
     {
       "task": "paloma_c4_100_domains__36_itunes.apple.com",
@@ -1179,13 +1181,13 @@
       },
       "num_docs": 182,
       "limit": null,
-      "seconds": 49.29111840808764,
+      "seconds": 7.564056339208037,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.6923487613569264
+      "docs_per_second": 24.061163989037073
     },
     {
       "task": "paloma_c4_100_domains__37_www.instructables.com",
@@ -1205,13 +1207,13 @@
       },
       "num_docs": 112,
       "limit": null,
-      "seconds": 51.1310710310936,
+      "seconds": 7.86713568167761,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.1904489333284465
+      "docs_per_second": 14.236439351217191
     },
     {
       "task": "paloma_c4_100_domains__38_www.youtube.com",
@@ -1231,13 +1233,13 @@
       },
       "num_docs": 108,
       "limit": null,
-      "seconds": 52.754858085885644,
+      "seconds": 8.11257149791345,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.047204824704002
+      "docs_per_second": 13.312671577412607
     },
     {
       "task": "paloma_c4_100_domains__39_www.booking.com",
@@ -1257,13 +1259,13 @@
       },
       "num_docs": 105,
       "limit": null,
-      "seconds": 47.40219358494505,
+      "seconds": 7.2828336847014725,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.215087363242785
+      "docs_per_second": 14.417465034326678
     },
     {
       "task": "paloma_c4_100_domains__40_www.etsy.com",
@@ -1283,13 +1285,13 @@
       },
       "num_docs": 138,
       "limit": null,
-      "seconds": 47.63152405899018,
+      "seconds": 7.317919339984655,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.8972409077041337
+      "docs_per_second": 18.857819222736797
     },
     {
       "task": "paloma_c4_100_domains__41_www.marketwired.com",
@@ -1309,13 +1311,13 @@
       },
       "num_docs": 123,
       "limit": null,
-      "seconds": 53.48982393881306,
+      "seconds": 8.208166943863034,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.2995028015179027
+      "docs_per_second": 14.985075333045327
     },
     {
       "task": "paloma_c4_100_domains__42_sites.google.com",
@@ -1335,13 +1337,13 @@
       },
       "num_docs": 114,
       "limit": null,
-      "seconds": 50.86333047086373,
+      "seconds": 7.800149294082075,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.241300342400959
+      "docs_per_second": 14.615104878375993
     },
     {
       "task": "paloma_c4_100_domains__43_www.baltimoresun.com",
@@ -1361,13 +1363,13 @@
       },
       "num_docs": 103,
       "limit": null,
-      "seconds": 50.647340591065586,
+      "seconds": 7.7840869971551,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.033670451359684
+      "docs_per_second": 13.232123438194366
     },
     {
       "task": "paloma_c4_100_domains__44_www.agreatertown.com",
@@ -1387,13 +1389,13 @@
       },
       "num_docs": 206,
       "limit": null,
-      "seconds": 48.015854543074965,
+      "seconds": 7.390416590962559,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.290249584440857
+      "docs_per_second": 27.873936125861842
     },
     {
       "task": "paloma_c4_100_domains__45_www.npr.org",
@@ -1413,13 +1415,13 @@
       },
       "num_docs": 112,
       "limit": null,
-      "seconds": 47.22695089504123,
+      "seconds": 7.267959488090128,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.3715272292067424
+      "docs_per_second": 15.410102406807901
     },
     {
       "task": "paloma_c4_100_domains__46_www.fool.com",
@@ -1439,13 +1441,13 @@
       },
       "num_docs": 71,
       "limit": null,
-      "seconds": 47.739594568964094,
+      "seconds": 7.330667489208281,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.4872350852798757
+      "docs_per_second": 9.685339036932374
     },
     {
       "task": "paloma_c4_100_domains__47_www.tripadvisor.com",
@@ -1465,13 +1467,13 @@
       },
       "num_docs": 211,
       "limit": null,
-      "seconds": 49.0805062581785,
+      "seconds": 7.543859380763024,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.299059159864313
+      "docs_per_second": 27.969768436836688
     },
     {
       "task": "paloma_c4_100_domains__48_www.bbc.co.uk",
@@ -1491,13 +1493,13 @@
       },
       "num_docs": 117,
       "limit": null,
-      "seconds": 50.77696936810389,
+      "seconds": 7.7861559758894145,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.304194233252031
+      "docs_per_second": 15.026670460019274
     },
     {
       "task": "paloma_c4_100_domains__49_lists.w3.org",
@@ -1517,13 +1519,13 @@
       },
       "num_docs": 182,
       "limit": null,
-      "seconds": 46.50986949214712,
+      "seconds": 7.154108582064509,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.9131479401534226
+      "docs_per_second": 25.43992698912588
     },
     {
       "task": "paloma_c4_100_domains__50_mashable.com",
@@ -1543,13 +1545,13 @@
       },
       "num_docs": 163,
       "limit": null,
-      "seconds": 48.65278229024261,
+      "seconds": 7.487051127012819,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.3502708853855188
+      "docs_per_second": 21.770921185766454
     },
     {
       "task": "paloma_c4_100_domains__51_disneyparksmomspanel.disney.go.com",
@@ -1569,13 +1571,13 @@
       },
       "num_docs": 315,
       "limit": null,
-      "seconds": 40.08876002533361,
+      "seconds": 6.195634361356497,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 7.857564060373519
+      "docs_per_second": 50.8422514350948
     },
     {
       "task": "paloma_c4_100_domains__52_www.cnbc.com",
@@ -1595,13 +1597,13 @@
       },
       "num_docs": 135,
       "limit": null,
-      "seconds": 49.557928835973144,
+      "seconds": 7.617753772996366,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.724084786650852
+      "docs_per_second": 17.721759461240648
     },
     {
       "task": "paloma_c4_100_domains__53_answers.sap.com",
@@ -1621,13 +1623,13 @@
       },
       "num_docs": 225,
       "limit": null,
-      "seconds": 48.420357888098806,
+      "seconds": 7.449576449114829,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.646805802633328
+      "docs_per_second": 30.20305940034146
     },
     {
       "task": "paloma_c4_100_domains__54_homestars.com",
@@ -1647,13 +1649,13 @@
       },
       "num_docs": 129,
       "limit": null,
-      "seconds": 50.57197052240372,
+      "seconds": 7.767833092715591,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.5508201216492474
+      "docs_per_second": 16.60694796866475
     },
     {
       "task": "paloma_c4_100_domains__55_www.hindustantimes.com",
@@ -1673,13 +1675,13 @@
       },
       "num_docs": 183,
       "limit": null,
-      "seconds": 46.861690466757864,
+      "seconds": 7.199352545198053,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.905108803742668
+      "docs_per_second": 25.41895244761426
     },
     {
       "task": "paloma_c4_100_domains__56_www.reference.com",
@@ -1699,13 +1701,13 @@
       },
       "num_docs": 275,
       "limit": null,
-      "seconds": 42.526378449983895,
+      "seconds": 6.566977776121348,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 6.466574630224694
+      "docs_per_second": 41.87618861753224
     },
     {
       "task": "paloma_c4_100_domains__57_www.city-data.com",
@@ -1725,13 +1727,13 @@
       },
       "num_docs": 109,
       "limit": null,
-      "seconds": 50.027449547778815,
+      "seconds": 7.694449032191187,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.1788038563888676
+      "docs_per_second": 14.166056535559314
     },
     {
       "task": "paloma_c4_100_domains__58_medium.com",
@@ -1751,13 +1753,13 @@
       },
       "num_docs": 90,
       "limit": null,
-      "seconds": 52.055045645684004,
+      "seconds": 8.016324252355844,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.7289390275938044
+      "docs_per_second": 11.227090767136911
     },
     {
       "task": "paloma_c4_100_domains__59_app-wiringdiagram.herokuapp.com",
@@ -1777,13 +1779,13 @@
       },
       "num_docs": 250,
       "limit": null,
-      "seconds": 46.56858150707558,
+      "seconds": 7.169134434312582,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 5.36842634903997
+      "docs_per_second": 34.87171321595833
     },
     {
       "task": "paloma_c4_100_domains__60_www.csmonitor.com",
@@ -1803,13 +1805,13 @@
       },
       "num_docs": 120,
       "limit": null,
-      "seconds": 46.63427118305117,
+      "seconds": 7.164644205011427,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.573214868716829
+      "docs_per_second": 16.748912655853033
     },
     {
       "task": "paloma_c4_100_domains__61_www.adweek.com",
@@ -1829,13 +1831,13 @@
       },
       "num_docs": 207,
       "limit": null,
-      "seconds": 49.67600066168234,
+      "seconds": 7.638378465082496,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.167002118583789
+      "docs_per_second": 27.09999261574483
     },
     {
       "task": "paloma_c4_100_domains__62_docs.microsoft.com",
@@ -1855,13 +1857,13 @@
       },
       "num_docs": 75,
       "limit": null,
-      "seconds": 51.00516443327069,
+      "seconds": 7.847035795915872,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.4704393336114305
+      "docs_per_second": 9.557749187156132
     },
     {
       "task": "paloma_c4_100_domains__63_www.yahoo.com",
@@ -1881,13 +1883,13 @@
       },
       "num_docs": 159,
       "limit": null,
-      "seconds": 50.459486281033605,
+      "seconds": 7.759574410971254,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.151042781419753
+      "docs_per_second": 20.49081451879501
     },
     {
       "task": "paloma_c4_100_domains__64_www.thesun.co.uk",
@@ -1907,13 +1909,13 @@
       },
       "num_docs": 190,
       "limit": null,
-      "seconds": 49.08464289829135,
+      "seconds": 7.531329947058111,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.870864465566153
+      "docs_per_second": 25.227947963456018
     },
     {
       "task": "paloma_c4_100_domains__65_www.nydailynews.com",
@@ -1933,13 +1935,13 @@
       },
       "num_docs": 153,
       "limit": null,
-      "seconds": 47.85000556986779,
+      "seconds": 7.332311555277556,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.1974917908128204
+      "docs_per_second": 20.866543769525947
     },
     {
       "task": "paloma_c4_100_domains__66_www.dailystar.co.uk",
@@ -1959,13 +1961,13 @@
       },
       "num_docs": 212,
       "limit": null,
-      "seconds": 45.03306076163426,
+      "seconds": 6.914323498029262,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.707652476080697
+      "docs_per_second": 30.66098947502598
     },
     {
       "task": "paloma_c4_100_domains__67_fineartamerica.com",
@@ -1985,13 +1987,13 @@
       },
       "num_docs": 91,
       "limit": null,
-      "seconds": 20.8119847192429,
+      "seconds": 3.1573038804344833,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.3724806272734185
+      "docs_per_second": 28.822059404518672
     },
     {
       "task": "paloma_c4_100_domains__68_www.kickstarter.com",
@@ -2011,13 +2013,13 @@
       },
       "num_docs": 80,
       "limit": null,
-      "seconds": 50.21929209213704,
+      "seconds": 7.739642472006381,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.593013295631975
+      "docs_per_second": 10.336394773964443
     },
     {
       "task": "paloma_c4_100_domains__69_uk.reuters.com",
@@ -2037,13 +2039,13 @@
       },
       "num_docs": 167,
       "limit": null,
-      "seconds": 49.7488954202272,
+      "seconds": 7.65423302911222,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.356858450611954
+      "docs_per_second": 21.817992653846545
     },
     {
       "task": "paloma_c4_100_domains__70_www.insiderpages.com",
@@ -2063,13 +2065,13 @@
       },
       "num_docs": 136,
       "limit": null,
-      "seconds": 51.90211164392531,
+      "seconds": 7.966112173162401,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.620317279825312
+      "docs_per_second": 17.07231796938286
     },
     {
       "task": "paloma_c4_100_domains__71_www.inquisitr.com",
@@ -2089,13 +2091,13 @@
       },
       "num_docs": 197,
       "limit": null,
-      "seconds": 43.1618320858106,
+      "seconds": 6.64405502518639,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.564217747021066
+      "docs_per_second": 29.650567199279546
     },
     {
       "task": "paloma_c4_100_domains__72_lists.debian.org",
@@ -2115,13 +2117,13 @@
       },
       "num_docs": 97,
       "limit": null,
-      "seconds": 42.99979158677161,
+      "seconds": 6.583628564141691,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.255824887063893
+      "docs_per_second": 14.733516487901367
     },
     {
       "task": "paloma_c4_100_domains__73_www.straitstimes.com",
@@ -2141,13 +2143,13 @@
       },
       "num_docs": 168,
       "limit": null,
-      "seconds": 47.176328422967345,
+      "seconds": 7.256597949191928,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.5611079881793177
+      "docs_per_second": 23.151344635085916
     },
     {
       "task": "paloma_c4_100_domains__74_www.cbsnews.com",
@@ -2167,13 +2169,13 @@
       },
       "num_docs": 133,
       "limit": null,
-      "seconds": 48.584392650052905,
+      "seconds": 7.462775403168052,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.7375046335966737
+      "docs_per_second": 17.821787849000472
     },
     {
       "task": "paloma_c4_100_domains__75_simple.wikipedia.org",
@@ -2193,13 +2195,13 @@
       },
       "num_docs": 135,
       "limit": null,
-      "seconds": 51.2029069699347,
+      "seconds": 7.864980269223452,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.6365690541607187
+      "docs_per_second": 17.16469658903915
     },
     {
       "task": "paloma_c4_100_domains__76_deadline.com",
@@ -2219,13 +2221,13 @@
       },
       "num_docs": 184,
       "limit": null,
-      "seconds": 49.19195936014876,
+      "seconds": 7.572136293165386,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.7404486910733126
+      "docs_per_second": 24.299615442220514
     },
     {
       "task": "paloma_c4_100_domains__77_www.androidheadlines.com",
@@ -2245,13 +2247,13 @@
       },
       "num_docs": 179,
       "limit": null,
-      "seconds": 47.32375930482522,
+      "seconds": 7.2844107751734555,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.7824552112821865
+      "docs_per_second": 24.573023889600414
     },
     {
       "task": "paloma_c4_100_domains__78_www.wired.com",
@@ -2271,13 +2273,13 @@
       },
       "num_docs": 77,
       "limit": null,
-      "seconds": 47.97342779999599,
+      "seconds": 7.327474218327552,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.6050552051651903
+      "docs_per_second": 10.508395895465156
     },
     {
       "task": "paloma_c4_100_domains__79_www.bustle.com",
@@ -2297,13 +2299,13 @@
       },
       "num_docs": 142,
       "limit": null,
-      "seconds": 49.31802646908909,
+      "seconds": 7.5784592418931425,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.879271742331395
+      "docs_per_second": 18.73731789900444
     },
     {
       "task": "paloma_c4_100_domains__80_premium.wpmudev.org",
@@ -2323,13 +2325,13 @@
       },
       "num_docs": 159,
       "limit": null,
-      "seconds": 49.776343720033765,
+      "seconds": 7.631489600986242,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.1942884534527667
+      "docs_per_second": 20.834726680286888
     },
     {
       "task": "paloma_c4_100_domains__81_www.librarything.com",
@@ -2349,13 +2351,13 @@
       },
       "num_docs": 96,
       "limit": null,
-      "seconds": 52.68907846882939,
+      "seconds": 8.097969975322485,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.8220094712188435
+      "docs_per_second": 11.854822911488629
     },
     {
       "task": "paloma_c4_100_domains__82_mail-archives.apache.org",
@@ -2375,13 +2377,13 @@
       },
       "num_docs": 149,
       "limit": null,
-      "seconds": 46.89864933723584,
+      "seconds": 7.201515885069966,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.177063777009445
+      "docs_per_second": 20.690088361660592
     },
     {
       "task": "paloma_c4_100_domains__83_scholars.duke.edu",
@@ -2401,13 +2403,13 @@
       },
       "num_docs": 258,
       "limit": null,
-      "seconds": 51.74122943961993,
+      "seconds": 7.935539909172803,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.98635233051577
+      "docs_per_second": 32.511965531390516
     },
     {
       "task": "paloma_c4_100_domains__84_www.glassdoor.com",
@@ -2427,13 +2429,13 @@
       },
       "num_docs": 174,
       "limit": null,
-      "seconds": 49.95377631904557,
+      "seconds": 7.667373441159725,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.4832201451336537
+      "docs_per_second": 22.693560100508382
     },
     {
       "task": "paloma_c4_100_domains__85_www.pcworld.com",
@@ -2453,13 +2455,13 @@
       },
       "num_docs": 157,
       "limit": null,
-      "seconds": 48.82403887808323,
+      "seconds": 7.500391098205,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.2156290959877185
+      "docs_per_second": 20.932241791707817
     },
     {
       "task": "paloma_c4_100_domains__86_www.shutterstock.com",
@@ -2479,13 +2481,13 @@
       },
       "num_docs": 108,
       "limit": null,
-      "seconds": 51.45728550013155,
+      "seconds": 7.894534034188837,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.0988281630153987
+      "docs_per_second": 13.680351434585587
     },
     {
       "task": "paloma_c4_100_domains__87_myemail.constantcontact.com",
@@ -2505,13 +2507,13 @@
       },
       "num_docs": 108,
       "limit": null,
-      "seconds": 50.79058420471847,
+      "seconds": 7.857837225776166,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.1263783768403033
+      "docs_per_second": 13.744239909389595
     },
     {
       "task": "paloma_c4_100_domains__88_www.eventbrite.co.uk",
@@ -2531,13 +2533,13 @@
       },
       "num_docs": 213,
       "limit": null,
-      "seconds": 49.66106274817139,
+      "seconds": 7.62428884068504,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.289074542768279
+      "docs_per_second": 27.937031826939812
     },
     {
       "task": "paloma_c4_100_domains__89_www.fastcompany.com",
@@ -2557,13 +2559,13 @@
       },
       "num_docs": 134,
       "limit": null,
-      "seconds": 48.14486240921542,
+      "seconds": 7.398396835196763,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.783266859525826
+      "docs_per_second": 18.11203196921191
     },
     {
       "task": "paloma_c4_100_domains__90_www.firstpost.com",
@@ -2583,13 +2585,13 @@
       },
       "num_docs": 134,
       "limit": null,
-      "seconds": 50.0081293862313,
+      "seconds": 7.680682264268398,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.6795643357316643
+      "docs_per_second": 17.446366792620317
     },
     {
       "task": "paloma_c4_100_domains__91_www.entrepreneur.com",
@@ -2609,13 +2611,13 @@
       },
       "num_docs": 116,
       "limit": null,
-      "seconds": 49.45600028755143,
+      "seconds": 7.6060395310632885,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.3455192357963157
+      "docs_per_second": 15.251038273762923
     },
     {
       "task": "paloma_c4_100_domains__92_www.breitbart.com",
@@ -2635,13 +2637,13 @@
       },
       "num_docs": 181,
       "limit": null,
-      "seconds": 49.40446002408862,
+      "seconds": 7.59755381103605,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.6636368439559512
+      "docs_per_second": 23.82345745772582
     },
     {
       "task": "paloma_c4_100_domains__93_techcrunch.com",
@@ -2661,13 +2663,13 @@
       },
       "num_docs": 154,
       "limit": null,
-      "seconds": 48.70197170507163,
+      "seconds": 7.495021330192685,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.162089636382485
+      "docs_per_second": 20.546972879134007
     },
     {
       "task": "paloma_c4_100_domains__94_www.nme.com",
@@ -2687,13 +2689,13 @@
       },
       "num_docs": 237,
       "limit": null,
-      "seconds": 47.96770948637277,
+      "seconds": 7.361001051962376,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.940823786204128
+      "docs_per_second": 32.19670780196641
     },
     {
       "task": "paloma_c4_100_domains__95_www.ndtv.com",
@@ -2713,13 +2715,13 @@
       },
       "num_docs": 183,
       "limit": null,
-      "seconds": 47.49583002412692,
+      "seconds": 7.286330877337605,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.8529698271835593
+      "docs_per_second": 25.115521526640777
     },
     {
       "task": "paloma_c4_100_domains__96_finance.yahoo.com",
@@ -2739,13 +2741,13 @@
       },
       "num_docs": 61,
       "limit": null,
-      "seconds": 51.34772800095379,
+      "seconds": 7.881499263923615,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.187978560587275
+      "docs_per_second": 7.739644191710882
     },
     {
       "task": "paloma_c4_100_domains__97_archives.lib.state.ma.us",
@@ -2765,13 +2767,13 @@
       },
       "num_docs": 1,
       "limit": null,
-      "seconds": 0.29030920611694455,
+      "seconds": 0.03458053199574351,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.444603129799378
+      "docs_per_second": 28.918005082255217
     },
     {
       "task": "paloma_c4_100_domains__98_www.gsmarena.com",
@@ -2791,13 +2793,13 @@
       },
       "num_docs": 144,
       "limit": null,
-      "seconds": 49.35081126540899,
+      "seconds": 7.590302248019725,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.9178851635400083
+      "docs_per_second": 18.97157653208987
     },
     {
       "task": "paloma_c4_100_domains__99_www.lonelyplanet.com",
@@ -2817,13 +2819,13 @@
       },
       "num_docs": 137,
       "limit": null,
-      "seconds": 51.57232737634331,
+      "seconds": 7.911758963949978,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.6564633975166134
+      "docs_per_second": 17.31599769712931
     },
     {
       "task": "paloma_c4_100_domains__100_www.ign.com",
@@ -2843,13 +2845,13 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 52.01932356087491,
+      "seconds": 7.969709029886872,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.9223625598086902
+      "docs_per_second": 12.547509529519107
     },
     {
       "task": "paloma_dolma_100_subreddits__00_AskReddit",
@@ -2869,13 +2871,13 @@
       },
       "num_docs": 492,
       "limit": null,
-      "seconds": 50.20298877032474,
+      "seconds": 7.740128888748586,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.800213334924472
+      "docs_per_second": 63.56483297263877
     },
     {
       "task": "paloma_dolma_100_subreddits__01_politics",
@@ -2895,13 +2897,13 @@
       },
       "num_docs": 492,
       "limit": null,
-      "seconds": 51.43647440709174,
+      "seconds": 7.882853007875383,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.565196792184617
+      "docs_per_second": 62.41395082573102
     },
     {
       "task": "paloma_dolma_100_subreddits__02_AmItheAsshole",
@@ -2921,13 +2923,13 @@
       },
       "num_docs": 501,
       "limit": null,
-      "seconds": 50.10122897522524,
+      "seconds": 7.7097953907214105,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.999754701581104
+      "docs_per_second": 64.98226925748818
     },
     {
       "task": "paloma_dolma_100_subreddits__03_worldnews",
@@ -2947,13 +2949,13 @@
       },
       "num_docs": 415,
       "limit": null,
-      "seconds": 43.61647802731022,
+      "seconds": 6.683599893003702,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.514752652429891
+      "docs_per_second": 62.09228658861164
     },
     {
       "task": "paloma_dolma_100_subreddits__04_relationships",
@@ -2973,13 +2975,13 @@
       },
       "num_docs": 440,
       "limit": null,
-      "seconds": 50.07495938194916,
+      "seconds": 7.696426986716688,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.786826897729041
+      "docs_per_second": 57.16938532118849
     },
     {
       "task": "paloma_dolma_100_subreddits__05_relationship_advice",
@@ -2999,13 +3001,13 @@
       },
       "num_docs": 479,
       "limit": null,
-      "seconds": 52.63626184221357,
+      "seconds": 8.082973300945014,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.100190310548392
+      "docs_per_second": 59.26037142099654
     },
     {
       "task": "paloma_dolma_100_subreddits__06_news",
@@ -3025,13 +3027,13 @@
       },
       "num_docs": 439,
       "limit": null,
-      "seconds": 41.62215476902202,
+      "seconds": 6.385066099930555,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.547267493386313
+      "docs_per_second": 68.75418251422246
     },
     {
       "task": "paloma_dolma_100_subreddits__07_leagueoflegends",
@@ -3051,13 +3053,13 @@
       },
       "num_docs": 480,
       "limit": null,
-      "seconds": 50.35239826515317,
+      "seconds": 7.736948525998741,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.53281306428235
+      "docs_per_second": 62.039962963051785
     },
     {
       "task": "paloma_dolma_100_subreddits__08_todayilearned",
@@ -3077,13 +3079,13 @@
       },
       "num_docs": 425,
       "limit": null,
-      "seconds": 41.636098984628916,
+      "seconds": 6.386893576942384,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.207488462281257
+      "docs_per_second": 66.54252100493922
     },
     {
       "task": "paloma_dolma_100_subreddits__09_TwoXChromosomes",
@@ -3103,13 +3105,13 @@
       },
       "num_docs": 463,
       "limit": null,
-      "seconds": 49.143570635002106,
+      "seconds": 7.566830372903496,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.421374841457531
+      "docs_per_second": 61.18810349680676
     },
     {
       "task": "paloma_dolma_100_subreddits__10_personalfinance",
@@ -3129,13 +3131,13 @@
       },
       "num_docs": 459,
       "limit": null,
-      "seconds": 52.98906973702833,
+      "seconds": 8.156641324982047,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.662163768450808
+      "docs_per_second": 56.273162164698995
     },
     {
       "task": "paloma_dolma_100_subreddits__11_changemyview",
@@ -3155,13 +3157,13 @@
       },
       "num_docs": 390,
       "limit": null,
-      "seconds": 52.19739136705175,
+      "seconds": 8.009215717203915,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 7.471637754031083
+      "docs_per_second": 48.693906341200694
     },
     {
       "task": "paloma_dolma_100_subreddits__12_unpopularopinion",
@@ -3181,13 +3183,13 @@
       },
       "num_docs": 533,
       "limit": null,
-      "seconds": 48.63727939268574,
+      "seconds": 7.486891810782254,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.958672167838289
+      "docs_per_second": 71.19109150641118
     },
     {
       "task": "paloma_dolma_100_subreddits__13_movies",
@@ -3207,13 +3209,13 @@
       },
       "num_docs": 483,
       "limit": null,
-      "seconds": 50.78407091693953,
+      "seconds": 7.798362535890192,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.510856283852789
+      "docs_per_second": 61.93607924446988
     },
     {
       "task": "paloma_dolma_100_subreddits__14_Games",
@@ -3233,13 +3235,13 @@
       },
       "num_docs": 433,
       "limit": null,
-      "seconds": 52.64037750707939,
+      "seconds": 8.069043116178364,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.225624900614886
+      "docs_per_second": 53.66187709814546
     },
     {
       "task": "paloma_dolma_100_subreddits__15_nba",
@@ -3259,13 +3261,13 @@
       },
       "num_docs": 502,
       "limit": null,
-      "seconds": 49.41403213329613,
+      "seconds": 7.649202979169786,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.159057626502467
+      "docs_per_second": 65.62775250794627
     },
     {
       "task": "paloma_dolma_100_subreddits__16_pics",
@@ -3285,13 +3287,13 @@
       },
       "num_docs": 436,
       "limit": null,
-      "seconds": 42.26730367075652,
+      "seconds": 6.478751630987972,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.315301950563157
+      "docs_per_second": 67.29691533699256
     },
     {
       "task": "paloma_dolma_100_subreddits__17_gaming",
@@ -3311,13 +3313,13 @@
       },
       "num_docs": 511,
       "limit": null,
-      "seconds": 45.36544120917097,
+      "seconds": 6.994171112775803,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 11.264080903432225
+      "docs_per_second": 73.06083762614689
     },
     {
       "task": "paloma_dolma_100_subreddits__18_soccer",
@@ -3337,13 +3339,13 @@
       },
       "num_docs": 501,
       "limit": null,
-      "seconds": 51.77101014694199,
+      "seconds": 7.948266755323857,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.6772305307161
+      "docs_per_second": 63.032610180631316
     },
     {
       "task": "paloma_dolma_100_subreddits__19_nfl",
@@ -3363,13 +3365,13 @@
       },
       "num_docs": 502,
       "limit": null,
-      "seconds": 51.949271611869335,
+      "seconds": 7.980077687185258,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.663273120566783
+      "docs_per_second": 62.906655759270684
     },
     {
       "task": "paloma_dolma_100_subreddits__20_explainlikeimfive",
@@ -3389,13 +3391,13 @@
       },
       "num_docs": 494,
       "limit": null,
-      "seconds": 50.45003132801503,
+      "seconds": 7.748241695575416,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.79186706125355
+      "docs_per_second": 63.75640040786228
     },
     {
       "task": "paloma_dolma_100_subreddits__21_conspiracy",
@@ -3415,13 +3417,13 @@
       },
       "num_docs": 460,
       "limit": null,
-      "seconds": 52.80150000797585,
+      "seconds": 8.094112914986908,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.711873714392876
+      "docs_per_second": 56.83142857425087
     },
     {
       "task": "paloma_dolma_100_subreddits__22_atheism",
@@ -3441,13 +3443,13 @@
       },
       "num_docs": 459,
       "limit": null,
-      "seconds": 49.717187620233744,
+      "seconds": 7.646339147351682,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.232219720594124
+      "docs_per_second": 60.02872631656355
     },
     {
       "task": "paloma_dolma_100_subreddits__23_AskMen",
@@ -3467,13 +3469,13 @@
       },
       "num_docs": 499,
       "limit": null,
-      "seconds": 50.47610531095415,
+      "seconds": 7.7524566277861595,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.885865736390496
+      "docs_per_second": 64.3666935473714
     },
     {
       "task": "paloma_dolma_100_subreddits__24_videos",
@@ -3493,13 +3495,13 @@
       },
       "num_docs": 410,
       "limit": null,
-      "seconds": 40.86418793303892,
+      "seconds": 6.260181311983615,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.033234984917264
+      "docs_per_second": 65.49331074727075
     },
     {
       "task": "paloma_dolma_100_subreddits__25_sex",
@@ -3519,13 +3521,13 @@
       },
       "num_docs": 486,
       "limit": null,
-      "seconds": 51.69303846312687,
+      "seconds": 7.933074740227312,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.40165280372653
+      "docs_per_second": 61.26250110005573
     },
     {
       "task": "paloma_dolma_100_subreddits__26_raisedbynarcissists",
@@ -3545,13 +3547,13 @@
       },
       "num_docs": 428,
       "limit": null,
-      "seconds": 51.45053356513381,
+      "seconds": 7.879532544873655,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.318669804622596
+      "docs_per_second": 54.31794304580321
     },
     {
       "task": "paloma_dolma_100_subreddits__27_NoStupidQuestions",
@@ -3571,13 +3573,13 @@
       },
       "num_docs": 512,
       "limit": null,
-      "seconds": 52.969494982622564,
+      "seconds": 8.131443922407925,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.665940748877619
+      "docs_per_second": 62.96544683645607
     },
     {
       "task": "paloma_dolma_100_subreddits__28_DestinyTheGame",
@@ -3597,13 +3599,13 @@
       },
       "num_docs": 464,
       "limit": null,
-      "seconds": 47.97002573311329,
+      "seconds": 7.422427843790501,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.67270692289216
+      "docs_per_second": 62.51323822409077
     },
     {
       "task": "paloma_dolma_100_subreddits__29_anime",
@@ -3623,13 +3625,13 @@
       },
       "num_docs": 422,
       "limit": null,
-      "seconds": 52.12949373899028,
+      "seconds": 8.046326440759003,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.095225365374398
+      "docs_per_second": 52.446293735031844
     },
     {
       "task": "paloma_dolma_100_subreddits__30_DnD",
@@ -3649,13 +3651,13 @@
       },
       "num_docs": 428,
       "limit": null,
-      "seconds": 51.032397808041424,
+      "seconds": 7.841036498080939,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.386829120001842
+      "docs_per_second": 54.5846202992106
     },
     {
       "task": "paloma_dolma_100_subreddits__31_ukpolitics",
@@ -3675,13 +3677,13 @@
       },
       "num_docs": 422,
       "limit": null,
-      "seconds": 48.38960269605741,
+      "seconds": 7.4199898657388985,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.720881687139434
+      "docs_per_second": 56.87339304175402
     },
     {
       "task": "paloma_dolma_100_subreddits__32_funny",
@@ -3701,13 +3703,13 @@
       },
       "num_docs": 447,
       "limit": null,
-      "seconds": 48.567787643987685,
+      "seconds": 7.452677314169705,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.20363108314931
+      "docs_per_second": 59.978445484299066
     },
     {
       "task": "paloma_dolma_100_subreddits__33_europe",
@@ -3727,13 +3729,13 @@
       },
       "num_docs": 405,
       "limit": null,
-      "seconds": 43.40576530294493,
+      "seconds": 6.647583712823689,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.330557753638367
+      "docs_per_second": 60.924392605801195
     },
     {
       "task": "paloma_dolma_100_subreddits__34_canada",
@@ -3753,13 +3755,13 @@
       },
       "num_docs": 472,
       "limit": null,
-      "seconds": 46.47966105397791,
+      "seconds": 7.13700921786949,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.15497938876653
+      "docs_per_second": 66.13414465238696
     },
     {
       "task": "paloma_dolma_100_subreddits__35_Christianity",
@@ -3779,13 +3781,13 @@
       },
       "num_docs": 390,
       "limit": null,
-      "seconds": 52.08412571391091,
+      "seconds": 7.974840332288295,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 7.4878860814944375
+      "docs_per_second": 48.90380042105416
     },
     {
       "task": "paloma_dolma_100_subreddits__36_SquaredCircle",
@@ -3805,13 +3807,13 @@
       },
       "num_docs": 520,
       "limit": null,
-      "seconds": 48.56713924603537,
+      "seconds": 7.475971348118037,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.706827869060636
+      "docs_per_second": 69.55617882763852
     },
     {
       "task": "paloma_dolma_100_subreddits__37_AskWomen",
@@ -3831,13 +3833,13 @@
       },
       "num_docs": 490,
       "limit": null,
-      "seconds": 50.389303233940154,
+      "seconds": 7.747877640184015,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.724286079628826
+      "docs_per_second": 63.24312576371074
     },
     {
       "task": "paloma_dolma_100_subreddits__38_legaladvice",
@@ -3857,13 +3859,13 @@
       },
       "num_docs": 496,
       "limit": null,
-      "seconds": 47.25592838600278,
+      "seconds": 7.30951355304569,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.496037575402188
+      "docs_per_second": 67.85677273877265
     },
     {
       "task": "paloma_dolma_100_subreddits__39_JUSTNOMIL",
@@ -3883,13 +3885,13 @@
       },
       "num_docs": 420,
       "limit": null,
-      "seconds": 50.421669892035425,
+      "seconds": 7.746649879962206,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.329751888410641
+      "docs_per_second": 54.21698495583088
     },
     {
       "task": "paloma_dolma_100_subreddits__40_technology",
@@ -3909,13 +3911,13 @@
       },
       "num_docs": 441,
       "limit": null,
-      "seconds": 41.087935586925596,
+      "seconds": 6.307270010001957,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.73307757375692
+      "docs_per_second": 69.91931521889343
     },
     {
       "task": "paloma_dolma_100_subreddits__41_IAmA",
@@ -3935,13 +3937,13 @@
       },
       "num_docs": 434,
       "limit": null,
-      "seconds": 52.26491260994226,
+      "seconds": 8.04792310576886,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.303850103777673
+      "docs_per_second": 53.92695659441664
     },
     {
       "task": "paloma_dolma_100_subreddits__42_wow",
@@ -3961,13 +3963,13 @@
       },
       "num_docs": 466,
       "limit": null,
-      "seconds": 49.879944474902004,
+      "seconds": 7.668343302793801,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.342432212098318
+      "docs_per_second": 60.76931895188138
     },
     {
       "task": "paloma_dolma_100_subreddits__43_Parenting",
@@ -3987,13 +3989,13 @@
       },
       "num_docs": 449,
       "limit": null,
-      "seconds": 48.75425220513716,
+      "seconds": 7.500458975788206,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.209453118279795
+      "docs_per_second": 59.86300324412022
     },
     {
       "task": "paloma_dolma_100_subreddits__44_exmormon",
@@ -4013,13 +4015,13 @@
       },
       "num_docs": 435,
       "limit": null,
-      "seconds": 52.09055355284363,
+      "seconds": 7.975793823134154,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.350842337636347
+      "docs_per_second": 54.54002568851048
     },
     {
       "task": "paloma_dolma_100_subreddits__45_AdviceAnimals",
@@ -4039,13 +4041,13 @@
       },
       "num_docs": 425,
       "limit": null,
-      "seconds": 41.43024760577828,
+      "seconds": 6.3541921828873456,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.258205648298498
+      "docs_per_second": 66.88497731380859
     },
     {
       "task": "paloma_dolma_100_subreddits__46_childfree",
@@ -4065,13 +4067,13 @@
       },
       "num_docs": 511,
       "limit": null,
-      "seconds": 48.12152647506446,
+      "seconds": 7.413164975121617,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.618948263513404
+      "docs_per_second": 68.93142156081812
     },
     {
       "task": "paloma_dolma_100_subreddits__47_unitedkingdom",
@@ -4091,13 +4093,13 @@
       },
       "num_docs": 442,
       "limit": null,
-      "seconds": 47.2597324969247,
+      "seconds": 7.256115804892033,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.352570923433856
+      "docs_per_second": 60.914132558635025
     },
     {
       "task": "paloma_dolma_100_subreddits__48_ffxiv",
@@ -4117,13 +4119,13 @@
       },
       "num_docs": 439,
       "limit": null,
-      "seconds": 51.29402228165418,
+      "seconds": 7.875361825805157,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.558502150396047
+      "docs_per_second": 55.74347054906493
     },
     {
       "task": "paloma_dolma_100_subreddits__49_dndnext",
@@ -4143,13 +4145,13 @@
       },
       "num_docs": 428,
       "limit": null,
-      "seconds": 50.35541637800634,
+      "seconds": 7.734244915191084,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.499582185699827
+      "docs_per_second": 55.33830447486233
     },
     {
       "task": "paloma_dolma_100_subreddits__50_ADHD",
@@ -4169,13 +4171,13 @@
       },
       "num_docs": 450,
       "limit": null,
-      "seconds": 49.20686702989042,
+      "seconds": 7.574588960967958,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.14506505213287
+      "docs_per_second": 59.40916428849948
     },
     {
       "task": "paloma_dolma_100_subreddits__51_loseit",
@@ -4195,13 +4197,13 @@
       },
       "num_docs": 439,
       "limit": null,
-      "seconds": 52.37495528208092,
+      "seconds": 8.038656262215227,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.381868731641578
+      "docs_per_second": 54.611117291265295
     },
     {
       "task": "paloma_dolma_100_subreddits__52_asoiaf",
@@ -4221,13 +4223,13 @@
       },
       "num_docs": 440,
       "limit": null,
-      "seconds": 47.74415344884619,
+      "seconds": 7.361984140239656,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.215788074898482
+      "docs_per_second": 59.76649658819784
     },
     {
       "task": "paloma_dolma_100_subreddits__53_BabyBumps",
@@ -4247,13 +4249,13 @@
       },
       "num_docs": 479,
       "limit": null,
-      "seconds": 51.80847358610481,
+      "seconds": 7.959708771202713,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.245591827829285
+      "docs_per_second": 60.17808110429435
     },
     {
       "task": "paloma_dolma_100_subreddits__54_Advice",
@@ -4273,13 +4275,13 @@
       },
       "num_docs": 470,
       "limit": null,
-      "seconds": 49.402567388955504,
+      "seconds": 7.608943948987871,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.513675601099909
+      "docs_per_second": 61.76941283192375
     },
     {
       "task": "paloma_dolma_100_subreddits__55_australia",
@@ -4299,13 +4301,13 @@
       },
       "num_docs": 506,
       "limit": null,
-      "seconds": 50.5953593258746,
+      "seconds": 7.769119161181152,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.000917213394121
+      "docs_per_second": 65.12964848425263
     },
     {
       "task": "paloma_dolma_100_subreddits__56_CFB",
@@ -4325,13 +4327,13 @@
       },
       "num_docs": 483,
       "limit": null,
-      "seconds": 53.02672936022282,
+      "seconds": 8.13046731101349,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.108613822264418
+      "docs_per_second": 59.40617943887809
     },
     {
       "task": "paloma_dolma_100_subreddits__57_offmychest",
@@ -4351,13 +4353,13 @@
       },
       "num_docs": 485,
       "limit": null,
-      "seconds": 51.700760988052934,
+      "seconds": 7.929178148973733,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.380906407007709
+      "docs_per_second": 61.166490509835896
     },
     {
       "task": "paloma_dolma_100_subreddits__58_PublicFreakout",
@@ -4377,13 +4379,13 @@
       },
       "num_docs": 456,
       "limit": null,
-      "seconds": 40.52173550100997,
+      "seconds": 6.207027210853994,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 11.253219892041262
+      "docs_per_second": 73.46512017904642
     },
     {
       "task": "paloma_dolma_100_subreddits__59_TrueOffMyChest",
@@ -4403,13 +4405,13 @@
       },
       "num_docs": 488,
       "limit": null,
-      "seconds": 50.20225099707022,
+      "seconds": 7.725286582950503,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.720679656943659
+      "docs_per_second": 63.16917757808529
     },
     {
       "task": "paloma_dolma_100_subreddits__60_science",
@@ -4429,13 +4431,13 @@
       },
       "num_docs": 413,
       "limit": null,
-      "seconds": 39.99781408486888,
+      "seconds": 6.140012028161436,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.325564270179388
+      "docs_per_second": 67.26371187967666
     },
     {
       "task": "paloma_dolma_100_subreddits__61_magicTCG",
@@ -4455,13 +4457,13 @@
       },
       "num_docs": 444,
       "limit": null,
-      "seconds": 51.39618831500411,
+      "seconds": 7.8968603177927434,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.638772923757518
+      "docs_per_second": 56.22487699315197
     },
     {
       "task": "paloma_dolma_100_subreddits__62_asktransgender",
@@ -4481,13 +4483,13 @@
       },
       "num_docs": 442,
       "limit": null,
-      "seconds": 52.90043300203979,
+      "seconds": 8.122302033938468,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.355319132887946
+      "docs_per_second": 54.41806992071141
     },
     {
       "task": "paloma_dolma_100_subreddits__63_DotA2",
@@ -4507,13 +4509,13 @@
       },
       "num_docs": 481,
       "limit": null,
-      "seconds": 49.157260512933135,
+      "seconds": 7.576209975872189,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.784922816710877
+      "docs_per_second": 63.48820868637901
     },
     {
       "task": "paloma_dolma_100_subreddits__64_neoliberal",
@@ -4533,13 +4535,13 @@
       },
       "num_docs": 449,
       "limit": null,
-      "seconds": 49.877711629960686,
+      "seconds": 7.661816663108766,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.002016839326956
+      "docs_per_second": 58.60228973657263
     },
     {
       "task": "paloma_dolma_100_subreddits__65_whowouldwin",
@@ -4559,13 +4561,13 @@
       },
       "num_docs": 408,
       "limit": null,
-      "seconds": 50.381313261110336,
+      "seconds": 7.732639469206333,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.09824066882627
+      "docs_per_second": 52.76335481885289
     },
     {
       "task": "paloma_dolma_100_subreddits__66_depression",
@@ -4585,13 +4587,13 @@
       },
       "num_docs": 465,
       "limit": null,
-      "seconds": 49.150265999138355,
+      "seconds": 7.558324399869889,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.460782979448206
+      "docs_per_second": 61.52157216327003
     },
     {
       "task": "paloma_dolma_100_subreddits__67_WTF",
@@ -4611,13 +4613,13 @@
       },
       "num_docs": 443,
       "limit": null,
-      "seconds": 43.58611533930525,
+      "seconds": 6.666104847099632,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.1637871728502
+      "docs_per_second": 66.45560040849728
     },
     {
       "task": "paloma_dolma_100_subreddits__68_pathofexile",
@@ -4637,13 +4639,13 @@
       },
       "num_docs": 466,
       "limit": null,
-      "seconds": 50.108036171179265,
+      "seconds": 7.690399461891502,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.299905476400014
+      "docs_per_second": 60.59503180675928
     },
     {
       "task": "paloma_dolma_100_subreddits__69_PoliticalDiscussion",
@@ -4663,13 +4665,13 @@
       },
       "num_docs": 442,
       "limit": null,
-      "seconds": 47.826801501680166,
+      "seconds": 7.354922122787684,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.241680106591959
+      "docs_per_second": 60.09580966609499
     },
     {
       "task": "paloma_dolma_100_subreddits__70_Libertarian",
@@ -4689,13 +4691,13 @@
       },
       "num_docs": 467,
       "limit": null,
-      "seconds": 49.55650638602674,
+      "seconds": 7.633367319125682,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.423586004272453
+      "docs_per_second": 61.17876691586875
     },
     {
       "task": "paloma_dolma_100_subreddits__71_PurplePillDebate",
@@ -4715,13 +4717,13 @@
       },
       "num_docs": 434,
       "limit": null,
-      "seconds": 52.384456800762564,
+      "seconds": 8.041852805763483,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.284900264417407
+      "docs_per_second": 53.96766273674623
     },
     {
       "task": "paloma_dolma_100_subreddits__72_Fitness",
@@ -4741,13 +4743,13 @@
       },
       "num_docs": 496,
       "limit": null,
-      "seconds": 48.83415649179369,
+      "seconds": 7.52838941803202,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.156825378633293
+      "docs_per_second": 65.8839457496685
     },
     {
       "task": "paloma_dolma_100_subreddits__73_books",
@@ -4767,13 +4769,13 @@
       },
       "num_docs": 482,
       "limit": null,
-      "seconds": 50.75059067783877,
+      "seconds": 7.797699765767902,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.497426405530973
+      "docs_per_second": 61.813100591022
     },
     {
       "task": "paloma_dolma_100_subreddits__74_dogs",
@@ -4793,13 +4795,13 @@
       },
       "num_docs": 424,
       "limit": null,
-      "seconds": 51.60541935591027,
+      "seconds": 7.933765629306436,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.216191347574817
+      "docs_per_second": 53.44246601308612
     },
     {
       "task": "paloma_dolma_100_subreddits__75_pcmasterrace",
@@ -4819,13 +4821,13 @@
       },
       "num_docs": 533,
       "limit": null,
-      "seconds": 46.95984851708636,
+      "seconds": 7.243430690839887,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 11.350121791940358
+      "docs_per_second": 73.58391662034359
     },
     {
       "task": "paloma_dolma_100_subreddits__76_teenagers",
@@ -4845,13 +4847,13 @@
       },
       "num_docs": 499,
       "limit": null,
-      "seconds": 51.81905924435705,
+      "seconds": 7.943908697925508,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.629661504407563
+      "docs_per_second": 62.81542487142508
     },
     {
       "task": "paloma_dolma_100_subreddits__77_stopdrinking",
@@ -4871,13 +4873,13 @@
       },
       "num_docs": 505,
       "limit": null,
-      "seconds": 50.78352005360648,
+      "seconds": 7.800213734619319,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.944170854382051
+      "docs_per_second": 64.7418156964959
     },
     {
       "task": "paloma_dolma_100_subreddits__78_Overwatch",
@@ -4897,13 +4899,13 @@
       },
       "num_docs": 456,
       "limit": null,
-      "seconds": 50.617371616885066,
+      "seconds": 7.762383658904582,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.008764885134541
+      "docs_per_second": 58.7448417957159
     },
     {
       "task": "paloma_dolma_100_subreddits__79_television",
@@ -4923,13 +4925,13 @@
       },
       "num_docs": 516,
       "limit": null,
-      "seconds": 48.675040828064084,
+      "seconds": 7.487905693706125,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.60091560729611
+      "docs_per_second": 68.91112429924405
     },
     {
       "task": "paloma_dolma_100_subreddits__80_buildapc",
@@ -4949,13 +4951,13 @@
       },
       "num_docs": 481,
       "limit": null,
-      "seconds": 48.531254841946065,
+      "seconds": 7.476476517971605,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.911138740724807
+      "docs_per_second": 64.33511813269187
     },
     {
       "task": "paloma_dolma_100_subreddits__81_askscience",
@@ -4975,13 +4977,13 @@
       },
       "num_docs": 449,
       "limit": null,
-      "seconds": 51.348778964951634,
+      "seconds": 7.888191185891628,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.74412223719024
+      "docs_per_second": 56.92052707888926
     },
     {
       "task": "paloma_dolma_100_subreddits__82_programming",
@@ -5001,13 +5003,13 @@
       },
       "num_docs": 397,
       "limit": null,
-      "seconds": 41.26512086996809,
+      "seconds": 6.3377608098089695,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.620715791697306
+      "docs_per_second": 62.640420159997525
     },
     {
       "task": "paloma_dolma_100_subreddits__83_Guildwars2",
@@ -5027,13 +5029,13 @@
       },
       "num_docs": 428,
       "limit": null,
-      "seconds": 49.76983490912244,
+      "seconds": 7.661082400009036,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.599586492129408
+      "docs_per_second": 55.86677934693604
     },
     {
       "task": "paloma_dolma_100_subreddits__84_cars",
@@ -5053,13 +5055,13 @@
       },
       "num_docs": 485,
       "limit": null,
-      "seconds": 51.89048551628366,
+      "seconds": 7.969607418868691,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.346607478702488
+      "docs_per_second": 60.856197113514426
     },
     {
       "task": "paloma_dolma_100_subreddits__85_formula1",
@@ -5079,13 +5081,13 @@
       },
       "num_docs": 522,
       "limit": null,
-      "seconds": 48.801452175248414,
+      "seconds": 7.517901615705341,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.696403011235656
+      "docs_per_second": 69.43426858759513
     },
     {
       "task": "paloma_dolma_100_subreddits__86_sysadmin",
@@ -5105,13 +5107,13 @@
       },
       "num_docs": 467,
       "limit": null,
-      "seconds": 52.85297774290666,
+      "seconds": 8.117402841337025,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.835831393864568
+      "docs_per_second": 57.53071630520187
     },
     {
       "task": "paloma_dolma_100_subreddits__87_hockey",
@@ -5131,13 +5133,13 @@
       },
       "num_docs": 509,
       "limit": null,
-      "seconds": 48.46464214101434,
+      "seconds": 7.464406270999461,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.502501979050967
+      "docs_per_second": 68.19028620903916
     },
     {
       "task": "paloma_dolma_100_subreddits__88_india",
@@ -5157,13 +5159,13 @@
       },
       "num_docs": 468,
       "limit": null,
-      "seconds": 50.237137706018984,
+      "seconds": 7.720994180068374,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.31581736878947
+      "docs_per_second": 60.61395580482818
     },
     {
       "task": "paloma_dolma_100_subreddits__89_SubredditDrama",
@@ -5183,13 +5185,13 @@
       },
       "num_docs": 454,
       "limit": null,
-      "seconds": 51.12376370886341,
+      "seconds": 7.828917600214481,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.880410342740264
+      "docs_per_second": 57.990136463763804
     },
     {
       "task": "paloma_dolma_100_subreddits__90_DMAcademy",
@@ -5209,13 +5211,13 @@
       },
       "num_docs": 447,
       "limit": null,
-      "seconds": 46.856418828014284,
+      "seconds": 7.216778179630637,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.539781553530716
+      "docs_per_second": 61.93899672040051
     },
     {
       "task": "paloma_dolma_100_subreddits__91_dating_advice",
@@ -5235,13 +5237,13 @@
       },
       "num_docs": 479,
       "limit": null,
-      "seconds": 52.27958157612011,
+      "seconds": 8.024010996799916,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.162276849950807
+      "docs_per_second": 59.69583045075981
     },
     {
       "task": "paloma_dolma_100_subreddits__92_Catholicism",
@@ -5261,13 +5263,13 @@
       },
       "num_docs": 390,
       "limit": null,
-      "seconds": 52.89541121479124,
+      "seconds": 8.117113191168755,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 7.373040327001817
+      "docs_per_second": 48.04663811074011
     },
     {
       "task": "paloma_dolma_100_subreddits__93_Drugs",
@@ -5287,13 +5289,13 @@
       },
       "num_docs": 473,
       "limit": null,
-      "seconds": 52.999895262066275,
+      "seconds": 8.139138472732157,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.924545938462284
+      "docs_per_second": 58.11425884749971
     },
     {
       "task": "paloma_dolma_100_subreddits__94_trees",
@@ -5313,13 +5315,13 @@
       },
       "num_docs": 529,
       "limit": null,
-      "seconds": 49.506541326176375,
+      "seconds": 7.618416115175933,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.685456625108518
+      "docs_per_second": 69.43700527806938
     },
     {
       "task": "paloma_dolma_100_subreddits__95_boardgames",
@@ -5339,13 +5341,13 @@
       },
       "num_docs": 453,
       "limit": null,
-      "seconds": 48.997280264273286,
+      "seconds": 7.543343246914446,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.245411123978409
+      "docs_per_second": 60.052948032730264
     },
     {
       "task": "paloma_dolma_100_subreddits__96_Conservative",
@@ -5365,13 +5367,13 @@
       },
       "num_docs": 431,
       "limit": null,
-      "seconds": 49.21201384579763,
+      "seconds": 7.555220401380211,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 8.758024033531894
+      "docs_per_second": 57.04664815883645
     },
     {
       "task": "paloma_dolma_100_subreddits__97_Futurology",
@@ -5391,13 +5393,13 @@
       },
       "num_docs": 453,
       "limit": null,
-      "seconds": 44.85266076400876,
+      "seconds": 6.896566811017692,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 10.099735272862608
+      "docs_per_second": 65.68485630796826
     },
     {
       "task": "paloma_dolma_100_subreddits__98_beyondthebump",
@@ -5417,13 +5419,13 @@
       },
       "num_docs": 488,
       "limit": null,
-      "seconds": 48.9854041012004,
+      "seconds": 7.548112106975168,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.962151154083088
+      "docs_per_second": 64.65192793692637
     },
     {
       "task": "paloma_dolma_100_subreddits__99_weddingplanning",
@@ -5443,13 +5445,13 @@
       },
       "num_docs": 469,
       "limit": null,
-      "seconds": 50.822974442038685,
+      "seconds": 7.8111382448114455,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 9.22811002600553
+      "docs_per_second": 60.042465681814505
     },
     {
       "task": "paloma_dolma_100_programing_languages__00_text",
@@ -5469,13 +5471,13 @@
       },
       "num_docs": 73,
       "limit": null,
-      "seconds": 51.8331827390939,
+      "seconds": 7.919702066108584,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.408364220415536
+      "docs_per_second": 9.217518461003065
     },
     {
       "task": "paloma_dolma_100_programing_languages__01_markdown",
@@ -5495,13 +5497,13 @@
       },
       "num_docs": 71,
       "limit": null,
-      "seconds": 50.76326403906569,
+      "seconds": 7.754936455748975,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.3986492268377542
+      "docs_per_second": 9.155458643038331
     },
     {
       "task": "paloma_dolma_100_programing_languages__02_c",
@@ -5521,13 +5523,13 @@
       },
       "num_docs": 92,
       "limit": null,
-      "seconds": 45.76926663983613,
+      "seconds": 7.007996805943549,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.0100824582565213
+      "docs_per_second": 13.127859864601241
     },
     {
       "task": "paloma_dolma_100_programing_languages__03_php",
@@ -5547,13 +5549,13 @@
       },
       "num_docs": 93,
       "limit": null,
-      "seconds": 46.47617946611717,
+      "seconds": 7.112457942217588,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.001025064200907
+      "docs_per_second": 13.075648496700087
     },
     {
       "task": "paloma_dolma_100_programing_languages__04_java",
@@ -5573,13 +5575,13 @@
       },
       "num_docs": 75,
       "limit": null,
-      "seconds": 43.2127569927834,
+      "seconds": 6.621028840076178,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.7355985875311108
+      "docs_per_second": 11.327544677956286
     },
     {
       "task": "paloma_dolma_100_programing_languages__05_c++",
@@ -5599,13 +5601,13 @@
       },
       "num_docs": 33,
       "limit": null,
-      "seconds": 40.639073548838496,
+      "seconds": 6.245863098651171,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.8120263854032462
+      "docs_per_second": 5.283497169050428
     },
     {
       "task": "paloma_dolma_100_programing_languages__06_python",
@@ -5625,13 +5627,13 @@
       },
       "num_docs": 54,
       "limit": null,
-      "seconds": 40.31082664709538,
+      "seconds": 6.187394340988249,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.3395904894917603
+      "docs_per_second": 8.727421758506367
     },
     {
       "task": "paloma_dolma_100_programing_languages__07_javascript",
@@ -5651,13 +5653,13 @@
       },
       "num_docs": 68,
       "limit": null,
-      "seconds": 46.38819828396663,
+      "seconds": 7.103765989653766,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.465890086606428
+      "docs_per_second": 9.572387392692574
     },
     {
       "task": "paloma_dolma_100_programing_languages__08_html",
@@ -5677,13 +5679,13 @@
       },
       "num_docs": 38,
       "limit": null,
-      "seconds": 45.28036456601694,
+      "seconds": 6.951666513923556,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.8392158580039155
+      "docs_per_second": 5.466315152473073
     },
     {
       "task": "paloma_dolma_100_programing_languages__09_c#",
@@ -5703,13 +5705,13 @@
       },
       "num_docs": 99,
       "limit": null,
-      "seconds": 44.019227555021644,
+      "seconds": 6.718510351143777,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.2490172022272628
+      "docs_per_second": 14.735409313337737
     },
     {
       "task": "paloma_dolma_100_programing_languages__10_yaml",
@@ -5729,13 +5731,13 @@
       },
       "num_docs": 106,
       "limit": null,
-      "seconds": 46.87942760717124,
+      "seconds": 7.179346015211195,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.2611197578654942
+      "docs_per_second": 14.764576017845242
     },
     {
       "task": "paloma_dolma_100_programing_languages__11_go",
@@ -5755,13 +5757,13 @@
       },
       "num_docs": 63,
       "limit": null,
-      "seconds": 42.435261469800025,
+      "seconds": 6.481940864119679,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.4846143942069336
+      "docs_per_second": 9.719311132369628
     },
     {
       "task": "paloma_dolma_100_programing_languages__12_typescript",
@@ -5781,13 +5783,13 @@
       },
       "num_docs": 113,
       "limit": null,
-      "seconds": 48.174813595134765,
+      "seconds": 7.405261351261288,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.3456240214993174
+      "docs_per_second": 15.259420922497688
     },
     {
       "task": "paloma_dolma_100_programing_languages__13_xml",
@@ -5807,13 +5809,13 @@
       },
       "num_docs": 24,
       "limit": null,
-      "seconds": 40.37034613918513,
+      "seconds": 6.031812948174775,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.5944957696734883
+      "docs_per_second": 3.978903226311485
     },
     {
       "task": "paloma_dolma_100_programing_languages__14_css",
@@ -5833,13 +5835,13 @@
       },
       "num_docs": 48,
       "limit": null,
-      "seconds": 42.008056432940066,
+      "seconds": 6.4053816720843315,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.1426379622352971
+      "docs_per_second": 7.493698651743363
     },
     {
       "task": "paloma_dolma_100_programing_languages__15_jupyter-notebook",
@@ -5859,13 +5861,13 @@
       },
       "num_docs": 14,
       "limit": null,
-      "seconds": 38.22835665009916,
+      "seconds": 5.915571243967861,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.36622029369823006
+      "docs_per_second": 2.3666353463794176
     },
     {
       "task": "paloma_dolma_100_programing_languages__16_rust",
@@ -5885,13 +5887,13 @@
       },
       "num_docs": 72,
       "limit": null,
-      "seconds": 42.96827375376597,
+      "seconds": 6.594353845808655,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.6756549358394817
+      "docs_per_second": 10.918431385929178
     },
     {
       "task": "paloma_dolma_100_programing_languages__17_unity3d-asset",
@@ -5911,13 +5913,13 @@
       },
       "num_docs": 402,
       "limit": null,
-      "seconds": 50.79162031877786,
+      "seconds": 7.815298657864332,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 7.914691389582998
+      "docs_per_second": 51.43757361025197
     },
     {
       "task": "paloma_dolma_100_programing_languages__18_gettext-catalog",
@@ -5937,13 +5939,13 @@
       },
       "num_docs": 11,
       "limit": null,
-      "seconds": 38.72384465485811,
+      "seconds": 5.9050792208872736,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.28406270343355466
+      "docs_per_second": 1.8628031205900035
     },
     {
       "task": "paloma_dolma_100_programing_languages__19_ruby",
@@ -5963,13 +5965,13 @@
       },
       "num_docs": 189,
       "limit": null,
-      "seconds": 51.14260602928698,
+      "seconds": 7.832167803775519,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.6955488715566926
+      "docs_per_second": 24.13125008747795
     },
     {
       "task": "paloma_dolma_100_programing_languages__20_vue",
@@ -5989,13 +5991,13 @@
       },
       "num_docs": 98,
       "limit": null,
-      "seconds": 45.444033563137054,
+      "seconds": 6.968209777958691,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.1564987153670025
+      "docs_per_second": 14.06387050946516
     },
     {
       "task": "paloma_dolma_100_programing_languages__21_sql",
@@ -6015,13 +6017,13 @@
       },
       "num_docs": 74,
       "limit": null,
-      "seconds": 50.33223865227774,
+      "seconds": 7.668047632090747,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.4702306509994902
+      "docs_per_second": 9.650435619402037
     },
     {
       "task": "paloma_dolma_100_programing_languages__22_swift",
@@ -6041,13 +6043,13 @@
       },
       "num_docs": 102,
       "limit": null,
-      "seconds": 47.76076388685033,
+      "seconds": 7.302153714932501,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.1356442338662642
+      "docs_per_second": 13.968481626374919
     },
     {
       "task": "paloma_dolma_100_programing_languages__23_kotlin",
@@ -6067,13 +6069,13 @@
       },
       "num_docs": 132,
       "limit": null,
-      "seconds": 47.77681941399351,
+      "seconds": 7.290406662039459,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.7628461169882335
+      "docs_per_second": 18.105985868705105
     },
     {
       "task": "paloma_dolma_100_programing_languages__24_scala",
@@ -6093,13 +6095,13 @@
       },
       "num_docs": 100,
       "limit": null,
-      "seconds": 46.548702655825764,
+      "seconds": 7.13059464097023,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.148287584712838
+      "docs_per_second": 14.024075835895983
     },
     {
       "task": "paloma_dolma_100_programing_languages__25_scss",
@@ -6119,13 +6121,13 @@
       },
       "num_docs": 185,
       "limit": null,
-      "seconds": 50.51058027287945,
+      "seconds": 7.732377882115543,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.6625989842237408
+      "docs_per_second": 23.925369765992976
     },
     {
       "task": "paloma_dolma_100_programing_languages__26_tex",
@@ -6145,13 +6147,13 @@
       },
       "num_docs": 52,
       "limit": null,
-      "seconds": 48.358975450042635,
+      "seconds": 7.435927429702133,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.0752915982208666
+      "docs_per_second": 6.993075240660734
     },
     {
       "task": "paloma_dolma_100_programing_languages__27_dart",
@@ -6171,13 +6173,13 @@
       },
       "num_docs": 124,
       "limit": null,
-      "seconds": 47.54862195486203,
+      "seconds": 7.2711315476335585,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.607856861082396
+      "docs_per_second": 17.053741799012933
     },
     {
       "task": "paloma_dolma_100_programing_languages__28_kicad",
@@ -6197,13 +6199,13 @@
       },
       "num_docs": 1,
       "limit": null,
-      "seconds": 40.99871543189511,
+      "seconds": 6.165713346097618,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.024391008095391353
+      "docs_per_second": 0.16218723509631153
     },
     {
       "task": "paloma_dolma_100_programing_languages__29_shell",
@@ -6223,13 +6225,13 @@
       },
       "num_docs": 226,
       "limit": null,
-      "seconds": 51.849372463300824,
+      "seconds": 7.936109285801649,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.358779851385156
+      "docs_per_second": 28.477430421016575
     },
     {
       "task": "paloma_dolma_100_programing_languages__30_smali",
@@ -6249,13 +6251,13 @@
       },
       "num_docs": 31,
       "limit": null,
-      "seconds": 41.811242846772075,
+      "seconds": 6.441696009598672,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.7414273742975634
+      "docs_per_second": 4.812397224862424
     },
     {
       "task": "paloma_dolma_100_programing_languages__31_lua",
@@ -6275,13 +6277,13 @@
       },
       "num_docs": 42,
       "limit": null,
-      "seconds": 43.53154677292332,
+      "seconds": 6.655514856800437,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.9648175429898589
+      "docs_per_second": 6.310556118297214
     },
     {
       "task": "paloma_dolma_100_programing_languages__32_restructuredtext",
@@ -6301,13 +6303,13 @@
       },
       "num_docs": 121,
       "limit": null,
-      "seconds": 48.13134993985295,
+      "seconds": 7.368235175963491,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.513954006093885
+      "docs_per_second": 16.42184283079397
     },
     {
       "task": "paloma_dolma_100_programing_languages__33_perl",
@@ -6327,13 +6329,13 @@
       },
       "num_docs": 53,
       "limit": null,
-      "seconds": 51.678050712216645,
+      "seconds": 7.906657306011766,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.0255804789376632
+      "docs_per_second": 6.703211983109709
     },
     {
       "task": "paloma_dolma_100_programing_languages__34_diff",
@@ -6353,13 +6355,13 @@
       },
       "num_docs": 26,
       "limit": null,
-      "seconds": 40.07060404215008,
+      "seconds": 6.07328697713092,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.6488547058749282
+      "docs_per_second": 4.281042555358162
     },
     {
       "task": "paloma_dolma_100_programing_languages__35_ini",
@@ -6379,13 +6381,13 @@
       },
       "num_docs": 59,
       "limit": null,
-      "seconds": 43.89203508477658,
+      "seconds": 6.634879681281745,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.3442074373184723
+      "docs_per_second": 8.892399385395064
     },
     {
       "task": "paloma_dolma_100_programing_languages__36_jsx",
@@ -6405,13 +6407,13 @@
       },
       "num_docs": 163,
       "limit": null,
-      "seconds": 44.61687390785664,
+      "seconds": 6.840216492768377,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.6533263252963386
+      "docs_per_second": 23.829655124560322
     },
     {
       "task": "paloma_dolma_100_programing_languages__37_haskell",
@@ -6431,13 +6433,13 @@
       },
       "num_docs": 90,
       "limit": null,
-      "seconds": 50.76730909291655,
+      "seconds": 7.783757990691811,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.7727943751219524
+      "docs_per_second": 11.562538314735157
     },
     {
       "task": "paloma_dolma_100_programing_languages__38_gnuplot",
@@ -6457,13 +6459,13 @@
       },
       "num_docs": 2,
       "limit": null,
-      "seconds": 41.013436851557344,
+      "seconds": 6.198403575923294,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.048764506306524194
+      "docs_per_second": 0.32266372711978286
     },
     {
       "task": "paloma_dolma_100_programing_languages__39_postscript",
@@ -6483,13 +6485,13 @@
       },
       "num_docs": 4,
       "limit": null,
-      "seconds": 40.891934412997216,
+      "seconds": 6.18912447290495,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.09781880112594106
+      "docs_per_second": 0.646294967488761
     },
     {
       "task": "paloma_dolma_100_programing_languages__40_groff",
@@ -6509,13 +6511,13 @@
       },
       "num_docs": 47,
       "limit": null,
-      "seconds": 52.16768743284047,
+      "seconds": 8.035360499750823,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.9009408373815069
+      "docs_per_second": 5.849146407489431
     },
     {
       "task": "paloma_dolma_100_programing_languages__41_turtle",
@@ -6535,13 +6537,13 @@
       },
       "num_docs": 32,
       "limit": null,
-      "seconds": 41.11846894631162,
+      "seconds": 6.342472644057125,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.7782390935271056
+      "docs_per_second": 5.045350890079737
     },
     {
       "task": "paloma_dolma_100_programing_languages__42_fortran",
@@ -6561,13 +6563,13 @@
       },
       "num_docs": 40,
       "limit": null,
-      "seconds": 44.242421076167375,
+      "seconds": 6.786268168129027,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.9041096537446796
+      "docs_per_second": 5.894255724796681
     },
     {
       "task": "paloma_dolma_100_programing_languages__43_makefile",
@@ -6587,13 +6589,13 @@
       },
       "num_docs": 113,
       "limit": null,
-      "seconds": 48.095140440855175,
+      "seconds": 7.360822915099561,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.3495097210280806
+      "docs_per_second": 15.351544426941507
     },
     {
       "task": "paloma_dolma_100_programing_languages__44_mathematica",
@@ -6613,13 +6615,13 @@
       },
       "num_docs": 1,
       "limit": null,
-      "seconds": 39.183759197127074,
+      "seconds": 5.92105914093554,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.02552077749787007
+      "docs_per_second": 0.1688887032197415
     },
     {
       "task": "paloma_dolma_100_programing_languages__45_pascal",
@@ -6639,13 +6641,13 @@
       },
       "num_docs": 16,
       "limit": null,
-      "seconds": 42.089311302639544,
+      "seconds": 6.459624832961708,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.3801440200566217
+      "docs_per_second": 2.476924034095038
     },
     {
       "task": "paloma_dolma_100_programing_languages__46_common-lisp",
@@ -6665,13 +6667,13 @@
       },
       "num_docs": 51,
       "limit": null,
-      "seconds": 50.751413261983544,
+      "seconds": 7.803523947950453,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.0048981244469632
+      "docs_per_second": 6.535508872679866
     },
     {
       "task": "paloma_dolma_100_programing_languages__47_gas",
@@ -6691,13 +6693,13 @@
       },
       "num_docs": 23,
       "limit": null,
-      "seconds": 43.46633200906217,
+      "seconds": 6.577740520704538,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.5291451782774033
+      "docs_per_second": 3.4966414268856694
     },
     {
       "task": "paloma_dolma_100_programing_languages__48_vhdl",
@@ -6717,13 +6719,13 @@
       },
       "num_docs": 36,
       "limit": null,
-      "seconds": 44.728717217221856,
+      "seconds": 6.858406009152532,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.8048520556752956
+      "docs_per_second": 5.249033077359091
     },
     {
       "task": "paloma_dolma_100_programing_languages__49_julia",
@@ -6743,13 +6745,13 @@
       },
       "num_docs": 39,
       "limit": null,
-      "seconds": 43.119659267831594,
+      "seconds": 6.60284489300102,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.9044598371651567
+      "docs_per_second": 5.906544926012088
     },
     {
       "task": "paloma_dolma_100_programing_languages__50_edn",
@@ -6769,13 +6771,13 @@
       },
       "num_docs": 4,
       "limit": null,
-      "seconds": 38.52375018782914,
+      "seconds": 5.787476929835975,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.10383205115019477
+      "docs_per_second": 0.6911474634791098
     },
     {
       "task": "paloma_dolma_100_programing_languages__51_visual-basic",
@@ -6795,13 +6797,13 @@
       },
       "num_docs": 52,
       "limit": null,
-      "seconds": 44.96524982340634,
+      "seconds": 6.8880081390962005,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.156448595398035
+      "docs_per_second": 7.549352287325128
     },
     {
       "task": "paloma_dolma_100_programing_languages__52_powershell",
@@ -6821,13 +6823,13 @@
       },
       "num_docs": 96,
       "limit": null,
-      "seconds": 48.033955552149564,
+      "seconds": 7.369131821207702,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.9985861854698725
+      "docs_per_second": 13.027314794901699
     },
     {
       "task": "paloma_dolma_100_programing_languages__53_g-code",
@@ -6847,13 +6849,13 @@
       },
       "num_docs": 13,
       "limit": null,
-      "seconds": 40.17140086879954,
+      "seconds": 6.098930360749364,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.32361330993803816
+      "docs_per_second": 2.1315213047296897
     },
     {
       "task": "paloma_dolma_100_programing_languages__54_ocaml",
@@ -6873,13 +6875,13 @@
       },
       "num_docs": 44,
       "limit": null,
-      "seconds": 43.98431459721178,
+      "seconds": 6.714441704098135,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.0003566135548971
+      "docs_per_second": 6.553039245711934
     },
     {
       "task": "paloma_dolma_100_programing_languages__55_java-server-pages",
@@ -6899,13 +6901,13 @@
       },
       "num_docs": 68,
       "limit": null,
-      "seconds": 49.09041456505656,
+      "seconds": 7.560474947094917,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.3851991392308107
+      "docs_per_second": 8.994143949399467
     },
     {
       "task": "paloma_dolma_100_programing_languages__56_solidity",
@@ -6925,13 +6927,13 @@
       },
       "num_docs": 44,
       "limit": null,
-      "seconds": 42.9796596467495,
+      "seconds": 6.576730666216463,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.0237400752271353
+      "docs_per_second": 6.69025420578958
     },
     {
       "task": "paloma_dolma_100_programing_languages__57_graphviz-dot",
@@ -6951,13 +6953,13 @@
       },
       "num_docs": 5,
       "limit": null,
-      "seconds": 38.371285463217646,
+      "seconds": 5.829273698851466,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.13030577265369317
+      "docs_per_second": 0.8577397902907087
     },
     {
       "task": "paloma_dolma_100_programing_languages__58_less",
@@ -6977,13 +6979,13 @@
       },
       "num_docs": 97,
       "limit": null,
-      "seconds": 47.134401499759406,
+      "seconds": 7.1439409530721605,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.057944874944368
+      "docs_per_second": 13.577939772624575
     },
     {
       "task": "paloma_dolma_100_programing_languages__59_twig",
@@ -7003,13 +7005,13 @@
       },
       "num_docs": 133,
       "limit": null,
-      "seconds": 50.39404764119536,
+      "seconds": 7.7122049778699875,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.6392005846991577
+      "docs_per_second": 17.245392255735
     },
     {
       "task": "paloma_dolma_100_programing_languages__60_asciidoc",
@@ -7029,13 +7031,13 @@
       },
       "num_docs": 95,
       "limit": null,
-      "seconds": 50.07407934824005,
+      "seconds": 7.6819586884230375,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.897189149286655
+      "docs_per_second": 12.366637709620608
     },
     {
       "task": "paloma_dolma_100_programing_languages__61_groovy",
@@ -7055,13 +7057,13 @@
       },
       "num_docs": 96,
       "limit": null,
-      "seconds": 48.755607541650534,
+      "seconds": 7.475708770100027,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.9690042815688416
+      "docs_per_second": 12.841591740968193
     },
     {
       "task": "paloma_dolma_100_programing_languages__62_llvm",
@@ -7081,13 +7083,13 @@
       },
       "num_docs": 4,
       "limit": null,
-      "seconds": 38.56129313400015,
+      "seconds": 5.839357593096793,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.10373096115060342
+      "docs_per_second": 0.6850068584134571
     },
     {
       "task": "paloma_dolma_100_programing_languages__63_hcl",
@@ -7107,13 +7109,13 @@
       },
       "num_docs": 200,
       "limit": null,
-      "seconds": 47.685554534196854,
+      "seconds": 7.290172078181058,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.194142271252682
+      "docs_per_second": 27.43419467403041
     },
     {
       "task": "paloma_dolma_100_programing_languages__64_html+erb",
@@ -7133,13 +7135,13 @@
       },
       "num_docs": 207,
       "limit": null,
-      "seconds": 51.33024808112532,
+      "seconds": 7.8575594471767545,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 4.032709907671693
+      "docs_per_second": 26.344057769028492
     },
     {
       "task": "paloma_dolma_100_programing_languages__65_erlang",
@@ -7159,13 +7161,13 @@
       },
       "num_docs": 49,
       "limit": null,
-      "seconds": 45.42615004116669,
+      "seconds": 6.943803507834673,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.0786738465750358
+      "docs_per_second": 7.05665129272645
     },
     {
       "task": "paloma_dolma_100_programing_languages__66_elixir",
@@ -7185,13 +7187,13 @@
       },
       "num_docs": 137,
       "limit": null,
-      "seconds": 49.43468309100717,
+      "seconds": 7.567051485180855,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.7713336352897975
+      "docs_per_second": 18.104806114812057
     },
     {
       "task": "paloma_dolma_100_programing_languages__67_eagle",
@@ -7211,13 +7213,13 @@
       },
       "num_docs": 8,
       "limit": null,
-      "seconds": 50.56377367815003,
+      "seconds": 7.720464314799756,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.1582160392323925
+      "docs_per_second": 1.036207107992765
     },
     {
       "task": "paloma_dolma_100_programing_languages__68_arduino",
@@ -7237,13 +7239,13 @@
       },
       "num_docs": 74,
       "limit": null,
-      "seconds": 48.02225203299895,
+      "seconds": 7.36677780514583,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.5409523058008647
+      "docs_per_second": 10.045097321696012
     },
     {
       "task": "paloma_dolma_100_programing_languages__69_coffeescript",
@@ -7263,13 +7265,13 @@
       },
       "num_docs": 23,
       "limit": null,
-      "seconds": 41.043677183799446,
+      "seconds": 6.117374971974641,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.5603786399791304
+      "docs_per_second": 3.759782603709803
     },
     {
       "task": "paloma_dolma_100_programing_languages__70_toml",
@@ -7289,13 +7291,13 @@
       },
       "num_docs": 114,
       "limit": null,
-      "seconds": 49.03002606285736,
+      "seconds": 7.480004317127168,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.3251058413440364
+      "docs_per_second": 15.240632915006628
     },
     {
       "task": "paloma_dolma_100_programing_languages__71_cuda",
@@ -7315,13 +7317,13 @@
       },
       "num_docs": 22,
       "limit": null,
-      "seconds": 38.62408667104319,
+      "seconds": 5.917412904556841,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.569592756648757
+      "docs_per_second": 3.7178409475293486
     },
     {
       "task": "paloma_dolma_100_programing_languages__72_nix",
@@ -7341,13 +7343,13 @@
       },
       "num_docs": 123,
       "limit": null,
-      "seconds": 46.16113765211776,
+      "seconds": 7.064117721747607,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.6645790432410856
+      "docs_per_second": 17.411940860120712
     },
     {
       "task": "paloma_dolma_100_programing_languages__73_smalltalk",
@@ -7367,13 +7369,13 @@
       },
       "num_docs": 274,
       "limit": null,
-      "seconds": 52.929181119892746,
+      "seconds": 8.06963166501373,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 5.176728492725927
+      "docs_per_second": 33.95446178639602
     },
     {
       "task": "paloma_dolma_100_programing_languages__74_cmake",
@@ -7393,13 +7395,13 @@
       },
       "num_docs": 35,
       "limit": null,
-      "seconds": 37.57519657490775,
+      "seconds": 5.673496203031391,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.9314655195542627
+      "docs_per_second": 6.169035590664402
     },
     {
       "task": "paloma_dolma_100_programing_languages__75_actionscript",
@@ -7419,13 +7421,13 @@
       },
       "num_docs": 88,
       "limit": null,
-      "seconds": 46.66912590106949,
+      "seconds": 7.132671325001866,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.8856149178055068
+      "docs_per_second": 12.337593587347442
     },
     {
       "task": "paloma_dolma_100_programing_languages__76_glsl",
@@ -7445,13 +7447,13 @@
       },
       "num_docs": 175,
       "limit": null,
-      "seconds": 51.59140835609287,
+      "seconds": 7.924427664838731,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.392037658520961
+      "docs_per_second": 22.08361378279568
     },
     {
       "task": "paloma_dolma_100_programing_languages__77_systemverilog",
@@ -7471,13 +7473,13 @@
       },
       "num_docs": 31,
       "limit": null,
-      "seconds": 41.287786920089275,
+      "seconds": 6.323938463814557,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.7508273587053518
+      "docs_per_second": 4.902008483697517
     },
     {
       "task": "paloma_dolma_100_programing_languages__78_haxe",
@@ -7497,13 +7499,13 @@
       },
       "num_docs": 138,
       "limit": null,
-      "seconds": 50.973648314829916,
+      "seconds": 7.830371344927698,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 2.7072812043522347
+      "docs_per_second": 17.623685253368304
     },
     {
       "task": "paloma_dolma_100_programing_languages__79_f#",
@@ -7523,13 +7525,13 @@
       },
       "num_docs": 75,
       "limit": null,
-      "seconds": 47.250762849114835,
+      "seconds": 7.2505766660906374,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.587275960802927
+      "docs_per_second": 10.344004822507237
     },
     {
       "task": "paloma_dolma_100_programing_languages__80_max",
@@ -7549,13 +7551,13 @@
       },
       "num_docs": 9,
       "limit": null,
-      "seconds": 43.889211046975106,
+      "seconds": 6.772898261900991,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.20506178592199348
+      "docs_per_second": 1.3288255119122245
     },
     {
       "task": "paloma_dolma_100_programing_languages__81_objective-c++",
@@ -7575,13 +7577,13 @@
       },
       "num_docs": 43,
       "limit": null,
-      "seconds": 42.872829124797136,
+      "seconds": 6.566770364064723,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.0029662347411852
+      "docs_per_second": 6.548119945735959
     },
     {
       "task": "paloma_dolma_100_programing_languages__82_standard-ml",
@@ -7601,13 +7603,13 @@
       },
       "num_docs": 20,
       "limit": null,
-      "seconds": 50.77838775701821,
+      "seconds": 7.79538731276989,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.39386835390880937
+      "docs_per_second": 2.5656197950853983
     },
     {
       "task": "paloma_dolma_100_programing_languages__83_dockerfile",
@@ -7627,13 +7629,13 @@
       },
       "num_docs": 352,
       "limit": null,
-      "seconds": 49.55345625197515,
+      "seconds": 7.575662238989025,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 7.103439933838513
+      "docs_per_second": 46.46458473140356
     },
     {
       "task": "paloma_dolma_100_programing_languages__84_emacs-lisp",
@@ -7653,13 +7655,13 @@
       },
       "num_docs": 53,
       "limit": null,
-      "seconds": 41.54508201498538,
+      "seconds": 6.327513398136944,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.275722598907924
+      "docs_per_second": 8.376118178683775
     },
     {
       "task": "paloma_dolma_100_programing_languages__85_scheme",
@@ -7679,13 +7681,13 @@
       },
       "num_docs": 40,
       "limit": null,
-      "seconds": 50.99821205995977,
+      "seconds": 7.806287480052561,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.7843412226485721
+      "docs_per_second": 5.12407467726652
     },
     {
       "task": "paloma_dolma_100_programing_languages__86_clojure",
@@ -7705,13 +7707,13 @@
       },
       "num_docs": 83,
       "limit": null,
-      "seconds": 48.10109489224851,
+      "seconds": 7.37889969907701,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.7255324475654596
+      "docs_per_second": 11.248289499094568
     },
     {
       "task": "paloma_dolma_100_programing_languages__87_handlebars",
@@ -7731,13 +7733,13 @@
       },
       "num_docs": 143,
       "limit": null,
-      "seconds": 47.46306815370917,
+      "seconds": 7.245345750823617,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.012868859149485
+      "docs_per_second": 19.73680827912794
     },
     {
       "task": "paloma_dolma_100_programing_languages__88_smarty",
@@ -7757,13 +7759,13 @@
       },
       "num_docs": 150,
       "limit": null,
-      "seconds": 49.43467258429155,
+      "seconds": 7.588263424113393,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 3.0343075448559618
+      "docs_per_second": 19.767368581768217
     },
     {
       "task": "paloma_dolma_100_programing_languages__89_logos",
@@ -7783,13 +7785,13 @@
       },
       "num_docs": 39,
       "limit": null,
-      "seconds": 51.09757163096219,
+      "seconds": 7.8368756687268615,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.7632456642297311
+      "docs_per_second": 4.976472978336243
     },
     {
       "task": "paloma_dolma_100_programing_languages__90_stata",
@@ -7809,13 +7811,13 @@
       },
       "num_docs": 36,
       "limit": null,
-      "seconds": 44.665206643752754,
+      "seconds": 6.867720291018486,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.8059964949257714
+      "docs_per_second": 5.241914124994334
     },
     {
       "task": "paloma_dolma_100_programing_languages__91_yacc",
@@ -7835,13 +7837,13 @@
       },
       "num_docs": 32,
       "limit": null,
-      "seconds": 43.89191446406767,
+      "seconds": 6.686467261053622,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.7290636644750813
+      "docs_per_second": 4.785785789513848
     },
     {
       "task": "paloma_dolma_100_programing_languages__92_nimrod",
@@ -7861,13 +7863,13 @@
       },
       "num_docs": 60,
       "limit": null,
-      "seconds": 42.58377195522189,
+      "seconds": 6.425646761897951,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.408987443927978
+      "docs_per_second": 9.337581448731509
     },
     {
       "task": "paloma_dolma_100_programing_languages__93_tcl",
@@ -7887,13 +7889,13 @@
       },
       "num_docs": 54,
       "limit": null,
-      "seconds": 46.79339952208102,
+      "seconds": 7.1723807556554675,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.1540089104771776
+      "docs_per_second": 7.528880833246431
     },
     {
       "task": "paloma_dolma_100_programing_languages__94_viml",
@@ -7913,13 +7915,13 @@
       },
       "num_docs": 102,
       "limit": null,
-      "seconds": 52.26893099397421,
+      "seconds": 8.03788457904011,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.9514460705492334
+      "docs_per_second": 12.689906031492296
     },
     {
       "task": "paloma_dolma_100_programing_languages__95_asp",
@@ -7939,13 +7941,13 @@
       },
       "num_docs": 48,
       "limit": null,
-      "seconds": 44.66645595012233,
+      "seconds": 6.778589865192771,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.0746319352849516
+      "docs_per_second": 7.081118780540791
     },
     {
       "task": "paloma_dolma_100_programing_languages__96_protocol-buffer",
@@ -7965,13 +7967,13 @@
       },
       "num_docs": 73,
       "limit": null,
-      "seconds": 49.03246006183326,
+      "seconds": 7.490235202945769,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.4888096560511555
+      "docs_per_second": 9.74602239076424
     },
     {
       "task": "paloma_dolma_100_programing_languages__97_r",
@@ -7991,13 +7993,13 @@
       },
       "num_docs": 81,
       "limit": null,
-      "seconds": 47.87818839401007,
+      "seconds": 7.386892698705196,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.6917933346478442
+      "docs_per_second": 10.965368430787954
     },
     {
       "task": "paloma_dolma_100_programing_languages__98_cython",
@@ -8017,13 +8019,13 @@
       },
       "num_docs": 48,
       "limit": null,
-      "seconds": 45.76645470224321,
+      "seconds": 6.980609629303217,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 1.0488031094452968
+      "docs_per_second": 6.876190268326352
     },
     {
       "task": "paloma_dolma_100_programing_languages__99_mediawiki",
@@ -8043,13 +8045,13 @@
       },
       "num_docs": 21,
       "limit": null,
-      "seconds": 46.402196841314435,
+      "seconds": 7.168484366964549,
       "truncation": {
         "requests": 0,
         "docs": 0,
         "max_tokens_cut": 0
       },
-      "docs_per_second": 0.4525647798921137
+      "docs_per_second": 2.92948954409066
     }
   ],
   "suites": [
@@ -8452,5 +8454,5 @@
       "score": null
     }
   ],
-  "schema_version": 6
+  "schema_version": 8
 }

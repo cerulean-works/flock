@@ -412,10 +412,16 @@ def test_cli_prints_the_tokenizers_and_datasets_versions_when_they_differ(write)
 
 
 @pytest.mark.parametrize(
-    ("name", "suite"),
-    [("olmo-2-0425-1b-float32", "base_easy"), ("olmo-2-0425-1b-paloma-float32", "paloma")],
+    ("name", "suite", "dtype"),
+    [
+        ("olmo-2-0425-1b-float32", "base_easy", "float32"),
+        ("olmo-2-0425-1b-paloma-float32", "paloma", "float32"),
+        ("olmo-2-0425-1b-bfloat16", "base_easy", "bfloat16"),
+    ],
 )
-def test_a_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(write, name, suite):
+def test_a_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(
+    write, name, suite, dtype
+):
     # Offline: a change to what `Results` writes, or to what `compare` reads, that a bank can
     # no longer pass fails here rather than after a GPU rerun. A bank's version may lag the
     # layout's: a bank is refreshed when its scores are meant to change, not in every schema bump
@@ -430,21 +436,17 @@ def test_a_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(wr
         fields["dataset"] = Dataset(**fields["dataset"])
         tasks.append(TaskResult(**fields))
     suites = [SuiteResult(**suite) for suite in data["suites"]]
-    # A run on today's code records the pinned kernel, which a bank older than the field lacks:
-    # a cause, not a refusal. A bank refreshed since keeps its own. Today's run also records
-    # `add_bos`, False as every older run was.
-    provenance_fields: dict[str, Any] = {"sdpa_backend": "EFFICIENT_ATTENTION", "add_bos": False}
-    provenance_fields.update(data["provenance"])
-    provenance = Provenance(**provenance_fields)
-    rewritten = Results(provenance, tasks, suites)
+    rewritten = Results(Provenance(**data["provenance"]), tasks, suites)
 
     comparison = compare(bank, write("rewritten", rewritten))
 
-    assert data["provenance"]["dtype"] == "float32"
+    # Every bank records the pinned kernel, which `compare` refuses to mix across files.
+    assert data["provenance"]["sdpa_backend"] == "EFFICIENT_ATTENTION"
+    assert data["provenance"]["dtype"] == dtype
     assert suite in comparison.suites
     assert comparison.changed == []
     assert comparison.breaches == []
-    assert comparison.provenance.keys() <= {"schema_version", "sdpa_backend"}
+    assert comparison.provenance.keys() <= {"schema_version"}
 
 
 def test_a_file_without_model_digest_compares_with_one_whose_digest_is_none(write):
