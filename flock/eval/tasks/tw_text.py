@@ -7,8 +7,8 @@ from flock.eval.tasks.suite import Suite, source_suite
 # revision, most documents first (stage file 026, 026.D6), as
 # `flock/eval/scripts/source_census.py tw_text` prints them and checks them against the split. A
 # domain under 100,000 OLMo 2 tokens in the sample is merged into `other`, and an `other` still
-# under that size leaves the sample, as every one did at `v0` (029.D2). A source with one value lists it. `bbc_zh_trad` is converted
-# from Simplified script, so it isn't here (026.D5).
+# under that size leaves the sample, as every one did at `v0` (029.D2). A source with one value
+# lists it. `bbc_zh_trad` is converted from Simplified script, so it isn't here (026.D5).
 SOURCES: dict[str, tuple[str, ...]] = {
     "judicial": ("地方", "高等"),
     "ly": ("院會紀錄", "委員會紀錄"),

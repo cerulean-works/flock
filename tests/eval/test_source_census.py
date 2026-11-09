@@ -14,7 +14,8 @@ from flock.eval.tasks.suite import source_suite
 from .toy import DOMAIN_ROWS, TEXT_ROWS
 
 # A dataset card in the shape of Paloma's and tw-text's: one configuration per source, each
-# split a pattern over the repo's files. `forum` is a source the toy suite leaves out.
+# split a pattern, or a list of them, over the repo's files. `forum` is a source the toy suite
+# leaves out.
 README = """---
 configs:
 - config_name: news
@@ -27,6 +28,10 @@ configs:
     path: "wiki/val/*"
   - split: test
     path: "wiki/test/*"
+- config_name: cna
+  data_files:
+  - split: test
+    path: [data/cna/a.parquet, data/cna/b.parquet]
 - config_name: forum
   data_files:
   - split: test
@@ -46,14 +51,17 @@ def write_parquet(path: Path, rows: list[dict]) -> None:
     pq.write_table(pa.Table.from_pylist(rows), path)
 
 
-def toy_suite(news_domains: tuple[str, ...]) -> Suite:
-    news = Dataset(repo="toy/sources", revision="0" * 40, subset="news", split="test")
-    wiki = Dataset(repo="toy/sources", revision="0" * 40, subset="wiki", split="test")
-    return Suite(
-        "toy",
-        (source_suite("toy", news, news_domains), source_suite("toy", wiki, ())),
-        metric="bits_per_byte",
-    )
+# The toy suite's table when it lists every domain: `news` has two, `wiki` has rows without a
+# `subdomain`, and every row of `cna` carries its source's name, as in `tw_text`.
+SOURCES = {"news": ("news", "exam"), "wiki": (), "cna": ("cna",)}
+
+
+def toy_suite(sources: dict[str, tuple[str, ...]]) -> Suite:
+    members = []
+    for source, domains in sources.items():
+        dataset = Dataset(repo="toy/sources", revision="0" * 40, subset=source, split="test")
+        members.append(source_suite("toy", dataset, domains))
+    return Suite("toy", tuple(members), metric="bits_per_byte")
 
 
 @pytest.fixture
@@ -66,6 +74,10 @@ def repo(tmp_path, monkeypatch, tokenizer) -> Path:
     write_jsonl_gz(root / "wiki/test/test-0.jsonl.gz", TEXT_ROWS[:2])
     write_jsonl_gz(root / "wiki/test/test-1.jsonl.gz", TEXT_ROWS[2:])
     write_jsonl_gz(root / "wiki/val/val-0.jsonl.gz", TEXT_ROWS)
+    # `datasets` skips a hidden file, so a domain in it is not the split's.
+    write_jsonl_gz(root / "wiki/test/.stray.jsonl.gz", DOMAIN_ROWS)
+    write_parquet(root / "data/cna/a.parquet", [{**TEXT_ROWS[0], "subdomain": "cna"}])
+    write_parquet(root / "data/cna/b.parquet", [{**TEXT_ROWS[1], "subdomain": "cna"}])
     write_parquet(root / "data/forum/test.parquet", DOMAIN_ROWS)
 
     class LocalApi:
@@ -133,13 +145,16 @@ def test_count_source_ranks_palomas_numbered_domains_before_counting_documents(t
     assert list(counts["domain_docs"]) == ["2_a", "10_b"]
 
 
-def test_count_source_rejects_rows_with_and_without_a_subdomain_or_another_format(
-    tmp_path, tokenizer
-):
-    write_jsonl_gz(tmp_path / "test.jsonl.gz", [*DOMAIN_ROWS, {**TEXT_ROWS[0], "id": "t-4"}])
-    with pytest.raises(ValueError, match="some rows have a subdomain and some don't"):
-        source_census.count_source(tokenizer, 4, [tmp_path / "test.jsonl.gz"])
+def test_count_source_counts_rows_without_a_subdomain_under_the_empty_domain(tmp_path, tokenizer):
+    rows = [*DOMAIN_ROWS, {**TEXT_ROWS[0], "id": "t-4"}, {**TEXT_ROWS[1], "subdomain": None}]
+    write_jsonl_gz(tmp_path / "test.jsonl.gz", rows)
 
+    counts = source_census.count_source(tokenizer, 4, [tmp_path / "test.jsonl.gz"])
+
+    assert counts["domain_docs"] == {"news": 2, "": 2, "exam": 1}
+
+
+def test_count_source_rejects_another_format(tmp_path, tokenizer):
     (tmp_path / "test.csv").write_text("id,text\n")
     with pytest.raises(ValueError, match="reads .jsonl.gz and .parquet files only"):
         source_census.count_source(tokenizer, 4, [tmp_path / "test.csv"])
@@ -148,7 +163,7 @@ def test_count_source_rejects_rows_with_and_without_a_subdomain_or_another_forma
 def test_the_census_passes_when_the_suite_lists_every_domain_and_reports_left_out_sources(
     repo, tmp_path, monkeypatch, capsys
 ):
-    monkeypatch.setitem(source_census.SUITES, "toy", toy_suite(("news", "exam")))
+    monkeypatch.setitem(source_census.SUITES, "toy", toy_suite(SOURCES))
     out = tmp_path / "census.json"
 
     source_census.main("toy", out)
@@ -156,12 +171,14 @@ def test_the_census_passes_when_the_suite_lists_every_domain_and_reports_left_ou
     census = json.loads(out.read_text())
     assert census["differences"] == {}
     assert census["unlisted_sources"] == ["forum"]
-    # The scored split only: wiki's `val` file isn't counted.
+    # The scored split only: wiki's `val` file and its hidden file aren't counted.
     assert census["sources"]["wiki"]["docs"] == 3
     assert census["sources"]["news"]["domain_docs"] == {"news": 2, "exam": 1}
+    assert census["sources"]["cna"]["domain_docs"] == {"cna": 2}  # both files of the list
     printed = capsys.readouterr().out
     assert "'news': ('news', 'exam'),\n" in printed
     assert "'wiki': (),\n" in printed
+    assert "'cna': ('cna',),\n" in printed
     assert "Sources toy leaves out: forum" in printed
 
 
@@ -171,7 +188,7 @@ def test_the_census_fails_when_a_domain_is_not_listed_or_not_in_the_split(
     out = tmp_path / "census.json"
 
     # `exam` is in the split and no task scores it.
-    monkeypatch.setitem(source_census.SUITES, "toy", toy_suite(("news",)))
+    monkeypatch.setitem(source_census.SUITES, "toy", toy_suite({**SOURCES, "news": ("news",)}))
     with pytest.raises(SystemExit) as exit_:
         source_census.main("toy", out)
     assert exit_.value.code == 1
@@ -179,8 +196,23 @@ def test_the_census_fails_when_a_domain_is_not_listed_or_not_in_the_split(
     assert differences == {"news": {"not_listed": ["exam"], "not_in_split": []}}
 
     # `sports` is listed and the split has no rows for it.
-    monkeypatch.setitem(source_census.SUITES, "toy", toy_suite(("news", "exam", "sports")))
+    sports = {**SOURCES, "news": ("news", "exam", "sports")}
+    monkeypatch.setitem(source_census.SUITES, "toy", toy_suite(sports))
     with pytest.raises(SystemExit):
         source_census.main("toy", out)
     differences = json.loads(out.read_text())["differences"]
     assert differences == {"news": {"not_listed": [], "not_in_split": ["sports"]}}
+
+    # `cna` listed with no value would read rows without a `subdomain`, and its rows all have one.
+    monkeypatch.setitem(source_census.SUITES, "toy", toy_suite({**SOURCES, "cna": ()}))
+    with pytest.raises(SystemExit):
+        source_census.main("toy", out)
+    differences = json.loads(out.read_text())["differences"]
+    assert differences == {"cna": {"not_listed": ["cna"], "not_in_split": [""]}}
+
+    # A listed source with no configuration in the card has none of its domains.
+    monkeypatch.setitem(source_census.SUITES, "toy", toy_suite({**SOURCES, "blog": ("blog",)}))
+    with pytest.raises(SystemExit):
+        source_census.main("toy", out)
+    differences = json.loads(out.read_text())["differences"]
+    assert differences == {"blog": {"not_listed": [], "not_in_split": ["blog"]}}

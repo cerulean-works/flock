@@ -26,11 +26,11 @@ The check could raise when a task loads, if any row of its source carries a doma
 
 ### 031.D2. The table checked is the suite's tasks
 
-The census takes a registered suite's name, `paloma` or `tw_text`, and compares each source's task domains with the split's `subdomain` values. It reads the tasks rather than the dict that builds them, so it checks what is scored. A source with one domain and no `subdomain` in its rows is listed with none, as `source_suite` makes it, and the census counts its rows under the domain `""`. Every task must score the same revision, split and window, which both benchmarks do, so the counts are what the tasks score.
+The census takes a registered suite's name, `paloma` or `tw_text`, and compares each source's task domains with the split's `subdomain` values. It reads the tasks rather than the dict that builds them, so it checks what is scored. A source with one domain and no `subdomain` in its rows is listed with none, as `source_suite` makes it, and the census counts its rows under the domain `""`. A row without a `subdomain` in a source with domains counts under `""` too, which no task of that source scores, so the check reports it as not listed. 008's census raised there instead, which would also have stopped the census on a source the suite leaves out. Every task must score the same revision, split and window, which both benchmarks do, so the counts are what the tasks score.
 
 ### 031.D3. A source is a configuration of the dataset card
 
-Paloma keeps a source's split as `<source>/test/*.jsonl.gz`, and tw-text as `data/<source>/test.parquet`. Both cards declare each source as a configuration whose splits are file patterns, the mapping `datasets` resolves. The census reads those patterns from the card at the pinned revision and matches them against the repository's files, so one rule finds both layouts. It still reads the raw files rather than `datasets`, as 008's census did, so the counts don't depend on a `datasets` version.
+Paloma keeps a source's split as `<source>/test/*.jsonl.gz`, and tw-text as `data/<source>/test.parquet`. Both cards declare each source as a configuration whose splits are file patterns, the mapping `datasets` resolves. The census reads those patterns, a string or a list of them, from the card at the pinned revision and matches them against the repository's files, so one rule finds both layouts. It skips hidden files and files under `__`, as `datasets` does unless a pattern names them, which no pinned card does. It still reads the raw files rather than `datasets`, as 008's census did, so the counts don't depend on a `datasets` version.
 
 ### 031.D4. A source the suite leaves out is reported, not failed
 
@@ -44,7 +44,7 @@ The census prints each source's domains in the table's format, ready to paste. D
 
 ## 3. Plan
 
-1. Rename `scripts/paloma_census.py` to `scripts/source_census.py`: suite name in, configurations from the card, `.parquet` beside `.jsonl.gz`, bytes per domain, the check.
+1. Rename `scripts/paloma_census.py` to `scripts/source_census.py`: suite name in, configurations from the card, `.parquet` beside `.jsonl.gz`, bytes per domain, the check. Files are read as UTF-8 whatever the locale.
 2. Tests on toy files in both formats, with a toy suite that passes, one with a domain left out and one with a domain the split lacks.
 3. Run it on both benchmarks at their pinned revisions and compare with the earlier counts.
 4. `add-task.md` gives the command; the two tables' comments name it.
@@ -57,4 +57,4 @@ The census prints each source's domains in the table's format, ready to paste. D
 - **Paloma.** The census exits with status 0 and lists the 7 sources `paloma` leaves out. Every printed line equals `DOMAINS` except `dolma-v1_5`'s order (031.D5), and all 160 counts it shares with 008's design census are equal across the 16 sources: documents, bytes, tokens, windows, texts over 2048 tokens, empty texts, repeated ids, and documents and tokens per domain.
 - **It fails when it should.** With `高等` dropped from `tw_text`'s `judicial`, the census at `v0` exits with status 1 and names `高等` as not listed.
 - **Unchanged.** Under `tasks/` only two comments change. The 334 hashes of Paloma's 309 tasks, `tw_text`'s 24 and `fineweb_edu` are equal at `main` and on this branch, and the snapshot regenerates with no diff.
-- **Tests.** The toy dataset has a card with three configurations: a two-domain source in parquet, a one-domain source in two `.jsonl.gz` files with a `val` split the census must skip, and a source the suite leaves out. The counts of one source are equal from either format, and bytes count UTF-8.
+- **Tests.** The toy dataset has a card with four configurations: a two-domain source in parquet, a one-domain source in two `.jsonl.gz` files with a `val` split and a hidden file the census must skip, a source whose rows all carry its name over a list of two files, and a source the suite leaves out. The census fails on a domain left out, a domain the split lacks, a one-value source listed with none, and a listed source the card doesn't have. The counts of one source are equal from either format, and bytes count UTF-8.

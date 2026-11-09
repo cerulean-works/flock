@@ -33,7 +33,7 @@ def count_source(
     Counts one source's split from its `.jsonl.gz` or `.parquet` files, overall and per domain, with windows of `window` tokens.
 
     Raises:
-        `ValueError`: if a file is in another format, or some rows have a `subdomain` and others don't, since a suite can't list the rows without one.
+        `ValueError`: if a file is in another format.
     """
     totals: Counter[str] = Counter()
     domain_docs: Counter[str] = Counter()
@@ -43,7 +43,7 @@ def count_source(
     empty_files = []
     for file in files:
         if file.name.endswith(".jsonl.gz"):
-            with gzip.open(file, "rt") as f:
+            with gzip.open(file, "rt", encoding="utf-8") as f:
                 rows = [json.loads(line) for line in f]
         elif file.suffix == ".parquet":
             rows = pq.read_table(file).to_pylist()
@@ -58,7 +58,8 @@ def count_source(
         lengths = [len(token_ids) for token_ids in encoded["input_ids"]]
         for row, length in zip(rows, lengths, strict=True):
             # A source with one domain may have no `subdomain` field. Its domain is "", and a
-            # null `subdomain` counts as none, as `PerplexityTask.load` reads it.
+            # null `subdomain` counts as none, as `PerplexityTask.load` reads it. Rows without one
+            # in a source with domains count under "" too, so the check reports them unlisted.
             domain = row.get("subdomain") or ""
             size = len(row["text"].encode())
             doc_ids.append(row["id"])
@@ -74,15 +75,13 @@ def count_source(
             # and `empty_texts` counts it.
             totals["windows"] += math.ceil(length / window)
 
-    if "" in domain_docs and len(domain_docs) > 1:
-        raise ValueError(f"{files[0].name}: some rows have a subdomain and some don't")
-
     # Paloma's ranked domains in rank order, `1_www.nytimes.com` before `10_...`, and the others
     # most documents first, as `tw_text` lists them (026.D6), then by name.
     rank = {}
     for domain in domain_docs:
         prefix = domain.split("_")[0]
-        rank[domain] = (int(prefix) if prefix.isdigit() else 0, -domain_docs[domain], domain)
+        ranked_prefix = prefix.isascii() and prefix.isdigit()
+        rank[domain] = (int(prefix) if ranked_prefix else 0, -domain_docs[domain], domain)
     ranked = sorted(domain_docs, key=rank.__getitem__)
 
     return {
@@ -119,7 +118,7 @@ def main(suite_name: str, out: Path) -> None:
     assert tokenizer is not None  # The stubs allow None; loading raises instead.
 
     # A source is a configuration in the dataset card, and its split is the files the card's
-    # patterns match, as `datasets` resolves them.
+    # patterns match, as `datasets` resolves them. A pattern is one string or a list of them.
     readme = hf_hub_download(repo, "README.md", repo_type="dataset", revision=revision)
     card = metadata_load(readme)
     if card is None or "configs" not in card:
@@ -128,9 +127,17 @@ def main(suite_name: str, out: Path) -> None:
     census = {}
     for config in sorted(card["configs"], key=lambda config: config["config_name"]):
         source = config["config_name"]
-        patterns = [entry["path"] for entry in config["data_files"] if entry["split"] == split]
+        patterns = []
+        for entry in config["data_files"]:
+            if entry["split"] == split:
+                patterns += [entry["path"]] if isinstance(entry["path"], str) else entry["path"]
         files = []
         for file in repo_files:
+            # `datasets` skips hidden files and those under `__` unless a pattern names them. No
+            # pinned card does, so the census skips them always.
+            parts = PurePosixPath(file).parts
+            if any(part.startswith((".", "__")) for part in parts):
+                continue
             if any(PurePosixPath(file).full_match(pattern) for pattern in patterns):
                 path = hf_hub_download(repo, file, repo_type="dataset", revision=revision)
                 files.append(Path(path))
@@ -140,10 +147,10 @@ def main(suite_name: str, out: Path) -> None:
             print(f"{source!r}: {tuple(domains)!r},")
 
     # A domain only the split has is never scored, and nothing at run time says so. One only the
-    # suite has raises when its task loads.
+    # suite has raises when its task loads. "" is rows without a `subdomain`.
     differences = {}
     for source, domains in listed.items():
-        found = set(census.get(source, {}).get("domain_docs", {}))
+        found = set(census[source]["domain_docs"]) if source in census else set()
         if found != domains:
             differences[source] = {
                 "not_listed": sorted(found - domains),
@@ -160,7 +167,8 @@ def main(suite_name: str, out: Path) -> None:
         "unlisted_sources": unlisted,
         "differences": differences,
     }
-    out.write_text(json.dumps({**header, "sources": census}, indent=1, ensure_ascii=False) + "\n")
+    census_json = json.dumps({**header, "sources": census}, indent=1, ensure_ascii=False)
+    out.write_text(census_json + "\n", encoding="utf-8")
 
     if unlisted:
         print(f"Sources {suite_name} leaves out: {', '.join(unlisted)}")
