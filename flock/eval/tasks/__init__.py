@@ -3,6 +3,7 @@
 from flock.eval.tasks.base import (
     CHINESE_ANSWER_PREFIX,
     CHINESE_QUESTION_PREFIX,
+    SIMPLIFIED_QUESTION_PREFIX,
     Choice,
     Dataset,
     Fewshot,
@@ -20,6 +21,7 @@ from flock.eval.tasks.suite import Suite, Task
 __all__ = [
     "CHINESE_ANSWER_PREFIX",
     "CHINESE_QUESTION_PREFIX",
+    "SIMPLIFIED_QUESTION_PREFIX",
     "SUITES",
     "TASKS",
     "Choice",

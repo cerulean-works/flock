@@ -125,6 +125,9 @@ class Choice:
 # figs. 8 and 9) and C-Eval's, and AGIEval's Chinese template in Simplified characters.
 CHINESE_QUESTION_PREFIX = "問題："
 CHINESE_ANSWER_PREFIX = "答案："
+# The same format for native Simplified Chinese sets, AGIEval's own `问题：` (`答案` is one spelling in
+# both scripts).
+SIMPLIFIED_QUESTION_PREFIX = "问题："
 
 
 def cloze(
@@ -138,7 +141,7 @@ def cloze(
     """
     Returns cloze choices: each answer is the continuation `"<separator><answer>"` of `"<question_prefix><question>\\n<answer_prefix>"`. The defaults are OLMES's format, `"Question: <question>\\nAnswer:"` and `" <answer>"` (OLMES, sec. 3.1).
 
-    Chinese tasks pass `CHINESE_QUESTION_PREFIX`, `CHINESE_ANSWER_PREFIX` and `separator=""`. Chinese text has no spaces between words, and a space before the answer often merges into the tokens of its first character and would count in `acc_per_char`.
+    Chinese tasks pass `CHINESE_QUESTION_PREFIX` (or `SIMPLIFIED_QUESTION_PREFIX`), `CHINESE_ANSWER_PREFIX` and `separator=""`. Chinese text has no spaces between words, and a space before the answer often merges into the tokens of its first character and would count in `acc_per_char`.
 
     Raises:
         `TypeError`: if `answers` is one string. A doc with one answer passes `(answer,)`.
