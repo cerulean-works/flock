@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | building |
+| Status | in review |
 | Date | 2026-11-06 |
 | Builds on | 013 score comparison, 018 refreshed bank, 021 changed suites, 023 SDPA pin |
 | Keeps | Every task, request, metric, comparison tolerance and kernel refusal |
@@ -36,7 +36,11 @@ Stage 023 refuses different recorded kernels in every dtype. Whether FP32 CPU an
 
 ## 4. How it was actually built
 
-The branch starts at 8069e25. Kernel refusal and missing-kernel compatibility already have tests. The banks and measurement results are pending.
+- **Runs.** Four jobs at `74836d6`, each on one H200 with `allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf`, batch tokens 32768, max length 4096, no BOS and the efficient kernel. The files are schema 8. BF16 Base Easy scored in 32 min on `25a-hgpn033` and again in 32 min on `25a-hgpn034`. FP32 Base Easy took 2 h 58 min and FP32 Paloma 45 min.
+- **BF16 repeatability.** `flock eval compare` of the two BF16 runs: 109 tasks and 10 suites compared, 0 breaches, no provenance difference besides `command` and `created_at`. All 109 prediction files are byte-equal, so no task needs a maximum difference. Every metric, hash, count and truncation field is equal at full precision.
+- **FP32 refresh.** Against the old Base Easy bank: 109 tasks, 10 suites, 0 breaches. Against the old Paloma bank: 309 tasks, 10 suites, 0 breaches. Each prints `flock_commit`, `sdpa_backend  None  ->  EFFICIENT_ATTENTION` and `schema_version  6  ->  8`, and the new files also add `add_bos` (False) and, for Base Easy, `model_digest` (None), which `compare` does not print. Every task field and suite is equal at full precision, and the prediction files of the runs that wrote the old banks equal the new ones byte for byte (109 and 309 files).
+- **Banks.** The three `results.json` files are copied unchanged to `tests/eval/regression/`. The bank test now covers the BF16 bank, checks each bank's dtype and kernel, and loads each provenance as written: every bank records `sdpa_backend` and `add_bos`, so the defaults it filled for older banks are gone. Since every bank now records the kernel, a CPU run is refused against them (030.D3); `compare-regression.md` lists the BF16 bank and says so.
+- **Kernel refusal.** `test_compare.py` already covers the refusal on two recorded kernels and the comparison with a file that lacks the field; this stage keeps both.
 
 ## 5. Known gaps
 

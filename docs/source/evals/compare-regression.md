@@ -4,14 +4,15 @@ Rerun the banked model and check whether an evaluation change moved its scores.
 
 ## Before you start
 
-Use an installed checkout and a GPU machine with enough memory for OLMo 2 1B in FP32. This is a full benchmark run, not a short smoke test. There are two banks, both of OLMo 2 1B in FP32:
+Use an installed checkout and a GPU machine with enough memory for OLMo 2 1B in FP32. This is a full benchmark run, not a short smoke test. There are three banks, all of OLMo 2 1B on one H200 with the pinned efficient SDPA kernel:
 
-| Bank | Suite |
-|---|---|
-| `tests/eval/regression/olmo-2-0425-1b-float32.json` | `base_easy` |
-| `tests/eval/regression/olmo-2-0425-1b-paloma-float32.json` | `paloma` |
+| Bank | Suite | Dtype |
+|---|---|---|
+| `tests/eval/regression/olmo-2-0425-1b-float32.json` | `base_easy` | FP32 |
+| `tests/eval/regression/olmo-2-0425-1b-paloma-float32.json` | `paloma` | FP32 |
+| `tests/eval/regression/olmo-2-0425-1b-bfloat16.json` | `base_easy` | BF16 |
 
-The steps below use the `base_easy` bank. For Paloma, run `--suite paloma` and compare with the Paloma bank.
+The steps below use the FP32 `base_easy` bank. For Paloma, run `--suite paloma` and compare with the Paloma bank. For BF16, run `--dtype bfloat16` and compare with the BF16 bank. A run on CPU records no kernel, so `compare` refuses it against these banks.
 
 ## Run the check
 
@@ -46,7 +47,7 @@ A changed task or suite is listed and not compared, and the rest is still compar
    cp results/regression/results.json tests/eval/regression/olmo-2-0425-1b-float32.json
    ```
 
-   For Paloma, copy it over `olmo-2-0425-1b-paloma-float32.json` instead.
+   For Paloma or BF16, copy it over that bank instead.
 
 3. Include the comparison output and reasons in the change review. Keep a library-driven bank refresh in the same change as its lockfile update.
 
