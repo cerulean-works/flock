@@ -7,7 +7,7 @@ Run from the repository root, with read access to the dataset (Paloma's terms ac
 
 It exits with status 1 if a source the suite lists has a domain in the split that the suite doesn't list, which no task would score and nothing at run time reports, or lists a domain the split doesn't have. A source the suite leaves out is reported but allowed, as Paloma leaves out 7 of its 16.
 
-It reads the raw files at the pinned revision, not `datasets`, so the counts don't depend on a `datasets` version, and it loads only a tokenizer, never model weights.
+It takes each source's files as `datasets` resolves them, the files the tasks load, and reads their raw rows itself, so the counts don't depend on how a `datasets` version parses them. It loads only a tokenizer, never model weights.
 """
 
 import gzip
@@ -15,12 +15,12 @@ import json
 import math
 import sys
 from collections import Counter
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
+import datasets
 import pyarrow.parquet as pq
-from huggingface_hub import HfApi, hf_hub_download
-from huggingface_hub.repocard import metadata_load
+from huggingface_hub import hf_hub_download
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from flock.eval.tasks import SUITES, PerplexityTask
@@ -117,46 +117,36 @@ def main(suite_name: str, out: Path) -> None:
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_repo, revision=tokenizer_revision)
     assert tokenizer is not None  # The stubs allow None; loading raises instead.
 
-    # A source is a configuration in the dataset card, and its split is the files the card's
-    # patterns match, as `datasets` resolves them. A pattern is one string or a list of them.
-    readme = hf_hub_download(repo, "README.md", repo_type="dataset", revision=revision)
-    card = metadata_load(readme)
-    if card is None or "configs" not in card:
-        raise ValueError(f"{repo}@{revision}: the dataset card declares no configurations")
-    repo_files = sorted(HfApi().list_repo_files(repo, repo_type="dataset", revision=revision))
+    # A source is a configuration of the dataset, and its split is the files `datasets` resolves
+    # for it, as `Dataset.load` reads them: `hf://datasets/<repo>@<revision>/<file>` each.
+    sources = sorted(datasets.get_dataset_config_names(repo, revision=revision))
     census = {}
-    for config in sorted(card["configs"], key=lambda config: config["config_name"]):
-        source = config["config_name"]
-        patterns = []
-        for entry in config["data_files"]:
-            if entry["split"] == split:
-                patterns += [entry["path"]] if isinstance(entry["path"], str) else entry["path"]
+    for source in sources:
+        builder = datasets.load_dataset_builder(repo, source, revision=revision)
+        resolved = (builder.config.data_files or {}).get(split, [])
         files = []
-        for file in repo_files:
-            # `datasets` skips hidden files and those under `__` unless a pattern names them. No
-            # pinned card does, so the census skips them always.
-            parts = PurePosixPath(file).parts
-            if any(part.startswith((".", "__")) for part in parts):
-                continue
-            if any(PurePosixPath(file).full_match(pattern) for pattern in patterns):
-                path = hf_hub_download(repo, file, repo_type="dataset", revision=revision)
-                files.append(Path(path))
+        for url in resolved:
+            file = url.removeprefix(f"hf://datasets/{repo}@{revision}/")
+            files.append(Path(hf_hub_download(repo, file, repo_type="dataset", revision=revision)))
         if files:
             census[source] = count_source(tokenizer, window, files)
-            domains = [domain for domain in census[source]["domain_docs"] if domain]
-            print(f"{source!r}: {tuple(domains)!r},")
 
     # A domain only the split has is never scored, and nothing at run time says so. One only the
-    # suite has raises when its task loads. "" is rows without a `subdomain`.
+    # suite has raises when its task loads. Rows without a `subdomain` count under "", which a
+    # table can't list in a source with domains, so the differences name them in words.
     differences = {}
     for source, domains in listed.items():
         found = set(census[source]["domain_docs"]) if source in census else set()
         if found != domains:
             differences[source] = {
-                "not_listed": sorted(found - domains),
-                "not_in_split": sorted(domains - found),
+                "not_listed": [
+                    domain or "(rows without a subdomain)" for domain in sorted(found - domains)
+                ],
+                "not_in_split": [
+                    domain or "(rows without a subdomain)" for domain in sorted(domains - found)
+                ],
             }
-    unlisted = sorted(set(census) - set(listed))
+    unlisted = [source for source in sources if source not in listed]
 
     header = {
         "suite": suite_name,
@@ -170,6 +160,10 @@ def main(suite_name: str, out: Path) -> None:
     census_json = json.dumps({**header, "sources": census}, indent=1, ensure_ascii=False)
     out.write_text(census_json + "\n", encoding="utf-8")
 
+    # Printed after the file is written, so a terminal that can't show a domain loses no counts.
+    for source, counts in census.items():
+        domains = [domain for domain in counts["domain_docs"] if domain]
+        print(f"{source!r}: {tuple(domains)!r},")
     if unlisted:
         print(f"Sources {suite_name} leaves out: {', '.join(unlisted)}")
     for source, difference in differences.items():

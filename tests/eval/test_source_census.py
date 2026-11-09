@@ -2,7 +2,9 @@ import gzip
 import json
 import math
 from pathlib import Path
+from types import SimpleNamespace
 
+import datasets
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
@@ -80,11 +82,24 @@ def repo(tmp_path, monkeypatch, tokenizer) -> Path:
     write_parquet(root / "data/cna/b.parquet", [{**TEXT_ROWS[1], "subdomain": "cna"}])
     write_parquet(root / "data/forum/test.parquet", DOMAIN_ROWS)
 
-    class LocalApi:
-        def list_repo_files(self, repo_id, repo_type, revision):
-            return [str(p.relative_to(root)) for p in root.rglob("*") if p.is_file()]
+    # `datasets` resolves the local copy's card as it would the hub's, and the census sees the
+    # files under the hub's URLs.
+    real_names = datasets.get_dataset_config_names
+    real_builder = datasets.load_dataset_builder
 
-    monkeypatch.setattr(source_census, "HfApi", LocalApi)
+    def builder(repo_id, name, revision):
+        data_files = {}
+        resolved = real_builder(str(root), name).config.data_files
+        assert resolved is not None  # A card with configurations always resolves its files.
+        for split, files in resolved.items():
+            urls = [
+                f"hf://datasets/{repo_id}@{revision}/{Path(f).relative_to(root)}" for f in files
+            ]
+            data_files[split] = urls
+        return SimpleNamespace(config=SimpleNamespace(data_files=data_files))
+
+    monkeypatch.setattr(datasets, "get_dataset_config_names", lambda *a, **k: real_names(str(root)))
+    monkeypatch.setattr(datasets, "load_dataset_builder", builder)
     monkeypatch.setattr(
         source_census, "hf_hub_download", lambda repo_id, filename, **kwargs: str(root / filename)
     )
@@ -208,7 +223,9 @@ def test_the_census_fails_when_a_domain_is_not_listed_or_not_in_the_split(
     with pytest.raises(SystemExit):
         source_census.main("toy", out)
     differences = json.loads(out.read_text())["differences"]
-    assert differences == {"cna": {"not_listed": ["cna"], "not_in_split": [""]}}
+    assert differences == {
+        "cna": {"not_listed": ["cna"], "not_in_split": ["(rows without a subdomain)"]}
+    }
 
     # A listed source with no configuration in the card has none of its domains.
     monkeypatch.setitem(source_census.SUITES, "toy", toy_suite({**SOURCES, "blog": ("blog",)}))
