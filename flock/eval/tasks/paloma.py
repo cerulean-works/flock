@@ -3,8 +3,9 @@
 from flock.eval.tasks.base import Dataset
 from flock.eval.tasks.suite import Suite, source_suite
 
-# Each source's domains in the `test` split at the pinned revision, as
-# `flock/eval/scripts/paloma_census.py` lists them. A source with one domain lists none.
+# Each source's domains in the `test` split at the pinned revision, in Paloma's rank order, and
+# by name where they have none. `flock/eval/scripts/source_census.py paloma` checks them against
+# the split. A source with one domain lists none.
 DOMAINS: dict[str, tuple[str, ...]] = {
     "c4_en": (),
     "mc4": (),
