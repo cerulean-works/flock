@@ -1,6 +1,5 @@
 """The `flock eval` command line."""
 
-import re
 import shlex
 import sys
 from pathlib import Path
@@ -145,7 +144,7 @@ def pull_command(ref: str, root: Path) -> None:
     org, _, pinned = ref.partition("/")
     repo, _, revision = pinned.partition("@")
     # A staged copy is read by the commit a task pins, never by a branch or tag.
-    if not org or not re.fullmatch(r"[^/]+/[^/]+", repo) or not hub.COMMIT.fullmatch(revision):
+    if not org or not hub.REPO.fullmatch(repo) or not hub.COMMIT.fullmatch(revision):
         raise click.UsageError(
             f"expected ORG/OWNER/NAME@COMMIT with a 40-digit commit, got {ref!r}"
         )
@@ -153,10 +152,9 @@ def pull_command(ref: str, root: Path) -> None:
     from flock.hub import s3
 
     try:
-        s3.get_process(org, read_only=True)
         click.echo(hub.pull(org, repo, revision, root))
     # Not signed in or refused; no such copy or tag, or a tag on another revision; a staging
-    # folder that can't be written.
+    # folder that can't be written, or that others could write to.
     except (s3.S3Error, ValueError, OSError) as error:
         raise click.ClickException(str(error)) from None
 

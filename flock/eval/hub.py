@@ -1,5 +1,9 @@
 """Copies of pinned Hugging Face datasets on the Flock hub, and the staged copies jobs read."""
 
+# `lance` and `flock.hub` are imported where they're used: `flock eval` loads this module for
+# every command, and `lance` alone takes about 1.3 s to import.
+
+import functools
 import json
 import re
 import shutil
@@ -11,6 +15,9 @@ from typing import Any
 
 import datasets
 import pyarrow as pa
+
+REPO = re.compile(r"[A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*")
+"""A Hugging Face repo id, `<owner>/<name>`, neither part starting with a dot, so it never leaves the folder it is joined to."""
 
 COMMIT = re.compile(r"[0-9a-f]{40}")
 """A full commit hash: the only revision a hub copy is staged and read by, since a branch or tag moves."""
@@ -41,7 +48,13 @@ def check(
         raise ValueError(f"{where} holds {source[0]}@{source[1]}, not {repo}@{revision}")
     if "pairs" not in properties:
         raise ValueError(f"{where} records no pairs")
-    return json.loads(properties["pairs"])
+    return _pairs(properties["pairs"])
+
+
+@functools.cache
+def _pairs(recorded: str) -> list[dict[str, Any]]:
+    """The pairs a copy records, parsed once per process however many tasks read it: a copy holds up to 132 pairs, and each of their tasks reads two. Callers don't change the result."""
+    return json.loads(recorded)
 
 
 def recorded(dataset: Any) -> dict[str, str]:
@@ -131,13 +144,21 @@ def pull(org: str, repo: str, revision: str, root: Path) -> Path:
 
     The copy is written to a temporary folder and renamed, so an interrupted pull leaves nothing a job could read, and a failed one removes its temporary folder. A staged copy that records the same source and pairs is kept, since those decide its rows, whichever org or version it came from, as is one another pull stages meanwhile. One staged from an earlier version under the tag, before a split was added, or that can't be read, is replaced; a job reading it then fails.
 
-    The staging root's permissions decide who reads every copy in it, private sets included, whatever the umask: folders between the root and a copy take the root's mode, and a copy's folders and files take it without anyone's write bits but the owner's (and files without execute bits), so nobody the root lets read a copy can change it. A missing `root` is made readable by its owner only.
+    The staging root's permissions decide who reads every copy in it, private sets included, whatever the umask: folders between the root and a copy take the root's mode, and a copy's folders and files take it without anyone's write bits but the owner's (and files without execute bits), so nobody the root lets read a copy can change it. A root others can write to must have the sticky bit, which the folders below it keep, so nobody but a copy's owner can rename or replace it. A missing `root` is made readable by its owner only.
+
+    Signs in to `org` with read-only keys first, so the copy recorded as `org`'s is read from `org`'s bucket.
 
     Raises:
-        `ValueError`: if the tagged version records another repo or revision, or no pairs.
+        `ValueError`: if `repo` isn't `<owner>/<name>`, the staging root is writable by others without the sticky bit, or the tagged version records another repo or revision, or no pairs.
+        [`~hub.s3.S3Error`]: if the sign-in to `org` fails.
     """
     import lance
 
+    from flock.hub import s3
+
+    if not REPO.fullmatch(repo):
+        raise ValueError(f"expected a repo OWNER/NAME, got {repo!r}")
+    s3.get_process(org, read_only=True)
     uri = f"{BUCKET}/{path(repo)}"
     source = lance.dataset(uri, version=revision)
     properties = recorded(source)
@@ -165,12 +186,7 @@ def pull(org: str, repo: str, revision: str, root: Path) -> Path:
         _protect(partial, mode)
         # Another pull may have staged the same rows meanwhile, and a job may read them already.
         if not _holds(folder, properties):
-            stale = partial.with_suffix(".stale")
-            if folder.exists():
-                folder.rename(stale)
-            partial.rename(folder)
-            # Removed only once the new copy is in place, so a failure here loses nothing.
-            shutil.rmtree(stale, ignore_errors=True)
+            _replace(folder, partial)
     except Exception:
         if not _holds(folder, properties):
             raise
@@ -178,6 +194,20 @@ def pull(org: str, repo: str, revision: str, root: Path) -> Path:
     finally:
         shutil.rmtree(partial, ignore_errors=True)
     return folder
+
+
+def _replace(folder: Path, partial: Path) -> None:
+    """Renames `partial` to `folder`, moving a copy already there aside first and deleting it only once the new one is in place. If the rename fails, the old copy is moved back."""
+    stale = partial.with_suffix(".stale")
+    if folder.exists():
+        folder.rename(stale)
+    try:
+        partial.rename(folder)
+    except OSError:
+        if stale.exists() and not folder.exists():
+            stale.rename(folder)
+        raise
+    shutil.rmtree(stale, ignore_errors=True)
 
 
 def _open(folder: Path) -> Any:
@@ -200,9 +230,19 @@ def _holds(folder: Path, properties: Mapping[str, str]) -> bool:
 
 
 def _make_folders(root: Path, folder: Path) -> int:
-    """Makes `folder` and the folders between it and `root` with `root`'s mode, setgid and sticky bits included, and returns that mode. A missing `root` is made with mode 0o700."""
+    """
+    Makes `folder` and the folders between it and `root` with `root`'s mode, setgid and sticky bits included, and returns that mode. A missing `root` is made with mode 0o700.
+
+    Raises:
+        `ValueError`: if others can write to `root` and it hasn't the sticky bit, since they could then replace any copy below it.
+    """
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     mode = stat.S_IMODE(root.stat().st_mode)
+    if mode & 0o022 and not mode & stat.S_ISVTX:
+        raise ValueError(
+            f"others can write to the staging root {root}, so they could replace a copy: "
+            f"set its sticky bit (chmod +t) or stage elsewhere"
+        )
     for made in [*reversed(folder.parents[: len(folder.relative_to(root).parts) - 1]), folder]:
         if not made.exists():
             made.mkdir(exist_ok=True)
@@ -211,8 +251,8 @@ def _make_folders(root: Path, folder: Path) -> int:
 
 
 def _protect(folder: Path, mode: int) -> None:
-    """Gives `folder` and every folder in it `mode` without group and other write bits, and every file in it `mode` without those or any execute bit."""
-    folders, files = mode & ~0o022, mode & 0o644
+    """Gives `folder` and every folder in it `mode` without group and other write bits or the sticky bit, which nobody else's writes need, and every file in it `mode` without those or any execute bit."""
+    folders, files = mode & ~0o022 & ~stat.S_ISVTX, mode & 0o644
     folder.chmod(folders)
     for made in folder.rglob("*"):
         made.chmod(folders if made.is_dir() else files)

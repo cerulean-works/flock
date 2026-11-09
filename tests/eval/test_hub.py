@@ -1,6 +1,7 @@
 import os
 import shutil
 import stat
+from pathlib import Path
 
 import datasets
 import lance
@@ -39,8 +40,15 @@ COUNTS = datasets.Features(
 
 @pytest.fixture(autouse=True)
 def bucket(tmp_path, monkeypatch):
-    """A local folder stands in for the org's bucket, so a copy of `repo` lives at `<tmp_path>/hub/eval/<repo>`."""
+    """A local folder stands in for the org's bucket, so a copy of `repo` lives at `<tmp_path>/hub/eval/<repo>`, and each sign-in is recorded instead of made."""
+    from flock.hub import s3
+
     monkeypatch.setattr(hub, "BUCKET", str(tmp_path / "hub"))
+    signed_in = []
+    monkeypatch.setattr(
+        s3, "get_process", lambda org, read_only: signed_in.append((org, read_only))
+    )
+    return signed_in
 
 
 def toy_splits() -> dict[tuple[str | None, str], datasets.Dataset]:
@@ -178,11 +186,9 @@ def test_hub_pull_takes_an_org_a_repo_and_a_commit(monkeypatch, tmp_path):
     from click.testing import CliRunner
 
     from flock.eval.cli import main
-    from flock.hub import s3
 
     pulled = []
-    monkeypatch.setattr(s3, "get_process", lambda org, read_only: pulled.append(org))
-    monkeypatch.setattr(hub, "pull", lambda org, repo, revision, root: pulled.append(repo) or root)
+    monkeypatch.setattr(hub, "pull", lambda org, repo, revision, root: pulled.append((org, repo)))
     runner = CliRunner()
 
     refs = (
@@ -190,6 +196,8 @@ def test_hub_pull_takes_an_org_a_repo_and_a_commit(monkeypatch, tmp_path):
         f"acme/{REPO}@{FIRST[:12]}",
         f"{REPO}@{FIRST}",
         f"acme//toy@{FIRST}",
+        f"acme/../toy@{FIRST}",
+        f"acme/cerulean/..@{FIRST}",
     )
     for ref in refs:
         result = runner.invoke(main, ["hub", "pull", ref, "--to", str(tmp_path)])
@@ -198,7 +206,7 @@ def test_hub_pull_takes_an_org_a_repo_and_a_commit(monkeypatch, tmp_path):
 
     result = runner.invoke(main, ["hub", "pull", f"acme/{REPO}@{FIRST}", "--to", str(tmp_path)])
     assert result.exit_code == 0
-    assert pulled == ["acme", REPO]
+    assert pulled == [("acme", REPO)]
 
     def refuse(org, repo, revision, root):
         raise ValueError("tag on another revision")
@@ -268,17 +276,23 @@ def test_a_staged_copy_is_as_readable_as_its_staging_root(tmp_path):
     hub.pull("acme", REPO, FIRST, tmp_path / "made")
     assert modes(tmp_path / "made") == [{0o700}, {0o700}, {0o600}]
 
-    # A group's root, setgid so new files keep its group: the folders between it and a copy take
-    # its mode, and the group reads the copy but can't change it, whatever the puller's umask.
+    # A root the group can write to without the sticky bit would let it replace a copy.
     root = tmp_path / "shared"
     root.mkdir()
     root.chmod(0o2770)
+    with pytest.raises(ValueError, match="set its sticky bit"):
+        hub.pull("acme", REPO, FIRST, root)
+
+    # A group's root, setgid so new files keep its group and sticky so only a copy's owner can
+    # move it: the folders between it and a copy take its mode, and the group reads the copy but
+    # can't change it, whatever the puller's umask.
+    root.chmod(0o3770)
     previous = os.umask(0o077)
     try:
         hub.pull("acme", REPO, FIRST, root)
     finally:
         os.umask(previous)
-    assert modes(root) == [{0o2770}, {0o2750}, {0o640}]
+    assert modes(root) == [{0o3770}, {0o2750}, {0o640}]
 
 
 def test_a_pull_keeps_a_copy_another_pull_staged_meanwhile(staged, monkeypatch):
@@ -400,3 +414,45 @@ def test_a_run_with_an_unstaged_dataset_fails_before_its_model_loads(tmp_path, m
     monkeypatch.setenv("FLOCK_EVAL_HUB", str(tmp_path))
     with pytest.raises(FileNotFoundError, match="allenai/ai2_arc@"):
         evaluate(EvalConfig(model="tiny@0", tasks=("arc_easy",)))
+
+
+def test_a_failed_rename_puts_the_staged_copy_back(tmp_path, monkeypatch, real_load):
+    splits = toy_splits()
+    uri = str(tmp_path / "hub" / "eval" / REPO)
+    root = tmp_path / "staged"
+    version = hub.write(uri, REPO, FIRST, {("qa", "test"): splits[("qa", "test")]})
+    lance.dataset(uri).tags.create(FIRST, version)
+    hub.pull("acme", REPO, FIRST, root)
+    version = hub.write(
+        uri, REPO, FIRST, {pair: splits[pair] for pair in (("qa", "test"), ("qa", "train"))}
+    )
+    lance.dataset(uri).tags.update(FIRST, version)
+
+    rename = Path.rename
+
+    def fail_from_partial(self, target):
+        if self.name.endswith(".partial"):
+            raise OSError("quota exceeded")
+        return rename(self, target)
+
+    with monkeypatch.context() as patched:
+        patched.setattr(Path, "rename", fail_from_partial)
+        with pytest.raises(OSError, match="quota exceeded"):
+            hub.pull("acme", REPO, FIRST, root)
+
+    # The earlier copy is back in place, and nothing is left beside it.
+    assert [path.name for path in (root / REPO).iterdir()] == [FIRST]
+    monkeypatch.setattr(Dataset, "load", real_load)
+    monkeypatch.setenv("FLOCK_EVAL_HUB", str(root))
+    assert Dataset(REPO, FIRST, "qa", "test").load() == list(splits[("qa", "test")])
+
+
+def test_a_pull_signs_in_to_its_org_and_stays_in_its_root(staged, bucket):
+    _, root, _ = staged
+    hub.pull("acme", REPO, FIRST, root)
+    assert bucket == [("acme", True)]
+
+    for repo in ("../toy", "cerulean/..", "cerulean/.hidden", "toy"):
+        with pytest.raises(ValueError, match="expected a repo OWNER/NAME"):
+            hub.pull("acme", repo, FIRST, root)
+    assert bucket == [("acme", True)]

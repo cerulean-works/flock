@@ -1,6 +1,7 @@
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
+from flock.eval.hub import Pair
 from flock.eval.metrics import scale
 from flock.eval.tasks.base import Dataset, MultipleChoiceTask
 from flock.eval.tasks.perplexity import PerplexityTask
@@ -26,9 +27,9 @@ def by_name[T: Task | Suite](items: Iterable[T]) -> dict[str, T]:
     return named
 
 
-def pins(tasks: Iterable[Task]) -> dict[tuple[str, str], set[tuple[str | None, str]]]:
+def pins(tasks: Iterable[Task]) -> dict[tuple[str, str], set[Pair]]:
     """The (subset, split) pairs `tasks` read, scored or few-shot, by pinned `(repo, revision)`."""
-    pinned: dict[tuple[str, str], set[tuple[str | None, str]]] = {}
+    pinned: dict[tuple[str, str], set[Pair]] = {}
     for task in tasks:
         dataset = task.dataset
         pairs = pinned.setdefault((dataset.repo, dataset.revision), set())
