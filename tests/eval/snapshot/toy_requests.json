@@ -514,6 +514,95 @@
       }
     ]
   },
+  "toy:simplified": {
+    "hash": "4d98079b77faa5b78cf5fb61ed87fc83221513ca6dcc60973b023f8559811b8f",
+    "requests": [
+      {
+        "context": "以下是关于常识的单项选择题，请直接给出正确答案的选项。\n\n问题：臺灣最高的山是哪一座？\n答案：玉山\n\n问题：Which gas do plants take in?\n答案：carbon dioxide\n\n问题：What do bees make?\n答案：",
+        "continuation": "honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "以下是关于常识的单项选择题，请直接给出正确答案的选项。\n\n问题：臺灣最高的山是哪一座？\n答案：玉山\n\n问题：Which gas do plants take in?\n答案：carbon dioxide\n\n问题：What do bees make?\n答案：",
+        "continuation": "milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "以下是关于常识的单项选择题，请直接给出正确答案的选项。\n\n问题：臺灣最高的山是哪一座？\n答案：玉山\n\n问题：Which gas do plants take in?\n答案：carbon dioxide\n\n问题：What do bees make?\n答案：",
+        "continuation": "silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "以下是关于常识的单项选择题，请直接给出正确答案的选项。\n\n问题：臺灣最高的山是哪一座？\n答案：玉山\n\n问题：Which gas do plants take in?\n答案：carbon dioxide\n\n问题：哪一個是水果？\n答案：",
+        "continuation": "石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "以下是关于常识的单项选择题，请直接给出正确答案的选项。\n\n问题：臺灣最高的山是哪一座？\n答案：玉山\n\n问题：Which gas do plants take in?\n答案：carbon dioxide\n\n问题：哪一個是水果？\n答案：",
+        "continuation": "蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "以下是关于常识的单项选择题，请直接给出正确答案的选项。\n\n问题：臺灣最高的山是哪一座？\n答案：玉山\n\n问题：Which gas do plants take in?\n答案：carbon dioxide\n\n问题：哪一個是水果？\n答案：",
+        "continuation": "椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "以下是关于常识的单项选择题，请直接给出正确答案的选项。\n\n问题：臺灣最高的山是哪一座？\n答案：玉山\n\n问题：Which gas do plants take in?\n答案：carbon dioxide\n\n问题：哪一個是水果？\n答案：",
+        "continuation": "雲",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "答案：",
+        "continuation": "honey",
+        "doc": "q-1",
+        "gold": true
+      },
+      {
+        "context": "答案：",
+        "continuation": "milk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "答案：",
+        "continuation": "silk",
+        "doc": "q-1",
+        "gold": false
+      },
+      {
+        "context": "答案：",
+        "continuation": "石頭",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "答案：",
+        "continuation": "蘋果",
+        "doc": "q-2",
+        "gold": true
+      },
+      {
+        "context": "答案：",
+        "continuation": "椅子",
+        "doc": "q-2",
+        "gold": false
+      },
+      {
+        "context": "答案：",
+        "continuation": "雲",
+        "doc": "q-2",
+        "gold": false
+      }
+    ]
+  },
   "toy:zero_shot": {
     "hash": "5aed28bb98e281c6156753b00cfd65646b37a55377980f94d9e8293dc008cf68",
     "requests": [
