@@ -338,9 +338,11 @@ class Trainer:
                 continue
 
             if step % self.save_steps == 0 or step == self.total_steps:
-                self.save_model(step)
+                self.save_model()
 
-    def save_model(self, step: int):
+    def save_model(self):
+        step = int(self.state.step.item())
+
         self.logger.info(f"Saving model at step {step}")
         save_path = self.output_dir.joinpath(f"checkpoint-{step}")
         if save_path.exists() and not self.overwrite_output_dir:
