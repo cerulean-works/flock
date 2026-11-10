@@ -1,6 +1,8 @@
 import copy
 import json
-from dataclasses import dataclass, field
+import os
+import random
+from dataclasses import dataclass, field, replace
 from typing import cast
 
 import lance
@@ -8,12 +10,14 @@ import pyarrow as pa
 import pytest
 import torch
 from lance.torch.data import SafeLanceDataset
+from pydantic import ValidationError
+from tokenizers.models import WordLevel
 from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 from flock.training.core.data_utils import LanceBatchCollator
-from flock.training.core.lr_scheduler import CosineConfig
+from flock.training.core.lr_scheduler import CosineConfig, WSDConfig
 from flock.training.core.models import BaseModel
 from flock.training.core.models.olmo2 import Olmo2
 from flock.training.core.optimization import AdamWConfig, MuonConfig
@@ -39,9 +43,8 @@ class RecordingRun:
 def trainer_factory(config, tokenizer, monkeypatch, tmp_path):
     # These tests must remain on CPU even when invoked on a developer GPU machine.
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    monkeypatch.setattr(torch.mps, "is_available", lambda: False)
 
-    def make(dataset=None, logging_steps=1, num_workers=1, prefetch_factor=1):
+    def make(dataset=None, logging_steps=1, num_workers=1, prefetch_factor=1, **config_overrides):
         run = RecordingRun()
         module_logs = []
         monkeypatch.setattr("flock.training.core.trainer.wandb.init", lambda **kwargs: run)
@@ -57,19 +60,22 @@ def trainer_factory(config, tokenizer, monkeypatch, tmp_path):
                 {"text": "d a"},
             ]
         trainer = Trainer(
-            config=TrainerConfig(
-                run_name="test-run",
-                input_column="text",
-                batch_size=2,
-                optimizer_config=AdamWConfig(lr=0.01, betas=(0.8, 0.9)),
-                lr_scheduler_config=CosineConfig(warmup_steps=0, min_lr_ratio=0.1),
-                dataloader_num_workers=num_workers,
-                dataloader_prefetch_factor=prefetch_factor,
-                wandb_project="offline-test",
-                wandb_mode="disabled",
-                output_dir=str(tmp_path / "checkpoints"),
-                max_norm=0.01,
-                logging_steps=logging_steps,
+            config=replace(
+                TrainerConfig(
+                    run_name="test-run",
+                    input_column="text",
+                    batch_size=2,
+                    optimizer_config=AdamWConfig(lr=0.01, betas=(0.8, 0.9)),
+                    lr_scheduler_config=CosineConfig(warmup_steps=0, min_lr_ratio=0.1),
+                    dataloader_num_workers=num_workers,
+                    dataloader_prefetch_factor=prefetch_factor,
+                    wandb_project="offline-test",
+                    wandb_mode="disabled",
+                    output_dir=str(tmp_path / "checkpoints"),
+                    max_norm=0.01,
+                    logging_steps=logging_steps,
+                ),
+                **config_overrides,
             ),
             model=Olmo2(config),
             tokenizer=tokenizer,
@@ -93,11 +99,611 @@ def test_trainer_initializes_schedule_and_metric_step(trainer_factory):
 
 
 def test_local_checkpoint_records_run_identity(trainer_factory):
-    trainer, _, _ = trainer_factory()
-    trainer.save_model(7)
-    metadata = json.loads((trainer.output_dir / "checkpoint-7" / "flock.json").read_text())
+    trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
+    trainer.train()
+    trainer.save_model()
+    metadata = json.loads((trainer.output_dir / "checkpoint-3" / "flock.json").read_text())
     assert metadata["run"] == "flock/pretrain/run123"
-    assert metadata["step"] == 7
+    assert metadata["step"] == trainer.state.step.item() == 3
+
+
+def assert_nested_equal(actual, expected):
+    if isinstance(expected, torch.Tensor):
+        torch.testing.assert_close(actual, expected, atol=0, rtol=0)
+    elif isinstance(expected, dict):
+        assert actual.keys() == expected.keys()
+        for key in expected:
+            assert_nested_equal(actual[key], expected[key])
+    elif isinstance(expected, (list, tuple)):
+        assert type(actual) is type(expected)
+        assert len(actual) == len(expected)
+        for left, right in zip(actual, expected, strict=True):
+            assert_nested_equal(left, right)
+    else:
+        assert actual == expected
+
+
+@pytest.fixture
+def trained_trainer(trainer_factory):
+    trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
+    trainer.train()
+    return trainer
+
+
+@pytest.fixture
+def simulated_cuda_rng(monkeypatch):
+    """Exercise CUDA RNG save/restore routing with independent CPU generators.
+
+    These tests never initialize CUDA and do not establish CUDA kernel determinism.
+    """
+
+    def install(count):
+        generators = [torch.Generator().manual_seed(100 + index) for index in range(count)]
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: len(generators))
+        monkeypatch.setattr(
+            torch.cuda, "get_rng_state_all", lambda: [g.get_state() for g in generators]
+        )
+        # Keep the real set_rng_state_all loop, but restore into CPU generators.
+        monkeypatch.setattr(
+            "torch.cuda.random.set_rng_state",
+            lambda state, device: generators[device].set_state(state),
+        )
+        return generators
+
+    return install
+
+
+@pytest.mark.parametrize("resume_latest", [True, False])
+@pytest.mark.parametrize("split_step", [0, 1, 2, 3])
+@pytest.mark.parametrize(
+    "schedule",
+    [
+        CosineConfig(warmup_steps=1, min_lr_ratio=0.1),
+        WSDConfig(warmup_steps=1, decay_steps=1, min_lr_ratio=0.1),
+    ],
+    ids=["cosine", "wsd"],
+)
+def test_checkpoint_resume_matches_uninterrupted_training(
+    trainer_factory, monkeypatch, tmp_path, resume_latest, split_step, schedule
+):
+    def make(output_dir, **overrides):
+        trainer, run, _ = trainer_factory(
+            num_workers=0,
+            prefetch_factor=None,
+            logging_steps=2,
+            output_dir=str(output_dir),
+            save_steps=1,
+            lr_scheduler_config=schedule,
+            **overrides,
+        )
+        forward = trainer.model._forward
+        seen_batches = []
+
+        def stochastic_forward(*args):
+            # Exercise restoration of both Python and torch RNGs, including the
+            # extra DataLoader iterator created when a process resumes.
+            seen_batches.append(args[0].detach().clone())
+            return F.dropout(forward(*args), p=0.25, training=True) * (0.8 + random.random())
+
+        monkeypatch.setattr(trainer.model, "_forward", stochastic_forward)
+        return trainer, run, seen_batches
+
+    reference, expected_run, expected_batches = make(tmp_path / "reference")
+    reference.train()
+    expected_state = copy.deepcopy(reference.get_trainer_state())
+    expected_random = (random.random(), torch.rand(4))
+
+    interrupted, first_run, first_batches = make(tmp_path / "resumed")
+    save = interrupted.save_model
+
+    def save_and_interrupt():
+        save()
+        if interrupted.state.step.item() == split_step:
+            raise InterruptedError("simulate process exit after a completed checkpoint")
+
+    if split_step == 0:
+        interrupted._set_seed()
+        interrupted.save_model()
+    else:
+        monkeypatch.setattr(interrupted, "save_model", save_and_interrupt)
+        with pytest.raises(InterruptedError):
+            interrupted.train()
+
+    resumed, resumed_run, resumed_batches = make(
+        interrupted.output_dir, optimizer_config=AdamWConfig(lr=0.7, betas=(0.5, 0.6))
+    )
+    resumed.save_steps = 2  # Cadence must use absolute steps after the restart.
+    with torch.no_grad():
+        for parameter in resumed.model.parameters():
+            parameter.add_(10)  # The loader must restore weights, not only optimizer state.
+    random.seed(1234)
+    torch.manual_seed(5678)
+    checkpoint = True if resume_latest else interrupted.output_dir / f"checkpoint-{split_step}"
+    resumed.train(resume_from_checkpoint=checkpoint)
+
+    assert_nested_equal(resumed.model.state_dict(), reference.model.state_dict())
+    assert_nested_equal(resumed.get_trainer_state(), expected_state)
+    assert first_run.metrics + resumed_run.metrics == expected_run.metrics
+    assert_nested_equal(first_batches + resumed_batches, expected_batches)
+    assert random.random() == expected_random[0]
+    torch.testing.assert_close(torch.rand(4), expected_random[1], atol=0, rtol=0)
+    expected_steps = list(range(1, split_step + 1)) if split_step else [0]
+    expected_steps += [step for step in (2, 3) if step > split_step]
+    assert [path.name for path in resumed._checkpoints()] == [
+        f"checkpoint-{step}" for step in expected_steps
+    ]
+    # Resuming an already completed run must perform no further updates or saves.
+    resumed.train(resume_from_checkpoint=True)
+    assert resumed.lr_scheduler.completed_steps == 3
+    assert first_run.metrics + resumed_run.metrics == expected_run.metrics
+
+
+def test_checkpoint_retention_removes_nested_state_and_orders_by_step(trainer_factory):
+    trainer, _, _ = trainer_factory(
+        dataset=[{"text": "a b c"}] * 20,
+        num_workers=0,
+        prefetch_factor=None,
+        save_steps=1,
+        save_total_limit=2,
+        overwrite_output_dir=True,
+    )
+    unrelated = trainer.output_dir / "checkpoint-not-a-step"
+    unrelated.mkdir()
+    trainer.train()
+    assert [path.name for path in trainer._checkpoints()] == ["checkpoint-9", "checkpoint-10"]
+    assert unrelated.is_dir()
+    assert (
+        trainer.output_dir / "checkpoint-10/training_state/optimizer_state_dict.safetensors"
+    ).is_file()
+
+
+def test_checkpoint_upload_uses_complete_local_folder(trainer_factory, monkeypatch):
+    trainer, run, _ = trainer_factory(save_to_hub_repo="cerulean/test-model")
+    uploads = []
+
+    def upload(folder, name, **options):
+        assert (folder / "model.safetensors").is_file()
+        assert (folder / "training_state/python_rng_state.safetensors").is_file()
+        uploads.append((folder, name, options))
+
+    monkeypatch.setattr("flock.training.core.trainer.save_to_hub", upload)
+    trainer.save_model()
+    assert uploads == [
+        (
+            trainer.output_dir / "checkpoint-0",
+            "cerulean/test-model",
+            {"run": run, "step": 0, "tags": ["checkpoint-0"]},
+        )
+    ]
+    assert uploads[0][0].is_dir()
+
+
+def test_failed_checkpoint_write_does_not_publish_or_prune(trainer_factory, monkeypatch):
+    trainer, _, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        save_steps=1,
+        save_total_limit=1,
+        overwrite_output_dir=True,
+    )
+    trainer.save_model()
+
+    def fail_write(model, folder, **kwargs):
+        folder.mkdir()
+        (folder / "flock.json").write_text("partial")
+        raise OSError("disk full")
+
+    monkeypatch.setattr("flock.training.core.trainer.write_model", fail_write)
+    with pytest.raises(OSError, match="disk full"):
+        trainer.train()
+    assert [path.name for path in trainer.output_dir.iterdir()] == ["checkpoint-0"]
+
+
+def test_resume_rejects_missing_state_and_incompatible_data(trainer_factory):
+    trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
+    with pytest.raises(FileNotFoundError, match="No checkpoints"):
+        trainer.train(resume_from_checkpoint=True)
+    trainer.save_model()
+    checkpoint = trainer.output_dir / "checkpoint-0"
+    trainer.seed += 1
+    with pytest.raises(ValueError, match="seed"):
+        trainer.load_checkpoint(checkpoint)
+    trainer.seed -= 1
+    for path in (checkpoint / "training_state").iterdir():
+        path.unlink()
+    with pytest.raises(ValueError, match="no training state"):
+        trainer.load_checkpoint(checkpoint)
+
+
+def test_existing_output_requires_resume_or_overwrite(trainer_factory):
+    trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
+    trainer.save_model()
+    with pytest.raises(RuntimeError, match="Resume"):
+        trainer.train()
+    with pytest.raises(FileExistsError, match="already exists"):
+        trainer.save_model()
+    trainer.overwrite_output_dir = True
+    trainer.save_model()
+    trainer.load_checkpoint(trainer.output_dir / "checkpoint-0")
+
+
+@pytest.mark.parametrize(
+    "section, field, value",
+    [
+        ("data_config", "batch_size", "2"),
+        ("trainer_state_dict", "step", torch.tensor(0.5)),
+        ("trainer_state_dict", "step", torch.tensor([0])),
+        ("trainer_state_dict", "step", torch.tensor(-1)),
+        ("lr_scheduler_state_dict", "completed_steps", "0"),
+        ("lr_scheduler_state_dict", "completed_steps", 1),
+        ("lr_scheduler_state_dict", "total_steps", 4),
+    ],
+)
+def test_checkpoint_schema_rejects_invalid_state_without_mutating_trainer(
+    trainer_factory, section, field, value
+):
+    trainer, _, _ = trainer_factory()
+    expected = copy.deepcopy(trainer.get_trainer_state())
+    invalid = copy.deepcopy(expected)
+    invalid[section][field] = value
+    with pytest.raises(ValidationError):
+        trainer.load_trainer_state(invalid)
+    assert_nested_equal(trainer.get_trainer_state(), expected)
+
+
+def test_checkpoint_schema_reports_missing_fields(trainer_factory):
+    trainer, _, _ = trainer_factory()
+    invalid = trainer.get_trainer_state()
+    del invalid["trainer_state_dict"]["step"]
+    with pytest.raises(ValidationError, match="trainer_state_dict.step"):
+        trainer.load_trainer_state(invalid)
+
+
+@pytest.mark.parametrize("shard_size", [2048, 5 * 2**30])
+def test_checkpoint_preserves_tied_parameters_and_optimizer_references(
+    trainer_factory, monkeypatch, shard_size
+):
+    from flock.hub.models.files import write_model
+
+    trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None, save_steps=3)
+    trainer.model.lm_head.weight = trainer.model.model.embed_tokens.weight
+    trainer.optimizer = trainer._get_optimizer(AdamWConfig(lr=0.01, betas=(0.8, 0.9)))
+    trainer.lr_scheduler = trainer._get_lr_scheduler(
+        CosineConfig(warmup_steps=0, min_lr_ratio=0.1), trainer.total_steps
+    )
+
+    def write_shards(model, folder, **options):
+        options["shard_size"] = shard_size
+        write_model(model, folder, **options)
+
+    monkeypatch.setattr("flock.training.core.trainer.write_model", write_shards)
+    trainer.train()
+    checkpoint = trainer.output_dir / "checkpoint-3"
+    assert (checkpoint / "model.safetensors.index.json").is_file() == (shard_size == 2048)
+    weights = copy.deepcopy(trainer.model.state_dict())
+    state = copy.deepcopy(trainer.get_trainer_state())
+    parameters = [id(p) for p in trainer.model.parameters()]
+    with torch.no_grad():
+        for parameter in trainer.model.parameters():
+            parameter.zero_()
+    trainer.optimizer.state.clear()
+    trainer.load_checkpoint(checkpoint)
+    assert trainer.model.lm_head.weight is trainer.model.model.embed_tokens.weight
+    assert [id(p) for p in trainer.model.parameters()] == parameters
+    assert [id(p) for p in trainer.optimizer.param_groups[0]["params"]] == parameters
+    assert_nested_equal(trainer.model.state_dict(), weights)
+    assert_nested_equal(trainer.get_trainer_state(), state)
+
+
+@pytest.mark.parametrize("corruption", ["missing", "unexpected"])
+def test_sharded_checkpoint_rejects_missing_or_unexpected_weights(
+    trainer_factory, monkeypatch, corruption
+):
+    from safetensors.torch import load_file, save_file
+
+    from flock.hub.models.files import weight_files, write_model
+
+    trainer, _, _ = trainer_factory()
+
+    def write_shards(model, folder, **options):
+        options["shard_size"] = 2048
+        write_model(model, folder, **options)
+
+    monkeypatch.setattr("flock.training.core.trainer.write_model", write_shards)
+    trainer.save_model()
+    checkpoint = trainer.output_dir / "checkpoint-0"
+    shard = weight_files(checkpoint)[0]
+    tensors = load_file(shard)
+    if corruption == "missing":
+        key = next(iter(tensors))
+        del tensors[key]
+    else:
+        key = "unknown.weight"
+        tensors[key] = torch.zeros(1)
+    save_file(tensors, shard)
+    with pytest.raises(RuntimeError, match=key):
+        trainer.load_checkpoint(checkpoint)
+
+
+def test_saved_checkpoints_remain_independent_of_later_updates(
+    trainer_factory, monkeypatch, tmp_path
+):
+    trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None, save_steps=1)
+    snapshots = {}
+    save = trainer.save_model
+
+    def save_and_record():
+        save()
+        snapshots[int(trainer.state.step.item())] = (
+            copy.deepcopy(trainer.model.state_dict()),
+            copy.deepcopy(trainer.get_trainer_state()),
+        )
+
+    monkeypatch.setattr(trainer, "save_model", save_and_record)
+    trainer.train()
+    with torch.no_grad():
+        for parameter in trainer.model.parameters():
+            parameter.zero_()
+    trainer.state.reset_global()
+    trainer.optimizer.state.clear()
+
+    restored, _, _ = trainer_factory(output_dir=str(tmp_path / "restored"))
+    for step, (weights, state) in snapshots.items():
+        restored.load_checkpoint(trainer.output_dir / f"checkpoint-{step}")
+        assert_nested_equal(restored.model.state_dict(), weights)
+        assert_nested_equal(restored.get_trainer_state(), state)
+
+
+def test_loading_replaces_existing_optimizer_and_schedule_state(
+    trained_trainer, trainer_factory, tmp_path
+):
+    source = trained_trainer
+    source.save_model()
+    weights = copy.deepcopy(source.model.state_dict())
+    state = copy.deepcopy(source.get_trainer_state())
+    target, _, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        output_dir=str(tmp_path / "target"),
+        optimizer_config=AdamWConfig(lr=0.3, betas=(0.7, 0.99)),
+        lr_scheduler_config=WSDConfig(warmup_steps=1, decay_steps=1),
+    )
+    target.train()
+    parameter_ids = [id(p) for p in target.model.parameters()]
+    target.load_checkpoint(source.output_dir / "checkpoint-3")
+    assert [id(p) for p in target.model.parameters()] == parameter_ids
+    assert_nested_equal(target.model.state_dict(), weights)
+    assert_nested_equal(target.get_trainer_state(), state)
+
+
+@pytest.mark.parametrize("gpu_count", [1, 2])
+def test_checkpoint_restores_cpu_python_and_cuda_rng_streams(
+    trained_trainer, simulated_cuda_rng, gpu_count
+):
+    trainer = trained_trainer
+    generators = simulated_cuda_rng(gpu_count)
+    trainer.save_model()
+    expected_python = [random.random() for _ in range(4)]
+    expected_cpu = torch.rand(5)
+    expected_cuda = [torch.rand(5, generator=g) for g in generators]
+    random.seed(999)
+    torch.random.default_generator.manual_seed(777)
+    for generator in generators:
+        generator.manual_seed(555)
+
+    trainer.load_checkpoint(trainer.output_dir / "checkpoint-3")
+    assert [random.random() for _ in range(4)] == expected_python
+    torch.testing.assert_close(torch.rand(5), expected_cpu, atol=0, rtol=0)
+    for generator, expected in zip(generators, expected_cuda, strict=True):
+        torch.testing.assert_close(torch.rand(5, generator=generator), expected, atol=0, rtol=0)
+
+
+def test_cpu_checkpoint_never_uses_cuda_rng_apis(trained_trainer, monkeypatch):
+    def unexpected_cuda_call(*args, **kwargs):
+        pytest.fail("a CPU checkpoint must not call CUDA RNG APIs")
+
+    for name in ("get_rng_state_all", "set_rng_state_all"):
+        monkeypatch.setattr(torch.cuda, name, unexpected_cuda_call)
+    trainer = trained_trainer
+    trainer.save_model()
+    trainer.load_checkpoint(trainer.output_dir / "checkpoint-3")
+    assert trainer.get_trainer_state()["cuda_rng_state"] is None
+
+
+def test_resume_latest_uses_step_not_mtime_and_ignores_staging(trainer_factory):
+    trainer, _, _ = trainer_factory(
+        dataset=[{"text": "a b c"}] * 20,
+        num_workers=0,
+        prefetch_factor=None,
+        save_steps=1,
+    )
+    trainer.train()
+    # Step 9 looks newer on disk and sorts after 10 lexicographically.
+    for path in trainer._checkpoints():
+        os.utime(path, (100, 100))
+    os.utime(trainer.output_dir / "checkpoint-9", (200, 200))
+    (trainer.output_dir / ".checkpoint-incomplete").mkdir()
+    (trainer.output_dir / "checkpoint-not-a-step").mkdir()
+    expected = copy.deepcopy(trainer.model.state_dict())
+    with torch.no_grad():
+        for parameter in trainer.model.parameters():
+            parameter.zero_()
+    trainer.train(resume_from_checkpoint=True)
+    assert trainer.state.step.item() == trainer.lr_scheduler.completed_steps == 10
+    assert_nested_equal(trainer.model.state_dict(), expected)
+
+
+def test_failed_overwrite_keeps_original_checkpoint(trained_trainer, monkeypatch):
+    trainer = trained_trainer
+    trainer.save_model()
+    checkpoint = trainer.output_dir / "checkpoint-3"
+    original_files = {
+        p.relative_to(checkpoint): p.read_bytes() for p in checkpoint.rglob("*") if p.is_file()
+    }
+    trainer.overwrite_output_dir = True
+    with torch.no_grad():
+        for parameter in trainer.model.parameters():
+            parameter.add_(1)
+
+    def fail_write(model, folder, **options):
+        folder.mkdir()
+        (folder / "model.safetensors").write_bytes(b"incomplete")
+        raise OSError("disk full")
+
+    monkeypatch.setattr("flock.training.core.trainer.write_model", fail_write)
+    with pytest.raises(OSError, match="disk full"):
+        trainer.save_model()
+    assert {
+        p.relative_to(checkpoint): p.read_bytes() for p in checkpoint.rglob("*") if p.is_file()
+    } == original_files
+    assert not list(trainer.output_dir.glob(".checkpoint-*"))
+
+
+def test_failed_upload_keeps_complete_checkpoint_and_previous_save(
+    trainer_factory, monkeypatch, tmp_path
+):
+    trainer, _, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        save_steps=1,
+        save_total_limit=1,
+        save_to_hub_repo="cerulean/test-model",
+    )
+
+    def upload(folder, name, **options):
+        if options["step"] == 2:
+            raise OSError("upload interrupted")
+
+    monkeypatch.setattr("flock.training.core.trainer.save_to_hub", upload)
+    with pytest.raises(OSError, match="upload interrupted"):
+        trainer.train()
+    assert [p.name for p in trainer._checkpoints()] == ["checkpoint-1", "checkpoint-2"]
+    expected = copy.deepcopy(trainer.get_trainer_state())
+    restored, _, _ = trainer_factory(output_dir=str(tmp_path / "restored"))
+    restored.load_checkpoint(trainer.output_dir / "checkpoint-2")
+    assert_nested_equal(restored.model.state_dict(), trainer.model.state_dict())
+    assert_nested_equal(restored.get_trainer_state(), expected)
+
+
+@pytest.mark.parametrize("changed_field", ["dataset_size", "batch_size", "seed", "input_column"])
+def test_incompatible_data_is_rejected_before_model_or_rng_changes(
+    trained_trainer, trainer_factory, tmp_path, changed_field
+):
+    source = trained_trainer
+    source.save_model()
+    options = {"output_dir": str(tmp_path / "target")}
+    if changed_field == "dataset_size":
+        options["dataset"] = [{"text": "a b c"}] * 6
+    else:
+        options[changed_field] = {"batch_size": 1, "seed": 99, "input_column": "other"}[
+            changed_field
+        ]
+    target, _, _ = trainer_factory(**options)
+    with torch.no_grad():
+        for parameter in target.model.parameters():
+            parameter.add_(1)
+    weights = copy.deepcopy(target.model.state_dict())
+    state = copy.deepcopy(target.get_trainer_state())
+    with pytest.raises(ValidationError):
+        target.load_checkpoint(source.output_dir / "checkpoint-3")
+    assert_nested_equal(target.model.state_dict(), weights)
+    assert_nested_equal(target.get_trainer_state(), state)
+
+
+@pytest.mark.xfail(
+    strict=True, raises=AssertionError, reason="Dataset/tokenizer identity is not checkpointed yet"
+)
+@pytest.mark.parametrize("changed_identity", ["dataset_uri", "dataset_version", "tokenizer"])
+def test_resume_rejects_changed_dataset_or_tokenizer_identity(
+    trainer_factory, tmp_path, changed_identity
+):
+    original_path = tmp_path / "original.lance"
+    changed_path = tmp_path / "changed.lance"
+    lance.write_dataset(pa.table({"text": ["a b c"] * 5}), str(original_path))
+    lance.write_dataset(pa.table({"text": ["b c d"] * 5}), str(original_path), mode="overwrite")
+    lance.write_dataset(pa.table({"text": ["d c b"] * 5}), str(changed_path))
+    source, _, _ = trainer_factory(
+        dataset=SafeLanceDataset(str(original_path), dataset_options={"version": 1}),
+        num_workers=0,
+        prefetch_factor=None,
+    )
+    source.train()
+    source.save_model()
+    target, _, _ = trainer_factory(
+        dataset=SafeLanceDataset(
+            str(changed_path if changed_identity == "dataset_uri" else original_path),
+            dataset_options={"version": 2 if changed_identity == "dataset_version" else 1},
+        ),
+        output_dir=str(tmp_path / "target"),
+    )
+    if changed_identity == "tokenizer":
+        target.tokenizer = copy.deepcopy(target.tokenizer)
+        vocabulary = target.tokenizer.get_vocab()
+        vocabulary["a"], vocabulary["b"] = vocabulary["b"], vocabulary["a"]
+        target.tokenizer.backend_tokenizer.model = WordLevel(vocabulary, unk_token="[UNK]")
+    try:
+        target.load_checkpoint(source.output_dir / "checkpoint-3")
+    except ValueError:
+        return
+    raise AssertionError(f"Checkpoint accepted a changed {changed_identity}")
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="Autocast dtype and clipping threshold are not checkpointed yet",
+)
+@pytest.mark.parametrize(
+    "overrides", [{"model_dtype": torch.float32}, {"max_norm": 2.0}], ids=["dtype", "clipping"]
+)
+def test_resume_rejects_changed_training_settings(
+    trained_trainer, trainer_factory, tmp_path, overrides
+):
+    source = trained_trainer
+    source.save_model()
+    target, _, _ = trainer_factory(output_dir=str(tmp_path / "target"), **overrides)
+    try:
+        target.load_checkpoint(source.output_dir / "checkpoint-3")
+    except ValueError:
+        return
+    raise AssertionError("Checkpoint accepted changed training settings")
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=ValidationError,
+    reason="Repeated train resets counters but retains optimizer/scheduler progress",
+)
+def test_repeated_training_rejects_reuse_or_leaves_a_loadable_checkpoint(trained_trainer):
+    trainer = trained_trainer
+    weights = copy.deepcopy(trainer.model.state_dict())
+    state = copy.deepcopy(trainer.get_trainer_state())
+    try:
+        trainer.train()
+    except RuntimeError:
+        assert_nested_equal(trainer.model.state_dict(), weights)
+        assert_nested_equal(trainer.get_trainer_state(), state)
+        return
+    trainer.save_model()
+    trainer.load_checkpoint(trainer.output_dir / f"checkpoint-{int(trainer.state.step.item())}")
+
+
+@pytest.mark.xfail(
+    strict=True, raises=IndexError, reason="CUDA RNG restore assumes unchanged visible device count"
+)
+def test_resume_handles_cuda_topology_change_cleanly(trained_trainer, simulated_cuda_rng):
+    trainer = trained_trainer
+    generators = simulated_cuda_rng(2)
+    trainer.save_model()
+    expected = torch.rand(5, generator=generators[0])
+    del generators[1:]
+    generators[0].manual_seed(999)
+    try:
+        trainer.load_checkpoint(trainer.output_dir / "checkpoint-3")
+    except ValueError:
+        return  # Explicitly rejecting a topology change is also a supported policy.
+    torch.testing.assert_close(torch.rand(5, generator=generators[0]), expected, atol=0, rtol=0)
 
 
 def test_adamw_forwards_configuration_and_matches_torch_updates():
