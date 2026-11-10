@@ -1,10 +1,11 @@
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from math import ceil
-from typing import Any, Iterator
+from typing import Any
 
 import torch
 from lance.torch.data import SafeLanceDataset
-from torch.utils.data import Dataset, Sampler
+from torch.utils.data import Sampler
 from transformers import TokenizersBackend
 from typing_extensions import TypedDict
 
