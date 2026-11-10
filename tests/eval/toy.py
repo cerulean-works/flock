@@ -1,6 +1,7 @@
 """Toy dataset rows and toy tasks in ARC's and Paloma's row formats, read by every eval test instead of a download, and toy results built by hand."""
 
 import dataclasses
+import functools
 from typing import Any
 
 from flock.eval.provenance import Provenance
@@ -8,6 +9,7 @@ from flock.eval.results import TaskResult, Truncation
 from flock.eval.tasks import (
     CHINESE_ANSWER_PREFIX,
     CHINESE_QUESTION_PREFIX,
+    SIMPLIFIED_QUESTION_PREFIX,
     Dataset,
     Fewshot,
     GoldOnlyTask,
@@ -87,14 +89,14 @@ ROWS = {
 }
 
 
-def chinese_doc(row: dict[str, Any]) -> MCDoc:
-    """A toy row in the Traditional Chinese cloze format, with no space before the answer, as TMMLU+ renders it."""
+def chinese_doc(row: dict[str, Any], question_prefix: str = CHINESE_QUESTION_PREFIX) -> MCDoc:
+    """A toy row in the Traditional Chinese cloze format, with no space before the answer, as TMMLU+ renders it, or with another question prefix."""
     return MCDoc(
         id=row["id"],
         choices=cloze(
             row["question"],
             row["choices"]["text"],
-            question_prefix=CHINESE_QUESTION_PREFIX,
+            question_prefix=question_prefix,
             answer_prefix=CHINESE_ANSWER_PREFIX,
             separator="",
         ),
@@ -153,6 +155,14 @@ PROMPT_PATHS = (
         name="toy:chinese",
         to_doc=chinese_doc,
         description="以下是關於常識考試單選題，請選出正確的答案。\n\n",
+        unconditional_context=CHINESE_ANSWER_PREFIX,
+    ),
+    # The Simplified prefix of C-Eval and CMMLU, the same format otherwise.
+    dataclasses.replace(
+        TASK,
+        name="toy:simplified",
+        to_doc=functools.partial(chinese_doc, question_prefix=SIMPLIFIED_QUESTION_PREFIX),
+        description="以下是关于常识的单项选择题，请直接给出正确答案的选项。\n\n",
         unconditional_context=CHINESE_ANSWER_PREFIX,
     ),
     # One choice per doc and no unconditional requests, as math, code and LAMBADA are scored.

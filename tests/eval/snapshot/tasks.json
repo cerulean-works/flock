@@ -112,6 +112,678 @@
       "metric": "bpb",
       "scored": true
     },
+    "ceval": {
+      "members": [
+        "ceval_advanced_mathematics",
+        "ceval_college_chemistry",
+        "ceval_college_physics",
+        "ceval_college_programming",
+        "ceval_computer_architecture",
+        "ceval_computer_network",
+        "ceval_discrete_mathematics",
+        "ceval_electrical_engineer",
+        "ceval_high_school_biology",
+        "ceval_high_school_chemistry",
+        "ceval_high_school_mathematics",
+        "ceval_high_school_physics",
+        "ceval_metrology_engineer",
+        "ceval_middle_school_biology",
+        "ceval_middle_school_chemistry",
+        "ceval_middle_school_mathematics",
+        "ceval_middle_school_physics",
+        "ceval_operating_system",
+        "ceval_probability_and_statistics",
+        "ceval_veterinary_medicine",
+        "ceval_business_administration",
+        "ceval_college_economics",
+        "ceval_education_science",
+        "ceval_high_school_geography",
+        "ceval_high_school_politics",
+        "ceval_mao_zedong_thought",
+        "ceval_marxism",
+        "ceval_middle_school_geography",
+        "ceval_middle_school_politics",
+        "ceval_teacher_qualification",
+        "ceval_art_studies",
+        "ceval_chinese_language_and_literature",
+        "ceval_high_school_chinese",
+        "ceval_high_school_history",
+        "ceval_ideological_and_moral_cultivation",
+        "ceval_law",
+        "ceval_legal_professional",
+        "ceval_logic",
+        "ceval_middle_school_history",
+        "ceval_modern_chinese_history",
+        "ceval_professional_tour_guide",
+        "ceval_accountant",
+        "ceval_basic_medicine",
+        "ceval_civil_servant",
+        "ceval_clinical_medicine",
+        "ceval_environmental_impact_assessment_engineer",
+        "ceval_fire_engineer",
+        "ceval_physician",
+        "ceval_plant_protection",
+        "ceval_sports_science",
+        "ceval_tax_accountant",
+        "ceval_urban_and_rural_planner"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "ceval:all": {
+      "members": [
+        "ceval",
+        "ceval:stem",
+        "ceval:social_science",
+        "ceval:humanities",
+        "ceval:other",
+        "ceval:bpb",
+        "ceval:stem:bpb",
+        "ceval:social_science:bpb",
+        "ceval:humanities:bpb",
+        "ceval:other:bpb"
+      ],
+      "metric": null,
+      "scored": false
+    },
+    "ceval:bpb": {
+      "members": [
+        "ceval_advanced_mathematics",
+        "ceval_college_chemistry",
+        "ceval_college_physics",
+        "ceval_college_programming",
+        "ceval_computer_architecture",
+        "ceval_computer_network",
+        "ceval_discrete_mathematics",
+        "ceval_electrical_engineer",
+        "ceval_high_school_biology",
+        "ceval_high_school_chemistry",
+        "ceval_high_school_mathematics",
+        "ceval_high_school_physics",
+        "ceval_metrology_engineer",
+        "ceval_middle_school_biology",
+        "ceval_middle_school_chemistry",
+        "ceval_middle_school_mathematics",
+        "ceval_middle_school_physics",
+        "ceval_operating_system",
+        "ceval_probability_and_statistics",
+        "ceval_veterinary_medicine",
+        "ceval_business_administration",
+        "ceval_college_economics",
+        "ceval_education_science",
+        "ceval_high_school_geography",
+        "ceval_high_school_politics",
+        "ceval_mao_zedong_thought",
+        "ceval_marxism",
+        "ceval_middle_school_geography",
+        "ceval_middle_school_politics",
+        "ceval_teacher_qualification",
+        "ceval_art_studies",
+        "ceval_chinese_language_and_literature",
+        "ceval_high_school_chinese",
+        "ceval_high_school_history",
+        "ceval_ideological_and_moral_cultivation",
+        "ceval_law",
+        "ceval_legal_professional",
+        "ceval_logic",
+        "ceval_middle_school_history",
+        "ceval_modern_chinese_history",
+        "ceval_professional_tour_guide",
+        "ceval_accountant",
+        "ceval_basic_medicine",
+        "ceval_civil_servant",
+        "ceval_clinical_medicine",
+        "ceval_environmental_impact_assessment_engineer",
+        "ceval_fire_engineer",
+        "ceval_physician",
+        "ceval_plant_protection",
+        "ceval_sports_science",
+        "ceval_tax_accountant",
+        "ceval_urban_and_rural_planner"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "ceval:humanities": {
+      "members": [
+        "ceval_art_studies",
+        "ceval_chinese_language_and_literature",
+        "ceval_high_school_chinese",
+        "ceval_high_school_history",
+        "ceval_ideological_and_moral_cultivation",
+        "ceval_law",
+        "ceval_legal_professional",
+        "ceval_logic",
+        "ceval_middle_school_history",
+        "ceval_modern_chinese_history",
+        "ceval_professional_tour_guide"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "ceval:humanities:bpb": {
+      "members": [
+        "ceval_art_studies",
+        "ceval_chinese_language_and_literature",
+        "ceval_high_school_chinese",
+        "ceval_high_school_history",
+        "ceval_ideological_and_moral_cultivation",
+        "ceval_law",
+        "ceval_legal_professional",
+        "ceval_logic",
+        "ceval_middle_school_history",
+        "ceval_modern_chinese_history",
+        "ceval_professional_tour_guide"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "ceval:other": {
+      "members": [
+        "ceval_accountant",
+        "ceval_basic_medicine",
+        "ceval_civil_servant",
+        "ceval_clinical_medicine",
+        "ceval_environmental_impact_assessment_engineer",
+        "ceval_fire_engineer",
+        "ceval_physician",
+        "ceval_plant_protection",
+        "ceval_sports_science",
+        "ceval_tax_accountant",
+        "ceval_urban_and_rural_planner"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "ceval:other:bpb": {
+      "members": [
+        "ceval_accountant",
+        "ceval_basic_medicine",
+        "ceval_civil_servant",
+        "ceval_clinical_medicine",
+        "ceval_environmental_impact_assessment_engineer",
+        "ceval_fire_engineer",
+        "ceval_physician",
+        "ceval_plant_protection",
+        "ceval_sports_science",
+        "ceval_tax_accountant",
+        "ceval_urban_and_rural_planner"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "ceval:social_science": {
+      "members": [
+        "ceval_business_administration",
+        "ceval_college_economics",
+        "ceval_education_science",
+        "ceval_high_school_geography",
+        "ceval_high_school_politics",
+        "ceval_mao_zedong_thought",
+        "ceval_marxism",
+        "ceval_middle_school_geography",
+        "ceval_middle_school_politics",
+        "ceval_teacher_qualification"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "ceval:social_science:bpb": {
+      "members": [
+        "ceval_business_administration",
+        "ceval_college_economics",
+        "ceval_education_science",
+        "ceval_high_school_geography",
+        "ceval_high_school_politics",
+        "ceval_mao_zedong_thought",
+        "ceval_marxism",
+        "ceval_middle_school_geography",
+        "ceval_middle_school_politics",
+        "ceval_teacher_qualification"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "ceval:stem": {
+      "members": [
+        "ceval_advanced_mathematics",
+        "ceval_college_chemistry",
+        "ceval_college_physics",
+        "ceval_college_programming",
+        "ceval_computer_architecture",
+        "ceval_computer_network",
+        "ceval_discrete_mathematics",
+        "ceval_electrical_engineer",
+        "ceval_high_school_biology",
+        "ceval_high_school_chemistry",
+        "ceval_high_school_mathematics",
+        "ceval_high_school_physics",
+        "ceval_metrology_engineer",
+        "ceval_middle_school_biology",
+        "ceval_middle_school_chemistry",
+        "ceval_middle_school_mathematics",
+        "ceval_middle_school_physics",
+        "ceval_operating_system",
+        "ceval_probability_and_statistics",
+        "ceval_veterinary_medicine"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "ceval:stem:bpb": {
+      "members": [
+        "ceval_advanced_mathematics",
+        "ceval_college_chemistry",
+        "ceval_college_physics",
+        "ceval_college_programming",
+        "ceval_computer_architecture",
+        "ceval_computer_network",
+        "ceval_discrete_mathematics",
+        "ceval_electrical_engineer",
+        "ceval_high_school_biology",
+        "ceval_high_school_chemistry",
+        "ceval_high_school_mathematics",
+        "ceval_high_school_physics",
+        "ceval_metrology_engineer",
+        "ceval_middle_school_biology",
+        "ceval_middle_school_chemistry",
+        "ceval_middle_school_mathematics",
+        "ceval_middle_school_physics",
+        "ceval_operating_system",
+        "ceval_probability_and_statistics",
+        "ceval_veterinary_medicine"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "cmmlu": {
+      "members": [
+        "cmmlu_anatomy",
+        "cmmlu_astronomy",
+        "cmmlu_college_actuarial_science",
+        "cmmlu_college_engineering_hydrology",
+        "cmmlu_college_mathematics",
+        "cmmlu_college_medical_statistics",
+        "cmmlu_computer_science",
+        "cmmlu_conceptual_physics",
+        "cmmlu_electrical_engineering",
+        "cmmlu_elementary_mathematics",
+        "cmmlu_genetics",
+        "cmmlu_high_school_biology",
+        "cmmlu_high_school_chemistry",
+        "cmmlu_high_school_mathematics",
+        "cmmlu_high_school_physics",
+        "cmmlu_machine_learning",
+        "cmmlu_virology",
+        "cmmlu_ancient_chinese",
+        "cmmlu_business_ethics",
+        "cmmlu_chinese_civil_service_exam",
+        "cmmlu_chinese_food_culture",
+        "cmmlu_chinese_foreign_policy",
+        "cmmlu_chinese_teacher_qualification",
+        "cmmlu_college_education",
+        "cmmlu_economics",
+        "cmmlu_education",
+        "cmmlu_elementary_chinese",
+        "cmmlu_ethnology",
+        "cmmlu_high_school_geography",
+        "cmmlu_high_school_politics",
+        "cmmlu_journalism",
+        "cmmlu_management",
+        "cmmlu_marketing",
+        "cmmlu_modern_chinese",
+        "cmmlu_professional_accounting",
+        "cmmlu_professional_psychology",
+        "cmmlu_public_relations",
+        "cmmlu_security_study",
+        "cmmlu_sociology",
+        "cmmlu_arts",
+        "cmmlu_chinese_history",
+        "cmmlu_chinese_literature",
+        "cmmlu_college_law",
+        "cmmlu_global_facts",
+        "cmmlu_international_law",
+        "cmmlu_jurisprudence",
+        "cmmlu_logical",
+        "cmmlu_marxist_theory",
+        "cmmlu_philosophy",
+        "cmmlu_professional_law",
+        "cmmlu_world_history",
+        "cmmlu_world_religions",
+        "cmmlu_agronomy",
+        "cmmlu_chinese_driving_rule",
+        "cmmlu_clinical_knowledge",
+        "cmmlu_college_medicine",
+        "cmmlu_computer_security",
+        "cmmlu_construction_project_management",
+        "cmmlu_elementary_commonsense",
+        "cmmlu_elementary_information_and_technology",
+        "cmmlu_food_science",
+        "cmmlu_human_sexuality",
+        "cmmlu_legal_and_moral_basis",
+        "cmmlu_nutrition",
+        "cmmlu_professional_medicine",
+        "cmmlu_sports_science",
+        "cmmlu_traditional_chinese_medicine"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "cmmlu:all": {
+      "members": [
+        "cmmlu",
+        "cmmlu:stem",
+        "cmmlu:social_science",
+        "cmmlu:humanities",
+        "cmmlu:other",
+        "cmmlu:china_specific",
+        "cmmlu:bpb",
+        "cmmlu:stem:bpb",
+        "cmmlu:social_science:bpb",
+        "cmmlu:humanities:bpb",
+        "cmmlu:other:bpb",
+        "cmmlu:china_specific:bpb"
+      ],
+      "metric": null,
+      "scored": false
+    },
+    "cmmlu:bpb": {
+      "members": [
+        "cmmlu_anatomy",
+        "cmmlu_astronomy",
+        "cmmlu_college_actuarial_science",
+        "cmmlu_college_engineering_hydrology",
+        "cmmlu_college_mathematics",
+        "cmmlu_college_medical_statistics",
+        "cmmlu_computer_science",
+        "cmmlu_conceptual_physics",
+        "cmmlu_electrical_engineering",
+        "cmmlu_elementary_mathematics",
+        "cmmlu_genetics",
+        "cmmlu_high_school_biology",
+        "cmmlu_high_school_chemistry",
+        "cmmlu_high_school_mathematics",
+        "cmmlu_high_school_physics",
+        "cmmlu_machine_learning",
+        "cmmlu_virology",
+        "cmmlu_ancient_chinese",
+        "cmmlu_business_ethics",
+        "cmmlu_chinese_civil_service_exam",
+        "cmmlu_chinese_food_culture",
+        "cmmlu_chinese_foreign_policy",
+        "cmmlu_chinese_teacher_qualification",
+        "cmmlu_college_education",
+        "cmmlu_economics",
+        "cmmlu_education",
+        "cmmlu_elementary_chinese",
+        "cmmlu_ethnology",
+        "cmmlu_high_school_geography",
+        "cmmlu_high_school_politics",
+        "cmmlu_journalism",
+        "cmmlu_management",
+        "cmmlu_marketing",
+        "cmmlu_modern_chinese",
+        "cmmlu_professional_accounting",
+        "cmmlu_professional_psychology",
+        "cmmlu_public_relations",
+        "cmmlu_security_study",
+        "cmmlu_sociology",
+        "cmmlu_arts",
+        "cmmlu_chinese_history",
+        "cmmlu_chinese_literature",
+        "cmmlu_college_law",
+        "cmmlu_global_facts",
+        "cmmlu_international_law",
+        "cmmlu_jurisprudence",
+        "cmmlu_logical",
+        "cmmlu_marxist_theory",
+        "cmmlu_philosophy",
+        "cmmlu_professional_law",
+        "cmmlu_world_history",
+        "cmmlu_world_religions",
+        "cmmlu_agronomy",
+        "cmmlu_chinese_driving_rule",
+        "cmmlu_clinical_knowledge",
+        "cmmlu_college_medicine",
+        "cmmlu_computer_security",
+        "cmmlu_construction_project_management",
+        "cmmlu_elementary_commonsense",
+        "cmmlu_elementary_information_and_technology",
+        "cmmlu_food_science",
+        "cmmlu_human_sexuality",
+        "cmmlu_legal_and_moral_basis",
+        "cmmlu_nutrition",
+        "cmmlu_professional_medicine",
+        "cmmlu_sports_science",
+        "cmmlu_traditional_chinese_medicine"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "cmmlu:china_specific": {
+      "members": [
+        "cmmlu_ancient_chinese",
+        "cmmlu_chinese_civil_service_exam",
+        "cmmlu_chinese_food_culture",
+        "cmmlu_chinese_foreign_policy",
+        "cmmlu_chinese_teacher_qualification",
+        "cmmlu_elementary_chinese",
+        "cmmlu_ethnology",
+        "cmmlu_high_school_politics",
+        "cmmlu_modern_chinese",
+        "cmmlu_chinese_history",
+        "cmmlu_chinese_literature",
+        "cmmlu_chinese_driving_rule",
+        "cmmlu_construction_project_management",
+        "cmmlu_elementary_commonsense",
+        "cmmlu_traditional_chinese_medicine"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "cmmlu:china_specific:bpb": {
+      "members": [
+        "cmmlu_ancient_chinese",
+        "cmmlu_chinese_civil_service_exam",
+        "cmmlu_chinese_food_culture",
+        "cmmlu_chinese_foreign_policy",
+        "cmmlu_chinese_teacher_qualification",
+        "cmmlu_elementary_chinese",
+        "cmmlu_ethnology",
+        "cmmlu_high_school_politics",
+        "cmmlu_modern_chinese",
+        "cmmlu_chinese_history",
+        "cmmlu_chinese_literature",
+        "cmmlu_chinese_driving_rule",
+        "cmmlu_construction_project_management",
+        "cmmlu_elementary_commonsense",
+        "cmmlu_traditional_chinese_medicine"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "cmmlu:humanities": {
+      "members": [
+        "cmmlu_arts",
+        "cmmlu_chinese_history",
+        "cmmlu_chinese_literature",
+        "cmmlu_college_law",
+        "cmmlu_global_facts",
+        "cmmlu_international_law",
+        "cmmlu_jurisprudence",
+        "cmmlu_logical",
+        "cmmlu_marxist_theory",
+        "cmmlu_philosophy",
+        "cmmlu_professional_law",
+        "cmmlu_world_history",
+        "cmmlu_world_religions"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "cmmlu:humanities:bpb": {
+      "members": [
+        "cmmlu_arts",
+        "cmmlu_chinese_history",
+        "cmmlu_chinese_literature",
+        "cmmlu_college_law",
+        "cmmlu_global_facts",
+        "cmmlu_international_law",
+        "cmmlu_jurisprudence",
+        "cmmlu_logical",
+        "cmmlu_marxist_theory",
+        "cmmlu_philosophy",
+        "cmmlu_professional_law",
+        "cmmlu_world_history",
+        "cmmlu_world_religions"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "cmmlu:other": {
+      "members": [
+        "cmmlu_agronomy",
+        "cmmlu_chinese_driving_rule",
+        "cmmlu_clinical_knowledge",
+        "cmmlu_college_medicine",
+        "cmmlu_computer_security",
+        "cmmlu_construction_project_management",
+        "cmmlu_elementary_commonsense",
+        "cmmlu_elementary_information_and_technology",
+        "cmmlu_food_science",
+        "cmmlu_human_sexuality",
+        "cmmlu_legal_and_moral_basis",
+        "cmmlu_nutrition",
+        "cmmlu_professional_medicine",
+        "cmmlu_sports_science",
+        "cmmlu_traditional_chinese_medicine"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "cmmlu:other:bpb": {
+      "members": [
+        "cmmlu_agronomy",
+        "cmmlu_chinese_driving_rule",
+        "cmmlu_clinical_knowledge",
+        "cmmlu_college_medicine",
+        "cmmlu_computer_security",
+        "cmmlu_construction_project_management",
+        "cmmlu_elementary_commonsense",
+        "cmmlu_elementary_information_and_technology",
+        "cmmlu_food_science",
+        "cmmlu_human_sexuality",
+        "cmmlu_legal_and_moral_basis",
+        "cmmlu_nutrition",
+        "cmmlu_professional_medicine",
+        "cmmlu_sports_science",
+        "cmmlu_traditional_chinese_medicine"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "cmmlu:social_science": {
+      "members": [
+        "cmmlu_ancient_chinese",
+        "cmmlu_business_ethics",
+        "cmmlu_chinese_civil_service_exam",
+        "cmmlu_chinese_food_culture",
+        "cmmlu_chinese_foreign_policy",
+        "cmmlu_chinese_teacher_qualification",
+        "cmmlu_college_education",
+        "cmmlu_economics",
+        "cmmlu_education",
+        "cmmlu_elementary_chinese",
+        "cmmlu_ethnology",
+        "cmmlu_high_school_geography",
+        "cmmlu_high_school_politics",
+        "cmmlu_journalism",
+        "cmmlu_management",
+        "cmmlu_marketing",
+        "cmmlu_modern_chinese",
+        "cmmlu_professional_accounting",
+        "cmmlu_professional_psychology",
+        "cmmlu_public_relations",
+        "cmmlu_security_study",
+        "cmmlu_sociology"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "cmmlu:social_science:bpb": {
+      "members": [
+        "cmmlu_ancient_chinese",
+        "cmmlu_business_ethics",
+        "cmmlu_chinese_civil_service_exam",
+        "cmmlu_chinese_food_culture",
+        "cmmlu_chinese_foreign_policy",
+        "cmmlu_chinese_teacher_qualification",
+        "cmmlu_college_education",
+        "cmmlu_economics",
+        "cmmlu_education",
+        "cmmlu_elementary_chinese",
+        "cmmlu_ethnology",
+        "cmmlu_high_school_geography",
+        "cmmlu_high_school_politics",
+        "cmmlu_journalism",
+        "cmmlu_management",
+        "cmmlu_marketing",
+        "cmmlu_modern_chinese",
+        "cmmlu_professional_accounting",
+        "cmmlu_professional_psychology",
+        "cmmlu_public_relations",
+        "cmmlu_security_study",
+        "cmmlu_sociology"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
+    "cmmlu:stem": {
+      "members": [
+        "cmmlu_anatomy",
+        "cmmlu_astronomy",
+        "cmmlu_college_actuarial_science",
+        "cmmlu_college_engineering_hydrology",
+        "cmmlu_college_mathematics",
+        "cmmlu_college_medical_statistics",
+        "cmmlu_computer_science",
+        "cmmlu_conceptual_physics",
+        "cmmlu_electrical_engineering",
+        "cmmlu_elementary_mathematics",
+        "cmmlu_genetics",
+        "cmmlu_high_school_biology",
+        "cmmlu_high_school_chemistry",
+        "cmmlu_high_school_mathematics",
+        "cmmlu_high_school_physics",
+        "cmmlu_machine_learning",
+        "cmmlu_virology"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "cmmlu:stem:bpb": {
+      "members": [
+        "cmmlu_anatomy",
+        "cmmlu_astronomy",
+        "cmmlu_college_actuarial_science",
+        "cmmlu_college_engineering_hydrology",
+        "cmmlu_college_mathematics",
+        "cmmlu_college_medical_statistics",
+        "cmmlu_computer_science",
+        "cmmlu_conceptual_physics",
+        "cmmlu_electrical_engineering",
+        "cmmlu_elementary_mathematics",
+        "cmmlu_genetics",
+        "cmmlu_high_school_biology",
+        "cmmlu_high_school_chemistry",
+        "cmmlu_high_school_mathematics",
+        "cmmlu_high_school_physics",
+        "cmmlu_machine_learning",
+        "cmmlu_virology"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
     "fineweb": {
       "members": [
         "fineweb_en",
@@ -1023,6 +1695,22 @@
       "metric": "bits_per_byte",
       "scored": true
     },
+    "zh_cn": {
+      "members": [
+        "ceval",
+        "cmmlu"
+      ],
+      "metric": null,
+      "scored": true
+    },
+    "zh_cn:bpb": {
+      "members": [
+        "ceval:bpb",
+        "cmmlu:bpb"
+      ],
+      "metric": "bpb",
+      "scored": true
+    },
     "zh_tw": {
       "members": [
         "tmmluplus",
@@ -1271,6 +1959,3338 @@
       "to_doc": "flock.eval.tasks.basic_skills.basic_skills_doc",
       "type": "flock.eval.tasks.base.MultipleChoiceTask",
       "unconditional_context": "Answer:"
+    },
+    "ceval_accountant": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "accountant"
+      },
+      "description": "以下是中国关于注册会计师的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_advanced_mathematics": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "advanced_mathematics"
+      },
+      "description": "以下是中国关于高等数学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_art_studies": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "art_studies"
+      },
+      "description": "以下是中国关于艺术学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_basic_medicine": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "basic_medicine"
+      },
+      "description": "以下是中国关于基础医学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_business_administration": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "business_administration"
+      },
+      "description": "以下是中国关于工商管理的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_chinese_language_and_literature": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "chinese_language_and_literature"
+      },
+      "description": "以下是中国关于中国语言文学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_civil_servant": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "civil_servant"
+      },
+      "description": "以下是中国关于公务员的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_clinical_medicine": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "clinical_medicine"
+      },
+      "description": "以下是中国关于临床医学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_college_chemistry": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_chemistry"
+      },
+      "description": "以下是中国关于大学化学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_college_economics": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_economics"
+      },
+      "description": "以下是中国关于大学经济学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_college_physics": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_physics"
+      },
+      "description": "以下是中国关于大学物理的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_college_programming": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_programming"
+      },
+      "description": "以下是中国关于大学编程的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_computer_architecture": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "computer_architecture"
+      },
+      "description": "以下是中国关于计算机组成的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_computer_network": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "computer_network"
+      },
+      "description": "以下是中国关于计算机网络的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_discrete_mathematics": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "discrete_mathematics"
+      },
+      "description": "以下是中国关于离散数学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_education_science": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "education_science"
+      },
+      "description": "以下是中国关于教育学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_electrical_engineer": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "electrical_engineer"
+      },
+      "description": "以下是中国关于注册电气工程师的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_environmental_impact_assessment_engineer": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "environmental_impact_assessment_engineer"
+      },
+      "description": "以下是中国关于环境影响评价工程师的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_fire_engineer": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "fire_engineer"
+      },
+      "description": "以下是中国关于注册消防工程师的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_high_school_biology": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_biology"
+      },
+      "description": "以下是中国关于高中生物的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_high_school_chemistry": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_chemistry"
+      },
+      "description": "以下是中国关于高中化学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_high_school_chinese": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_chinese"
+      },
+      "description": "以下是中国关于高中语文的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_high_school_geography": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_geography"
+      },
+      "description": "以下是中国关于高中地理的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_high_school_history": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_history"
+      },
+      "description": "以下是中国关于高中历史的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_high_school_mathematics": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_mathematics"
+      },
+      "description": "以下是中国关于高中数学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_high_school_physics": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_physics"
+      },
+      "description": "以下是中国关于高中物理的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_high_school_politics": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_politics"
+      },
+      "description": "以下是中国关于高中政治的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_ideological_and_moral_cultivation": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "ideological_and_moral_cultivation"
+      },
+      "description": "以下是中国关于思想道德修养与法律基础的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_law": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "law"
+      },
+      "description": "以下是中国关于法学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_legal_professional": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "legal_professional"
+      },
+      "description": "以下是中国关于法律职业资格的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_logic": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "logic"
+      },
+      "description": "以下是中国关于逻辑学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_mao_zedong_thought": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "mao_zedong_thought"
+      },
+      "description": "以下是中国关于毛泽东思想和中国特色社会主义理论体系概论的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_marxism": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "marxism"
+      },
+      "description": "以下是中国关于马克思主义基本原理的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_metrology_engineer": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "metrology_engineer"
+      },
+      "description": "以下是中国关于注册计量师的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_middle_school_biology": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "middle_school_biology"
+      },
+      "description": "以下是中国关于初中生物的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_middle_school_chemistry": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "middle_school_chemistry"
+      },
+      "description": "以下是中国关于初中化学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_middle_school_geography": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "middle_school_geography"
+      },
+      "description": "以下是中国关于初中地理的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_middle_school_history": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "middle_school_history"
+      },
+      "description": "以下是中国关于初中历史的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_middle_school_mathematics": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "middle_school_mathematics"
+      },
+      "description": "以下是中国关于初中数学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_middle_school_physics": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "middle_school_physics"
+      },
+      "description": "以下是中国关于初中物理的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_middle_school_politics": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "middle_school_politics"
+      },
+      "description": "以下是中国关于初中政治的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_modern_chinese_history": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "modern_chinese_history"
+      },
+      "description": "以下是中国关于近代史纲要的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_operating_system": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "operating_system"
+      },
+      "description": "以下是中国关于操作系统的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": "flock.eval.tasks.zh_cn.keep_ceval_operating_system",
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_physician": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "physician"
+      },
+      "description": "以下是中国关于医师资格的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_plant_protection": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "plant_protection"
+      },
+      "description": "以下是中国关于植物保护的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_probability_and_statistics": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "probability_and_statistics"
+      },
+      "description": "以下是中国关于概率统计的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_professional_tour_guide": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "professional_tour_guide"
+      },
+      "description": "以下是中国关于导游资格的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_sports_science": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "sports_science"
+      },
+      "description": "以下是中国关于体育学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_tax_accountant": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "tax_accountant"
+      },
+      "description": "以下是中国关于税务师的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_teacher_qualification": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "teacher_qualification"
+      },
+      "description": "以下是中国关于教师资格的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_urban_and_rural_planner": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "urban_and_rural_planner"
+      },
+      "description": "以下是中国关于注册城乡规划师的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "ceval_veterinary_medicine": {
+      "dataset": {
+        "repo": "ceval/ceval-exam",
+        "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
+        "row_index": true,
+        "split": "test",
+        "subset": "veterinary_medicine"
+      },
+      "description": "以下是中国关于兽医学的单项选择题，请选出其中的正确答案。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.ceval_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_agronomy": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "agronomy"
+      },
+      "description": "以下是关于农学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_anatomy": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "anatomy"
+      },
+      "description": "以下是关于解剖学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_ancient_chinese": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "ancient_chinese"
+      },
+      "description": "以下是关于古汉语的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_arts": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "arts"
+      },
+      "description": "以下是关于艺术学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_astronomy": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "astronomy"
+      },
+      "description": "以下是关于天文学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_business_ethics": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "business_ethics"
+      },
+      "description": "以下是关于商业伦理的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_chinese_civil_service_exam": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "chinese_civil_service_exam"
+      },
+      "description": "以下是关于中国公务员考试的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_chinese_driving_rule": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "chinese_driving_rule"
+      },
+      "description": "以下是关于中国驾驶规则的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_chinese_food_culture": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "chinese_food_culture"
+      },
+      "description": "以下是关于中国饮食文化的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_chinese_foreign_policy": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "chinese_foreign_policy"
+      },
+      "description": "以下是关于中国外交政策的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_chinese_history": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "chinese_history"
+      },
+      "description": "以下是关于中国历史的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_chinese_literature": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "chinese_literature"
+      },
+      "description": "以下是关于中国文学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_chinese_teacher_qualification": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "chinese_teacher_qualification"
+      },
+      "description": "以下是关于中国教师资格的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_clinical_knowledge": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "clinical_knowledge"
+      },
+      "description": "以下是关于临床知识的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_college_actuarial_science": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_actuarial_science"
+      },
+      "description": "以下是关于大学精算学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_college_education": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_education"
+      },
+      "description": "以下是关于大学教育学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_college_engineering_hydrology": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_engineering_hydrology"
+      },
+      "description": "以下是关于大学工程水文学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_college_law": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_law"
+      },
+      "description": "以下是关于大学法律的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_college_mathematics": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_mathematics"
+      },
+      "description": "以下是关于大学数学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_college_medical_statistics": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_medical_statistics"
+      },
+      "description": "以下是关于大学医学统计的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_college_medicine": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "college_medicine"
+      },
+      "description": "以下是关于大学医学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_computer_science": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "computer_science"
+      },
+      "description": "以下是关于计算机科学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": "flock.eval.tasks.zh_cn.keep_cmmlu_computer_science",
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_computer_security": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "computer_security"
+      },
+      "description": "以下是关于计算机安全的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_conceptual_physics": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "conceptual_physics"
+      },
+      "description": "以下是关于概念物理学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_construction_project_management": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "construction_project_management"
+      },
+      "description": "以下是关于建设工程管理的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_economics": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "economics"
+      },
+      "description": "以下是关于经济学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_education": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "education"
+      },
+      "description": "以下是关于教育学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_electrical_engineering": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "electrical_engineering"
+      },
+      "description": "以下是关于电气工程的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_elementary_chinese": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "elementary_chinese"
+      },
+      "description": "以下是关于小学语文的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_elementary_commonsense": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "elementary_commonsense"
+      },
+      "description": "以下是关于小学常识的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_elementary_information_and_technology": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "elementary_information_and_technology"
+      },
+      "description": "以下是关于小学信息技术的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_elementary_mathematics": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "elementary_mathematics"
+      },
+      "description": "以下是关于初等数学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_ethnology": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "ethnology"
+      },
+      "description": "以下是关于民族学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_food_science": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "food_science"
+      },
+      "description": "以下是关于食品科学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_genetics": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "genetics"
+      },
+      "description": "以下是关于遗传学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_global_facts": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "global_facts"
+      },
+      "description": "以下是关于全球事实的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_high_school_biology": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_biology"
+      },
+      "description": "以下是关于高中生物的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_high_school_chemistry": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_chemistry"
+      },
+      "description": "以下是关于高中化学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_high_school_geography": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_geography"
+      },
+      "description": "以下是关于高中地理的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_high_school_mathematics": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_mathematics"
+      },
+      "description": "以下是关于高中数学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_high_school_physics": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_physics"
+      },
+      "description": "以下是关于高中物理学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_high_school_politics": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "high_school_politics"
+      },
+      "description": "以下是关于高中政治的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_human_sexuality": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "human_sexuality"
+      },
+      "description": "以下是关于人类性行为的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_international_law": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "international_law"
+      },
+      "description": "以下是关于国际法学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_journalism": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "journalism"
+      },
+      "description": "以下是关于新闻学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_jurisprudence": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "jurisprudence"
+      },
+      "description": "以下是关于法理学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_legal_and_moral_basis": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "legal_and_moral_basis"
+      },
+      "description": "以下是关于法律与道德基础的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_logical": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "logical"
+      },
+      "description": "以下是关于逻辑学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_machine_learning": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "machine_learning"
+      },
+      "description": "以下是关于机器学习的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_management": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "management"
+      },
+      "description": "以下是关于管理学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_marketing": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "marketing"
+      },
+      "description": "以下是关于市场营销的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_marxist_theory": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "marxist_theory"
+      },
+      "description": "以下是关于马克思主义理论的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_modern_chinese": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "modern_chinese"
+      },
+      "description": "以下是关于现代汉语的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_nutrition": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "nutrition"
+      },
+      "description": "以下是关于营养学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_philosophy": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "philosophy"
+      },
+      "description": "以下是关于哲学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_professional_accounting": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "professional_accounting"
+      },
+      "description": "以下是关于专业会计的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_professional_law": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "professional_law"
+      },
+      "description": "以下是关于专业法学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_professional_medicine": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "professional_medicine"
+      },
+      "description": "以下是关于专业医学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_professional_psychology": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "professional_psychology"
+      },
+      "description": "以下是关于专业心理学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_public_relations": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "public_relations"
+      },
+      "description": "以下是关于公共关系的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_security_study": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "security_study"
+      },
+      "description": "以下是关于安全研究的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_sociology": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "sociology"
+      },
+      "description": "以下是关于社会学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_sports_science": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "sports_science"
+      },
+      "description": "以下是关于体育学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_traditional_chinese_medicine": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "traditional_chinese_medicine"
+      },
+      "description": "以下是关于中医中药的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_virology": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "virology"
+      },
+      "description": "以下是关于病毒学的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_world_history": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "world_history"
+      },
+      "description": "以下是关于世界历史的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
+    },
+    "cmmlu_world_religions": {
+      "dataset": {
+        "repo": "cerulean-works/cmmlu",
+        "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
+        "row_index": true,
+        "split": "test",
+        "subset": "world_religions"
+      },
+      "description": "以下是关于世界宗教的单项选择题，请直接给出正确答案的选项。\n\n",
+      "fewshot": {
+        "ids": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "num_shots": null,
+        "rows": [],
+        "split": "dev"
+      },
+      "keep": null,
+      "metrics": null,
+      "primary_metric": "acc_per_char",
+      "to_doc": "flock.eval.tasks.zh_cn.cmmlu_doc",
+      "type": "flock.eval.tasks.base.MultipleChoiceTask",
+      "unconditional_context": "答案："
     },
     "coqa": {
       "dataset": {
