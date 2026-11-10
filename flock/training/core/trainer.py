@@ -4,21 +4,24 @@ import math
 import random
 import shutil
 import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from json import JSONDecodeError
 from pathlib import Path
-from typing import Any, Literal, cast, overload
+from typing import Any, Literal, Self, cast, overload
 
 import torch
 import torch.nn.functional as F
 import wandb
 from lance.torch.data import SafeLanceDataset
+from pydantic import BaseModel as PydanticBaseModel
+from pydantic import ConfigDict, Field, field_validator, model_validator
 from safetensors.torch import load_model
 from torch import nn
 from torch.optim import AdamW, Muon, Optimizer
 from torch.utils.data import DataLoader
 from transformers import TokenizersBackend
 
+from flock.eval.tasks import TASKS
 from flock.hub.models import PendingUpload, save_to_hub
 from flock.hub.models.files import import_path, read_training_state, weight_files, write_model
 from flock.training.core.checkpoint import TrainerCheckpoint
@@ -28,33 +31,54 @@ from flock.training.core.models import BaseModel
 from flock.training.core.optimization import AdamWConfig, MuonConfig, OptimizerConfig
 
 
-@dataclass(frozen=True, kw_only=True)
-class TrainerConfig:
+class TrainerConfig(PydanticBaseModel):
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
+
     run_name: str
 
     input_column: str
-    batch_size: int
+    batch_size: int = Field(gt=0)
 
     optimizer_config: OptimizerConfig
     lr_scheduler_config: LRSchedulerConfig
 
-    dataloader_prefetch_factor: int | None = 4
-    dataloader_num_workers: int = 4
+    dataloader_prefetch_factor: int | None = Field(default=4, gt=0)
+    dataloader_num_workers: int = Field(default=4, ge=0)
+
+    validation_tasks: list[str] = Field(default_factory=list)
+    validation_steps: int | None = Field(default=None, gt=0)
 
     wandb_project: str
     wandb_mode: Literal["online", "offline", "disabled", "shared"] = "online"
 
     output_dir: str | None = None
-    save_steps: int | None = None
-    save_total_limit: int | None = None
+    save_steps: int | None = Field(default=None, gt=0)
+    save_total_limit: int | None = Field(default=None, gt=0)
     save_to_hub_repo: str | None = None
     overwrite_output_dir: bool = False
 
     # Master weights are always stored in FP32, but the model can be trained in BF16.
     model_dtype: torch.dtype = torch.bfloat16
-    max_norm: float = 1.0
-    logging_steps: int = 10
+    max_norm: float = Field(default=1.0, ge=0, allow_inf_nan=False)
+    logging_steps: int = Field(default=10, gt=0)
     seed: int = 42
+
+    @field_validator("validation_tasks")
+    @classmethod
+    def validate_tasks(cls, tasks: list[str]) -> list[str]:
+        if any(task not in TASKS for task in tasks):
+            raise ValueError(
+                f"Invalid validation task(s) specified. Supported tasks are: {list(TASKS.keys())}"
+            )
+        return tasks
+
+    @model_validator(mode="after")
+    def validate_dataloader(self) -> Self:
+        if self.dataloader_num_workers == 0 and self.dataloader_prefetch_factor is not None:
+            raise ValueError(
+                "dataloader_prefetch_factor must be None when dataloader_num_workers is 0"
+            )
+        return self
 
 
 class TrainerState(nn.Module):
@@ -150,7 +174,7 @@ class Trainer:
 
         self.logger = logging.getLogger(__name__)
         self.run = wandb.init(
-            project=config.wandb_project, mode=config.wandb_mode, config=asdict(config)
+            project=config.wandb_project, mode=config.wandb_mode, config=config.model_dump()
         )
         self.run.define_metric("global_step")
         self.run.define_metric("train/*", step_metric="global_step")
@@ -172,6 +196,9 @@ class Trainer:
         self.optimizer = self._get_optimizer(config.optimizer_config)
         self.lr_scheduler = self._get_lr_scheduler(config.lr_scheduler_config, self.total_steps)
 
+        self.validation_tasks = config.validation_tasks
+        self.validation_steps = config.validation_steps
+
         self.output_dir: Path = (
             Path(config.output_dir)
             if config.output_dir is not None
@@ -184,23 +211,9 @@ class Trainer:
 
         self.pending_uploads: dict[Path, PendingUpload] = {}
 
-        if self.save_steps is not None and self.save_steps <= 0:
-            raise ValueError("save_steps must be a positive integer or None")
-        if self.save_total_limit is not None and self.save_total_limit <= 0:
-            raise ValueError("save_total_limit must be a positive integer or None")
-
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_training_dataloader(self, skip_batches: int = 0) -> DataLoader:
-        if self.dataloader_num_workers < 0:
-            raise ValueError("dataloader_num_workers must be non-negative")
-        if self.dataloader_num_workers == 0 and self.dataloader_prefetch_factor is not None:
-            raise ValueError(
-                "dataloader_prefetch_factor must be None when dataloader_num_workers is 0"
-            )
-        elif self.dataloader_prefetch_factor is not None and self.dataloader_prefetch_factor < 1:
-            raise ValueError("dataloader_prefetch_factor must be >= 1")
-
         collator = LanceBatchCollator(self.tokenizer, self.ds_input_column)
         sampler = ResumableBatchDataSampler(
             batch_size=self.batch_size,

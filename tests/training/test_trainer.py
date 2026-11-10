@@ -5,7 +5,7 @@ import random
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import cast
 
 import lance
@@ -66,22 +66,22 @@ def trainer_factory(config, tokenizer, monkeypatch, tmp_path):
                 {"text": "d a"},
             ]
         trainer = Trainer(
-            config=replace(
-                TrainerConfig(
-                    run_name="test-run",
-                    input_column="text",
-                    batch_size=2,
-                    optimizer_config=AdamWConfig(lr=0.01, betas=(0.8, 0.9)),
-                    lr_scheduler_config=CosineConfig(warmup_steps=0, min_lr_ratio=0.1),
-                    dataloader_num_workers=num_workers,
-                    dataloader_prefetch_factor=prefetch_factor,
-                    wandb_project="offline-test",
-                    wandb_mode="disabled",
-                    output_dir=str(tmp_path / "checkpoints"),
-                    max_norm=0.01,
-                    logging_steps=logging_steps,
-                ),
-                **config_overrides,
+            config=TrainerConfig(
+                **{
+                    "run_name": "test-run",
+                    "input_column": "text",
+                    "batch_size": 2,
+                    "optimizer_config": AdamWConfig(lr=0.01, betas=(0.8, 0.9)),
+                    "lr_scheduler_config": CosineConfig(warmup_steps=0, min_lr_ratio=0.1),
+                    "dataloader_num_workers": num_workers,
+                    "dataloader_prefetch_factor": prefetch_factor,
+                    "wandb_project": "offline-test",
+                    "wandb_mode": "disabled",
+                    "output_dir": str(tmp_path / "checkpoints"),
+                    "max_norm": 0.01,
+                    "logging_steps": logging_steps,
+                    **config_overrides,
+                },
             ),
             model=Olmo2(config),
             tokenizer=tokenizer,
@@ -1299,9 +1299,8 @@ def test_training_loader_supports_zero_workers(trainer_factory):
 
 @pytest.mark.parametrize("prefetch_factor", [1, 2])
 def test_zero_workers_reject_explicit_prefetch(trainer_factory, prefetch_factor):
-    trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=prefetch_factor)
-    with pytest.raises(ValueError, match="must be None"):
-        trainer._get_training_dataloader()
+    with pytest.raises(ValidationError, match="must be None"):
+        trainer_factory(num_workers=0, prefetch_factor=prefetch_factor)
 
 
 def test_worker_prefetch_can_use_pytorch_default(trainer_factory):
