@@ -136,7 +136,7 @@ def hub_group() -> None:
     "root",
     envvar=hub.ROOT,
     required=True,
-    type=click.Path(file_okay=False, path_type=Path),
+    type=click.Path(file_okay=False, path_type=Path, resolve_path=True),
     help="The staging folder jobs read with FLOCK_EVAL_HUB set (default: $FLOCK_EVAL_HUB).",
 )
 def pull_command(ref: str, root: Path) -> None:

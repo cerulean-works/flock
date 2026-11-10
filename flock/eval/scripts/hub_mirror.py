@@ -114,12 +114,17 @@ def main(org: str, repos: tuple[str, ...]) -> None:
         if (anonymous_info, member_info, public) != (404, 200, False):
             # A path this run created goes to the trash, where only admins can restore it. One
             # that held versions before is left for an admin, since the trash would take them too.
+            outcome = ""
             if new:
-                member.post(f"{datasets_api}/delete", {"path": path})
+                trashed = member.post(f"{datasets_api}/delete", {"path": path})
+                outcome = (
+                    f"; NOT moved to the trash ({error_of(trashed)}): trash it by hand now"
+                    if trashed.is_error
+                    else "; moved to the trash"
+                )
             sys.exit(
                 f"{path} answers anonymous readers with {anonymous_info} and members with "
-                f"{member_info}, public {public}, not 404, 200 and False"
-                + ("; moved to the trash" if new else "")
+                f"{member_info}, public {public}, not 404, 200 and False{outcome}"
             )
 
 

@@ -80,7 +80,7 @@ A job on a machine that can't reach the Hugging Face Hub reads its datasets from
 With `FLOCK_EVAL_HUB` set, every dataset must be staged. The run checks them all before the model loads and lists the `pull` command for each missing one, with the organization left for you to fill in. The staged copy gives the same rows as the Hugging Face Hub, so the task hashes and scores don't depend on where the rows came from. A pin's commit is in its task's definition, and `pull` refuses a copy whose recorded commit differs.
 
 > [!IMPORTANT]
-> A staged copy is readable by whoever can read its staging folder, whatever your umask, and only you can change it. Some copies (exam sets, crawled text) are private on Flock, so choose a staging folder that only the people allowed to read them can open. A staging folder that doesn't exist yet is made readable by you only. A folder others can write to, such as a group's, needs the sticky bit (`chmod +t`), so nobody can replace a copy they don't own; `pull` refuses one without it.
+> A staged copy is readable by whoever can read its staging folder, whatever your umask, and only you can change it. Some copies (exam sets, crawled text) are private on Flock, so choose a staging folder that only the people allowed to read them can open. A staging folder that doesn't exist yet is made readable by you only. A folder others can write to, such as a group's, needs the sticky bit (`chmod +t`), so nobody can replace a copy they don't own; `pull` refuses one without it. Everyone who can write to the folder is trusted: the first copy staged for a dataset is the one every later `pull` keeps, and only its owner can replace it.
 
 ## Read the results
 

@@ -9,6 +9,7 @@ import functools
 import json
 import os
 import re
+import shlex
 import shutil
 import stat
 import tempfile
@@ -36,9 +37,9 @@ type Pair = tuple[str | None, str]
 
 
 def root() -> Path | None:
-    """The staging root `$FLOCK_EVAL_HUB` names, or `None` if it is unset or empty."""
+    """The staging root `$FLOCK_EVAL_HUB` names, made absolute, or `None` if it is unset or empty. A relative root would follow a job into whatever folder it starts in."""
     value = os.environ.get(ROOT)
-    return Path(value) if value else None
+    return Path(value).absolute() if value else None
 
 
 def path(repo: str) -> str:
@@ -179,11 +180,13 @@ def pull(org: str, repo: str, revision: str, root: Path) -> Path:
     properties = recorded(source)
     check(properties, repo, revision, f"{uri} tag {revision} (version {source.version})")
 
+    # The folders are checked even when the copy is already there, so a root others could write
+    # to is refused whether or not this pull writes anything.
     folder = root / repo / revision
+    mode = _make_folders(root, folder.parent)
     if _holds(folder, properties):
         return folder
 
-    mode = _make_folders(root, folder.parent)
     with _locked(folder.parent):
         # Another pull may have staged the same rows while this one waited.
         if _holds(folder, properties):
@@ -213,7 +216,7 @@ def pull(org: str, repo: str, revision: str, root: Path) -> Path:
 
 @contextlib.contextmanager
 def _locked(folder: Path) -> Generator[None]:
-    """Holds an exclusive lock on `folder`, shared by every process on the machines that mount it. The folder itself is locked, so no lock file sits beside the copies."""
+    """Holds an exclusive `flock()` lock on `folder`, so pulls on one machine take turns, and pulls on several do too where the filesystem shares `flock()` locks between machines. The folder itself is locked, so no lock file sits beside the copies."""
     descriptor = os.open(folder, os.O_RDONLY | os.O_DIRECTORY)
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)
@@ -226,7 +229,13 @@ def _replace(folder: Path, partial: Path) -> None:
     """Renames `partial` to `folder`, moving a copy already there aside first and deleting it only once the new one is in place. If the rename fails, the old copy is moved back."""
     stale = partial.with_suffix(".stale")
     if folder.exists():
-        folder.rename(stale)
+        try:
+            folder.rename(stale)
+        except PermissionError as error:
+            raise PermissionError(
+                f"{folder} is {_owner(folder)}'s and you can't replace it ({error.strerror}): "
+                f"ask them to pull it again, or stage elsewhere"
+            ) from None
     try:
         partial.rename(folder)
     except OSError:
@@ -247,10 +256,9 @@ def _open(folder: Path) -> Any:
 
     try:
         folder.stat()
+        return lance.dataset(str(folder))
     except FileNotFoundError:
         return None
-    try:
-        return lance.dataset(str(folder))
     except (ValueError, OSError) as error:
         raise OSError(f"{folder} is there but can't be read as a staged copy: {error}") from None
 
@@ -311,7 +319,15 @@ def _protect(folder: Path, mode: int) -> None:
 
 def _pull_command(root: Path, repo: str, revision: str) -> str:
     """The command that stages `repo` at `revision` under `root`, with the org left to fill in."""
-    return f"flock eval hub pull <org>/{repo}@{revision} --to {root}"
+    return f"flock eval hub pull <org>/{repo}@{revision} --to {shlex.quote(str(root))}"
+
+
+def _owner(folder: Path) -> str:
+    """The name of `folder`'s owner, or a description if it can't be found."""
+    try:
+        return folder.owner()
+    except OSError, KeyError:
+        return "another user"
 
 
 def _copy(root: Path, repo: str, revision: str) -> tuple[Any, list[dict[str, Any]]]:
@@ -332,8 +348,8 @@ def _copy(root: Path, repo: str, revision: str) -> tuple[Any, list[dict[str, Any
         table = _open(folder)
     except OSError as error:
         raise OSError(
-            f"{error}. It belongs to user {folder.lstat().st_uid}; if that is you, run "
-            f"`{command}` to replace it, otherwise ask them or stage elsewhere"
+            f"{error}. It is {_owner(folder)}'s; if that is you, run `{command}` to replace it, "
+            f"otherwise ask them or stage elsewhere"
         ) from None
     if table is None:
         raise FileNotFoundError(

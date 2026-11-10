@@ -524,3 +524,23 @@ def test_perplexity_rows_are_read_again_when_the_staging_root_changes(staged, mo
     monkeypatch.setenv("FLOCK_EVAL_HUB", str(root))
     with pytest.raises(KeyError):  # the staged toy copy has no `id`/`text` rows, but it is read
         task.load()
+
+
+def test_a_root_others_could_write_to_is_refused_even_with_the_copy_staged(staged):
+    _, root, _ = staged
+    hub.pull("acme", REPO, FIRST, root)
+    root.chmod(0o777)
+    with pytest.raises(ValueError, match="set its sticky bit"):
+        hub.pull("acme", REPO, FIRST, root)
+
+
+def test_the_staging_root_is_absolute_and_quoted_in_pull_commands(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FLOCK_EVAL_HUB", "eval hub")
+    root = tmp_path / "eval hub"
+    assert hub.root() == root
+    with pytest.raises(FileNotFoundError) as error:
+        hub.check_staged(root, {(REPO, FIRST): {("qa", "test")}})
+    assert str(error.value).splitlines()[1].endswith(f"--to '{tmp_path}/eval hub'")
+    monkeypatch.setenv("FLOCK_EVAL_HUB", "")
+    assert hub.root() is None
