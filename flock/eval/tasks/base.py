@@ -3,11 +3,9 @@
 import dataclasses
 import hashlib
 import json
-import os
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import datasets
@@ -48,15 +46,12 @@ class Dataset:
 
         Raises:
             `ValueError`: if `row_index` is set and the rows already have an `"index"` column.
-            `FileNotFoundError`, `ValueError`, `KeyError`: if `$FLOCK_EVAL_HUB` is set and the pin isn't staged there, isn't a commit or doesn't hold the split (see [`~eval.hub.staged_rows`]).
+            `FileNotFoundError`, `OSError`, `ValueError`, `KeyError`: if `$FLOCK_EVAL_HUB` is set and the pin isn't staged there, can't be read there, isn't a commit or doesn't hold the split (see [`~eval.hub.staged_rows`]).
         """
         # A job on a node with no network reads a staged copy; the variable makes that a
         # requirement, so a missing copy fails instead of falling back to the network.
-        root = os.environ.get("FLOCK_EVAL_HUB")
-        if root:
-            rows = hub.staged_rows(
-                Path(root), self.repo, self.revision, self.subset, split or self.split
-            )
+        if root := hub.root():
+            rows = hub.staged_rows(root, self.repo, self.revision, self.subset, split or self.split)
         else:
             rows = datasets.load_dataset(
                 self.repo, self.subset, revision=self.revision, split=split or self.split
@@ -429,6 +424,14 @@ class MultipleChoiceTask:
             skipped.add("acc_uncond")
 
         return tuple(name for name in MULTIPLE_CHOICE_METRICS if name not in skipped)
+
+    @property
+    def reads(self) -> set[hub.Pair]:
+        """The `(subset, split)` pairs of `dataset` that `load` reads: the scored split, and the few-shot split unless the examples are written out."""
+        pairs = {(self.dataset.subset, self.dataset.split)}
+        if self.fewshot is not None and self.fewshot.split is not None:
+            pairs.add((self.dataset.subset, self.fewshot.split))
+        return pairs
 
     def load(self, limit: int | None = None) -> tuple[list[MCDoc], list[MCDoc]]:
         """

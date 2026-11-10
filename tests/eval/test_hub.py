@@ -1,6 +1,9 @@
+import contextlib
 import os
 import shutil
 import stat
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import datasets
@@ -182,15 +185,12 @@ def test_the_writer_refuses_rows_with_its_bookkeeping_columns(tmp_path):
             hub.write(str(tmp_path / column), REPO, FIRST, {(None, "test"): rows})
 
 
-def test_hub_pull_takes_an_org_a_repo_and_a_commit(monkeypatch, tmp_path):
+def test_hub_pull_takes_an_org_a_repo_and_a_commit(monkeypatch, tmp_path, bucket):
     from click.testing import CliRunner
 
     from flock.eval.cli import main
 
-    pulled = []
-    monkeypatch.setattr(hub, "pull", lambda org, repo, revision, root: pulled.append((org, repo)))
     runner = CliRunner()
-
     refs = (
         f"acme/{REPO}@main",
         f"acme/{REPO}@{FIRST[:12]}",
@@ -201,9 +201,13 @@ def test_hub_pull_takes_an_org_a_repo_and_a_commit(monkeypatch, tmp_path):
     )
     for ref in refs:
         result = runner.invoke(main, ["hub", "pull", ref, "--to", str(tmp_path)])
-        assert result.exit_code == 2, ref  # a usage error, before any sign-in
-    assert pulled == []
+        assert result.exit_code == 1, ref
+    result = runner.invoke(main, ["hub", "pull", f"/{REPO}@{FIRST}", "--to", str(tmp_path)])
+    assert result.exit_code == 2  # no org
+    assert bucket == []  # refused before any sign-in
 
+    pulled = []
+    monkeypatch.setattr(hub, "pull", lambda org, repo, revision, root: pulled.append((org, repo)))
     result = runner.invoke(main, ["hub", "pull", f"acme/{REPO}@{FIRST}", "--to", str(tmp_path)])
     assert result.exit_code == 0
     assert pulled == [("acme", REPO)]
@@ -295,23 +299,24 @@ def test_a_staged_copy_is_as_readable_as_its_staging_root(tmp_path):
     assert modes(root) == [{0o3770}, {0o2750}, {0o640}]
 
 
-def test_a_pull_keeps_a_copy_another_pull_staged_meanwhile(staged, monkeypatch):
+def test_a_pull_waits_for_another_and_keeps_the_copy_it_staged(staged, tmp_path):
     _, root, _ = staged
-    protect = hub._protect
-    others = []
+    elsewhere = hub.pull("acme", REPO, FIRST, tmp_path / "elsewhere")
+    folder = root / REPO / FIRST
+    folder.parent.mkdir(parents=True)
 
-    def another_pull_finishes_first(folder, mode):
-        protect(folder, mode)
-        monkeypatch.setattr(hub, "_protect", protect)
-        other = hub.pull("acme", REPO, FIRST, root)
-        others.append((other, (other / "_versions").stat().st_ino))
-
-    monkeypatch.setattr(hub, "_protect", another_pull_finishes_first)
-    folder = hub.pull("acme", REPO, FIRST, root)
+    # Another pull holds the repo's lock, and stages its copy before letting go.
+    with hub._locked(folder.parent):
+        waiting = ThreadPoolExecutor(1).submit(hub.pull, "acme", REPO, FIRST, root)
+        time.sleep(0.5)
+        assert not waiting.done()
+        shutil.copytree(elsewhere, folder)
+        staged_inode = (folder / "_versions").stat().st_ino
+    assert waiting.result(timeout=60) == folder
 
     # The other pull's copy, which a job may already read, is the one left, with nothing beside it.
-    assert others == [(folder, (folder / "_versions").stat().st_ino)]
-    assert [path.name for path in (root / REPO).iterdir()] == [FIRST]
+    assert (folder / "_versions").stat().st_ino == staged_inode
+    assert [path.name for path in folder.parent.iterdir()] == [FIRST]
 
 
 def test_a_failed_pull_leaves_nothing_and_a_broken_copy_is_replaced(staged, monkeypatch, real_load):
@@ -325,8 +330,11 @@ def test_a_failed_pull_leaves_nothing_and_a_broken_copy_is_replaced(staged, monk
 
     monkeypatch.setenv("FLOCK_EVAL_HUB", str(root))
     monkeypatch.setattr(Dataset, "load", real_load)
-    with pytest.raises(FileNotFoundError, match="flock eval hub pull"):
+    with pytest.raises(
+        OSError, match="can't be read as a staged copy.*flock eval hub pull"
+    ) as error:
         Dataset(REPO, FIRST, "qa", "train").load()
+    assert not isinstance(error.value, FileNotFoundError)  # it is there, so not "isn't staged"
 
     with monkeypatch.context() as patched:
         patched.setattr(hub, "_protect", fail)
@@ -394,12 +402,18 @@ def test_a_run_checks_every_staged_copy_before_its_model_loads(staged):
         (REPO, FIRST): {("qa", "test"), ("qa", "train")},
         ("cerulean/gone", FIRST): {(None, "test")},
     }
-    with pytest.raises(FileNotFoundError, match=f"cerulean/gone@{FIRST}, {REPO}@{FIRST}"):
+    command = "flock eval hub pull <org>/{}@" + FIRST + f" --to {root}"
+    with pytest.raises(FileNotFoundError) as error:
         hub.check_staged(root, pins)
+    # One command per missing pin, ready to paste once the org is filled in.
+    assert str(error.value).splitlines()[1:] == [
+        command.format("cerulean/gone"),
+        command.format(REPO),
+    ]
 
     hub.pull("acme", REPO, FIRST, root)
     hub.check_staged(root, {(REPO, FIRST): {("qa", "test"), ("qa", "train")}})
-    with pytest.raises(FileNotFoundError, match=f"split a task reads: {REPO}@{FIRST}\\."):
+    with pytest.raises(FileNotFoundError, match=f"split a task reads.*\n.*{REPO}@{FIRST}"):
         hub.check_staged(root, {(REPO, FIRST): {("qa", "validation")}})
 
 
@@ -455,4 +469,58 @@ def test_a_pull_signs_in_to_its_org_and_stays_in_its_root(staged, bucket):
     for repo in ("../toy", "cerulean/..", "cerulean/.hidden", "toy"):
         with pytest.raises(ValueError, match="expected a repo OWNER/NAME"):
             hub.pull("acme", repo, FIRST, root)
+    # A branch, a tag or a path in place of the commit could move or leave the root.
+    for revision in ("main", FIRST[:12], f"../../../{FIRST}"):
+        with pytest.raises(ValueError, match="needs a commit hash"):
+            hub.pull("acme", REPO, revision, root)
     assert bucket == [("acme", True)]
+
+
+def test_a_pull_refuses_a_folder_below_the_root_that_others_could_write_to(staged):
+    _, root, _ = staged
+    root.mkdir(mode=0o1777)
+    root.chmod(0o1777)
+    (root / "cerulean").mkdir()
+    (root / "cerulean").chmod(0o777)  # made by an older pull or by hand, without the sticky bit
+    with pytest.raises(ValueError, match="staging folder .*cerulean, so they could replace"):
+        hub.pull("acme", REPO, FIRST, root)
+
+    (root / "cerulean").chmod(0o1777)
+    assert hub.pull("acme", REPO, FIRST, root) == root / REPO / FIRST
+
+
+def test_every_registered_task_reads_exactly_the_pairs_it_reports(monkeypatch):
+    from flock.eval.tasks import TASKS
+    from flock.eval.tasks.perplexity import _docs_by_domain
+
+    read = []
+
+    def record(dataset, split=None):
+        read.append((dataset.subset, split or dataset.split))
+        return []
+
+    monkeypatch.setattr(Dataset, "load", record)
+    for task in TASKS.values():
+        read.clear()
+        _docs_by_domain.cache_clear()
+        with contextlib.suppress(KeyError, ValueError):  # no rows, so no docs or few-shot ids
+            task.load()
+        assert set(read) == task.reads, task.name
+
+
+def test_perplexity_rows_are_read_again_when_the_staging_root_changes(staged, monkeypatch):
+    from flock.eval.tasks import PerplexityTask
+    from flock.eval.tasks.perplexity import _docs_by_domain
+
+    _, root, _ = staged
+    hub.pull("acme", REPO, FIRST, root)
+    rows = [{"id": "1", "text": "from the Hugging Face Hub"}]
+    monkeypatch.setattr(datasets, "load_dataset", lambda *args, **kwargs: rows)
+    task = PerplexityTask(name="toy", dataset=Dataset(REPO, FIRST, None, "validation"))
+    _docs_by_domain.cache_clear()
+    assert [doc.text for doc in task.load()] == ["from the Hugging Face Hub"]
+
+    rows.clear()  # staged rows now, or nothing
+    monkeypatch.setenv("FLOCK_EVAL_HUB", str(root))
+    with pytest.raises(KeyError):  # the staged toy copy has no `id`/`text` rows, but it is read
+        task.load()

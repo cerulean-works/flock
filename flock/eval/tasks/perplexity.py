@@ -6,7 +6,9 @@ import hashlib
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
+from flock.eval import hub
 from flock.eval.tasks.base import Dataset
 
 
@@ -66,6 +68,11 @@ class PerplexityTask:
         """The metrics the task reports, each over all of its docs: `bits_per_byte`, `loss_per_token` in nats, and `perplexity`, its `exp`."""
         return ("bits_per_byte", "loss_per_token", "perplexity")
 
+    @property
+    def reads(self) -> set[hub.Pair]:
+        """The `(subset, split)` pairs of `dataset` that `load` reads: the scored split."""
+        return {(self.dataset.subset, self.dataset.split)}
+
     def load(self, limit: int | None = None) -> list[TextDoc]:
         """
         Loads the scored split's docs in the task's domain, keeping the first `limit` (all if `None`).
@@ -78,7 +85,7 @@ class PerplexityTask:
         if limit is not None and limit < 1:
             raise ValueError(f"limit must be at least 1, got {limit}")
 
-        docs_by_domain = _docs_by_domain(self.dataset)
+        docs_by_domain = _docs_by_domain(self.dataset, hub.root())
         if self.domain is None and any(domain is not None for domain in docs_by_domain):
             raise ValueError(f"{self.name}: the rows have domains; give the task its domain")
         if not docs_by_domain:
@@ -106,8 +113,8 @@ class PerplexityTask:
 # add about 10 minutes to a run. A bound of one keeps a training process from holding every
 # source.
 @functools.lru_cache(maxsize=1)
-def _docs_by_domain(dataset: Dataset) -> dict[str | None, tuple[TextDoc, ...]]:
-    """The scored split's docs grouped by `subdomain`, in row order, under `None` for rows without one. Tuples of frozen docs, so tasks sharing the split can't change each other's docs."""
+def _docs_by_domain(dataset: Dataset, root: Path | None) -> dict[str | None, tuple[TextDoc, ...]]:
+    """The scored split's docs grouped by `subdomain`, in row order, under `None` for rows without one. Tuples of frozen docs, so tasks sharing the split can't change each other's docs. `root` is the staging root `dataset.load` reads now ([`~eval.hub.root`]): it keys the cache, so a process that changes `$FLOCK_EVAL_HUB` reads the rows again."""
     grouped: dict[str | None, list[TextDoc]] = {}
     for row in dataset.load():
         # A null or empty `subdomain` counts as none, as the census reads it: `datasets` fills a

@@ -4,7 +4,7 @@ Run from the repository root on a machine that reaches both hubs, signed in to F
 
     uv run python flock/eval/scripts/hub_mirror.py ORG [OWNER/NAME ...]
 
-Each dataset goes to `eval/<owner>/<name>` in ORG's `flock-datasets` bucket, holding only the configurations and splits some task reads (scored or few-shot), and its version is tagged with the pinned revision, which `flock eval hub pull` looks up. The path is made private before anything is written, an existing path is checked private before more rows go to it, and a new one is checked after its first write and moved to the trash if any reader but a member can see it; making a dataset public stays a separate decision. A pin already tagged is kept, unless a task now reads a split its version lacks: then a new version holds both, and the tag moves to it.
+Each dataset goes to `eval/<owner>/<name>` in ORG's `flock-datasets` bucket, holding only the configurations and splits some task reads (scored or few-shot), and its version is tagged with the pinned revision, which `flock eval hub pull` looks up. The path is made private before anything is written, an existing path is checked private before more rows go to it, a path whose member status is neither 200 nor 404 is left alone, and a new one is checked after its first write and moved to the trash if any reader but a member can see it; making a dataset public stays a separate decision. A pin already tagged is kept, unless a task now reads a split its version lacks: then a new version holds both, and the tag moves to it.
 """
 
 import json
@@ -53,9 +53,14 @@ def main(org: str, repos: tuple[str, ...]) -> None:
         refused = member.request("DELETE", f"{datasets_api}/public?{query}")
         if refused.is_error:
             raise click.ClickException(f"{path}: can't make it private: {error_of(refused)}")
+        # A member reads a written path (200) or a missing one (404). Any other answer leaves
+        # unknown whether the path holds tagged versions or is public, so nothing is written.
         existed = statuses(anonymous, member, info)
+        if existed[1] not in (200, 404):
+            raise click.ClickException(f"{path} answers members with {existed[1]}: try again")
+        new = existed[1] == 404
         # A path already written is checked before more rows go to it.
-        if existed[1] == 200 and existed[::2] != (404, False):
+        if not new and existed[::2] != (404, False):
             raise click.ClickException(
                 f"{path} answers anonymous readers with {existed[0]}, public {existed[2]}"
             )
@@ -107,13 +112,14 @@ def main(org: str, repos: tuple[str, ...]) -> None:
         print(json.dumps(record), flush=True)
         # A missing path answers 404 too, so a private copy is an anonymous 404 and a member 200.
         if (anonymous_info, member_info, public) != (404, 200, False):
-            # A path this run created goes to the trash, where only admins can restore it.
-            if existed[1] != 200:
+            # A path this run created goes to the trash, where only admins can restore it. One
+            # that held versions before is left for an admin, since the trash would take them too.
+            if new:
                 member.post(f"{datasets_api}/delete", {"path": path})
             sys.exit(
                 f"{path} answers anonymous readers with {anonymous_info} and members with "
                 f"{member_info}, public {public}, not 404, 200 and False"
-                + ("" if existed[1] == 200 else "; moved to the trash")
+                + ("; moved to the trash" if new else "")
             )
 
 

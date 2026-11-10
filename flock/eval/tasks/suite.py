@@ -31,11 +31,7 @@ def pins(tasks: Iterable[Task]) -> dict[tuple[str, str], set[Pair]]:
     """The (subset, split) pairs `tasks` read, scored or few-shot, by pinned `(repo, revision)`."""
     pinned: dict[tuple[str, str], set[Pair]] = {}
     for task in tasks:
-        dataset = task.dataset
-        pairs = pinned.setdefault((dataset.repo, dataset.revision), set())
-        pairs.add((dataset.subset, dataset.split))
-        if isinstance(task, MultipleChoiceTask) and task.fewshot and task.fewshot.split:
-            pairs.add((dataset.subset, task.fewshot.split))
+        pinned.setdefault((task.dataset.repo, task.dataset.revision), set()).update(task.reads)
     return pinned
 
 

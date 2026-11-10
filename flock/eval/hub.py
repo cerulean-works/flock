@@ -3,13 +3,16 @@
 # `lance` and `flock.hub` are imported where they're used: `flock eval` loads this module for
 # every command, and `lance` alone takes about 1.3 s to import.
 
+import contextlib
+import fcntl
 import functools
 import json
+import os
 import re
 import shutil
 import stat
 import tempfile
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Generator, Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -22,11 +25,20 @@ REPO = re.compile(r"[A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*")
 COMMIT = re.compile(r"[0-9a-f]{40}")
 """A full commit hash: the only revision a hub copy is staged and read by, since a branch or tag moves."""
 
+ROOT = "FLOCK_EVAL_HUB"
+"""The variable naming the staging root jobs read every dataset from; unset or empty, they read the Hugging Face Hub."""
+
 BUCKET = "s3://flock-datasets"
 """The dataset bucket of the org `flock.hub.s3` is signed in to."""
 
 type Pair = tuple[str | None, str]
 """A configuration (`None` for none) and a split of a Hugging Face repo."""
+
+
+def root() -> Path | None:
+    """The staging root `$FLOCK_EVAL_HUB` names, or `None` if it is unset or empty."""
+    value = os.environ.get(ROOT)
+    return Path(value) if value else None
 
 
 def path(repo: str) -> str:
@@ -83,16 +95,13 @@ def write(uri: str, repo: str, revision: str, splits: Mapping[Pair, datasets.Dat
     # the stored columns are its own, under which name.
     fields = {name: pa.field(name, pa.string()) for name in ("hf_subset", "hf_split")}
     pairs: list[dict[str, Any]] = []
-    # A filtered or shuffled `datasets.Dataset` keeps its rows behind an index; this table is the
-    # rows it gives, in its order.
-    tables = {pair: rows.with_format("arrow")[:] for pair, rows in splits.items()}
     for (subset, split), rows in splits.items():
         clash = {"hf_subset", "hf_split"} & set(rows.column_names)
         if clash:
             raise ValueError(f"{repo} {subset or ''} {split}: the rows have a {clash} column")
 
         columns = {}
-        for field in tables[(subset, split)].schema:
+        for field in rows.data.schema:
             stored, copy = field.name, 0
             while stored in columns or (stored in fields and fields[stored].type != field.type):
                 copy += 1
@@ -110,20 +119,23 @@ def write(uri: str, repo: str, revision: str, splits: Mapping[Pair, datasets.Dat
         )
     schema = pa.schema(list(fields.values()))
 
+    # One pair's batches at a time, so a repo of a hundred splits isn't held in memory at once. A
+    # filtered or shuffled `datasets.Dataset` keeps its rows behind an index, and `iter` gives
+    # the rows it gives, in its order.
     def batches() -> Iterator[pa.RecordBatch]:
-        for pair, table in zip(pairs, tables.values(), strict=True):
-            for batch in table.to_batches(max_chunksize=10_000):
-                length = batch.num_rows
+        for pair, rows in zip(pairs, splits.values(), strict=True):
+            for table in rows.with_format("arrow").iter(batch_size=10_000):
+                length = table.num_rows
                 columns = {
                     "hf_subset": pa.array([pair["subset"]] * length, pa.string()),
                     "hf_split": pa.array([pair["split"]] * length, pa.string()),
                 }
                 for field in schema:
                     if field.name in pair["columns"]:
-                        columns[field.name] = batch.column(pair["columns"][field.name])
+                        columns[field.name] = table.column(pair["columns"][field.name])
                     elif field.name not in columns:
                         columns[field.name] = pa.nulls(length, field.type)
-                yield pa.RecordBatch.from_pydict(columns, schema=schema)
+                yield from pa.Table.from_pydict(columns, schema=schema).to_batches()
 
     written = lance.write_dataset(
         pa.RecordBatchReader.from_batches(schema, batches()),
@@ -142,14 +154,14 @@ def pull(org: str, repo: str, revision: str, root: Path) -> Path:
     """
     Stages the version of `org`'s hub copy of `repo` tagged `revision` under `root`, where [`staged_rows`] finds it, and returns its folder.
 
-    The copy is written to a temporary folder and renamed, so an interrupted pull leaves nothing a job could read, and a failed one removes its temporary folder. A staged copy that records the same source and pairs is kept, since those decide its rows, whichever org or version it came from, as is one another pull stages meanwhile. One staged from an earlier version under the tag, before a split was added, or that can't be read, is replaced; a job reading it then fails.
+    The copy is written to a temporary folder and renamed, so an interrupted pull leaves nothing a job could read, and a failed one removes its temporary folder. Pulls of one repo into one root take turns, under a lock on the repo's folder. A staged copy that records the same source and pairs is kept, since those decide its rows, whichever org or version it came from. One staged from an earlier version under the tag, before a split was added, or that can't be read, is replaced; a job reading it then fails.
 
-    The staging root's permissions decide who reads every copy in it, private sets included, whatever the umask: folders between the root and a copy take the root's mode, and a copy's folders and files take it without anyone's write bits but the owner's (and files without execute bits), so nobody the root lets read a copy can change it. A root others can write to must have the sticky bit, which the folders below it keep, so nobody but a copy's owner can rename or replace it. A missing `root` is made readable by its owner only.
+    The staging root's permissions decide who reads every copy in it, private sets included, whatever the umask: folders between the root and a copy take the root's mode, and a copy's folders and files take it without anyone's write bits but the owner's (and files without execute bits), so nobody the root lets read a copy can change it. A root others can write to must have the sticky bit, as must every folder below it that others can write to, so nobody but a copy's owner can rename or replace it. A missing `root` is made readable by its owner only.
 
     Signs in to `org` with read-only keys first, so the copy recorded as `org`'s is read from `org`'s bucket.
 
     Raises:
-        `ValueError`: if `repo` isn't `<owner>/<name>`, the staging root is writable by others without the sticky bit, or the tagged version records another repo or revision, or no pairs.
+        `ValueError`: if `repo` isn't `<owner>/<name>`, `revision` isn't a commit hash, the staging root or a folder below it is writable by others without the sticky bit, or the tagged version records another repo or revision, or no pairs.
         [`~hub.s3.S3Error`]: if the sign-in to `org` fails.
     """
     import lance
@@ -158,6 +170,9 @@ def pull(org: str, repo: str, revision: str, root: Path) -> Path:
 
     if not REPO.fullmatch(repo):
         raise ValueError(f"expected a repo OWNER/NAME, got {repo!r}")
+    # A staged copy is read by the commit a task pins, never by a branch or tag that moves.
+    if not COMMIT.fullmatch(revision):
+        raise ValueError(f"{repo}: a staged copy needs a commit hash, not {revision!r}")
     s3.get_process(org, read_only=True)
     uri = f"{BUCKET}/{path(repo)}"
     source = lance.dataset(uri, version=revision)
@@ -169,31 +184,42 @@ def pull(org: str, repo: str, revision: str, root: Path) -> Path:
         return folder
 
     mode = _make_folders(root, folder.parent)
-    partial = Path(tempfile.mkdtemp(dir=folder.parent, prefix=f".{revision}.", suffix=".partial"))
-    try:
-        lance.write_dataset(
-            source.to_batches(),
-            str(partial),
-            schema=source.schema,
-            mode="overwrite",
-            transaction_properties={
-                **properties,
-                "hub_org": org,
-                "hub_uri": uri,
-                "hub_version": str(source.version),
-            },
+    with _locked(folder.parent):
+        # Another pull may have staged the same rows while this one waited.
+        if _holds(folder, properties):
+            return folder
+        partial = Path(
+            tempfile.mkdtemp(dir=folder.parent, prefix=f".{revision}.", suffix=".partial")
         )
-        _protect(partial, mode)
-        # Another pull may have staged the same rows meanwhile, and a job may read them already.
-        if not _holds(folder, properties):
+        try:
+            lance.write_dataset(
+                source.to_batches(),
+                str(partial),
+                schema=source.schema,
+                mode="overwrite",
+                transaction_properties={
+                    **properties,
+                    "hub_org": org,
+                    "hub_uri": uri,
+                    "hub_version": str(source.version),
+                },
+            )
+            _protect(partial, mode)
             _replace(folder, partial)
-    except Exception:
-        if not _holds(folder, properties):
-            raise
-        # Another pull of the same rows renamed its copy in first.
-    finally:
-        shutil.rmtree(partial, ignore_errors=True)
+        finally:
+            shutil.rmtree(partial, ignore_errors=True)
     return folder
+
+
+@contextlib.contextmanager
+def _locked(folder: Path) -> Generator[None]:
+    """Holds an exclusive lock on `folder`, shared by every process on the machines that mount it. The folder itself is locked, so no lock file sits beside the copies."""
+    descriptor = os.open(folder, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(descriptor)  # closing releases the lock
 
 
 def _replace(folder: Path, partial: Path) -> None:
@@ -204,25 +230,37 @@ def _replace(folder: Path, partial: Path) -> None:
     try:
         partial.rename(folder)
     except OSError:
-        if stale.exists() and not folder.exists():
+        if stale.exists():
             stale.rename(folder)
         raise
     shutil.rmtree(stale, ignore_errors=True)
 
 
 def _open(folder: Path) -> Any:
-    """The Lance dataset in `folder`, or `None` if there is none or it can't be read."""
+    """
+    The Lance dataset in `folder`, or `None` if nothing is there.
+
+    Raises:
+        `OSError`: if something is there that can't be read as a copy: a broken one, or another user's that you can't read.
+    """
     import lance
 
     try:
-        return lance.dataset(str(folder))
-    except ValueError, OSError:
+        folder.stat()
+    except FileNotFoundError:
         return None
+    try:
+        return lance.dataset(str(folder))
+    except (ValueError, OSError) as error:
+        raise OSError(f"{folder} is there but can't be read as a staged copy: {error}") from None
 
 
 def _holds(folder: Path, properties: Mapping[str, str]) -> bool:
-    """Whether the copy in `folder` records every one of `properties`."""
-    table = _open(folder)
+    """Whether the copy in `folder` records every one of `properties`; `False` if it can't be read, so a pull replaces it."""
+    try:
+        table = _open(folder)
+    except OSError:
+        return False
     if table is None:
         return False
     staged = recorded(table)
@@ -231,22 +269,35 @@ def _holds(folder: Path, properties: Mapping[str, str]) -> bool:
 
 def _make_folders(root: Path, folder: Path) -> int:
     """
-    Makes `folder` and the folders between it and `root` with `root`'s mode, setgid and sticky bits included, and returns that mode. A missing `root` is made with mode 0o700.
+    Makes `folder` and the folders between it and `root` with `root`'s mode, setgid and sticky bits included, and returns that mode. A missing `root` is made with mode 0o700, and a new folder is made owner-only before it takes the mode, so it is never open to others' writes without the sticky bit.
 
     Raises:
-        `ValueError`: if others can write to `root` and it hasn't the sticky bit, since they could then replace any copy below it.
+        `ValueError`: if others can write to `root` or a folder between it and `folder` without the sticky bit, since they could then replace any copy below it.
     """
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    mode = stat.S_IMODE(root.stat().st_mode)
+    mode = _guarded_mode(root)
+    for made in [*reversed(folder.parents[: len(folder.relative_to(root).parts) - 1]), folder]:
+        try:
+            made.mkdir(mode=0o700)
+            made.chmod(mode)
+        except FileExistsError:
+            _guarded_mode(made)  # made by another pull or by hand
+    return mode
+
+
+def _guarded_mode(folder: Path) -> int:
+    """
+    The permission bits of `folder`.
+
+    Raises:
+        `ValueError`: if others can write to it and it hasn't the sticky bit.
+    """
+    mode = stat.S_IMODE(folder.stat().st_mode)
     if mode & 0o022 and not mode & stat.S_ISVTX:
         raise ValueError(
-            f"others can write to the staging root {root}, so they could replace a copy: "
+            f"others can write to the staging folder {folder}, so they could replace a copy: "
             f"set its sticky bit (chmod +t) or stage elsewhere"
         )
-    for made in [*reversed(folder.parents[: len(folder.relative_to(root).parts) - 1]), folder]:
-        if not made.exists():
-            made.mkdir(exist_ok=True)
-            made.chmod(mode)
     return mode
 
 
@@ -258,24 +309,36 @@ def _protect(folder: Path, mode: int) -> None:
         made.chmod(folders if made.is_dir() else files)
 
 
+def _pull_command(root: Path, repo: str, revision: str) -> str:
+    """The command that stages `repo` at `revision` under `root`, with the org left to fill in."""
+    return f"flock eval hub pull <org>/{repo}@{revision} --to {root}"
+
+
 def _copy(root: Path, repo: str, revision: str) -> tuple[Any, list[dict[str, Any]]]:
     """
     The copy of `repo` at `revision` staged under `root`, and the pairs it records.
 
     Raises:
         `ValueError`: if `revision` isn't a commit hash, or the copy records another repo or revision.
-        `FileNotFoundError`: if the pin isn't staged, or its folder can't be read.
+        `FileNotFoundError`: if the pin isn't staged.
+        `OSError`: if its folder is there but can't be read, naming whose it is and the pull command that replaces it.
     """
     if not COMMIT.fullmatch(revision):
         raise ValueError(f"{repo}: a staged copy needs a commit hash, not {revision!r}")
 
     folder = root / repo / revision
-    table = _open(folder)
+    command = _pull_command(root, repo, revision)
+    try:
+        table = _open(folder)
+    except OSError as error:
+        raise OSError(
+            f"{error}. It belongs to user {folder.lstat().st_uid}; if that is you, run "
+            f"`{command}` to replace it, otherwise ask them or stage elsewhere"
+        ) from None
     if table is None:
         raise FileNotFoundError(
             f"{repo}@{revision} isn't staged in {root}: run "
-            f"`flock eval hub pull <org>/{repo}@{revision} --to {root}` on a machine that "
-            f"reaches the hub"
+            f"`{command}` on a machine that reaches the hub"
         )
     return table, check(recorded(table), repo, revision, str(folder))
 
@@ -285,7 +348,8 @@ def check_staged(root: Path, pins: Mapping[tuple[str, str], Iterable[Pair]]) -> 
     Checks that each `(repo, revision)` pin is staged under `root` with every pair it maps to, so a run fails before its model loads instead of at its first unstaged task.
 
     Raises:
-        `FileNotFoundError`: naming every pin that isn't staged or lacks a pair.
+        `FileNotFoundError`: naming every pin that isn't staged or lacks a pair, each with its pull command.
+        `OSError`: if a pin's folder is there but can't be read.
         `ValueError`: if a revision isn't a commit hash, or a copy records another repo or revision.
     """
     missing = []
@@ -295,12 +359,11 @@ def check_staged(root: Path, pins: Mapping[tuple[str, str], Iterable[Pair]]) -> 
         except FileNotFoundError:
             held = []
         if not set(pairs) <= {(pair["subset"], pair["split"]) for pair in held}:
-            missing.append(f"{repo}@{revision}")
+            missing.append(_pull_command(root, repo, revision))
     if missing:
         raise FileNotFoundError(
-            f"not staged in {root}, or staged without a split a task reads: "
-            f"{', '.join(missing)}. Run `flock eval hub pull <org>/<repo>@<commit> --to {root}` "
-            f"for each on a machine that reaches the hub"
+            f"not staged in {root}, or staged without a split a task reads; on a machine that "
+            f"reaches the hub, run:\n" + "\n".join(missing)
         )
 
 
@@ -312,7 +375,8 @@ def staged_rows(
 
     Raises:
         `ValueError`: if `revision` isn't a commit hash, or the staged copy records another repo or revision.
-        `FileNotFoundError`: if the pin isn't staged, or its folder can't be read.
+        `FileNotFoundError`: if the pin isn't staged.
+        `OSError`: if its folder is there but can't be read.
         `KeyError`: if the staged copy doesn't hold the split.
     """
     table, pairs = _copy(root, repo, revision)
