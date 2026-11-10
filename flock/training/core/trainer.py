@@ -21,6 +21,8 @@ from torch.optim import AdamW, Muon, Optimizer
 from torch.utils.data import DataLoader
 from transformers import TokenizersBackend
 
+from flock.eval.model import FlockCausalLM, ScoringModel
+from flock.eval.run import score_task
 from flock.eval.tasks import TASKS
 from flock.hub.models import PendingUpload, save_to_hub
 from flock.hub.models.files import import_path, read_training_state, weight_files, write_model
@@ -178,6 +180,7 @@ class Trainer:
         )
         self.run.define_metric("global_step")
         self.run.define_metric("train/*", step_metric="global_step")
+        self.run.define_metric("eval/*", step_metric="global_step")
 
         self.model = model.to(self.device)
         self.tokenizer = tokenizer
@@ -308,6 +311,12 @@ class Trainer:
                 self.run.log(metrics_dict)
                 self.state.reset_window()
 
+            if self.validation_steps and (
+                step % self.validation_steps == 0 or step == self.total_steps
+            ):
+                self.evaluate()
+                self.model.train()
+
             if self.save_steps is None:
                 continue
 
@@ -375,6 +384,28 @@ class Trainer:
         finally:
             if self.pending_uploads or (self.save_steps and self.state.step % self.save_steps != 0):
                 self.save_model(blocking=True)
+
+    @torch.no_grad()
+    def evaluate(self):
+        self.model.eval()
+
+        step = int(self.state.step.item())
+        scorer = ScoringModel(
+            FlockCausalLM(self.model), self.tokenizer, name=f"{self.run_name}@step-{step}"
+        )
+
+        try:
+            results = {task: score_task(scorer, TASKS[task]) for task in self.validation_tasks}
+        except (FileExistsError, KeyError) as e:
+            self.logger.error(f"Error during evaluation, skipping: {e}")
+            return
+
+        log_dict = {"global_step": step}
+        for task_key, score_dict in results.items():
+            for metric_key, score in score_dict.metrics.items():
+                log_dict[f"eval/{task_key}/{metric_key}"] = score
+
+        self.run.log(log_dict)
 
     def save_model(self, blocking=False):
         for checkpoint, upload in list(self.pending_uploads.items()):
