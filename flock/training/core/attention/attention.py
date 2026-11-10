@@ -38,7 +38,7 @@ class GroupedAttentionWithRoPE(nn.Module):
         """Validate head dimensions and construct projections and normalization."""
         super().__init__()
         if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+            num_key_value_heads: int = num_attention_heads
         if hidden_size <= 0 or num_attention_heads <= 0 or num_key_value_heads <= 0:
             raise ValueError("hidden_size and attention head counts must be positive")
         if hidden_size % num_attention_heads:

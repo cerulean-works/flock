@@ -12,7 +12,7 @@ from transformers.models.olmo2.modeling_olmo2 import (
     apply_rotary_pos_emb,
 )
 
-from flock.training.core.nn import GroupedAttentionWithRoPE
+from flock.training.core.attention import GroupedAttentionWithRoPE
 from tests.training._reference import check_gqa_parity, check_swiglu_parity, hf_config
 
 if TYPE_CHECKING:

@@ -5,7 +5,8 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 
-from flock.training.core.nn import GroupedAttentionWithRoPE, SwiGLU
+from flock.training.core.attention import GroupedAttentionWithRoPE
+from flock.training.core.nn import SwiGLU
 
 from .base import BaseModel
 
