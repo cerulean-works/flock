@@ -61,6 +61,7 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
         shuffle: bool = True,
         seed: int = 42,
         skip_batches: int = 0,
+        drop_last: bool = False,
     ):
         super().__init__()
         self.dataset_size = dataset_size
@@ -68,8 +69,11 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
         self.shuffle = shuffle
         self.seed = seed
         self.skip_batches = skip_batches
+        self.drop_last = drop_last
 
     def __len__(self) -> int:
+        if self.drop_last:
+            return self.dataset_size // self.batch_size
         return ceil(self.dataset_size / self.batch_size)
 
     def __iter__(self) -> Iterator[list[int]]:
