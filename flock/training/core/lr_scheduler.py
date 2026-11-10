@@ -1,5 +1,7 @@
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass
 from math import cos, pi
+from typing import Any
 
 from torch.optim import Optimizer
 
@@ -73,3 +75,42 @@ class StepLRScheduler:
 
     def get_last_lr(self) -> list[float]:
         return [float(group["lr"]) for group in self.optimizer.param_groups]
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return the schedule and progress as plain values, without the optimizer."""
+        return {
+            "config": {
+                "type": "cosine" if isinstance(self.config, CosineConfig) else "wsd",
+                **asdict(self.config),
+            },
+            "total_steps": self.total_steps,
+            "base_lrs": self.base_lrs.copy(),
+            "completed_steps": self.completed_steps,
+        }
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        """Restore a schedule and apply the learning rates for its next update.
+
+        Restore the optimizer's state before calling this method.
+        """
+        config_fields = dict(state_dict["config"])
+        config_type = config_fields.pop("type")
+        if config_type == "cosine":
+            config = CosineConfig(**config_fields)
+        elif config_type == "wsd":
+            config = WSDConfig(**config_fields)
+        else:
+            raise ValueError(f"Unsupported scheduler config type: {config_type}")
+
+        base_lrs = list(state_dict["base_lrs"])
+        if len(base_lrs) != len(self.optimizer.param_groups):
+            raise ValueError("Optimizer parameter groups do not match the saved scheduler")
+        completed_steps = state_dict["completed_steps"]
+        if completed_steps < 0:
+            raise ValueError("completed_steps must be nonnegative")
+
+        self.config = config
+        self.total_steps = state_dict["total_steps"]
+        self.base_lrs = base_lrs
+        self.completed_steps = completed_steps
+        self._apply_lr()
