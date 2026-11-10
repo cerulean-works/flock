@@ -1,5 +1,6 @@
 import copy
 import json
+import math
 import os
 import random
 import threading
@@ -19,8 +20,10 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
+from flock.eval.tasks import TASKS, Choice, Dataset, MCDoc, MultipleChoiceTask, PerplexityTask
 from flock.hub.models import upload as hub_upload
 from flock.hub.models.files import write_training_state
+from flock.training.core import trainer as trainer_module
 from flock.training.core.checkpoint import TrainerCheckpoint
 from flock.training.core.data_utils import LanceBatchCollator
 from flock.training.core.lr_scheduler import CosineConfig, WSDConfig
@@ -66,8 +69,8 @@ def trainer_factory(config, tokenizer, monkeypatch, tmp_path):
                 {"text": "d a"},
             ]
         trainer = Trainer(
-            config=TrainerConfig(
-                **{
+            config=TrainerConfig.model_validate(
+                {
                     "run_name": "test-run",
                     "input_column": "text",
                     "batch_size": 2,
@@ -101,7 +104,212 @@ def test_trainer_initializes_schedule_and_metric_step(trainer_factory):
     assert run.definitions == [
         (("global_step",), {}),
         (("train/*",), {"step_metric": "global_step"}),
+        (("eval/*",), {"step_metric": "global_step"}),
     ]
+
+
+@pytest.fixture
+def validation_tasks(monkeypatch):
+    """Real task/scorer paths with local rows and the training fixture's tokenizer."""
+    text_task = PerplexityTask(
+        "test_trainer_text",
+        Dataset("offline/trainer", "0" * 40, None, "text"),
+        window=8,
+    )
+    choice_task = MultipleChoiceTask(
+        name="test_trainer_choices",
+        dataset=Dataset("offline/trainer", "0" * 40, None, "choices"),
+        to_doc=lambda row: MCDoc(row["id"], (Choice("a", " b"), Choice("a", " c")), 0),
+        primary_metric="acc_raw",
+        metrics=("acc_raw", "bpb"),
+        unconditional_context=None,
+    )
+    rows = {
+        "text": [{"id": "long", "text": "a b c d"}, {"id": "short", "text": "b c"}],
+        "choices": [{"id": "q"}],
+    }
+
+    def load(dataset, split=None):
+        assert dataset.repo == "offline/trainer", "validation must not load external data"
+        return rows[split or dataset.split]
+
+    monkeypatch.setattr(Dataset, "load", load)
+    tasks = [text_task, choice_task]
+    for task in tasks:
+        monkeypatch.setitem(TASKS, task.name, task)
+    return tasks
+
+
+@pytest.mark.parametrize(
+    "interval, expected_steps",
+    [(None, []), (1, [1, 2, 3]), (2, [2, 3]), (3, [3]), (5, [3])],
+)
+def test_validation_schedule_and_training_mode(
+    trainer_factory, validation_tasks, monkeypatch, interval, expected_steps
+):
+    trainer, _, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        validation_tasks=[task.name for task in validation_tasks],
+        validation_steps=interval,
+    )
+    calls, forward_modes = [], []
+
+    def evaluate():
+        calls.append(int(trainer.state.step.item()))
+        trainer.model.eval()  # The training loop owns restoring training mode.
+
+    monkeypatch.setattr(trainer, "evaluate", evaluate)
+    hook = trainer.model.register_forward_pre_hook(
+        lambda model, args: forward_modes.append(model.training)
+    )
+    try:
+        trainer.train()
+    finally:
+        hook.remove()
+    assert calls == expected_steps
+    assert forward_modes == [True, True, True]
+    assert trainer.model.training
+    assert trainer.lr_scheduler.completed_steps == 3
+
+
+def test_evaluation_scores_real_tasks_and_logs_at_training_step(
+    trainer_factory, validation_tasks, monkeypatch
+):
+    trainer, run, module_logs = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        validation_tasks=[task.name for task in validation_tasks],
+    )
+    trainer.state.step.fill_(2)
+    # Compute expectations directly from causal logits, without the eval scorer/metrics.
+    reference = copy.deepcopy(trainer.model).eval()
+    with torch.no_grad():
+        total_nll = 0.0
+        for inputs, targets in [([1, 2, 3, 4], [2, 3, 4, 5]), ([1, 3], [3, 4])]:
+            ids = torch.tensor([inputs])  # EOS=1 supplies the first token's context.
+            logits = reference(
+                {"input_ids": ids, "attention_mask": torch.ones_like(ids), "labels": ids}
+            )
+            total_nll += F.cross_entropy(
+                logits[0].float(), torch.tensor(targets), reduction="sum"
+            ).item()
+        ids = torch.tensor([[2]])  # Both choices have context "a".
+        logits = reference(
+            {"input_ids": ids, "attention_mask": torch.ones_like(ids), "labels": ids}
+        )
+        logprob = logits[0, 0].float().log_softmax(-1)
+        expected_accuracy = float(logprob[3] >= logprob[4])
+        expected_choice_bpb = -logprob[3].item() / (len(b" b") * math.log(2))
+
+    # Evaluation must leave existing gradients, weights, counters and RNG state alone.
+    for parameter in trainer.model.parameters():
+        parameter.grad = torch.full_like(parameter, 0.125)
+    weights = copy.deepcopy(trainer.model.state_dict())
+    state = copy.deepcopy(trainer.get_trainer_state())
+    calls = []
+    score_task = trainer_module.score_task
+
+    def score(scorer, task):
+        assert not torch.is_grad_enabled()
+        assert not trainer.model.training
+        assert scorer.model.model is trainer.model
+        assert scorer.tokenizer is trainer.tokenizer
+        assert scorer.name == "test-run@step-2"
+        calls.append(task)
+        return score_task(scorer, task)
+
+    monkeypatch.setattr(trainer_module, "score_task", score)
+    trainer.evaluate()
+
+    assert calls == validation_tasks
+    assert module_logs == []
+    assert len(run.metrics) == 1
+    assert run.metrics[0] == pytest.approx(
+        {
+            "global_step": 2,
+            "eval/test_trainer_text/bits_per_byte": total_nll
+            / (len(b"a b c d") + len(b"b c"))
+            / math.log(2),
+            "eval/test_trainer_text/loss_per_token": total_nll / 6,
+            "eval/test_trainer_text/perplexity": math.exp(total_nll / 6),
+            "eval/test_trainer_choices/acc_raw": expected_accuracy,
+            "eval/test_trainer_choices/bpb": expected_choice_bpb,
+        },
+        rel=1e-6,
+        abs=1e-6,
+    )
+    assert_nested_equal(trainer.model.state_dict(), weights)
+    assert_nested_equal(trainer.get_trainer_state(), state)
+    for parameter in trainer.model.parameters():
+        torch.testing.assert_close(parameter.grad, torch.full_like(parameter, 0.125))
+
+
+@pytest.mark.parametrize(
+    "error_type, failed_task",
+    [(None, None), (KeyError, 0), (KeyError, 1), (FileExistsError, 0), (FileExistsError, 1)],
+)
+def test_validation_preserves_training_updates(
+    trainer_factory, validation_tasks, monkeypatch, tmp_path, caplog, error_type, failed_task
+):
+    reference, reference_run, _ = trainer_factory(num_workers=0, prefetch_factor=None)
+    reference.train()
+    expected_state = copy.deepcopy(reference.get_trainer_state())
+    trainer, run, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        output_dir=str(tmp_path / "validation-errors"),
+        validation_tasks=[task.name for task in validation_tasks],
+        validation_steps=1,
+    )
+    calls = []
+    score_task = trainer_module.score_task
+
+    def score(scorer, task):
+        assert not trainer.model.training
+        calls.append((int(trainer.state.step.item()), task.name))
+        if error_type is not None and task is validation_tasks[failed_task]:
+            raise error_type("validation fixture failure")
+        return score_task(scorer, task)
+
+    monkeypatch.setattr(trainer_module, "score_task", score)
+    trainer.train()
+
+    scored_tasks = validation_tasks if error_type is None else validation_tasks[: failed_task + 1]
+    assert calls == [(step, task.name) for step in [1, 2, 3] for task in scored_tasks]
+    if error_type is not None:
+        assert caplog.text.count("Error during evaluation, skipping:") == 3
+        assert "validation fixture failure" in caplog.text
+    eval_logs = [metrics for metrics in run.metrics if any(k.startswith("eval/") for k in metrics)]
+    assert [metrics["global_step"] for metrics in eval_logs] == (
+        [1, 2, 3] if error_type is None else []
+    )
+    assert trainer.model.training
+    assert [metrics for metrics in run.metrics if "train/loss_mean" in metrics] == (
+        reference_run.metrics
+    )
+    assert_nested_equal(trainer.model.state_dict(), reference.model.state_dict())
+    assert_nested_equal(trainer.get_trainer_state(), expected_state)
+
+
+def test_unexpected_validation_error_is_not_silenced(
+    trainer_factory, validation_tasks, monkeypatch
+):
+    trainer, run, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        validation_tasks=[task.name for task in validation_tasks],
+        validation_steps=1,
+    )
+
+    def score(scorer, task):
+        raise ValueError("invalid validation window")
+
+    monkeypatch.setattr(trainer_module, "score_task", score)
+    with pytest.raises(ValueError, match="invalid validation window"):
+        trainer.train()
+    assert trainer.state.step.item() == trainer.lr_scheduler.completed_steps == 1
+    assert all(not key.startswith("eval/") for metrics in run.metrics for key in metrics)
 
 
 def test_local_checkpoint_records_run_identity(trainer_factory):
