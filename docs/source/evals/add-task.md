@@ -46,7 +46,15 @@ uv run flock eval run \
 
 ## A perplexity task
 
-A [`~eval.tasks.PerplexityTask`] needs no row function: it reads each row's `id` and `text`, and keeps the rows whose `subdomain` is its `domain`. A Paloma source is one line in `DOMAINS` in `flock/eval/tasks/paloma.py`, with the domains `flock/eval/scripts/paloma_census.py` prints for it. `source_suite` makes one task per domain and the source's suite, and `PALOMA` registers them. `tw_text` is built the same way from `SOURCES` in `flock/eval/tasks/tw_text.py`, whose rows always carry `subdomain`: list a source whose rows carry one value with that value, such as `"cna": ("cna",)`, never with none, and list every distinct `subdomain` value of the other sources' `test` split.
+A [`~eval.tasks.PerplexityTask`] needs no row function: it reads each row's `id` and `text`, and keeps the rows whose `subdomain` is its `domain`. A Paloma source is one line in `DOMAINS` in `flock/eval/tasks/paloma.py`. `source_suite` makes one task per domain and the source's suite, and `PALOMA` registers them. `tw_text` is built the same way from `SOURCES` in `flock/eval/tasks/tw_text.py`, whose rows always carry `subdomain`: list a source whose rows carry one value with that value, such as `"cna": ("cna",)`, never with none, and list every distinct `subdomain` value of the other sources' `test` split.
+
+A row whose `subdomain` the table leaves out is never scored, and nothing at run time says so. Run the census whenever you add a source or move the revision:
+
+```bash
+uv run python flock/eval/scripts/source_census.py tw_text tw-text-census.json
+```
+
+It counts every source's documents, bytes, tokens and windows in the scored split, prints each source's domains in the table's format, and exits with status 1 if a source the suite lists has a domain the table leaves out or lists one the split lacks. A source the suite leaves out on purpose is reported, not failed. Pass `paloma` for Paloma, after accepting its terms on the Hugging Face Hub.
 
 ## Check that it works
 

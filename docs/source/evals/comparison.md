@@ -49,7 +49,7 @@ A breach adds a line such as `piqa  metrics.acc_raw  0.6  ->  0.625  (+0.025)`. 
 A difference in score only means something if both runs used the same settings. `compare` refuses, before it reads any score, when:
 - the provenance's `model`, `dtype`, `batch_tokens`, `max_length`, `add_bos` or `attention` differ. A file written before `add_bos` existed reads as `false`, since no run before it added BOS.
 - the provenance's `model_digest` differs, as for two Flock servers that each have a `flock:acme/olmo2-1b@12`. A file written before `model_digest` existed counts as `null`, the value for a Hugging Face model.
-- the provenance's `sdpa_backend` differs, the SDPA kernel that changes BF16 scores. A file written before `sdpa_backend` existed is not refused on it: its kernel is unknown, and in FP32 the kernel changes no score, so an older FP32 bank stays comparable. Its missing field prints as `None` among the causes above, as other missing fields do.
+- the provenance's `sdpa_backend` differs, the SDPA kernel that changes BF16 scores. A file written before `sdpa_backend` existed is not refused on it: its kernel is unknown. Its missing field prints as `None` among the causes above, as other missing fields do. When both files have the field, a different value is refused in every dtype, so a CPU run, which records `null`, is refused against the banks, which record `EFFICIENT_ATTENTION`.
 - no task is in both files
 - a file isn't JSON, a field it reads is missing, or a value there has the wrong type
 
