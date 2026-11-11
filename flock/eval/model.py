@@ -205,11 +205,12 @@ class FlockCausalLM(torch.nn.Module):
     def __init__(self, model: torch.nn.Module) -> None:
         super().__init__()
         self.model = model
-        # What `ScoringModel` reads from a transformers config. Flock's attention calls
-        # `scaled_dot_product_attention` with an explicit mask.
+        # Report the selected implementation so scoring only pins SDPA when it is used.
         self.config = SimpleNamespace(
             max_position_embeddings=getattr(model, "max_position_embeddings", None),
-            _attn_implementation="sdpa",
+            _attn_implementation=getattr(
+                getattr(model, "config", None), "attn_implementation", "sdpa"
+            ),
         )
 
     @property

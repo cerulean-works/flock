@@ -248,6 +248,42 @@ still selects CUDA if it is available.
 PyTorch warns that FP32 training autocast is unsupported and disables it;
 the example's weights and computations remain FP32.
 
+## Choose an attention backend
+
+Flock's `Olmo2Config.attn_implementation` selects the attention computation in every
+decoder layer. It defaults to `"sdpa"`, the built-in PyTorch implementation.
+Omit this field to keep SDPA: existing model construction and experiment configs
+need no changes. Set it only when selecting another implementation.
+
+Projection weights, Q/K normalization and RoPE belong to the attention layer.
+The selected backend receives the prepared Q/K/V and returns the attention output.
+
+Selection and registration follow the naming in Hugging Face's
+[attention interface](https://huggingface.co/docs/transformers/main/en/attention_interface).
+To use a custom implementation, import `AttentionInterface` from
+`flock.training.core.attention` and call `AttentionInterface.register(name, function)`.
+Then select the registered name with `attn_implementation` in the config.
+`AttentionInterface.get_interface(name)` resolves the name to its function.
+Registration and lookup use class methods with one shared mapping.
+
+Flock has its own registry and function signature. Functions
+follow the `AttentionFunction` interface: Q/K/V use `[batch, heads, sequence,
+head_dim]`, with keyword arguments `attention_mask` and `is_causal`. Boolean masks
+allow attention where True; floating masks add to the scores. The output uses
+the same layout, with Q's heads and sequence length. Implementations handle GQA
+when Q has more heads than K/V, and report unsupported inputs as errors.
+
+The layer resolves the function at construction. Changing the registry later
+does not change existing layers. Unknown names raise `ValueError`. `"sdpa"` is
+the only implemented built-in backend; selecting it lets PyTorch choose the SDPA
+kernel. `"flash_attention_3"` is registered as a placeholder. Selecting it allows
+model construction, but an attention call raises `NotImplementedError`.
+
+The backend name is saved in `config.json`, so register custom implementations
+before loading their models in another process. A config without this field
+defaults to `"sdpa"`. The in-memory evaluation adapter reports the selected name;
+only `"sdpa"` receives the evaluator's SDPA kernel pin.
+
 ## Check the run
 
 Watch `global_step`, `train/loss_mean`, `train/loss_window_max`,

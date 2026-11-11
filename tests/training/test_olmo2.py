@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import replace
+import json
+from dataclasses import asdict, replace
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
@@ -9,6 +10,7 @@ import torch
 from huggingface_hub import constants
 from torch.nn import functional as F
 
+from flock.training.core.attention import AttentionInterface, sdpa_attention
 from flock.training.core.data_utils import Batch, LanceBatchCollator
 from flock.training.core.models.olmo2 import OLMO2_1B_CONFIG, OLMO2_7B_CONFIG, Olmo2
 from tests.training._reference import olmo2_training_parity
@@ -54,6 +56,40 @@ def test_causality_and_padding_invariance(config: Olmo2Config) -> None:
         ):
             actual = model(make_batch(torch.tensor(padded), torch.tensor(mask)))
             torch.testing.assert_close(actual[:, start : start + 4], expected)
+
+
+def test_attn_implementation_survives_config_round_trip_and_reaches_every_layer(
+    config, monkeypatch
+):
+    calls = []
+
+    def recording_attention(q, k, v, *, attention_mask=None, is_causal=False):
+        calls.append(attention_mask)
+        return sdpa_attention(q, k, v, attention_mask=attention_mask, is_causal=is_causal)
+
+    monkeypatch.setattr(
+        AttentionInterface, "_global_mapping", AttentionInterface._global_mapping.copy()
+    )
+    AttentionInterface.register("recording", recording_attention)
+    selected_config = replace(config, attn_implementation="recording")
+    restored_config = type(config)(**json.loads(json.dumps(asdict(selected_config))))
+    assert restored_config.attn_implementation == "recording"
+    model = Olmo2(restored_config)
+    reference = Olmo2(config)
+    reference.load_state_dict(model.state_dict(), strict=True)
+    batch = make_batch(torch.tensor([[0, 2, 3, 4]]), torch.tensor([[0, 1, 1, 1]]))
+    torch.testing.assert_close(model(batch), reference(batch))
+    assert len(calls) == config.num_hidden_layers
+
+
+def test_config_without_attn_implementation_defaults_to_sdpa(config):
+    saved = asdict(config)
+    del saved["attn_implementation"]
+    restored = type(config)(**saved)
+    model = Olmo2(restored)
+    assert restored.attn_implementation == "sdpa"
+    batch = make_batch(torch.tensor([[2, 3, 4]]))
+    torch.testing.assert_close(model(batch), Olmo2(config)(batch))
 
 
 @pytest.fixture

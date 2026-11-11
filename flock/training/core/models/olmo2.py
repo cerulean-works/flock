@@ -46,6 +46,8 @@ class Olmo2Config:
     initializer_range: float = 0.02
     init_seed: int = 42
     hf_repo: str | None = None
+    # Attention implementation is optional.
+    attn_implementation: str = "sdpa"
 
     def __post_init__(self) -> None:
         """Validate positive dimensions, grouped heads and an even RoPE head width."""
@@ -109,6 +111,8 @@ class Olmo2DecoderLayer(nn.Module):
             num_key_value_heads=config.num_key_value_heads,
             q_norm=nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps),
             k_norm=nn.RMSNorm(config.num_key_value_heads * head_dim, eps=config.rms_norm_eps),
+            # Attention implementation is optional.
+            attn_implementation=config.attn_implementation,
         )
         self.mlp = SwiGLU(
             hidden_size=config.hidden_size, intermediate_size=config.intermediate_size

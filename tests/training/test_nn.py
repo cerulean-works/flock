@@ -12,11 +12,66 @@ from transformers.models.olmo2.modeling_olmo2 import (
     apply_rotary_pos_emb,
 )
 
-from flock.training.core.attention import GroupedAttentionWithRoPE
+from flock.training.core.attention import (
+    AttentionInterface,
+    GroupedAttentionWithRoPE,
+    sdpa_attention,
+)
 from tests.training._reference import check_gqa_parity, check_swiglu_parity, hf_config
 
 if TYPE_CHECKING:
     from flock.training.core.models.olmo2 import Olmo2Config
+
+
+@pytest.mark.parametrize("mask_type", ["causal", "padding", "additive"])
+def test_selected_kernel_preserves_layout_masks_and_gradients(monkeypatch, mask_type):
+    calls = []
+
+    def doubled_attention(q, k, v, *, attention_mask=None, is_causal=False):
+        calls.append((q.shape, k.shape, v.shape, attention_mask, is_causal))
+        return 2 * sdpa_attention(q, k, v, attention_mask=attention_mask, is_causal=is_causal)
+
+    monkeypatch.setattr(
+        AttentionInterface, "_global_mapping", AttentionInterface._global_mapping.copy()
+    )
+    AttentionInterface.register("doubled", doubled_attention)
+    attention = GroupedAttentionWithRoPE(
+        hidden_size=32, num_attention_heads=4, num_key_value_heads=2, attn_implementation="doubled"
+    )
+    reference = GroupedAttentionWithRoPE(
+        hidden_size=32, num_attention_heads=4, num_key_value_heads=2
+    )
+    reference.load_state_dict(attention.state_dict(), strict=True)
+    x = torch.randn(2, 5, 32, requires_grad=True)
+    reference_x = x.detach().clone().requires_grad_()
+    mask = None
+    if mask_type == "padding":
+        mask = torch.tensor([[False, True, True, True, True], [True] * 5])[:, None, None, :]
+    elif mask_type == "additive":
+        mask = torch.zeros(5, 5).masked_fill(torch.ones(5, 5, dtype=torch.bool).triu(1), -torch.inf)
+    causal = mask_type == "causal"
+    actual = attention(x, attention_mask=mask, is_causal=causal)
+    # The output projection has no bias, so scaling the kernel scales its output.
+    expected = 2 * reference(reference_x, attention_mask=mask, is_causal=causal)
+    assert len(calls) == 1
+    q_shape, k_shape, v_shape, received_mask, received_causal = calls[0]
+    assert q_shape == (2, 4, 5, 8)
+    assert k_shape == v_shape == (2, 2, 5, 8)
+    assert received_mask is mask
+    assert received_causal == causal
+    torch.testing.assert_close(actual, expected)
+    actual.square().mean().backward()
+    expected.square().mean().backward()
+    torch.testing.assert_close(x.grad, reference_x.grad)
+    for name, parameter in attention.named_parameters():
+        torch.testing.assert_close(parameter.grad, reference.get_parameter(name).grad)
+
+
+def test_unknown_attn_implementation_is_rejected():
+    with pytest.raises(ValueError, match="Unknown attention implementation 'missing'"):
+        GroupedAttentionWithRoPE(
+            hidden_size=16, num_attention_heads=4, attn_implementation="missing"
+        )
 
 
 @pytest.mark.parametrize("mask_type", ["none", "causal", "padding", "additive"])
