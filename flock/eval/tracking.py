@@ -6,9 +6,6 @@ from typing import Any
 
 import wandb
 
-from flock.cli import credentials
-from flock.cli.api import Api, error_of
-
 
 def log_to_tracker(
     results: dict[str, Any],
@@ -30,7 +27,7 @@ def log_to_tracker(
         entity (`str`, *optional*):
             The organization to log to, or `None` for the SDK's default.
         host (`str`, *optional*):
-            The tracker's URL, logged to online, or `None` for the SDK's settings.
+            The tracker's URL, logged to online as a new run, or `None` for the SDK's settings.
     """
     summary: dict[str, Any] = {}
     for task in results["tasks"]:
@@ -56,8 +53,11 @@ def log_to_tracker(
 
     # Leaving the block finishes the run, with exit code 1 if the update raised, so a failed log
     # isn't left running on the tracker.
-    # Online even where `WANDB_MODE` says offline, so a backfill never reports a run it didn't log.
-    settings = wandb.Settings(base_url=host, mode="online") if host is not None else None
+    # Online even where `WANDB_MODE` says offline, so a backfill never reports a run it didn't
+    # log, and never resumed, so a `WANDB_RUN_ID` left in the environment can't overwrite a run.
+    settings = None
+    if host is not None:
+        settings = wandb.Settings(base_url=host, mode="online", resume="never")
     with wandb.init(
         entity=entity, project=project, job_type="eval", config=config, settings=settings
     ) as run:
@@ -73,7 +73,12 @@ def log_results_file(path: Path, project: str) -> str:
     Raises:
         `ValueError`: if the file's schema isn't 6 to 8, Flock refuses the sign-in or the query, or the project already has a run with the file's `model` and `created_at` that didn't fail or crash.
         `click.ClickException`: if Flock can't be reached.
+        `wandb.errors.Error`: if the tracker refuses the run, for example for a wandb key set for another server.
     """
+    # Imported here so a live run's log doesn't import the Flock API client.
+    from flock.cli import credentials
+    from flock.cli.api import Api, error_of
+
     results = json.loads(path.read_text())
     # Schemas 6 to 8 hold every field the run is built from. Older files lack suite hashes, and
     # some lack suites.

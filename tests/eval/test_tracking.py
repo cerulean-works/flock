@@ -180,6 +180,7 @@ def test_a_banked_file_logs_its_provenance_as_written(logged, hub, schema):
     assert logged["init"]["entity"] == "acme"
     assert logged["init"]["settings"].base_url == HOST
     assert logged["init"]["settings"].mode == "online"  # never a silent offline run
+    assert logged["init"]["settings"].resume == "never"  # never into an existing run
     (query,) = hub.queries
     assert query["filter"] == {
         "$and": [
@@ -270,3 +271,17 @@ def test_the_log_command_prints_where_the_run_went_or_why_not(logged, hub):
     refused = CliRunner().invoke(main, ["log", path, "--project", "model-evals"])
     assert refused.exit_code == 1
     assert "already logged as acme/model-evals/run-1" in refused.output
+
+
+def test_the_log_command_reports_a_tracker_refusal_in_one_line(hub, monkeypatch):
+    def refuse(**kwargs):
+        raise wandb.errors.AuthenticationError("API key is invalid")
+
+    monkeypatch.setattr(wandb, "init", refuse)
+
+    result = CliRunner().invoke(
+        main, ["log", str(LOGGED / "schema8.json"), "--project", "model-evals"]
+    )
+
+    assert result.exit_code == 1
+    assert result.output == "Error: API key is invalid\n"

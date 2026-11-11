@@ -80,4 +80,4 @@ The run differs from a live one in a few ways:
 | config | The [provenance](results#provenance), plus `task_hashes` (each task's hash by name), `suite_members` (each suite's members by name) and `suite_hashes` (each suite's hash by name). |
 | summary | `<task>/<metric>` for each metric, `<task>/docs_per_second` unless the clock measured no time, and `suites/<suite>` for each scored suite's score. |
 
-`results.json` is written either way.
+`flock eval run` writes `results.json` whether or not it logs.
