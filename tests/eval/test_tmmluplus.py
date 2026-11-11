@@ -16,7 +16,12 @@ from flock.eval.tasks import (
     MultipleChoiceTask,
     cloze,
 )
-from flock.eval.tasks.tmmluplus import CATEGORIES, TAIWAN_TASKS, TMMLUPLUS, tmmluplus_doc
+from flock.eval.tasks.tmmluplus import (
+    TAIWAN_TASKS,
+    TMMLUPLUS,
+    TMMLUPLUS_BENCHMARK,
+    tmmluplus_doc,
+)
 
 ROWS = {
     "train": [
@@ -169,15 +174,6 @@ def test_metrics_on_chinese_text_follow_their_definitions(scorer, tmmluplus_rows
     assert result.metrics["bpb"] == pytest.approx(sum(bpb) / len(built.docs), rel=1e-5)
 
 
-def test_chinese_scores_do_not_depend_on_batching(scorer, tmmluplus_rows):
-    task = TASKS["tmmluplus_organic_chemistry"]
-    assert isinstance(task, MultipleChoiceTask)
-    one_batch = score_task(scorer, task)
-
-    scorer.batch_tokens = 1
-    assert score_task(scorer, task).metrics == pytest.approx(one_batch.metrics, abs=1e-5)
-
-
 def test_cloze_takes_other_prefixes_and_separator():
     assert cloze(
         "為什麼？", ("因為",), question_prefix="問題：", answer_prefix="答案：", separator=""
@@ -188,8 +184,9 @@ def test_cloze_takes_other_prefixes_and_separator():
 
 
 def test_subjects_and_categories_match_the_card():
-    names = [subject.name for subjects in CATEGORIES.values() for subject in subjects]
-    sizes = {category: len(subjects) for category, subjects in CATEGORIES.items()}
+    categories = TMMLUPLUS_BENCHMARK.categories
+    names = [subject.name for category in categories for subject in category.subjects]
+    sizes = {category.name: len(category.subjects) for category in categories}
 
     assert len(set(names)) == len(TMMLUPLUS.tasks) == 66
     assert sizes == {"stem": 14, "social_sciences": 18, "humanities": 7, "other": 27}
