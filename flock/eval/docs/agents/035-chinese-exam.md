@@ -8,8 +8,6 @@
 | Keeps | every task, request, gold index, task hash, suite and suite hash of TMMLU+, C-Eval, CMMLU, `zh_tw` and `zh_cn`; the snapshot is unchanged |
 | Result | TMMLU+, C-Eval and CMMLU are three `Benchmark` values in one format; TMMLU+'s own `Subject` and `subject_task` are gone |
 
-The file number, and with it the decision numbers, is provisional until the PR is opened. 034 is left free because an open branch claims it.
-
 ## 1. Goal
 
 Stage 033 gave C-Eval and CMMLU a shared `Benchmark` type but left TMMLU+ on its own copy of the same code: `ceval_doc` repeated `tmmluplus_doc` with a different question prefix, and `Benchmark.task` and `zh_cn.Subject` repeated `tmmluplus.subject_task` and `tmmluplus.Subject`. This stage moves all three benchmarks onto one type, so a fourth Chinese exam set is one declaration and a fix to the format is made once.
