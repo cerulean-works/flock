@@ -115,7 +115,7 @@ def evaluate(config: EvalConfig) -> Results:
         `KeyError`: if a task or suite name isn't in its registry.
         `ValueError`: if two different tasks, or two different suites, to run share a name, a task and a suite share a name, a task is named `suites`, a perplexity task's window is above the model's `max_length`, or a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
         `FileExistsError`: if `config.out` exists and isn't an empty directory.
-        `FileNotFoundError`, `OSError`: if `FLOCK_EVAL_HUB` is set and a dataset a task reads isn't staged there, or can't be read there (see [`~eval.hub.check_staged`]).
+        `FileNotFoundError`, `OSError`: if `FLOCK_EVAL_HUB` is set and a dataset a task reads isn't staged there, or can't be read there (see `hub.check_staged`).
     """
     _check_names("tasks", config.tasks, TASKS)
     _check_names("suites", config.suites, SUITES)

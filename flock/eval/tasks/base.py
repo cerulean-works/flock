@@ -19,7 +19,7 @@ from flock.eval.requests import Request, Scores
 @dataclass(frozen=True, slots=True)
 class Dataset:
     """
-    A Hugging Face dataset pinned to a revision. Rows come from the Hugging Face Hub, or from a copy staged from the Flock hub under `$FLOCK_EVAL_HUB` when that is set (stage 034); either way the rows and the task hashes are the same.
+    A Hugging Face dataset pinned to a revision. Rows come from the Hugging Face Hub, or from a copy staged from the Flock hub under `$FLOCK_EVAL_HUB` when that is set (stage file 034); either way the rows and the task hashes are the same.
 
     Args:
         repo (`str`):
@@ -46,7 +46,7 @@ class Dataset:
 
         Raises:
             `ValueError`: if `row_index` is set and the rows already have an `"index"` column.
-            `FileNotFoundError`, `OSError`, `ValueError`, `KeyError`: if `$FLOCK_EVAL_HUB` is set and the pin isn't staged there, can't be read there, isn't a commit or doesn't hold the split (see [`~eval.hub.staged_rows`]).
+            `FileNotFoundError`, `OSError`, `ValueError`, `KeyError`: if `$FLOCK_EVAL_HUB` is set and the pin isn't staged there, can't be read there, isn't a commit or doesn't hold the split (see `hub.staged_rows`).
         """
         # A job on a node with no network reads a staged copy; the variable makes that a
         # requirement, so a missing copy fails instead of falling back to the network.

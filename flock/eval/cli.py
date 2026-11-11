@@ -149,7 +149,7 @@ def pull_command(ref: str, root: Path) -> None:
     from flock.hub import s3
 
     try:
-        click.echo(hub.pull(org, repo, revision, root))
+        click.echo(hub.pull(root, org, repo, revision))
     # A repo or commit `pull` refuses; not signed in or refused; no such copy or tag, or a tag on
     # another revision; a staging folder that can't be written, or that others could write to.
     except (s3.S3Error, ValueError, OSError) as error:

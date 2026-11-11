@@ -114,7 +114,7 @@ class PerplexityTask:
 # source.
 @functools.lru_cache(maxsize=1)
 def _docs_by_domain(dataset: Dataset, root: Path | None) -> dict[str | None, tuple[TextDoc, ...]]:
-    """The scored split's docs grouped by `subdomain`, in row order, under `None` for rows without one. Tuples of frozen docs, so tasks sharing the split can't change each other's docs. `root` is the staging root `dataset.load` reads now ([`~eval.hub.root`]): it keys the cache, so a process that changes `$FLOCK_EVAL_HUB` reads the rows again."""
+    """The scored split's docs grouped by `subdomain`, in row order, under `None` for rows without one. Tuples of frozen docs, so tasks sharing the split can't change each other's docs. `root` is the staging root `dataset.load` reads now (`hub.root`): it keys the cache, so a process that changes `$FLOCK_EVAL_HUB` reads the rows again."""
     grouped: dict[str | None, list[TextDoc]] = {}
     for row in dataset.load():
         # A null or empty `subdomain` counts as none, as the census reads it: `datasets` fills a
