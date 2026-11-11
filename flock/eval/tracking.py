@@ -35,7 +35,9 @@ def log_to_tracker(
     summary: dict[str, Any] = {}
     for task in results["tasks"]:
         for name, value in task["metrics"].items():
-            summary[f"{task['task']}/{name}"] = value
+            # A written file holds an infinite or NaN score as null: absent, as a null suite is.
+            if value is not None:
+                summary[f"{task['task']}/{name}"] = value
         if task["docs_per_second"] is not None:
             summary[f"{task['task']}/docs_per_second"] = task["docs_per_second"]
     for suite in results["suites"]:
@@ -109,11 +111,10 @@ def log_results_file(path: Path, project: str) -> str:
 
     # A project that doesn't exist yet holds no run; the first run creates it. Any other 404
     # (a server without the route) would skip the check, so it refuses.
-    missing = error_of(answer) == f"project {entity}/{project} not found"
-    if answer.status_code == 404 and missing:
-        runs = []
-    elif answer.status_code == 200:
+    if answer.status_code == 200:
         runs = answer.json()["ids"]
+    elif answer.status_code == 404 and error_of(answer) == f"project {entity}/{project} not found":
+        runs = []
     else:
         raise ValueError(f"{found.host} refused the run query ({error_of(answer)})")
     if runs:

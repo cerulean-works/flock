@@ -190,6 +190,19 @@ def test_a_banked_file_logs_its_provenance_as_written(logged, hub, schema):
     }
 
 
+def test_a_null_score_in_a_written_file_is_not_logged(logged, hub, tmp_path):
+    # `Results.write` turns an infinite or NaN score into null; the run has no value for it.
+    results = Results(
+        PROVENANCE,
+        [task_result("toy", {"bpb": float("inf"), "acc_raw": 0.5})],
+        [SuiteResult("rc", "hash-rc", ["toy"], "bpb", float("inf"))],
+    )
+
+    log_results_file(results.write(tmp_path), "model-evals")
+
+    assert logged["summary"] == {"toy/acc_raw": 0.5, "toy/docs_per_second": 2.0}
+
+
 def test_a_schema_6_file_logs_no_kernel_and_no_bos(logged, hub):
     # Schema 6 predates both fields. Its missing `sdpa_backend` means an unknown kernel, which a
     # logged `None` (no pin applied) would misstate.

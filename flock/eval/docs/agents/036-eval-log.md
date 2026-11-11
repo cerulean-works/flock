@@ -56,6 +56,7 @@ Precedent: W&B's `wandb sync` uploads a run recorded locally after the fact ("Sy
 - **`tracking.py`** holds both functions. `log_to_tracker` reads plain dicts, and takes `entity` and `host` as keyword arguments that only the backfill passes, so a live run calls `wandb.init` with the SDK's defaults as before. `log_results_file` checks the schema, asks `me` for the default organization, queries `projects/{entity}/{project}/runs/query`, and logs.
 - **A project that doesn't exist yet** answers 404 with `project {entity}/{project} not found`. That counts as no duplicate, since the first run creates the project. Any other refusal, a bare 404 included, stops the command before a run starts.
 - **The client** is closed once the query is answered.
+- **A null score** in a written file (infinite or NaN when scored) is left out of the summary, as a null suite score is.
 - **Review** found a failed run counting as a duplicate, any 404 passing as a missing project, `WANDB_MODE=offline` reporting a run it didn't send, and docs that promised more than the check covers. All four are fixed above. It also found that the wandb key comes from the SDK's settings: `flock login` writes it for the Flock server, and a key for another server fails with 401, so this stays.
 - **The Flock API client** is `flock.cli.api.Api`, with the credential from `flock.cli.credentials.resolve` (`flock login` or `FLOCK_TOKEN`). `flock-eval` now declares `flock-cli`, which brings `httpx`; until now it reached `flock.cli` only through the `flock` package.
 - **The command** imports `tracking` when it runs, as `evaluate` does, so the other commands don't import wandb.
@@ -64,7 +65,8 @@ Precedent: W&B's `wandb sync` uploads a run recorded locally after the fact ("Sy
 ## 5. Known gaps
 
 - Until the project and organization for compared evals are agreed, a backfill lands in the logging user's default organization.
-- Two files with the same model and `created_at` but different tasks (one run split by hand) would be refused as duplicates. No banked file is split that way.
+- Two files with the same model and `created_at` but different tasks are refused as duplicates. `created_at` has one-second resolution, so this covers two jobs of one model that start scoring in the same second (an FP32 and a BF16 run, say), as well as a run split by hand. Adding `config.command` to the key would tell them apart; it is left for a later decision.
 - The check covers one organization on one server. A run logged live elsewhere, or by a teammate into their own organization, isn't found.
 - Infinite and NaN scores are written as `null`, so a backfilled run has no value where the live run logged the number.
+- `log_to_tracker` now reads the results' JSON form, a plain dict, so the type checker no longer checks its keys against `Results`. The live-run test pins the row instead.
 - The check and the log are two requests, so two people logging the same file at the same moment could both pass the check.
