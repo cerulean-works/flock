@@ -1,0 +1,114 @@
+{
+  "provenance": {
+    "model": "allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf",
+    "model_digest": null,
+    "flock_commit": "6fb48c405caae7cfc717534e34060dc22931fcdf",
+    "command": "flock eval run --suite fineweb --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf --dtype float32 --batch-tokens 16384 --wandb-project model-evals --out /work/harrychang08/eval-lab/048/olmo2-1b",
+    "device": "NVIDIA H200",
+    "dtype": "float32",
+    "batch_tokens": 16384,
+    "max_length": 4096,
+    "attention": "sdpa",
+    "sdpa_backend": "EFFICIENT_ATTENTION",
+    "torch": "2.14.1+cu130",
+    "transformers": "5.20.1",
+    "tokenizers": "0.23.3",
+    "datasets": "5.1.0",
+    "python": "3.14.7",
+    "created_at": "2026-11-05T06:23:49+00:00"
+  },
+  "tasks": [
+    {
+      "task": "fineweb_en",
+      "task_hash": "ae2e6791843bd27bc7370d7d9996020688613cb2b3555e5b6e03b94b159abee4",
+      "dataset": {
+        "repo": "cerulean-works/fineweb-edu-dev",
+        "revision": "2484afe000a6fdf442ba2396391a3bec12644903",
+        "subset": null,
+        "split": "validation",
+        "row_index": false
+      },
+      "primary_metric": "perplexity",
+      "metrics": {
+        "bits_per_byte": 0.6359484056630714,
+        "loss_per_token": 2.2298528256861148,
+        "perplexity": 9.298497478788017
+      },
+      "num_docs": 5000,
+      "limit": null,
+      "seconds": 352.60576889291406,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 14.1801423604005
+    },
+    {
+      "task": "fineweb_zh_hant",
+      "task_hash": "11b6817ce19dbde160fcc4b051fd8d9a7ee4cf21ff3022e4cbfe431bc9c8dfc7",
+      "dataset": {
+        "repo": "cerulean-works/fineweb-2-zh-dev",
+        "revision": "6d54ae9ec544b822699267d615597649452d9eea",
+        "subset": "zh_hant",
+        "split": "test",
+        "row_index": false
+      },
+      "primary_metric": "perplexity",
+      "metrics": {
+        "bits_per_byte": 1.817524597160432,
+        "loss_per_token": 2.521909779817287,
+        "perplexity": 12.452355226233434
+      },
+      "num_docs": 3383,
+      "limit": null,
+      "seconds": 330.5535518024117,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 10.234347752591047
+    },
+    {
+      "task": "fineweb_zh_hans",
+      "task_hash": "070f41212e32c3115571d7691866cd1dad7e88ef8244ed2ba1eac21d8d708d54",
+      "dataset": {
+        "repo": "cerulean-works/fineweb-2-zh-dev",
+        "revision": "6d54ae9ec544b822699267d615597649452d9eea",
+        "subset": "zh_hans",
+        "split": "test",
+        "row_index": false
+      },
+      "primary_metric": "perplexity",
+      "metrics": {
+        "bits_per_byte": 1.6803367569298948,
+        "loss_per_token": 2.785844632197081,
+        "perplexity": 16.213506544659243
+      },
+      "num_docs": 5000,
+      "limit": null,
+      "seconds": 558.493652081117,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 8.952653233154004
+    }
+  ],
+  "suites": [
+    {
+      "suite": "fineweb",
+      "suite_hash": "341e8ca824f8afb027089d0f52f5d501697bd04ed05f3f900b71d986c1cc460a",
+      "members": [
+        "fineweb_en",
+        "fineweb_zh_hant",
+        "fineweb_zh_hans"
+      ],
+      "metric": "bits_per_byte",
+      "score": 1.3779365865844662
+    }
+  ],
+  "schema_version": 7
+}

@@ -1,0 +1,95 @@
+{
+  "provenance": {
+    "model": "allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf",
+    "model_digest": null,
+    "flock_commit": "7165d94d69ff8007542eb3883b9b1083c3dd5874",
+    "command": "flock eval run --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf --suite base_easy --suite zh_tw --suite zh_tw:bpb --dtype float32 --batch-tokens 16384 --wandb-project model-evals --out /work/harrychang08/eval-lab/029/olmo2-1b/mc",
+    "device": "NVIDIA H200",
+    "dtype": "float32",
+    "batch_tokens": 16384,
+    "max_length": 4096,
+    "attention": "sdpa",
+    "torch": "2.14.1+cu130",
+    "transformers": "5.20.1",
+    "tokenizers": "0.23.3",
+    "datasets": "5.1.0",
+    "python": "3.14.7",
+    "created_at": "2026-11-03T16:54:46+00:00"
+  },
+  "tasks": [
+    {
+      "task": "humaneval",
+      "task_hash": "165426f5a1e0ccc691388206caf83d97a30add54a02a1becaa77f3445e673b13",
+      "dataset": {
+        "repo": "openai/openai_humaneval",
+        "revision": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544",
+        "subset": null,
+        "split": "test",
+        "row_index": false
+      },
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.552278459072113
+      },
+      "num_docs": 164,
+      "limit": null,
+      "seconds": 5.745927656069398,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 28.541953504542914
+    },
+    {
+      "task": "mbpp",
+      "task_hash": "db2a554b7c8fcaf4e9d1205b60a439d36d833e882344d62bf5ce607dbaba40af",
+      "dataset": {
+        "repo": "google-research-datasets/mbpp",
+        "revision": "4bb6404fdc6cacfda99d4ac4205087b89d32030c",
+        "subset": "full",
+        "split": "test",
+        "row_index": false
+      },
+      "primary_metric": "bpb",
+      "metrics": {
+        "bpb": 0.6956455111503601
+      },
+      "num_docs": 500,
+      "limit": null,
+      "seconds": 7.579396584071219,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 65.9683121807869
+    }
+  ],
+  "suites": [
+    {
+      "suite": "base_easy:code_bpb",
+      "suite_hash": "4987afeeea92db815bca80bc5dbfff65ba75ffd929d0907423e74c31c8eb3754",
+      "members": [
+        "humaneval",
+        "mbpp",
+        "mt_mbpp"
+      ],
+      "metric": "bpb",
+      "score": 0.5752596025373421
+    },
+    {
+      "suite": "base_easy",
+      "suite_hash": "cef61385948933dd22fd6bf5a10ae7ec5db8ac3e2d35eb8979deddb953ec8443",
+      "members": [
+        "base_easy:qa_rc",
+        "base_easy:qa_bpb",
+        "base_easy:math_bpb",
+        "base_easy:code_bpb"
+      ],
+      "metric": null,
+      "score": null
+    }
+  ],
+  "schema_version": 6
+}

@@ -123,6 +123,22 @@ def compare_command(banked: Path, new: Path) -> None:
     sys.exit(2 if comparison.changed else 1 if comparison.breaches else 0)
 
 
+@main.command(name="log")
+@click.argument("results", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--project", required=True, help="The tracker project to log to.")
+def log_command(results: Path, project: str) -> None:
+    """Log a written results.json to the tracker as written, in your default organization. Refuses a file whose model and start time already have a run in the project."""
+    # Imported here so the other commands don't import wandb.
+    from flock.eval.tracking import log_results_file
+
+    try:
+        logged = log_results_file(results, project)
+    except ValueError as error:
+        raise click.ClickException(str(error)) from None
+
+    click.echo(f"logged {results} to {logged}")
+
+
 def format_comparison(comparison: Comparison) -> str:
     """Formats the provenance fields that differ, the one-sided and the changed tasks and suites, one line per breach, then a count."""
     lines = []
