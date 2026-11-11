@@ -46,13 +46,38 @@ Compares a new `results.json` with a banked one and exits non-zero if any score 
 uv run flock eval compare tests/eval/regression/olmo-2-0425-1b-float32.json results/regression/results.json
 ```
 
+## `flock eval log`
+
+Logs a `results.json` written earlier to a tracker project, as written, without scoring anything. Use it for results scored without `--wandb-project`.
+
+```bash
+uv run flock eval log results/olmo2-1b/results.json --project model-evals
+```
+
+| Argument or flag | Default | Meaning |
+|---|---|---|
+| `RESULTS` | required | The `results.json` to log. It must have `schema_version` 6, 7 or 8. |
+| `--project` | required | The tracker project. |
+
+It needs both sign-ins: `flock login` for the duplicate check, and the wandb SDK's key for the same server to log the run. [Sign in](../cli/sign-in) sets up both. The run goes to the server you signed in to with `flock login` and to your default organization, online, whatever the SDK's own settings and `WANDB_MODE` say. A `WANDB_API_KEY` set for another server fails with HTTP 401.
+
+The command refuses a file that's already logged. It looks in the project for a run whose `config.model` and `config.created_at` equal the file's, and exits with code 1 if it finds one. A run that failed or crashed doesn't count, since it may hold no scores. The check covers only the project in your default organization on the server you signed in to. A run logged live into another organization or server, or by a teammate into theirs, isn't found.
+
+The run differs from a live one in a few ways:
+
+- **Fields the file lacks stay absent.** An older file has no `add_bos` or `sdpa_backend`, so its run has neither. A missing `sdpa_backend` means the kernel is unknown, which is different from `None` (no pin applied). See [provenance](results#provenance).
+- **The run's own stamps are the logging machine's.** The tracker records the host, time and git commit of the machine that ran `flock eval log`. The scoring job's facts are `config.created_at` and `config.flock_commit`.
+- **Infinite and NaN scores are missing.** `results.json` writes them as `null`, so the run has no value for that metric or suite, where a live run logs the number.
+- **Two runs started in the same second look like one.** `created_at` has one-second resolution, so a second file of the same model stamped in the same second is refused as already logged.
+- **The organization is yours.** Until a shared project for comparisons is agreed, a run lands in your default organization.
+
 ## Tracker runs
 
-With `--wandb-project`, each `flock eval run` logs one run with job type `eval`:
+`flock eval run --wandb-project` and `flock eval log` log one run with job type `eval`:
 
 | Run field | Holds |
 |---|---|
 | config | The [provenance](results#provenance), plus `task_hashes` (each task's hash by name), `suite_members` (each suite's members by name) and `suite_hashes` (each suite's hash by name). |
 | summary | `<task>/<metric>` for each metric, `<task>/docs_per_second` unless the clock measured no time, and `suites/<suite>` for each scored suite's score. |
 
-`results.json` is written either way.
+`flock eval run` writes `results.json` whether or not it logs.

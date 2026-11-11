@@ -1,0 +1,88 @@
+{
+  "provenance": {
+    "model": "meta-llama/Llama-3.2-1B@4e20de362430cd3b72f300e6b0f18e50e7166e08",
+    "model_digest": null,
+    "flock_commit": "265e10f954dc8b2364f123fac1e74a08370af17c",
+    "command": "flock eval run --model meta-llama/Llama-3.2-1B@4e20de362430cd3b72f300e6b0f18e50e7166e08 --dtype float32 --batch-tokens 16384 --wandb-project model-evals --out /work/harrychang08/eval-lab/046/llama32-1b-tw_text-265e10f --suite tw_text",
+    "device": "NVIDIA H200",
+    "dtype": "float32",
+    "batch_tokens": 16384,
+    "max_length": 131072,
+    "add_bos": false,
+    "attention": "sdpa",
+    "sdpa_backend": "EFFICIENT_ATTENTION",
+    "torch": "2.14.1+cu130",
+    "transformers": "5.20.1",
+    "tokenizers": "0.23.3",
+    "datasets": "5.1.0",
+    "python": "3.14.7",
+    "created_at": "2026-11-07T05:54:01+00:00"
+  },
+  "tasks": [
+    {
+      "task": "tw_text_judicial__地方",
+      "task_hash": "189712c7282f60caf49f160a76e1bb9b71de89d67892b4b84ca2b2671519bbcf",
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "subset": "judicial",
+        "split": "test",
+        "row_index": false
+      },
+      "primary_metric": "bits_per_byte",
+      "metrics": {
+        "bits_per_byte": 1.2428472017367036,
+        "loss_per_token": 2.523535469078809,
+        "perplexity": 12.47261535027636
+      },
+      "num_docs": 622,
+      "limit": null,
+      "seconds": 74.52080293558538,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 8.346662616311946
+    },
+    {
+      "task": "tw_text_judicial__高等",
+      "task_hash": "0339607f79e786f912e7793cd8aa7fa86b37bc44892ac395bb708e4dcda7226e",
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v0",
+        "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
+        "subset": "judicial",
+        "split": "test",
+        "row_index": false
+      },
+      "primary_metric": "bits_per_byte",
+      "metrics": {
+        "bits_per_byte": 1.1370809020724513,
+        "loss_per_token": 2.312091020089432,
+        "perplexity": 10.095512519246913
+      },
+      "num_docs": 38,
+      "limit": null,
+      "seconds": 13.397616216912866,
+      "truncation": {
+        "requests": 0,
+        "docs": 0,
+        "max_tokens_cut": 0
+      },
+      "docs_per_second": 2.8363254615421516
+    }
+  ],
+  "suites": [
+    {
+      "suite": "tw_text:judicial",
+      "suite_hash": "87e1166f3a36c47699f9350a772e8330aa0af533793b6a20d63c917c0054041f",
+      "members": [
+        "tw_text_judicial__地方",
+        "tw_text_judicial__高等"
+      ],
+      "metric": "bits_per_byte",
+      "score": 1.1899640519045773
+    }
+  ],
+  "schema_version": 8
+}
