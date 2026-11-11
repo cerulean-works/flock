@@ -131,4 +131,6 @@ You can combine tasks and suites; overlapping tasks run once. A suite can report
 
 Open `model-evals` in [Cerulean's dashboard](https://flock.cerulean.works) and find the run with job type `eval`. Its summary contains task metrics and suite scores, while config records the evaluation provenance. The local `results.json` is still written. [Tracker fields](commands#tracker-runs) lists the details.
 
+To log a `results.json` scored without `--wandb-project`, run `flock eval log` on it. See [`flock eval log`](commands#flock-eval-log).
+
 To plot evaluation curves on an existing training run instead, use [Evaluate a checkpoint in memory](evaluate-checkpoint) and log its returned metrics with that run.

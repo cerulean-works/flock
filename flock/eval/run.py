@@ -217,7 +217,7 @@ def evaluate(config: EvalConfig) -> Results:
         # `score_prepared`, doesn't import wandb.
         from flock.eval.tracking import log_to_tracker
 
-        log_to_tracker(results, config.wandb_project)
+        log_to_tracker(results.to_dict(), config.wandb_project)
 
     return results
 
