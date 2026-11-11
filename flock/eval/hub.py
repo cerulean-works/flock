@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import datasets
-import pyarrow as pa
 
 if TYPE_CHECKING:
     import lance
@@ -144,6 +143,7 @@ def write(uri: str, repo: str, revision: str, splits: Mapping[Pair, datasets.Dat
         `ValueError`: if a table already has an `hf_subset` or `hf_split` column.
     """
     import lance
+    import pyarrow as pa
 
     # One table for every pair. A column a pair lacks is null in its rows. A column whose type
     # differs between pairs (Paloma's `timestamp` is a time in some sources and text in others)
