@@ -11,6 +11,7 @@ from typing import Any
 import datasets
 import torch
 
+from flock.eval import hub
 from flock.eval.metrics import MULTIPLE_CHOICE_METRICS, ChoiceScores
 from flock.eval.requests import Request, Scores
 
@@ -18,7 +19,7 @@ from flock.eval.requests import Request, Scores
 @dataclass(frozen=True, slots=True)
 class Dataset:
     """
-    A Hugging Face dataset pinned to a revision.
+    A Hugging Face dataset pinned to a revision. Rows come from the Hugging Face Hub, or from a copy staged from the Flock hub under `$FLOCK_EVAL_HUB` when that is set (stage file 034); either way the rows and the task hashes are the same.
 
     Args:
         repo (`str`):
@@ -45,10 +46,16 @@ class Dataset:
 
         Raises:
             `ValueError`: if `row_index` is set and the rows already have an `"index"` column.
+            `FileNotFoundError`, `OSError`, `ValueError`, `KeyError`: if `$FLOCK_EVAL_HUB` is set and the pin isn't staged there, can't be read there, isn't a commit or doesn't hold the split (see `hub.staged_rows`).
         """
-        rows = datasets.load_dataset(
-            self.repo, self.subset, revision=self.revision, split=split or self.split
-        )
+        # A job on a node with no network reads a staged copy; the variable makes that a
+        # requirement, so a missing copy fails instead of falling back to the network.
+        if root := hub.root():
+            rows = hub.staged_rows(root, self.repo, self.revision, self.subset, split or self.split)
+        else:
+            rows = datasets.load_dataset(
+                self.repo, self.subset, revision=self.revision, split=split or self.split
+            )
         if not self.row_index:
             return list(rows)
 
@@ -420,6 +427,14 @@ class MultipleChoiceTask:
             skipped.add("acc_uncond")
 
         return tuple(name for name in MULTIPLE_CHOICE_METRICS if name not in skipped)
+
+    @property
+    def reads(self) -> set[hub.Pair]:
+        """The `(subset, split)` pairs of `dataset` that `load` reads: the scored split, and the few-shot split unless the examples are written out."""
+        pairs = {(self.dataset.subset, self.dataset.split)}
+        if self.fewshot is not None and self.fewshot.split is not None:
+            pairs.add((self.dataset.subset, self.fewshot.split))
+        return pairs
 
     def load(self, limit: int | None = None) -> tuple[list[MCDoc], list[MCDoc]]:
         """

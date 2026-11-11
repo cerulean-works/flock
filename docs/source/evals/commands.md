@@ -71,6 +71,23 @@ The run differs from a live one in a few ways:
 - **Two runs started in the same second look like one.** `created_at` has one-second resolution, so a second file of the same model stamped in the same second is refused as already logged.
 - **The organization is yours.** Until a shared project for comparisons is agreed, a run lands in your default organization.
 
+## `flock eval hub pull`
+
+Stages one pinned dataset from Flock for jobs that can't reach the network. See [Run where there is no network](run-evaluation#run-where-there-is-no-network).
+
+```bash
+uv run flock eval hub pull acme/allenai/ai2_arc@210d026faf9955653af8916fad021475a3f00453 --to /shared/eval-hub
+```
+
+| Argument or option | Default | Description |
+|---|---|---|
+| `ORG/OWNER/NAME@COMMIT` | required | The organization that holds the copy, the Hugging Face repo and its pinned commit, as the task's definition names them. The copy is the version of `eval/OWNER/NAME` tagged with the commit. |
+| `--to` | `$FLOCK_EVAL_HUB` | The staging folder. The copy is written to `<folder>/OWNER/NAME/COMMIT`. A copy already there with the same splits is kept, and one from an earlier version of the tag is replaced, so don't pull a newer version while a job reads that folder. Whoever can read the folder can read the copies in it, only you and the owners of the folders above a copy can change it, and a missing folder is made readable by you only. A folder others can write to needs the sticky bit, and so does every folder below it that others can write to; a folder below it that is a link is refused. Two pulls of the same dataset on one machine take turns. A shared filesystem may not pass that turn between machines (NCHC's `/work` doesn't), so pull from one machine. |
+
+| Environment variable | Effect |
+|---|---|
+| `FLOCK_EVAL_HUB` | `flock eval run` reads every dataset from the copies staged in this folder, and fails before the model loads if one is missing instead of downloading it. |
+
 ## Tracker runs
 
 `flock eval run --wandb-project` and `flock eval log` log one run with job type `eval`:

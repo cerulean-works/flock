@@ -57,6 +57,31 @@ uv run flock eval run \
 
 [Sign in](../cli/sign-in) first. The version is resolved to its number before anything loads, and the results record it as `flock:acme/olmo2-1b@12`, with the version's digest in `model_digest`. Moving the tag or the primary later doesn't change what the results say was scored. The tokenizer is the Hugging Face one that the model's config names in `hf_repo`, so a model saved without `hf_repo` can't be scored.
 
+## Run where there is no network
+
+A job on a machine that can't reach the Hugging Face Hub reads its datasets from copies staged on shared disk. Each task's dataset is a Hugging Face repo pinned to a commit, and your organization keeps a private copy of that pin on Flock at `eval/<owner>/<name>`. The copy holds the configurations and splits the tasks read.
+
+1. On a machine that reaches Flock, [sign in](../cli/sign-in) and stage each pinned dataset the run reads. ARC-Easy reads `allenai/ai2_arc`:
+
+   ```bash
+   uv run flock eval hub pull acme/allenai/ai2_arc@210d026faf9955653af8916fad021475a3f00453 --to /shared/eval-hub
+   ```
+
+2. In the job, set `FLOCK_EVAL_HUB` to the same folder and run as usual:
+
+   ```bash
+   export FLOCK_EVAL_HUB=/shared/eval-hub
+   uv run flock eval run \
+     --model allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf \
+     --task arc_easy \
+     --out results/olmo2-1b
+   ```
+
+With `FLOCK_EVAL_HUB` set, every dataset must be staged. The run checks them all before the model loads and lists the `pull` command for each missing one, with the organization left for you to fill in. The staged copy gives the same rows as the Hugging Face Hub, so the task hashes and scores don't depend on where the rows came from. A pin's commit is in its task's definition, and `pull` refuses a copy whose recorded commit differs.
+
+> [!IMPORTANT]
+> A staged copy is readable by whoever can read its staging folder, whatever your umask, and nobody who can only read it can change it. Some copies (exam sets, crawled text) are private on Flock, so choose a staging folder that only the people allowed to read them can open. A staging folder that doesn't exist yet is made readable by you only. A folder others can write to, such as a group's, needs the sticky bit (`chmod +t`), so writing to the folder isn't enough to replace someone else's copy; `pull` refuses one without it. Everyone who can write to the folder is trusted: the first copy staged for a dataset is the one every later `pull` keeps, and only its owner and the owners of the folders above it, up to the staging folder, can replace it.
+
 ## Read the results
 
 `results.json` holds the task metrics and **provenance**: the model commit, Flock commit, numerical settings and machine that produced them. Prediction files hold one row per question, including its gold choice and the per-choice scores.

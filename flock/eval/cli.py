@@ -7,6 +7,7 @@ from typing import get_args
 
 import click
 
+from flock.eval import hub
 from flock.eval.compare import Comparison, compare
 from flock.eval.model import DEFAULT_BATCH_TOKENS
 from flock.eval.results import Results
@@ -139,6 +140,38 @@ def log_command(results: Path, project: str) -> None:
         raise click.ClickException(str(error)) from None
 
     click.echo(f"logged {results} to {logged}")
+
+
+@main.group(name="hub")
+def hub_group() -> None:
+    """Copies of the evaluation datasets on the Flock hub."""
+
+
+@hub_group.command(name="pull")
+@click.argument("ref")
+@click.option(
+    "--to",
+    "root",
+    envvar=hub.ROOT,
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path, resolve_path=True),
+    help="The staging folder jobs read with FLOCK_EVAL_HUB set (default: $FLOCK_EVAL_HUB).",
+)
+def pull_command(ref: str, root: Path) -> None:
+    """Stage one pinned dataset, ORG/OWNER/NAME@COMMIT, from the Flock hub, for jobs that can't reach the network. Prints the staged folder."""
+    org, _, pinned = ref.partition("/")
+    repo, _, revision = pinned.partition("@")
+    if not org:
+        raise click.UsageError(f"expected ORG/OWNER/NAME@COMMIT, got {ref!r}")
+
+    from flock.hub import s3
+
+    try:
+        click.echo(hub.pull(root, org, repo, revision))
+    # A repo or commit `pull` refuses; not signed in or refused; no such copy or tag, or a tag on
+    # another revision; a staging folder that can't be written, or that others could write to.
+    except (s3.S3Error, ValueError, OSError) as error:
+        raise click.ClickException(str(error)) from None
 
 
 def format_comparison(comparison: Comparison) -> str:
