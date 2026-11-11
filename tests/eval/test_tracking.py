@@ -49,10 +49,11 @@ def logged(monkeypatch):
 
 @dataclasses.dataclass
 class FakeHub:
-    """A Flock API whose run query finds the runs in `found`, or answers `status`, and records each query."""
+    """A Flock API whose run query finds the runs in `found`, or answers `status` with `error`, and records each query."""
 
     found: list[str] = dataclasses.field(default_factory=list)
     status: int = 200
+    error: dict = dataclasses.field(default_factory=lambda: {"error": "refused"})
     queries: list[dict] = dataclasses.field(default_factory=list)
 
     def answer(self, request: httpx.Request) -> httpx.Response:
@@ -61,7 +62,7 @@ class FakeHub:
         assert request.url.path == "/api/v1/projects/acme/model-evals/runs/query"
         self.queries.append(json.loads(request.content))
         if self.status != 200:
-            return httpx.Response(self.status, json={"error": "refused"})
+            return httpx.Response(self.status, json=self.error)
         return httpx.Response(200, json={"total": len(self.found), "ids": self.found})
 
 
@@ -178,11 +179,13 @@ def test_a_banked_file_logs_its_provenance_as_written(logged, hub, schema):
     # The run goes where the duplicate check looked: the signed-in API and its default org.
     assert logged["init"]["entity"] == "acme"
     assert logged["init"]["settings"].base_url == HOST
+    assert logged["init"]["settings"].mode == "online"  # never a silent offline run
     (query,) = hub.queries
     assert query["filter"] == {
         "$and": [
             {"config.model": {"$eq": written["provenance"]["model"]}},
             {"config.created_at": {"$eq": written["provenance"]["created_at"]}},
+            {"state": {"$nin": ["failed", "crashed"]}},  # a failed log may hold no scores
         ]
     }
 
@@ -206,11 +209,21 @@ def test_a_file_already_logged_is_refused_before_any_run(logged, hub):
 
 
 def test_a_project_that_does_not_exist_yet_holds_no_duplicate(logged, hub):
-    hub.status = 404
+    hub.status, hub.error = 404, {"error": "project acme/model-evals not found"}
 
     log_results_file(LOGGED / "schema7.json", "model-evals")
 
     assert logged["init"]["project"] == "model-evals"
+
+
+def test_a_404_from_anything_but_a_missing_project_logs_nothing(logged, hub):
+    # A server without the run query answers a bare 404, which must not pass as "no project".
+    hub.status, hub.error = 404, {"detail": "Not Found"}
+
+    with pytest.raises(ValueError, match="refused the run query"):
+        log_results_file(LOGGED / "schema7.json", "model-evals")
+
+    assert "init" not in logged
 
 
 def test_a_refused_query_logs_nothing(logged, hub):

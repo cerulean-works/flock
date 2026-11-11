@@ -30,7 +30,7 @@ def log_to_tracker(
         entity (`str`, *optional*):
             The organization to log to, or `None` for the SDK's default.
         host (`str`, *optional*):
-            The tracker's URL, or `None` for the SDK's settings.
+            The tracker's URL, logged to online, or `None` for the SDK's settings.
     """
     summary: dict[str, Any] = {}
     for task in results["tasks"]:
@@ -54,7 +54,8 @@ def log_to_tracker(
 
     # Leaving the block finishes the run, with exit code 1 if the update raised, so a failed log
     # isn't left running on the tracker.
-    settings = wandb.Settings(base_url=host) if host is not None else None
+    # Online even where `WANDB_MODE` says offline, so a backfill never reports a run it didn't log.
+    settings = wandb.Settings(base_url=host, mode="online") if host is not None else None
     with wandb.init(
         entity=entity, project=project, job_type="eval", config=config, settings=settings
     ) as run:
@@ -68,7 +69,8 @@ def log_results_file(path: Path, project: str) -> str:
     A field the file lacks stays absent from the run: an older file's missing `sdpa_backend` means an unknown kernel, not none. The tracker stamps the run with this machine's host, time and commit; the scoring job's are the config's `created_at` and `flock_commit`.
 
     Raises:
-        `ValueError`: if the file's schema isn't 6 to 8, Flock refuses the sign-in or the query, or the project already has a run with the file's `model` and `created_at`.
+        `ValueError`: if the file's schema isn't 6 to 8, Flock refuses the sign-in or the query, or the project already has a run with the file's `model` and `created_at` that didn't fail or crash.
+        `click.ClickException`: if Flock can't be reached.
     """
     results = json.loads(path.read_text())
     # Schemas 6 to 8 hold every field the run is built from. Older files lack suite hashes, and
@@ -81,30 +83,39 @@ def log_results_file(path: Path, project: str) -> str:
     if found is None:
         raise ValueError("Not logged in: run flock login, or set FLOCK_TOKEN.")
     api = Api(found.host, found.token)
-    me = api.get("me")
-    if me.status_code != 200:
-        raise ValueError(f"{found.host} refused your credential ({error_of(me)})")
-    entity = me.json().get("default_org")
-    if entity is None:
-        raise ValueError("You don't belong to any organization.")
+    with api.client:
+        me = api.get("me")
+        if me.status_code != 200:
+            raise ValueError(f"{found.host} refused your credential ({error_of(me)})")
+        entity = me.json().get("default_org")
+        if entity is None:
+            raise ValueError("You don't belong to any organization.")
 
-    # A run already logged, live or by an earlier backfill, has the same model and start time.
-    # `task_hashes` isn't matched: the tracker keeps it as one column per task.
-    query = {
-        "filter": {
-            "$and": [
-                {"config.model": {"$eq": provenance["model"]}},
-                {"config.created_at": {"$eq": provenance["created_at"]}},
-            ]
-        },
-        "columns": [],
-        "limit": 1,
-    }
-    answer = api.post(f"projects/{entity}/{project}/runs/query", query)
-    # A 404 is a project that doesn't exist yet, so it holds no run; the first run creates it.
-    if answer.status_code not in (200, 404):
+        # A run already logged, live or by an earlier backfill, has the same model and start
+        # time. `task_hashes` isn't matched: the tracker keeps it as one column per task. A run
+        # that failed or crashed may hold no scores, so it doesn't count.
+        query = {
+            "filter": {
+                "$and": [
+                    {"config.model": {"$eq": provenance["model"]}},
+                    {"config.created_at": {"$eq": provenance["created_at"]}},
+                    {"state": {"$nin": ["failed", "crashed"]}},
+                ]
+            },
+            "columns": [],
+            "limit": 1,
+        }
+        answer = api.post(f"projects/{entity}/{project}/runs/query", query)
+
+    # A project that doesn't exist yet holds no run; the first run creates it. Any other 404
+    # (a server without the route) would skip the check, so it refuses.
+    missing = error_of(answer) == f"project {entity}/{project} not found"
+    if answer.status_code == 404 and missing:
+        runs = []
+    elif answer.status_code == 200:
+        runs = answer.json()["ids"]
+    else:
         raise ValueError(f"{found.host} refused the run query ({error_of(answer)})")
-    runs = answer.json()["ids"] if answer.status_code == 200 else []
     if runs:
         raise ValueError(f"{path} is already logged as {entity}/{project}/{runs[0]}")
 
