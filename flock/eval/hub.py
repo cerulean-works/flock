@@ -95,10 +95,19 @@ def check(
         raise ValueError(f"{where} holds {source[0]}@{source[1]}, not {repo}@{revision}")
     if "pairs" not in properties:
         raise ValueError(f"{where} records no pairs")
-    # Not JSON, a pair with other fields than `StoredPair`'s, or a row count that isn't a number.
+    # Not JSON, not a list, a pair with other fields than `StoredPair`'s, or a field of another
+    # type. A row count is a count: `true` is a `bool`, which Python counts as an `int`.
     try:
         pairs = _stored_pairs(properties["pairs"])
-        readable = all(isinstance(pair.rows, int) for pair in pairs)
+        readable = all(
+            isinstance(pair.subset, str | None)
+            and isinstance(pair.split, str)
+            and type(pair.rows) is int
+            and pair.rows >= 0
+            and isinstance(pair.columns, dict)
+            and isinstance(pair.features, dict)
+            for pair in pairs
+        )
     except TypeError, ValueError:
         readable = False
     if not readable:
@@ -109,7 +118,11 @@ def check(
 @functools.cache
 def _stored_pairs(text: str) -> tuple[StoredPair, ...]:
     """The pairs a copy records as `text`, parsed once per process however many tasks read it: a copy holds up to 132 pairs, and each of their tasks reads two."""
-    return tuple(StoredPair(**pair) for pair in json.loads(text))
+    parsed = json.loads(text)
+    # `{}` and `""` parse to empty values that aren't a list of pairs.
+    if not isinstance(parsed, list):
+        raise TypeError(f"pairs are a {type(parsed).__name__}, not a list")
+    return tuple(StoredPair(**pair) for pair in parsed)
 
 
 def recorded(dataset: lance.LanceDataset) -> dict[str, str]:
