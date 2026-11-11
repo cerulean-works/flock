@@ -74,6 +74,7 @@ class GroupedAttentionWithRoPE(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         is_causal: bool = False,
+        
     ) -> torch.Tensor:
         """Map [batch, sequence, hidden] to the same shape using PyTorch SDPA.
 
