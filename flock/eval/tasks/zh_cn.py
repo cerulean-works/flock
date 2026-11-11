@@ -1,36 +1,15 @@
 """C-Eval (Huang et al. 2023, 2305.08322) and CMMLU (Li et al. 2023, 2306.09212): native Simplified Chinese exam questions, one task per subject, and the `zh_cn` suites."""
 
-from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
 
-from flock.eval.tasks.base import (
-    CHINESE_ANSWER_PREFIX,
-    SIMPLIFIED_QUESTION_PREFIX,
-    Dataset,
-    Fewshot,
-    MCDoc,
-    MultipleChoiceTask,
-    cloze,
-)
-from flock.eval.tasks.suite import Suite, by_name
+from flock.eval.tasks.base import SIMPLIFIED_QUESTION_PREFIX, MCDoc
+from flock.eval.tasks.chinese_exam import Benchmark, Category, Subject, exam_doc
+from flock.eval.tasks.suite import Suite
 
 
 def ceval_doc(row: dict[str, Any]) -> MCDoc:
-    """A C-Eval row as a Simplified Chinese cloze doc, identified by its row index (033.D6). The question and choices are stripped, as TMMLU+'s are, since some carry outer whitespace."""
-    letters = ("A", "B", "C", "D")
-
-    return MCDoc(
-        id=str(row["index"]),
-        choices=cloze(
-            row["question"].strip(),
-            [row[letter].strip() for letter in letters],
-            question_prefix=SIMPLIFIED_QUESTION_PREFIX,
-            answer_prefix=CHINESE_ANSWER_PREFIX,
-            separator="",
-        ),
-        gold=letters.index(row["answer"]),
-    )
+    """A C-Eval row as `exam_doc` reads it, with `问题：` (033.D6). A named function rather than a `partial`, so the task snapshot (012) pins it by name."""
+    return exam_doc(row, SIMPLIFIED_QUESTION_PREFIX)
 
 
 def cmmlu_doc(row: dict[str, Any]) -> MCDoc:
@@ -51,171 +30,91 @@ def keep_cmmlu_computer_science(row: dict[str, Any]) -> bool:
     return row["index"] != 108
 
 
-@dataclass(frozen=True, slots=True)
-class Subject:
-    """
-    One subject of C-Eval or CMMLU.
-
-    Args:
-        name (`str`):
-            The dataset config, which names the task `<benchmark>_<name>` as lm-evaluation-harness does.
-        chinese_name (`str`):
-            The subject in the task's header, from lm-evaluation-harness's per-subject config (v0.4.3).
-        china_specific (`bool`, *optional*, defaults to `False`):
-            Whether CMMLU's `src/categories.py` tags the subject China specific.
-        keep (`Callable[[dict], bool]`, *optional*):
-            The task's `keep`, for a subject with a test row no model can score (033.D8). Every row if not set.
-    """
-
-    name: str
-    chinese_name: str
-    china_specific: bool = False
-    keep: Callable[[dict[str, Any]], bool] | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class Benchmark:
-    """
-    A native Simplified Chinese exam set. Each subject is scored in 005's Chinese cloze format with `问题：`, after the benchmark's own header and the subject's five `dev` rows in file order (033.D1 to 033.D4 in the stage file).
-
-    Args:
-        name (`str`):
-            The prefix of its task names and the name of its suite.
-        repo (`str`):
-            The dataset repo, with one config per subject and `test` and `dev` splits.
-        revision (`str`):
-            The repo's commit.
-        header (`str`):
-            The paper's header, with `{}` for the subject's Chinese name.
-        to_doc (`Callable[[dict], MCDoc]`):
-            Turns one row into a doc.
-        categories (`dict[str, tuple[Subject, ...]]`):
-            The subjects by the benchmark's own categories.
-    """
-
-    name: str
-    repo: str
-    revision: str
-    header: str
-    to_doc: Callable[[dict[str, Any]], MCDoc]
-    categories: dict[str, tuple[Subject, ...]]
-
-    def task(self, subject: Subject) -> MultipleChoiceTask:
-        """The subject's task: the header, the subject's five `dev` rows in file order as lm-evaluation-harness's `ceval` and `cmmlu` show them (`first_n`), then the test question."""
-        return MultipleChoiceTask(
-            name=f"{self.name}_{subject.name}",
-            dataset=Dataset(
-                repo=self.repo,
-                revision=self.revision,
-                subset=subject.name,
-                split="test",
-                row_index=True,
-            ),
-            to_doc=self.to_doc,
-            # As TMMLU+ (005) and OLMES's MMLU.
-            primary_metric="acc_per_char",
-            # Every subject of both sets has exactly five dev rows. C-Eval's `explanation` is for
-            # chain of thought and isn't shown.
-            fewshot=Fewshot(split="dev", ids=("0", "1", "2", "3", "4")),
-            description=self.header.format(subject.chinese_name) + "\n\n",
-            unconditional_context=CHINESE_ANSWER_PREFIX,
-            keep=subject.keep,
-        )
-
-    def suites(self) -> Suite:
-        """The benchmark's suites in one unscored `<name>:all` group: all subjects, each category, the China specific subjects if any, and a `bpb` twin of each."""
-        tasks: dict[str, MultipleChoiceTask] = {}
-        for subjects in self.categories.values():
-            for subject in subjects:
-                tasks[subject.name] = self.task(subject)
-
-        # Both papers average subjects, not categories (C-Eval Table 3 caption, CMMLU Table 1
-        # caption; 033.D3), so the benchmark's own suite holds its tasks directly.
-        groups = {self.name: tuple(tasks.values())}
-        china_specific = []
-        for category, subjects in self.categories.items():
-            groups[f"{self.name}:{category}"] = tuple(tasks[s.name] for s in subjects)
-            china_specific.extend(tasks[s.name] for s in subjects if s.china_specific)
-        if china_specific:
-            groups[f"{self.name}:china_specific"] = tuple(china_specific)
-
-        accuracy = [Suite(name, members) for name, members in groups.items()]
-        bpb = [Suite(f"{name}:bpb", members, metric="bpb") for name, members in groups.items()]
-
-        return Suite(f"{self.name}:all", (*accuracy, *bpb), scored=False)
-
-
 # Categories are `subject_mapping.json`'s third field (`hkust-nlp/ceval` at cba65ae9). The header
 # is the paper's (fig. 6, p.16), as lm-evaluation-harness's `ceval` `description`. Test labels
-# are public since 2025-07-27, and this revision has all 12,342.
+# are public since 2025-07-27, and this revision has all 12,342. Its `explanation` is for chain of
+# thought and isn't shown.
 CEVAL = Benchmark(
     name="ceval",
     repo="ceval/ceval-exam",
     revision="617524a00b307ff6f9933702f724131fe12ca7ce",
+    fewshot_split="dev",
     header="以下是中国关于{}的单项选择题，请选出其中的正确答案。",
     to_doc=ceval_doc,
-    categories={
-        "stem": (
-            Subject("advanced_mathematics", "高等数学"),
-            Subject("college_chemistry", "大学化学"),
-            Subject("college_physics", "大学物理"),
-            Subject("college_programming", "大学编程"),
-            Subject("computer_architecture", "计算机组成"),
-            Subject("computer_network", "计算机网络"),
-            Subject("discrete_mathematics", "离散数学"),
-            Subject("electrical_engineer", "注册电气工程师"),
-            Subject("high_school_biology", "高中生物"),
-            Subject("high_school_chemistry", "高中化学"),
-            Subject("high_school_mathematics", "高中数学"),
-            Subject("high_school_physics", "高中物理"),
-            Subject("metrology_engineer", "注册计量师"),
-            Subject("middle_school_biology", "初中生物"),
-            Subject("middle_school_chemistry", "初中化学"),
-            Subject("middle_school_mathematics", "初中数学"),
-            Subject("middle_school_physics", "初中物理"),
-            Subject("operating_system", "操作系统", keep=keep_ceval_operating_system),
-            Subject("probability_and_statistics", "概率统计"),
-            Subject("veterinary_medicine", "兽医学"),
+    categories=(
+        Category(
+            "stem",
+            (
+                Subject("advanced_mathematics", "高等数学"),
+                Subject("college_chemistry", "大学化学"),
+                Subject("college_physics", "大学物理"),
+                Subject("college_programming", "大学编程"),
+                Subject("computer_architecture", "计算机组成"),
+                Subject("computer_network", "计算机网络"),
+                Subject("discrete_mathematics", "离散数学"),
+                Subject("electrical_engineer", "注册电气工程师"),
+                Subject("high_school_biology", "高中生物"),
+                Subject("high_school_chemistry", "高中化学"),
+                Subject("high_school_mathematics", "高中数学"),
+                Subject("high_school_physics", "高中物理"),
+                Subject("metrology_engineer", "注册计量师"),
+                Subject("middle_school_biology", "初中生物"),
+                Subject("middle_school_chemistry", "初中化学"),
+                Subject("middle_school_mathematics", "初中数学"),
+                Subject("middle_school_physics", "初中物理"),
+                Subject("operating_system", "操作系统", keep=keep_ceval_operating_system),
+                Subject("probability_and_statistics", "概率统计"),
+                Subject("veterinary_medicine", "兽医学"),
+            ),
         ),
-        "social_science": (
-            Subject("business_administration", "工商管理"),
-            Subject("college_economics", "大学经济学"),
-            Subject("education_science", "教育学"),
-            Subject("high_school_geography", "高中地理"),
-            Subject("high_school_politics", "高中政治"),
-            Subject("mao_zedong_thought", "毛泽东思想和中国特色社会主义理论体系概论"),
-            Subject("marxism", "马克思主义基本原理"),
-            Subject("middle_school_geography", "初中地理"),
-            Subject("middle_school_politics", "初中政治"),
-            Subject("teacher_qualification", "教师资格"),
+        Category(
+            "social_science",
+            (
+                Subject("business_administration", "工商管理"),
+                Subject("college_economics", "大学经济学"),
+                Subject("education_science", "教育学"),
+                Subject("high_school_geography", "高中地理"),
+                Subject("high_school_politics", "高中政治"),
+                Subject("mao_zedong_thought", "毛泽东思想和中国特色社会主义理论体系概论"),
+                Subject("marxism", "马克思主义基本原理"),
+                Subject("middle_school_geography", "初中地理"),
+                Subject("middle_school_politics", "初中政治"),
+                Subject("teacher_qualification", "教师资格"),
+            ),
         ),
-        "humanities": (
-            Subject("art_studies", "艺术学"),
-            Subject("chinese_language_and_literature", "中国语言文学"),
-            Subject("high_school_chinese", "高中语文"),
-            Subject("high_school_history", "高中历史"),
-            Subject("ideological_and_moral_cultivation", "思想道德修养与法律基础"),
-            Subject("law", "法学"),
-            Subject("legal_professional", "法律职业资格"),
-            Subject("logic", "逻辑学"),
-            Subject("middle_school_history", "初中历史"),
-            Subject("modern_chinese_history", "近代史纲要"),
-            Subject("professional_tour_guide", "导游资格"),
+        Category(
+            "humanities",
+            (
+                Subject("art_studies", "艺术学"),
+                Subject("chinese_language_and_literature", "中国语言文学"),
+                Subject("high_school_chinese", "高中语文"),
+                Subject("high_school_history", "高中历史"),
+                Subject("ideological_and_moral_cultivation", "思想道德修养与法律基础"),
+                Subject("law", "法学"),
+                Subject("legal_professional", "法律职业资格"),
+                Subject("logic", "逻辑学"),
+                Subject("middle_school_history", "初中历史"),
+                Subject("modern_chinese_history", "近代史纲要"),
+                Subject("professional_tour_guide", "导游资格"),
+            ),
         ),
-        "other": (
-            Subject("accountant", "注册会计师"),
-            Subject("basic_medicine", "基础医学"),
-            Subject("civil_servant", "公务员"),
-            Subject("clinical_medicine", "临床医学"),
-            Subject("environmental_impact_assessment_engineer", "环境影响评价工程师"),
-            Subject("fire_engineer", "注册消防工程师"),
-            Subject("physician", "医师资格"),
-            Subject("plant_protection", "植物保护"),
-            Subject("sports_science", "体育学"),
-            Subject("tax_accountant", "税务师"),
-            Subject("urban_and_rural_planner", "注册城乡规划师"),
+        Category(
+            "other",
+            (
+                Subject("accountant", "注册会计师"),
+                Subject("basic_medicine", "基础医学"),
+                Subject("civil_servant", "公务员"),
+                Subject("clinical_medicine", "临床医学"),
+                Subject("environmental_impact_assessment_engineer", "环境影响评价工程师"),
+                Subject("fire_engineer", "注册消防工程师"),
+                Subject("physician", "医师资格"),
+                Subject("plant_protection", "植物保护"),
+                Subject("sports_science", "体育学"),
+                Subject("tax_accountant", "税务师"),
+                Subject("urban_and_rural_planner", "注册城乡规划师"),
+            ),
         ),
-    },
+    ),
 )
 
 # Categories and the China specific tags are `src/categories.py`'s (`haonan-li/CMMLU` at d6e7b716).
@@ -226,92 +125,104 @@ CMMLU = Benchmark(
     name="cmmlu",
     repo="cerulean-works/cmmlu",
     revision="46bb6edee95673e17186965063d2fba50ec23e00",
+    fewshot_split="dev",
     header="以下是关于{}的单项选择题，请直接给出正确答案的选项。",
     to_doc=cmmlu_doc,
-    categories={
-        "stem": (
-            Subject("anatomy", "解剖学"),
-            Subject("astronomy", "天文学"),
-            Subject("college_actuarial_science", "大学精算学"),
-            Subject("college_engineering_hydrology", "大学工程水文学"),
-            Subject("college_mathematics", "大学数学"),
-            Subject("college_medical_statistics", "大学医学统计"),
-            Subject("computer_science", "计算机科学", keep=keep_cmmlu_computer_science),
-            Subject("conceptual_physics", "概念物理学"),
-            Subject("electrical_engineering", "电气工程"),
-            Subject("elementary_mathematics", "初等数学"),
-            Subject("genetics", "遗传学"),
-            Subject("high_school_biology", "高中生物"),
-            Subject("high_school_chemistry", "高中化学"),
-            Subject("high_school_mathematics", "高中数学"),
-            Subject("high_school_physics", "高中物理学"),
-            Subject("machine_learning", "机器学习"),
-            Subject("virology", "病毒学"),
+    categories=(
+        Category(
+            "stem",
+            (
+                Subject("anatomy", "解剖学"),
+                Subject("astronomy", "天文学"),
+                Subject("college_actuarial_science", "大学精算学"),
+                Subject("college_engineering_hydrology", "大学工程水文学"),
+                Subject("college_mathematics", "大学数学"),
+                Subject("college_medical_statistics", "大学医学统计"),
+                Subject("computer_science", "计算机科学", keep=keep_cmmlu_computer_science),
+                Subject("conceptual_physics", "概念物理学"),
+                Subject("electrical_engineering", "电气工程"),
+                Subject("elementary_mathematics", "初等数学"),
+                Subject("genetics", "遗传学"),
+                Subject("high_school_biology", "高中生物"),
+                Subject("high_school_chemistry", "高中化学"),
+                Subject("high_school_mathematics", "高中数学"),
+                Subject("high_school_physics", "高中物理学"),
+                Subject("machine_learning", "机器学习"),
+                Subject("virology", "病毒学"),
+            ),
         ),
-        "social_science": (
-            Subject("ancient_chinese", "古汉语", china_specific=True),
-            Subject("business_ethics", "商业伦理"),
-            Subject("chinese_civil_service_exam", "中国公务员考试", china_specific=True),
-            Subject("chinese_food_culture", "中国饮食文化", china_specific=True),
-            Subject("chinese_foreign_policy", "中国外交政策", china_specific=True),
-            Subject("chinese_teacher_qualification", "中国教师资格", china_specific=True),
-            Subject("college_education", "大学教育学"),
-            Subject("economics", "经济学"),
-            Subject("education", "教育学"),
-            Subject("elementary_chinese", "小学语文", china_specific=True),
-            Subject("ethnology", "民族学", china_specific=True),
-            Subject("high_school_geography", "高中地理"),
-            Subject("high_school_politics", "高中政治", china_specific=True),
-            Subject("journalism", "新闻学"),
-            Subject("management", "管理学"),
-            Subject("marketing", "市场营销"),
-            Subject("modern_chinese", "现代汉语", china_specific=True),
-            Subject("professional_accounting", "专业会计"),
-            Subject("professional_psychology", "专业心理学"),
-            Subject("public_relations", "公共关系"),
-            Subject("security_study", "安全研究"),
-            Subject("sociology", "社会学"),
+        Category(
+            "social_science",
+            (
+                Subject("ancient_chinese", "古汉语", china_specific=True),
+                Subject("business_ethics", "商业伦理"),
+                Subject("chinese_civil_service_exam", "中国公务员考试", china_specific=True),
+                Subject("chinese_food_culture", "中国饮食文化", china_specific=True),
+                Subject("chinese_foreign_policy", "中国外交政策", china_specific=True),
+                Subject("chinese_teacher_qualification", "中国教师资格", china_specific=True),
+                Subject("college_education", "大学教育学"),
+                Subject("economics", "经济学"),
+                Subject("education", "教育学"),
+                Subject("elementary_chinese", "小学语文", china_specific=True),
+                Subject("ethnology", "民族学", china_specific=True),
+                Subject("high_school_geography", "高中地理"),
+                Subject("high_school_politics", "高中政治", china_specific=True),
+                Subject("journalism", "新闻学"),
+                Subject("management", "管理学"),
+                Subject("marketing", "市场营销"),
+                Subject("modern_chinese", "现代汉语", china_specific=True),
+                Subject("professional_accounting", "专业会计"),
+                Subject("professional_psychology", "专业心理学"),
+                Subject("public_relations", "公共关系"),
+                Subject("security_study", "安全研究"),
+                Subject("sociology", "社会学"),
+            ),
         ),
-        "humanities": (
-            Subject("arts", "艺术学"),
-            Subject("chinese_history", "中国历史", china_specific=True),
-            Subject("chinese_literature", "中国文学", china_specific=True),
-            Subject("college_law", "大学法律"),
-            Subject("global_facts", "全球事实"),
-            Subject("international_law", "国际法学"),
-            Subject("jurisprudence", "法理学"),
-            Subject("logical", "逻辑学"),
-            Subject("marxist_theory", "马克思主义理论"),
-            Subject("philosophy", "哲学"),
-            Subject("professional_law", "专业法学"),
-            Subject("world_history", "世界历史"),
-            Subject("world_religions", "世界宗教"),
+        Category(
+            "humanities",
+            (
+                Subject("arts", "艺术学"),
+                Subject("chinese_history", "中国历史", china_specific=True),
+                Subject("chinese_literature", "中国文学", china_specific=True),
+                Subject("college_law", "大学法律"),
+                Subject("global_facts", "全球事实"),
+                Subject("international_law", "国际法学"),
+                Subject("jurisprudence", "法理学"),
+                Subject("logical", "逻辑学"),
+                Subject("marxist_theory", "马克思主义理论"),
+                Subject("philosophy", "哲学"),
+                Subject("professional_law", "专业法学"),
+                Subject("world_history", "世界历史"),
+                Subject("world_religions", "世界宗教"),
+            ),
         ),
-        "other": (
-            Subject("agronomy", "农学"),
-            Subject("chinese_driving_rule", "中国驾驶规则", china_specific=True),
-            Subject("clinical_knowledge", "临床知识"),
-            Subject("college_medicine", "大学医学"),
-            Subject("computer_security", "计算机安全"),
-            Subject("construction_project_management", "建设工程管理", china_specific=True),
-            Subject("elementary_commonsense", "小学常识", china_specific=True),
-            Subject("elementary_information_and_technology", "小学信息技术"),
-            Subject("food_science", "食品科学"),
-            Subject("human_sexuality", "人类性行为"),
-            Subject("legal_and_moral_basis", "法律与道德基础"),
-            Subject("nutrition", "营养学"),
-            Subject("professional_medicine", "专业医学"),
-            Subject("sports_science", "体育学"),
-            Subject("traditional_chinese_medicine", "中医中药", china_specific=True),
+        Category(
+            "other",
+            (
+                Subject("agronomy", "农学"),
+                Subject("chinese_driving_rule", "中国驾驶规则", china_specific=True),
+                Subject("clinical_knowledge", "临床知识"),
+                Subject("college_medicine", "大学医学"),
+                Subject("computer_security", "计算机安全"),
+                Subject("construction_project_management", "建设工程管理", china_specific=True),
+                Subject("elementary_commonsense", "小学常识", china_specific=True),
+                Subject("elementary_information_and_technology", "小学信息技术"),
+                Subject("food_science", "食品科学"),
+                Subject("human_sexuality", "人类性行为"),
+                Subject("legal_and_moral_basis", "法律与道德基础"),
+                Subject("nutrition", "营养学"),
+                Subject("professional_medicine", "专业医学"),
+                Subject("sports_science", "体育学"),
+                Subject("traditional_chinese_medicine", "中医中药", china_specific=True),
+            ),
         ),
-    },
+    ),
 )
 
-CEVAL_ALL = CEVAL.suites()
-CMMLU_ALL = CMMLU.suites()
+CEVAL_ALL = CEVAL.all_suite()
+CMMLU_ALL = CMMLU.all_suite()
 
 # One member per benchmark through its own suite, so neither set's subject count decides the mix,
 # as `zh_tw` (stage file 017).
-_suites = by_name((*CEVAL_ALL.suites, *CMMLU_ALL.suites))
-ZH_CN = Suite("zh_cn", (_suites["ceval"], _suites["cmmlu"]))
-ZH_CN_BPB = Suite("zh_cn:bpb", (_suites["ceval:bpb"], _suites["cmmlu:bpb"]), metric="bpb")
+ZH_CN = Suite("zh_cn", (CEVAL.suite, CMMLU.suite))
+ZH_CN_BPB = Suite("zh_cn:bpb", (CEVAL.bpb_suite, CMMLU.bpb_suite), metric="bpb")

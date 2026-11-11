@@ -36,6 +36,10 @@ TEST = [
     ("哪一个是水果？", ["苹果", "石头", "椅子", "云"], "A"),
 ]
 ROWS = {
+    # TMMLU+ reads C-Eval's columns, and its dev rows are its `train` split. The three benchmarks
+    # share one task builder, so these rows serve the test that covers all three.
+    ("ikala/tmmluplus", "train"): [ceval_row(i, *row) for i, row in enumerate(DEV)],
+    ("ikala/tmmluplus", "test"): [ceval_row(i, *row) for i, row in enumerate(TEST)],
     ("ceval/ceval-exam", "dev"): [ceval_row(i, *row) for i, row in enumerate(DEV)],
     ("ceval/ceval-exam", "test"): [ceval_row(i, *row) for i, row in enumerate(TEST)],
     ("cerulean-works/cmmlu", "dev"): [cmmlu_row(*row) for row in DEV],
@@ -45,7 +49,7 @@ ROWS = {
 
 @pytest.fixture
 def zh_cn_rows(monkeypatch, real_load):
-    """Every C-Eval and CMMLU task loads `ROWS` through the real `Dataset.load`, which numbers the rows."""
+    """Every TMMLU+, C-Eval and CMMLU task loads `ROWS` through the real `Dataset.load`, which numbers the rows."""
     monkeypatch.setattr(Dataset, "load", real_load)
     monkeypatch.setattr(
         datasets,
@@ -111,13 +115,17 @@ def test_dropped_rows_are_left_out_of_the_test_split_only(zh_cn_rows, monkeypatc
     # Only the two subjects of 033.D8 leave a row out.
     with_keep = []
     for benchmark in (CEVAL, CMMLU):
-        for subjects in benchmark.categories.values():
-            with_keep.extend(f"{benchmark.name}_{s.name}" for s in subjects if s.keep is not None)
+        for category in benchmark.categories:
+            for subject in category.subjects:
+                if subject.keep is not None:
+                    with_keep.append(f"{benchmark.name}_{subject.name}")
     assert with_keep == ["ceval_operating_system", "cmmlu_computer_science"]
 
 
-def test_scores_do_not_depend_on_batching(scorer, zh_cn_rows):
-    task = TASKS["ceval_logic"]
+# One test for the three benchmarks, since `Benchmark.tasks` builds all their tasks.
+@pytest.mark.parametrize("name", ["tmmluplus_organic_chemistry", "ceval_logic", "cmmlu_logical"])
+def test_scores_do_not_depend_on_batching(scorer, zh_cn_rows, name):
+    task = TASKS[name]
     assert isinstance(task, MultipleChoiceTask)
     one_batch = score_task(scorer, task)
 
@@ -139,8 +147,9 @@ def test_subject_tables_match_the_benchmarks_files():
         (CEVAL, {"stem": 20, "social_science": 10, "humanities": 11, "other": 11}),
         (CMMLU, {"stem": 17, "social_science": 22, "humanities": 13, "other": 15}),
     ):
-        subjects = [s for subjects in benchmark.categories.values() for s in subjects]
-        assert {category: len(s) for category, s in benchmark.categories.items()} == sizes
+        categories = benchmark.categories
+        subjects = [subject for category in categories for subject in category.subjects]
+        assert {category.name: len(category.subjects) for category in categories} == sizes
         assert len({subject.name for subject in subjects}) == len(subjects)
         assert len(SUITES[benchmark.name].tasks) == len(subjects)
 
@@ -148,7 +157,7 @@ def test_subject_tables_match_the_benchmarks_files():
     # CMMLU's `src/categories.py` tags 15, though its paper says 16.
     assert len(china_specific) == 15
     assert set(china_specific) <= set(SUITES["cmmlu"].tasks)
-    assert not any(subject.china_specific for s in CEVAL.categories.values() for subject in s)
+    assert not any(s.china_specific for category in CEVAL.categories for s in category.subjects)
 
 
 def test_each_benchmark_averages_its_subjects_and_zh_cn_weighs_both_equally():
