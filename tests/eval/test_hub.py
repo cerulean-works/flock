@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import datasets
+import httpx
 import lance
 import pyarrow as pa
 import pytest
@@ -49,7 +50,7 @@ def bucket(tmp_path, monkeypatch):
     monkeypatch.setattr(hub, "BUCKET", str(tmp_path / "hub"))
     signed_in = []
     monkeypatch.setattr(
-        s3, "get_process", lambda org, read_only: signed_in.append((org, read_only))
+        s3, "get_process", lambda org, read_only=False: signed_in.append((org, read_only))
     )
     return signed_in
 
@@ -544,3 +545,77 @@ def test_the_staging_root_is_absolute_and_quoted_in_pull_commands(tmp_path, monk
     assert str(error.value).splitlines()[1].endswith(f"--to '{tmp_path}/eval hub'")
     monkeypatch.setenv("FLOCK_EVAL_HUB", "")
     assert hub.root() is None
+
+
+@pytest.fixture
+def mirror(tmp_path, monkeypatch):
+    """Runs the mirror script on the toy repo's one pin against a stand-in for the Flock API, which answers `info` for members and anonymous readers as told, before and after the tag is set, and records every request."""
+    from click.testing import CliRunner
+
+    from flock.cli import api, credentials
+    from flock.eval.scripts import hub_mirror
+
+    splits = toy_splits()
+    monkeypatch.setattr(hub_mirror, "pins", lambda tasks: {(REPO, FIRST): {("qa", "test")}})
+    monkeypatch.setattr(
+        datasets, "load_dataset", lambda repo, subset, revision, split: splits[(subset, split)]
+    )
+    monkeypatch.setattr(
+        credentials, "resolve", lambda: credentials.Credentials("https://flock.test", "t", "env")
+    )
+
+    def run(before, after, trash=200):
+        requests = []
+
+        def answer(request: httpx.Request) -> httpx.Response:
+            requests.append((request.method, request.url.path.rsplit("/", 1)[-1]))
+            if request.url.path.endswith("/info"):
+                tagged = any(method == "PUT" for method, _ in requests)
+                member, anonymous, public = after if tagged else before
+                if "Authorization" not in request.headers:
+                    return httpx.Response(anonymous)
+                return httpx.Response(member, json={"public": public})
+            if request.url.path.endswith("/delete"):
+                return httpx.Response(trash, json={})
+            return httpx.Response(200, json={})
+
+        monkeypatch.setattr(api, "TRANSPORT", httpx.MockTransport(answer))
+        result = CliRunner().invoke(hub_mirror.main, ["acme"])
+        return result, requests
+
+    return run
+
+
+def test_the_mirror_writes_only_to_a_path_members_read_or_find_missing(mirror, tmp_path):
+    copy = tmp_path / "hub" / "eval" / REPO
+
+    # A member status that is neither 200 nor 404 says nothing about what the path holds.
+    result, requests = mirror(before=(503, 404, None), after=(200, 404, False))
+    assert result.exit_code == 1 and "answers members with 503" in result.output
+    assert requests[0] == ("DELETE", "public")  # private first, whatever follows
+    assert not copy.exists() and ("PUT", FIRST) not in requests
+
+    # A path that is already there and public gets no more rows, and is not trashed.
+    result, requests = mirror(before=(200, 200, True), after=(200, 404, False))
+    assert result.exit_code == 1 and "public True" in result.output
+    assert not copy.exists() and ("POST", "delete") not in requests
+
+    # A missing path is written, tagged and checked: private is an anonymous 404, a member 200.
+    result, requests = mirror(before=(404, 404, None), after=(200, 404, False))
+    assert result.exit_code == 0, result.output
+    assert requests[0] == ("DELETE", "public") and ("PUT", FIRST) in requests
+    assert ("POST", "delete") not in requests
+    pairs = hub.check(hub.recorded(lance.dataset(str(copy))), REPO, FIRST, str(copy))
+    assert [(pair["subset"], pair["split"]) for pair in pairs] == [("qa", "test")]
+
+
+@pytest.mark.parametrize(
+    ("trash", "outcome"),
+    [(200, "; moved to the trash"), (500, "NOT moved to the trash (500 Internal Server Error)")],
+)
+def test_a_new_path_others_can_see_goes_to_the_trash_or_says_it_did_not(mirror, trash, outcome):
+    result, requests = mirror(before=(404, 404, None), after=(200, 200, True), trash=trash)
+
+    assert result.exit_code == 1
+    assert "answers anonymous readers with 200" in result.output and outcome in result.output
+    assert requests[-1] == ("POST", "delete")  # after the write and its check
