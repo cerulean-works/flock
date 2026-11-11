@@ -93,20 +93,39 @@ def toy_splits() -> dict[tuple[str | None, str], datasets.Dataset]:
     return splits
 
 
+def mirrored(tmp_path, *pairs, revision=FIRST) -> str:
+    """Writes `pairs` of the toy repo to the stand-in hub as a new version with the pin's tag on it, as the mirror does, and returns the copy's URI."""
+    splits = toy_splits()
+    uri = str(tmp_path / "hub" / "eval" / REPO)
+    version = hub.write(uri, REPO, revision, {pair: splits[pair] for pair in pairs})
+    tags = lance.dataset(uri).tags
+    set_tag = tags.update if revision in tags.list() else tags.create
+    set_tag(revision, version)
+    return uri
+
+
+@pytest.fixture
+def read_staged(monkeypatch, real_load):
+    """Makes `Dataset.load` the real one, reading the copies staged under the root it is given."""
+
+    def switch(root):
+        monkeypatch.setattr(Dataset, "load", real_load)
+        monkeypatch.setenv("FLOCK_EVAL_HUB", str(root))
+
+    return switch
+
+
 @pytest.fixture
 def staged(tmp_path, monkeypatch, real_load):
     """A toy repo written to a local stand-in for the hub at two pins and staged at the first, with `datasets.load_dataset` answering from the same tables."""
     splits = toy_splits()
-    uri = str(tmp_path / "hub" / "eval" / REPO)
     for revision in (FIRST, SECOND):
-        version = hub.write(uri, REPO, revision, splits)
-        lance.dataset(uri).tags.create(revision, version)
+        uri = mirrored(tmp_path, *splits, revision=revision)
 
     monkeypatch.setattr(
         datasets, "load_dataset", lambda repo, subset, revision, split: splits[(subset, split)]
     )
     monkeypatch.setattr(Dataset, "load", real_load)
-    monkeypatch.delenv("FLOCK_EVAL_HUB", raising=False)
     root = tmp_path / "staged"
     return uri, root, splits
 
@@ -231,26 +250,26 @@ def test_hub_pull_takes_an_org_a_repo_and_a_commit(monkeypatch, tmp_path, bucket
     result = runner.invoke(main, ["hub", "pull", f"acme/{REPO}@{FIRST}", "--to", str(tmp_path)])
     assert result.exit_code == 1 and "tag on another revision" in result.output
 
+    def crash(root, org, repo, revision):
+        raise RuntimeError("a bug, not a refusal")
 
-def test_a_pull_replaces_a_copy_staged_from_an_earlier_version_of_the_tag(
-    tmp_path, monkeypatch, real_load
-):
+    # Only the errors `pull` is known to raise become one line; anything else keeps its traceback.
+    monkeypatch.setattr(hub, "pull", crash)
+    result = runner.invoke(main, ["hub", "pull", f"acme/{REPO}@{FIRST}", "--to", str(tmp_path)])
+    assert isinstance(result.exception, RuntimeError)
+
+
+def test_a_pull_replaces_a_copy_staged_from_an_earlier_version_of_the_tag(tmp_path, read_staged):
     splits = toy_splits()
-    uri = str(tmp_path / "hub" / "eval" / REPO)
+    mirrored(tmp_path, ("qa", "test"))
     root = tmp_path / "staged"
-    version = hub.write(uri, REPO, FIRST, {("qa", "test"): splits[("qa", "test")]})
-    lance.dataset(uri).tags.create(FIRST, version)
     hub.pull(root, "acme", REPO, FIRST)
 
     # A task now reads the few-shot split too: the mirror writes both and moves the tag.
-    version = hub.write(
-        uri, REPO, FIRST, {pair: splits[pair] for pair in (("qa", "test"), ("qa", "train"))}
-    )
-    lance.dataset(uri).tags.update(FIRST, version)
+    mirrored(tmp_path, ("qa", "test"), ("qa", "train"))
     hub.pull(root, "acme", REPO, FIRST)
 
-    monkeypatch.setattr(Dataset, "load", real_load)
-    monkeypatch.setenv("FLOCK_EVAL_HUB", str(root))
+    read_staged(root)
     assert Dataset(REPO, FIRST, "qa", "train").load() == list(splits[("qa", "train")])
     assert [path.name for path in (root / REPO).iterdir()] == [FIRST]  # nothing left beside it
 
@@ -263,22 +282,19 @@ def test_a_pull_refuses_a_copy_of_another_repo(tmp_path):
         hub.pull(tmp_path / "staged", "acme", "cerulean/other", FIRST)
 
 
-def test_the_writer_writes_the_rows_a_filtered_dataset_gives(tmp_path, monkeypatch, real_load):
+def test_the_writer_writes_the_rows_a_filtered_dataset_gives(tmp_path, read_staged):
     rows = datasets.Dataset.from_list([{"n": n} for n in range(5)]).filter(lambda row: row["n"] % 2)
     uri = str(tmp_path / "hub" / "eval" / REPO)
     version = hub.write(uri, REPO, FIRST, {(None, "test"): rows, (None, "train"): rows})
     lance.dataset(uri).tags.create(FIRST, version)
     hub.pull(tmp_path / "staged", "acme", REPO, FIRST)
 
-    monkeypatch.setattr(Dataset, "load", real_load)
-    monkeypatch.setenv("FLOCK_EVAL_HUB", str(tmp_path / "staged"))
+    read_staged(tmp_path / "staged")
     assert Dataset(REPO, FIRST, None, "train").load() == [{"n": 1}, {"n": 3}]
 
 
 def test_a_staged_copy_is_as_readable_as_its_staging_root(tmp_path):
-    uri = str(tmp_path / "hub" / "eval" / REPO)
-    version = hub.write(uri, REPO, FIRST, {("qa", "test"): toy_splits()[("qa", "test")]})
-    lance.dataset(uri).tags.create(FIRST, version)
+    mirrored(tmp_path, ("qa", "test"))
 
     def modes(root):
         """The modes of the repo's folders, of the copy's folders and of its files."""
@@ -408,26 +424,20 @@ def test_a_copy_of_the_same_rows_from_another_org_is_kept(staged):
     assert hub.recorded(lance.dataset(str(folder)))["hub_org"] == "acme"
 
 
-def test_a_stale_copy_that_cannot_be_removed_still_gives_way(tmp_path, monkeypatch, real_load):
+def test_a_stale_copy_that_cannot_be_removed_still_gives_way(tmp_path, read_staged):
     splits = toy_splits()
-    uri = str(tmp_path / "hub" / "eval" / REPO)
+    mirrored(tmp_path, ("qa", "test"))
     root = tmp_path / "staged"
-    version = hub.write(uri, REPO, FIRST, {("qa", "test"): splits[("qa", "test")]})
-    lance.dataset(uri).tags.create(FIRST, version)
     folder = hub.pull(root, "acme", REPO, FIRST)
     locked = folder / "locked"
     locked.mkdir()
     (locked / "kept").write_text("")
     locked.chmod(0o500)
 
-    version = hub.write(
-        uri, REPO, FIRST, {pair: splits[pair] for pair in (("qa", "test"), ("qa", "train"))}
-    )
-    lance.dataset(uri).tags.update(FIRST, version)
+    mirrored(tmp_path, ("qa", "test"), ("qa", "train"))
     try:
         assert hub.pull(root, "acme", REPO, FIRST) == folder
-        monkeypatch.setattr(Dataset, "load", real_load)
-        monkeypatch.setenv("FLOCK_EVAL_HUB", str(root))
+        read_staged(root)
         assert Dataset(REPO, FIRST, "qa", "train").load() == list(splits[("qa", "train")])
     finally:
         for stale in (root / REPO).glob(".*.stale"):
@@ -465,17 +475,12 @@ def test_a_run_with_an_unstaged_dataset_fails_before_its_model_loads(tmp_path, m
         evaluate(EvalConfig(model="tiny@0", tasks=("arc_easy",)))
 
 
-def test_a_failed_rename_puts_the_staged_copy_back(tmp_path, monkeypatch, real_load):
+def test_a_failed_rename_puts_the_staged_copy_back(tmp_path, monkeypatch, read_staged):
     splits = toy_splits()
-    uri = str(tmp_path / "hub" / "eval" / REPO)
+    mirrored(tmp_path, ("qa", "test"))
     root = tmp_path / "staged"
-    version = hub.write(uri, REPO, FIRST, {("qa", "test"): splits[("qa", "test")]})
-    lance.dataset(uri).tags.create(FIRST, version)
     hub.pull(root, "acme", REPO, FIRST)
-    version = hub.write(
-        uri, REPO, FIRST, {pair: splits[pair] for pair in (("qa", "test"), ("qa", "train"))}
-    )
-    lance.dataset(uri).tags.update(FIRST, version)
+    mirrored(tmp_path, ("qa", "test"), ("qa", "train"))
 
     rename = Path.rename
 
@@ -491,12 +496,11 @@ def test_a_failed_rename_puts_the_staged_copy_back(tmp_path, monkeypatch, real_l
 
     # The earlier copy is back in place, and nothing is left beside it.
     assert [path.name for path in (root / REPO).iterdir()] == [FIRST]
-    monkeypatch.setattr(Dataset, "load", real_load)
-    monkeypatch.setenv("FLOCK_EVAL_HUB", str(root))
+    read_staged(root)
     assert Dataset(REPO, FIRST, "qa", "test").load() == list(splits[("qa", "test")])
 
 
-def test_a_pull_signs_in_to_its_org_and_stays_in_its_root(staged, bucket):
+def test_a_pull_signs_in_to_its_org_with_read_only_keys(staged, bucket):
     _, root, _ = staged
     hub.pull(root, "acme", REPO, FIRST)
     assert bucket == [("acme", True)]
@@ -549,23 +553,47 @@ def test_a_pull_refuses_a_link_below_the_root(staged, tmp_path):
     assert list(outside.iterdir()) == []
 
 
-def test_a_staged_copy_cut_short_is_refused(tmp_path, monkeypatch, real_load):
+@pytest.mark.parametrize("held", [1, 3], ids=["cut short", "grown"])
+def test_a_copy_with_other_rows_than_it_records_is_refused_and_a_pull_replaces_it(
+    tmp_path, read_staged, held
+):
     splits = toy_splits()
-    uri = str(tmp_path / "hub" / "eval" / REPO)
-    hub.write(uri, REPO, FIRST, {("qa", "test"): splits[("qa", "test")]})
-    written = lance.dataset(uri)
-    # A copy that records the two rows written, and holds one.
+    written = lance.dataset(mirrored(tmp_path, ("qa", "test")))
+    # A copy that records the two rows of the split, and holds one or three.
+    rows = written.to_table()
     root = tmp_path / "staged"
     lance.write_dataset(
-        written.to_table().slice(0, 1),
+        pa.concat_tables([rows, rows]).slice(0, held),
         str(root / REPO / FIRST),
         transaction_properties=hub.recorded(written),
     )
 
-    monkeypatch.setattr(Dataset, "load", real_load)
-    monkeypatch.setenv("FLOCK_EVAL_HUB", str(root))
-    with pytest.raises(ValueError, match="holds 1 rows of split 'test'.*not the 2 it records"):
+    refusal = f"holds {held} rows, not the 2 it records: run `flock eval hub pull"
+    with pytest.raises(ValueError, match=refusal):  # before a run's model loads
+        hub.check_staged(root, {(REPO, FIRST): {("qa", "test")}})
+    read_staged(root)
+    with pytest.raises(ValueError, match=refusal):
         Dataset(REPO, FIRST, "qa", "test").load()
+
+    hub.pull(root, "acme", REPO, FIRST)
+    assert Dataset(REPO, FIRST, "qa", "test").load() == list(splits[("qa", "test")])
+
+
+def test_a_copy_whose_pairs_this_version_cannot_read_is_refused(tmp_path):
+    uri = str(tmp_path / "hub" / "eval" / REPO)
+    pairs = [{"subset": None, "split": "test", "rows": 1, "columns": {}, "digest": "new"}]
+    written = lance.write_dataset(
+        pa.table({"n": [1]}),
+        uri,
+        transaction_properties={
+            "source_repo": REPO,
+            "source_revision": FIRST,
+            "pairs": json.dumps(pairs),
+        },
+    )
+    lance.dataset(uri).tags.create(FIRST, written.version)
+    with pytest.raises(ValueError, match="records pairs in a form this version doesn't read"):
+        hub.pull(tmp_path / "staged", "acme", REPO, FIRST)
 
 
 def test_every_registered_task_reads_exactly_the_pairs_it_reports(monkeypatch):
@@ -676,10 +704,12 @@ def test_the_mirror_writes_only_to_a_path_members_read_or_find_missing(mirror, t
     assert requests[0] == ("DELETE", "public")  # private first, whatever follows
     assert not copy.exists() and ("PUT", FIRST) not in requests
 
-    # A path that is already there and public gets no more rows, and is not trashed.
-    result, requests = mirror(before=(200, 200, True), after=PRIVATE)
-    assert result.exit_code == 1 and "public True" in result.output
-    assert not copy.exists() and ("POST", "delete") not in requests
+    # A path that is already there and public gets no more rows, and is not trashed, whether
+    # anonymous readers see it yet or only its flag says they may.
+    for before in ((200, 200, True), (404, 200, True)):
+        result, requests = mirror(before=before, after=PRIVATE)
+        assert result.exit_code == 1 and "public True" in result.output
+        assert not copy.exists() and ("POST", "delete") not in requests
 
     # A missing path is written, checked, then tagged: private is an anonymous 404, a member 200.
     result, requests = mirror(before=MISSING, after=PRIVATE)
@@ -713,11 +743,16 @@ def test_the_mirror_keeps_a_tagged_version_until_a_task_reads_another_split(mirr
     ("trash", "outcome"),
     [(200, "; moved to the trash"), (500, "NOT moved to the trash (500 Internal Server Error)")],
 )
-def test_a_new_path_others_can_see_goes_to_the_trash_or_says_it_did_not(mirror, trash, outcome):
-    result, requests = mirror(before=MISSING, after=(200, 200, True), trash=trash)
+# Seen by anonymous readers, or hidden from them but flagged public, or unreadable by members.
+@pytest.mark.parametrize("after", [(200, 200, True), (404, 200, True), (404, 403, None)])
+def test_a_new_path_that_is_not_private_goes_to_the_trash_or_says_it_did_not(
+    mirror, after, trash, outcome
+):
+    result, requests = mirror(before=MISSING, after=after, trash=trash)
 
     assert result.exit_code == 1
-    assert "answers anonymous readers with 200" in result.output and outcome in result.output
+    assert f"answers anonymous readers with {after[0]}" in result.output
+    assert outcome in result.output
     # Checked straight after the write: no tag is set on a path others can see.
     assert requests[-1] == ("POST", "delete") and ("PUT", FIRST) not in requests
 
@@ -727,3 +762,13 @@ def test_a_new_path_is_checked_even_when_its_tag_cannot_be_set(mirror):
 
     assert result.exit_code == 1 and f"can't tag {FIRST}" in result.output
     assert [name for _, name in requests][-3:] == ["info", "info", FIRST]  # checked, then tagged
+
+
+def test_a_path_that_held_versions_is_never_trashed(mirror):
+    mirror(before=MISSING, after=PRIVATE)
+
+    # It grows by a split and then fails its check: left for an admin, with its older versions.
+    result, requests = mirror(before=PRIVATE, after=(200, 200, True), pairs=[("qa", "train")])
+    assert result.exit_code == 1 and "answers anonymous readers with 200" in result.output
+    assert "trash" not in result.output
+    assert ("POST", "delete") not in requests and ("PUT", FIRST) not in requests

@@ -8,7 +8,6 @@ Each dataset goes to `eval/<owner>/<name>` in ORG's `flock-datasets` bucket, hol
 """
 
 import json
-import sys
 from typing import NamedTuple
 from urllib.parse import urlencode
 
@@ -41,13 +40,14 @@ def main(org: str, repos: tuple[str, ...]) -> None:
     member = Api(found.host, found.token)
     anonymous = Api(found.host)
     s3.get_process(org)
+    datasets_api = f"orgs/{org}/datasets"
 
-    for (repo, revision), pairs in sorted(pinned.items(), key=lambda pin: pin[0][0].lower()):
+    for repo, revision in sorted(pinned, key=lambda pin: pin[0].lower()):
         if repos and repo not in repos:
             continue
+        pairs = pinned[(repo, revision)]
         path = hub.path(repo)
         uri = f"{hub.BUCKET}/{path}"
-        datasets_api = f"orgs/{org}/datasets"
         query = urlencode({"path": path})
         info = f"{datasets_api}/info?{query}"
 
@@ -55,12 +55,14 @@ def main(org: str, repos: tuple[str, ...]) -> None:
         refused = member.request("DELETE", f"{datasets_api}/public?{query}")
         if refused.is_error:
             raise click.ClickException(f"{path}: can't make it private: {error_of(refused)}")
+
         # A member reads a written path (200) or a missing one (404). Any other answer leaves
         # unknown whether the path holds tagged versions or is public, so nothing is written.
         existed = statuses(anonymous, member, info)
         if existed.member not in (200, 404):
             raise click.ClickException(f"{path} answers members with {existed.member}: try again")
         new = existed.member == 404
+
         # A path already written is checked before more rows go to it.
         if not new and existed != PRIVATE:
             raise click.ClickException(
@@ -74,25 +76,28 @@ def main(org: str, repos: tuple[str, ...]) -> None:
             if "was not found" not in str(error):
                 raise
             tags = {}  # nothing written there yet
+
         # A tagged version is kept when it holds every pair the registry reads. Otherwise a new
-        # version holds its pairs and the new ones, and the tag moves to it (stage file 034, 034.D3).
+        # version holds its pairs and the new ones, and the tag moves to it (stage file 034,
+        # 034.D3).
         version = None
         held = set()
         if revision in tags:
             version = tags[revision]["version"]
             properties = hub.recorded(lance.dataset(uri, version=version))
             try:
-                recorded = hub.check(properties, repo, revision, f"{path} tag {revision}")
+                stored = hub.check(properties, repo, revision, f"{path} tag {revision}")
             except ValueError as error:
                 raise click.ClickException(str(error)) from None
-            held = {pair.key for pair in recorded}
+            held = {pair.key for pair in stored}
         wrote = version is None or not pairs <= held
         if wrote:
             # Configurations and splits sort with no configuration first.
-            splits = {
-                (subset, split): datasets.load_dataset(repo, subset, revision=revision, split=split)
-                for subset, split in sorted(pairs | held, key=lambda pair: (pair[0] or "", pair[1]))
-            }
+            splits = {}
+            for subset, split in sorted(pairs | held, key=lambda pair: (pair[0] or "", pair[1])):
+                splits[(subset, split)] = datasets.load_dataset(
+                    repo, subset, revision=revision, split=split
+                )
             version = hub.write(uri, repo, revision, splits)
 
         # Checked straight after the write and before the tag, so a tag request that fails can't
@@ -100,8 +105,9 @@ def main(org: str, repos: tuple[str, ...]) -> None:
         # anonymous 404 and a member 200.
         seen = statuses(anonymous, member, info)
         if seen != PRIVATE:
-            # A path this run created goes to the trash, where only admins can restore it. One
-            # that held versions before is left for an admin, since the trash would take them too.
+            # A path that was missing before this write goes to the trash, where only admins can
+            # restore it. One that held versions before is left for an admin, since the trash
+            # would take them too.
             outcome = ""
             if new:
                 trashed = member.post(f"{datasets_api}/delete", {"path": path})
@@ -110,7 +116,7 @@ def main(org: str, repos: tuple[str, ...]) -> None:
                     if trashed.is_error
                     else "; moved to the trash"
                 )
-            sys.exit(
+            raise click.ClickException(
                 f"{path} answers anonymous readers with {seen.anonymous} and members with "
                 f"{seen.member}, public {seen.public}, not 404, 200 and False{outcome}"
             )

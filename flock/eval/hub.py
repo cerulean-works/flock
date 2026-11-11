@@ -35,6 +35,7 @@ ROOT = "FLOCK_EVAL_HUB"
 # The dataset bucket of the org a pull or the mirror is signed in to.
 BUCKET = "s3://flock-datasets"
 
+
 # A configuration (`None` for none) and a split of a Hugging Face repo.
 type Pair = tuple[str | None, str]
 
@@ -87,14 +88,17 @@ def check(
     The pairs a copy at `where` records, in the order their rows are stored, after checking that it is a copy of `repo` at `revision`.
 
     Raises:
-        `ValueError`: if the copy records another repo or revision, or no pairs.
+        `ValueError`: if the copy records another repo or revision, no pairs, or pairs in a form this version doesn't read.
     """
     source = (properties.get("source_repo"), properties.get("source_revision"))
     if source != (repo, revision):
         raise ValueError(f"{where} holds {source[0]}@{source[1]}, not {repo}@{revision}")
     if "pairs" not in properties:
         raise ValueError(f"{where} records no pairs")
-    return _stored_pairs(properties["pairs"])
+    try:
+        return _stored_pairs(properties["pairs"])
+    except TypeError:  # a pair with other fields than `StoredPair`'s
+        raise ValueError(f"{where} records pairs in a form this version doesn't read") from None
 
 
 @functools.cache
@@ -198,6 +202,8 @@ def pull(root: Path, org: str, repo: str, revision: str) -> Path:
     Raises:
         `ValueError`: if `repo` isn't `<owner>/<name>`, `revision` isn't a commit hash, the staging root or a folder below it is writable by others without the sticky bit, a folder below it is a link, or the tagged version records another repo or revision, or no pairs.
         [`~hub.s3.S3Error`]: if the sign-in to `org` fails.
+        `PermissionError`: if a copy to replace is another user's.
+        `OSError`: if the staging folder can't be written.
     """
     import lance
 
@@ -210,6 +216,7 @@ def pull(root: Path, org: str, repo: str, revision: str) -> Path:
     # A staged copy is read by the commit a task pins, never by a branch or tag that moves.
     if not COMMIT.fullmatch(revision):
         raise ValueError(f"{repo}: a staged copy needs a commit hash, not {revision!r}")
+
     s3.get_process(org, read_only=True)
     uri = f"{BUCKET}/{path(repo)}"
     source = lance.dataset(uri, version=revision)
@@ -295,7 +302,7 @@ def _open(folder: Path) -> lance.LanceDataset | None:
 
 
 def _holds(folder: Path, properties: Mapping[str, str]) -> bool:
-    """Whether the copy in `folder` records every one of `properties`; `False` if it can't be read, so a pull replaces it."""
+    """Whether the copy in `folder` records every one of `properties` and holds as many rows as they record; `False` if it can't be read, so a pull replaces it."""
     try:
         table = _open(folder)
     except OSError:
@@ -303,7 +310,9 @@ def _holds(folder: Path, properties: Mapping[str, str]) -> bool:
     if table is None:
         return False
     staged = recorded(table)
-    return all(staged.get(key) == value for key, value in properties.items())
+    if any(staged.get(key) != value for key, value in properties.items()):
+        return False
+    return table.count_rows() == sum(pair.rows for pair in _stored_pairs(properties["pairs"]))
 
 
 def _make_folders(root: Path, folder: Path) -> int:
@@ -377,7 +386,16 @@ def _copy(
             f"{repo}@{revision} isn't staged in {root}: run "
             f"`{command}` on a machine that reaches the hub"
         )
-    return table, check(recorded(table), repo, revision, str(folder))
+    pairs = check(recorded(table), repo, revision, str(folder))
+
+    # A copy cut short, or one with rows added, would give other rows than the hub copy's.
+    total = sum(pair.rows for pair in pairs)
+    if table.count_rows() != total:
+        raise ValueError(
+            f"{folder} holds {table.count_rows()} rows, not the {total} it records: run "
+            f"`{command}` to replace it"
+        )
+    return table, pairs
 
 
 def check_staged(root: Path, pins: Mapping[tuple[str, str], Iterable[Pair]]) -> None:
@@ -387,7 +405,7 @@ def check_staged(root: Path, pins: Mapping[tuple[str, str], Iterable[Pair]]) -> 
     Raises:
         `FileNotFoundError`: naming every pin that isn't staged or lacks a pair, each with its pull command.
         `OSError`: if a pin's folder is there but can't be read.
-        `ValueError`: if a revision isn't a commit hash, or a copy records another repo or revision.
+        `ValueError`: if a revision isn't a commit hash, or a copy records another repo or revision, or holds another number of rows than it records.
     """
     missing = []
     for (repo, revision), pairs in sorted(pins.items()):
@@ -411,7 +429,7 @@ def staged_rows(
     The rows of one split of `repo` at `revision` from the copy staged under `root`, as `datasets` gives them from the Hugging Face Hub.
 
     Raises:
-        `ValueError`: if `revision` isn't a commit hash, the staged copy records another repo or revision, or it holds fewer rows than it records for the split.
+        `ValueError`: if `revision` isn't a commit hash, or the staged copy records another repo or revision, or holds another number of rows than it records.
         `FileNotFoundError`: if the pin isn't staged.
         `OSError`: if its folder is there but can't be read.
         `KeyError`: if the staged copy doesn't hold the split.
@@ -426,13 +444,6 @@ def staged_rows(
     offset = sum(earlier.rows for earlier in pairs[:index])
 
     rows = table.to_table(columns=list(pair.columns), offset=offset, limit=pair.rows)
-    # A copy cut short would otherwise score fewer docs with no error.
-    if rows.num_rows != pair.rows:
-        raise ValueError(
-            f"{root / repo / revision} holds {rows.num_rows} rows of split {split!r} of subset "
-            f"{subset!r}, not the {pair.rows} it records"
-        )
-
     features = datasets.Features.from_dict(pair.features)
     rows = rows.rename_columns(list(pair.columns.values())).select(list(features))
     rows = rows.cast(features.arrow_schema)
