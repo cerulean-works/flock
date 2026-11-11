@@ -8,7 +8,7 @@
 | Keeps | every task, request, gold index, task hash, suite and suite hash of TMMLU+, C-Eval, CMMLU, `zh_tw` and `zh_cn`; the snapshot is unchanged |
 | Result | TMMLU+, C-Eval and CMMLU are three `Benchmark` values in one format; TMMLU+'s own `Subject` and `subject_task` are gone |
 
-The file number is provisional. The file takes the next free number when its PR is opened.
+The file number, and with it the decision numbers, is provisional until the PR is opened. 034 is left free because an open branch claims it.
 
 ## 1. Goal
 
@@ -40,9 +40,9 @@ The new module `tasks/chinese_exam.py` holds `Subject`, `Category`, `Benchmark` 
 
 The snapshot (012) pins each task's `to_doc` by its qualified name, and a `functools.partial` has none. So `tmmluplus_doc` and `ceval_doc` remain in their modules under their old names, each one line that calls `exam_doc` with its prefix. This keeps the snapshot unchanged, names included.
 
-### 035.D4. Tasks are built once per benchmark
+### 035.D4. Tasks and suites are built once per benchmark
 
-`Benchmark.tasks` is a cached property: every suite of a benchmark, and the registry, hold the same task objects, as the registry test requires. `Benchmark` is a frozen dataclass without slots so the cache can live on the instance. Its categories are a tuple of `Category` values, not a `dict`, so the frozen value is hashable and can't be changed in place. `zh_cn` takes its two members from `Benchmark.suite()` instead of looking suites up by string, and the method that builds `<name>:all` is `all_suite`, so it no longer shares the name of the `Suite.suites` property.
+`Benchmark.tasks`, `Benchmark.suite` and `Benchmark.bpb_suite` are cached properties: every group of a benchmark, `zh_tw`, `zh_cn` and the registry hold the same task and suite objects, as they did before. `Benchmark` is a frozen dataclass without slots so the cache can live on the instance. Its categories are a tuple of `Category` values, not a `dict`, so the frozen value is hashable and can't be changed in place. `zh_cn` takes its members from `suite` and `bpb_suite` instead of looking suites up by string, and the method that builds `<name>:all` is `all_suite`, so it no longer shares the name of the `Suite.suites` property.
 
 ### 035.D5. Corrections to stage 033
 
@@ -62,8 +62,8 @@ Stage files are not edited once merged, so two corrections to 033 are recorded h
 
 - **Snapshot.** `uv run python -m tests.eval.snapshot` leaves `tests/eval/snapshot/` byte-identical: every task definition (including `to_doc` and `keep` names), every suite's members, and the rendered toy requests.
 - **Registry.** A dump of every registered task (`repr`, fields in order) and every suite (members, metric, `scored`, tasks in order), in registry order, equals the same dump from `main` except for function addresses.
-- **First attempt.** Building tasks on each call made suites hold equal copies of the registry's tasks, which `test_registry_suites_hold_registered_tasks` caught because it checks identity. That led to 035.D4.
-- **Tests.** The batching test in `test_zh_cn.py` now scores one task of each benchmark from one row table (TMMLU+ reads C-Eval's columns), and TMMLU+'s copy is removed. The table tests read `Category` values.
+- **First attempt.** Building tasks on each call made suites hold equal copies of the registry's tasks, which `test_registry_suites_hold_registered_tasks` caught because it checks identity. That led to 035.D4. Review then found the same for suites (equal copies, not one object), so the suites are cached too, and `zh_tw`, `zh_cn` and the registry were checked to hold one object per suite.
+- **Tests.** The batching test in `test_zh_cn.py` is now parametrized over one task of each benchmark, from one row table (TMMLU+ reads C-Eval's columns), and TMMLU+'s copy is removed. The table tests read `Category` values.
 
 ## 5. Known gaps
 

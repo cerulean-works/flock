@@ -4,7 +4,7 @@ from typing import Any
 
 from flock.eval.tasks.base import CHINESE_QUESTION_PREFIX, MCDoc
 from flock.eval.tasks.chinese_exam import Benchmark, Category, Subject, exam_doc
-from flock.eval.tasks.suite import Suite, by_name
+from flock.eval.tasks.suite import Suite
 
 
 def tmmluplus_doc(row: dict[str, Any]) -> MCDoc:
@@ -120,16 +120,15 @@ TMMLUPLUS_BENCHMARK = Benchmark(
     averages_categories=True,
 )
 
-TMMLUPLUS = TMMLUPLUS_BENCHMARK.suite()
-TMMLUPLUS_BPB = TMMLUPLUS_BENCHMARK.suite("bpb")
+TMMLUPLUS = TMMLUPLUS_BENCHMARK.suite
+TMMLUPLUS_BPB = TMMLUPLUS_BENCHMARK.bpb_suite
 
 # The subjects behind the Gemma-3-TAIDE cards' Taiwan columns (台灣地理, 台灣用語, 閩南語). The
 # cards don't name the second one's subject: `ttqav2` is the only one about Taiwanese terms.
-_tasks_by_name = by_name(TMMLUPLUS.tasks)
 TAIWAN_TASKS = (
-    _tasks_by_name["tmmluplus_geography_of_taiwan"],
-    _tasks_by_name["tmmluplus_ttqav2"],
-    _tasks_by_name["tmmluplus_taiwanese_hokkien"],
+    TMMLUPLUS_BENCHMARK.tasks["geography_of_taiwan"],
+    TMMLUPLUS_BENCHMARK.tasks["ttqav2"],
+    TMMLUPLUS_BENCHMARK.tasks["taiwanese_hokkien"],
 )
 TAIWAN = Suite("tmmluplus:taiwan", TAIWAN_TASKS)
 TAIWAN_BPB = Suite("tmmluplus:taiwan:bpb", TAIWAN_TASKS, metric="bpb")

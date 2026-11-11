@@ -85,7 +85,7 @@ class Category:
     subjects: tuple[Subject, ...]
 
 
-# Not slotted, so `tasks` can be cached on the instance.
+# Not slotted, so `tasks` and the suites can be cached on the instance.
 @dataclass(frozen=True)
 class Benchmark:
     """
@@ -107,7 +107,7 @@ class Benchmark:
         categories (`tuple[Category, ...]`):
             The subjects by the benchmark's own categories.
         averages_categories (`bool`, *optional*, defaults to `False`):
-            Whether the benchmark's score is the mean of its category means, as TMMLU+'s card computes its total (005), rather than the mean of its subjects, as C-Eval and CMMLU report (033.D3).
+            Whether the benchmark's score is the mean of its category means, as TMMLU+'s card computes its total (005), rather than the mean of its subjects, as C-Eval and CMMLU report (C-Eval Table 3 caption, CMMLU Table 1 caption; 033.D3).
     """
 
     name: str
@@ -135,9 +135,9 @@ class Benchmark:
                         row_index=True,
                     ),
                     to_doc=self.to_doc,
-                    # As OLMES scores MMLU (`mmlu_<subject>:rc::olmes` in `oe_eval/configs`).
+                    # As OLMES scores MMLU (`mmlu_<subject>:rc::olmes` in
+                    # `oe_eval/configs/tasks.py`).
                     primary_metric="acc_per_char",
-                    # C-Eval's `explanation` is for chain of thought and isn't shown.
                     fewshot=Fewshot(
                         split=self.fewshot_split,
                         ids=tuple(str(row) for row in range(subject.dev_rows)),
@@ -149,37 +149,43 @@ class Benchmark:
 
         return tasks
 
-    def suite(self, metric: str | None = None) -> Suite:
-        """The benchmark's suite `<name>`, or with `metric` its `<name>:<metric>` twin: the mean of its subjects, or of its category suites if it `averages_categories`."""
-        suffix = f":{metric}" if metric else ""
-        if self.averages_categories:
-            members = tuple(
-                Suite(
-                    f"{self.name}:{category.name}{suffix}",
-                    tuple(self.tasks[subject.name] for subject in category.subjects),
-                    metric=metric,
-                )
-                for category in self.categories
-            )
-        else:
-            members = tuple(self.tasks.values())
+    @cached_property
+    def suite(self) -> Suite:
+        """The benchmark's suite `<name>`. Built once, so every group holds the same object."""
+        return self._scored_suite(None)
 
-        return Suite(f"{self.name}{suffix}", members, metric=metric)
+    @cached_property
+    def bpb_suite(self) -> Suite:
+        """The `bpb` twin of `suite`, `<name>:bpb`."""
+        return self._scored_suite("bpb")
+
+    def _scored_suite(self, metric: str | None) -> Suite:
+        """The mean of the subjects under `metric`, or of the category suites if the benchmark `averages_categories`."""
+        suffix = f":{metric}" if metric else ""
+        if not self.averages_categories:
+            return Suite(f"{self.name}{suffix}", tuple(self.tasks.values()), metric=metric)
+
+        members = []
+        for category in self.categories:
+            tasks = tuple(self.tasks[subject.name] for subject in category.subjects)
+            members.append(Suite(f"{self.name}:{category.name}{suffix}", tasks, metric=metric))
+
+        return Suite(f"{self.name}{suffix}", tuple(members), metric=metric)
 
     def all_suite(self, *more: Suite) -> Suite:
         """The unscored `<name>:all` group: the benchmark's suite, each category's unless the benchmark's suite holds them, and the China specific subjects' if any, then the `bpb` twin of each, then `more`."""
         groups: dict[str, tuple[MultipleChoiceTask, ...]] = {}
-        if not self.averages_categories:
-            for category in self.categories:
-                groups[category.name] = tuple(self.tasks[s.name] for s in category.subjects)
         china_specific = []
         for category in self.categories:
+            tasks = tuple(self.tasks[subject.name] for subject in category.subjects)
+            if not self.averages_categories:
+                groups[category.name] = tasks
             china_specific.extend(self.tasks[s.name] for s in category.subjects if s.china_specific)
         if china_specific:
             groups["china_specific"] = tuple(china_specific)
 
-        accuracy = [self.suite()]
-        bpb = [self.suite("bpb")]
+        accuracy = [self.suite]
+        bpb = [self.bpb_suite]
         for group, tasks in groups.items():
             accuracy.append(Suite(f"{self.name}:{group}", tasks))
             bpb.append(Suite(f"{self.name}:{group}:bpb", tasks, metric="bpb"))

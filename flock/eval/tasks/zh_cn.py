@@ -32,7 +32,8 @@ def keep_cmmlu_computer_science(row: dict[str, Any]) -> bool:
 
 # Categories are `subject_mapping.json`'s third field (`hkust-nlp/ceval` at cba65ae9). The header
 # is the paper's (fig. 6, p.16), as lm-evaluation-harness's `ceval` `description`. Test labels
-# are public since 2025-07-27, and this revision has all 12,342.
+# are public since 2025-07-27, and this revision has all 12,342. Its `explanation` is for chain of
+# thought and isn't shown.
 CEVAL = Benchmark(
     name="ceval",
     repo="ceval/ceval-exam",
@@ -223,5 +224,5 @@ CMMLU_ALL = CMMLU.all_suite()
 
 # One member per benchmark through its own suite, so neither set's subject count decides the mix,
 # as `zh_tw` (stage file 017).
-ZH_CN = Suite("zh_cn", (CEVAL.suite(), CMMLU.suite()))
-ZH_CN_BPB = Suite("zh_cn:bpb", (CEVAL.suite("bpb"), CMMLU.suite("bpb")), metric="bpb")
+ZH_CN = Suite("zh_cn", (CEVAL.suite, CMMLU.suite))
+ZH_CN_BPB = Suite("zh_cn:bpb", (CEVAL.bpb_suite, CMMLU.bpb_suite), metric="bpb")

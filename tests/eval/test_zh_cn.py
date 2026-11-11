@@ -122,17 +122,15 @@ def test_dropped_rows_are_left_out_of_the_test_split_only(zh_cn_rows, monkeypatc
     assert with_keep == ["ceval_operating_system", "cmmlu_computer_science"]
 
 
-def test_scores_do_not_depend_on_batching(scorer, zh_cn_rows):
-    # One test for the three benchmarks, since `Benchmark.tasks` builds all their tasks.
-    default = scorer.batch_tokens
-    for name in ("tmmluplus_organic_chemistry", "ceval_logic", "cmmlu_logical"):
-        task = TASKS[name]
-        assert isinstance(task, MultipleChoiceTask)
-        scorer.batch_tokens = default
-        one_batch = score_task(scorer, task)
+# One test for the three benchmarks, since `Benchmark.tasks` builds all their tasks.
+@pytest.mark.parametrize("name", ["tmmluplus_organic_chemistry", "ceval_logic", "cmmlu_logical"])
+def test_scores_do_not_depend_on_batching(scorer, zh_cn_rows, name):
+    task = TASKS[name]
+    assert isinstance(task, MultipleChoiceTask)
+    one_batch = score_task(scorer, task)
 
-        scorer.batch_tokens = 1
-        assert score_task(scorer, task).metrics == pytest.approx(one_batch.metrics, abs=1e-5)
+    scorer.batch_tokens = 1
+    assert score_task(scorer, task).metrics == pytest.approx(one_batch.metrics, abs=1e-5)
 
 
 def test_doc_reads_each_benchmarks_columns():
