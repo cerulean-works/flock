@@ -95,10 +95,15 @@ def check(
         raise ValueError(f"{where} holds {source[0]}@{source[1]}, not {repo}@{revision}")
     if "pairs" not in properties:
         raise ValueError(f"{where} records no pairs")
+    # Not JSON, a pair with other fields than `StoredPair`'s, or a row count that isn't a number.
     try:
-        return _stored_pairs(properties["pairs"])
-    except TypeError:  # a pair with other fields than `StoredPair`'s
-        raise ValueError(f"{where} records pairs in a form this version doesn't read") from None
+        pairs = _stored_pairs(properties["pairs"])
+        readable = all(isinstance(pair.rows, int) for pair in pairs)
+    except TypeError, ValueError:
+        readable = False
+    if not readable:
+        raise ValueError(f"{where} records pairs in a form this version doesn't read")
+    return pairs
 
 
 @functools.cache
@@ -193,14 +198,14 @@ def pull(root: Path, org: str, repo: str, revision: str) -> Path:
     """
     Stages the version of `org`'s hub copy of `repo` tagged `revision` under `root`, where [`staged_rows`] finds it, and returns its folder.
 
-    The copy is written to a temporary folder and renamed, so an interrupted pull leaves nothing a job could read, and a failed one removes its temporary folder. Pulls of one repo into one root take turns, under a lock on the repo's folder. A staged copy that records the same source and pairs is kept, since those decide its rows, whichever org or version it came from. One staged from an earlier version under the tag, before a split was added, or that can't be read, is replaced; a job reading it then fails.
+    The copy is written to a temporary folder and renamed, so an interrupted pull leaves nothing a job could read, and a failed one removes its temporary folder. Pulls of one repo into one root take turns, under a lock on the repo's folder. A staged copy that records the same source and pairs is kept, since those decide its rows, whichever org or version it came from. One staged from an earlier version under the tag, before a split was added, one that holds another number of rows than it records, or one that can't be read, is replaced; a job reading it then fails.
 
     The staging root's permissions decide who reads every copy in it, private sets included, whatever the umask: folders between the root and a copy take the root's mode, and a copy's folders and files take it without anyone's write bits but the owner's (and files without execute bits), so nobody the root lets only read a copy can change it. A root others can write to must have the sticky bit, as must every folder below it that others can write to, so a copy can be renamed or replaced only by its owner and the owners of the folders above it, up to the root. A missing `root` is made readable by its owner only.
 
     Signs in to `org` with read-only keys first, so the copy recorded as `org`'s is read from `org`'s bucket.
 
     Raises:
-        `ValueError`: if `repo` isn't `<owner>/<name>`, `revision` isn't a commit hash, the staging root or a folder below it is writable by others without the sticky bit, a folder below it is a link, or the tagged version records another repo or revision, or no pairs.
+        `ValueError`: if `repo` isn't `<owner>/<name>`, `revision` isn't a commit hash, the staging root or a folder below it is writable by others without the sticky bit, a folder below it is a link, or the tagged version records another repo or revision, no pairs, or pairs in a form this version doesn't read.
         [`~hub.s3.S3Error`]: if the sign-in to `org` fails.
         `PermissionError`: if a copy to replace is another user's.
         `OSError`: if the staging folder can't be written.

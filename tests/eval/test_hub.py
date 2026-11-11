@@ -579,20 +579,26 @@ def test_a_copy_with_other_rows_than_it_records_is_refused_and_a_pull_replaces_i
     assert Dataset(REPO, FIRST, "qa", "test").load() == list(splits[("qa", "test")])
 
 
-def test_a_copy_whose_pairs_this_version_cannot_read_is_refused(tmp_path):
+@pytest.mark.parametrize(
+    "pairs",
+    [
+        '[{"subset": null, "split": "test", "rows": 1, "columns": {}, "digest": "new"}]',
+        '[{"subset": null, "split": "test", "rows": "1", "columns": {}, "features": {}}]',
+        "not JSON",
+    ],
+    ids=["other fields", "rows not a number", "not JSON"],
+)
+def test_a_copy_whose_pairs_this_version_cannot_read_is_refused(tmp_path, pairs):
     uri = str(tmp_path / "hub" / "eval" / REPO)
-    pairs = [{"subset": None, "split": "test", "rows": 1, "columns": {}, "digest": "new"}]
     written = lance.write_dataset(
         pa.table({"n": [1]}),
         uri,
-        transaction_properties={
-            "source_repo": REPO,
-            "source_revision": FIRST,
-            "pairs": json.dumps(pairs),
-        },
+        transaction_properties={"source_repo": REPO, "source_revision": FIRST, "pairs": pairs},
     )
     lance.dataset(uri).tags.create(FIRST, written.version)
-    with pytest.raises(ValueError, match="records pairs in a form this version doesn't read"):
+    with pytest.raises(
+        ValueError, match="tag .* records pairs in a form this version doesn't read"
+    ):
         hub.pull(tmp_path / "staged", "acme", REPO, FIRST)
 
 
