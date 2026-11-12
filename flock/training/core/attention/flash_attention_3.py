@@ -65,6 +65,16 @@ def flash_attention_3(
             "FA3 expects full-sequence Q/K/V with matching dimensions and MHA/GQA heads"
         )
 
+    # FP32 RMSNorm weights can leave Q/K in FP32 while V is already low precision.
+    # Apply CUDA autocast before validation, as SDPA would at its dispatch boundary.
+    if (
+        q.is_cuda
+        and torch.is_autocast_enabled("cuda")
+        and all(t.dtype in (torch.float16, torch.bfloat16, torch.float32) for t in (q, k, v))
+    ):
+        dtype = torch.get_autocast_dtype("cuda")
+        q, k, v = q.to(dtype), k.to(dtype), v.to(dtype)
+
     if q.device != k.device or q.device != v.device or q.dtype != k.dtype or q.dtype != v.dtype:
         raise ValueError("FA3 Q/K/V must share a device and dtype")
 

@@ -15,6 +15,8 @@ from transformers.models.olmo2.modeling_olmo2 import (
 from flock.training.core.attention import (
     AttentionInterface,
     GroupedAttentionWithRoPE,
+    prepare_flash_attention_mask,
+    prepare_sdpa_mask,
     sdpa_attention,
 )
 from tests.training._reference import check_gqa_parity, check_swiglu_parity, hf_config
@@ -34,7 +36,7 @@ def test_selected_kernel_preserves_layout_masks_and_gradients(monkeypatch, mask_
     monkeypatch.setattr(
         AttentionInterface, "_global_mapping", AttentionInterface._global_mapping.copy()
     )
-    AttentionInterface.register("doubled", doubled_attention)
+    AttentionInterface.register("doubled", doubled_attention, mask_preparer=prepare_sdpa_mask)
     attention = GroupedAttentionWithRoPE(
         hidden_size=32, num_attention_heads=4, num_key_value_heads=2, attn_implementation="doubled"
     )
@@ -72,6 +74,28 @@ def test_unknown_attn_implementation_is_rejected():
         GroupedAttentionWithRoPE(
             hidden_size=16, num_attention_heads=4, attn_implementation="missing"
         )
+    with pytest.raises(ValueError, match="Unknown attention implementation 'missing'"):
+        AttentionInterface.get_mask_preparer("missing")
+
+
+def test_registration_requires_an_explicit_preparer_even_when_replacing(monkeypatch):
+    monkeypatch.setattr(
+        AttentionInterface, "_global_mapping", AttentionInterface._global_mapping.copy()
+    )
+    with pytest.raises(TypeError, match="mask_preparer"):
+        AttentionInterface.register("custom", sdpa_attention)  # ty: ignore[missing-argument]
+    with pytest.raises(ValueError, match="Unknown attention implementation 'custom'"):
+        AttentionInterface.get_interface("custom")
+
+    AttentionInterface.register(
+        "custom", sdpa_attention, mask_preparer=prepare_flash_attention_mask
+    )
+    with pytest.raises(TypeError, match="mask_preparer"):
+        AttentionInterface.register("custom", sdpa_attention)  # ty: ignore[missing-argument]
+    assert AttentionInterface.get_mask_preparer("custom") is prepare_flash_attention_mask
+    AttentionInterface.register("custom", sdpa_attention, mask_preparer=prepare_sdpa_mask)
+    assert AttentionInterface.get_interface("custom") is sdpa_attention
+    assert AttentionInterface.get_mask_preparer("custom") is prepare_sdpa_mask
 
 
 @pytest.mark.parametrize("mask_type", ["none", "causal", "padding", "additive"])

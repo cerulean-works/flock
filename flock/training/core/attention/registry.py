@@ -1,16 +1,20 @@
+from dataclasses import dataclass
 from typing import ClassVar, Protocol
 
 import torch
 
 from .flash_attention_3 import flash_attention_3
+from .masking import MaskPreparationFunction, prepare_flash_attention_mask, prepare_sdpa_mask
 from .sdpa import sdpa_attention
 
 
 class AttentionFunction(Protocol):
     """Compute attention from prepared Q/K/V in [batch, heads, sequence, head_dim] order.
 
-    Return the same layout, with Q's heads and sequence length. Kernels own mask
-    handling and GQA, while the caller owns projections, normalization and RoPE.
+    Return the same layout, with Q's heads and sequence length. Each function
+    defines its supported mask formats and handles GQA. Models use the registered
+    mask preparer; direct callers supply an already prepared mask and causal flag.
+    The caller owns projections, normalization and RoPE.
     """
 
     def __call__(
@@ -24,22 +28,43 @@ class AttentionFunction(Protocol):
     ) -> torch.Tensor: ...
 
 
-class AttentionInterface:
-    """Register attention functions by name."""
+@dataclass(frozen=True)
+class _AttentionBackend:
+    function: AttentionFunction
+    mask_preparer: MaskPreparationFunction
 
-    _global_mapping: ClassVar[dict[str, AttentionFunction]] = {
-        "sdpa": sdpa_attention,
-        "flash_attention_3": flash_attention_3,
+
+class AttentionInterface:
+    """Register attention functions and their mask preparers together by name."""
+
+    _global_mapping: ClassVar[dict[str, _AttentionBackend]] = {
+        "sdpa": _AttentionBackend(sdpa_attention, prepare_sdpa_mask),
+        "flash_attention_3": _AttentionBackend(flash_attention_3, prepare_flash_attention_mask),
     }
 
     @classmethod
-    def register(cls, name: str, function: AttentionFunction) -> None:
-        """Register or replace an attention function."""
-        cls._global_mapping[name] = function
+    def register(
+        cls,
+        name: str,
+        function: AttentionFunction,
+        *,
+        mask_preparer: MaskPreparationFunction,
+    ) -> None:
+        """Register or replace an attention function with an explicit mask preparer."""
+        cls._global_mapping[name] = _AttentionBackend(function, mask_preparer)
 
     @classmethod
     def get_interface(cls, attn_implementation: str) -> AttentionFunction:
         """Resolve an implementation name to its attention function."""
+        return cls._get_backend(attn_implementation).function
+
+    @classmethod
+    def get_mask_preparer(cls, attn_implementation: str) -> MaskPreparationFunction:
+        """Resolve an implementation name to its model-level mask preparer."""
+        return cls._get_backend(attn_implementation).mask_preparer
+
+    @classmethod
+    def _get_backend(cls, attn_implementation: str) -> _AttentionBackend:
         try:
             return cls._global_mapping[attn_implementation]
         except KeyError:

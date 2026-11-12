@@ -1,11 +1,17 @@
 """Implement full-sequence OLMo 2 models and fresh-initialization presets."""
 
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import nn
 
-from flock.training.core.attention import GroupedAttentionWithRoPE
+from flock.training.core.attention import (
+    AttentionInterface,
+    GroupedAttentionWithRoPE,
+    MaskPreparationFunction,
+    PreparedAttentionMask,
+)
 from flock.training.core.nn import SwiGLU
 
 from .base import BaseModel
@@ -125,7 +131,7 @@ class Olmo2DecoderLayer(nn.Module):
         x: torch.Tensor,
         cos: torch.Tensor,
         sin: torch.Tensor,
-        attention_mask: torch.Tensor | None,
+        mask: PreparedAttentionMask,
     ) -> torch.Tensor:
         """Return updated hidden states with the same shape as `x`.
 
@@ -142,8 +148,8 @@ class Olmo2DecoderLayer(nn.Module):
         attention_output = self.self_attn(
             x,
             position_embeddings=(cos, sin),
-            attention_mask=attention_mask,
-            is_causal=attention_mask is None,
+            attention_mask=mask.attention_mask,
+            is_causal=mask.is_causal,
         )
         x = x + self.post_attention_layernorm(attention_output)
         return x + self.post_feedforward_layernorm(self.mlp(x))
@@ -159,6 +165,9 @@ class Olmo2Model(nn.Module):
     def __init__(self, config: Olmo2Config) -> None:
         """Construct embeddings, decoder layers and final normalization."""
         super().__init__()
+        self.mask_preparer: MaskPreparationFunction = AttentionInterface.get_mask_preparer(
+            config.attn_implementation
+        )
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList(
             Olmo2DecoderLayer(config) for _ in range(config.num_hidden_layers)
@@ -177,14 +186,15 @@ class Olmo2Model(nn.Module):
 
         Args:
             input_ids (`torch.Tensor`): Token IDs shaped `[batch, sequence]`.
-            attention_mask (`torch.Tensor` or `None`): Complete SDPA mask, or
-                `None` for causal attention without padding.
+            attention_mask (`torch.Tensor` or `None`): Boolean padding mask shaped
+                `[batch, sequence]`; `None` means every token is valid.
             position_ids (`torch.Tensor`): Positions shaped `[batch, sequence]`.
 
         Returns:
             `torch.Tensor`: Normalized states shaped `[batch, sequence, hidden]`.
         """
-        x = self.embed_tokens(input_ids)
+        mask = self.mask_preparer(attention_mask, is_causal=True)
+        x: Any = self.embed_tokens(input_ids)
         # Build frequencies in float32 even when model weights are cast to bfloat16.
         inv_freq = self.rope_theta ** (
             -torch.arange(0, self.head_dim, 2, device=x.device, dtype=torch.float32) / self.head_dim
@@ -193,7 +203,7 @@ class Olmo2Model(nn.Module):
         angles = torch.cat((freqs, freqs), dim=-1).unsqueeze(1)
         cos, sin = angles.cos(), angles.sin()
         for layer in self.layers:
-            x = layer(x, cos, sin, attention_mask)
+            x: Any = layer(x, cos, sin, mask)
         return self.norm(x)
 
 

@@ -6,7 +6,9 @@ from unittest.mock import Mock
 
 import pytest
 import torch
+from torch._subclasses.fake_tensor import FakeTensorMode
 from torch.nn import attention
+from torch.nn import functional as F
 
 from flock.training.core.attention import flash_attention_3, sdpa_attention
 from flock.training.core.models.olmo2 import Olmo2
@@ -71,12 +73,15 @@ def test_model_huggingface_training_parity(math_kernel, config, kv_heads, paddin
     )
 
 
-def test_model_preserves_padding_logits_and_gradients(math_kernel, config):
-    model = Olmo2(replace(config, attn_implementation="flash_attention_3", num_key_value_heads=2))
-    reference = Olmo2(replace(config, num_key_value_heads=2))
+@pytest.mark.parametrize("kv_heads", [4, 2, 1])
+def test_model_preserves_padding_logits_and_gradients(math_kernel, config, kv_heads):
+    model = Olmo2(
+        replace(config, attn_implementation="flash_attention_3", num_key_value_heads=kv_heads)
+    )
+    reference = Olmo2(replace(config, num_key_value_heads=kv_heads))
     batch = make_batch(
-        torch.tensor([[0, 0, 0, 0], [0, 2, 3, 0], [4, 5, 0, 0]]),
-        torch.tensor([[0, 0, 0, 0], [0, 1, 1, 0], [1, 1, 0, 0]]),
+        torch.tensor([[0, 0, 0, 0], [0, 2, 3, 0], [4, 5, 0, 0], [0, 6, 0, 0]]),
+        torch.tensor([[0, 0, 0, 0], [0, 1, 1, 0], [1, 1, 0, 0], [0, 1, 0, 0]]),
     )
     actual, expected = model(batch), reference(batch)
     torch.testing.assert_close(actual, expected)
@@ -87,6 +92,37 @@ def test_model_preserves_padding_logits_and_gradients(math_kernel, config):
         torch.testing.assert_close(
             parameter.grad, reference.get_parameter(name).grad, atol=2e-5, rtol=2e-4
         )
+
+
+@pytest.mark.parametrize("backend", ["sdpa", "flash_attention_3"])
+@pytest.mark.parametrize("padding", [False, True])
+def test_model_future_tokens_cannot_change_earlier_logits(math_kernel, config, backend, padding):
+    model = Olmo2(replace(config, attn_implementation=backend)).eval()
+    ids = torch.tensor([[2, 3, 4, 5]])
+    mask = torch.ones_like(ids)
+    if padding:
+        ids = F.pad(ids, (1, 1))
+        mask = F.pad(mask, (1, 1))
+    changed = ids.clone()
+    start = int(padding)
+    changed[:, start + 2 : start + 4] = torch.tensor([20, 21])
+    with torch.no_grad():
+        actual = model(make_batch(ids, mask))
+        other = model(make_batch(changed, mask))
+    torch.testing.assert_close(actual[:, start : start + 2], other[:, start : start + 2])
+
+
+def test_unpadded_model_uses_one_batched_fa3_call_per_layer(math_kernel, config, monkeypatch):
+    compute = Mock(wraps=sdpa_attention)
+    monkeypatch.setattr(fa3_module, "sdpa_attention", compute)
+    model = Olmo2(replace(config, attn_implementation="flash_attention_3"))
+    ids = torch.tensor([[2, 3, 4, 5], [6, 7, 8, 9]])
+    model(make_batch(ids))
+    assert compute.call_count == config.num_hidden_layers
+    for call in compute.call_args_list:
+        assert call.args[0].shape[0] == ids.shape[0]
+        assert call.kwargs.get("attention_mask") is None
+        assert call.kwargs["is_causal"] is True
 
 
 @pytest.mark.parametrize(
@@ -145,6 +181,60 @@ def mock_activation(monkeypatch):
     monkeypatch.setattr(attention, "current_flash_attention_impl", lambda: state["active"])
     monkeypatch.setattr(attention, "activate_flash_attention_impl", activate)
     return state, activate
+
+
+@pytest.fixture
+def fake_cuda(monkeypatch):
+    # Exercise CUDA autocast's dtype rules without a CUDA runtime or kernels.
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda: True)
+    with FakeTensorMode():
+        yield
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+@pytest.mark.parametrize("value_dtype", [torch.float32, torch.float16, torch.bfloat16])
+def test_cuda_autocast_reconciles_dtypes_before_validation(
+    fake_cuda, mock_activation, monkeypatch, dtype, value_dtype
+):
+    compute = Mock(side_effect=lambda q, k, v, **kwargs: torch.empty_like(q))
+    monkeypatch.setattr(fa3_module, "sdpa_attention", compute)
+    q = torch.empty(2, 4, 5, 8, device="cuda:0", dtype=torch.float32)
+    k = torch.empty(2, 2, 5, 8, device="cuda:0", dtype=torch.float32)
+    v = torch.empty_like(k, dtype=value_dtype)
+
+    with torch.autocast("cuda", dtype=dtype):
+        output = flash_attention_3(q, k, v, is_causal=True)
+
+    assert output.shape == q.shape
+    assert output.dtype == dtype
+    compute.assert_called_once()
+    assert all(tensor.dtype == dtype for tensor in compute.call_args.args)
+    assert compute.call_args.kwargs["is_causal"] is True
+    assert q.dtype == k.dtype == torch.float32
+    assert v.dtype == value_dtype
+
+
+@pytest.mark.parametrize("autocast_device", ["cpu", "cuda"])
+def test_mixed_dtypes_require_enabled_cuda_autocast(fake_cuda, autocast_device):
+    q = torch.empty(1, 2, 4, 8, device="cuda:0")
+    v = torch.empty_like(q, dtype=torch.bfloat16)
+    with (
+        torch.autocast(autocast_device, dtype=torch.bfloat16),
+        torch.autocast("cuda", enabled=False),
+        pytest.raises(ValueError, match="share a device and dtype"),
+    ):
+        flash_attention_3(q, q, v)
+
+
+@pytest.mark.parametrize("dtype", [torch.float64, torch.int64])
+def test_cuda_autocast_does_not_accept_unsupported_dtypes(fake_cuda, dtype):
+    q = torch.empty(1, 2, 4, 8, device="cuda:0", dtype=dtype)
+    with (
+        torch.autocast("cuda", dtype=torch.bfloat16),
+        pytest.raises(ValueError, match="float16 or bfloat16"),
+    ):
+        flash_attention_3(q, q, q)
 
 
 def test_activation_survives_forward_and_only_runs_once(mock_activation):

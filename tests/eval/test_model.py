@@ -21,7 +21,7 @@ from transformers import (
 from flock.eval import model
 from flock.eval.model import FlockCausalLM, ModelRef, ScoringModel
 from flock.eval.requests import Request
-from flock.training.core.attention import AttentionInterface, sdpa_attention
+from flock.training.core.attention import AttentionInterface, prepare_sdpa_mask, sdpa_attention
 from flock.training.core.models import Olmo2, Olmo2Config
 
 if TYPE_CHECKING:
@@ -219,7 +219,7 @@ def test_a_wrapped_flock_model_scores_as_its_own_forward_pass(
         monkeypatch.setattr(
             AttentionInterface, "_global_mapping", AttentionInterface._global_mapping.copy()
         )
-        AttentionInterface.register("custom", sdpa_attention)
+        AttentionInterface.register("custom", sdpa_attention, mask_preparer=prepare_sdpa_mask)
     flock_model = Olmo2(
         Olmo2Config(
             vocab_size=len(tokenizer),
