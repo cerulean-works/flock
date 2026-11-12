@@ -47,7 +47,9 @@ docstring-code-format = true
 docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint]
-ignore = []
+extend-select = ["ANN"]
+# Dynamic JSON payloads and third-party SDK boundaries may explicitly use Any.
+ignore = ["ANN401"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["flock", "src", "app", "scripts"]
