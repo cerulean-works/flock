@@ -7,6 +7,7 @@ import importlib
 import json
 import os
 import subprocess
+import time
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -250,6 +251,7 @@ def write_model(
         "flock_commit": flock_commit(),
         "run": run,
         "step": step,
+        "saved_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     (folder / "flock.json").write_text(json.dumps(described, indent=2) + "\n")
     write_weights(model, folder, shard_size)

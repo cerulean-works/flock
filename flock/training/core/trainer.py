@@ -5,6 +5,7 @@ import random
 import shutil
 import tempfile
 from dataclasses import asdict, dataclass
+from json import JSONDecodeError
 from pathlib import Path
 from typing import Any, Literal, cast, overload
 
@@ -362,15 +363,32 @@ class Trainer:
                 shutil.rmtree(save_path)
             staged.rename(save_path)
         if self.save_to_hub_repo is not None:
-            save_to_hub(
-                save_path,
-                self.save_to_hub_repo,
-                run=self.run,
-                step=step,
-                tags=[f"checkpoint-{step}"],
-            )
+            try:
+                save_to_hub(
+                    save_path,
+                    self.save_to_hub_repo,
+                    run=self.run,
+                    step=step,
+                    tags=[f"checkpoint-{step}"],
+                )
+            except Exception:
+                self.logger.exception(
+                    f"Failed to save checkpoint {save_path} to hub {self.save_to_hub_repo}"
+                )
         if self.save_total_limit is not None:
             checkpoints = self._checkpoints()
+            checkpoint_save_time: dict[str, str] = {}
+
+            for checkpoint in checkpoints:
+                try:
+                    metadata = json.loads((checkpoint / "flock.json").read_text())
+                    checkpoint_save_time[checkpoint.name] = metadata.get("saved_at", "")
+                except JSONDecodeError as e:
+                    self.logger.warning(f"Failed to read metadata for checkpoint {checkpoint}: {e}")
+                    checkpoint_save_time[checkpoint.name] = ""
+
+            checkpoints.sort(key=lambda path: checkpoint_save_time.get(path.name, ""))
+
             while len(checkpoints) > self.save_total_limit:
                 checkpoint_to_delete = checkpoints.pop(0)
                 self.logger.info(f"Deleting old checkpoint {checkpoint_to_delete}")

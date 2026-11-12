@@ -560,8 +560,9 @@ def test_failed_overwrite_keeps_original_checkpoint(trained_trainer, monkeypatch
     assert not list(trainer.output_dir.glob(".checkpoint-*"))
 
 
-def test_failed_upload_keeps_complete_checkpoint_and_previous_save(
-    trainer_factory, monkeypatch, tmp_path
+@pytest.mark.parametrize("failed_step", [2, 3])
+def test_failed_upload_continues_training_and_retention(
+    trainer_factory, monkeypatch, tmp_path, caplog, failed_step
 ):
     trainer, _, _ = trainer_factory(
         num_workers=0,
@@ -571,17 +572,25 @@ def test_failed_upload_keeps_complete_checkpoint_and_previous_save(
         save_to_hub_repo="cerulean/test-model",
     )
 
+    upload_attempts = []
+
     def upload(folder, name, **options):
-        if options["step"] == 2:
+        upload_attempts.append(options["step"])
+        if options["step"] == failed_step:
             raise OSError("upload interrupted")
 
     monkeypatch.setattr("flock.training.core.trainer.save_to_hub", upload)
-    with pytest.raises(OSError, match="upload interrupted"):
-        trainer.train()
-    assert [p.name for p in trainer._checkpoints()] == ["checkpoint-1", "checkpoint-2"]
+    trainer.train()
+    assert upload_attempts == [1, 2, 3]
+    assert trainer.state.step.item() == trainer.total_steps == 3
+    assert [p.name for p in trainer._checkpoints()] == ["checkpoint-3"]
+    assert (
+        f"Failed to save checkpoint {trainer.output_dir / f'checkpoint-{failed_step}'} to hub "
+        "cerulean/test-model"
+    ) in caplog.text
     expected = copy.deepcopy(trainer.get_trainer_state())
     restored, _, _ = trainer_factory(output_dir=str(tmp_path / "restored"))
-    restored.load_checkpoint(trainer.output_dir / "checkpoint-2")
+    restored.load_checkpoint(trainer.output_dir / "checkpoint-3")
     assert_nested_equal(restored.model.state_dict(), trainer.model.state_dict())
     assert_nested_equal(restored.get_trainer_state(), expected)
 
