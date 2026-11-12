@@ -84,21 +84,20 @@ class GroupedAttentionWithRoPE(nn.Module):
         attention_mask: torch.Tensor | None = None,
         is_causal: bool = False,
     ) -> torch.Tensor:
-        """Map [batch, sequence, hidden] to the same shape using the selected kernel.
+        """Map [batch, sequence, hidden] to the same shape using the selected attention function.
 
         RoPE cos/sin must broadcast to [batch, heads, sequence, head_dim].
-        Masks follow SDPA semantics: True allows attention; floats are additive.
-        Supply either a complete attention mask (including causal constraints)
-        or is_causal=True for unmasked causal attention.
+        attention_mask and is_causal are forwarded unchanged to the selected
+        attention function, which defines supported mask formats and combinations.
 
         Args:
             x (`torch.Tensor`): Hidden states shaped `[batch, sequence, hidden]`.
             position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Cosines and sines for split-half RoPE. Omit to skip rotary embeddings.
-            attention_mask (`torch.Tensor`, *optional*): SDPA mask broadcastable to
-                `[batch, heads, sequence, sequence]`, including causal constraints.
+            attention_mask (`torch.Tensor`, *optional*):
+                Mask prepared for the selected attention implementation.
             is_causal (`bool`, *optional*, defaults to `False`):
-                Use SDPA causal attention when no explicit mask is supplied.
+                Request causal attention from the selected implementation.
 
         Returns:
             `torch.Tensor`: Projected states with the same shape as `x`.
