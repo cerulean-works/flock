@@ -21,6 +21,7 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
 from flock.eval.tasks import TASKS, Choice, Dataset, MCDoc, MultipleChoiceTask, PerplexityTask
+from flock.eval.tasks.perplexity import _docs_by_domain
 from flock.hub.models import upload as hub_upload
 from flock.hub.models.files import write_training_state
 from flock.training.core import trainer as trainer_module
@@ -111,6 +112,7 @@ def test_trainer_initializes_schedule_and_metric_step(trainer_factory):
 @pytest.fixture
 def validation_tasks(monkeypatch):
     """Real task/scorer paths with local rows and the training fixture's tokenizer."""
+    _docs_by_domain.cache_clear()
     text_task = PerplexityTask(
         "test_trainer_text",
         Dataset("offline/trainer", "0" * 40, None, "text"),
@@ -157,7 +159,6 @@ def test_validation_schedule_and_training_mode(
 
     def evaluate():
         calls.append(int(trainer.state.step.item()))
-        trainer.model.eval()  # The training loop owns restoring training mode.
 
     monkeypatch.setattr(trainer, "evaluate", evaluate)
     hook = trainer.model.register_forward_pre_hook(
@@ -180,6 +181,7 @@ def test_evaluation_scores_real_tasks_and_logs_at_training_step(
         num_workers=0,
         prefetch_factor=None,
         validation_tasks=[task.name for task in validation_tasks],
+        model_dtype=torch.float32,
     )
     trainer.state.step.fill_(2)
     # Compute expectations directly from causal logits, without the eval scorer/metrics.
@@ -208,18 +210,19 @@ def test_evaluation_scores_real_tasks_and_logs_at_training_step(
     weights = copy.deepcopy(trainer.model.state_dict())
     state = copy.deepcopy(trainer.get_trainer_state())
     calls = []
-    score_task = trainer_module.score_task
+    score_prepared = trainer_module.score_prepared
 
-    def score(scorer, task):
+    def score(scorer, prepared):
+        task = prepared.task
         assert not torch.is_grad_enabled()
         assert not trainer.model.training
         assert scorer.model.model is trainer.model
         assert scorer.tokenizer is trainer.tokenizer
         assert scorer.name == "test-run@step-2"
         calls.append(task)
-        return score_task(scorer, task)
+        return score_prepared(scorer, prepared)
 
-    monkeypatch.setattr(trainer_module, "score_task", score)
+    monkeypatch.setattr(trainer_module, "score_prepared", score)
     trainer.evaluate()
 
     assert calls == validation_tasks
@@ -263,16 +266,17 @@ def test_validation_preserves_training_updates(
         validation_steps=1,
     )
     calls = []
-    score_task = trainer_module.score_task
+    score_prepared = trainer_module.score_prepared
 
-    def score(scorer, task):
+    def score(scorer, prepared):
+        task = prepared.task
         assert not trainer.model.training
         calls.append((int(trainer.state.step.item()), task.name))
         if error_type is not None and task is validation_tasks[failed_task]:
             raise error_type("validation fixture failure")
-        return score_task(scorer, task)
+        return score_prepared(scorer, prepared)
 
-    monkeypatch.setattr(trainer_module, "score_task", score)
+    monkeypatch.setattr(trainer_module, "score_prepared", score)
     trainer.train()
 
     scored_tasks = validation_tasks if error_type is None else validation_tasks[: failed_task + 1]
@@ -302,14 +306,185 @@ def test_unexpected_validation_error_is_not_silenced(
         validation_steps=1,
     )
 
-    def score(scorer, task):
+    def score(scorer, prepared):
         raise ValueError("invalid validation window")
 
-    monkeypatch.setattr(trainer_module, "score_task", score)
+    monkeypatch.setattr(trainer_module, "score_prepared", score)
     with pytest.raises(ValueError, match="invalid validation window"):
         trainer.train()
     assert trainer.state.step.item() == trainer.lr_scheduler.completed_steps == 1
+    assert trainer.model.training
     assert all(not key.startswith("eval/") for metrics in run.metrics for key in metrics)
+
+
+def test_validation_reuses_loaded_and_tokenized_tasks_with_limits(
+    trainer_factory, validation_tasks, monkeypatch
+):
+    trainer, run, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        validation_tasks=[task.name for task in validation_tasks],
+        validation_limit=1,
+        validation_batch_tokens=4,
+    )
+    loads, tokenizations, prepared_calls, scored, batch_sizes = [], [], [], [], []
+    load = Dataset.load
+    tokenize = trainer_module.ScoringModel.tokenize
+    prepare = trainer_module.prepare_task
+    score = trainer_module.score_prepared
+
+    def load_once(dataset, split=None):
+        loads.append(dataset.split)
+        return load(dataset, split)
+
+    def tokenize_once(scorer, texts):
+        tokenizations.append(texts)
+        return tokenize(scorer, texts)
+
+    def prepare_once(scorer, task, limit):
+        prepared = prepare(scorer, task, limit)
+        prepared_calls.append((task.name, prepared))
+        return prepared
+
+    def record_score(scorer, prepared):
+        assert scorer.batch_tokens == 4
+        result = score(scorer, prepared)
+        assert result.limit == result.num_docs == 1
+        scored.append(prepared)
+        return result
+
+    monkeypatch.setattr(Dataset, "load", load_once)
+    monkeypatch.setattr(trainer_module.ScoringModel, "tokenize", tokenize_once)
+    monkeypatch.setattr(trainer_module, "prepare_task", prepare_once)
+    monkeypatch.setattr(trainer_module, "score_prepared", record_score)
+    hook = trainer.model.register_forward_pre_hook(
+        lambda model, args: batch_sizes.append(args[0]["input_ids"].numel())
+    )
+    try:
+        trainer.evaluate()
+        first_tokenizations = len(tokenizations)
+        assert first_tokenizations > 0
+        # The next step uses new weights, while its requests keep the same token IDs.
+        with torch.no_grad():
+            trainer.model.lm_head.weight.zero_()
+        trainer.state.step.fill_(1)
+        trainer.evaluate()
+    finally:
+        hook.remove()
+    assert loads == ["text", "choices"]
+    assert len(tokenizations) == first_tokenizations
+    assert [name for name, _ in prepared_calls] == [task.name for task in validation_tasks]
+    assert all(scored[index] is prepared for index, (_, prepared) in enumerate(prepared_calls))
+    assert all(scored[index + 2] is prepared for index, (_, prepared) in enumerate(prepared_calls))
+    assert batch_sizes and max(batch_sizes) <= 4
+    assert [metrics["global_step"] for metrics in run.metrics] == [0, 1]
+    assert run.metrics[1]["eval/test_trainer_text/loss_per_token"] == pytest.approx(math.log(32))
+
+
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float32])
+@pytest.mark.parametrize("training", [True, False])
+def test_evaluation_precision_and_module_modes(trainer_factory, validation_tasks, dtype, training):
+    trainer, _, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        validation_tasks=[task.name for task in validation_tasks],
+        model_dtype=dtype,
+    )
+    trainer.model.train(training)
+    trainer.model.lm_head.train(not training)
+    modes = [module.training for module in trainer.model.modules()]
+    outputs = []
+
+    def record(model, args, output):
+        assert all(not module.training for module in model.modules())
+        assert not torch.is_grad_enabled()
+        assert torch.is_autocast_enabled("cpu") == (dtype == torch.bfloat16)
+        outputs.append(output.dtype)
+
+    hook = trainer.model.register_forward_hook(record)
+    try:
+        trainer.evaluate()
+    finally:
+        hook.remove()
+    assert outputs and set(outputs) == {dtype}
+    assert all(parameter.dtype == torch.float32 for parameter in trainer.model.parameters())
+    assert [module.training for module in trainer.model.modules()] == modes
+    assert not torch.is_autocast_enabled("cpu")
+
+
+@pytest.mark.parametrize("error", [KeyError, ValueError])
+def test_evaluation_restores_modes_after_preparation_failure(
+    trainer_factory, validation_tasks, monkeypatch, error
+):
+    trainer, _, _ = trainer_factory(validation_tasks=[task.name for task in validation_tasks])
+    trainer.model.lm_head.eval()
+    modes = [module.training for module in trainer.model.modules()]
+
+    def fail(*args, **kwargs):
+        raise error("preparation failed")
+
+    monkeypatch.setattr(trainer_module, "prepare_task", fail)
+    if error is ValueError:
+        with pytest.raises(ValueError, match="preparation failed"):
+            trainer.evaluate()
+    else:
+        trainer.evaluate()
+    assert [module.training for module in trainer.model.modules()] == modes
+
+
+@pytest.mark.parametrize("tasks_enabled", [True, False])
+def test_disabled_validation_does_not_prepare_tasks(
+    trainer_factory, validation_tasks, monkeypatch, tasks_enabled
+):
+    trainer, run, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        validation_tasks=[task.name for task in validation_tasks] if tasks_enabled else [],
+        validation_steps=None if tasks_enabled else 1,
+    )
+
+    def fail(*args, **kwargs):
+        pytest.fail("disabled validation must not prepare tasks")
+
+    monkeypatch.setattr(trainer_module, "prepare_task", fail)
+    trainer.train()
+    assert not any(key.startswith("eval/") for metrics in run.metrics for key in metrics)
+
+
+@pytest.mark.parametrize("fail_evaluation", [True, False])
+def test_checkpoint_is_saved_before_validation(
+    trainer_factory, validation_tasks, monkeypatch, fail_evaluation
+):
+    trainer, _, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        validation_tasks=[task.name for task in validation_tasks],
+        validation_steps=2,
+        save_steps=2,
+    )
+    calls = []
+    evaluate = trainer.evaluate
+
+    def validate():
+        step = int(trainer.state.step.item())
+        checkpoint = trainer.output_dir / f"checkpoint-{step}"
+        assert (checkpoint / "model.safetensors").is_file()
+        assert (checkpoint / "training_state/trainer_state_dict.safetensors").is_file()
+        calls.append(step)
+        if fail_evaluation:
+            raise RuntimeError("validation failed after save")
+        evaluate()
+
+    monkeypatch.setattr(trainer, "evaluate", validate)
+    if fail_evaluation:
+        with pytest.raises(RuntimeError, match="validation failed after save"):
+            trainer.train()
+        assert calls == [2]
+        trainer.load_checkpoint(trainer.output_dir / "checkpoint-2")
+        assert trainer.state.step.item() == trainer.lr_scheduler.completed_steps == 2
+    else:
+        trainer.train()
+        assert calls == [2, 3]
 
 
 def test_local_checkpoint_records_run_identity(trainer_factory):

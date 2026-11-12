@@ -107,9 +107,40 @@ With the recipe's `wandb_mode="offline"`, check the local run directory or
 `wandb_mode="online"`, accept SDK setup during `flock login`, and check the
 project in [Cerulean's dashboard](https://flock.cerulean.works).
 
-The trained weights remain in `trainer.model`. The scaffold has no evaluation
-loop, gradient accumulation or distributed training.
+The trained weights remain in `trainer.model`. The scaffold has no gradient
+accumulation or distributed training.
 See the [trainer implementation](https://github.com/cerulean-works/flock/blob/feat/scaffold-training-loop/flock/training/core/trainer.py) for the current loop.
+
+## Validate during training
+
+Set `validation_tasks` to registered [task names](../evals/tasks) and
+`validation_steps` to a positive update interval. Validation runs at that interval
+and at the final update, logging each metric as `eval/<task>/<metric>` against
+`global_step`. You can also call `trainer.evaluate()` directly.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `validation_tasks` | `[]` | Task names to score. An empty list skips validation. |
+| `validation_steps` | `None` | Positive number of updates between validations. `None` disables automatic validation. |
+| `validation_limit` | `None` | Score only the first positive number of documents per task, or all documents with `None`. |
+| `validation_batch_tokens` | `32768` | Positive padded-token budget per scoring batch. Lower it to fit evaluation beside the training model, gradients and optimizer state. A single request can exceed the budget. |
+
+Each task is loaded and tokenized on its first validation, then its prepared
+requests are reused for later steps. Disabled validation does not load tasks.
+Keep the task list, document limit and tokenizer unchanged while reusing a trainer.
+Limited scores describe the selected documents, rather than the full benchmark.
+
+Validation uses `model_dtype` for autocast, which defaults to `torch.bfloat16`,
+while retaining the FP32 master weights. Set `model_dtype=torch.float32` to
+disable autocast for validation. Log-softmax stays in FP32. The eval CLI loads
+BF16 weights by default, so its scores can differ from autocast over FP32 weights.
+Keep precision and batching consistent when comparing checkpoints; see
+[Scoring behavior](../evals/scoring#batching-and-precision).
+
+Validation restores each module's previous training mode, including when scoring
+fails. A `KeyError` or `FileExistsError` is logged and skips that validation;
+other errors stop training. When saving and validation fall on the same update,
+the checkpoint is saved first so an evaluation failure leaves it available to resume.
 
 ## Save and resume training
 

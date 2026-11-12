@@ -25,6 +25,8 @@ def config_values():
         "batch_size",
         "logging_steps",
         "validation_steps",
+        "validation_limit",
+        "validation_batch_tokens",
         "save_steps",
         "save_total_limit",
         "dataloader_prefetch_factor",
@@ -61,6 +63,8 @@ def test_config_accepts_boundaries_and_disabled_intervals(config_values):
         logging_steps=1,
     )
     assert config.validation_steps is None
+    assert config.validation_limit is None
+    assert config.validation_batch_tokens == 32768
     assert config.save_steps is None
     assert config.save_total_limit is None
 

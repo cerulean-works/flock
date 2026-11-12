@@ -21,8 +21,8 @@ from torch.optim import AdamW, Muon, Optimizer
 from torch.utils.data import DataLoader
 from transformers import TokenizersBackend
 
-from flock.eval.model import FlockCausalLM, ScoringModel
-from flock.eval.run import score_task
+from flock.eval.model import DEFAULT_BATCH_TOKENS, FlockCausalLM, ScoringModel
+from flock.eval.run import PreparedTask, prepare_task, score_prepared
 from flock.eval.tasks import TASKS
 from flock.hub.models import PendingUpload, save_to_hub
 from flock.hub.models.files import import_path, read_training_state, weight_files, write_model
@@ -49,6 +49,8 @@ class TrainerConfig(PydanticBaseModel):
 
     validation_tasks: list[str] = Field(default_factory=list)
     validation_steps: int | None = Field(default=None, gt=0)
+    validation_limit: int | None = Field(default=None, gt=0)
+    validation_batch_tokens: int = Field(default=DEFAULT_BATCH_TOKENS, gt=0)
 
     wandb_project: str
     wandb_mode: Literal["online", "offline", "disabled", "shared"] = "online"
@@ -201,6 +203,9 @@ class Trainer:
 
         self.validation_tasks = config.validation_tasks
         self.validation_steps = config.validation_steps
+        self.validation_limit = config.validation_limit
+        self.validation_batch_tokens = config.validation_batch_tokens
+        self._prepared_validation_tasks: dict[str, PreparedTask] = {}
 
         self.output_dir: Path = (
             Path(config.output_dir)
@@ -311,17 +316,15 @@ class Trainer:
                 self.run.log(metrics_dict)
                 self.state.reset_window()
 
+            if self.save_steps is not None and (
+                step % self.save_steps == 0 or step == self.total_steps
+            ):
+                self.save_model()
+
             if self.validation_steps and (
                 step % self.validation_steps == 0 or step == self.total_steps
             ):
                 self.evaluate()
-                self.model.train()
-
-            if self.save_steps is None:
-                continue
-
-            if step % self.save_steps == 0 or step == self.total_steps:
-                self.save_model()
 
     def train(self, resume_from_checkpoint: bool | str | Path = False):
         """Train one pass, optionally restoring the latest or a specified local checkpoint.
@@ -387,18 +390,45 @@ class Trainer:
 
     @torch.no_grad()
     def evaluate(self):
-        self.model.eval()
+        """Scores cached validation tasks using the training autocast dtype, then restores modes."""
+        if not self.validation_tasks:
+            return
 
         step = int(self.state.step.item())
         scorer = ScoringModel(
-            FlockCausalLM(self.model), self.tokenizer, name=f"{self.run_name}@step-{step}"
+            FlockCausalLM(self.model),
+            self.tokenizer,
+            name=f"{self.run_name}@step-{step}",
+            batch_tokens=self.validation_batch_tokens,
         )
 
+        # In eval mode, the model is not updated and dropout is disabled. We restore the original modes after evaluation.
+        modes = [(module, module.training) for module in self.model.modules()]
         try:
-            results = {task: score_task(scorer, TASKS[task]) for task in self.validation_tasks}
+            self.model.eval()
+            # Prepare on the first evaluation, so disabled validation never loads data.
+            # Keep token IDs on the host and reuse them at every subsequent step.
+            for task in self.validation_tasks:
+                if task not in self._prepared_validation_tasks:
+                    self._prepared_validation_tasks[task] = prepare_task(
+                        scorer, TASKS[task], limit=self.validation_limit
+                    )
+            # Match training precision without casting or copying the FP32 master weights.
+            with torch.autocast(
+                self.device.type,
+                dtype=self.model_dtype,
+                enabled=self.model_dtype != torch.float32,
+            ):
+                results = {
+                    task: score_prepared(scorer, self._prepared_validation_tasks[task])
+                    for task in self.validation_tasks
+                }
         except (FileExistsError, KeyError) as e:
             self.logger.error(f"Error during evaluation, skipping: {e}")
             return
+        finally:
+            for module, training in modes:
+                module.training = training
 
         log_dict = {"global_step": step}
         for task_key, score_dict in results.items():
