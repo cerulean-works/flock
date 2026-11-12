@@ -360,11 +360,12 @@ class Trainer:
             self.logger.info("Starting training")
             self._inner_training_loop(dataloader, start_step)
         finally:
-            self.save_model(blocking=True)
+            if self.save_steps and self.state.step % self.save_steps != 0:
+                self.save_model(blocking=True)
 
     def save_model(self, blocking=False):
         for checkpoint, upload in list(self.pending_uploads.items()):
-            if not upload.done():
+            if upload.done():
                 self.pending_uploads.pop(checkpoint)
         step = int(self.state.step.item())
 
