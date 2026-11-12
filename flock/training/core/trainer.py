@@ -364,6 +364,7 @@ class Trainer:
             staged.rename(save_path)
         if self.save_to_hub_repo is not None:
             try:
+                # Make non-blocking
                 save_to_hub(
                     save_path,
                     self.save_to_hub_repo,
