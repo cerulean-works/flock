@@ -88,11 +88,8 @@ class StepLRScheduler:
             "completed_steps": self.completed_steps,
         }
 
-    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
-        """Restore a schedule and apply the learning rates for its next update.
-
-        Restore the optimizer's state before calling this method.
-        """
+    def validate_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        """Check saved schedule settings without changing the scheduler or optimizer."""
         config_fields = dict(state_dict["config"])
         config_type = config_fields.pop("type")
         if config_type == "cosine":
@@ -113,7 +110,16 @@ class StepLRScheduler:
             raise ValueError(
                 f"Scheduler config does not match the saved scheduler: {config} != {self.config}"
             )
-        self.total_steps = state_dict["total_steps"]
-        self.base_lrs = base_lrs
-        self.completed_steps = completed_steps
+        if state_dict["total_steps"] != self.total_steps:
+            raise ValueError("Scheduler total_steps does not match the saved scheduler")
+        if base_lrs != self.base_lrs:
+            raise ValueError("Scheduler base_lrs do not match the saved scheduler")
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        """Restore progress and apply the learning rates for the next update.
+
+        Restore the optimizer's state before calling this method.
+        """
+        self.validate_state_dict(state_dict)
+        self.completed_steps = state_dict["completed_steps"]
         self._apply_lr()

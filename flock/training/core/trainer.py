@@ -471,10 +471,7 @@ class Trainer:
         if not state:
             raise ValueError(f"Checkpoint has no training state: {checkpoint}")
 
-        checkpoint_state = TrainerCheckpoint.model_validate(
-            state,
-            context={"data_config": self.data_config, "total_steps": self.total_steps},
-        )
+        checkpoint_state = self._validate_trainer_state(state)
 
         missing = set(self.model.state_dict())
         unexpected = set()
@@ -511,11 +508,40 @@ class Trainer:
             "data_config": self.data_config,
         }
 
-    def load_trainer_state(self, state: dict[str, Any] | TrainerCheckpoint):
+    def _validate_trainer_state(
+        self, state: dict[str, Any] | TrainerCheckpoint
+    ) -> TrainerCheckpoint:
+        """Reject incompatible resume settings before loading any checkpoint state."""
         checkpoint = TrainerCheckpoint.model_validate(
             state,
             context={"data_config": self.data_config, "total_steps": self.total_steps},
         )
+        self.lr_scheduler.validate_state_dict(checkpoint.lr_scheduler_state_dict.model_dump())
+
+        saved_groups = checkpoint.optimizer_state_dict["param_groups"]
+        current_groups = self.optimizer.param_groups
+        if len(saved_groups) != len(current_groups):
+            raise ValueError("Checkpoint optimizer parameter groups do not match this run")
+        for index, (saved, current) in enumerate(zip(saved_groups, current_groups, strict=True)):
+            if len(saved["params"]) != len(current["params"]):
+                raise ValueError(
+                    f"Checkpoint optimizer parameter group {index} size does not match this run"
+                )
+            # The current LR depends on progress; original LRs are checked by the scheduler.
+            saved_settings = {
+                key: value for key, value in saved.items() if key not in ("params", "lr")
+            }
+            current_settings = {
+                key: value for key, value in current.items() if key not in ("params", "lr")
+            }
+            if saved_settings != current_settings:
+                raise ValueError(
+                    f"Checkpoint optimizer parameter group {index} settings do not match this run"
+                )
+        return checkpoint
+
+    def load_trainer_state(self, state: dict[str, Any] | TrainerCheckpoint):
+        checkpoint = self._validate_trainer_state(state)
 
         self.state.load_state_dict(checkpoint.trainer_state_dict.model_dump())
         self.optimizer.load_state_dict(checkpoint.optimizer_state_dict)

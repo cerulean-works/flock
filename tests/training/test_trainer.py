@@ -213,9 +213,7 @@ def test_checkpoint_resume_matches_uninterrupted_training(
         with pytest.raises(InterruptedError):
             interrupted.train()
 
-    resumed, resumed_run, resumed_batches = make(
-        interrupted.output_dir, optimizer_config=AdamWConfig(lr=0.7, betas=(0.5, 0.6))
-    )
+    resumed, resumed_run, resumed_batches = make(interrupted.output_dir)
     resumed.save_steps = 2  # Cadence must use absolute steps after the restart.
     with torch.no_grad():
         for parameter in resumed.model.parameters():
@@ -473,13 +471,52 @@ def test_loading_replaces_existing_optimizer_and_schedule_state(
         num_workers=0,
         prefetch_factor=None,
         output_dir=str(tmp_path / "target"),
-        optimizer_config=AdamWConfig(lr=0.3, betas=(0.7, 0.99)),
-        lr_scheduler_config=WSDConfig(warmup_steps=1, decay_steps=1),
     )
     target.train()
     parameter_ids = [id(p) for p in target.model.parameters()]
     target.load_checkpoint(source.output_dir / "checkpoint-3")
     assert [id(p) for p in target.model.parameters()] == parameter_ids
+    assert_nested_equal(target.model.state_dict(), weights)
+    assert_nested_equal(target.get_trainer_state(), state)
+
+
+@pytest.mark.parametrize("load_weights", [True, False], ids=["checkpoint", "trainer-state"])
+@pytest.mark.parametrize(
+    "overrides, error",
+    [
+        ({"lr_scheduler_config": WSDConfig(warmup_steps=0, decay_steps=1)}, "Scheduler config"),
+        (
+            {"lr_scheduler_config": CosineConfig(warmup_steps=1, min_lr_ratio=0.1)},
+            "Scheduler config",
+        ),
+        (
+            {"lr_scheduler_config": CosineConfig(warmup_steps=0, min_lr_ratio=0.2)},
+            "Scheduler config",
+        ),
+        ({"optimizer_config": AdamWConfig(lr=0.3, betas=(0.8, 0.9))}, "base_lrs"),
+        ({"optimizer_config": AdamWConfig(lr=0.01, betas=(0.7, 0.99))}, "optimizer"),
+    ],
+    ids=["schedule-type", "warmup", "minimum-lr", "base-lr", "betas"],
+)
+def test_incompatible_schedule_or_optimizer_is_rejected_before_loading(
+    trained_trainer, trainer_factory, tmp_path, load_weights, overrides, error
+):
+    source = trained_trainer
+    source.save_model()
+    target, _, _ = trainer_factory(output_dir=str(tmp_path / "target"), **overrides)
+    # Populate optimizer buffers so a failed restore must preserve existing state too.
+    for parameter in target.model.parameters():
+        parameter.grad = torch.ones_like(parameter)
+    target.optimizer.step()
+    target.lr_scheduler.step()
+    target.state.step.fill_(1)
+    weights = copy.deepcopy(target.model.state_dict())
+    state = copy.deepcopy(target.get_trainer_state())
+    with pytest.raises(ValueError, match=error):
+        if load_weights:
+            target.load_checkpoint(source.output_dir / "checkpoint-3")
+        else:
+            target.load_trainer_state(copy.deepcopy(source.get_trainer_state()))
     assert_nested_equal(target.model.state_dict(), weights)
     assert_nested_equal(target.get_trainer_state(), state)
 
