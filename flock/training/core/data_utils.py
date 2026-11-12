@@ -59,8 +59,8 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
         batch_size: int,
         dataset_size: int,
         shuffle: bool = True,
-        seed=42,
-        skip_batches=0,
+        seed: int = 42,
+        skip_batches: int = 0,
     ):
         super().__init__()
         self.dataset_size = dataset_size
