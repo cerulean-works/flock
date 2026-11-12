@@ -1,11 +1,22 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pytest
 
 from tests.app.utils import history_rows, system_samples
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
+
+    from tests.app.conftest import Client, EventStream, Flocks
+
+
 PROJECTS = "/api/v1/projects"
 
 
-def test_create_list_get_and_update(api):
+def test_create_list_get_and_update(api: Client) -> None:
     created = api.post(PROJECTS, {"entity": "flock", "name": "vision", "description": "cnns"})
     assert created.status == 201, created.body
     assert created.json() | {"created_at": 0, "updated_at": 0} == {
@@ -41,23 +52,23 @@ def test_create_list_get_and_update(api):
 
 
 @pytest.mark.parametrize("name", ["", " padded", "a/b", "a:b", "50%", "x" * 129, "tab\there"])
-def test_invalid_project_names_are_rejected(api, name):
+def test_invalid_project_names_are_rejected(api: Client, name: str) -> None:
     assert api.post(PROJECTS, {"entity": "flock", "name": name}).status == 422
     api.create_run("p", "r1")
     assert api.patch(f"{PROJECTS}/flock/p", {"name": name}).status == 422
 
 
-def test_unknown_fields_are_rejected(api):
+def test_unknown_fields_are_rejected(api: Client) -> None:
     assert api.post(PROJECTS, {"entity": "flock", "name": "x", "colour": "red"}).status == 422
 
 
-def test_logging_creates_the_project(api):
+def test_logging_creates_the_project(api: Client) -> None:
     api.create_run("auto", "r1")
     project = api.get(f"{PROJECTS}/flock/auto").json()
     assert (project["run_count"], project["active_run_count"]) == (1, 1)
 
 
-def test_empty_projects_survive_a_restart(make_flock):
+def test_empty_projects_survive_a_restart(make_flock: Flocks) -> None:
     server = make_flock()
     api = server.client()
     api.post(PROJECTS, {"entity": "flock", "name": "empty", "description": "later"})
@@ -68,13 +79,13 @@ def test_empty_projects_survive_a_restart(make_flock):
     assert restarted.workspace("empty")["runs"] == []
 
 
-def test_file_stream_does_not_create_runs(api):
+def test_file_stream_does_not_create_runs(api: Client) -> None:
     resp = api.file_stream("flock", "p", "ghost", {"files": {}})
     assert resp.status == 404
     assert api.get(f"{PROJECTS}/flock/p").status == 404
 
 
-def test_rename(make_flock, events):
+def test_rename(make_flock: Flocks, events: Callable[..., EventStream]) -> None:
     server = make_flock()
     api = server.client()
     api.create_run("old", "r1")
@@ -107,7 +118,9 @@ def test_rename(make_flock, events):
     assert restarted.get(f"{PROJECTS}/flock/new").json()["description"] == "moved"
 
 
-def test_delete_project_removes_everything(make_flock, events, wait_for):
+def test_delete_project_removes_everything(
+    make_flock: Flocks, events: Callable[..., EventStream], wait_for: Callable[..., Any]
+) -> None:
     server = make_flock()
     store = server.store
     api = server.client()

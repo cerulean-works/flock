@@ -10,7 +10,7 @@ from flock.eval.tasks.yesno import qasper_doc, sciriff_doc
 # at commit 5a51f50.
 
 
-def test_sciq_puts_the_correct_answer_last():
+def test_sciq_puts_the_correct_answer_last() -> None:
     row = {
         "index": 4,
         "question": "What do plants take in?",
@@ -25,7 +25,7 @@ def test_sciq_puts_the_correct_answer_last():
     )
 
 
-def test_medical_docs_read_their_answer_index():
+def test_medical_docs_read_their_answer_index() -> None:
     medmcqa = {"id": "u-1", "question": "q?", "opa": "a", "opb": "b", "opc": "c", "opd": "d"}
     medqa = {"index": 2, "question": "q?", "choices": ["a", "b"], "answer_idx": 1}
 
@@ -36,13 +36,13 @@ def test_medical_docs_read_their_answer_index():
     assert "acc_uncond" not in MEDQA_EN.reported_metrics
 
 
-def test_lab_bench_puts_the_ideal_answer_last():
+def test_lab_bench_puts_the_ideal_answer_last() -> None:
     row = {"id": "x", "question": "Which gene?", "distractors": ["A1", "B2"], "ideal": "C3"}
 
     assert lab_bench_doc(row) == MCDoc("x", cloze("Which gene?", ("A1", "B2", "C3")), 2)
 
 
-def test_yesno_joins_evidence_and_strips_the_prompt():
+def test_yesno_joins_evidence_and_strips_the_prompt() -> None:
     qasper = {"id": "p_0", "evidence": ["One.", "Two."], "question": "Is it?", "answer": "No"}
     context = "One. Two.\nQuestion: Is it?\nAnswer:"
 
@@ -53,7 +53,7 @@ def test_yesno_joins_evidence_and_strips_the_prompt():
     assert sciriff_doc(sciriff).gold == 0
 
 
-def test_basic_skills_orders_choices_as_olmes_does():
+def test_basic_skills_orders_choices_as_olmes_does() -> None:
     row = {
         "id": "0",
         "question": "4 * 8 =",
@@ -68,7 +68,7 @@ def test_basic_skills_orders_choices_as_olmes_does():
     assert doc.choices[2] == Choice("4 * 8 =", " 32")
 
 
-def test_basic_skills_shots_skip_the_scored_doc():
+def test_basic_skills_shots_skip_the_scored_doc() -> None:
     ids = SHOT_IDS["arithmetic"]
     row = {"question": "q", "answer": "a", "wrong_answers": ["b"]}
     shots = [basic_skills_doc({**row, "id": shot_id}) for shot_id in ids]
@@ -81,7 +81,7 @@ def test_basic_skills_shots_skip_the_scored_doc():
     assert built.requests[0].context == "q a\n\n" * 5 + "q"
 
 
-def test_lambada_scores_the_last_word_after_single_spaces():
+def test_lambada_scores_the_last_word_after_single_spaces() -> None:
     doc = lambada_doc({"index": 9, "text": "He said  hello\nto  Sacha"})
 
     assert doc == MCDoc("9", (Choice("He said hello to", " Sacha"),), 0)
@@ -92,7 +92,7 @@ def test_lambada_scores_the_last_word_after_single_spaces():
     )
 
 
-def test_basic_skills_suites_list_the_six_skills():
+def test_basic_skills_suites_list_the_six_skills() -> None:
     # Membership of the Base Easy suites is checked in test_suites.py.
     assert [task.name for task in SUITES["basic_skills"].members] == [
         f"basic_skills_{skill}"

@@ -8,13 +8,15 @@ from flock.training.core.models import BaseModel
 class EchoModel(BaseModel):
     """Exercise shared input handling independently of any model architecture."""
 
-    def _forward(self, input_ids, attention_mask, position_ids):
+    def _forward(
+        self, input_ids: torch.Tensor, attention_mask: torch.Tensor, position_ids: torch.Tensor
+    ) -> torch.Tensor:
         self.received_mask = attention_mask
         self.received_positions = position_ids
         return input_ids
 
 
-def test_base_model_prepares_collated_batch():
+def test_base_model_prepares_collated_batch() -> None:
     model = EchoModel(max_position_embeddings=4)
     batch: Batch = {
         "input_ids": torch.tensor([[0, 2, 3]]),
@@ -34,7 +36,7 @@ def test_base_model_prepares_collated_batch():
     ]
 
 
-def test_base_model_prepares_unpadded_batch():
+def test_base_model_prepares_unpadded_batch() -> None:
     model = EchoModel(max_position_embeddings=4)
     batch: Batch = {
         "input_ids": torch.tensor([[1, 2, 3]]),
@@ -50,7 +52,7 @@ def test_base_model_prepares_unpadded_batch():
     ]
 
 
-def test_base_model_rejects_overlong_input_before_forward():
+def test_base_model_rejects_overlong_input_before_forward() -> None:
     model = EchoModel(max_position_embeddings=2)
     with pytest.raises(ValueError, match="max_position_embeddings"):
         model(

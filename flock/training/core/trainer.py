@@ -96,7 +96,7 @@ class TrainerState(nn.Module):
     window_tokens: torch.Tensor
     window_steps: torch.Tensor
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.register_buffer("loss_sum", torch.zeros((), dtype=torch.float))
         self.register_buffer("loss_max", torch.zeros((), dtype=torch.float))
@@ -111,7 +111,7 @@ class TrainerState(nn.Module):
     @torch.no_grad()
     def update(
         self, add_step: int, loss: torch.Tensor, grad_norm: torch.Tensor, tokens: torch.Tensor
-    ):
+    ) -> None:
         self.loss_sum.add_(loss.detach() * tokens)
         self.loss_max = torch.maximum(loss.detach(), self.loss_max)
 
@@ -143,7 +143,7 @@ class TrainerState(nn.Module):
         }
 
     @torch.no_grad()
-    def reset_window(self):
+    def reset_window(self) -> None:
         for name in (
             "loss_sum",
             "loss_max",
@@ -155,7 +155,7 @@ class TrainerState(nn.Module):
             getattr(self, name).zero_()
 
     @torch.no_grad()
-    def reset_global(self):
+    def reset_global(self) -> None:
         self.reset_window()
         self.step.zero_()
         self.total_tokens.zero_()
@@ -169,7 +169,7 @@ class Trainer:
         model: BaseModel,
         tokenizer: TokenizersBackend,
         dataset: SafeLanceDataset,
-    ):
+    ) -> None:
         self.run_name = config.run_name
         self.seed = config.seed
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -283,11 +283,11 @@ class Trainer:
         loss = loss_sum / num_tokens.clamp_min(1)
         return loss, num_tokens
 
-    def _set_seed(self):
+    def _set_seed(self) -> None:
         random.seed(self.seed)
         torch.manual_seed(self.seed)
 
-    def _inner_training_loop(self, dataloader: DataLoader, start_step: int):
+    def _inner_training_loop(self, dataloader: DataLoader, start_step: int) -> None:
         """Trainer's inner training loop that can be resumed from a checkpoint."""
         for step, batch in enumerate(dataloader, start=start_step + 1):
             self.optimizer.zero_grad()
@@ -326,7 +326,7 @@ class Trainer:
             ):
                 self.evaluate()
 
-    def train(self, resume_from_checkpoint: bool | str | Path = False):
+    def train(self, resume_from_checkpoint: bool | str | Path = False) -> None:
         """Train one pass, optionally restoring the latest or a specified local checkpoint.
 
         Args:
@@ -389,7 +389,7 @@ class Trainer:
                 self.save_model(blocking=True)
 
     @torch.no_grad()
-    def evaluate(self):
+    def evaluate(self) -> None:
         """Scores cached validation tasks using the training autocast dtype, then restores modes."""
         if not self.validation_tasks:
             return
@@ -437,7 +437,7 @@ class Trainer:
 
         self.run.log(log_dict)
 
-    def save_model(self, blocking=False):
+    def save_model(self, blocking: bool = False) -> None:
         for checkpoint, upload in list(self.pending_uploads.items()):
             if upload.done():
                 try:
@@ -536,7 +536,7 @@ class Trainer:
                 self.logger.info(f"Deleting old checkpoint {checkpoint_to_delete}")
                 shutil.rmtree(checkpoint_to_delete)
 
-    def load_checkpoint(self, checkpoint: str | Path):
+    def load_checkpoint(self, checkpoint: str | Path) -> None:
         """Restore model weights and training state from a local checkpoint folder."""
 
         checkpoint = Path(checkpoint)
@@ -624,7 +624,7 @@ class Trainer:
                 )
         return checkpoint
 
-    def load_trainer_state(self, state: dict[str, Any] | TrainerCheckpoint):
+    def load_trainer_state(self, state: dict[str, Any] | TrainerCheckpoint) -> None:
         checkpoint = self._validate_trainer_state(state)
 
         self.state.load_state_dict(checkpoint.trainer_state_dict.model_dump())

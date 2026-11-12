@@ -147,7 +147,7 @@ def writer(flock: S3Flock) -> Writer:
 # ---------------------------------------------------------------------- the managed bucket (D85)
 
 
-def test_managed_bucket_is_created_with_the_org(flock: S3Flock):
+def test_managed_bucket_is_created_with_the_org(flock: S3Flock) -> None:
     api = flock.client()
     # flock-models (014) is the other bucket Flock manages.
     bucket, models = api.get(BUCKETS).json()["buckets"]
@@ -171,8 +171,8 @@ def test_managed_bucket_is_created_with_the_org(flock: S3Flock):
 
 
 def test_startup_creates_missing_buckets_and_adopts_existing_ones(
-    make_flock: Flocks, s3_server: S3Server, wait_for
-):
+    make_flock: Flocks, s3_server: S3Server, wait_for: Callable[..., Any]
+) -> None:
     # Two orgs on a server without S3: one already had a bucket named flock-datasets (from
     # before names were reserved), the other none.
     plain = make_flock()
@@ -232,7 +232,7 @@ def test_startup_creates_missing_buckets_and_adopts_existing_ones(
     assert [f["name"] for f in files] == ["mine.txt"]
 
 
-def test_the_datasets_tab_creates_a_missing_bucket(flock: S3Flock):
+def test_the_datasets_tab_creates_a_missing_bucket(flock: S3Flock) -> None:
     """When creating it failed earlier, opening the tab tries again."""
     # As if the org's creation had failed to make it: no row, no bucket upstream.
     flock.s3.client().delete_bucket(Bucket=upstream_name(flock))
@@ -246,7 +246,7 @@ def test_the_datasets_tab_creates_a_missing_bucket(flock: S3Flock):
     assert names == ["flock-datasets", "flock-models"]
 
 
-def test_managed_bucket_cant_be_deleted_and_flock_names_are_reserved(flock: S3Flock):
+def test_managed_bucket_cant_be_deleted_and_flock_names_are_reserved(flock: S3Flock) -> None:
     api = flock.client()
     refused = api.delete(f"{BUCKETS}/flock-datasets")
     assert refused.status == 409
@@ -265,7 +265,7 @@ def test_managed_bucket_cant_be_deleted_and_flock_names_are_reserved(flock: S3Fl
 
 def test_listing_finds_datasets_at_any_depth(
     flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
-):
+) -> None:
     writer.write("top", table(0, 5))
     writer.write("eval/mmlu", table(0, 5))
     writer.write("eval/mmlu", table(5, 5), mode="append")
@@ -314,7 +314,7 @@ def test_listing_finds_datasets_at_any_depth(
     assert get(api, f"{DATASETS}/at", path="/eval").status == 422
 
 
-def test_the_datasets_tab_creates_folders(flock: S3Flock, writer: Writer):
+def test_the_datasets_tab_creates_folders(flock: S3Flock, writer: Writer) -> None:
     """The Datasets tab's New folder writes the folder's marker through the Storage tab's
     route, and the empty folder lists."""
     writer.write("eval/mmlu", table(0, 1))
@@ -329,7 +329,7 @@ def test_the_datasets_tab_creates_folders(flock: S3Flock, writer: Writer):
     assert (empty["datasets"], empty["folders"], empty["files"]) == ([], [], [])
 
 
-def test_listing_pages(flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch):
+def test_listing_pages(flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch) -> None:
     tune(monkeypatch, flock, PAGE=3)
     writer.write("d1", table(0, 1))
     writer.write("d2", table(0, 1))
@@ -352,7 +352,7 @@ def test_listing_pages(flock: S3Flock, writer: Writer, monkeypatch: pytest.Monke
 # ---------------------------------------------------------------------- the dataset page (D88-D92)
 
 
-def test_info_rows_and_versions_at_any_version(flock: S3Flock, writer: Writer):
+def test_info_rows_and_versions_at_any_version(flock: S3Flock, writer: Writer) -> None:
     path = "eval/mmlu"
     writer.write(path, table(0, 10))
     writer.write(path, table(10, 10), mode="append", transaction_properties={"message": "more"})
@@ -423,7 +423,7 @@ def test_info_rows_and_versions_at_any_version(flock: S3Flock, writer: Writer):
     assert (latest["version"], latest["latest_version"]) == (3, 4)
 
 
-def test_versions_page(flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch):
+def test_versions_page(flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch) -> None:
     tune(monkeypatch, flock, VERSION_PAGE=2)
     writer.write("d", table(0, 1))
     for i in range(4):
@@ -491,7 +491,9 @@ def cells_table() -> Any:
     )
 
 
-def test_cells_render_each_type(flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch):
+def test_cells_render_each_type(
+    flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tune(monkeypatch, flock, IMAGE_LIMIT=1000)
     writer.write("cells", cells_table())
     api = flock.client()
@@ -550,7 +552,7 @@ def test_cells_render_each_type(flock: S3Flock, writer: Writer, monkeypatch: pyt
 
 def test_a_page_sends_at_most_its_byte_budget(
     flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
-):
+) -> None:
     tune(monkeypatch, flock, PAGE_BYTES=len(PNG) * 2)
     writer.write("pics", pa.table({"img": pa.array([PNG] * 4, pa.binary())}))
     page = get(flock.client(), f"{DATASETS}/rows", path="pics").json()
@@ -558,7 +560,7 @@ def test_a_page_sends_at_most_its_byte_budget(
     assert page["rows"][3][0] == {"k": "bin", "size": len(PNG)}
 
 
-def test_readme(flock: S3Flock, writer: Writer):
+def test_readme(flock: S3Flock, writer: Writer) -> None:
     writer.write("with", table(0, 1))
     writer.write("without", table(0, 1))
     put(flock, "with/README.md", "# MMLU\n\nQuestions. ✓".encode())
@@ -569,7 +571,7 @@ def test_readme(flock: S3Flock, writer: Writer):
     assert get(api, f"{DATASETS}/readme", path="nowhere").status == 404
 
 
-def test_lance_errors_are_502(flock: S3Flock, writer: Writer):
+def test_lance_errors_are_502(flock: S3Flock, writer: Writer) -> None:
     writer.write("broken", table(0, 3))
     data = [k for k in keys(flock, upstream_name(flock), "broken/data/")]
     flock.s3.client().delete_object(Bucket=upstream_name(flock), Key=data[0])
@@ -583,7 +585,7 @@ def test_lance_errors_are_502(flock: S3Flock, writer: Writer):
 
 def test_delete_moves_to_the_trash_and_restores(
     flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
-):
+) -> None:
     path = "eval/mmlu"
     writer.write(path, table(0, 10))
     writer.write(path, table(10, 10), mode="append")
@@ -625,7 +627,7 @@ def test_delete_moves_to_the_trash_and_restores(
     assert writer.open(path, 1).count_rows() == 10
 
 
-def test_the_trash_is_out_of_every_key_s_reach(flock: S3Flock, writer: Writer):
+def test_the_trash_is_out_of_every_key_s_reach(flock: S3Flock, writer: Writer) -> None:
     import boto3
     from botocore.config import Config
     from botocore.exceptions import ClientError
@@ -650,7 +652,7 @@ def test_the_trash_is_out_of_every_key_s_reach(flock: S3Flock, writer: Writer):
         assert raised.value.response["Error"]["Code"] == "NoSuchBucket"
 
 
-def test_restore_to_another_path_when_the_old_one_is_taken(flock: S3Flock, writer: Writer):
+def test_restore_to_another_path_when_the_old_one_is_taken(flock: S3Flock, writer: Writer) -> None:
     writer.write("d", table(0, 3))
     api = flock.client()
     pk = api.post(f"{DATASETS}/delete", {"path": "d"}).json()["id"]
@@ -669,7 +671,7 @@ def test_restore_to_another_path_when_the_old_one_is_taken(flock: S3Flock, write
     assert get(api, f"{DATASETS}/info", path="d").json()["rows"] == 1
 
 
-def test_delete_for_good_and_who_may(flock: S3Flock, writer: Writer):
+def test_delete_for_good_and_who_may(flock: S3Flock, writer: Writer) -> None:
     alice = flock.add_user("alice@flock.test", "member")
     api = flock.client()
     assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
@@ -717,7 +719,7 @@ def test_delete_for_good_and_who_may(flock: S3Flock, writer: Writer):
     assert get(api, f"{DATASETS}/info", path="e").status == 200
 
 
-def test_delete_limits(flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch):
+def test_delete_limits(flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch) -> None:
     writer.write("d", table(0, 3))
     writer.write("d", table(3, 3), mode="append")
     before = keys(flock, upstream_name(flock), "d/")
@@ -733,7 +735,7 @@ def test_delete_limits(flock: S3Flock, writer: Writer, monkeypatch: pytest.Monke
     assert get(flock.client(), f"{DATASETS}/trash").json()["entries"] == []
 
 
-def test_sweep_removes_entries_after_14_days(flock: S3Flock, writer: Writer):
+def test_sweep_removes_entries_after_14_days(flock: S3Flock, writer: Writer) -> None:
     writer.write("old", table(0, 1))
     writer.write("new", table(0, 1))
     api = flock.client()
@@ -753,7 +755,7 @@ def test_sweep_removes_entries_after_14_days(flock: S3Flock, writer: Writer):
 
 def test_sweep_settles_stuck_moves_and_orphans(
     flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
-):
+) -> None:
     org = flock.call(flock.store.org("flock")).pk
     bucket = upstream_name(flock)
     trash = datasets(flock).trash
@@ -801,7 +803,7 @@ def test_sweep_settles_stuck_moves_and_orphans(
     assert [(e["id"], e["moved_at"] is not None) for e in entries] == [(gone, True)]
 
 
-def test_deleting_an_org_empties_its_trash(flock: S3Flock, wait_for):
+def test_deleting_an_org_empties_its_trash(flock: S3Flock, wait_for: Callable[..., Any]) -> None:
     api = flock.client()
     assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
     Writer(flock, "lab").write("d", table(0, 1))
@@ -817,7 +819,7 @@ def test_deleting_an_org_empties_its_trash(flock: S3Flock, wait_for):
 # ---------------------------------------------------------------------- renaming (D95)
 
 
-def test_rename_keeps_everything(flock: S3Flock, writer: Writer):
+def test_rename_keeps_everything(flock: S3Flock, writer: Writer) -> None:
     writer.write("scratch/mmlu", table(0, 10))
     writer.write("scratch/mmlu", table(10, 10), mode="append")
     ds = writer.open("scratch/mmlu")
@@ -850,7 +852,7 @@ def test_rename_keeps_everything(flock: S3Flock, writer: Writer):
     assert moved.to_table(filter="id = 15").num_rows == 1
 
 
-def test_rename_refusals(flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch):
+def test_rename_refusals(flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch) -> None:
     writer.write("a", table(0, 3))
     writer.write("b", table(0, 3))
     put(flock, "files/x.txt", b"x")
@@ -880,7 +882,7 @@ def test_rename_refusals(flock: S3Flock, writer: Writer, monkeypatch: pytest.Mon
 
 def test_rename_refused_when_written_during_the_copy(
     flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
-):
+) -> None:
     writer.write("a", table(0, 3))
     wrote = []
 
@@ -899,7 +901,7 @@ def test_rename_refused_when_written_during_the_copy(
 
 def test_rename_copies_large_objects_in_parts(
     flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
-):
+) -> None:
     writer.write("a", table(0, 3))
     big = bytes(range(256)) * (12 * 4096)  # 12 MiB
     put(flock, "a/extra/big.bin", big)
@@ -916,7 +918,7 @@ def test_rename_copies_large_objects_in_parts(
 # ---------------------------------------------------------------------- tags (D96)
 
 
-def test_tags(flock: S3Flock, writer: Writer):
+def test_tags(flock: S3Flock, writer: Writer) -> None:
     writer.write("d", table(0, 1))
     writer.write("d", table(1, 1), mode="append")
     writer.write("d", table(2, 1), mode="append")
@@ -972,7 +974,7 @@ def private_paths(flock: S3Flock) -> list[str]:
     return [r["path"] for r in sql(flock, "SELECT path FROM private_datasets ORDER BY path")]
 
 
-def test_datasets_are_public_unless_made_private(flock: S3Flock, writer: Writer):
+def test_datasets_are_public_unless_made_private(flock: S3Flock, writer: Writer) -> None:
     path = "eval/mmlu"
     writer.write(path, table(0, 10))
     writer.write(path, table(10, 10), mode="append")
@@ -1042,7 +1044,7 @@ def test_datasets_are_public_unless_made_private(flock: S3Flock, writer: Writer)
 
 def test_a_path_made_private_ahead_is_private_from_its_first_version(
     flock: S3Flock, writer: Writer
-):
+) -> None:
     api = flock.client()
     anon = flock.anonymous()
     assert make_private(api, "exam/v1").status == 204
@@ -1051,7 +1053,7 @@ def test_a_path_made_private_ahead_is_private_from_its_first_version(
     assert get(api, f"{DATASETS}/info", path="exam/v1").json()["public"] is False
 
 
-def test_private_follows_renames_and_outlives_deletes(flock: S3Flock, writer: Writer):
+def test_private_follows_renames_and_outlives_deletes(flock: S3Flock, writer: Writer) -> None:
     writer.write("a", table(0, 3))
     writer.write("open", table(0, 3))
     api = flock.client()
@@ -1080,7 +1082,7 @@ def test_private_follows_renames_and_outlives_deletes(flock: S3Flock, writer: Wr
     assert private_paths(flock) == ["b/c", "d", "e"]
 
 
-def test_orgs_from_before_keep_their_datasets_private(flock: S3Flock, writer: Writer):
+def test_orgs_from_before_keep_their_datasets_private(flock: S3Flock, writer: Writer) -> None:
     # Orgs made before datasets became public by default (migration 0016) start closed: every
     # dataset they hold is flagged private before any is public.
     for path in ("old", "eval/mmlu", "eval/deep/set"):

@@ -228,7 +228,7 @@ class Org:
         s3_ephemeral_ttl: int = 8 * 3600,
         s3_key_max_ttl: int | None = 30 * 86400,
         model_retention: int | None = None,
-    ):
+    ) -> None:
         self.pk = pk
         self.name = name
         self.display_name = display_name if display_name is not None else name

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import copy
 import json
 import math
@@ -7,7 +9,7 @@ import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import cast
+from typing import TYPE_CHECKING, Never, cast
 
 import lance
 import pyarrow as pa
@@ -19,6 +21,7 @@ from tokenizers.models import WordLevel
 from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
+from torch.utils.data.dataloader import _MultiProcessingDataLoaderIter
 
 from flock.eval.tasks import TASKS, Choice, Dataset, MCDoc, MultipleChoiceTask, PerplexityTask
 from flock.eval.tasks.perplexity import _docs_by_domain
@@ -33,6 +36,24 @@ from flock.training.core.models.olmo2 import Olmo2
 from flock.training.core.optimization import AdamWConfig, MuonConfig
 from flock.training.core.trainer import Trainer, TrainerConfig
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Generator
+    from contextlib import AbstractContextManager
+    from pathlib import Path
+    from typing import Any
+
+    from transformers import TokenizersBackend
+
+    from flock.eval.model import ScoringModel
+    from flock.eval.results import TaskResult
+    from flock.eval.run import PreparedTask
+    from flock.eval.tasks import Task
+    from flock.hub.models._common import ModelVersion, Ref
+    from flock.hub.models.upload import PendingUpload
+    from flock.training.core.data_utils import Batch
+    from flock.training.core.lr_scheduler import LRSchedulerConfig
+    from flock.training.core.models.olmo2 import Olmo2Config
+
 
 @dataclass
 class RecordingRun:
@@ -42,19 +63,34 @@ class RecordingRun:
     definitions: list = field(default_factory=list)
     metrics: list = field(default_factory=list)
 
-    def define_metric(self, *args, **kwargs):
+    def define_metric(self, *args: Any, **kwargs: Any) -> None:
         self.definitions.append((args, kwargs))
 
-    def log(self, metrics):
+    def log(self, metrics: dict[str, Any]) -> None:
         self.metrics.append(dict(metrics))
 
 
+type TrainerBundle = tuple[Trainer, RecordingRun, list[dict[str, Any]]]
+type TrainerFactory = Callable[..., TrainerBundle]
+
+
 @pytest.fixture
-def trainer_factory(config, tokenizer, monkeypatch, tmp_path):
+def trainer_factory(
+    config: Olmo2Config,
+    tokenizer: TokenizersBackend,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> TrainerFactory:
     # These tests must remain on CPU even when invoked on a developer GPU machine.
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
 
-    def make(dataset=None, logging_steps=1, num_workers=1, prefetch_factor=1, **config_overrides):
+    def make(
+        dataset: list[dict[str, str]] | SafeLanceDataset | None = None,
+        logging_steps: int = 1,
+        num_workers: int = 1,
+        prefetch_factor: int | None = 1,
+        **config_overrides: Any,
+    ) -> TrainerBundle:
         run = RecordingRun()
         module_logs = []
         monkeypatch.setattr("flock.training.core.trainer.wandb.init", lambda **kwargs: run)
@@ -97,7 +133,9 @@ def trainer_factory(config, tokenizer, monkeypatch, tmp_path):
     return make
 
 
-def test_trainer_initializes_schedule_and_metric_step(trainer_factory):
+def test_trainer_initializes_schedule_and_metric_step(
+    trainer_factory: TrainerFactory,
+) -> None:
     trainer, run, _ = trainer_factory()
     assert trainer.device == torch.device("cpu")
     assert trainer.total_steps == 3  # Five rows include a final partial batch.
@@ -110,7 +148,7 @@ def test_trainer_initializes_schedule_and_metric_step(trainer_factory):
 
 
 @pytest.fixture
-def validation_tasks(monkeypatch):
+def validation_tasks(monkeypatch: pytest.MonkeyPatch) -> list[PerplexityTask | MultipleChoiceTask]:
     """Real task/scorer paths with local rows and the training fixture's tokenizer."""
     _docs_by_domain.cache_clear()
     text_task = PerplexityTask(
@@ -131,7 +169,7 @@ def validation_tasks(monkeypatch):
         "choices": [{"id": "q"}],
     }
 
-    def load(dataset, split=None):
+    def load(dataset: Dataset, split: str | None = None) -> list[dict[str, Any]]:
         assert dataset.repo == "offline/trainer", "validation must not load external data"
         return rows[split or dataset.split]
 
@@ -147,8 +185,12 @@ def validation_tasks(monkeypatch):
     [(None, []), (1, [1, 2, 3]), (2, [2, 3]), (3, [3]), (5, [3])],
 )
 def test_validation_schedule_and_training_mode(
-    trainer_factory, validation_tasks, monkeypatch, interval, expected_steps
-):
+    trainer_factory: TrainerFactory,
+    validation_tasks: list[PerplexityTask | MultipleChoiceTask],
+    monkeypatch: pytest.MonkeyPatch,
+    interval: None | int,
+    expected_steps: list[int],
+) -> None:
     trainer, _, _ = trainer_factory(
         num_workers=0,
         prefetch_factor=None,
@@ -157,7 +199,7 @@ def test_validation_schedule_and_training_mode(
     )
     calls, forward_modes = [], []
 
-    def evaluate():
+    def evaluate() -> None:
         calls.append(int(trainer.state.step.item()))
 
     monkeypatch.setattr(trainer, "evaluate", evaluate)
@@ -175,8 +217,10 @@ def test_validation_schedule_and_training_mode(
 
 
 def test_evaluation_scores_real_tasks_and_logs_at_training_step(
-    trainer_factory, validation_tasks, monkeypatch
-):
+    trainer_factory: TrainerFactory,
+    validation_tasks: list[PerplexityTask | MultipleChoiceTask],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     trainer, run, module_logs = trainer_factory(
         num_workers=0,
         prefetch_factor=None,
@@ -212,7 +256,7 @@ def test_evaluation_scores_real_tasks_and_logs_at_training_step(
     calls = []
     score_prepared = trainer_module.score_prepared
 
-    def score(scorer, prepared):
+    def score(scorer: ScoringModel, prepared: PreparedTask) -> TaskResult:
         task = prepared.task
         assert not torch.is_grad_enabled()
         assert not trainer.model.training
@@ -253,8 +297,14 @@ def test_evaluation_scores_real_tasks_and_logs_at_training_step(
     [(None, None), (KeyError, 0), (KeyError, 1), (FileExistsError, 0), (FileExistsError, 1)],
 )
 def test_validation_preserves_training_updates(
-    trainer_factory, validation_tasks, monkeypatch, tmp_path, caplog, error_type, failed_task
-):
+    trainer_factory: TrainerFactory,
+    validation_tasks: list[PerplexityTask | MultipleChoiceTask],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    error_type: type[Exception] | None,
+    failed_task: int | None,
+) -> None:
     reference, reference_run, _ = trainer_factory(num_workers=0, prefetch_factor=None)
     reference.train()
     expected_state = copy.deepcopy(reference.get_trainer_state())
@@ -268,18 +318,22 @@ def test_validation_preserves_training_updates(
     calls = []
     score_prepared = trainer_module.score_prepared
 
-    def score(scorer, prepared):
+    def score(scorer: ScoringModel, prepared: PreparedTask) -> TaskResult:
         task = prepared.task
         assert not trainer.model.training
         calls.append((int(trainer.state.step.item()), task.name))
-        if error_type is not None and task is validation_tasks[failed_task]:
+        if (
+            error_type is not None
+            and failed_task is not None
+            and task is validation_tasks[failed_task]
+        ):
             raise error_type("validation fixture failure")
         return score_prepared(scorer, prepared)
 
     monkeypatch.setattr(trainer_module, "score_prepared", score)
     trainer.train()
 
-    scored_tasks = validation_tasks if error_type is None else validation_tasks[: failed_task + 1]
+    scored_tasks = validation_tasks if failed_task is None else validation_tasks[: failed_task + 1]
     assert calls == [(step, task.name) for step in [1, 2, 3] for task in scored_tasks]
     if error_type is not None:
         assert caplog.text.count("Error during evaluation, skipping:") == 3
@@ -297,8 +351,10 @@ def test_validation_preserves_training_updates(
 
 
 def test_unexpected_validation_error_is_not_silenced(
-    trainer_factory, validation_tasks, monkeypatch
-):
+    trainer_factory: TrainerFactory,
+    validation_tasks: list[PerplexityTask | MultipleChoiceTask],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     trainer, run, _ = trainer_factory(
         num_workers=0,
         prefetch_factor=None,
@@ -306,7 +362,7 @@ def test_unexpected_validation_error_is_not_silenced(
         validation_steps=1,
     )
 
-    def score(scorer, prepared):
+    def score(scorer: ScoringModel, prepared: PreparedTask) -> Never:
         raise ValueError("invalid validation window")
 
     monkeypatch.setattr(trainer_module, "score_prepared", score)
@@ -318,8 +374,10 @@ def test_unexpected_validation_error_is_not_silenced(
 
 
 def test_validation_reuses_loaded_and_tokenized_tasks_with_limits(
-    trainer_factory, validation_tasks, monkeypatch
-):
+    trainer_factory: TrainerFactory,
+    validation_tasks: list[PerplexityTask | MultipleChoiceTask],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     trainer, run, _ = trainer_factory(
         num_workers=0,
         prefetch_factor=None,
@@ -333,20 +391,20 @@ def test_validation_reuses_loaded_and_tokenized_tasks_with_limits(
     prepare = trainer_module.prepare_task
     score = trainer_module.score_prepared
 
-    def load_once(dataset, split=None):
+    def load_once(dataset: Dataset, split: str | None = None) -> list[dict[str, Any]]:
         loads.append(dataset.split)
         return load(dataset, split)
 
-    def tokenize_once(scorer, texts):
+    def tokenize_once(scorer: ScoringModel, texts: list[str]) -> list[list[int]]:
         tokenizations.append(texts)
         return tokenize(scorer, texts)
 
-    def prepare_once(scorer, task, limit):
+    def prepare_once(scorer: ScoringModel, task: Task, limit: int | None) -> PreparedTask:
         prepared = prepare(scorer, task, limit)
         prepared_calls.append((task.name, prepared))
         return prepared
 
-    def record_score(scorer, prepared):
+    def record_score(scorer: ScoringModel, prepared: PreparedTask) -> TaskResult:
         assert scorer.batch_tokens == 4
         result = score(scorer, prepared)
         assert result.limit == result.num_docs == 1
@@ -366,7 +424,7 @@ def test_validation_reuses_loaded_and_tokenized_tasks_with_limits(
         assert first_tokenizations > 0
         # The next step uses new weights, while its requests keep the same token IDs.
         with torch.no_grad():
-            trainer.model.lm_head.weight.zero_()
+            cast(Olmo2, trainer.model).lm_head.weight.zero_()
         trainer.state.step.fill_(1)
         trainer.evaluate()
     finally:
@@ -383,7 +441,12 @@ def test_validation_reuses_loaded_and_tokenized_tasks_with_limits(
 
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float32])
 @pytest.mark.parametrize("training", [True, False])
-def test_evaluation_precision_and_module_modes(trainer_factory, validation_tasks, dtype, training):
+def test_evaluation_precision_and_module_modes(
+    trainer_factory: TrainerFactory,
+    validation_tasks: list[PerplexityTask | MultipleChoiceTask],
+    dtype: torch.dtype,
+    training: bool,
+) -> None:
     trainer, _, _ = trainer_factory(
         num_workers=0,
         prefetch_factor=None,
@@ -391,11 +454,13 @@ def test_evaluation_precision_and_module_modes(trainer_factory, validation_tasks
         model_dtype=dtype,
     )
     trainer.model.train(training)
-    trainer.model.lm_head.train(not training)
+    cast(Olmo2, trainer.model).lm_head.train(not training)
     modes = [module.training for module in trainer.model.modules()]
     outputs = []
 
-    def record(model, args, output):
+    def record(
+        model: torch.nn.Module, args: tuple[torch.Tensor, ...], output: torch.Tensor
+    ) -> None:
         assert all(not module.training for module in model.modules())
         assert not torch.is_grad_enabled()
         assert torch.is_autocast_enabled("cpu") == (dtype == torch.bfloat16)
@@ -414,13 +479,16 @@ def test_evaluation_precision_and_module_modes(trainer_factory, validation_tasks
 
 @pytest.mark.parametrize("error", [KeyError, ValueError])
 def test_evaluation_restores_modes_after_preparation_failure(
-    trainer_factory, validation_tasks, monkeypatch, error
-):
+    trainer_factory: TrainerFactory,
+    validation_tasks: list[PerplexityTask | MultipleChoiceTask],
+    monkeypatch: pytest.MonkeyPatch,
+    error: type[Exception],
+) -> None:
     trainer, _, _ = trainer_factory(validation_tasks=[task.name for task in validation_tasks])
-    trainer.model.lm_head.eval()
+    cast(Olmo2, trainer.model).lm_head.eval()
     modes = [module.training for module in trainer.model.modules()]
 
-    def fail(*args, **kwargs):
+    def fail(*args: Any, **kwargs: Any) -> Never:
         raise error("preparation failed")
 
     monkeypatch.setattr(trainer_module, "prepare_task", fail)
@@ -434,8 +502,11 @@ def test_evaluation_restores_modes_after_preparation_failure(
 
 @pytest.mark.parametrize("tasks_enabled", [True, False])
 def test_disabled_validation_does_not_prepare_tasks(
-    trainer_factory, validation_tasks, monkeypatch, tasks_enabled
-):
+    trainer_factory: TrainerFactory,
+    validation_tasks: list[PerplexityTask | MultipleChoiceTask],
+    monkeypatch: pytest.MonkeyPatch,
+    tasks_enabled: bool,
+) -> None:
     trainer, run, _ = trainer_factory(
         num_workers=0,
         prefetch_factor=None,
@@ -443,7 +514,7 @@ def test_disabled_validation_does_not_prepare_tasks(
         validation_steps=None if tasks_enabled else 1,
     )
 
-    def fail(*args, **kwargs):
+    def fail(*args: Any, **kwargs: Any) -> None:
         pytest.fail("disabled validation must not prepare tasks")
 
     monkeypatch.setattr(trainer_module, "prepare_task", fail)
@@ -453,8 +524,11 @@ def test_disabled_validation_does_not_prepare_tasks(
 
 @pytest.mark.parametrize("fail_evaluation", [True, False])
 def test_checkpoint_is_saved_before_validation(
-    trainer_factory, validation_tasks, monkeypatch, fail_evaluation
-):
+    trainer_factory: TrainerFactory,
+    validation_tasks: list[PerplexityTask | MultipleChoiceTask],
+    monkeypatch: pytest.MonkeyPatch,
+    fail_evaluation: bool,
+) -> None:
     trainer, _, _ = trainer_factory(
         num_workers=0,
         prefetch_factor=None,
@@ -465,7 +539,7 @@ def test_checkpoint_is_saved_before_validation(
     calls = []
     evaluate = trainer.evaluate
 
-    def validate():
+    def validate() -> None:
         step = int(trainer.state.step.item())
         checkpoint = trainer.output_dir / f"checkpoint-{step}"
         assert (checkpoint / "model.safetensors").is_file()
@@ -487,7 +561,9 @@ def test_checkpoint_is_saved_before_validation(
         assert calls == [2, 3]
 
 
-def test_local_checkpoint_records_run_identity(trainer_factory):
+def test_local_checkpoint_records_run_identity(
+    trainer_factory: TrainerFactory,
+) -> None:
     trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
     trainer.train()
     trainer.save_model()
@@ -496,7 +572,7 @@ def test_local_checkpoint_records_run_identity(trainer_factory):
     assert metadata["step"] == trainer.state.step.item() == 3
 
 
-def assert_nested_equal(actual, expected):
+def assert_nested_equal(actual: Any, expected: Any) -> None:
     if isinstance(expected, torch.Tensor):
         torch.testing.assert_close(actual, expected, atol=0, rtol=0)
     elif isinstance(expected, dict):
@@ -512,21 +588,26 @@ def assert_nested_equal(actual, expected):
         assert actual == expected
 
 
-def restore_checkpoint_state(trainer, checkpoint, state, load_via):
+def restore_checkpoint_state(
+    trainer: Trainer, checkpoint: Path, state: dict[str, Any], load_via: str
+) -> None:
     if load_via == "checkpoint":
         write_training_state(state, checkpoint)
         trainer.load_checkpoint(checkpoint)
     else:
         if load_via == "validated-state":
-            state = TrainerCheckpoint.model_validate(state)
-        trainer.load_trainer_state(state)
+            trainer.load_trainer_state(TrainerCheckpoint.model_validate(state))
+        else:
+            trainer.load_trainer_state(state)
 
 
 @pytest.fixture
-def forbid_checkpoint_loads(monkeypatch):
+def forbid_checkpoint_loads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[Trainer], AbstractContextManager[None]]:
     @contextmanager
-    def forbid(trainer):
-        def unexpected_load(*args, **kwargs):
+    def forbid(trainer: Trainer) -> Generator[None]:
+        def unexpected_load(*args: Any, **kwargs: Any) -> None:
             pytest.fail("Incompatible settings must be rejected before any checkpoint state loads")
 
         with monkeypatch.context() as patches:
@@ -547,20 +628,22 @@ def forbid_checkpoint_loads(monkeypatch):
 
 
 @pytest.fixture
-def trained_trainer(trainer_factory):
+def trained_trainer(
+    trainer_factory: TrainerFactory,
+) -> Trainer:
     trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
     trainer.train()
     return trainer
 
 
 @pytest.fixture
-def simulated_cuda_rng(monkeypatch):
+def simulated_cuda_rng(monkeypatch: pytest.MonkeyPatch) -> Callable[[int], list[torch.Generator]]:
     """Exercise CUDA RNG save/restore routing with independent CPU generators.
 
     These tests never initialize CUDA and do not establish CUDA kernel determinism.
     """
 
-    def install(count):
+    def install(count: int) -> list[torch.Generator]:
         generators = [torch.Generator().manual_seed(100 + index) for index in range(count)]
         monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
         monkeypatch.setattr(torch.cuda, "device_count", lambda: len(generators))
@@ -588,9 +671,14 @@ def simulated_cuda_rng(monkeypatch):
     ids=["cosine", "wsd"],
 )
 def test_checkpoint_resume_matches_uninterrupted_training(
-    trainer_factory, monkeypatch, tmp_path, resume_latest, split_step, schedule
-):
-    def make(output_dir, **overrides):
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    resume_latest: bool,
+    split_step: int,
+    schedule: LRSchedulerConfig,
+) -> None:
+    def make(output_dir: Path, **overrides: Any) -> TrainerBundle:
         trainer, run, _ = trainer_factory(
             num_workers=0,
             prefetch_factor=None,
@@ -603,7 +691,7 @@ def test_checkpoint_resume_matches_uninterrupted_training(
         forward = trainer.model._forward
         seen_batches = []
 
-        def stochastic_forward(*args):
+        def stochastic_forward(*args: Any) -> torch.Tensor:
             # Exercise restoration of both Python and torch RNGs, including the
             # extra DataLoader iterator created when a process resumes.
             seen_batches.append(args[0].detach().clone())
@@ -620,7 +708,7 @@ def test_checkpoint_resume_matches_uninterrupted_training(
     interrupted, first_run, first_batches = make(tmp_path / "resumed")
     save = interrupted.save_model
 
-    def save_and_interrupt():
+    def save_and_interrupt() -> None:
         save()
         if interrupted.state.step.item() == split_step:
             raise InterruptedError("simulate process exit after a completed checkpoint")
@@ -660,7 +748,9 @@ def test_checkpoint_resume_matches_uninterrupted_training(
     assert first_run.metrics + resumed_run.metrics == expected_run.metrics
 
 
-def test_checkpoint_retention_removes_nested_state_and_orders_by_step(trainer_factory):
+def test_checkpoint_retention_removes_nested_state_and_orders_by_step(
+    trainer_factory: TrainerFactory,
+) -> None:
     trainer, _, _ = trainer_factory(
         dataset=[{"text": "a b c"}] * 20,
         num_workers=0,
@@ -679,11 +769,14 @@ def test_checkpoint_retention_removes_nested_state_and_orders_by_step(trainer_fa
     ).is_file()
 
 
-def test_checkpoint_upload_uses_complete_local_folder(trainer_factory, monkeypatch):
+def test_checkpoint_upload_uses_complete_local_folder(
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     trainer, run, _ = trainer_factory(save_to_hub_repo="cerulean/test-model")
     uploads = []
 
-    def upload(folder, name, **options):
+    def upload(folder: Path, name: str, **options: Any) -> Future[Any]:
         assert (folder / "model.safetensors").is_file()
         assert (folder / "training_state/python_rng_state.safetensors").is_file()
         uploads.append((folder, name, options))
@@ -704,7 +797,10 @@ def test_checkpoint_upload_uses_complete_local_folder(trainer_factory, monkeypat
     trainer.save_model(blocking=True)
 
 
-def test_failed_checkpoint_write_does_not_publish_or_prune(trainer_factory, monkeypatch):
+def test_failed_checkpoint_write_does_not_publish_or_prune(
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     trainer, _, _ = trainer_factory(
         num_workers=0,
         prefetch_factor=None,
@@ -714,7 +810,7 @@ def test_failed_checkpoint_write_does_not_publish_or_prune(trainer_factory, monk
     )
     trainer.save_model()
 
-    def fail_write(model, folder, **kwargs):
+    def fail_write(model: BaseModel, folder: Path, **kwargs: Any) -> Never:
         folder.mkdir()
         (folder / "flock.json").write_text("partial")
         raise OSError("disk full")
@@ -725,7 +821,9 @@ def test_failed_checkpoint_write_does_not_publish_or_prune(trainer_factory, monk
     assert [path.name for path in trainer.output_dir.iterdir()] == ["checkpoint-0"]
 
 
-def test_resume_rejects_missing_state_and_incompatible_data(trainer_factory):
+def test_resume_rejects_missing_state_and_incompatible_data(
+    trainer_factory: TrainerFactory,
+) -> None:
     trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
     with pytest.raises(FileNotFoundError, match="No checkpoints"):
         trainer.train(resume_from_checkpoint=True)
@@ -741,7 +839,9 @@ def test_resume_rejects_missing_state_and_incompatible_data(trainer_factory):
         trainer.load_checkpoint(checkpoint)
 
 
-def test_existing_output_requires_resume_or_overwrite(trainer_factory):
+def test_existing_output_requires_resume_or_overwrite(
+    trainer_factory: TrainerFactory,
+) -> None:
     trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
     trainer.save_model()
     with pytest.raises(RuntimeError, match="Resume"):
@@ -766,8 +866,11 @@ def test_existing_output_requires_resume_or_overwrite(trainer_factory):
     ],
 )
 def test_checkpoint_schema_rejects_invalid_state_without_mutating_trainer(
-    trainer_factory, section, field, value
-):
+    trainer_factory: TrainerFactory,
+    section: str,
+    field: str,
+    value: str | int,
+) -> None:
     trainer, _, _ = trainer_factory()
     expected = copy.deepcopy(trainer.get_trainer_state())
     invalid = copy.deepcopy(expected)
@@ -777,7 +880,9 @@ def test_checkpoint_schema_rejects_invalid_state_without_mutating_trainer(
     assert_nested_equal(trainer.get_trainer_state(), expected)
 
 
-def test_checkpoint_schema_reports_missing_fields(trainer_factory):
+def test_checkpoint_schema_reports_missing_fields(
+    trainer_factory: TrainerFactory,
+) -> None:
     trainer, _, _ = trainer_factory()
     invalid = trainer.get_trainer_state()
     del invalid["trainer_state_dict"]["step"]
@@ -787,18 +892,20 @@ def test_checkpoint_schema_reports_missing_fields(trainer_factory):
 
 @pytest.mark.parametrize("shard_size", [2048, 5 * 2**30])
 def test_checkpoint_preserves_tied_parameters_and_optimizer_references(
-    trainer_factory, monkeypatch, shard_size
-):
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    shard_size: int,
+) -> None:
     from flock.hub.models.files import write_model
 
     trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None, save_steps=3)
-    trainer.model.lm_head.weight = trainer.model.model.embed_tokens.weight
+    cast(Olmo2, trainer.model).lm_head.weight = cast(Olmo2, trainer.model).model.embed_tokens.weight
     trainer.optimizer = trainer._get_optimizer(AdamWConfig(lr=0.01, betas=(0.8, 0.9)))
     trainer.lr_scheduler = trainer._get_lr_scheduler(
         CosineConfig(warmup_steps=0, min_lr_ratio=0.1), trainer.total_steps
     )
 
-    def write_shards(model, folder, **options):
+    def write_shards(model: BaseModel, folder: Path, **options: Any) -> None:
         options["shard_size"] = shard_size
         write_model(model, folder, **options)
 
@@ -814,7 +921,10 @@ def test_checkpoint_preserves_tied_parameters_and_optimizer_references(
             parameter.zero_()
     trainer.optimizer.state.clear()
     trainer.load_checkpoint(checkpoint)
-    assert trainer.model.lm_head.weight is trainer.model.model.embed_tokens.weight
+    assert (
+        cast(Olmo2, trainer.model).lm_head.weight
+        is cast(Olmo2, trainer.model).model.embed_tokens.weight
+    )
     assert [id(p) for p in trainer.model.parameters()] == parameters
     assert [id(p) for p in trainer.optimizer.param_groups[0]["params"]] == parameters
     assert_nested_equal(trainer.model.state_dict(), weights)
@@ -823,15 +933,17 @@ def test_checkpoint_preserves_tied_parameters_and_optimizer_references(
 
 @pytest.mark.parametrize("corruption", ["missing", "unexpected"])
 def test_sharded_checkpoint_rejects_missing_or_unexpected_weights(
-    trainer_factory, monkeypatch, corruption
-):
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    corruption: str,
+) -> None:
     from safetensors.torch import load_file, save_file
 
     from flock.hub.models.files import weight_files, write_model
 
     trainer, _, _ = trainer_factory()
 
-    def write_shards(model, folder, **options):
+    def write_shards(model: BaseModel, folder: Path, **options: Any) -> None:
         options["shard_size"] = 2048
         write_model(model, folder, **options)
 
@@ -852,13 +964,15 @@ def test_sharded_checkpoint_rejects_missing_or_unexpected_weights(
 
 
 def test_saved_checkpoints_remain_independent_of_later_updates(
-    trainer_factory, monkeypatch, tmp_path
-):
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None, save_steps=1)
     snapshots = {}
     save = trainer.save_model
 
-    def save_and_record():
+    def save_and_record() -> None:
         save()
         snapshots[int(trainer.state.step.item())] = (
             copy.deepcopy(trainer.model.state_dict()),
@@ -891,8 +1005,12 @@ def test_saved_checkpoints_remain_independent_of_later_updates(
     ids=["cosine", "wsd"],
 )
 def test_loading_restores_progress_with_matching_settings_and_different_current_lr(
-    trainer_factory, tmp_path, load_via, target_steps, schedule
-):
+    trainer_factory: TrainerFactory,
+    tmp_path: Path,
+    load_via: str,
+    target_steps: int,
+    schedule: LRSchedulerConfig,
+) -> None:
     source, _, _ = trainer_factory(
         num_workers=0, prefetch_factor=None, lr_scheduler_config=schedule
     )
@@ -944,8 +1062,14 @@ def test_loading_restores_progress_with_matching_settings_and_different_current_
     ids=["schedule-type", "warmup", "minimum-lr", "base-lr", "betas"],
 )
 def test_incompatible_schedule_or_optimizer_is_rejected_before_loading(
-    trained_trainer, trainer_factory, tmp_path, forbid_checkpoint_loads, load_via, overrides, error
-):
+    trained_trainer: Trainer,
+    trainer_factory: TrainerFactory,
+    tmp_path: Path,
+    forbid_checkpoint_loads: Callable[[Trainer], AbstractContextManager[None]],
+    load_via: str,
+    overrides: dict[str, Any],
+    error: str,
+) -> None:
     source = trained_trainer
     source.save_model()
     target, _, _ = trainer_factory(output_dir=str(tmp_path / "target"), **overrides)
@@ -978,8 +1102,13 @@ def test_incompatible_schedule_or_optimizer_is_rejected_before_loading(
     ],
 )
 def test_incompatible_optimizer_layout_or_wsd_settings_reject_before_loading(
-    trainer_factory, tmp_path, forbid_checkpoint_loads, load_via, change, error
-):
+    trainer_factory: TrainerFactory,
+    tmp_path: Path,
+    forbid_checkpoint_loads: Callable[[Trainer], AbstractContextManager[None]],
+    load_via: str,
+    change: str,
+    error: str,
+) -> None:
     schedule = WSDConfig(warmup_steps=1, decay_steps=1, min_lr_ratio=0.1)
     source, _, _ = trainer_factory(
         num_workers=0, prefetch_factor=None, lr_scheduler_config=schedule
@@ -1010,8 +1139,10 @@ def test_incompatible_optimizer_layout_or_wsd_settings_reject_before_loading(
 
 @pytest.mark.parametrize("gpu_count", [1, 2])
 def test_checkpoint_restores_cpu_python_and_cuda_rng_streams(
-    trained_trainer, simulated_cuda_rng, gpu_count
-):
+    trained_trainer: Trainer,
+    simulated_cuda_rng: Callable[[int], list[torch.Generator]],
+    gpu_count: int,
+) -> None:
     trainer = trained_trainer
     generators = simulated_cuda_rng(gpu_count)
     trainer.save_model()
@@ -1030,8 +1161,10 @@ def test_checkpoint_restores_cpu_python_and_cuda_rng_streams(
         torch.testing.assert_close(torch.rand(5, generator=generator), expected, atol=0, rtol=0)
 
 
-def test_cpu_checkpoint_never_uses_cuda_rng_apis(trained_trainer, monkeypatch):
-    def unexpected_cuda_call(*args, **kwargs):
+def test_cpu_checkpoint_never_uses_cuda_rng_apis(
+    trained_trainer: Trainer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unexpected_cuda_call(*args: Any, **kwargs: Any) -> None:
         pytest.fail("a CPU checkpoint must not call CUDA RNG APIs")
 
     for name in ("get_rng_state_all", "set_rng_state_all"):
@@ -1042,7 +1175,9 @@ def test_cpu_checkpoint_never_uses_cuda_rng_apis(trained_trainer, monkeypatch):
     assert trainer.get_trainer_state()["cuda_rng_state"] is None
 
 
-def test_resume_latest_uses_step_not_mtime_and_ignores_staging(trainer_factory):
+def test_resume_latest_uses_step_not_mtime_and_ignores_staging(
+    trainer_factory: TrainerFactory,
+) -> None:
     trainer, _, _ = trainer_factory(
         dataset=[{"text": "a b c"}] * 20,
         num_workers=0,
@@ -1065,7 +1200,9 @@ def test_resume_latest_uses_step_not_mtime_and_ignores_staging(trainer_factory):
     assert_nested_equal(trainer.model.state_dict(), expected)
 
 
-def test_failed_overwrite_keeps_original_checkpoint(trained_trainer, monkeypatch):
+def test_failed_overwrite_keeps_original_checkpoint(
+    trained_trainer: Trainer, monkeypatch: pytest.MonkeyPatch
+) -> None:
     trainer = trained_trainer
     trainer.save_model()
     checkpoint = trainer.output_dir / "checkpoint-3"
@@ -1077,7 +1214,7 @@ def test_failed_overwrite_keeps_original_checkpoint(trained_trainer, monkeypatch
         for parameter in trainer.model.parameters():
             parameter.add_(1)
 
-    def fail_write(model, folder, **options):
+    def fail_write(model: BaseModel, folder: Path, **options: Any) -> Never:
         folder.mkdir()
         (folder / "model.safetensors").write_bytes(b"incomplete")
         raise OSError("disk full")
@@ -1093,8 +1230,12 @@ def test_failed_overwrite_keeps_original_checkpoint(trained_trainer, monkeypatch
 
 @pytest.mark.parametrize("failed_step", [2, 3])
 def test_failed_upload_continues_training_and_retention(
-    trainer_factory, monkeypatch, tmp_path, caplog, failed_step
-):
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    failed_step: int,
+) -> None:
     trainer, _, _ = trainer_factory(
         num_workers=0,
         prefetch_factor=None,
@@ -1105,7 +1246,7 @@ def test_failed_upload_continues_training_and_retention(
 
     upload_attempts = []
 
-    def upload(folder, name, **options):
+    def upload(folder: Path, name: str, **options: Any) -> Future[Any]:
         upload_attempts.append(options["step"])
         if options["step"] == failed_step:
             raise OSError("upload interrupted")
@@ -1130,8 +1271,9 @@ def test_failed_upload_continues_training_and_retention(
 
 
 def test_async_uploads_overlap_training_and_keep_sources_until_finished(
-    trainer_factory, monkeypatch
-):
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     trainer, _, _ = trainer_factory(
         num_workers=0,
         prefetch_factor=None,
@@ -1145,7 +1287,7 @@ def test_async_uploads_overlap_training_and_keep_sources_until_finished(
     started = []
     uploaded = []
 
-    def push(source, ref, options, **kwargs):
+    def push(source: Path, ref: Ref, options: dict[str, Any], **kwargs: Any) -> None:
         with lock:
             started.append(options["step"])
             if len(started) == 3:
@@ -1182,8 +1324,11 @@ def test_async_uploads_overlap_training_and_keep_sources_until_finished(
 
 @pytest.mark.parametrize("failed_step", [2, 3])
 def test_async_upload_failure_is_logged_and_other_uploads_finish(
-    trainer_factory, monkeypatch, caplog, failed_step
-):
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    failed_step: int,
+) -> None:
     trainer, _, _ = trainer_factory(
         num_workers=0,
         prefetch_factor=None,
@@ -1193,7 +1338,7 @@ def test_async_upload_failure_is_logged_and_other_uploads_finish(
     )
     uploaded = []
 
-    def push(source, ref, options, **kwargs):
+    def push(source: Path, ref: Ref, options: dict[str, Any], **kwargs: Any) -> None:
         if options["step"] == failed_step:
             raise OSError("background upload interrupted")
         uploaded.append(options["step"])
@@ -1213,8 +1358,10 @@ def test_async_upload_failure_is_logged_and_other_uploads_finish(
 
 @pytest.mark.parametrize("error_type", [RuntimeError, KeyboardInterrupt])
 def test_training_error_drains_uploads_and_preserves_original_exception(
-    trainer_factory, monkeypatch, error_type
-):
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    error_type: type[Exception],
+) -> None:
     trainer, _, _ = trainer_factory(
         num_workers=0,
         prefetch_factor=None,
@@ -1225,7 +1372,7 @@ def test_training_error_drains_uploads_and_preserves_original_exception(
     monkeypatch.setattr("flock.training.core.trainer.save_to_hub", lambda *a, **kw: pending)
     forward = trainer.model.forward
 
-    def fail_on_second_batch(batch):
+    def fail_on_second_batch(batch: Batch) -> torch.Tensor:
         if trainer.state.step.item() == 1:
             pending.set_exception(OSError("background upload failed"))
             raise error_type("training interrupted")
@@ -1239,8 +1386,9 @@ def test_training_error_drains_uploads_and_preserves_original_exception(
 
 
 def test_overwrite_waits_for_upload_to_finish_reading_original_checkpoint(
-    trainer_factory, monkeypatch
-):
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     trainer, _, _ = trainer_factory(
         overwrite_output_dir=True, save_to_hub_repo="cerulean/test-model"
     )
@@ -1248,7 +1396,7 @@ def test_overwrite_waits_for_upload_to_finish_reading_original_checkpoint(
     waiting = threading.Event()
     snapshots = []
 
-    def push(source, ref, options, **kwargs):
+    def push(source: Path, ref: Ref, options: dict[str, Any], **kwargs: Any) -> None:
         assert release.wait(10), "upload was never released"
         snapshots.append((source / "model.safetensors").read_bytes())
 
@@ -1256,7 +1404,7 @@ def test_overwrite_waits_for_upload_to_finish_reading_original_checkpoint(
     pending = []
     save_to_hub = hub_upload.save_to_hub
 
-    def upload(*args, **kwargs):
+    def upload(*args: Any, **kwargs: Any) -> Future[Any] | ModelVersion | PendingUpload:
         result = save_to_hub(*args, **kwargs)
         pending.append(result)
         return result
@@ -1270,7 +1418,7 @@ def test_overwrite_waits_for_upload_to_finish_reading_original_checkpoint(
             parameter.add_(1)
     result = pending[0].result
 
-    def wait_for_original(timeout=None):
+    def wait_for_original(timeout: float | None = None) -> Any:
         waiting.set()
         return result(timeout)
 
@@ -1293,12 +1441,15 @@ def test_overwrite_waits_for_upload_to_finish_reading_original_checkpoint(
 
 @pytest.mark.parametrize("failed", [False, True], ids=["success", "failure"])
 def test_completed_uploads_are_reaped_on_the_next_save(
-    trainer_factory, monkeypatch, caplog, failed
-):
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    failed: bool,
+) -> None:
     trainer, _, _ = trainer_factory(save_total_limit=1, save_to_hub_repo="cerulean/test-model")
     uploads = []
 
-    def upload(*args, **kwargs):
+    def upload(*args: Any, **kwargs: Any) -> Future[Any]:
         pending = Future()
         uploads.append(pending)
         return pending
@@ -1325,18 +1476,21 @@ def test_completed_uploads_are_reaped_on_the_next_save(
 
 @pytest.mark.parametrize("failed", [False, True], ids=["success", "failure"])
 def test_blocking_save_finishes_all_uploads_before_pruning(
-    trainer_factory, monkeypatch, caplog, failed
-):
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    failed: bool,
+) -> None:
     trainer, _, _ = trainer_factory(save_total_limit=1, save_to_hub_repo="cerulean/test-model")
     uploads = []
     waiting = [threading.Event(), threading.Event()]
 
-    def upload(*args, **kwargs):
+    def upload(*args: Any, **kwargs: Any) -> Future[Any]:
         pending = Future()
         index = len(uploads)
         result = pending.result
 
-        def wait(timeout=None):
+        def wait(timeout: float | None = None) -> Any:
             waiting[index].set()
             return result(timeout)
 
@@ -1372,12 +1526,13 @@ def test_blocking_save_finishes_all_uploads_before_pruning(
 
 
 def test_failed_submission_keeps_latest_checkpoint_while_old_upload_is_pending(
-    trainer_factory, monkeypatch
-):
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     trainer, _, _ = trainer_factory(save_total_limit=1, save_to_hub_repo="cerulean/test-model")
     pending = Future()
 
-    def upload(*args, **kwargs):
+    def upload(*args: Any, **kwargs: Any) -> Future[Any]:
         if kwargs["step"] == 1:
             raise OSError("could not start upload")
         return pending
@@ -1395,8 +1550,11 @@ def test_failed_submission_keeps_latest_checkpoint_while_old_upload_is_pending(
 
 @pytest.mark.parametrize("changed_field", ["dataset_size", "batch_size", "seed", "input_column"])
 def test_incompatible_data_is_rejected_before_model_or_rng_changes(
-    trained_trainer, trainer_factory, tmp_path, changed_field
-):
+    trained_trainer: Trainer,
+    trainer_factory: TrainerFactory,
+    tmp_path: Path,
+    changed_field: str,
+) -> None:
     source = trained_trainer
     source.save_model()
     options = {"output_dir": str(tmp_path / "target")}
@@ -1423,8 +1581,10 @@ def test_incompatible_data_is_rejected_before_model_or_rng_changes(
 )
 @pytest.mark.parametrize("changed_identity", ["dataset_uri", "dataset_version", "tokenizer"])
 def test_resume_rejects_changed_dataset_or_tokenizer_identity(
-    trainer_factory, tmp_path, changed_identity
-):
+    trainer_factory: TrainerFactory,
+    tmp_path: Path,
+    changed_identity: str,
+) -> None:
     original_path = tmp_path / "original.lance"
     changed_path = tmp_path / "changed.lance"
     lance.write_dataset(pa.table({"text": ["a b c"] * 5}), str(original_path))
@@ -1465,8 +1625,11 @@ def test_resume_rejects_changed_dataset_or_tokenizer_identity(
     "overrides", [{"model_dtype": torch.float32}, {"max_norm": 2.0}], ids=["dtype", "clipping"]
 )
 def test_resume_rejects_changed_training_settings(
-    trained_trainer, trainer_factory, tmp_path, overrides
-):
+    trained_trainer: Trainer,
+    trainer_factory: TrainerFactory,
+    tmp_path: Path,
+    overrides: dict[str, torch.dtype] | dict[str, float],
+) -> None:
     source = trained_trainer
     source.save_model()
     target, _, _ = trainer_factory(output_dir=str(tmp_path / "target"), **overrides)
@@ -1482,7 +1645,9 @@ def test_resume_rejects_changed_training_settings(
     raises=ValidationError,
     reason="Repeated train resets counters but retains optimizer/scheduler progress",
 )
-def test_repeated_training_rejects_reuse_or_leaves_a_loadable_checkpoint(trained_trainer):
+def test_repeated_training_rejects_reuse_or_leaves_a_loadable_checkpoint(
+    trained_trainer: Trainer,
+) -> None:
     trainer = trained_trainer
     weights = copy.deepcopy(trainer.model.state_dict())
     state = copy.deepcopy(trainer.get_trainer_state())
@@ -1499,7 +1664,9 @@ def test_repeated_training_rejects_reuse_or_leaves_a_loadable_checkpoint(trained
 @pytest.mark.xfail(
     strict=True, raises=IndexError, reason="CUDA RNG restore assumes unchanged visible device count"
 )
-def test_resume_handles_cuda_topology_change_cleanly(trained_trainer, simulated_cuda_rng):
+def test_resume_handles_cuda_topology_change_cleanly(
+    trained_trainer: Trainer, simulated_cuda_rng: Callable[[int], list[torch.Generator]]
+) -> None:
     trainer = trained_trainer
     generators = simulated_cuda_rng(2)
     trainer.save_model()
@@ -1513,7 +1680,7 @@ def test_resume_handles_cuda_topology_change_cleanly(trained_trainer, simulated_
     torch.testing.assert_close(torch.rand(5, generator=generators[0]), expected, atol=0, rtol=0)
 
 
-def test_adamw_forwards_configuration_and_matches_torch_updates():
+def test_adamw_forwards_configuration_and_matches_torch_updates() -> None:
     trainer = object.__new__(Trainer)
     trainer.model = cast(BaseModel, nn.Linear(3, 2))
     reference = copy.deepcopy(trainer.model)
@@ -1533,7 +1700,7 @@ def test_adamw_forwards_configuration_and_matches_torch_updates():
         torch.testing.assert_close(actual, expected, atol=0, rtol=0)
 
 
-def test_muon_remains_explicitly_unsupported():
+def test_muon_remains_explicitly_unsupported() -> None:
     trainer = object.__new__(Trainer)
     trainer.model = cast(BaseModel, nn.Linear(3, 2))
     with pytest.raises(NotImplementedError, match="Muon"):
@@ -1541,7 +1708,7 @@ def test_muon_remains_explicitly_unsupported():
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.bfloat16])
-def test_loss_and_gradients_match_cross_entropy_over_valid_targets(dtype):
+def test_loss_and_gradients_match_cross_entropy_over_valid_targets(dtype: torch.dtype) -> None:
     # Noncontiguous logits check reshape rather than a contiguous-only view path.
     logits = (
         torch.linspace(-2, 2, 30, dtype=dtype)
@@ -1566,7 +1733,7 @@ def test_loss_and_gradients_match_cross_entropy_over_valid_targets(dtype):
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.bfloat16])
-def test_all_ignored_targets_do_not_produce_nan_loss(dtype):
+def test_all_ignored_targets_do_not_produce_nan_loss(dtype: torch.dtype) -> None:
     logits = torch.linspace(-2, 2, 30, dtype=dtype).reshape(2, 3, 5).requires_grad_()
     labels = torch.full((2, 3), -100, dtype=torch.long)
     loss, count = Trainer._calc_batch_loss(object.__new__(Trainer), logits, labels)
@@ -1583,8 +1750,11 @@ def test_all_ignored_targets_do_not_produce_nan_loss(dtype):
 
 @pytest.mark.parametrize("logging_steps, expected_steps", [(1, [1, 2, 3]), (2, [2, 3]), (5, [3])])
 def test_all_ignored_logging_windows_remain_finite(
-    trainer_factory, monkeypatch, logging_steps, expected_steps
-):
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    logging_steps: int,
+    expected_steps: list[int],
+) -> None:
     trainer, run, _ = trainer_factory(logging_steps=logging_steps)
     batch = {
         "input_ids": torch.tensor([[2, 3], [4, 5]]),
@@ -1604,7 +1774,12 @@ def test_all_ignored_logging_windows_remain_finite(
         }
 
 
-def reference_epoch(model, batches, max_norm, model_dtype):
+def reference_epoch(
+    model: BaseModel,
+    batches: list[dict[str, torch.Tensor]],
+    max_norm: float,
+    model_dtype: torch.dtype,
+) -> list[tuple[float, float, float]]:
     """Independent three-update loop: explicit LR values and gradient clipping math."""
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.01, betas=(0.8, 0.9))
     records = []
@@ -1616,11 +1791,15 @@ def reference_epoch(model, batches, max_norm, model_dtype):
             logits = model(batch)
         loss = F.cross_entropy(logits.float()[valid], batch["labels"][valid])
         loss.backward()
-        norm = torch.sqrt(sum(p.grad.square().sum() for p in model.parameters()))
+        grads = []
+        for parameter in model.parameters():
+            assert parameter.grad is not None
+            grads.append(parameter.grad)
+        norm = torch.sqrt(cast(torch.Tensor, sum(grad.square().sum() for grad in grads)))
         assert norm.item() > max_norm, "fixture must exercise actual gradient clipping"
         scale = (max_norm / (norm + 1e-6)).clamp(max=1)
-        for parameter in model.parameters():
-            parameter.grad.mul_(scale)
+        for grad in grads:
+            grad.mul_(scale)
         optimizer.param_groups[0]["lr"] = 0.01 * factor
         optimizer.step()
         records.append((loss.item(), valid.sum().item(), norm.item()))
@@ -1628,7 +1807,11 @@ def reference_epoch(model, batches, max_norm, model_dtype):
 
 
 @pytest.mark.parametrize("logging_steps", [1, 2, 5])
-def test_training_updates_and_token_weighted_logging(trainer_factory, monkeypatch, logging_steps):
+def test_training_updates_and_token_weighted_logging(
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    logging_steps: int,
+) -> None:
     trainer, run, module_logs = trainer_factory(logging_steps=logging_steps)
     collator = LanceBatchCollator(trainer.tokenizer, trainer.ds_input_column)
     # Stable input order isolates trainer math from shuffle implementation details.
@@ -1670,7 +1853,9 @@ def test_training_updates_and_token_weighted_logging(trainer_factory, monkeypatc
         assert actual == pytest.approx(expected, abs=2e-5, rel=2e-5)
 
 
-def test_training_loader_supports_zero_workers(trainer_factory):
+def test_training_loader_supports_zero_workers(
+    trainer_factory: TrainerFactory,
+) -> None:
     trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
     loader = trainer._get_training_dataloader()
     assert loader.num_workers == 0
@@ -1681,12 +1866,17 @@ def test_training_loader_supports_zero_workers(trainer_factory):
 
 
 @pytest.mark.parametrize("prefetch_factor", [1, 2])
-def test_zero_workers_reject_explicit_prefetch(trainer_factory, prefetch_factor):
+def test_zero_workers_reject_explicit_prefetch(
+    trainer_factory: TrainerFactory,
+    prefetch_factor: int,
+) -> None:
     with pytest.raises(ValidationError, match="must be None"):
         trainer_factory(num_workers=0, prefetch_factor=prefetch_factor)
 
 
-def test_worker_prefetch_can_use_pytorch_default(trainer_factory):
+def test_worker_prefetch_can_use_pytorch_default(
+    trainer_factory: TrainerFactory,
+) -> None:
     trainer, _, _ = trainer_factory(num_workers=1, prefetch_factor=None)
     loader = trainer._get_training_dataloader()
     assert loader.prefetch_factor == 2
@@ -1694,7 +1884,10 @@ def test_worker_prefetch_can_use_pytorch_default(trainer_factory):
     assert loader.persistent_workers
 
 
-def test_empty_dataset_is_rejected_without_an_optimizer_update(trainer_factory, monkeypatch):
+def test_empty_dataset_is_rejected_without_an_optimizer_update(
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     trainer, run, _ = trainer_factory(dataset=[])
     updates = []
     monkeypatch.setattr(trainer.optimizer, "step", lambda: updates.append(True))
@@ -1704,7 +1897,10 @@ def test_empty_dataset_is_rejected_without_an_optimizer_update(trainer_factory, 
     assert run.metrics == []
 
 
-def test_real_spawned_loader_reads_temporary_lance_dataset(trainer_factory, tmp_path):
+def test_real_spawned_loader_reads_temporary_lance_dataset(
+    trainer_factory: TrainerFactory,
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "training.lance"
     lance.write_dataset(pa.table({"text": ["a b c", "b c d", "c d a"]}), str(path))
     dataset = SafeLanceDataset(str(path))
@@ -1715,6 +1911,7 @@ def test_real_spawned_loader_reads_temporary_lance_dataset(trainer_factory, tmp_
     assert loader.prefetch_factor == 1
     loader.timeout = 120  # Bound a worker failure; allow startup on busy CI hosts.
     iterator = iter(loader)
+    assert isinstance(iterator, _MultiProcessingDataLoaderIter)
     try:
         batches = list(iterator)
     finally:

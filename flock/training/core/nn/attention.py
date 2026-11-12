@@ -20,7 +20,7 @@ class GroupedAttentionWithRoPE(nn.Module):
         bias: bool = False,
         q_norm: nn.Module | None = None,
         k_norm: nn.Module | None = None,
-    ):
+    ) -> None:
         super().__init__()
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads

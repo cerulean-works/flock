@@ -1,5 +1,7 @@
 """Fixtures shared by the app tests, the CLI tests and the S3 tests."""
 
+from __future__ import annotations
+
 import importlib
 import itertools
 import os
@@ -7,9 +9,16 @@ import secrets
 import socket
 import time
 from collections.abc import Callable, Iterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Coroutine, Generator
+    from contextlib import AbstractContextManager
+
+    from app.api.src.core.bus import Bus
+
 
 # Thread pools size themselves from the core count, so on a many-core login node that caps a
 # user's threads, a few workers can exhaust the cap. Set before any test imports torch or a
@@ -62,27 +71,29 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> Callable[[str], Clock]:
 
 
 @pytest.fixture
-def notification():
+def notification() -> Callable[..., AbstractContextManager[None]]:
     """Observe a real bus notification before checking another process's cache."""
     import asyncio
     import threading
     from contextlib import contextmanager
 
     @contextmanager
-    def watch(bus, loop, channel: str, payload: str):
+    def watch(
+        bus: Bus, loop: asyncio.AbstractEventLoop, channel: str, payload: str
+    ) -> Generator[None]:
         received = threading.Event()
 
         def notified(value: str) -> None:
             if value == payload:
                 received.set()
 
-        def on_loop(coro):
+        def on_loop(coro: Coroutine[Any, Any, None]) -> None:
             return asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=10)
 
-        async def listen():
+        async def listen() -> None:
             bus.listen(channel, notified)
 
-        async def unlisten():
+        async def unlisten() -> None:
             bus._channels[channel].remove(notified)
 
         on_loop(listen())
@@ -114,7 +125,9 @@ class S3Server:
     end, so other buckets on a shared server are never touched.
     """
 
-    def __init__(self, endpoint: str, access_key_id: str, secret_access_key: str, real: bool):
+    def __init__(
+        self, endpoint: str, access_key_id: str, secret_access_key: str, real: bool
+    ) -> None:
         self.endpoint = endpoint
         self.access_key_id = access_key_id
         self.secret_access_key = secret_access_key

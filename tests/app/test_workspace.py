@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import asyncio
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -8,15 +11,27 @@ from app.api.src.core.live import Subscriber, points_message
 from app.api.src.core.metric_defs import parse_metric_defs
 from tests.app.utils import history_rows, system_samples
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+    from typing import Any
+
+    from app.api.src.core.history import History
+    from app.api.src.core.store import Run
+    from tests.app.conftest import Client, EventStream, Flocks, FlockServer, WandbClient
+    from tests.conftest import Clock
+
+
 # ---------------------------------------------------------------------- snapshot
 
 
-def test_snapshot_with_chunks_appended_after_run_selection(api, flock, monkeypatch):
+def test_snapshot_with_chunks_appended_after_run_selection(
+    api: Client, flock: FlockServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
     api.create_run("p", "r")
     api.stream("p", "r", history_rows(1, loss=float))
     histories = flock.store.histories
 
-    def append():
+    def append() -> None:
         writer = flock.client()
         try:
             writer.stream(
@@ -25,7 +40,9 @@ def test_snapshot_with_chunks_appended_after_run_selection(api, flock, monkeypat
         finally:
             writer.close()
 
-    async def histories_after_append(runs, keys=None, stream="history"):
+    async def histories_after_append(
+        runs: Sequence[Run], keys: list[str] | None = None, stream: str = "history"
+    ) -> list[History]:
         assert runs[0].history_line_count == 1
         await asyncio.to_thread(append)
         return await histories(runs, keys, stream)
@@ -36,7 +53,7 @@ def test_snapshot_with_chunks_appended_after_run_selection(api, flock, monkeypat
     assert snap["mappings"][("r", "_runtime")] == ([0, 2], [0, 2])
 
 
-def test_snapshot_has_table_cells_and_curves(api):
+def test_snapshot_has_table_cells_and_curves(api: Client) -> None:
     api.create_run("p", "old", config={"lr": 0.1, "opt": "adam", "model": {"depth": 4}})
     api.stream("p", "old", history_rows(10, loss=lambda s: 10 - s), summary={"loss": 1, "tag": "x"})
     api.stream("p", "old", complete=0)
@@ -78,7 +95,7 @@ def test_snapshot_has_table_cells_and_curves(api):
     assert ("old", "acc") not in curves
 
 
-def test_snapshot_downsampling_sorting_and_paging(api):
+def test_snapshot_downsampling_sorting_and_paging(api: Client) -> None:
     for i in range(5):
         api.create_run("p", f"r{i}", config={"order": (i * 3) % 5})
         api.stream("p", f"r{i}", history_rows(1000, loss=lambda s, i=i: s + i))
@@ -90,7 +107,7 @@ def test_snapshot_downsampling_sorting_and_paging(api):
     assert y == [s + 2 for s in x]  # sampled points are real points
 
 
-def test_snapshot_filters_runs(api):
+def test_snapshot_filters_runs(api: Client) -> None:
     for i in range(4):
         api.create_run("p", f"r{i}", config={"lr": i / 10, "opt": "adam" if i % 2 else "sgd"})
         api.stream("p", f"r{i}", history_rows(3, loss=float))
@@ -109,7 +126,7 @@ def test_snapshot_filters_runs(api):
     assert api.get("/api/v1/projects/flock/p/workspace", filter="{").status == 400
 
 
-def test_snapshot_has_and_filters_on_run_owners(flock, api):
+def test_snapshot_has_and_filters_on_run_owners(flock: FlockServer, api: Client) -> None:
     alice = flock.add_user("alice@lab.test")
     me = api.get("/api/v1/me").json()["id"]
     api.create_run("p", "mine")
@@ -123,7 +140,7 @@ def test_snapshot_has_and_filters_on_run_owners(flock, api):
     assert [r["id"] for r in snap["runs"]] == ["hers"]
 
 
-def test_snapshot_lists_only_the_metrics_of_its_runs(api):
+def test_snapshot_lists_only_the_metrics_of_its_runs(api: Client) -> None:
     # Old runs logged metrics newer ones don't: their pages would chart them empty.
     api.create_run("p", "old", config={"kind": "old"})
     api.stream("p", "old", history_rows(3, loss=float, **{"lr/group0": float, "perf/mfu": float}))
@@ -138,7 +155,7 @@ def test_snapshot_lists_only_the_metrics_of_its_runs(api):
     assert api.workspace(filter='{"config.kind": "none"}')["metrics"] == []
 
 
-def test_snapshot_point_budget(api, monkeypatch):
+def test_snapshot_point_budget(api: Client, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Snapshot, "POINT_BUDGET", 200)
     api.create_run("p", "r")
     api.stream("p", "r", history_rows(1000, a=float, b=float))
@@ -147,7 +164,7 @@ def test_snapshot_point_budget(api, monkeypatch):
     assert len(snap["curves"][("r", "a")][0]) == 66
 
 
-def test_unknown_project_and_metric_keys_survive_restart(make_flock):
+def test_unknown_project_and_metric_keys_survive_restart(make_flock: Flocks) -> None:
     server = make_flock()
     api = server.client()
     assert api.get("/api/v1/projects/flock/nope/workspace").status == 404
@@ -178,7 +195,7 @@ HF_METRICS = [
 ]
 
 
-def test_metric_definitions_are_parsed_from_the_config():
+def test_metric_definitions_are_parsed_from_the_config() -> None:
     config = {"lr": {"value": 0.1}, "_wandb": {"value": {"m": HF_METRICS}}}
     assert parse_metric_defs(config) == [
         {"key": "train/global_step"},
@@ -202,7 +219,7 @@ def test_metric_definitions_are_parsed_from_the_config():
     assert parse_metric_defs({}) == parse_metric_defs({"_wandb": {"value": {"m": 3}}}) == []
 
 
-def test_snapshot_carries_metric_definitions_and_axis_mappings(api):
+def test_snapshot_carries_metric_definitions_and_axis_mappings(api: Client) -> None:
     api.create_run("p", "hf", config={"lr": 0.1, "_wandb": {"m": HF_METRICS}})
     rows = []
     for s in range(40):
@@ -247,7 +264,9 @@ def test_snapshot_carries_metric_definitions_and_axis_mappings(api):
     assert bare["axes"] == ["_runtime", "_timestamp"] and bare["system_axes"] == []
 
 
-def test_stream_announces_new_metric_definitions(api, events):
+def test_stream_announces_new_metric_definitions(
+    api: Client, events: Callable[..., EventStream]
+) -> None:
     api.create_run("p", "r1", config={"lr": 0.1})
     live = events("p", "r1:0")
     live.next_of("hello")
@@ -266,7 +285,12 @@ def test_stream_announces_new_metric_definitions(api, events):
 # ---------------------------------------------------------------------- live stream
 
 
-def test_stream_replays_missed_points_then_streams_new_ones(api, events, flock, monkeypatch):
+def test_stream_replays_missed_points_then_streams_new_ones(
+    api: Client,
+    events: Callable[..., EventStream],
+    flock: FlockServer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     api.create_run("p", "r1")
     api.stream("p", "r1", history_rows(3, loss=float))
     lines = api.workspace()["runs"][0]["lines"]
@@ -277,7 +301,9 @@ def test_stream_replays_missed_points_then_streams_new_ones(api, events, flock, 
 
     histories = flock.store.histories
 
-    async def histories_with_overlap(runs, keys=None, stream="history"):
+    async def histories_with_overlap(
+        runs: Sequence[Run], keys: list[str] | None = None, stream: str = "history"
+    ) -> list[History]:
         result = await histories(runs, keys, stream)
         # Deliver the write while subscribed but before its replay is sent. This
         # overlap is part of the SSE contract; slower CI scheduling exposed it.
@@ -317,7 +343,9 @@ def test_stream_replays_missed_points_then_streams_new_ones(api, events, flock, 
     }
 
 
-def test_stream_reports_summary_state_and_new_runs(api, events):
+def test_stream_reports_summary_state_and_new_runs(
+    api: Client, events: Callable[..., EventStream]
+) -> None:
     api.create_run("p", "r1")
     api.create_run("p", "other")
     live = events("p", "r1")
@@ -341,7 +369,9 @@ def test_stream_reports_summary_state_and_new_runs(api, events):
     assert created["run"] == "fresh" and created["state"] == "running"
 
 
-def test_crashed_runs_are_announced(make_flock, events, clock):
+def test_crashed_runs_are_announced(
+    make_flock: Flocks, events: Callable[..., EventStream], clock: Callable[[str], Clock]
+) -> None:
     # Keep heartbeat age fixed until subscribed: a crash before then would be missed
     # (PR #49). The real crash watcher still detects and publishes the stale run.
     wall = clock("app.api.src.core.store")
@@ -356,12 +386,15 @@ def test_crashed_runs_are_announced(make_flock, events, clock):
     api.close()
 
 
-def test_slow_subscribers_are_disconnected(api, flock, monkeypatch, wait_for):
+def test_slow_subscribers_are_disconnected(
+    api: Client, flock: FlockServer, monkeypatch: pytest.MonkeyPatch, wait_for: Callable[..., Any]
+) -> None:
     monkeypatch.setattr(Subscriber, "QUEUE_SIZE", 2)
     api.create_run("p", "r1")
 
-    async def subscribe():
+    async def subscribe() -> Subscriber:
         project = await flock.store.project("flock", "p")
+        assert project is not None
         return flock.store.live.subscribe(project.pk, ["r1"])
 
     sub = flock.call(subscribe())
@@ -373,14 +406,21 @@ def test_slow_subscribers_are_disconnected(api, flock, monkeypatch, wait_for):
         items.append(sub.queue.get_nowait())
     assert items[-1] is None  # end-of-stream marker made it into the full queue
 
-    async def unsubscribe():
+    async def unsubscribe() -> None:
         project = await flock.store.project("flock", "p")
+        assert project is not None
         flock.store.live.unsubscribe(project.pk, sub)
 
     flock.call(unsubscribe())
 
 
-def test_wandb_sdk_points_reach_a_dashboard_stream(flock, api, wandb_client, events, wait_for):
+def test_wandb_sdk_points_reach_a_dashboard_stream(
+    flock: FlockServer,
+    api: Client,
+    wandb_client: WandbClient,
+    events: Callable[..., EventStream],
+    wait_for: Callable[..., Any],
+) -> None:
     """End to end: a run logging through the real SDK, watched from a snapshot's cursor."""
     proc = wandb_client.popen(
         """
@@ -395,6 +435,7 @@ def test_wandb_sdk_points_reach_a_dashboard_stream(flock, api, wandb_client, eve
         run.finish()
         """
     )
+    assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
     try:
         line = proc.stdout.readline()
         assert line.startswith("LOGGED"), line + proc.stderr.read()

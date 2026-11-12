@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import dataclasses
+from typing import TYPE_CHECKING
 
 import datasets
 import pytest
@@ -20,6 +23,10 @@ from flock.eval.tasks.arc import ARC_EASY, arc_doc
 
 from .toy import ROWS, TASK, not_about_bees
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
+
 
 @pytest.mark.parametrize(
     ("primary_metric", "unconditional_context"),
@@ -28,27 +35,29 @@ from .toy import ROWS, TASK, not_about_bees
         pytest.param("acc_uncond", None, id="uncond-without-context"),
     ],
 )
-def test_task_rejects_unreported_primary_metric(primary_metric, unconditional_context):
+def test_task_rejects_unreported_primary_metric(
+    primary_metric: str, unconditional_context: str | None
+) -> None:
     with pytest.raises(ValueError, match="primary_metric"):
         dataclasses.replace(
             TASK, primary_metric=primary_metric, unconditional_context=unconditional_context
         )
 
 
-def test_arc_doc_maps_letter_and_digit_keys():
+def test_arc_doc_maps_letter_and_digit_keys() -> None:
     assert arc_doc(ROWS["train"][0]) == MCDoc(
         "shot-1", cloze("Which gas do plants take in?", ("oxygen", "carbon dioxide")), 1
     )
     assert arc_doc(ROWS["train"][1]).gold == 0
 
 
-def test_load_keeps_fewshot_order_and_limit():
+def test_load_keeps_fewshot_order_and_limit() -> None:
     docs, shots = TASK.load(limit=1)
     assert [d.id for d in docs] == ["q-1"]
     assert [s.id for s in shots] == ["shot-2", "shot-1"]
 
 
-def test_keep_filters_scored_rows_before_limit_and_leaves_examples_and_hash_alone():
+def test_keep_filters_scored_rows_before_limit_and_leaves_examples_and_hash_alone() -> None:
     task = dataclasses.replace(TASK, keep=not_about_bees)
 
     docs, shots = task.load(limit=1)
@@ -61,12 +70,14 @@ def test_keep_filters_scored_rows_before_limit_and_leaves_examples_and_hash_alon
 
 
 @pytest.mark.parametrize("limit", [0, -1])
-def test_load_rejects_limit_below_one(limit):
+def test_load_rejects_limit_below_one(limit: int) -> None:
     with pytest.raises(ValueError, match="at least 1"):
         TASK.load(limit=limit)
 
 
-def test_row_index_numbers_rows_per_split(monkeypatch, real_load):
+def test_row_index_numbers_rows_per_split(
+    monkeypatch: pytest.MonkeyPatch, real_load: Callable[..., list[dict[str, Any]]]
+) -> None:
     splits = {"dev": [{"q": "a"}, {"q": "b"}], "test": [{"q": "c"}]}
     monkeypatch.setattr(
         datasets,
@@ -80,7 +91,7 @@ def test_row_index_numbers_rows_per_split(monkeypatch, real_load):
     assert real_load(dataclasses.replace(dataset, row_index=False)) == [{"q": "c"}]
 
 
-def test_row_index_task_needs_an_index_in_written_out_examples():
+def test_row_index_task_needs_an_index_in_written_out_examples() -> None:
     numbered = dataclasses.replace(TASK.dataset, row_index=True)
     with pytest.raises(ValueError, match="needs an index in each written-out example"):
         dataclasses.replace(TASK, dataset=numbered, fewshot=Fewshot(rows=({"q": "a"},)))
@@ -88,20 +99,22 @@ def test_row_index_task_needs_an_index_in_written_out_examples():
     dataclasses.replace(TASK, dataset=numbered, fewshot=Fewshot(rows=({"q": "a", "index": 0},)))
 
 
-def test_row_index_rejects_an_index_column(monkeypatch, real_load):
+def test_row_index_rejects_an_index_column(
+    monkeypatch: pytest.MonkeyPatch, real_load: Callable[..., list[dict[str, Any]]]
+) -> None:
     rows = datasets.Dataset.from_list([{"index": 7}])
     monkeypatch.setattr(datasets, "load_dataset", lambda *args, **kwargs: rows)
     with pytest.raises(ValueError, match="test: the rows already have an index column"):
         real_load(Dataset("cerulean/toy", "0" * 40, None, "test", row_index=True))
 
 
-def test_load_rejects_unknown_fewshot_id():
+def test_load_rejects_unknown_fewshot_id() -> None:
     task = dataclasses.replace(TASK, fewshot=Fewshot("train", ("shot-1", "nope")))
     with pytest.raises(KeyError, match="nope"):
         task.load()
 
 
-def test_context_matches_olmes_format():
+def test_context_matches_olmes_format() -> None:
     assert TASK.requests(*TASK.load()).requests[0].context == (
         "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山\n\n"
         "Question: Which gas do plants take in?\nAnswer: carbon dioxide\n\n"
@@ -109,7 +122,7 @@ def test_context_matches_olmes_format():
     )
 
 
-def test_requests_cover_every_choice_then_the_unconditional_ones():
+def test_requests_cover_every_choice_then_the_unconditional_ones() -> None:
     built = TASK.requests(*TASK.load())
     assert len(built.requests) == 2 * (3 + 4)
     contexted, uncond = built.requests[:7], built.requests[7:]
@@ -135,7 +148,7 @@ def uniform_scores(n: int, tokens_cut: list[int] | None = None) -> Scores:
     )
 
 
-def test_choice_scores_lays_requests_out_per_doc():
+def test_choice_scores_lays_requests_out_per_doc() -> None:
     built = TASK.requests(*TASK.load())
     n = len(built.requests)
     # Request i scores -i with i + 1 tokens, and only odd requests are greedy, so each cell shows
@@ -161,7 +174,7 @@ def test_choice_scores_lays_requests_out_per_doc():
     assert layout.logprob_uncond[1].tolist() == [-10, -11, -12, -13]
 
 
-def test_choice_scores_counts_leading_space_and_bytes():
+def test_choice_scores_counts_leading_space_and_bytes() -> None:
     built = TASK.requests(*TASK.load())
     n = len(built.requests)
     layout = built.choice_scores(uniform_scores(n))
@@ -172,7 +185,7 @@ def test_choice_scores_counts_leading_space_and_bytes():
     assert layout.num_bytes[0, 0].item() == len(" honey")
 
 
-def test_without_unconditional_context_there_is_no_pmi():
+def test_without_unconditional_context_there_is_no_pmi() -> None:
     task = dataclasses.replace(TASK, unconditional_context=None)
     built = task.requests(*task.load())
     assert len(built.requests) == 7
@@ -181,7 +194,7 @@ def test_without_unconditional_context_there_is_no_pmi():
     assert layout.logprob_uncond is None
 
 
-def test_choice_scores_rejects_mismatched_request_count():
+def test_choice_scores_rejects_mismatched_request_count() -> None:
     built = TASK.requests(*TASK.load())
     broken = dataclasses.replace(built, requests=built.requests[:-1])
     n = len(broken.requests)
@@ -189,18 +202,18 @@ def test_choice_scores_rejects_mismatched_request_count():
         broken.choice_scores(uniform_scores(n))
 
 
-def test_choice_scores_rejects_no_docs():
+def test_choice_scores_rejects_no_docs() -> None:
     built = TASK.requests([], [])
     with pytest.raises(ValueError, match="no docs"):
         built.choice_scores(uniform_scores(0))
 
 
-def test_truncation_is_zero_when_nothing_is_cut():
+def test_truncation_is_zero_when_nothing_is_cut() -> None:
     built = TASK.requests(*TASK.load())
     assert built.truncation(uniform_scores(len(built.requests))) == Truncation(0, 0, 0)
 
 
-def test_truncation_counts_requests_and_their_docs():
+def test_truncation_counts_requests_and_their_docs() -> None:
     built = TASK.requests(*TASK.load())
     # Doc 1's first choice (request 3) and doc 0's first unconditional request (7 + 0) are cut:
     # two requests in two docs. Mapping the unconditional half to the wrong docs would give 1.
@@ -217,12 +230,12 @@ def test_truncation_counts_requests_and_their_docs():
     )
 
 
-def test_truncation_rejects_no_docs():
+def test_truncation_rejects_no_docs() -> None:
     with pytest.raises(ValueError, match="no docs"):
         TASK.requests([], []).truncation(uniform_scores(0))
 
 
-def test_hash_is_stable():
+def test_hash_is_stable() -> None:
     docs, shots = TASK.load()
     base = TASK.requests(docs, shots).hash
     assert base == TASK.requests(*TASK.load()).hash
@@ -276,26 +289,26 @@ def test_hash_is_stable():
         ),
     ],
 )
-def test_hash_tracks_what_is_scored(change):
+def test_hash_tracks_what_is_scored(change: Callable[..., Any]) -> None:
     docs, shots = TASK.load()
     assert change(docs, shots).hash != TASK.requests(docs, shots).hash
 
 
-def test_registry_has_arc_easy_with_olmes_shots():
+def test_registry_has_arc_easy_with_olmes_shots() -> None:
     assert TASKS["arc_easy"] is ARC_EASY
     assert ARC_EASY.fewshot is not None
     assert len(ARC_EASY.fewshot.ids) == 5
     assert ARC_EASY.dataset.split == "test"
 
 
-def test_cloze_renders_olmes_prompt_and_spaced_answers():
+def test_cloze_renders_olmes_prompt_and_spaced_answers() -> None:
     assert cloze("Why?", ("a", "b"), question_prefix="Goal: ") == (
         Choice("Goal: Why?\nAnswer:", " a"),
         Choice("Goal: Why?\nAnswer:", " b"),
     )
 
 
-def test_cloze_rejects_one_string_as_answers():
+def test_cloze_rejects_one_string_as_answers() -> None:
     # A string is a sequence too, and would silently become one choice per character.
     with pytest.raises(TypeError, match=r"pass \(answer,\)"):
         cloze("Why?", "yes")
@@ -310,7 +323,7 @@ def test_cloze_rejects_one_string_as_answers():
         pytest.param(cloze("?", ("a", "b")), -1, "doc d: gold -1", id="gold-negative"),
     ],
 )
-def test_doc_rejects_bad_choices_or_gold(choices, gold, match):
+def test_doc_rejects_bad_choices_or_gold(choices: tuple[()], gold: int, match: str) -> None:
     with pytest.raises(ValueError, match=match):
         MCDoc("d", choices, gold)
 
@@ -336,12 +349,15 @@ def test_doc_rejects_bad_choices_or_gold(choices, gold, match):
         ),
     ],
 )
-def test_fewshot_rejects_bad_definitions(kwargs, match):
+def test_fewshot_rejects_bad_definitions(
+    kwargs: dict[str, Any],
+    match: str,
+) -> None:
     with pytest.raises(ValueError, match=match):
         Fewshot(**kwargs)
 
 
-def test_task_rejects_num_shots_from_another_split():
+def test_task_rejects_num_shots_from_another_split() -> None:
     # Ids are unique within a split, so dropping the scored doc's own example by id only works
     # when the examples come from the split the task scores.
     fewshot = Fewshot("train", ("shot-1", "shot-2"), num_shots=1)
@@ -349,13 +365,13 @@ def test_task_rejects_num_shots_from_another_split():
         dataclasses.replace(TASK, fewshot=fewshot)
 
 
-def test_fewshot_rows_go_through_to_doc():
+def test_fewshot_rows_go_through_to_doc() -> None:
     task = dataclasses.replace(TASK, fewshot=Fewshot(rows=(ROWS["test"][1],)))
     _, shots = task.load()
     assert shots == [arc_doc(ROWS["test"][1])]
 
 
-def test_num_shots_skips_the_scored_doc():
+def test_num_shots_skips_the_scored_doc() -> None:
     # Examples from the scored split: each doc is shown the first one that isn't itself.
     task = dataclasses.replace(TASK, fewshot=Fewshot("test", ("q-1", "q-2"), num_shots=1))
     built = task.requests(*task.load())
@@ -369,7 +385,7 @@ def test_num_shots_skips_the_scored_doc():
 
 
 @pytest.mark.parametrize("reorder", [False, True])
-def test_a_shot_showing_the_docs_answer_is_not_shown_to_it(reorder):
+def test_a_shot_showing_the_docs_answer_is_not_shown_to_it(reorder: bool) -> None:
     docs, shots = TASK.load()
     # Doc q-2 repeated under the few-shot id shot-9, as a dataset may repeat a question, perhaps
     # with its choices in another order. Either way the example would show q-2's answer.
@@ -384,7 +400,7 @@ def test_a_shot_showing_the_docs_answer_is_not_shown_to_it(reorder):
     assert built.requests[3].context.count("Question:") == 3
 
 
-def test_a_shot_is_compared_with_the_doc_by_the_text_it_shows():
+def test_a_shot_is_compared_with_the_doc_by_the_text_it_shows() -> None:
     docs, _ = TASK.load()
     # A doc whose examples read differently from its scored text, as HumanEval's do. An example
     # is the doc itself only if it shows the same text, so the plain repeat stays.
@@ -396,7 +412,7 @@ def test_a_shot_is_compared_with_the_doc_by_the_text_it_shows():
     assert "as an example" not in built.requests[0].context
 
 
-def test_shots_from_the_scored_split_are_shown_to_their_own_doc():
+def test_shots_from_the_scored_split_are_shown_to_their_own_doc() -> None:
     # OLMES shows a curated example from the scored split to every doc, its own included.
     task = dataclasses.replace(TASK, fewshot=Fewshot("test", ("q-1",)))
     docs, shots = task.load()
@@ -405,7 +421,7 @@ def test_shots_from_the_scored_split_are_shown_to_their_own_doc():
     assert built.requests[0].context.count("Question:") == 2
 
 
-def test_shots_from_another_split_may_share_an_id_with_the_doc():
+def test_shots_from_another_split_may_share_an_id_with_the_doc() -> None:
     docs, shots = TASK.load()
     namesake = dataclasses.replace(shots[0], id=docs[0].id)
 
@@ -413,7 +429,7 @@ def test_shots_from_another_split_may_share_an_id_with_the_doc():
     assert built.requests[0].context.count("Question:") == 2
 
 
-def test_description_and_per_choice_contexts():
+def test_description_and_per_choice_contexts() -> None:
     # A WinoGrande-like doc: the choices differ in context and share one continuation.
     doc = MCDoc("w", (Choice("Tom gave it to", " him."), Choice("Ann gave it to", " him.")), 1)
     task = dataclasses.replace(TASK, description="Header\n\n", unconditional_context=None)
@@ -430,12 +446,12 @@ def test_description_and_per_choice_contexts():
     ]
 
 
-def test_doc_rejects_an_empty_example():
+def test_doc_rejects_an_empty_example() -> None:
     with pytest.raises(ValueError, match="empty example"):
         MCDoc("s", (Choice("Q1", " a"),), 0, example="")
 
 
-def test_example_replaces_the_gold_choice_in_the_shots():
+def test_example_replaces_the_gold_choice_in_the_shots() -> None:
     shot = MCDoc("s", (Choice("Q1", " a"),), 0, example="Q1  a")
     doc = MCDoc("d", (Choice("Q2", " b"),), 0)
     # An example from the scored split is shown to its own doc too, as OLMES's curated ones are.
@@ -449,12 +465,12 @@ def test_example_replaces_the_gold_choice_in_the_shots():
     ]
 
 
-def test_requests_are_immutable():
+def test_requests_are_immutable() -> None:
     built = TASK.requests(*TASK.load())
     assert isinstance(built.docs, tuple) and isinstance(built.requests, tuple)
 
 
-def test_reported_metrics_follow_pmi_and_the_metrics_field():
+def test_reported_metrics_follow_pmi_and_the_metrics_field() -> None:
     # `acc_greedy` compares no choices, so only a gold-only task reports it.
     assert TASK.reported_metrics == tuple(m for m in MULTIPLE_CHOICE_METRICS if m != "acc_greedy")
     no_pmi = dataclasses.replace(TASK, unconditional_context=None)
@@ -463,7 +479,7 @@ def test_reported_metrics_follow_pmi_and_the_metrics_field():
     assert bpb_only.reported_metrics == ("bpb",)
 
 
-def test_gold_only_tasks_report_bpb_unless_asked_for_greedy_match():
+def test_gold_only_tasks_report_bpb_unless_asked_for_greedy_match() -> None:
     gold_only = GoldOnlyTask(name="toy:gold", dataset=TASK.dataset, to_doc=arc_doc)
     assert (gold_only.primary_metric, gold_only.reported_metrics) == ("bpb", ("bpb",))
     assert gold_only.unconditional_context is None
@@ -494,6 +510,9 @@ def test_gold_only_tasks_report_bpb_unless_asked_for_greedy_match():
         pytest.param({"metrics": ()}, "metrics is empty", id="empty"),
     ],
 )
-def test_task_rejects_metrics_it_does_not_compute(kwargs, match):
+def test_task_rejects_metrics_it_does_not_compute(
+    kwargs: dict[str, Any],
+    match: str,
+) -> None:
     with pytest.raises(ValueError, match=match):
         dataclasses.replace(TASK, **kwargs)

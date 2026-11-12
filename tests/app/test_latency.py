@@ -1,12 +1,20 @@
+from __future__ import annotations
+
 import asyncio
 import random
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
 
 import orjson
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from tests.app.conftest import Client, Flocks, FlockServer
+
 
 pytestmark = pytest.mark.latency
 
@@ -27,7 +35,15 @@ class Timing:
         return cls(times[len(times) // 2], p95, times[-1], data)
 
     @classmethod
-    def measure(cls, client, method: str, path: str, body=None, params=None, n: int = 40) -> Self:
+    def measure(
+        cls,
+        client: Client,
+        method: str,
+        path: str,
+        body: Any = None,
+        params: dict[str, Any] | None = None,
+        n: int = 40,
+    ) -> Self:
         """Time ``n`` requests end to end (after warmup), including decoding the response."""
         times, data, size = [], None, 0
         for i in range(5 + n):
@@ -66,7 +82,7 @@ class TestCurves:
 
     @pytest.fixture(scope="class")
     @classmethod
-    def curves(cls, make_module_flock):
+    def curves(cls, make_module_flock: Flocks) -> Iterator[tuple[FlockServer, Client]]:
         server = make_module_flock()
         rng = random.Random(0)
         rows = cls.STEPS // cls.LOG_EVERY
@@ -112,7 +128,7 @@ class TestCurves:
         yield server, client
         client.close()
 
-    def test_recent_50_runs_loss_curves(self, curves):
+    def test_recent_50_runs_loss_curves(self, curves: tuple[FlockServer, Client]) -> None:
         _, client = curves
         timing = Timing.measure(client, "GET", self.PATH, params={"keys": "loss"})
         runs = timing.data["runs"]
@@ -121,7 +137,7 @@ class TestCurves:
         assert runs[0]["series"]["loss"]["x"][-1] == self.STEPS - self.LOG_EVERY
         timing.check(self.P50_MS, self.P95_MS)
 
-    def test_recent_50_runs_loss_curves_cold(self, curves):
+    def test_recent_50_runs_loss_curves_cold(self, curves: tuple[FlockServer, Client]) -> None:
         """Curves aren't cached in Flock (D78): every read, like this one, decodes the chunks
         PostgreSQL returns. Only PostgreSQL's own buffer cache is warm."""
         _, client = curves
@@ -135,13 +151,15 @@ class TestCurves:
         print(f"\ncold recent-50 curves: p50={timing.p50:.2f}ms p95={timing.p95:.2f}ms")
         timing.check(self.P50_MS, self.P95_MS)
 
-    def test_recent_50_runs_several_metrics(self, curves):
+    def test_recent_50_runs_several_metrics(self, curves: tuple[FlockServer, Client]) -> None:
         _, client = curves
         timing = Timing.measure(client, "GET", self.PATH, params={"keys": "loss,val_loss,lr"})
         assert all(set(r["series"]) == {"loss", "val_loss", "lr"} for r in timing.data["runs"])
         timing.check(self.P50_MS, self.P95_MS)
 
-    def test_ongoing_runs_curves_while_runs_are_logging(self, curves):
+    def test_ongoing_runs_curves_while_runs_are_logging(
+        self, curves: tuple[FlockServer, Client]
+    ) -> None:
         """Read curves of running runs while those runs keep streaming history over HTTP."""
         server, client = curves
         project = server.call(server.store.project("flock", "curves"))
@@ -151,7 +169,7 @@ class TestCurves:
         stop = threading.Event()
         sent = {"batches": 0}
 
-        def writer():
+        def writer() -> None:
             rng = random.Random(1)
             writer_client = server.client()
             offsets = {name: found[name].history_line_count for name in running}
@@ -209,7 +227,9 @@ class TestSweep:
 
     @pytest.fixture(scope="class")
     @classmethod
-    def sweep(cls, make_module_flock):
+    def sweep(
+        cls, make_module_flock: Flocks
+    ) -> Iterator[tuple[Client, list[tuple[dict[str, Any], dict[str, Any], list[str]]]]]:
         server = make_module_flock()
         rng = random.Random(0)
         specs = []
@@ -267,14 +287,18 @@ class TestSweep:
         yield client, specs
         client.close()
 
-    def test_filter_single_metric(self, sweep):
+    def test_filter_single_metric(
+        self, sweep: tuple[Client, list[tuple[dict[str, Any], dict[str, Any], list[str]]]]
+    ) -> None:
         client, specs = sweep
         body = {"filter": {"summary.loss": {"$lt": 0.1}}}
         timing = Timing.measure(client, "POST", self.PATH, body=body)
         assert timing.data["total"] == sum(1 for _, summary, _ in specs if summary["loss"] < 0.1)
         timing.check(self.P50_MS, self.P95_MS)
 
-    def test_filter_compound_sorted(self, sweep):
+    def test_filter_compound_sorted(
+        self, sweep: tuple[Client, list[tuple[dict[str, Any], dict[str, Any], list[str]]]]
+    ) -> None:
         client, specs = sweep
         body = {
             "filter": {
@@ -310,7 +334,9 @@ class TestSweep:
         assert len(data["columns"]) == 3 + 10 + 1
         timing.check(self.P50_MS, self.P95_MS)
 
-    def test_filter_or_regex_and_strings(self, sweep):
+    def test_filter_or_regex_and_strings(
+        self, sweep: tuple[Client, list[tuple[dict[str, Any], dict[str, Any], list[str]]]]
+    ) -> None:
         client, _ = sweep
         body = {
             "filter": {
@@ -327,28 +353,36 @@ class TestSweep:
         assert timing.data["total"] > 0
         timing.check(self.P50_MS, self.P95_MS)
 
-    def test_filter_returning_all_matching_ids(self, sweep):
+    def test_filter_returning_all_matching_ids(
+        self, sweep: tuple[Client, list[tuple[dict[str, Any], dict[str, Any], list[str]]]]
+    ) -> None:
         client, _ = sweep
         body = {"filter": {"summary.metric_0007": {"$gt": 0.2}}, "all_ids": True, "limit": 50}
         timing = Timing.measure(client, "POST", self.PATH, body=body)
         assert len(timing.data["all_ids"]) == timing.data["total"] > 7000
         timing.check(self.P50_MS, self.P95_MS)
 
-    def test_wide_column_projection(self, sweep):
+    def test_wide_column_projection(
+        self, sweep: tuple[Client, list[tuple[dict[str, Any], dict[str, Any], list[str]]]]
+    ) -> None:
         client, _ = sweep
         body = {"columns": ["summary.metric_01*"], "sort": "summary.metric_0100", "limit": 100}
         timing = Timing.measure(client, "POST", self.PATH, body=body)
         assert len(timing.data["columns"]) == 100
         timing.check(self.P50_MS, self.P95_MS)
 
-    def test_column_search(self, sweep):
+    def test_column_search(
+        self, sweep: tuple[Client, list[tuple[dict[str, Any], dict[str, Any], list[str]]]]
+    ) -> None:
         client, _ = sweep
         path = "/api/v1/projects/flock/sweep/columns"
         timing = Timing.measure(client, "GET", path, params={"q": "metric_13"})
         assert len(timing.data["columns"]) == 100
         timing.check(self.P50_MS, self.P95_MS)
 
-    def test_home_feed(self, sweep):
+    def test_home_feed(
+        self, sweep: tuple[Client, list[tuple[dict[str, Any], dict[str, Any], list[str]]]]
+    ) -> None:
         client, _ = sweep
         first = Timing.measure(client, "GET", "/api/v1/feed", params={"limit": 30})
         assert len(first.data["items"]) == 30
@@ -358,7 +392,9 @@ class TestSweep:
         assert {item["kind"] for item in deeper.data["items"]} == {"run_failed"}
         deeper.check(self.P50_MS, self.P95_MS)
 
-    def test_budget_panel(self, sweep):
+    def test_budget_panel(
+        self, sweep: tuple[Client, list[tuple[dict[str, Any], dict[str, Any], list[str]]]]
+    ) -> None:
         """Every run of the project has a usage entry this month."""
         client, _ = sweep
         timing = Timing.measure(client, "GET", "/api/v1/orgs/flock/budget")
@@ -367,7 +403,9 @@ class TestSweep:
 
     # Mutations come last: they change the shared dataset.
 
-    def test_bulk_delete_and_move_then_filter(self, sweep):
+    def test_bulk_delete_and_move_then_filter(
+        self, sweep: tuple[Client, list[tuple[dict[str, Any], dict[str, Any], list[str]]]]
+    ) -> None:
         """Deleting ~1k runs (marked deleted, then purged in the background) and moving 500
         of the 10k × 1.5k table; filters stay fast."""
         client, specs = sweep

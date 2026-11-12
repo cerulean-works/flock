@@ -1,5 +1,6 @@
 import asyncio
 import time
+from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
 import numpy as np
@@ -330,7 +331,7 @@ async def stream(
             store.live.unsubscribe(project.pk, sub)
             raise APIError(404, f"project {project.entity}/{project.name} not found")
 
-    async def events():
+    async def events() -> AsyncIterator[bytes]:
         try:
             found = await store.project_runs(project, cursors)
             watched = [found[n] for n in cursors if n in found]

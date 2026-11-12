@@ -1,7 +1,17 @@
+from __future__ import annotations
+
 import json
 import time
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from tests.app.conftest import Client, Flocks, FlockServer
+    from tests.conftest import Clock
+
 
 H200x8 = json.dumps({"gpu": "NVIDIA H200", "gpu_count": 8, "cudaVersion": "12.6"}).encode()
 BILLING = "/api/v1/orgs/flock/billing"
@@ -9,10 +19,12 @@ BUDGET = "/api/v1/orgs/flock/budget"
 
 
 @pytest.fixture
-def run_for(clock):
+def run_for(clock: Callable[[str], Clock]) -> Callable[..., None]:
     wall = clock("app.api.src.core.store")
 
-    def run(api, project: str, name: str, seconds: float, metadata: bytes | None = H200x8):
+    def run(
+        api: Client, project: str, name: str, seconds: float, metadata: bytes | None = H200x8
+    ) -> None:
         """Accrue elapsed time through real heartbeat requests, without waiting."""
         api.create_run(project, name)
         if metadata is not None:
@@ -24,13 +36,13 @@ def run_for(clock):
     return run
 
 
-def detail(api, project: str, name: str) -> dict:
+def detail(api: Client, project: str, name: str) -> dict:
     resp = api.get(f"/api/v1/projects/flock/{project}/runs/{name}")
     assert resp.status == 200, resp.body
     return resp.json()
 
 
-def test_gpus_are_detected_and_can_be_overridden(flock, api):
+def test_gpus_are_detected_and_can_be_overridden(flock: FlockServer, api: Client) -> None:
     api.create_run("p", "r1")
     api.create_run("p", "r2")
     assert detail(api, "p", "r1")["gpu_count"] is None  # nothing known yet
@@ -59,7 +71,9 @@ def test_gpus_are_detected_and_can_be_overridden(flock, api):
     assert data == {"gpu_type": ["H100", "H100"], "gpu_count": [1, 0]}
 
 
-def test_spend_accrues_from_heartbeats_and_is_priced(flock, api, run_for):
+def test_spend_accrues_from_heartbeats_and_is_priced(
+    flock: FlockServer, api: Client, run_for: Callable[..., None]
+) -> None:
     alice = flock.add_user("alice@lab.test")
     run_for(alice.api, "p", "r1", 1.0)
     run = detail(api, "p", "r1")
@@ -111,7 +125,9 @@ def test_spend_accrues_from_heartbeats_and_is_priced(flock, api, run_for):
     assert api.get(BUDGET).json()["spent"] == 0
 
 
-def test_silences_longer_than_the_crash_timeout_are_not_billed(make_flock, clock):
+def test_silences_longer_than_the_crash_timeout_are_not_billed(
+    make_flock: Flocks, clock: Callable[[str], Clock]
+) -> None:
     wall = clock("app.api.src.core.store")
     api = make_flock(crash_timeout=0.5).client()
     api.create_run("p", "r1")
@@ -121,14 +137,14 @@ def test_silences_longer_than_the_crash_timeout_are_not_billed(make_flock, clock
     assert detail(api, "p", "r1")["runtime"] < 0.5
 
 
-def test_runs_without_gpu_info_are_reported(api, run_for):
+def test_runs_without_gpu_info_are_reported(api: Client, run_for: Callable[..., None]) -> None:
     run_for(api, "p", "r1", 0.2, metadata=None)
     budget = api.get(BUDGET).json()
     assert budget["unknown_gpu"] == {"runs": 1, "hours": 0.0}  # a fraction of a second
     assert budget["top_runs"] == []  # no GPU hours, nothing to rank
 
 
-def test_top_runs_and_the_project_breakdown(api, run_for):
+def test_top_runs_and_the_project_breakdown(api: Client, run_for: Callable[..., None]) -> None:
     api.patch(BILLING, {"rates": {"H200": 60}})
     for i in range(6):
         run_for(api, "p" if i % 2 else "q", f"r{i}", 0.05 * (i + 1))
@@ -139,7 +155,9 @@ def test_top_runs_and_the_project_breakdown(api, run_for):
     assert sum(p["cost"] for p in budget["projects"]) == pytest.approx(budget["spent"], abs=0.02)
 
 
-def test_spend_survives_moves_deletes_and_restarts(make_flock, run_for):
+def test_spend_survives_moves_deletes_and_restarts(
+    make_flock: Flocks, run_for: Callable[..., None]
+) -> None:
     server = make_flock()
     api = server.client()
     api.patch(BILLING, {"rates": {"H200": 3600}, "monthly_budget": 1000})
@@ -166,7 +184,7 @@ def test_spend_survives_moves_deletes_and_restarts(make_flock, run_for):
     assert restarted.get(BUDGET).json() == after_delete
 
 
-def test_budgets_are_monthly(flock, api):
+def test_budgets_are_monthly(flock: FlockServer, api: Client) -> None:
     alice = flock.add_user("alice@lab.test")
     assert api.patch(BILLING, {"monthly_budget": 500}).status == 200
     this_month = api.get(BUDGET).json()["month"]
@@ -189,7 +207,7 @@ def dismissal(warning: dict) -> str:
     return f"{WARNINGS}/{warning['id']}/dismissal"
 
 
-def test_runs_without_gpu_time_count_for_nothing(api, run_for):
+def test_runs_without_gpu_time_count_for_nothing(api: Client, run_for: Callable[..., None]) -> None:
     cpu = json.dumps({"cpu_count": 4}).encode()
     run_for(api, "p", "gpu", 0.2)
     run_for(api, "p", "cpu", 0.2, metadata=cpu)
@@ -207,7 +225,9 @@ def test_runs_without_gpu_time_count_for_nothing(api, run_for):
     assert api.get(BUDGET).json()["unknown_gpu"] == {"runs": 0, "hours": 0}
 
 
-def test_warnings_can_be_dismissed_until_they_change(make_flock, run_for):
+def test_warnings_can_be_dismissed_until_they_change(
+    make_flock: Flocks, run_for: Callable[..., None]
+) -> None:
     server = make_flock()
     api = server.client()
     alice = server.add_user("alice@lab.test")
@@ -270,7 +290,9 @@ def test_warnings_can_be_dismissed_until_they_change(make_flock, run_for):
     )
 
 
-def test_budget_carries_no_warnings_and_members_no_gpu_details(flock, api, run_for):
+def test_budget_carries_no_warnings_and_members_no_gpu_details(
+    flock: FlockServer, api: Client, run_for: Callable[..., None]
+) -> None:
     alice = flock.add_user("alice@lab.test")
     flock.store.budgets.WARN_HOURS = 0
     run_for(api, "p", "r1", 0.1, metadata=None)
@@ -282,7 +304,9 @@ def test_budget_carries_no_warnings_and_members_no_gpu_details(flock, api, run_f
     assert member == {k: v for k, v in admin.items() if k not in ("unpriced", "unknown_gpu")}
 
 
-def test_admins_can_exclude_the_spend_of_deleted_projects(make_flock, run_for):
+def test_admins_can_exclude_the_spend_of_deleted_projects(
+    make_flock: Flocks, run_for: Callable[..., None]
+) -> None:
     server = make_flock()
     api = server.client()
     alice = server.add_user("alice@lab.test")

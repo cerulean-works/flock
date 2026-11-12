@@ -1,6 +1,9 @@
 """S3 keys (D55-D57, D60): issuing them, their lifetimes, and their revocation."""
 
+from __future__ import annotations
+
 import time
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -8,6 +11,12 @@ from app.api.src import s3_credentials
 from tests.app.conftest import Flocks, S3Flock
 from tests.app.utils import cli_login
 from tests.conftest import S3Server
+
+if TYPE_CHECKING:
+    from typing import Any
+
+    from tests.app.conftest import Client, FlockServer, Response, User
+
 
 CREDENTIALS = "/api/v1/s3/credentials"
 KEYS = "/api/v1/me/s3-keys"
@@ -20,11 +29,11 @@ def flock(make_flock: Flocks, s3_server: S3Server) -> S3Flock:
     return make_flock.s3(s3_server)
 
 
-def browser(server, user):
+def browser(server: FlockServer, user: User) -> Client:
     return server.client(token=user.signup["access_token"])
 
 
-def key_rows(server, user_id: int) -> list:
+def key_rows(server: FlockServer, user_id: int) -> list:
     return server.call(
         server.store.db.fetch(
             "SELECT access_key_id, session_pk, api_key_pk FROM s3_keys WHERE user_pk = $1 "
@@ -34,7 +43,7 @@ def key_rows(server, user_id: int) -> list:
     )
 
 
-def test_s3_is_off_without_its_settings(make_flock):
+def test_s3_is_off_without_its_settings(make_flock: Flocks) -> None:
     flock = make_flock()
     alice = flock.add_user("alice@lab.test")
     assert flock.anonymous().get("/api/v1/auth/config").json()["s3"] is None
@@ -51,12 +60,12 @@ def test_s3_is_off_without_its_settings(make_flock):
         assert got.json()["error"] == "S3 isn't enabled on this server"
 
 
-def test_auth_config_names_the_proxy(flock):
+def test_auth_config_names_the_proxy(flock: S3Flock) -> None:
     config = flock.anonymous().get("/api/v1/auth/config").json()
     assert config["s3"] == {"endpoint": flock.proxy.url, "region": "us-east-1"}
 
 
-def test_a_cli_token_gets_an_ephemeral_key_of_its_default_org(flock):
+def test_a_cli_token_gets_an_ephemeral_key_of_its_default_org(flock: S3Flock) -> None:
     alice = flock.add_user("alice@lab.test")
     token = cli_login(flock, browser(flock, alice), "gpu-node-7")
     cli = flock.client(token=token)
@@ -102,7 +111,7 @@ def test_a_cli_token_gets_an_ephemeral_key_of_its_default_org(flock):
     assert "secret_access_key" not in first
 
 
-def test_keys_cover_one_org_the_caller_belongs_to(flock):
+def test_keys_cover_one_org_the_caller_belongs_to(flock: S3Flock) -> None:
     alice = flock.add_user("alice@lab.test")
     assert flock.client().post("/api/v1/orgs", {"name": "lab"}).status == 201
     assert alice.api.post(CREDENTIALS, {"org": "lab"}).status == 404
@@ -112,7 +121,7 @@ def test_keys_cover_one_org_the_caller_belongs_to(flock):
     assert admin.post(CREDENTIALS, {"ttl": 0}).status == 422
 
 
-def test_keys_a_wandb_key_got_go_with_it(flock):
+def test_keys_a_wandb_key_got_go_with_it(flock: S3Flock) -> None:
     """wandb keys can't be exchanged any more (D72). Keys they got before still list, and
     end with them."""
     alice = flock.add_user("alice@lab.test")
@@ -134,7 +143,7 @@ def test_keys_a_wandb_key_got_go_with_it(flock):
     assert key_rows(flock, alice.id) == []
 
 
-def test_long_lived_keys_need_a_browser_and_respect_the_maximum(flock):
+def test_long_lived_keys_need_a_browser_and_respect_the_maximum(flock: S3Flock) -> None:
     alice = flock.add_user("alice@lab.test")
     cli = flock.client(token=cli_login(flock, browser(flock, alice)))
     web = browser(flock, alice)
@@ -170,12 +179,12 @@ def test_long_lived_keys_need_a_browser_and_respect_the_maximum(flock):
     assert [k["name"] for k in cli.get(KEYS).json()["keys"]] == ["forever"]
 
 
-def test_the_two_lifetimes(flock):
+def test_the_two_lifetimes(flock: S3Flock) -> None:
     admin = flock.client()
     org = admin.get("/api/v1/orgs/flock").json()
     assert (org["s3_ephemeral_ttl"], org["s3_key_max_ttl"]) == (8 * HOUR, 30 * DAY)
 
-    def patch(**body):
+    def patch(**body: Any) -> Response:
         return admin.patch("/api/v1/orgs/flock", body)
 
     assert patch(s3_ephemeral_ttl=31 * DAY).status == 422  # longer than the maximum
@@ -197,7 +206,7 @@ def test_the_two_lifetimes(flock):
     assert member.api.patch("/api/v1/orgs/flock", {"s3_ephemeral_ttl": HOUR}).status == 403
 
 
-def test_a_lower_maximum_shortens_existing_keys(flock):
+def test_a_lower_maximum_shortens_existing_keys(flock: S3Flock) -> None:
     alice = flock.add_user("alice@lab.test")
     web = browser(flock, alice)
     key = web.post(KEYS, {"name": "notebook", "ttl": 30 * DAY}).json()
@@ -215,7 +224,7 @@ def test_a_lower_maximum_shortens_existing_keys(flock):
     assert abs(listed["expires_at"] - (time.time() + 5 * DAY)) < 60
 
 
-def test_keys_go_with_the_cli_session_that_got_them(flock):
+def test_keys_go_with_the_cli_session_that_got_them(flock: S3Flock) -> None:
     alice = flock.add_user("alice@lab.test")
     web = browser(flock, alice)
     tokens = {name: cli_login(flock, web, name) for name in ("laptop", "node", "box")}
@@ -240,7 +249,7 @@ def test_keys_go_with_the_cli_session_that_got_them(flock):
     assert [k["id"] for k in web.get(KEYS).json()["keys"]] == [long_lived["id"]]
 
 
-def test_a_password_reset_ends_cli_keys(flock):
+def test_a_password_reset_ends_cli_keys(flock: S3Flock) -> None:
     alice = flock.add_user("alice@lab.test")
     flock.credentials(flock.client(token=cli_login(flock, browser(flock, alice))))
     assert len(key_rows(flock, alice.id)) == 1
@@ -251,7 +260,7 @@ def test_a_password_reset_ends_cli_keys(flock):
     assert key_rows(flock, alice.id) == []
 
 
-def test_the_sweep_deletes_expired_keys(flock):
+def test_the_sweep_deletes_expired_keys(flock: S3Flock) -> None:
     alice = flock.add_user("alice@lab.test")
     short = flock.credentials(alice.api, ttl=60)
     kept = flock.credentials(alice.api)

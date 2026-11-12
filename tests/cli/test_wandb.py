@@ -1,18 +1,30 @@
 """`flock login` pointing the wandb SDK at Flock (D52)."""
 
+from __future__ import annotations
+
 import socket
 import sys
+from typing import TYPE_CHECKING
 
 import pytest
 
 from flock.cli import credentials
 from flock.cli import login as login_module
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from click.testing import Result
+
+    from tests.app.conftest import FlockServer, User
+    from tests.cli.conftest import Browser
+
+
 QUESTION = "Also log the wandb SDK in to this Flock server, for experiment tracking? [Y/n]"
 
 
 @pytest.fixture
-def wandb_logins(monkeypatch) -> list[dict]:
+def wandb_logins(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     """Replaces ``wandb.login`` with a fake that records its arguments."""
     wandb = pytest.importorskip("wandb")
     calls: list[dict] = []
@@ -20,14 +32,20 @@ def wandb_logins(monkeypatch) -> list[dict]:
     return calls
 
 
-def keys(user) -> list[str]:
+def keys(user: User) -> list[str]:
     return [k["name"] for k in user.api.get("/api/v1/me/wandb-keys").json()["keys"]]
 
 
 @pytest.mark.parametrize("answer", ["y\n", "\n"])  # the default is yes
 def test_yes_creates_a_key_and_logs_wandb_in(
-    server, alice, browser, flock_cli, monkeypatch, wandb_logins, answer
-):
+    server: FlockServer,
+    alice: User,
+    browser: Browser,
+    flock_cli: Callable[..., Result],
+    monkeypatch: pytest.MonkeyPatch,
+    wandb_logins: list[dict],
+    answer: str,
+) -> None:
     monkeypatch.setattr(login_module, "_terminal", lambda: True)
     approval = browser.answer()
     result = flock_cli("login", "--host", server.url, "--no-browser", input=answer)
@@ -50,8 +68,13 @@ def test_yes_creates_a_key_and_logs_wandb_in(
 
 @pytest.mark.parametrize("flag", [["--wandb"], []])
 def test_the_flag_or_no_terminal_skips_the_question(
-    server, alice, browser, flock_cli, wandb_logins, flag
-):
+    server: FlockServer,
+    alice: User,
+    browser: Browser,
+    flock_cli: Callable[..., Result],
+    wandb_logins: list[dict],
+    flag: list[str],
+) -> None:
     approval = browser.answer()
     result = flock_cli("login", "--host", server.url, *flag)  # no terminal: yes, unasked
     approval.join()
@@ -61,7 +84,15 @@ def test_the_flag_or_no_terminal_skips_the_question(
 
 
 @pytest.mark.parametrize("how", ["answer", "flag"])
-def test_no(server, alice, browser, flock_cli, monkeypatch, wandb_logins, how):
+def test_no(
+    server: FlockServer,
+    alice: User,
+    browser: Browser,
+    flock_cli: Callable[..., Result],
+    monkeypatch: pytest.MonkeyPatch,
+    wandb_logins: list[dict],
+    how: str,
+) -> None:
     monkeypatch.setattr(login_module, "_terminal", lambda: True)
     args = ["login", "--host", server.url, "--no-browser"]
     approval = browser.answer()
@@ -78,7 +109,14 @@ def test_no(server, alice, browser, flock_cli, monkeypatch, wandb_logins, how):
     assert saved is not None and "wandb_key" not in saved
 
 
-def test_already_logged_in(server, alice, browser, flock_cli, monkeypatch, wandb_logins):
+def test_already_logged_in(
+    server: FlockServer,
+    alice: User,
+    browser: Browser,
+    flock_cli: Callable[..., Result],
+    monkeypatch: pytest.MonkeyPatch,
+    wandb_logins: list[dict],
+) -> None:
     monkeypatch.setattr(login_module, "_terminal", lambda: True)
     monkeypatch.setenv("WANDB_BASE_URL", server.url)
     monkeypatch.setenv("WANDB_API_KEY", alice.api_key)
@@ -93,8 +131,13 @@ def test_already_logged_in(server, alice, browser, flock_cli, monkeypatch, wandb
 
 
 def test_a_wandb_key_that_no_longer_works_is_replaced(
-    server, alice, browser, flock_cli, monkeypatch, wandb_logins
-):
+    server: FlockServer,
+    alice: User,
+    browser: Browser,
+    flock_cli: Callable[..., Result],
+    monkeypatch: pytest.MonkeyPatch,
+    wandb_logins: list[dict],
+) -> None:
     monkeypatch.setenv("WANDB_BASE_URL", server.url)
     monkeypatch.setenv("WANDB_API_KEY", "flock-" + "0" * 48)
     approval = browser.answer()
@@ -105,7 +148,14 @@ def test_a_wandb_key_that_no_longer_works_is_replaced(
 
 
 @pytest.mark.parametrize("flag", [[], ["--wandb"]])
-def test_wandb_not_installed(server, alice, browser, flock_cli, monkeypatch, flag):
+def test_wandb_not_installed(
+    server: FlockServer,
+    alice: User,
+    browser: Browser,
+    flock_cli: Callable[..., Result],
+    monkeypatch: pytest.MonkeyPatch,
+    flag: list[str],
+) -> None:
     monkeypatch.setattr(login_module, "_terminal", lambda: True)
     monkeypatch.setitem(sys.modules, "wandb", None)  # import wandb raises ImportError
     approval = browser.answer()

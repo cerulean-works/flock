@@ -2,7 +2,7 @@
 
 import secrets
 import xml.etree.ElementTree as ET
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 from starlette.responses import Response
 
@@ -18,7 +18,9 @@ def dump(root: ET.Element) -> bytes:
     return b'<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root)
 
 
-def xml_response(root: ET.Element, status: int = 200, headers=None) -> Response:
+def xml_response(
+    root: ET.Element, status: int = 200, headers: Mapping[str, str] | None = None
+) -> Response:
     return Response(dump(root), status, headers, media_type="application/xml")
 
 

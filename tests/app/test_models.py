@@ -4,12 +4,14 @@ primary version (D107), deleting, the trash and retention (D109), the sweep (D10
 links to training runs (D106).
 Files are written through the S3 proxy with boto3, as the client will write them."""
 
+from __future__ import annotations
+
 import asyncio
 import base64
 import hashlib
 import json
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import asyncpg
 import boto3
@@ -20,6 +22,11 @@ from botocore.exceptions import ClientError
 from app.api.src.core.models import Models, digest
 from tests.app.conftest import Client, Flocks, FlockServer, S3Flock
 from tests.conftest import S3Server
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from contextlib import AbstractContextManager
+
 
 MODELS = "/api/v1/orgs/flock/models"
 MIB = 1024 * 1024
@@ -129,7 +136,9 @@ class Pusher:
         declared = [{"path": p, "size": len(d)} for p, d in files.items()]
         return self.api.post(f"{MODELS}/{name}/uploads", {"files": declared, **body})
 
-    def put(self, upload: dict, files: dict[str, bytes], hashes: dict[str, str] | None = None):
+    def put(
+        self, upload: dict, files: dict[str, bytes], hashes: dict[str, str] | None = None
+    ) -> None:
         for path, data in files.items():
             metadata = {"sha256": (hashes or {}).get(path, sha(data))}
             self.s3.put_object(
@@ -166,8 +175,8 @@ def pusher(flock: S3Flock) -> Pusher:
 
 
 def test_managed_bucket_is_created_adopted_and_kept(
-    make_flock: Flocks, s3_server: S3Server, wait_for
-):
+    make_flock: Flocks, s3_server: S3Server, wait_for: Callable[..., Any]
+) -> None:
     flock = make_flock.s3(s3_server)
     api = flock.client()
     buckets = {b["name"]: b for b in api.get("/api/v1/orgs/flock/buckets").json()["buckets"]}
@@ -216,7 +225,7 @@ def test_managed_bucket_is_created_adopted_and_kept(
     assert keys(restarted, old) == ["mine.txt"]
 
 
-def test_the_models_routes_create_a_missing_bucket(flock: S3Flock):
+def test_the_models_routes_create_a_missing_bucket(flock: S3Flock) -> None:
     flock.s3.client().delete_bucket(Bucket=upstream_name(flock))
     sql(flock, "DELETE FROM s3_buckets WHERE managed = 'models'")
     listed = flock.client().get(MODELS)
@@ -228,7 +237,9 @@ def test_the_models_routes_create_a_missing_bucket(flock: S3Flock):
 # ---------------------------------------------------------------------- the proxy (D97, D101)
 
 
-def test_the_proxy_lets_writes_only_into_the_caller_s_open_upload(flock: S3Flock, notification):
+def test_the_proxy_lets_writes_only_into_the_caller_s_open_upload(
+    flock: S3Flock, notification: Callable[..., AbstractContextManager[None]]
+) -> None:
     alice = flock.add_user("alice@lab.test")
     bob = flock.add_user("bob@lab.test")
     pusher = Pusher(flock, alice.api)
@@ -240,7 +251,7 @@ def test_the_proxy_lets_writes_only_into_the_caller_s_open_upload(flock: S3Flock
     s3 = pusher.s3
     message = "flock-models is written through flock models push"
 
-    def refused(call, *args, **kwargs) -> None:
+    def refused(call: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
         with pytest.raises(ClientError) as raised:
             call(*args, **kwargs)
         assert code(raised) == "AccessDenied"
@@ -312,7 +323,9 @@ def test_the_proxy_lets_writes_only_into_the_caller_s_open_upload(flock: S3Flock
     refused(s3.put_object, Bucket="flock-models", Key=other["prefix"] + "x", Body=b"x")
 
 
-def test_writes_touch_the_upload_s_activity(flock: S3Flock, pusher: Pusher, wait_for):
+def test_writes_touch_the_upload_s_activity(
+    flock: S3Flock, pusher: Pusher, wait_for: Callable[..., Any]
+) -> None:
     upload = pusher.open("m", single()).json()
     sql(
         flock,
@@ -336,7 +349,7 @@ def test_writes_touch_the_upload_s_activity(flock: S3Flock, pusher: Pusher, wait
 # ---------------------------------------------------------------------- uploads (D100)
 
 
-def test_open_commit_and_commit_again(flock: S3Flock, pusher: Pusher):
+def test_open_commit_and_commit_again(flock: S3Flock, pusher: Pusher) -> None:
     api = flock.client()
     files = sharded()
     opened = pusher.open("olmo2-1b", files, metadata={"lr": 0.001}, step=12)
@@ -378,7 +391,7 @@ def test_open_commit_and_commit_again(flock: S3Flock, pusher: Pusher):
     ]
 
 
-def test_opening_checks_names_and_files(flock: S3Flock, pusher: Pusher):
+def test_opening_checks_names_and_files(flock: S3Flock, pusher: Pusher) -> None:
     assert pusher.open("Bad_Name", single()).status == 422
     assert pusher.open("m", {"config.json": b"{}", "flock.json": b"{}"}).status == 422
     assert pusher.open("m", {**single(), "manifest.json": b"{}"}).status == 422
@@ -389,7 +402,7 @@ def test_opening_checks_names_and_files(flock: S3Flock, pusher: Pusher):
     assert flock.client().get(MODELS).json()["models"] == []
 
 
-def test_commit_refuses_what_wasnt_declared(flock: S3Flock, pusher: Pusher):
+def test_commit_refuses_what_wasnt_declared(flock: S3Flock, pusher: Pusher) -> None:
     files = single()
     upload = pusher.open("m", files).json()
     ulid, prefix = upload["ulid"], upload["prefix"]
@@ -442,7 +455,7 @@ def test_commit_refuses_what_wasnt_declared(flock: S3Flock, pusher: Pusher):
     )
 
 
-def test_commit_reads_the_safetensors_headers(flock: S3Flock, pusher: Pusher):
+def test_commit_reads_the_safetensors_headers(flock: S3Flock, pusher: Pusher) -> None:
     def refused(files: dict[str, bytes]) -> Any:
         upload = pusher.open("m", files).json()
         pusher.put(upload, files)
@@ -473,7 +486,7 @@ def test_commit_reads_the_safetensors_headers(flock: S3Flock, pusher: Pusher):
     assert answer.status == 422 and "isn't in the upload" in answer.json()["error"]
 
 
-def test_concurrent_commits_get_consecutive_numbers(flock: S3Flock, pusher: Pusher):
+def test_concurrent_commits_get_consecutive_numbers(flock: S3Flock, pusher: Pusher) -> None:
     files = single()
     uploads = []
     for _ in range(4):
@@ -501,7 +514,7 @@ def test_concurrent_commits_get_consecutive_numbers(flock: S3Flock, pusher: Push
     assert sorted(numbers) == [1, 2, 3, 4]
 
 
-def test_dedupe_key_returns_the_existing_version(flock: S3Flock, pusher: Pusher):
+def test_dedupe_key_returns_the_existing_version(flock: S3Flock, pusher: Pusher) -> None:
     files = single()
     first = pusher.push("m", files, dedupe_key="run:12000")
     again = pusher.open("m", files, dedupe_key="run:12000")
@@ -523,7 +536,7 @@ def test_dedupe_key_returns_the_existing_version(flock: S3Flock, pusher: Pusher)
     assert pusher.commit("m", b["ulid"], files).json()["number"] == 2
 
 
-def test_training_runs_are_linked(flock: S3Flock, pusher: Pusher):
+def test_training_runs_are_linked(flock: S3Flock, pusher: Pusher) -> None:
     api = flock.client()
     api.create_run("pretrain", "3k9x2")
     version = pusher.push("m", run="flock/pretrain/3k9x2", step=12000)
@@ -533,7 +546,7 @@ def test_training_runs_are_linked(flock: S3Flock, pusher: Pusher):
     assert unknown["run"] is None and unknown["number"] == 2
 
 
-def test_a_runs_versions(flock: S3Flock, pusher: Pusher):
+def test_a_runs_versions(flock: S3Flock, pusher: Pusher) -> None:
     api = flock.client()
     api.create_run("train", "t1")
     pusher.push("m", run="flock/train/t1", step=100, tags=["checkpoint-100"])
@@ -571,7 +584,7 @@ def test_a_runs_versions(flock: S3Flock, pusher: Pusher):
 # ---------------------------------------------------------------------- aborting and the sweep
 
 
-def test_abort_removes_what_landed(flock: S3Flock, pusher: Pusher):
+def test_abort_removes_what_landed(flock: S3Flock, pusher: Pusher) -> None:
     alice = flock.add_user("alice@lab.test")
     files = single()
     upload = pusher.open("m", files).json()
@@ -594,7 +607,7 @@ def test_abort_removes_what_landed(flock: S3Flock, pusher: Pusher):
 
 def test_sweep_expires_idle_uploads_and_removes_strays(
     flock: S3Flock, pusher: Pusher, monkeypatch: pytest.MonkeyPatch
-):
+) -> None:
     files = single()
     idle = pusher.open("m", files).json()
     pusher.put(idle, files)
@@ -634,7 +647,9 @@ def test_sweep_expires_idle_uploads_and_removes_strays(
     assert keys(flock, bucket, "m/u/01JD3KQ8000000000000000000/") == []
 
 
-def test_missing_manifests_are_written(flock: S3Flock, pusher: Pusher, monkeypatch):
+def test_missing_manifests_are_written(
+    flock: S3Flock, pusher: Pusher, monkeypatch: pytest.MonkeyPatch
+) -> None:
     upstream = flock.store.s3.upstream
     assert upstream is not None
     original = upstream.put_object
@@ -657,7 +672,7 @@ def test_missing_manifests_are_written(flock: S3Flock, pusher: Pusher, monkeypat
 # ---------------------------------------------------------------------- tags and the primary
 
 
-def test_tags(flock: S3Flock, pusher: Pusher):
+def test_tags(flock: S3Flock, pusher: Pusher) -> None:
     api = flock.client()
     pusher.push("m", tags=["checkpoint-1000", "latest"])
     pusher.push("m", tags=["checkpoint-2000", "latest"])  # latest moves at upload
@@ -694,7 +709,7 @@ def test_tags(flock: S3Flock, pusher: Pusher):
     ]
 
 
-def test_the_primary_version(flock: S3Flock, pusher: Pusher):
+def test_the_primary_version(flock: S3Flock, pusher: Pusher) -> None:
     api = flock.client()
     first = pusher.push("m")
     assert first["primary"] is True  # the first version
@@ -722,7 +737,7 @@ def test_the_primary_version(flock: S3Flock, pusher: Pusher):
 
 def test_versions_page_and_checkpoint_filter(
     flock: S3Flock, pusher: Pusher, monkeypatch: pytest.MonkeyPatch
-):
+) -> None:
     for step in (1, 2, 3):
         pusher.push("m", tags=[f"checkpoint-{step}"] if step != 2 else [])
     monkeypatch.setattr(models(flock), "VERSION_PAGE", 2)
@@ -739,7 +754,9 @@ def test_versions_page_and_checkpoint_filter(
 # ---------------------------------------------------------------------- deleting (D109)
 
 
-def test_deleting_and_restoring_versions(flock: S3Flock, pusher: Pusher, wait_for):
+def test_deleting_and_restoring_versions(
+    flock: S3Flock, pusher: Pusher, wait_for: Callable[..., Any]
+) -> None:
     api = flock.client()
     pusher.push("m", tags=["checkpoint-1"])
     second = pusher.push("m", tags=["checkpoint-2", "release"])
@@ -786,7 +803,9 @@ def test_deleting_and_restoring_versions(flock: S3Flock, pusher: Pusher, wait_fo
     assert pusher.push("m")["number"] == 5
 
 
-def test_deleting_and_restoring_models(flock: S3Flock, pusher: Pusher, wait_for):
+def test_deleting_and_restoring_models(
+    flock: S3Flock, pusher: Pusher, wait_for: Callable[..., Any]
+) -> None:
     api = flock.client()
     first = pusher.push("m", tags=["release"])
     pusher.push("m")
@@ -828,8 +847,8 @@ def test_deleting_and_restoring_models(flock: S3Flock, pusher: Pusher, wait_for)
 
 
 def test_sweep_empties_the_trash_after_14_days(
-    flock: S3Flock, pusher: Pusher, wait_for, monkeypatch: pytest.MonkeyPatch
-):
+    flock: S3Flock, pusher: Pusher, wait_for: Callable[..., Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
     api = flock.client()
     pusher.push("m")
     pusher.push("m")
@@ -858,7 +877,7 @@ def test_sweep_empties_the_trash_after_14_days(
     assert [m["name"] for m in api.get(MODELS).json()["models"]] == ["m"]
 
 
-def test_retention(flock: S3Flock, pusher: Pusher, wait_for):
+def test_retention(flock: S3Flock, pusher: Pusher, wait_for: Callable[..., Any]) -> None:
     api = flock.client()
     for step in range(1, 7):
         pusher.push("m", tags=[f"checkpoint-{step}"])
@@ -884,7 +903,7 @@ def test_retention(flock: S3Flock, pusher: Pusher, wait_for):
     )
 
 
-def test_the_dashboard_cant_write_files_into_flock_models(flock: S3Flock, pusher: Pusher):
+def test_the_dashboard_cant_write_files_into_flock_models(flock: S3Flock, pusher: Pusher) -> None:
     """The Storage tab's own writes go upstream with the global key, so the API refuses them in
     flock-models as the proxy refuses other clients' (D97)."""
     version = pusher.push("m")
@@ -903,7 +922,7 @@ def test_the_dashboard_cant_write_files_into_flock_models(flock: S3Flock, pusher
     assert api.get(f"{path}/objects", prefix=version["prefix"]).status == 200
 
 
-def test_a_non_member_gets_404(flock: S3Flock, pusher: Pusher):
+def test_a_non_member_gets_404(flock: S3Flock, pusher: Pusher) -> None:
     pusher.push("m")
     api = flock.client()
     assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
@@ -914,7 +933,7 @@ def test_a_non_member_gets_404(flock: S3Flock, pusher: Pusher):
     assert olga.api.get("/api/v1/orgs/lab/models").json()["models"] == []
 
 
-def test_deleting_an_org_removes_its_models(flock: S3Flock):
+def test_deleting_an_org_removes_its_models(flock: S3Flock) -> None:
     api = flock.client()
     assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
     declared = [{"path": p, "size": len(d)} for p, d in single().items()]
@@ -925,8 +944,8 @@ def test_deleting_an_org_removes_its_models(flock: S3Flock):
 
 
 def test_large_files_keep_their_metadata_through_the_trash(
-    flock: S3Flock, pusher: Pusher, wait_for, monkeypatch: pytest.MonkeyPatch
-):
+    flock: S3Flock, pusher: Pusher, wait_for: Callable[..., Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Files over the copy limit are copied in parts, which carry no metadata of their own."""
     monkeypatch.setattr(models(flock), "COPY_LIMIT", 16)
     api = flock.client()
@@ -946,7 +965,7 @@ def test_large_files_keep_their_metadata_through_the_trash(
 
 def test_multipart_uploads_through_the_proxy_keep_part_md5s_and_metadata(
     flock: S3Flock, pusher: Pusher
-):
+) -> None:
     """What resuming relies on (D102): ListParts gives each part's MD5 as its ETag, and the
     completed object keeps the x-amz-meta-sha256 set when it was created."""
     big = [b"a" * (5 * MIB), b"b" * 10]

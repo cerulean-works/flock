@@ -1,15 +1,23 @@
+from __future__ import annotations
+
 import base64
 import json
 import re
 import threading
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote
 
 import pytest
 
 from app.api.src.core.wandb_source import parse_time
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from tests.app.conftest import Client, Flocks, FlockServer
+
 
 KEY = "wandb-test-key"
 CREATED = "2025-01-02T03:04:05"
@@ -202,15 +210,17 @@ def source(fake: FakeWandb, **fields: Any) -> dict[str, Any]:
     return {"entity": fake.entity, "api_key": KEY, "base_url": fake.url, **fields}
 
 
-def finished(api, wait_for, org: str = "lab") -> dict:
-    def done():
+def finished(api: Client, wait_for: Callable[..., Any], org: str = "lab") -> dict:
+    def done() -> dict[str, Any] | None:
         job = api.get(f"/api/v1/orgs/{org}/import").json()
         return job if job["state"] != "running" else None
 
     return wait_for(done)
 
 
-def test_create_org_imports_wandb_projects_and_runs(flock, api, wandb, wait_for):
+def test_create_org_imports_wandb_projects_and_runs(
+    flock: FlockServer, api: Client, wandb: FakeWandb, wait_for: Callable[..., Any]
+) -> None:
     alice = flock.add_user("alice@flock.test")
     me = api.get("/api/v1/me").json()["id"]
     wandb.add(
@@ -306,7 +316,9 @@ def test_create_org_imports_wandb_projects_and_runs(flock, api, wandb, wait_for)
     assert alice.api.get("/api/v1/orgs/lab/import").status == 404  # not a member
 
 
-def test_import_problems_are_refused_before_creating_the_org(flock, api, wandb):
+def test_import_problems_are_refused_before_creating_the_org(
+    flock: FlockServer, api: Client, wandb: FakeWandb
+) -> None:
     bad_key = api.post("/api/v1/orgs", {"name": "lab", "wandb": source(wandb, api_key="nope")})
     assert bad_key.status == 400
     assert bad_key.json()["error"] == "W&B rejected the API key"
@@ -325,7 +337,9 @@ def test_import_problems_are_refused_before_creating_the_org(flock, api, wandb):
     assert refused.status == 403
 
 
-def test_failed_runs_are_counted_and_imports_resume(flock, api, wandb, wait_for):
+def test_failed_runs_are_counted_and_imports_resume(
+    flock: FlockServer, api: Client, wandb: FakeWandb, wait_for: Callable[..., Any]
+) -> None:
     logged = {"output.log": b"hello\n", "requirements.txt": b"torch\n"}
     wandb.add("p", *(wandb_run(f"r{i}", _files=logged) for i in range(5)))
     wandb.broken = {"r3"}
@@ -348,8 +362,8 @@ def test_failed_runs_are_counted_and_imports_resume(flock, api, wandb, wait_for)
 
 
 def test_running_imports_can_be_cancelled_or_stopped_by_deleting_the_org(
-    flock, api, wandb, wait_for
-):
+    flock: FlockServer, api: Client, wandb: FakeWandb, wait_for: Callable[..., Any]
+) -> None:
     wandb.add("p", wandb_run("r1"), wandb_run("r2"))
     wandb.gate.clear()  # history requests hang
     assert api.post("/api/v1/orgs", {"name": "lab", "wandb": source(wandb)}).status == 201
@@ -375,7 +389,9 @@ def test_running_imports_can_be_cancelled_or_stopped_by_deleting_the_org(
     wait_for(lambda: flock.store.imports.jobs == {})
 
 
-def test_imports_cut_short_by_a_restart_are_interrupted(make_flock, wandb, wait_for):
+def test_imports_cut_short_by_a_restart_are_interrupted(
+    make_flock: Flocks, wandb: FakeWandb, wait_for: Callable[..., Any]
+) -> None:
     server = make_flock()
     api = server.client()
     wandb.add("p", wandb_run("r1"))
@@ -395,7 +411,7 @@ def test_imports_cut_short_by_a_restart_are_interrupted(make_flock, wandb, wait_
     assert api.runs("p", entity="lab")["ids"] == ["r1"]
 
 
-def test_queries_use_only_fields_the_wandb_sdk_uses():
+def test_queries_use_only_fields_the_wandb_sdk_uses() -> None:
     """W&B refuses unknown fields; the run, project and file fields are the SDK's own."""
     pytest.importorskip("wandb")
     from wandb.apis._generated.operations import GET_PROJECTS_GQL
@@ -419,7 +435,9 @@ def test_queries_use_only_fields_the_wandb_sdk_uses():
         assert selected(query) <= FIELDS, selected(query) - FIELDS
 
 
-def test_a_file_that_cannot_be_downloaded_is_skipped(flock, api, wandb, wait_for):
+def test_a_file_that_cannot_be_downloaded_is_skipped(
+    flock: FlockServer, api: Client, wandb: FakeWandb, wait_for: Callable[..., Any]
+) -> None:
     wandb.add(
         "p",
         wandb_run("r1", _files={"output.log": b"hello\n", "requirements.txt": b"torch\n"}),
@@ -434,7 +452,9 @@ def test_a_file_that_cannot_be_downloaded_is_skipped(flock, api, wandb, wait_for
     assert api.get("/api/v1/projects/lab/p/runs/r1/logs").json()["lines"] == []
 
 
-def test_files_listed_but_not_stored_are_not_failures(flock, api, wandb, wait_for):
+def test_files_listed_but_not_stored_are_not_failures(
+    flock: FlockServer, api: Client, wandb: FakeWandb, wait_for: Callable[..., Any]
+) -> None:
     # As on wandb.ai: wandb-events.jsonl is listed with no content, and the system metrics
     # come from the run's events.
     events = [{"_runtime": t, "_timestamp": t, "system.cpu": t} for t in range(3)]

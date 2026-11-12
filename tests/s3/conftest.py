@@ -1,5 +1,7 @@
 """A flock with S3 on, its proxy, and helpers to reach buckets through it."""
 
+from __future__ import annotations
+
 import asyncio
 import itertools
 import secrets
@@ -7,7 +9,7 @@ import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import asyncpg
 import boto3
@@ -21,6 +23,9 @@ from botocore.exceptions import ClientError
 
 from tests.app.conftest import Client, Flocks, Postgres, S3Flock, User
 from tests.conftest import S3Server
+
+if TYPE_CHECKING:
+    from contextlib import AbstractContextManager
 
 
 @dataclass(frozen=True)
@@ -36,7 +41,7 @@ class PayloadAuth(S3SigV4Auth):
         super().__init__(credentials, "s3", "us-east-1")
         self.payload_hash = payload_hash
 
-    def payload(self, request):
+    def payload(self, request: pytest.FixtureRequest) -> str:
         return self.payload_hash or super().payload(request)
 
 
@@ -184,7 +189,9 @@ def env(make_module_flock: Flocks, s3_server: S3Server) -> S3Env:
 
 
 @pytest.fixture
-def invalidates(env: S3Env, notification):
+def invalidates(
+    env: S3Env, notification: Callable[..., AbstractContextManager[None]]
+) -> Callable[[str], AbstractContextManager[None]]:
     """Wait for the proxy to receive the mutation's real database notification."""
     bus = env.flock.proxy.app.state.proxy._directory.bus
 

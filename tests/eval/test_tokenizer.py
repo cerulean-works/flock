@@ -66,7 +66,7 @@ def model_file(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture(scope="module")
-def scorer(model_file) -> ScoringModel:
+def scorer(model_file: Path) -> ScoringModel:
     tokenizer = SentencePieceTokenizer(model_file)
     torch.manual_seed(0)
     config = LlamaConfig(
@@ -81,7 +81,7 @@ def scorer(model_file) -> ScoringModel:
     return ScoringModel(LlamaForCausalLM(config).eval(), tokenizer, name="tiny@0")
 
 
-def test_ids_equal_raw_encode_on_every_kind_of_text(model_file):
+def test_ids_equal_raw_encode_on_every_kind_of_text(model_file: Path) -> None:
     tokenizer = SentencePieceTokenizer(model_file)
     raw = SentencePieceProcessor(model_file=str(model_file))
     ids = tokenizer(TEXTS, add_special_tokens=False)["input_ids"]
@@ -92,7 +92,7 @@ def test_ids_equal_raw_encode_on_every_kind_of_text(model_file):
     assert raw.id_to_piece(ids[0][0]).startswith("▁")
 
 
-def test_literal_special_token_text_is_ordinary_pieces(model_file):
+def test_literal_special_token_text_is_ordinary_pieces(model_file: Path) -> None:
     tokenizer = SentencePieceTokenizer(model_file)
     special = {tokenizer.bos_token_id, tokenizer.eos_token_id, tokenizer.processor.unk_id()}
     ids = tokenizer(["a <s> b", "a </s> b", "a <unk> b"], add_special_tokens=False)["input_ids"]
@@ -100,13 +100,15 @@ def test_literal_special_token_text_is_ordinary_pieces(model_file):
         assert not special & set(text_ids)
 
 
-def test_asking_for_special_tokens_raises(model_file):
+def test_asking_for_special_tokens_raises(model_file: Path) -> None:
     tokenizer = SentencePieceTokenizer(model_file)
     with pytest.raises(ValueError, match="adds no special tokens"):
         tokenizer(["The quick brown fox"], add_special_tokens=True)
 
 
-def test_bos_and_eos_come_from_the_processor_and_may_be_absent(model_file, tmp_path):
+def test_bos_and_eos_come_from_the_processor_and_may_be_absent(
+    model_file: Path, tmp_path: Path
+) -> None:
     tokenizer = SentencePieceTokenizer(model_file)
     assert (tokenizer.bos_token_id, tokenizer.eos_token_id) == (1, 2)
 
@@ -114,7 +116,9 @@ def test_bos_and_eos_come_from_the_processor_and_may_be_absent(model_file, tmp_p
     assert (bare.bos_token_id, bare.eos_token_id) == (None, None)
 
 
-def test_a_tokenizer_model_in_another_format_is_an_error_not_another_tokenization(tmp_path):
+def test_a_tokenizer_model_in_another_format_is_an_error_not_another_tokenization(
+    tmp_path: Path,
+) -> None:
     # Llama 3's `tokenizer.model` is a tiktoken file: base64 of a token, then its rank.
     path = tmp_path / "tokenizer.model"
     path.write_text("IQ== 0\nIg== 1\n")
@@ -128,11 +132,11 @@ SENTINEL = SimpleNamespace(vocab_files_names={"tokenizer_file": "tokenizer.json"
 
 
 @pytest.fixture
-def auto(monkeypatch) -> list[tuple[str, str]]:
+def auto(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
     """Stands in for `AutoTokenizer`, and returns what it was asked to load."""
     asked = []
 
-    def from_pretrained(repo, revision):
+    def from_pretrained(repo: str, revision: str) -> object:
         asked.append((repo, revision))
         return SENTINEL
 
@@ -141,12 +145,14 @@ def auto(monkeypatch) -> list[tuple[str, str]]:
 
 
 @pytest.fixture
-def offline_cache(tmp_path, monkeypatch) -> Callable[..., None]:
+def offline_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Callable[..., None]:
     """Returns a function that writes `org/repo` into an empty Hub cache, with the Hub unreachable: `cached` files are in the snapshot, and `absent` ones are recorded as not in the repo, as a 404 records them."""
     monkeypatch.setattr(constants, "HF_HUB_CACHE", str(tmp_path))
     monkeypatch.setattr(constants, "HF_HUB_OFFLINE", True)
 
-    def write(cached: Sequence[str] = (), absent: Sequence[str] = (), source: Path | None = None):
+    def write(
+        cached: Sequence[str] = (), absent: Sequence[str] = (), source: Path | None = None
+    ) -> None:
         repo = tmp_path / "models--org--repo"
         (repo / "snapshots" / SHA).mkdir(parents=True, exist_ok=True)
         (repo / ".no_exist" / SHA).mkdir(parents=True, exist_ok=True)
@@ -159,15 +165,17 @@ def offline_cache(tmp_path, monkeypatch) -> Callable[..., None]:
     return write
 
 
-def test_a_repo_recorded_without_tokenizer_json_gets_sentencepiece(model_file, offline_cache, auto):
+def test_a_repo_recorded_without_tokenizer_json_gets_sentencepiece(
+    model_file: Path, offline_cache: Callable[..., None], auto: list[tuple[str, str]]
+) -> None:
     offline_cache(["tokenizer.model"], ["tokenizer.json"], model_file)
     assert isinstance(load_tokenizer(REF), SentencePieceTokenizer)
     assert auto == []
 
 
 def test_an_interrupted_download_does_not_look_like_a_sentencepiece_only_repo(
-    model_file, offline_cache, auto
-):
+    model_file: Path, offline_cache: Callable[..., None], auto: list[tuple[str, str]]
+) -> None:
     # `tokenizer.model` landed, and nothing says the repo has no `tokenizer.json`.
     offline_cache(["tokenizer.model"], source=model_file)
     with pytest.raises(LocalEntryNotFoundError):
@@ -175,27 +183,35 @@ def test_an_interrupted_download_does_not_look_like_a_sentencepiece_only_repo(
     assert auto == []
 
 
-def test_tokenizer_json_decides_without_fetching_tokenizer_model(offline_cache, auto):
+def test_tokenizer_json_decides_without_fetching_tokenizer_model(
+    offline_cache: Callable[..., None], auto: list[tuple[str, str]]
+) -> None:
     # Offline, asking for the uncached `tokenizer.model` would raise.
     offline_cache(["tokenizer.json"])
     assert load_tokenizer(REF) is SENTINEL
     assert auto == [("org/repo", SHA)]
 
 
-def test_a_repo_with_neither_file_goes_to_auto_tokenizer(offline_cache, auto):
+def test_a_repo_with_neither_file_goes_to_auto_tokenizer(
+    offline_cache: Callable[..., None], auto: list[tuple[str, str]]
+) -> None:
     # Nothing records `tokenizer.model`: only transformers has loaded this repo.
     offline_cache(["vocab.json", "merges.txt"], ["tokenizer.json"])
     assert load_tokenizer(REF) is SENTINEL
 
 
-def test_an_unrecorded_cache_without_tokenizer_model_goes_to_auto_tokenizer(offline_cache, auto):
+def test_an_unrecorded_cache_without_tokenizer_model_goes_to_auto_tokenizer(
+    offline_cache: Callable[..., None], auto: list[tuple[str, str]]
+) -> None:
     # As `hf download` leaves such a repo: no records at all.
     offline_cache(["vocab.json", "merges.txt"])
     assert load_tokenizer(REF) is SENTINEL
 
 
-def test_a_file_the_hub_answers_404_for_is_absent(model_file, monkeypatch, auto):
-    def download(repo, filename, revision):
+def test_a_file_the_hub_answers_404_for_is_absent(
+    model_file: Path, monkeypatch: pytest.MonkeyPatch, auto: list[tuple[str, str]]
+) -> None:
+    def download(repo: str, filename: str, revision: str) -> str:
         if filename == "tokenizer.model":
             return str(model_file)
         raise RemoteEntryNotFoundError("404", response=Mock())
@@ -206,8 +222,10 @@ def test_a_file_the_hub_answers_404_for_is_absent(model_file, monkeypatch, auto)
 
 
 @pytest.mark.parametrize("failing", ["tokenizer.json", "tokenizer.model"])
-def test_a_failed_hub_request_chooses_nothing(failing, model_file, monkeypatch, auto):
-    def download(repo, filename, revision):
+def test_a_failed_hub_request_chooses_nothing(
+    failing: str, model_file: Path, monkeypatch: pytest.MonkeyPatch, auto: list[tuple[str, str]]
+) -> None:
+    def download(repo: str, filename: str, revision: str) -> str:
         if filename == failing:
             raise LocalEntryNotFoundError("timed out")
         if filename == "tokenizer.model":
@@ -231,7 +249,9 @@ def test_a_failed_hub_request_chooses_nothing(failing, model_file, monkeypatch, 
         ("SpeechT5Tokenizer", "spm_char.model"),
     ],
 )
-def test_a_conversion_under_another_name_is_refused(tokenizer_class, name, model_file, tmp_path):
+def test_a_conversion_under_another_name_is_refused(
+    tokenizer_class: str, name: str, model_file: Path, tmp_path: Path
+) -> None:
     (tmp_path / name).write_bytes(model_file.read_bytes())
     (tmp_path / "tokenizer_config.json").write_text(
         json.dumps({"tokenizer_class": tokenizer_class})
@@ -240,13 +260,17 @@ def test_a_conversion_under_another_name_is_refused(tokenizer_class, name, model
         load_tokenizer(ModelRef(str(tmp_path), SHA))
 
 
-def test_another_name_beside_tokenizer_json_goes_to_auto_tokenizer(tmp_path, auto):
+def test_another_name_beside_tokenizer_json_goes_to_auto_tokenizer(
+    tmp_path: Path, auto: list[tuple[str, str]]
+) -> None:
     (tmp_path / "spiece.model").write_bytes(b"")
     (tmp_path / "tokenizer.json").write_text("{}")
     assert load_tokenizer(ModelRef(str(tmp_path), SHA)) is SENTINEL
 
 
-def test_a_local_folder_chooses_by_its_own_files(model_file, tmp_path, auto):
+def test_a_local_folder_chooses_by_its_own_files(
+    model_file: Path, tmp_path: Path, auto: list[tuple[str, str]]
+) -> None:
     # Not a valid Hub repo id, so reaching the Hub would raise.
     assert isinstance(load_tokenizer(ModelRef(str(model_file.parent), SHA)), SentencePieceTokenizer)
 
@@ -255,7 +279,9 @@ def test_a_local_folder_chooses_by_its_own_files(model_file, tmp_path, auto):
     assert load_tokenizer(ModelRef(str(tmp_path), SHA)) is SENTINEL
 
 
-def test_a_resegmented_context_is_refused(scorer, model_file, monkeypatch):
+def test_a_resegmented_context_is_refused(
+    scorer: ScoringModel, model_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tokenizer = SentencePieceTokenizer(model_file)
     # A unigram model does this: the added text merges the context's last pieces into one.
     ids = {"黃色": [5, 6], "黃色的": [7], "黃色的花": [7, 8], "紅": [9], "紅色": [9, 10]}
@@ -269,7 +295,9 @@ def test_a_resegmented_context_is_refused(scorer, model_file, monkeypatch):
             resegmented.encode(Request("黃色", continuation))
 
 
-def test_add_bos_starts_the_context_and_the_split_check_ignores_it(scorer, model_file, monkeypatch):
+def test_add_bos_starts_the_context_and_the_split_check_ignores_it(
+    scorer: ScoringModel, model_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tokenizer = SentencePieceTokenizer(model_file)
     ids = {"黃色": [5, 6], "黃色的": [7], "紅": [9], "紅色": [9, 10]}
     processor = SimpleNamespace(encode=lambda texts: [ids[text] for text in texts])
@@ -282,13 +310,15 @@ def test_add_bos_starts_the_context_and_the_split_check_ignores_it(scorer, model
         with_bos.encode(Request("黃色", "的"))
 
 
-def test_add_bos_needs_a_bos_token_in_the_sentencepiece_model(scorer, tmp_path):
+def test_add_bos_needs_a_bos_token_in_the_sentencepiece_model(
+    scorer: ScoringModel, tmp_path: Path
+) -> None:
     no_bos = SentencePieceTokenizer(train(tmp_path / "tokenizer.model", bos_id=-1))
     with pytest.raises(ValueError, match="add_bos is set, but the tokenizer has no BOS token"):
         ScoringModel(scorer.model, no_bos, name="tiny@0", add_bos=True)
 
 
-def test_a_context_that_tokenizes_to_nothing_gets_the_prefix_token(scorer):
+def test_a_context_that_tokenizes_to_nothing_gets_the_prefix_token(scorer: ScoringModel) -> None:
     tokenizer = scorer.tokenizer
     # The tiny model's default normalizer drops this character.
     assert tokenizer(["\u200b"], add_special_tokens=False)["input_ids"] == [[]]
@@ -297,7 +327,7 @@ def test_a_context_that_tokenizes_to_nothing_gets_the_prefix_token(scorer):
     assert scorer.encode(Request("\u200b", " Paris")) == ([tokenizer.bos_token_id], joined)
 
 
-def test_a_multiple_choice_request_scores_end_to_end(scorer):
+def test_a_multiple_choice_request_scores_end_to_end(scorer: ScoringModel) -> None:
     requests = [
         Request("Question: Which gas do plants take in?\nAnswer:", " carbon dioxide"),
         Request("Question: 臺灣最高的山是哪一座？\nAnswer:", " 玉山"),
@@ -319,7 +349,7 @@ def test_a_multiple_choice_request_scores_end_to_end(scorer):
         assert math.isclose(scores.logprob[i].item(), expected, abs_tol=2e-4)
 
 
-def test_a_rolling_text_scores_end_to_end(scorer):
+def test_a_rolling_text_scores_end_to_end(scorer: ScoringModel) -> None:
     text = " ".join(CORPUS)
     ids = scorer.tokenizer([text], add_special_tokens=False)["input_ids"][0]
     assert len(ids) > 2 * 8  # several windows of 8 tokens

@@ -1,15 +1,25 @@
+from __future__ import annotations
+
 import time
+from typing import TYPE_CHECKING
 
 import jwt
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from contextlib import AbstractContextManager
+
+    from tests.app.conftest import Flocks, FlockServer, Response
+
 
 ME = "/api/v1/me"
 
 
-def login(server, email: str, password: str):
+def login(server: FlockServer, email: str, password: str) -> Response:
     return server.anonymous().post("/api/v1/auth/login", {"email": email, "password": password})
 
 
-def test_the_first_signup_becomes_the_super_admin(make_flock):
+def test_the_first_signup_becomes_the_super_admin(make_flock: Flocks) -> None:
     server = make_flock(bootstrap=False)
     anon = server.anonymous()
     config = anon.get("/api/v1/auth/config").json()
@@ -47,7 +57,7 @@ def test_the_first_signup_becomes_the_super_admin(make_flock):
     assert login(server, "ROOT@x.io", "rootroot").status == 200
 
 
-def test_setting_up_before_any_account_exists(make_flock):
+def test_setting_up_before_any_account_exists(make_flock: Flocks) -> None:
     """The dashboard's setup: signing in first is refused like any wrong password (nobody to
     sign in as), then the super admin signs up without an org and creates its first one."""
     server = make_flock(bootstrap=False)
@@ -87,7 +97,9 @@ def test_setting_up_before_any_account_exists(make_flock):
     assert login(server, "root@x.io", "rootroot").status == 200
 
 
-def test_login_refresh_and_logout(flock, notification):
+def test_login_refresh_and_logout(
+    flock: FlockServer, notification: Callable[..., AbstractContextManager[None]]
+) -> None:
     alice = flock.add_user("alice@lab.test")
     assert login(flock, alice.email, "wrong password").status == 401
     assert login(flock, "nobody@lab.test", alice.password).status == 401
@@ -114,7 +126,7 @@ def test_login_refresh_and_logout(flock, notification):
     assert gone.status == 401
 
 
-def test_access_tokens_expire_and_must_be_ours(make_flock):
+def test_access_tokens_expire_and_must_be_ours(make_flock: Flocks) -> None:
     server = make_flock(access_token_ttl=120)
     alice = server.add_user("alice@lab.test")
     tokens = alice.signup
@@ -138,7 +150,7 @@ def test_access_tokens_expire_and_must_be_ours(make_flock):
     assert server.client(token=refreshed.json()["access_token"]).get(ME).status == 200
 
 
-def test_changing_the_password_ends_other_sessions(flock):
+def test_changing_the_password_ends_other_sessions(flock: FlockServer) -> None:
     alice = flock.add_user("alice@lab.test")
     here = flock.client(token=login(flock, alice.email, alice.password).json()["access_token"])
     there = flock.client(token=login(flock, alice.email, alice.password).json()["access_token"])
@@ -154,7 +166,7 @@ def test_changing_the_password_ends_other_sessions(flock):
     assert login(flock, alice.email, "new password").status == 200
 
 
-def test_me(flock):
+def test_me(flock: FlockServer) -> None:
     alice = flock.add_user("alice@lab.test")
     assert flock.client().post("/api/v1/orgs", {"name": "lab"}).status == 201
     assert alice.api.patch(ME, {"default_org": "lab"}).status == 404  # not a member
@@ -163,7 +175,7 @@ def test_me(flock):
     assert alice.api.patch(ME, {"email": "x@y.z"}).status == 422
 
 
-def test_accounts_survive_a_restart(make_flock):
+def test_accounts_survive_a_restart(make_flock: Flocks) -> None:
     server = make_flock()
     alice = server.add_user("alice@lab.test")
     tokens = login(server, alice.email, alice.password).json()
@@ -178,7 +190,7 @@ def test_accounts_survive_a_restart(make_flock):
     assert login(restarted, alice.email, alice.password).status == 200
 
 
-def test_configured_jwt_secret_signs_tokens(make_flock):
+def test_configured_jwt_secret_signs_tokens(make_flock: Flocks) -> None:
     secret = "configured-secret-0123456789abcdef"
     server = make_flock(jwt_secret=secret)
     alice = server.add_user("alice@lab.test")

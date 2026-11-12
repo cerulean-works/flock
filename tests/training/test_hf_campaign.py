@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import hashlib
+from typing import TYPE_CHECKING
 
 import pytest
 import torch
@@ -19,18 +22,22 @@ from flock.training.experiments.hf_campaign.config import existing_config
 from flock.training.experiments.hf_campaign.runtime import CpuExperiment
 from flock.training.experiments.hf_campaign.stream import Pool, TargetStream
 
+if TYPE_CHECKING:
+    from pathlib import Path
+    from typing import Any
+
 
 class FixtureEncoder:
-    def __init__(self):
+    def __init__(self) -> None:
         self.calls = []
 
-    def encode(self, text, *, add_special_tokens):
+    def encode(self, text: str, *, add_special_tokens: bool) -> list[int]:
         assert not add_special_tokens
         self.calls.append(text)
         return [int(word) for word in text.split()]
 
 
-def record(name, text, **extra):
+def record(name: str, text: str, **extra: Any) -> dict[str, Any]:
     return {
         "id": name,
         "family_id": name,
@@ -45,7 +52,7 @@ def record(name, text, **extra):
     }
 
 
-def stream(block_size=4, quota=32):
+def stream(block_size: int = 4, quota: int = 32) -> TargetStream:
     pools = []
     for name, bucket in [("native", "tc_native"), ("english", "en")]:
         rows = Dataset.from_list([record(f"{name}-{i}", "2 3 4 5 6 7 8") for i in range(12)])
@@ -61,7 +68,7 @@ def stream(block_size=4, quota=32):
     )
 
 
-def tiny_config():
+def tiny_config() -> Olmo2Config:
     config = Olmo2Config(
         vocab_size=16,
         hidden_size=16,
@@ -78,7 +85,7 @@ def tiny_config():
     return config
 
 
-def test_selected_config_meta_count():
+def test_selected_config_meta_count() -> None:
     config = existing_config()
     with torch.device("meta"):
         model = Olmo2ForCausalLM(config)
@@ -90,7 +97,7 @@ def test_selected_config_meta_count():
 
 
 @pytest.mark.parametrize("length", [1, 3, 4, 7])
-def test_stream_conserves_targets_and_resume(length):
+def test_stream_conserves_targets_and_resume(length: int) -> None:
     producer = stream(length, quota=17)
     first = producer.blocks("tc", 7)
     saved = producer.state_dict()
@@ -112,7 +119,7 @@ def test_stream_conserves_targets_and_resume(length):
         changed.load_state_dict(saved)
 
 
-def test_whole_document_exclusion_precedes_tokenization():
+def test_whole_document_exclusion_precedes_tokenization() -> None:
     encoder = FixtureEncoder()
     rows = [record("heldout", "2 99 4"), record("dev", "5", split="test"), record("ok", "6 7")]
     source = TargetStream(
@@ -130,7 +137,7 @@ def test_whole_document_exclusion_precedes_tokenization():
     assert source.state_dict()["rejected"] == 2
 
 
-def test_converted_original_and_receipts_are_checked():
+def test_converted_original_and_receipts_are_checked() -> None:
     rows = [
         record(
             "rejected",
@@ -163,7 +170,7 @@ def test_converted_original_and_receipts_are_checked():
     assert source.counters == {"tc_converted": 2}
 
 
-def test_empty_whitespace_exhaustion_and_literal_eos():
+def test_empty_whitespace_exhaustion_and_literal_eos() -> None:
     source = TargetStream(
         [
             Pool(
@@ -187,7 +194,7 @@ def test_empty_whitespace_exhaustion_and_literal_eos():
         source.blocks("tc", 1)
 
 
-def test_optimizer_resume_prefetch_corruption_and_export(tmp_path):
+def test_optimizer_resume_prefetch_corruption_and_export(tmp_path: Path) -> None:
     experiment = CpuExperiment(tiny_config(), stream(), seed=17)
     experiment.update(tc_targets=5, en_targets=5)
     experiment.checkpoint(tmp_path / "checkpoint")
@@ -244,7 +251,7 @@ def test_optimizer_resume_prefetch_corruption_and_export(tmp_path):
         restored.resume(tmp_path / "checkpoint")
 
 
-def test_duplicate_family_is_rejected_before_encoder():
+def test_duplicate_family_is_rejected_before_encoder() -> None:
     encoder = FixtureEncoder()
     rows = [record("first", "2 3", family_id="same"), record("mirror", "4 5", family_id="same")]
     producer = TargetStream(
@@ -262,7 +269,7 @@ def test_duplicate_family_is_rejected_before_encoder():
     assert encoder.calls == ["2 3"]
 
 
-def test_aligned_loss_uses_every_target_and_exact_terminal_budget():
+def test_aligned_loss_uses_every_target_and_exact_terminal_budget() -> None:
     experiment = CpuExperiment(tiny_config(), stream(), seed=17, total_targets=10, warmup_targets=2)
     oracle = stream()
     blocks = oracle.blocks("tc", 3) + oracle.blocks("en", 3)
@@ -282,7 +289,7 @@ def test_aligned_loss_uses_every_target_and_exact_terminal_budget():
         experiment.update(tc_targets=1, en_targets=1)
 
 
-def test_nullable_mixed_schema_and_missing_converted_original_quarantine():
+def test_nullable_mixed_schema_and_missing_converted_original_quarantine() -> None:
     encoder = FixtureEncoder()
     native = Dataset.from_list([record("native", "2 3", original_text=None)])
     converted = Dataset.from_list(

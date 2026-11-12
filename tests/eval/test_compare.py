@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import dataclasses
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from click.testing import CliRunner
@@ -11,6 +13,10 @@ from flock.eval.compare import Breach, compare
 from flock.eval.provenance import Provenance
 from flock.eval.results import Results, SuiteResult, TaskResult
 from flock.eval.tasks import Dataset, Truncation
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 
 PROVENANCE = Provenance(
     model="allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf",
@@ -49,12 +55,14 @@ BANK = Results(PROVENANCE, [ARC, PIQA], [SUITE])
 
 
 @pytest.fixture
-def write(tmp_path):
+def write(tmp_path: Path) -> Callable[[str, Results], Path]:
     """Writes results as `<name>/results.json` and returns its path."""
     return lambda name, results: results.write(tmp_path / name)
 
 
-def test_a_rerun_with_equal_scores_passes_whatever_its_timing(write):
+def test_a_rerun_with_equal_scores_passes_whatever_its_timing(
+    write: Callable[[str, Results], Path],
+) -> None:
     rerun = dataclasses.replace(BANK, tasks=[dataclasses.replace(ARC, seconds=99.0), PIQA])
 
     comparison = compare(write("bank", BANK), write("new", rerun))
@@ -65,7 +73,7 @@ def test_a_rerun_with_equal_scores_passes_whatever_its_timing(write):
     assert comparison.provenance == {}
 
 
-def test_every_changed_score_is_a_breach(write):
+def test_every_changed_score_is_a_breach(write: Callable[[str, Results], Path]) -> None:
     arc = dataclasses.replace(
         ARC,
         metrics={"acc_raw": 0.7, "acc_per_char": 0.752},
@@ -89,11 +97,13 @@ def test_every_changed_score_is_a_breach(write):
     assert comparison.provenance == {"flock_commit": ("abc123", "def456")}
 
 
-def test_an_accuracy_may_move_by_two_docs_and_bpb_by_a_relative_1e_4(write):
+def test_an_accuracy_may_move_by_two_docs_and_bpb_by_a_relative_1e_4(
+    write: Callable[[str, Results], Path],
+) -> None:
     arc = dataclasses.replace(ARC, metrics={"acc_raw": 0.7, "acc_per_char": 0.75, "bpb": 1.0})
     bank = write("bank", dataclasses.replace(BANK, tasks=[arc, PIQA]))
 
-    def rerun(acc_per_char, bpb):
+    def rerun(acc_per_char: float, bpb: float) -> Path:
         moved = dataclasses.replace(
             arc, metrics={"acc_raw": 0.7, "acc_per_char": acc_per_char, "bpb": bpb}
         )
@@ -106,7 +116,9 @@ def test_an_accuracy_may_move_by_two_docs_and_bpb_by_a_relative_1e_4(write):
     ]
 
 
-def test_a_suite_may_move_by_its_members_tolerances_combined_as_independent_errors(write):
+def test_a_suite_may_move_by_its_members_tolerances_combined_as_independent_errors(
+    write: Callable[[str, Results], Path],
+) -> None:
     # 2.5 docs (2 flips and half a step of slack) of 2000 and of 1000 are 0.00125 and 0.0025,
     # so sqrt(0.00125**2 + 0.0025**2) / 2 = 0.0013975 for the suite, and the same for a suite
     # holding it alone. Each member is read under its primary metric.
@@ -115,7 +127,7 @@ def test_a_suite_may_move_by_its_members_tolerances_combined_as_independent_erro
     outer = SuiteResult("toy", "hash-toy", ["toy:rc"], None, 0.675)
     bank = write("bank", Results(PROVENANCE, [arc, piqa], [SUITE, outer]))
 
-    def rerun(score):
+    def rerun(score: float) -> Path:
         suites = [dataclasses.replace(SUITE, score=score), dataclasses.replace(outer, score=score)]
         return write(f"new-{score}", Results(PROVENANCE, [arc, piqa], suites))
 
@@ -123,14 +135,16 @@ def test_a_suite_may_move_by_its_members_tolerances_combined_as_independent_erro
     assert [breach.name for breach in compare(bank, rerun(0.6765)).breaches] == ["toy:rc", "toy"]
 
 
-def test_a_bpb_suite_may_move_by_a_relative_1e_4_over_root_members(write):
+def test_a_bpb_suite_may_move_by_a_relative_1e_4_over_root_members(
+    write: Callable[[str, Results], Path],
+) -> None:
     # Two members with bpb 1.0 and a mean of 1.0: sqrt(2) * 1e-4 / 2, about 0.707e-4.
     arc = dataclasses.replace(ARC, metrics={"bpb": 1.0}, primary_metric="bpb")
     piqa = dataclasses.replace(PIQA, metrics={"bpb": 1.0}, primary_metric="bpb")
     suite = SuiteResult("toy:bpb", "hash-bpb", ["arc_easy", "piqa"], "bpb", 1.0)
     bank = write("bank", Results(PROVENANCE, [arc, piqa], [suite]))
 
-    def rerun(score):
+    def rerun(score: float) -> Path:
         moved = dataclasses.replace(suite, score=score)
         return write(f"new-{score}", Results(PROVENANCE, [arc, piqa], [moved]))
 
@@ -138,7 +152,7 @@ def test_a_bpb_suite_may_move_by_a_relative_1e_4_over_root_members(write):
     assert compare(bank, rerun(1.00008)).breaches == [Breach("toy:bpb", "score", 1.0, 1.00008)]
 
 
-def test_an_infinity_must_repeat_exactly(write):
+def test_an_infinity_must_repeat_exactly(write: Callable[[str, Results], Path]) -> None:
     inf = dataclasses.replace(ARC, metrics={"acc_per_char": 0.75, "bpb": float("inf")})
     bank = write("bank", dataclasses.replace(BANK, tasks=[inf, PIQA]))
     finite = dataclasses.replace(ARC, metrics={"acc_per_char": 0.75, "bpb": 1.0})
@@ -150,7 +164,9 @@ def test_an_infinity_must_repeat_exactly(write):
     ).breaches == [Breach("arc_easy", "metrics.bpb", None, 1.0)]
 
 
-def test_a_task_with_no_docs_must_repeat_its_metrics_exactly(write):
+def test_a_task_with_no_docs_must_repeat_its_metrics_exactly(
+    write: Callable[[str, Results], Path],
+) -> None:
     # No docs means no accuracy to move, and no division by zero.
     empty = dataclasses.replace(ARC, num_docs=0)
     bank = write("bank", dataclasses.replace(BANK, tasks=[empty, PIQA]))
@@ -174,7 +190,11 @@ def test_a_task_with_no_docs_must_repeat_its_metrics_exactly(write):
         ({"add_bos": True}, "provenance.add_bos"),
     ],
 )
-def test_runs_with_other_settings_are_refused(write, change, match):
+def test_runs_with_other_settings_are_refused(
+    write: Callable[[str, Results], Path],
+    change: dict[str, Any],
+    match: str,
+) -> None:
     rerun = dataclasses.replace(BANK, provenance=dataclasses.replace(PROVENANCE, **change))
 
     with pytest.raises(ValueError, match=f"different instrument: {match}"):
@@ -183,8 +203,8 @@ def test_runs_with_other_settings_are_refused(write, change, match):
 
 @pytest.mark.parametrize("change", [{"task_hash": "5e2d"}, {"limit": 10}])
 def test_a_task_scored_on_other_requests_is_listed_with_its_suites_and_the_rest_compared(
-    write, change
-):
+    write: Callable[[str, Results], Path], change: dict[str, str] | dict[str, int]
+) -> None:
     # PIQA's moved score is not a breach: it was scored on other requests. ARC still compares.
     # The suite's hash moves with PIQA's, as in a real file, and the suite is listed by member.
     piqa = dataclasses.replace(PIQA, metrics={"acc_raw": 0.5}, **change)
@@ -200,7 +220,9 @@ def test_a_task_scored_on_other_requests_is_listed_with_its_suites_and_the_rest_
     assert comparison.breaches == [Breach("arc_easy", "metrics.acc_per_char", 0.75, 0.8)]
 
 
-def test_tasks_and_suites_in_one_file_are_listed_not_compared(write):
+def test_tasks_and_suites_in_one_file_are_listed_not_compared(
+    write: Callable[[str, Results], Path],
+) -> None:
     other = dataclasses.replace(ARC, task="hellaswag", task_hash="77aa")
     rerun = Results(PROVENANCE, [other, ARC], [])
 
@@ -212,7 +234,9 @@ def test_tasks_and_suites_in_one_file_are_listed_not_compared(write):
     assert comparison.only_new == ["hellaswag"]
 
 
-def test_files_with_no_common_task_or_a_missing_key_are_refused(write, tmp_path):
+def test_files_with_no_common_task_or_a_missing_key_are_refused(
+    write: Callable[[str, Results], Path], tmp_path: Path
+) -> None:
     other = dataclasses.replace(ARC, task="hellaswag")
     bank = write("bank", BANK)
 
@@ -232,7 +256,9 @@ def test_files_with_no_common_task_or_a_missing_key_are_refused(write, tmp_path)
         compare(bank, tmp_path / "list.json")
 
 
-def test_cli_exits_0_on_equal_scores_1_on_a_breach_and_2_on_a_change_or_a_refusal(write):
+def test_cli_exits_0_on_equal_scores_1_on_a_breach_and_2_on_a_change_or_a_refusal(
+    write: Callable[[str, Results], Path],
+) -> None:
     bank = write("bank", BANK)
     moved = dataclasses.replace(PIQA, metrics={"acc_raw": 0.625})
     breach = write("breach", dataclasses.replace(BANK, tasks=[ARC, moved]))
@@ -270,7 +296,9 @@ def test_cli_exits_0_on_equal_scores_1_on_a_breach_and_2_on_a_change_or_a_refusa
     assert "refused: different instrument: provenance.dtype is 'float32'" in result.output
 
 
-def test_a_suite_averaging_another_metric_is_listed_as_changed(write):
+def test_a_suite_averaging_another_metric_is_listed_as_changed(
+    write: Callable[[str, Results], Path],
+) -> None:
     rerun = dataclasses.replace(BANK, suites=[dataclasses.replace(SUITE, metric="acc_raw")])
 
     comparison = compare(write("bank", BANK), write("new", rerun))
@@ -279,7 +307,9 @@ def test_a_suite_averaging_another_metric_is_listed_as_changed(write):
     assert comparison.tasks == ["arc_easy", "piqa"]
 
 
-def test_a_suite_with_another_hash_is_listed_unless_a_file_predates_suite_hashes(write, tmp_path):
+def test_a_suite_with_another_hash_is_listed_unless_a_file_predates_suite_hashes(
+    write: Callable[[str, Results], Path], tmp_path: Path
+) -> None:
     # Change only the suite's own hash: its members and every score are the same.
     rerun = dataclasses.replace(BANK, suites=[dataclasses.replace(SUITE, suite_hash="hash-rc2")])
 
@@ -311,7 +341,9 @@ def test_a_suite_with_another_hash_is_listed_unless_a_file_predates_suite_hashes
         compare(tmp_path / "old.json", new)
 
 
-def test_a_suite_holding_a_changed_member_at_any_depth_is_listed_in_old_files_too(write, tmp_path):
+def test_a_suite_holding_a_changed_member_at_any_depth_is_listed_in_old_files_too(
+    write: Callable[[str, Results], Path], tmp_path: Path
+) -> None:
     # A suite hash covers its members' hashes all the way down, and a file older than schema 5
     # has none, so the member rule must name the same suites. Here the bank's suite lacks the
     # changed task, as when a task joins a suite in the same change that moves its hash.
@@ -332,7 +364,9 @@ def test_a_suite_holding_a_changed_member_at_any_depth_is_listed_in_old_files_to
     assert (comparison.tasks, comparison.suites, comparison.breaches) == (["arc_easy"], [], [])
 
 
-def test_a_suite_holding_a_changed_suite_that_comes_after_it_in_the_bank_is_listed(write, tmp_path):
+def test_a_suite_holding_a_changed_suite_that_comes_after_it_in_the_bank_is_listed(
+    write: Callable[[str, Results], Path], tmp_path: Path
+) -> None:
     # Each file writes a suite after the suites it holds, but only its own: here `toy` holds
     # `toy:rc` in the new file only, so in the bank it comes first.
     bank = BANK.to_dict()
@@ -353,7 +387,9 @@ def test_a_suite_holding_a_changed_suite_that_comes_after_it_in_the_bank_is_list
     assert (comparison.suites, comparison.breaches) == ([], [])
 
 
-def test_a_repeated_nan_is_no_breach_but_a_new_one_is(write):
+def test_a_repeated_nan_is_no_breach_but_a_new_one_is(
+    write: Callable[[str, Results], Path],
+) -> None:
     nan = dataclasses.replace(PIQA, metrics={"acc_raw": float("nan")})
     bank = write("bank", dataclasses.replace(BANK, tasks=[ARC, nan]))
 
@@ -362,7 +398,9 @@ def test_a_repeated_nan_is_no_breach_but_a_new_one_is(write):
     assert breach[:3] == ("piqa", "metrics.acc_raw", 0.6)
 
 
-def test_a_file_that_is_not_json_is_refused_by_name(write, tmp_path):
+def test_a_file_that_is_not_json_is_refused_by_name(
+    write: Callable[[str, Results], Path], tmp_path: Path
+) -> None:
     broken = tmp_path / "broken.json"
     broken.write_text('{"provenance": ')  # a job killed while writing
 
@@ -370,7 +408,9 @@ def test_a_file_that_is_not_json_is_refused_by_name(write, tmp_path):
         compare(write("bank", BANK), broken)
 
 
-def test_a_suite_dropped_beside_a_task_of_its_name_is_listed(write):
+def test_a_suite_dropped_beside_a_task_of_its_name_is_listed(
+    write: Callable[[str, Results], Path],
+) -> None:
     # Names are paired within tasks and within suites, never across them.
     bank = Results(PROVENANCE, [ARC], [dataclasses.replace(SUITE, suite="arc_easy")])
 
@@ -379,7 +419,9 @@ def test_a_suite_dropped_beside_a_task_of_its_name_is_listed(write):
     assert comparison.only_banked == ["arc_easy"]
 
 
-def test_cli_prints_causes_then_one_sided_names_then_breaches(write):
+def test_cli_prints_causes_then_one_sided_names_then_breaches(
+    write: Callable[[str, Results], Path],
+) -> None:
     piqa = dataclasses.replace(PIQA, metrics={"acc_raw": 0.6, "bpb": 1.25})
     suite = dataclasses.replace(SUITE, members=["arc_easy"])
     hella = dataclasses.replace(ARC, task="hellaswag", task_hash="77aa")
@@ -398,7 +440,9 @@ def test_cli_prints_causes_then_one_sided_names_then_breaches(write):
     ]
 
 
-def test_cli_prints_the_tokenizers_and_datasets_versions_when_they_differ(write):
+def test_cli_prints_the_tokenizers_and_datasets_versions_when_they_differ(
+    write: Callable[[str, Results], Path],
+) -> None:
     provenance = dataclasses.replace(PROVENANCE, tokenizers="0.24.0", datasets="5.2.0")
     new = write("new", dataclasses.replace(BANK, provenance=provenance))
 
@@ -420,8 +464,8 @@ def test_cli_prints_the_tokenizers_and_datasets_versions_when_they_differ(write)
     ],
 )
 def test_a_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(
-    write, name, suite, dtype
-):
+    write: Callable[[str, Results], Path], name: str, suite: str, dtype: str
+) -> None:
     # Offline: a change to what `Results` writes, or to what `compare` reads, that a bank can
     # no longer pass fails here rather than after a GPU rerun. A bank's version may lag the
     # layout's: a bank is refreshed when its scores are meant to change, not in every schema bump
@@ -451,7 +495,9 @@ def test_a_bank_loads_in_the_current_layout_and_compares_equal_to_its_rewrite(
     assert comparison.provenance.keys() <= {"schema_version"}
 
 
-def test_a_file_without_model_digest_compares_with_one_whose_digest_is_none(write):
+def test_a_file_without_model_digest_compares_with_one_whose_digest_is_none(
+    write: Callable[[str, Results], Path],
+) -> None:
     # Results written before `model_digest` was added lack the key; a Hugging Face model's is
     # None, so the two compare.
     bank = write("bank", BANK)
@@ -462,7 +508,7 @@ def test_a_file_without_model_digest_compares_with_one_whose_digest_is_none(writ
     assert compare(bank, write("new", BANK)).breaches == []
 
 
-def test_a_file_without_add_bos_reads_as_no_bos(write):
+def test_a_file_without_add_bos_reads_as_no_bos(write: Callable[[str, Results], Path]) -> None:
     # Results written before `add_bos` was added lack the key, and no code before it added BOS.
     bank = write("bank", BANK)
     data = json.loads(bank.read_text())
@@ -476,7 +522,9 @@ def test_a_file_without_add_bos_reads_as_no_bos(write):
 
 
 @pytest.mark.parametrize("backend", ["EFFICIENT_ATTENTION", None])
-def test_a_file_without_sdpa_backend_compares_with_any_kernel(write, backend):
+def test_a_file_without_sdpa_backend_compares_with_any_kernel(
+    write: Callable[[str, Results], Path], backend: str | None
+) -> None:
     # Results written before the pin lack the key: PyTorch chose the kernel per batch, which is
     # unknown, not none. FP32 scores don't move with the kernel, so the run is not refused.
     bank = write("bank", BANK)

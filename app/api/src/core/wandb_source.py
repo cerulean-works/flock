@@ -289,7 +289,9 @@ class WandbSource:
                 return
             cursor = page.get("endCursor")
 
-    async def _run_field(self, query: str, entity: str, project: str, run: str, **variables):
+    async def _run_field(
+        self, query: str, entity: str, project: str, run: str, **variables: Any
+    ) -> dict[str, Any]:
         data = await self.query(query, entity=entity, project=project, run=run, **variables)
         found = (data.get("project") or {}).get("run")
         if found is None:

@@ -18,7 +18,7 @@ def git(cwd: Path, *args: str) -> str:
 
 
 @pytest.fixture
-def checkout(tmp_path, monkeypatch) -> Path:
+def checkout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A one-commit repository laid out like flock, with `provenance` pointed at its copy of the module and `FLOCK_COMMIT` unset."""
     # Inside a git hook these point at the real repository, which `git add` would then change.
     for name in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"):
@@ -34,7 +34,7 @@ def checkout(tmp_path, monkeypatch) -> Path:
     return tmp_path
 
 
-def test_untracked_files_count_only_under_flock(checkout):
+def test_untracked_files_count_only_under_flock(checkout: Path) -> None:
     head = git(checkout, "rev-parse", "HEAD")
     assert provenance.flock_commit() == head
 
@@ -55,12 +55,14 @@ def test_untracked_files_count_only_under_flock(checkout):
     assert provenance.flock_commit() == f"{head}-dirty"
 
 
-def test_a_changed_tracked_file_makes_the_commit_dirty(checkout):
+def test_a_changed_tracked_file_makes_the_commit_dirty(checkout: Path) -> None:
     (checkout / "flock" / "eval" / "provenance.py").write_text("# changed\n")
     assert provenance.flock_commit().endswith("-dirty")
 
 
-def test_a_copy_inside_another_repository_has_no_known_commit(checkout, monkeypatch):
+def test_a_copy_inside_another_repository_has_no_known_commit(
+    checkout: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # As a non-editable install in a virtualenv inside some other project.
     module = checkout / ".venv" / "site-packages" / "flock" / "eval" / "provenance.py"
     module.parent.mkdir(parents=True)
@@ -70,6 +72,6 @@ def test_a_copy_inside_another_repository_has_no_known_commit(checkout, monkeypa
     assert provenance.flock_commit() == "unknown"
 
 
-def test_flock_commit_env_wins(checkout, monkeypatch):
+def test_flock_commit_env_wins(checkout: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FLOCK_COMMIT", "abc123")
     assert provenance.flock_commit() == "abc123"

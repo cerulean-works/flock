@@ -13,7 +13,7 @@ from flock.eval.metrics import (
 )
 
 
-def test_bits_per_byte_matches_hand_value():
+def test_bits_per_byte_matches_hand_value() -> None:
     # " 玉山" is a space plus two 3-byte characters: 7 bytes. -ln(1/128) nats is 7 bits.
     num_bytes = torch.tensor([len(" 玉山".encode())])
     assert num_bytes.item() == 7
@@ -21,26 +21,26 @@ def test_bits_per_byte_matches_hand_value():
     assert bits_per_byte(logprob, num_bytes).item() == pytest.approx(1.0)
 
 
-def test_bits_per_byte_counts_at_least_one_byte_and_warns(caplog):
+def test_bits_per_byte_counts_at_least_one_byte_and_warns(caplog: pytest.LogCaptureFixture) -> None:
     bpb = bits_per_byte(torch.tensor([-math.log(2)] * 3), torch.tensor([0, -1, 1]))
 
     assert bpb.tolist() == pytest.approx([1, 1, 1])
     assert "2 byte counts are below 1" in caplog.text
 
 
-def test_bits_per_byte_is_quiet_on_valid_counts(caplog):
+def test_bits_per_byte_is_quiet_on_valid_counts(caplog: pytest.LogCaptureFixture) -> None:
     bits_per_byte(torch.tensor([-1.0]), torch.tensor([1]))
     assert not caplog.records
 
 
-def test_accuracy_ignores_padding_and_breaks_ties_to_first():
+def test_accuracy_ignores_padding_and_breaks_ties_to_first() -> None:
     score = torch.tensor([[1.0, 1.0, 0.0], [0.0, 2.0, 9.0]])
     valid = torch.tensor([[True, True, True], [True, True, False]])
     assert accuracy(score, valid, torch.tensor([1, 1])).tolist() == [0.0, 1.0]
     assert accuracy(score, valid, torch.tensor([0, 2])).tolist() == [1.0, 0.0]
 
 
-def scores(**overrides) -> ChoiceScores:
+def scores(**overrides: Any) -> ChoiceScores:
     """One doc, two choices: " A" (gold, 2 tokens) and " BBBBBBB" (1 token)."""
     fields: dict[str, Any] = {
         "logprob": torch.tensor([[-4.0, -3.0]]),
@@ -76,13 +76,13 @@ def scores(**overrides) -> ChoiceScores:
         ({"gold": torch.tensor([1])}, {"acc_greedy": 1.0}),
     ],
 )
-def test_each_normalization(overrides, expected):
+def test_each_normalization(overrides: dict[str, Any], expected: dict[str, float]) -> None:
     metrics = multiple_choice(scores(**overrides))
     for name, value in expected.items():
         assert metrics[name].item() == value, name
 
 
-def test_multiple_choice_reports_gold_bpb_and_skips_uncond_without_it():
+def test_multiple_choice_reports_gold_bpb_and_skips_uncond_without_it() -> None:
     metrics = multiple_choice(scores())
     assert "acc_uncond" not in metrics
     assert metrics["bpb"].item() == pytest.approx(4.0 / math.log(2) / 2)
@@ -96,7 +96,7 @@ def test_multiple_choice_reports_gold_bpb_and_skips_uncond_without_it():
     ]
 
 
-def test_multiple_choice_metrics_lists_every_name_in_order():
+def test_multiple_choice_metrics_lists_every_name_in_order() -> None:
     # results.json writes the metrics in this order.
     metrics = multiple_choice(scores(logprob_uncond=torch.tensor([[-5.0, -5.0]])))
     assert list(metrics) == list(MULTIPLE_CHOICE_METRICS)

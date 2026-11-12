@@ -1,14 +1,27 @@
 """`flock whoami` and `flock token`."""
 
+from __future__ import annotations
+
 import json
+from typing import TYPE_CHECKING
 
 import httpx
 
 from flock.cli import api, credentials
 from tests.app.utils import machines
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
-def test_whoami(server, alice, signed_in, flock_cli):
+    import pytest
+    from click.testing import Result
+
+    from tests.app.conftest import FlockServer, User
+
+
+def test_whoami(
+    server: FlockServer, alice: User, signed_in: str, flock_cli: Callable[..., Result]
+) -> None:
     result = flock_cli("whoami")
     assert result.exit_code == 0, result.output
     path = credentials.credentials_path()
@@ -20,14 +33,21 @@ def test_whoami(server, alice, signed_in, flock_cli):
     )
 
 
-def test_whoami_json(server, alice, signed_in, flock_cli):
+def test_whoami_json(
+    server: FlockServer, alice: User, signed_in: str, flock_cli: Callable[..., Result]
+) -> None:
     result = flock_cli("whoami", "--json")
     assert result.exit_code == 0, result.output
     shown = json.loads(result.stdout)
     assert shown == alice.api.get("/api/v1/me").json() | {"host": server.url, "source": "file"}
 
 
-def test_whoami_with_flock_token(server, alice, flock_cli, monkeypatch):
+def test_whoami_with_flock_token(
+    server: FlockServer,
+    alice: User,
+    flock_cli: Callable[..., Result],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FLOCK_HOST", server.url)
     monkeypatch.setenv("FLOCK_TOKEN", alice.token)
     result = flock_cli("whoami", "--json")
@@ -41,7 +61,9 @@ def test_whoami_with_flock_token(server, alice, flock_cli, monkeypatch):
     assert "refused the credential from FLOCK_TOKEN. wandb keys only work" in refused.stderr
 
 
-def test_whoami_signed_out_or_revoked(server, alice, signed_in, flock_cli):
+def test_whoami_signed_out_or_revoked(
+    server: FlockServer, alice: User, signed_in: str, flock_cli: Callable[..., Result]
+) -> None:
     other = flock_cli("whoami", "--host", "http://other.test")
     assert other.exit_code == 1
     assert other.stderr == "Error: Not logged in to http://other.test. Run flock login.\n"
@@ -63,7 +85,9 @@ def refuse(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"flock token made a request: {request.url}")
 
 
-def test_token_prints_only_the_token_without_a_request(signed_in, flock_cli, monkeypatch):
+def test_token_prints_only_the_token_without_a_request(
+    signed_in: str, flock_cli: Callable[..., Result], monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(api, "TRANSPORT", httpx.MockTransport(refuse))
     result = flock_cli("token")
     assert result.exit_code == 0, result.output
@@ -71,13 +95,15 @@ def test_token_prints_only_the_token_without_a_request(signed_in, flock_cli, mon
     assert result.stderr == ""
 
 
-def test_token_from_the_environment(flock_cli, monkeypatch):
+def test_token_from_the_environment(
+    flock_cli: Callable[..., Result], monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(api, "TRANSPORT", httpx.MockTransport(refuse))
     monkeypatch.setenv("FLOCK_TOKEN", "flock-abc")
     assert flock_cli("token").stdout == "flock-abc\n"
 
 
-def test_token_signed_out(flock_cli):
+def test_token_signed_out(flock_cli: Callable[..., Result]) -> None:
     result = flock_cli("token")
     assert result.exit_code == 1
     assert result.stdout == ""

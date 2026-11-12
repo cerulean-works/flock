@@ -1,6 +1,17 @@
+from __future__ import annotations
+
 import time
+from typing import TYPE_CHECKING
 
 from tests.app.utils import history_rows
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from contextlib import AbstractContextManager
+    from typing import Any
+
+    from tests.app.conftest import Client, EventStream, Flocks, FlockServer, Response
+
 
 ORGS = "/api/v1/orgs"
 UPSERT = """
@@ -13,7 +24,7 @@ mutation UpsertBucket($name: String, $project: String, $entity: String, $notes: 
 """
 
 
-def upsert_error(client, entity: str | None, project: str, run: str) -> str | None:
+def upsert_error(client: Client, entity: str | None, project: str, run: str) -> str | None:
     """The GraphQL error of an SDK-style UpsertBucket, or None if it succeeded."""
     variables = {"entity": entity, "project": project, "name": run, "notes": "x"}
     body = client.graphql(UPSERT, variables).json()
@@ -23,7 +34,7 @@ def upsert_error(client, entity: str | None, project: str, run: str) -> str | No
 # ---------------------------------------------------------------------- organizations
 
 
-def test_org_crud(flock):
+def test_org_crud(flock: FlockServer) -> None:
     admin = flock.client()
     created = admin.post(ORGS, {"name": "lab"})
     assert created.status == 201
@@ -51,7 +62,7 @@ def test_org_crud(flock):
     assert alice.api.delete(f"{ORGS}/flock").status == 403
 
 
-def test_org_display_names(make_flock, events):
+def test_org_display_names(make_flock: Flocks, events: Callable[..., EventStream]) -> None:
     server = make_flock()
     api = server.client()
     created = api.post(ORGS, {"name": "cerulean-labs", "display_name": "  Cerulean Labs "})
@@ -106,7 +117,7 @@ def test_org_display_names(make_flock, events):
     details = server.anonymous().get(f"/api/v1/invites/{invite['token']}").json()
     assert (details["org"], details["org_display_name"]) == ("flock", "Flock")
 
-    def check(client) -> None:
+    def check(client: Client) -> None:
         org = client.get(f"{ORGS}/flock").json()
         assert (org["name"], org["display_name"]) == ("flock", "Flock")
         assert client.get(f"{ORGS}/acme2").status == 404
@@ -117,7 +128,7 @@ def test_org_display_names(make_flock, events):
     check(make_flock(reuse=server).client())
 
 
-def test_only_org_admins_change_display_names(flock):
+def test_only_org_admins_change_display_names(flock: FlockServer) -> None:
     admin = flock.client()
     alice = flock.add_user("alice@lab.test")  # a member
     bob = flock.add_user("bob@lab.test", role="admin")
@@ -134,7 +145,11 @@ def test_only_org_admins_change_display_names(flock):
     ]
 
 
-def test_delete_org(make_flock, notification, wait_for):
+def test_delete_org(
+    make_flock: Flocks,
+    notification: Callable[..., AbstractContextManager[None]],
+    wait_for: Callable[..., Any],
+) -> None:
     server = make_flock()
     store = server.store
     api = server.client()
@@ -155,7 +170,7 @@ def test_delete_org(make_flock, notification, wait_for):
     # Another background purge can already own the rows when flush finds no work.
     wait_for(lambda: not (server.files_dir / str(run.pk)).exists())
 
-    def check(server) -> None:
+    def check(server: FlockServer) -> None:
         client = server.client()
         assert client.get(f"{ORGS}/lab").status == 404
         assert client.get("/api/v1/projects/lab/p").status == 404
@@ -171,7 +186,7 @@ def test_delete_org(make_flock, notification, wait_for):
 # ---------------------------------------------------------------------- invites and members
 
 
-def test_invites(make_flock):
+def test_invites(make_flock: Flocks) -> None:
     server = make_flock(web_url="https://ui.test/", api_public_url="https://api.test/")
     admin = server.client()
     anon = server.anonymous()
@@ -228,7 +243,7 @@ def test_invites(make_flock):
     assert bob.api.post(invites, {"email": "eve@lab.test"}).status == 403  # members can't
 
 
-def test_invites_expire(make_flock):
+def test_invites_expire(make_flock: Flocks) -> None:
     server = make_flock(invite_ttl=60)
     token = server.client().post(f"{ORGS}/flock/invites", {"email": "x@lab.test"}).json()["token"]
     assert server.anonymous().get(f"/api/v1/invites/{token}").status == 200
@@ -238,7 +253,7 @@ def test_invites_expire(make_flock):
     assert server.anonymous().get(f"/api/v1/invites/{token}").status == 404
 
 
-def test_roles_and_leaving(flock):
+def test_roles_and_leaving(flock: FlockServer) -> None:
     admin = flock.client()
     members = f"{ORGS}/flock/members"
     alice = flock.add_user("alice@lab.test")
@@ -267,7 +282,7 @@ def test_roles_and_leaving(flock):
 # ---------------------------------------------------------------------- permissions
 
 
-def test_members_change_only_their_own_runs(flock):
+def test_members_change_only_their_own_runs(flock: FlockServer) -> None:
     admin = flock.client()
     assert admin.post(ORGS, {"name": "lab"}).status == 201
     alice = flock.add_user("alice@lab.test")
@@ -321,7 +336,7 @@ def test_members_change_only_their_own_runs(flock):
     assert dave.api.get("/api/v1/projects", entity="flock").json()["projects"] == []
 
 
-def test_password_resets(flock):
+def test_password_resets(flock: FlockServer) -> None:
     admin = flock.client()
     assert admin.post(ORGS, {"name": "lab"}).status == 201
     alice = flock.add_user("alice@lab.test")
@@ -330,7 +345,7 @@ def test_password_resets(flock):
     session = flock.client(token=alice.signup["access_token"])
     admin_id = admin.get("/api/v1/me").json()["id"]
 
-    def reset(actor, user_id: int):
+    def reset(actor: Client, user_id: int) -> Response:
         return actor.post(f"/api/v1/users/{user_id}/password-reset", {})
 
     assert reset(alice.api, carol.id).status == 403  # members can't
@@ -352,7 +367,7 @@ def test_password_resets(flock):
     assert reset(admin, dave.id).status == 201  # super admins reset anyone
 
 
-def signed_out(api, timeout: float = 5.0) -> bool:
+def signed_out(api: Client, timeout: float = 5.0) -> bool:
     """Whether ``api``'s user stops being signed in: a deleted account's cached sign-in is
     dropped once the database's notification of the delete arrives, not at once."""
     deadline = time.monotonic() + timeout
@@ -361,7 +376,7 @@ def signed_out(api, timeout: float = 5.0) -> bool:
     return status == 401
 
 
-def test_user_administration(flock):
+def test_user_administration(flock: FlockServer) -> None:
     admin = flock.client()
     admin_id = admin.get("/api/v1/me").json()["id"]
     alice = flock.add_user("alice@lab.test")

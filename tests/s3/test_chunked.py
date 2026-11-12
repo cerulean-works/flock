@@ -1,10 +1,17 @@
+from __future__ import annotations
+
 import asyncio
 import base64
 import zlib
+from typing import TYPE_CHECKING
 
 import pytest
 
 from app.api.src.s3_proxy.chunked import ChunkedError, decode
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
 
 DATA = b"hello, s3! " * 1000
 
@@ -27,7 +34,7 @@ def frame(data: bytes, size: int = 4096, trailer: str | None = None) -> bytes:
 def run(body: bytes, length: int, trailer: str | None = None, split: int = 7) -> bytes:
     """Decode ``body`` delivered in ``split``-byte pieces, as a network would."""
 
-    async def stream():
+    async def stream() -> AsyncIterator[bytes]:
         for i in range(0, len(body), split):
             yield body[i : i + split]
 
@@ -38,21 +45,21 @@ def run(body: bytes, length: int, trailer: str | None = None, split: int = 7) ->
 
 
 @pytest.mark.parametrize("split", [1, 7, 4096, 1 << 20])
-def test_decodes_whatever_the_network_splits(split):
+def test_decodes_whatever_the_network_splits(split: int) -> None:
     body = frame(DATA, trailer=crc32(DATA))
     assert run(body, len(DATA), "x-amz-checksum-crc32", split) == DATA
 
 
-def test_without_a_trailer():
+def test_without_a_trailer() -> None:
     assert run(frame(DATA), len(DATA)) == DATA
 
 
-def test_unknown_checksums_pass_unchecked():
+def test_unknown_checksums_pass_unchecked() -> None:
     body = frame(DATA)[:-2] + b"x-amz-checksum-crc64nvme:AAAAAAAAAAA=\r\n\r\n"
     assert run(body, len(DATA), "x-amz-checksum-crc64nvme") == DATA
 
 
-def test_empty_body():
+def test_empty_body() -> None:
     assert run(frame(b"", trailer=crc32(b"")), 0, "x-amz-checksum-crc32") == b""
 
 
@@ -68,19 +75,19 @@ def test_empty_body():
         (b"2\r\nhiX0\r\n\r\n", 2),  # no CRLF after the data
     ],
 )
-def test_bad_bodies_are_refused(body, length):
+def test_bad_bodies_are_refused(body: bytes, length: int) -> None:
     with pytest.raises(ChunkedError):
         run(body, length, "x-amz-checksum-crc32")
 
 
-def test_last_piece_waits_for_the_checksum():
+def test_last_piece_waits_for_the_checksum() -> None:
     """An upstream that got every declared byte would store the object, so a bad checksum
     must stop the body short."""
     body = frame(DATA, size=len(DATA) // 2, trailer=crc32(b"other"))
     received = []
 
-    async def go():
-        async def stream():
+    async def go() -> None:
+        async def stream() -> AsyncIterator[bytes]:
             yield body
 
         with pytest.raises(ChunkedError):

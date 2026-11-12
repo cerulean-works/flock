@@ -1,5 +1,7 @@
 """`flock.hub.s3` and `flock s3` (D58, D59), against a flock with S3 on."""
 
+from __future__ import annotations
+
 import configparser
 import datetime as dt
 import json
@@ -11,6 +13,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -20,6 +23,13 @@ from flock.hub.cli import parse_duration, set_profile
 from tests.app.conftest import Flocks, S3Flock, User
 from tests.app.utils import cli_login
 from tests.conftest import S3Server
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+
+    from click.testing import Result
+
+    from tests.conftest import Clock
 
 
 @pytest.fixture
@@ -45,7 +55,14 @@ def keys_of(flock: S3Flock, alice: User) -> list[dict]:
 
 
 @pytest.fixture(params=["cli", "python"])
-def native_lance_profile(flock, signed_in, flock_cli, tmp_path, monkeypatch, request):
+def native_lance_profile(
+    flock: S3Flock,
+    signed_in: str,
+    flock_cli: Callable[..., Result],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+) -> Iterator[None]:
     previous = dict(os.environ)
     try:
         if request.param == "python":
@@ -75,7 +92,12 @@ def native_lance_profile(flock, signed_in, flock_cli, tmp_path, monkeypatch, req
         os.environ.update(previous)
 
 
-def _configure_native_lance_profile(flock, flock_cli, tmp_path, monkeypatch):
+def _configure_native_lance_profile(
+    flock: S3Flock,
+    flock_cli: Callable[..., Result],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A real Flock credential_process, isolated from the user's AWS configuration."""
     for name in list(os.environ):
         if name.startswith("AWS_"):
@@ -110,12 +132,12 @@ def _configure_native_lance_profile(flock, flock_cli, tmp_path, monkeypatch):
 
 
 def test_get_process_pins_sign_in_and_sets_the_entire_environment(
-    flock,
-    alice,
-    signed_in,
-    tmp_path,
-    monkeypatch,
-):
+    flock: S3Flock,
+    alice: User,
+    signed_in: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     previous = dict(os.environ)
     user_config = tmp_path / "user-config"
     user_config.write_text("[default]\nregion = untouched\n")
@@ -170,14 +192,16 @@ def test_get_process_pins_sign_in_and_sets_the_entire_environment(
 
 
 @pytest.mark.parametrize("ttl", [0, -1, float("nan"), float("inf")])
-def test_get_process_rejects_invalid_lifetimes_without_changing_environment(ttl):
+def test_get_process_rejects_invalid_lifetimes_without_changing_environment(ttl: float) -> None:
     previous = dict(os.environ)
     with pytest.raises(ValueError, match="positive and finite"):
         s3.get_process(ttl=ttl)
     assert dict(os.environ) == previous
 
 
-def test_credentials_formats(flock, alice, signed_in, flock_cli):
+def test_credentials_formats(
+    flock: S3Flock, alice: User, signed_in: str, flock_cli: Callable[..., Result]
+) -> None:
     env = flock_cli("s3", "credentials")
     assert env.exit_code == 0, env.output
     exports = dict(
@@ -211,7 +235,9 @@ def test_credentials_formats(flock, alice, signed_in, flock_cli):
     assert len(keys_of(flock, alice)) == 3
 
 
-def test_errors_exit_1(make_flock, flock_cli, flock):
+def test_errors_exit_1(
+    make_flock: Flocks, flock_cli: Callable[..., Result], flock: S3Flock
+) -> None:
     signed_out = flock_cli("s3", "credentials")
     assert signed_out.exit_code == 1
     assert "Not logged in" in signed_out.output
@@ -233,7 +259,7 @@ def test_errors_exit_1(make_flock, flock_cli, flock):
     assert flock_cli("s3", "credentials", "--ttl", "soon").exit_code == 2
 
 
-def test_durations():
+def test_durations() -> None:
     assert parse_duration("90") == 90
     assert parse_duration("90s") == 90
     assert parse_duration("15m") == 900
@@ -242,8 +268,13 @@ def test_durations():
 
 
 def test_configure_writes_a_profile_and_asks_before_replacing_one(
-    flock, alice, signed_in, flock_cli, tmp_path, monkeypatch
-):
+    flock: S3Flock,
+    alice: User,
+    signed_in: str,
+    flock_cli: Callable[..., Result],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     config = tmp_path / "aws" / "config"
     monkeypatch.setenv("AWS_CONFIG_FILE", str(config))
     config.parent.mkdir()
@@ -276,7 +307,7 @@ def test_configure_writes_a_profile_and_asks_before_replacing_one(
     assert "[profile lab]" in config.read_text() and "[profile flock]" in config.read_text()
 
 
-def test_set_profile_keeps_what_follows():
+def test_set_profile_keeps_what_follows() -> None:
     text = "[profile a]\nx = 1\n\n[profile b]\ny = 2\n"
     replaced, found = set_profile(text, "[profile a]", ["z = 3"])
     assert found
@@ -285,7 +316,9 @@ def test_set_profile_keeps_what_follows():
     assert (added, found) == ("[profile c]\nw = 4\n", False)
 
 
-def test_buckets_commands(flock, alice, signed_in, flock_cli):
+def test_buckets_commands(
+    flock: S3Flock, alice: User, signed_in: str, flock_cli: Callable[..., Result]
+) -> None:
     # Every org has flock-datasets and flock-models, which Flock manages (013, 014).
     managed = flock_cli("s3", "buckets", "list")
     assert managed.exit_code == 0
@@ -328,7 +361,9 @@ def flock_admin_token(flock: S3Flock) -> str:
     return flock.call(flock.store.accounts.start_session(admin))["access_token"]
 
 
-def test_credentials_renew_before_they_expire(flock, alice, signed_in, clock):
+def test_credentials_renew_before_they_expire(
+    flock: S3Flock, alice: User, signed_in: str, clock: Callable[[str], Clock]
+) -> None:
     wall = clock("flock.hub.s3.client")
     creds = s3.credentials(ttl=120)
     first = creds.access_key_id
@@ -345,7 +380,7 @@ def test_credentials_renew_before_they_expire(flock, alice, signed_in, clock):
     assert creds.fsspec_options()["endpoint_url"] == flock.proxy.url
 
 
-def test_credentials_pickle_without_their_key(flock, alice, signed_in):
+def test_credentials_pickle_without_their_key(flock: S3Flock, alice: User, signed_in: str) -> None:
     creds = s3.credentials()
     secret = creds.secret_access_key
     data = pickle.dumps(creds)
@@ -357,7 +392,9 @@ def test_credentials_pickle_without_their_key(flock, alice, signed_in):
     assert len(keys_of(flock, alice)) == 2
 
 
-def test_boto3_clients_renew_their_key(flock, alice, signed_in, monkeypatch):
+def test_boto3_clients_renew_their_key(
+    flock: S3Flock, alice: User, signed_in: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     alice.api.post("/api/v1/orgs/flock/buckets", {"name": "data"})
     creds = s3.credentials(ttl=240)
     client = creds.boto3_client()
@@ -376,7 +413,9 @@ def test_boto3_clients_renew_their_key(flock, alice, signed_in, monkeypatch):
     assert names == ["data", "flock-datasets", "flock-models", "more"]
 
 
-def test_lance_native_profile_renews_after_expiry(flock, alice, native_lance_profile):
+def test_lance_native_profile_renews_after_expiry(
+    flock: S3Flock, alice: User, native_lance_profile: None
+) -> None:
     import lance
     import pyarrow as pa
 
@@ -407,10 +446,10 @@ def test_lance_native_profile_renews_after_expiry(flock, alice, native_lance_pro
 
 
 def test_spawned_lance_worker_renews_native_profile_between_epochs(
-    flock,
-    alice,
-    native_lance_profile,
-):
+    flock: S3Flock,
+    alice: User,
+    native_lance_profile: None,
+) -> None:
     import lance
     import pyarrow as pa
     from lance.torch.data import SafeLanceDataset
@@ -445,7 +484,7 @@ def test_spawned_lance_worker_renews_native_profile_between_epochs(
         iterator._shutdown_workers()
 
 
-def test_the_module_imports_no_s3_library():
+def test_the_module_imports_no_s3_library() -> None:
     source = Path(s3.__file__).read_text()
     top_level = [line for line in source.splitlines() if line.startswith(("import ", "from "))]
     assert all(

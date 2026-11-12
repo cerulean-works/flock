@@ -296,7 +296,7 @@ def identicon(seed: str) -> bytes:
 class Planner:
     """Decides everything that happened in the month, before anything is written."""
 
-    def __init__(self, rng: random.Random, now: float, scale: float, keep_running: bool):
+    def __init__(self, rng: random.Random, now: float, scale: float, keep_running: bool) -> None:
         self.rng = rng
         self.now = now
         self.start = now - DAYS * DAY

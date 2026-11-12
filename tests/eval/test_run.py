@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import dataclasses
 import hashlib
 import json
@@ -5,6 +7,7 @@ import math
 import shlex
 import sys
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import datasets
 import pytest
@@ -24,15 +27,25 @@ from flock.eval.tokenizer import SentencePieceTokenizer
 
 from .toy import PROMPT_PATHS, PROVENANCE, TASK, task_result
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+    from pathlib import Path
+    from typing import Any
+
+    from transformers import LlamaForCausalLM, PreTrainedTokenizerFast
+
+    from flock.eval.model import Encoded, Scores
+    from flock.eval.requests import Request
+
 
 @pytest.fixture
-def offline_model(monkeypatch, scorer):
+def offline_model(monkeypatch: pytest.MonkeyPatch, scorer: ScoringModel) -> None:
     monkeypatch.setitem(run.TASKS, TASK.name, TASK)
     monkeypatch.setattr(ScoringModel, "from_pretrained", lambda *args, **kwargs: scorer)
     monkeypatch.setenv("FLOCK_COMMIT", "abc123")
 
 
-def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
+def test_evaluate_writes_results_and_predictions(offline_model: None, tmp_path: Path) -> None:
     results = evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path))
 
     data = json.loads((tmp_path / "results.json").read_text())
@@ -73,8 +86,12 @@ def test_evaluate_writes_results_and_predictions(offline_model, tmp_path):
 
 
 def test_predictions_recompute_every_metric_and_the_truncation(
-    offline_model, monkeypatch, lm, tokenizer, tmp_path
-):
+    offline_model: None,
+    monkeypatch: pytest.MonkeyPatch,
+    lm: LlamaForCausalLM,
+    tokenizer: PreTrainedTokenizerFast,
+    tmp_path: Path,
+) -> None:
     # A short `max_length` cuts the few-shot contexts, so the truncation counts aren't all 0.
     short = ScoringModel(lm, tokenizer, name="tiny@0", max_length=16)
     monkeypatch.setattr(ScoringModel, "from_pretrained", lambda *args, **kwargs: short)
@@ -82,14 +99,14 @@ def test_predictions_recompute_every_metric_and_the_truncation(
     lines = (tmp_path / "predictions" / "toy.jsonl").read_text().splitlines()
     rows = [json.loads(line) for line in lines]
 
-    def accuracy(score) -> float:
+    def accuracy(score: Callable[[dict[str, Any], int], float]) -> float:
         hits = 0
         for row in rows:
             scores = [score(row, i) for i in range(len(row["logprob"]))]
             hits += scores.index(max(scores)) == row["gold"]  # ties go to the first choice
         return hits / len(rows)
 
-    def bpb(row, i) -> float:
+    def bpb(row: dict[str, Any], i: int) -> float:
         return -row["logprob"][i] / row["num_bytes"][i] / math.log(2)
 
     recomputed = {
@@ -108,7 +125,9 @@ def test_predictions_recompute_every_metric_and_the_truncation(
     assert task.truncation.max_tokens_cut == max(max(cut) for cut in cuts)
 
 
-def resegmenting_scorer(lm, monkeypatch, tmp_path) -> ScoringModel:
+def resegmenting_scorer(
+    lm: LlamaForCausalLM, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> ScoringModel:
     """A scorer on a SentencePiece tokenizer whose joined texts never start with their contexts."""
     SentencePieceTrainer.train(
         sentence_iterator=iter(["the quick brown fox", "jumps over the lazy dog"]),
@@ -123,7 +142,9 @@ def resegmenting_scorer(lm, monkeypatch, tmp_path) -> ScoringModel:
     return ScoringModel(lm, tokenizer, name="tiny@0", max_length=16)
 
 
-def test_a_refused_request_fails_before_any_task_scores(offline_model, lm, monkeypatch, tmp_path):
+def test_a_refused_request_fails_before_any_task_scores(
+    offline_model: None, lm: LlamaForCausalLM, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     scorer = resegmenting_scorer(lm, monkeypatch, tmp_path)
     monkeypatch.setattr(ScoringModel, "from_pretrained", lambda *args, **kwargs: scorer)
     monkeypatch.setattr(ScoringModel, "loglikelihood", None)  # scoring would fail on None
@@ -133,7 +154,9 @@ def test_a_refused_request_fails_before_any_task_scores(offline_model, lm, monke
     assert not (out / "predictions" / "toy.jsonl").exists()
 
 
-def test_provenance_is_collected_before_scoring(offline_model, scorer, monkeypatch):
+def test_provenance_is_collected_before_scoring(
+    offline_model: None, scorer: ScoringModel, monkeypatch: pytest.MonkeyPatch
+) -> None:
     events = []
     collect = Provenance.collect
     loglikelihood = scorer.loglikelihood
@@ -158,12 +181,12 @@ GROUP = Suite("toys", (RC, BPB), scored=False)
 
 
 @pytest.fixture
-def toy_suites(offline_model, monkeypatch):
+def toy_suites(offline_model: None, monkeypatch: pytest.MonkeyPatch) -> None:
     for suite in GROUP.suites:
         monkeypatch.setitem(run.SUITES, suite.name, suite)
 
 
-def test_evaluate_scores_suites_and_each_task_once(toy_suites, tmp_path):
+def test_evaluate_scores_suites_and_each_task_once(toy_suites: None, tmp_path: Path) -> None:
     results = evaluate(EvalConfig(model="tiny@0", tasks=("toy",), suites=("toys",), out=tmp_path))
 
     assert [task.task for task in results.tasks] == ["toy", "other"]
@@ -197,8 +220,10 @@ def test_evaluate_scores_suites_and_each_task_once(toy_suites, tmp_path):
     assert hashes["toy:rc"] == hashlib.sha256(json.dumps(rc, sort_keys=True).encode()).hexdigest()
 
 
-def test_a_suite_hash_moves_with_any_hash_below_it(toy_suites, monkeypatch):
-    def suite_hashes(**kwargs) -> dict[str, str]:
+def test_a_suite_hash_moves_with_any_hash_below_it(
+    toy_suites: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def suite_hashes(**kwargs: Any) -> dict[str, str]:
         results = evaluate(EvalConfig(model="tiny@0", suites=("toys",), **kwargs))
         return {suite.suite: suite.suite_hash for suite in results.suites}
 
@@ -224,32 +249,38 @@ def test_a_suite_hash_moves_with_any_hash_below_it(toy_suites, monkeypatch):
     assert suite_hashes()["toy:rc"] != before["toy:rc"]
 
 
-def test_evaluate_rejects_two_tasks_under_one_name(toy_suites, monkeypatch):
+def test_evaluate_rejects_two_tasks_under_one_name(
+    toy_suites: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setitem(run.TASKS, "other", dataclasses.replace(OTHER, description="x"))
     with pytest.raises(ValueError, match="two different definitions are named other"):
         evaluate(EvalConfig(model="tiny@0", tasks=("other",), suites=("toy:rc",)))
 
 
-def test_evaluate_rejects_a_suite_named_like_a_task(toy_suites, monkeypatch):
+def test_evaluate_rejects_a_suite_named_like_a_task(
+    toy_suites: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setitem(run.SUITES, "toys", Suite("toys", (Suite("toy", (TASK,)), RC)))
     with pytest.raises(ValueError, match=r"share the names \['toy'\]"):
         evaluate(EvalConfig(model="tiny@0", suites=("toys",)))
 
 
-def test_evaluate_rejects_a_task_named_suites(monkeypatch):
+def test_evaluate_rejects_a_task_named_suites(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(run.TASKS, "suites", dataclasses.replace(TASK, name="suites"))
     with pytest.raises(ValueError, match="named suites"):
         evaluate(EvalConfig(model="tiny@0", tasks=("suites",)))
 
 
-def test_evaluate_rejects_two_suites_under_one_name(toy_suites, monkeypatch):
+def test_evaluate_rejects_two_suites_under_one_name(
+    toy_suites: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     clash = Suite("toy:rc", (TASK,))
     monkeypatch.setitem(run.SUITES, "other", Suite("other", (clash,)))
     with pytest.raises(ValueError, match="two different definitions are named toy:rc"):
         evaluate(EvalConfig(model="tiny@0", suites=("toys", "other")))
 
 
-def test_prediction_rows_drop_padded_choices(tmp_path):
+def test_prediction_rows_drop_padded_choices(tmp_path: Path) -> None:
     docs = [
         MCDoc(id="a", choices=cloze("?", ("x", "y")), gold=1),
         MCDoc(id="b", choices=cloze("?", ("x", "y", "z")), gold=0),
@@ -301,7 +332,9 @@ def test_prediction_rows_drop_padded_choices(tmp_path):
         write_predictions(path, docs, scores)
 
 
-def test_score_task_refuses_an_existing_predictions_file(scorer, tmp_path, monkeypatch):
+def test_score_task_refuses_an_existing_predictions_file(
+    scorer: ScoringModel, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     score_task(scorer, TASK, out=tmp_path)
     monkeypatch.setattr(scorer, "loglikelihood", None)  # scoring again would fail on None
 
@@ -309,7 +342,9 @@ def test_score_task_refuses_an_existing_predictions_file(scorer, tmp_path, monke
         score_task(scorer, TASK, out=tmp_path)
 
 
-def test_a_task_timed_at_zero_seconds_has_no_throughput(offline_model, tmp_path, monkeypatch):
+def test_a_task_timed_at_zero_seconds_has_no_throughput(
+    offline_model: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # Only `run`'s clock stops: other libraries keep the real `time`.
     monkeypatch.setattr(run, "time", SimpleNamespace(perf_counter=lambda: 0.0))
 
@@ -320,17 +355,21 @@ def test_a_task_timed_at_zero_seconds_has_no_throughput(offline_model, tmp_path,
     assert "docs/s" not in cli.format_results(results, verbose=True)
 
 
-def test_score_task_does_not_depend_on_batching(scorer):
+def test_score_task_does_not_depend_on_batching(scorer: ScoringModel) -> None:
     one_batch = score_task(scorer, TASK)
     scorer.batch_tokens = 1
     assert score_task(scorer, TASK).metrics == pytest.approx(one_batch.metrics, abs=1e-5)
 
 
-def test_score_task_averages_greedy_match_over_gold_only_docs(scorer, monkeypatch, tmp_path):
+def test_score_task_averages_greedy_match_over_gold_only_docs(
+    scorer: ScoringModel, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     gold_only = next(task for task in PROMPT_PATHS if task.name == "toy:gold_only")
     loglikelihood = scorer.loglikelihood
 
-    def second_doc_greedy(requests, encoded=None):
+    def second_doc_greedy(
+        requests: Sequence[Request], encoded: Sequence[Encoded] | None = None
+    ) -> Scores:
         scores = loglikelihood(requests, encoded)
         return dataclasses.replace(scores, is_greedy=torch.tensor([False, True]))
 
@@ -343,13 +382,15 @@ def test_score_task_averages_greedy_match_over_gold_only_docs(scorer, monkeypatc
     assert [json.loads(line)["is_greedy"] for line in lines] == [[False], [True]]
 
 
-def test_score_task_reports_only_the_tasks_metrics(scorer):
+def test_score_task_reports_only_the_tasks_metrics(scorer: ScoringModel) -> None:
     gold_only = dataclasses.replace(TASK, metrics=("bpb",), primary_metric="bpb")
     assert list(score_task(scorer, gold_only).metrics) == ["bpb"]
     assert list(score_task(scorer, TASK).metrics) == list(TASK.reported_metrics)
 
 
-def test_score_task_records_truncation(lm, tokenizer):
+def test_score_task_records_truncation(
+    lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast
+) -> None:
     scorer = ScoringModel(lm, tokenizer, name="tiny@0", max_length=16)
     built = TASK.requests(*TASK.load())
     conditional = sum(len(doc.choices) for doc in built.docs)
@@ -365,7 +406,7 @@ def test_score_task_records_truncation(lm, tokenizer):
     assert truncation.max_tokens_cut == max(cuts)
 
 
-def test_evaluate_rejects_unknown_task_or_suite():
+def test_evaluate_rejects_unknown_task_or_suite() -> None:
     with pytest.raises(KeyError, match="unknown tasks"):
         evaluate(EvalConfig(model="tiny@0", tasks=("nope",)))
     with pytest.raises(KeyError, match="unknown suites"):
@@ -380,12 +421,12 @@ def test_evaluate_rejects_unknown_task_or_suite():
         pytest.param({"suites": ("toy", "toy")}, "suites repeat", id="suites"),
     ],
 )
-def test_eval_config_rejects_empty_or_repeated_names(kwargs, match):
+def test_eval_config_rejects_empty_or_repeated_names(kwargs: dict[str, Any], match: str) -> None:
     with pytest.raises(ValueError, match=match):
         EvalConfig(model="tiny@0", **kwargs)
 
 
-def test_evaluate_refuses_a_non_empty_out(offline_model, tmp_path):
+def test_evaluate_refuses_a_non_empty_out(offline_model: None, tmp_path: Path) -> None:
     (tmp_path / "results.json").write_text("{}")
     with pytest.raises(FileExistsError, match="one directory holds one run"):
         evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path))
@@ -393,7 +434,7 @@ def test_evaluate_refuses_a_non_empty_out(offline_model, tmp_path):
         evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path / "results.json"))
 
 
-def test_eval_config_rejects_counts_below_one():
+def test_eval_config_rejects_counts_below_one() -> None:
     with pytest.raises(ValueError, match="limit must be at least 1"):
         EvalConfig(model="tiny@0", tasks=("toy",), limit=0)
     with pytest.raises(ValueError, match="batch_tokens must be at least 1"):
@@ -401,7 +442,7 @@ def test_eval_config_rejects_counts_below_one():
 
 
 @pytest.mark.parametrize("flag", ["--limit", "--batch-tokens"])
-def test_cli_rejects_counts_below_one(flag):
+def test_cli_rejects_counts_below_one(flag: str) -> None:
     argv = ["run", "--model", "m@0", "--task", "arc_easy", "--out", "o", flag, "0"]
     result = CliRunner().invoke(cli.main, argv)
 
@@ -409,7 +450,9 @@ def test_cli_rejects_counts_below_one(flag):
     assert "x>=1" in result.output
 
 
-def test_cli_runs_and_prints_each_tasks_primary_metric(offline_model, tmp_path, monkeypatch):
+def test_cli_runs_and_prints_each_tasks_primary_metric(
+    offline_model: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     argv = ["run", "--model", "tiny@0", "--task", "arc_easy", "--out", str(tmp_path)]
     # `--task` only accepts registered names, fixed when the CLI is imported, so the toy task
     # runs under the name `arc_easy`.
@@ -427,10 +470,12 @@ def test_cli_runs_and_prints_each_tasks_primary_metric(offline_model, tmp_path, 
     assert data["provenance"]["command"] == shlex.join(["flock", "eval", *argv])
 
 
-def test_run_loads_the_weights_in_the_dtype_asked_for(offline_model, scorer, monkeypatch, tmp_path):
+def test_run_loads_the_weights_in_the_dtype_asked_for(
+    offline_model: None, scorer: ScoringModel, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     loaded = []
 
-    def from_pretrained(*args, **kwargs):
+    def from_pretrained(*args: Any, **kwargs: Any) -> ScoringModel:
         loaded.append(kwargs["dtype"])
         return scorer
 
@@ -446,10 +491,12 @@ def test_run_loads_the_weights_in_the_dtype_asked_for(offline_model, scorer, mon
         EvalConfig(model="tiny@0", tasks=("arc_easy",), dtype="float16")  # ty: ignore[invalid-argument-type]
 
 
-def test_run_passes_add_bos_to_the_model(offline_model, scorer, monkeypatch, tmp_path):
+def test_run_passes_add_bos_to_the_model(
+    offline_model: None, scorer: ScoringModel, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     asked = []
 
-    def from_pretrained(*args, **kwargs):
+    def from_pretrained(*args: Any, **kwargs: Any) -> ScoringModel:
         asked.append(kwargs["add_bos"])
         return scorer
 
@@ -463,14 +510,16 @@ def test_run_passes_add_bos_to_the_model(offline_model, scorer, monkeypatch, tmp
     assert asked == [False, True]  # no BOS unless asked
 
 
-def test_cli_needs_a_task_or_suite():
+def test_cli_needs_a_task_or_suite() -> None:
     result = CliRunner().invoke(cli.main, ["run", "--model", "m@0", "--out", "o"])
 
     assert result.exit_code == 2
     assert "at least one task or suite" in result.output
 
 
-def test_cli_prints_suite_scores(toy_suites, tmp_path, monkeypatch):
+def test_cli_prints_suite_scores(
+    toy_suites: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # `--suite` only accepts names registered when the CLI was imported, so the toy group takes
     # a registered name.
     monkeypatch.setitem(run.SUITES, "base_easy", dataclasses.replace(GROUP, name="base_easy"))
@@ -493,7 +542,9 @@ def test_cli_prints_suite_scores(toy_suites, tmp_path, monkeypatch):
     assert result.output.splitlines()[-1] == "base_easy  unscored  (toy:rc, toy:bpb)"
 
 
-def test_the_summary_prints_each_suite_before_its_members_then_tasks_outside_scored_suites():
+def test_the_summary_prints_each_suite_before_its_members_then_tasks_outside_scored_suites() -> (
+    None
+):
     arc = task_result("arc_easy", {"acc_per_char": 0.75, "acc_raw": 0.5, "bpb": 1.25})
     mbpp = task_result("mbpp:bpb", {"bpb": 0.5}, seconds=0.0)
     # As `evaluate` orders them for `--suite base_easy --suite knowledge`: each after its members.

@@ -7,7 +7,7 @@ from flock.eval.tasks.minerva_math import MINERVA_MATH_TASKS, SUBJECTS, minerva_
 # for the same row at commit 5a51f50.
 
 
-def test_minerva_scores_the_solution_after_one_space():
+def test_minerva_scores_the_solution_after_one_space() -> None:
     doc = minerva_doc({"index": 4, "problem": "What is $1+1$?", "solution": "It is $\\boxed{2}$."})
     context = "Problem:\nWhat is $1+1$?\n\nSolution:"
     assert doc == MCDoc("4", (Choice(context, " It is $\\boxed{2}$."),), 0)
@@ -17,7 +17,7 @@ def test_minerva_scores_the_solution_after_one_space():
     assert doc.choices[0].continuation == "\n2"
 
 
-def test_minerva_shots_are_olmes_literal_problems():
+def test_minerva_shots_are_olmes_literal_problems() -> None:
     task = TASKS["minerva_math_algebra"]
     assert isinstance(task, MultipleChoiceTask)
     doc = minerva_doc({"index": 0, "problem": "Find $x$.", "solution": "$x=1$."})
@@ -36,7 +36,7 @@ def test_minerva_shots_are_olmes_literal_problems():
     assert built.requests[0].continuation == " $x=1$."
 
 
-def test_humaneval_shows_examples_with_olmes_extra_space():
+def test_humaneval_shows_examples_with_olmes_extra_space() -> None:
     def row(number: int, body: str) -> dict:
         return {
             "task_id": f"HumanEval/{number}",
@@ -59,7 +59,7 @@ def test_humaneval_shows_examples_with_olmes_extra_space():
     assert request.continuation == "    return 112\n"
 
 
-def test_mbpp_closes_the_fence_without_a_leading_space():
+def test_mbpp_closes_the_fence_without_a_leading_space() -> None:
     row = {"task_id": 11, "text": " Add one. ", "code": "def f(x):\r\n  return x + 1 \r\n\n"}
 
     assert mbpp_doc(row) == MCDoc(
@@ -67,7 +67,7 @@ def test_mbpp_closes_the_fence_without_a_leading_space():
     )
 
 
-def test_mt_mbpp_uses_the_row_language_and_unix_line_ends():
+def test_mt_mbpp_uses_the_row_language_and_unix_line_ends() -> None:
     row = {
         "task_id": 11,
         "text": "Add one.\r\n",
@@ -80,7 +80,7 @@ def test_mt_mbpp_uses_the_row_language_and_unix_line_ends():
     )
 
 
-def test_math_and_code_suites_hold_every_subject_and_language():
+def test_math_and_code_suites_hold_every_subject_and_language() -> None:
     assert len(SUBJECTS) == len(MINERVA_MATH_TASKS) == 7
     assert len(LANGUAGES) == len(MT_MBPP_TASKS) == 17
     assert SUITES["base_easy:math_bpb"].members == MINERVA_MATH_TASKS
@@ -96,7 +96,7 @@ def test_math_and_code_suites_hold_every_subject_and_language():
         assert task.unconditional_context is None
 
 
-def test_code_bpb_averages_the_languages_first():
+def test_code_bpb_averages_the_languages_first() -> None:
     metrics = {task.name: {"bpb": 0.0} for task in SUITES["base_easy:code_bpb"].tasks}
     for task in MT_MBPP_TASKS:
         metrics[task.name]["bpb"] = 3.0

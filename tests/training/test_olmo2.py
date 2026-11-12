@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from dataclasses import replace
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import pytest
 import torch
@@ -9,6 +12,14 @@ from torch.nn import functional as F
 from flock.training.core.data_utils import Batch, LanceBatchCollator
 from flock.training.core.models.olmo2 import OLMO2_1B_CONFIG, OLMO2_7B_CONFIG, Olmo2
 from tests.training._reference import olmo2_training_parity
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from typing import Any
+
+    from transformers import TokenizersBackend
+
+    from flock.training.core.models.olmo2 import Olmo2Config
 
 
 def make_batch(input_ids: torch.Tensor, attention_mask: torch.Tensor | None = None) -> Batch:
@@ -21,7 +32,7 @@ def make_batch(input_ids: torch.Tensor, attention_mask: torch.Tensor | None = No
 
 @pytest.mark.parametrize("kv_heads", [4, 2, 1], ids=["mha", "gqa", "mqa"])
 @pytest.mark.parametrize("padding", ["none", "left", "right"])
-def test_huggingface_training_parity(config, kv_heads, padding):
+def test_huggingface_training_parity(config: Olmo2Config, kv_heads: int, padding: str) -> None:
     olmo2_training_parity(
         replace(config, num_key_value_heads=kv_heads),
         padding,
@@ -30,7 +41,7 @@ def test_huggingface_training_parity(config, kv_heads, padding):
     )
 
 
-def test_causality_and_padding_invariance(config):
+def test_causality_and_padding_invariance(config: Olmo2Config) -> None:
     model = Olmo2(config).eval()
     ids = torch.tensor([[2, 3, 4, 5]])
     with torch.no_grad():
@@ -46,7 +57,7 @@ def test_causality_and_padding_invariance(config):
 
 
 @pytest.fixture
-def sentencepiece_class(monkeypatch):
+def sentencepiece_class(monkeypatch: pytest.MonkeyPatch) -> None:
     """`AutoTokenizer` gives a tokenizer whose class is built on a SentencePiece model."""
     tokenizer = SimpleNamespace(vocab_files_names={"vocab_file": "spiece.model"})
     monkeypatch.setattr(
@@ -55,7 +66,9 @@ def sentencepiece_class(monkeypatch):
     )
 
 
-def test_a_conversion_in_a_local_folder_is_refused(config, tmp_path, sentencepiece_class):
+def test_a_conversion_in_a_local_folder_is_refused(
+    config: Olmo2Config, tmp_path: Path, sentencepiece_class: None
+) -> None:
     model = Olmo2(replace(config, hf_repo=str(tmp_path)))
     with pytest.raises(ValueError, match="without tokenizer.json: SimpleNamespace would be"):
         model.get_hf_tokenizer()
@@ -63,8 +76,12 @@ def test_a_conversion_in_a_local_folder_is_refused(config, tmp_path, sentencepie
 
 @pytest.mark.parametrize("record", [False, True], ids=["unrecorded", "recorded"])
 def test_a_conversion_from_the_cache_is_refused(
-    config, tmp_path, monkeypatch, sentencepiece_class, record
-):
+    config: Olmo2Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    sentencepiece_class: None,
+    record: bool,
+) -> None:
     monkeypatch.setattr(constants, "HF_HUB_CACHE", str(tmp_path))
     sha = "a" * 40
     repo = tmp_path / "models--org--repo"
@@ -81,8 +98,11 @@ def test_a_conversion_from_the_cache_is_refused(
 
 
 def test_a_sentencepiece_class_with_tokenizer_json_is_not_a_conversion(
-    config, tokenizer, tmp_path, monkeypatch
-):
+    config: Olmo2Config,
+    tokenizer: TokenizersBackend,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         "flock.training.core.models.base.AutoTokenizer.from_pretrained",
         lambda repo, **kwargs: tokenizer,
@@ -93,7 +113,9 @@ def test_a_sentencepiece_class_with_tokenizer_json_is_not_a_conversion(
     assert model.get_hf_tokenizer() is tokenizer
 
 
-def test_a_class_with_other_vocabulary_files_is_not_a_conversion(config, tmp_path, monkeypatch):
+def test_a_class_with_other_vocabulary_files_is_not_a_conversion(
+    config: Olmo2Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # The check reads the class, so one naming no SentencePiece file passes. The type check is next.
     tokenizer = SimpleNamespace(vocab_files_names={"vocab_file": "vocab.json"})
     monkeypatch.setattr(
@@ -106,17 +128,24 @@ def test_a_class_with_other_vocabulary_files_is_not_a_conversion(config, tmp_pat
         model.get_hf_tokenizer()
 
 
-def test_collated_training_batch(config, tokenizer, tmp_path, monkeypatch):
+def test_collated_training_batch(
+    config: Olmo2Config,
+    tokenizer: TokenizersBackend,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         "flock.training.core.models.base.AutoTokenizer.from_pretrained",
         lambda repo, **kwargs: tokenizer,
     )
     (tmp_path / "tokenizer.json").write_text("{}")
     model = Olmo2(replace(config, hf_repo=str(tmp_path)))
-    tokenizer = model.get_hf_tokenizer()
-    assert tokenizer is not None
-    tokenizer.padding_side = "left"
-    batch = LanceBatchCollator(tokenizer, "text").collate_fn([{"text": "a b c"}, {"text": "b c"}])
+    loaded_tokenizer = model.get_hf_tokenizer()
+    assert loaded_tokenizer is not None
+    loaded_tokenizer.padding_side = "left"
+    batch = LanceBatchCollator(loaded_tokenizer, "text").collate_fn(
+        [{"text": "a b c"}, {"text": "b c"}]
+    )
     assert batch["input_ids"].shape == batch["attention_mask"].shape == batch["labels"].shape
     assert batch["labels"].tolist() == [[3, 4], [-100, 4]]
     logits = model(batch)
@@ -127,7 +156,7 @@ def test_collated_training_batch(config, tokenizer, tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
-def test_fully_masked_rows_are_finite(config, dtype):
+def test_fully_masked_rows_are_finite(config: Olmo2Config, dtype: torch.dtype) -> None:
     model = Olmo2(config).to(dtype=dtype)
     ids = torch.tensor([[0, 0, 0], [2, 3, 4]])
     logits = model(make_batch(ids, torch.tensor([[0, 0, 0], [1, 1, 1]])))
@@ -144,7 +173,7 @@ def test_fully_masked_rows_are_finite(config, dtype):
         (OLMO2_7B_CONFIG, 7_298_617_344),
     ],
 )
-def test_presets(config, expected_count):
+def test_presets(config: Olmo2Config, expected_count: int) -> None:
     # Validate full-size shapes without allocating billions of weights.
     with torch.device("meta"):
         model = Olmo2(config)
@@ -164,12 +193,12 @@ def test_presets(config, expected_count):
         {"rms_norm_eps": 0},
     ],
 )
-def test_invalid_config(config, changes):
+def test_invalid_config(config: Olmo2Config, changes: dict[str, int]) -> None:
     with pytest.raises(ValueError):
         replace(config, **changes)
 
 
-def test_invalid_input_shapes(config):
+def test_invalid_input_shapes(config: Olmo2Config) -> None:
     model = Olmo2(config)
     for ids in (torch.ones(2, dtype=torch.long), torch.ones(1, 17, dtype=torch.long)):
         with pytest.raises(ValueError):
@@ -179,11 +208,16 @@ def test_invalid_input_shapes(config):
         model(make_batch(ids, attention_mask=torch.ones(1, 4)))
 
 
-def test_tokenizer_config(config, tokenizer, tmp_path, monkeypatch):
+def test_tokenizer_config(
+    config: Olmo2Config,
+    tokenizer: TokenizersBackend,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls = []
     tokenizer.pad_token = None
 
-    def load(repo, **kwargs):
+    def load(repo: str, **kwargs: Any) -> TokenizersBackend:
         calls.append((repo, kwargs))
         return tokenizer
 
@@ -198,7 +232,7 @@ def test_tokenizer_config(config, tokenizer, tmp_path, monkeypatch):
     ]
 
 
-def test_initialization_is_independent_of_global_rng(config):
+def test_initialization_is_independent_of_global_rng(config: Olmo2Config) -> None:
     torch.manual_seed(1)
     first = Olmo2(config)
     torch.randn(100)
@@ -214,7 +248,7 @@ def test_initialization_is_independent_of_global_rng(config):
     assert not torch.equal(first.model.embed_tokens.weight, first.lm_head.weight)
 
 
-def test_explicit_init_seed(config):
+def test_explicit_init_seed(config: Olmo2Config) -> None:
     first = Olmo2(replace(config, init_seed=123))
     second = Olmo2(replace(config, init_seed=123))
     different = Olmo2(replace(config, init_seed=456))
@@ -224,7 +258,7 @@ def test_explicit_init_seed(config):
 
 
 @pytest.mark.parametrize("device", ["cpu", "meta"])
-def test_initialization_preserves_global_rng(config, device):
+def test_initialization_preserves_global_rng(config: Olmo2Config, device: str) -> None:
     before = torch.get_rng_state().clone()
     with torch.device(device):
         Olmo2(config)

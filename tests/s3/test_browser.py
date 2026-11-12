@@ -1,9 +1,12 @@
 """What the dashboard's browser does with the proxy (D69): presigned uploads, downloads and
 multipart uploads, and CORS for the web origin only."""
 
+from __future__ import annotations
+
 import hashlib
 import os
 import xml.etree.ElementTree as ET
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
@@ -11,6 +14,10 @@ import pytest
 from tests.app.conftest import Flocks, S3Flock
 from tests.conftest import S3Server
 from tests.s3.conftest import S3Env, make_env
+
+if TYPE_CHECKING:
+    from typing import Any
+
 
 WEB = "http://dashboard.flock.test:5173"
 
@@ -20,13 +27,13 @@ def env(make_module_flock: Flocks, s3_server: S3Server) -> S3Env:
     return make_env(make_module_flock, s3_server, web_url=WEB)
 
 
-def presign(env: S3Env, bucket: str, user: str = "alice", **body) -> dict:
+def presign(env: S3Env, bucket: str, user: str = "alice", **body: Any) -> dict:
     got = env.api(user).post(f"/api/v1/orgs/flock/buckets/{bucket}/presign", body)
     assert got.status == 200, got.body
     return got.json()
 
 
-def test_presigned_put_and_get(env):
+def test_presigned_put_and_get(env: S3Env) -> None:
     bucket = env.bucket()
     body = b"hello, browser"
     put = presign(env, bucket, method="put", key="docs/hello world.txt", size=len(body))
@@ -67,7 +74,7 @@ def test_presigned_put_and_get(env):
     assert httpx.get(tampered).status_code == 403
 
 
-def test_a_browser_style_multipart_upload(env):
+def test_a_browser_style_multipart_upload(env: S3Env) -> None:
     bucket = env.bucket()
     data = os.urandom(17 * 1024 * 1024)
     key = "big/model.bin"
@@ -107,7 +114,7 @@ def test_a_browser_style_multipart_upload(env):
     assert hashlib.sha256(stored["Body"].read()).digest() == hashlib.sha256(data).digest()
 
 
-def test_an_aborted_multipart_upload_leaves_nothing(env):
+def test_an_aborted_multipart_upload_leaves_nothing(env: S3Env) -> None:
     bucket = env.bucket()
     started = presign(env, bucket, method="multipart", key="x", size=10)
     upload_id = started["upload_id"]
@@ -118,7 +125,7 @@ def test_an_aborted_multipart_upload_leaves_nothing(env):
     assert uploads.get("Uploads", []) == []
 
 
-def test_cors_preflight_for_the_web_origin_only(env):
+def test_cors_preflight_for_the_web_origin_only(env: S3Env) -> None:
     bucket = env.bucket()
     url = f"{env.proxy_url}/{bucket}/some/key"
     asked = {
@@ -143,7 +150,7 @@ def test_cors_preflight_for_the_web_origin_only(env):
     assert "access-control-allow-origin" not in sent.headers
 
 
-def test_cors_is_off_without_a_web_url(make_flock: Flocks, s3_server: S3Server):
+def test_cors_is_off_without_a_web_url(make_flock: Flocks, s3_server: S3Server) -> None:
     flock: S3Flock = make_flock.s3(s3_server)
     got = httpx.options(
         f"{flock.proxy.url}/b/k",

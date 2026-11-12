@@ -11,6 +11,7 @@ import base64
 import hashlib
 import zlib
 from collections.abc import AsyncIterable, AsyncIterator
+from typing import Protocol
 
 from app.api.src.s3_proxy.sigv4 import STREAMING_UNSIGNED_TRAILER
 
@@ -35,7 +36,13 @@ class _Crc32:
         return self.value.to_bytes(4, "big")
 
 
-def _checker(name: str):
+class _Checksum(Protocol):
+    def update(self, data: bytes, /) -> None: ...
+
+    def digest(self) -> bytes: ...
+
+
+def _checker(name: str) -> _Checksum | None:
     """A running checksum for the trailer header ``name``, or None if the proxy can't check it
     (CRC32C and CRC64NVME need libraries the API doesn't have; TLS still protects the bytes)."""
     if name == "x-amz-checksum-crc32":

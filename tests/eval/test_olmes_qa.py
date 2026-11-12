@@ -9,7 +9,7 @@ from flock.eval.tasks.winogrande import WINOGRANDE, winogrande_doc
 # the same row at commit 5a51f50.
 
 
-def test_hellaswag_strips_wikihow_markup_and_capitalizes_like_olmes():
+def test_hellaswag_strips_wikihow_markup_and_capitalizes_like_olmes() -> None:
     row = {
         "index": 3,
         "activity_label": "Home and Garden",
@@ -26,7 +26,7 @@ def test_hellaswag_strips_wikihow_markup_and_capitalizes_like_olmes():
     )
 
 
-def test_winogrande_gives_each_option_its_own_context():
+def test_winogrande_gives_each_option_its_own_context() -> None:
     row = {
         "index": 0,
         "sentence": "Sarah was a much better surgeon than Maria so _ always got the easier cases.",
@@ -42,7 +42,7 @@ def test_winogrande_gives_each_option_its_own_context():
     )
 
 
-def test_winogrande_shot_is_its_gold_sentence_and_has_no_pmi():
+def test_winogrande_shot_is_its_gold_sentence_and_has_no_pmi() -> None:
     shot = winogrande_doc(
         {"index": 0, "sentence": "A _ b.", "option1": "x", "option2": "y", "answer": "1"}
     )
@@ -58,7 +58,7 @@ def test_winogrande_shot_is_its_gold_sentence_and_has_no_pmi():
     assert "acc_uncond" not in WINOGRANDE.reported_metrics
 
 
-def test_socialiqa_joins_context_and_question():
+def test_socialiqa_joins_context_and_question() -> None:
     row = {
         "index": 0,
         "context": "Tracy didn't go home that evening and resisted Riley's attacks.",
@@ -80,7 +80,7 @@ def test_socialiqa_joins_context_and_question():
     )
 
 
-def test_piqa_uses_the_goal_prefix():
+def test_piqa_uses_the_goal_prefix() -> None:
     row = {
         "index": 5,
         "goal": "Open a jar.",
@@ -95,7 +95,7 @@ def test_piqa_uses_the_goal_prefix():
     assert doc.choices[1] == Choice("Goal: Open a jar.\nAnswer:", " Eat it.")
 
 
-def test_mmlu_subject_header_comes_before_the_shots():
+def test_mmlu_subject_header_comes_before_the_shots() -> None:
     task = TASKS["mmlu_high_school_us_history"]
     assert isinstance(task, MultipleChoiceTask)
     shot = mmlu_doc({"index": 0, "question": "1 + 1?", "choices": ["1", "2"], "answer": 1})
@@ -109,12 +109,12 @@ def test_mmlu_subject_header_comes_before_the_shots():
     )
 
 
-def test_mmlu_has_one_task_per_subject_under_both_suites():
+def test_mmlu_has_one_task_per_subject_under_both_suites() -> None:
     assert len(set(SUBJECTS)) == len(MMLU_TASKS) == 57
     assert SUITES["mmlu"].tasks == SUITES["mmlu:bpb"].tasks == MMLU_TASKS
 
 
-def test_suite_scores_average_mmlu_first():
+def test_suite_scores_average_mmlu_first() -> None:
     metrics = {task.name: {task.primary_metric: 0.0} for task in TASKS.values()}
     for task in MMLU_TASKS:
         metrics[task.name]["acc_per_char"] = 1.0

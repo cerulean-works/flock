@@ -1,9 +1,12 @@
 """``ColumnTable``, kept as the oracle for the run table's PostgreSQL queries (012, D77): every
 case runs against both."""
 
+from __future__ import annotations
+
 import asyncio
 import datetime as dt
 import random
+from typing import TYPE_CHECKING
 
 import asyncpg
 import numpy as np
@@ -12,6 +15,9 @@ import pytest
 from app.api.src.core import query, values
 from app.api.src.core.query import FilterError, Selection, check_regex
 from app.api.src.core.table import ColumnTable
+
+if TYPE_CHECKING:
+    from typing import Any
 
 
 def random_rows(n: int, seed: int = 0) -> list[dict]:
@@ -106,7 +112,7 @@ def assert_same(table: ColumnTable, expected: ColumnTable) -> None:
 
 
 @pytest.mark.parametrize("order", ["kept", "shuffled"])
-def test_take_matches_a_table_built_from_the_kept_rows(order):
+def test_take_matches_a_table_built_from_the_kept_rows(order: str) -> None:
     rows = random_rows(200)
     keep = [i for i in range(len(rows)) if i % 3 and i != 3]
     if order == "shuffled":
@@ -120,14 +126,14 @@ def test_take_matches_a_table_built_from_the_kept_rows(order):
     assert table.columns["summary.loss"].get(row) == 0.25
 
 
-def test_take_everything_away():
+def test_take_everything_away() -> None:
     table = build(random_rows(10))
     table.take(np.array([], dtype=np.int64))
     assert table.n == 0
     assert table.columns == {}
 
 
-def test_append_from_copies_rows_between_tables():
+def test_append_from_copies_rows_between_tables() -> None:
     rows = random_rows(120, seed=2)
     source, target = build(rows[:100]), build(rows[100:])
     moved = [5, 17, 3, 60]
@@ -136,7 +142,7 @@ def test_append_from_copies_rows_between_tables():
     assert_same(target, build(rows[100:] + [rows[i] for i in moved]))
 
 
-def test_postgres_answers_like_the_column_table(postgres):
+def test_postgres_answers_like_the_column_table(postgres: Any) -> None:
     """The filter compiler, sorts and column counts over ``run_values`` agree with
     ``ColumnTable`` on the same rows (the in-memory table the run table used to be)."""
     rows = random_rows(150, seed=3)
@@ -236,7 +242,7 @@ def test_postgres_answers_like_the_column_table(postgres):
         "(",
     ],
 )
-def test_regex_postgres_reads_differently_is_refused(pattern):
+def test_regex_postgres_reads_differently_is_refused(pattern: str) -> None:
     with pytest.raises(FilterError):
         check_regex(pattern)
 
@@ -244,5 +250,5 @@ def test_regex_postgres_reads_differently_is_refused(pattern):
 @pytest.mark.parametrize(
     "pattern", [r"^adam", r"(?i)ADAM", r"[\b]x", r"a{2,3}?", r"(?:ab)+$", r"\d+\.\d", r"(?=a)a"]
 )
-def test_regex_both_read_alike_is_accepted(pattern):
+def test_regex_both_read_alike_is_accepted(pattern: str) -> None:
     check_regex(pattern)

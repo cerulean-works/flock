@@ -1,12 +1,21 @@
 """The Storage tab's object routes (D65, D67, D69): listing, details, deletes, folders, and the
 presigned URLs signed with a session's browser key."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
 from tests.app.conftest import Flocks, S3Flock
 from tests.conftest import S3Server
+
+if TYPE_CHECKING:
+    from typing import Any
+
+    import asyncpg
+
 
 BUCKETS = "/api/v1/orgs/flock/buckets"
 
@@ -38,7 +47,7 @@ def akid(url: str) -> str:
     return parse_qs(urlsplit(url).query)["X-Amz-Credential"][0].partition("/")[0]
 
 
-def test_listing_shows_one_level_folders_first(flock):
+def test_listing_shows_one_level_folders_first(flock: S3Flock) -> None:
     path = make_bucket(
         flock, "data", "a.txt", "b/c.txt", "b/d/e.txt", "f/", "f/g.txt", "h.json", "b/"
     )
@@ -63,13 +72,13 @@ def test_listing_shows_one_level_folders_first(flock):
     ]
 
 
-def test_listing_pages_with_a_cursor(flock):
+def test_listing_pages_with_a_cursor(flock: S3Flock) -> None:
     keys = [f"k{i:02d}" for i in range(7)]
     path = make_bucket(flock, "data", *keys)
     api = flock.client()
     seen, cursor = [], None
     for _ in range(4):
-        params = {"limit": 3, **({"cursor": cursor} if cursor else {})}
+        params: dict[str, Any] = {"limit": 3, **({"cursor": cursor} if cursor else {})}
         page = api.get(f"{path}/objects", **params).json()
         seen += [o["key"] for o in page["objects"]]
         cursor = page["cursor"]
@@ -80,7 +89,7 @@ def test_listing_pages_with_a_cursor(flock):
     assert api.get(f"{BUCKETS}/nope/objects").status == 404
 
 
-def test_head_returns_an_objects_details(flock):
+def test_head_returns_an_objects_details(flock: S3Flock) -> None:
     path = make_bucket(flock)
     pk = flock.call(flock.store.org("flock")).pk
     flock.s3.client().put_object(
@@ -102,7 +111,7 @@ def test_head_returns_an_objects_details(flock):
     assert api.get(f"{path}/object", key="dir/missing").status == 404
 
 
-def test_folders_are_empty_markers(flock):
+def test_folders_are_empty_markers(flock: S3Flock) -> None:
     path = make_bucket(flock)
     api = flock.client()
     created = api.post(f"{path}/folders", {"prefix": "models/v1/"})
@@ -114,7 +123,7 @@ def test_folders_are_empty_markers(flock):
         assert api.post(f"{path}/folders", {"prefix": bad}).status == 422, bad
 
 
-def test_deleting_objects_and_folders(flock):
+def test_deleting_objects_and_folders(flock: S3Flock) -> None:
     path = make_bucket(flock, "data", "a", "b", "dir/", "dir/x", "dir/sub/y", "dirt", "keep/z")
     api = flock.client()
     got = api.post(f"{path}/objects/delete", {"keys": ["a"], "prefixes": ["dir/"]})
@@ -126,8 +135,8 @@ def test_deleting_objects_and_folders(flock):
     assert api.post(f"{path}/objects/delete", {"prefixes": ["keep"]}).status == 422
 
 
-def test_folder_deletes_are_capped(flock):
-    flock.store.s3.FOLDER_DELETE_LIMIT = 5
+def test_folder_deletes_are_capped(flock: S3Flock, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(flock.store.s3, "FOLDER_DELETE_LIMIT", 5)
     path = make_bucket(flock, "data", *(f"big/{i}" for i in range(6)), "small/1", "small/2")
     api = flock.client()
     refused = api.post(f"{path}/objects/delete", {"prefixes": ["big/"]})
@@ -143,7 +152,7 @@ def test_folder_deletes_are_capped(flock):
     assert api.post(f"{path}/objects/delete", {"prefixes": ["small/"]}).json() == {"deleted": 2}
 
 
-def test_members_use_objects_and_others_cant(flock):
+def test_members_use_objects_and_others_cant(flock: S3Flock) -> None:
     path = make_bucket(flock, "data", "a")
     alice = flock.add_user("alice@lab.test")
     assert alice.api.get(f"{path}/objects").status == 200
@@ -164,17 +173,17 @@ def test_members_use_objects_and_others_cant(flock):
         assert got.status == 404, (sub, got.body)
 
 
-def test_the_browser_key_is_reused_rotated_and_ends_with_the_session(flock):
+def test_the_browser_key_is_reused_rotated_and_ends_with_the_session(flock: S3Flock) -> None:
     path = make_bucket(flock, "data", "a")
     alice = flock.add_user("alice@lab.test")
     web = flock.client(token=alice.signup["access_token"])
 
-    def presign(**body):
+    def presign(**body: Any) -> Any:
         got = web.post(f"{path}/presign", {"key": "a", **body})
         assert got.status == 200, got.body
         return got.json()
 
-    def keys():
+    def keys() -> list[asyncpg.Record]:
         return flock.call(
             flock.store.db.fetch(
                 "SELECT access_key_id, name, session_pk, extract(epoch FROM expires_at)::float8 "
@@ -224,11 +233,11 @@ def test_the_browser_key_is_reused_rotated_and_ends_with_the_session(flock):
     assert keys() == []
 
 
-def test_presign_refuses_what_the_browser_shouldnt_do(flock):
+def test_presign_refuses_what_the_browser_shouldnt_do(flock: S3Flock) -> None:
     path = make_bucket(flock, "data", "a")
     api = flock.client()
 
-    def presign(**body):
+    def presign(**body: Any) -> Any:
         return api.post(f"{path}/presign", {"key": "a", **body})
 
     assert presign(method="put", size=101 * 1024 * 1024).status == 422
@@ -245,11 +254,13 @@ def test_presign_refuses_what_the_browser_shouldnt_do(flock):
     assert api.post(f"{BUCKETS}/nope/presign", {"key": "a", "method": "get"}).status == 404
 
 
-def test_deleting_buckets_are_listed_until_purged(flock):
+def test_deleting_buckets_are_listed_until_purged(
+    flock: S3Flock, monkeypatch: pytest.MonkeyPatch
+) -> None:
     make_bucket(flock, "data")
     api = flock.client()
     # Keep the purge from finishing, so the bucket stays "being deleted".
-    flock.store.s3.purge_later = lambda: None
+    monkeypatch.setattr(flock.store.s3, "purge_later", lambda: None)
     assert api.delete(f"{BUCKETS}/data").status == 204
     # Only the buckets Flock manages (013, 014) are left.
     names = [b["name"] for b in api.get(BUCKETS).json()["buckets"]]

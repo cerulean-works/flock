@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import dataclasses
 import math
+from typing import TYPE_CHECKING
 
 import pytest
 import torch
@@ -9,8 +12,14 @@ from flock.eval.run import score_task
 from flock.eval.tasks import SUITES, TASKS, Choice, Dataset, Fewshot, MultipleChoiceTask
 from flock.eval.tasks.tw_mock_exams import SUBJECTS, TW_MOCK_EXAMS, chinese_doc, english_doc
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from typing import Any
 
-def row(id: str, stem: str, options: list[str], answer: str, **fields) -> dict:
+    from flock.eval.model import ScoringModel
+
+
+def row(id: str, stem: str, options: list[str], answer: str, **fields: Any) -> dict:
     """A dataset row as the private repo holds it, scored unless `fields` says otherwise."""
     return {
         "hash": id,
@@ -50,16 +59,18 @@ TEST = [
 
 
 @pytest.fixture
-def history():
+def history() -> Iterator[MultipleChoiceTask]:
     """`tw_mock_exams_history` with two examples, reading the rows above by split."""
-    task = dataclasses.replace(TASKS["tw_mock_exams_history"], fewshot=Fewshot("dev", ("s1", "s2")))
+    base = TASKS["tw_mock_exams_history"]
+    assert isinstance(base, MultipleChoiceTask)
+    task = dataclasses.replace(base, fewshot=Fewshot("dev", ("s1", "s2")))
     rows = {"dev": SHOTS, "test": TEST}
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(Dataset, "load", lambda dataset, split=None: rows[split or dataset.split])
         yield task
 
 
-def test_only_eligible_rows_are_scored_whatever_their_rights(history):
+def test_only_eligible_rows_are_scored_whatever_their_rights(history: MultipleChoiceTask) -> None:
     docs, shots = history.load()
 
     # Multi-answer, character-sensitive, figure, follow-up, listening, cloze and empty-option
@@ -70,7 +81,7 @@ def test_only_eligible_rows_are_scored_whatever_their_rights(history):
     assert [doc.id for doc in history.load(limit=3)[0]] == ["t1", "t2", "t3"]
 
 
-def test_an_answer_that_is_not_exactly_one_label_names_the_doc():
+def test_an_answer_that_is_not_exactly_one_label_names_the_doc() -> None:
     # As one English item's labels read A, B, C, B: the unique answer still finds its option.
     repeated = row("r1", "Pick one.", ["a", "b", "c", "d"], "C")
     repeated["options"][3]["label"] = "B"
@@ -80,7 +91,9 @@ def test_an_answer_that_is_not_exactly_one_label_names_the_doc():
         english_doc({**repeated, "answer": "B"})
 
 
-def test_chinese_request_is_header_then_shots_then_stripped_question(history):
+def test_chinese_request_is_header_then_shots_then_stripped_question(
+    history: MultipleChoiceTask,
+) -> None:
     built = history.requests(*history.load())
 
     assert built.requests[0].context == (
@@ -95,14 +108,14 @@ def test_chinese_request_is_header_then_shots_then_stripped_question(history):
     assert built.requests[len(built.requests) // 2].context == "答案："
 
 
-def test_a_grouped_item_puts_its_passage_before_the_question():
+def test_a_grouped_item_puts_its_passage_before_the_question() -> None:
     doc = chinese_doc(TEST[1])
 
     assert doc.choices[1] == Choice("康熙皇帝在位六十一年。\n問題：這是哪一個朝代？\n答案：", "明")
     assert doc.gold == 1
 
 
-def test_english_takes_olmes_format_with_a_spaced_answer():
+def test_english_takes_olmes_format_with_a_spaced_answer() -> None:
     english = row(
         "e1", "What is the main idea?", ["Trees", "Rivers"], "B",
         doc_subject="英文", passage="Rivers shape the land.",
@@ -120,7 +133,7 @@ def test_english_takes_olmes_format_with_a_spaced_answer():
     assert task.unconditional_context == "Answer:"
 
 
-def test_a_doc_repeating_an_example_is_not_shown_it(history):
+def test_a_doc_repeating_an_example_is_not_shown_it(history: MultipleChoiceTask) -> None:
     docs, shots = history.load()
     context = history.requests(docs[2:], shots).requests[0].context
 
@@ -137,7 +150,7 @@ def uniform_scores(n: int) -> Scores:
     )
 
 
-def test_lengths_count_characters_and_utf8_bytes(history):
+def test_lengths_count_characters_and_utf8_bytes(history: MultipleChoiceTask) -> None:
     built = history.requests(*history.load())
     layout = built.choice_scores(uniform_scores(len(built.requests)))
 
@@ -155,7 +168,9 @@ def test_lengths_count_characters_and_utf8_bytes(history):
     assert layout.num_bytes[0].tolist() == [4, 4]
 
 
-def test_metrics_follow_their_definitions_and_ignore_batching(scorer, history):
+def test_metrics_follow_their_definitions_and_ignore_batching(
+    scorer: ScoringModel, history: MultipleChoiceTask
+) -> None:
     built = history.requests(*history.load())
     logprob = scorer.loglikelihood(built.requests).logprob.tolist()
 
@@ -178,12 +193,12 @@ def test_metrics_follow_their_definitions_and_ignore_batching(scorer, history):
     assert score_task(scorer, history).metrics == pytest.approx(result.metrics, abs=1e-5)
 
 
-def test_ten_subjects_with_five_examples_each():
+def test_ten_subjects_with_five_examples_each() -> None:
     assert len({subject.name for subject in SUBJECTS}) == len(TW_MOCK_EXAMS.tasks) == 10
     assert all(len(set(subject.shots)) == 5 for subject in SUBJECTS)
 
 
-def test_suite_is_the_plain_mean_of_the_subjects():
+def test_suite_is_the_plain_mean_of_the_subjects() -> None:
     metrics = {task.name: {"acc_per_char": 0.0, "bpb": 1.0} for task in TW_MOCK_EXAMS.tasks}
     metrics["tw_mock_exams_physics"] = {"acc_per_char": 1.0, "bpb": 2.0}
 

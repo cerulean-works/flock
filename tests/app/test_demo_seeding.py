@@ -1,12 +1,24 @@
+from __future__ import annotations
+
 import asyncio
 import datetime as dt
+from typing import TYPE_CHECKING
 
 from app.api.scripts.seed_demo import ADMIN_EMAIL, PASSWORD, simulate
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from typing import Any
+
+    from tests.app.conftest import Flocks
+
 
 MID_MONTH = dt.datetime(2026, 10, 15, tzinfo=dt.UTC).timestamp()  # spend is counted per UTC month
 
 
-def test_a_simulated_month_loads_into_the_flock(postgres, make_flock, tmp_path):
+def test_a_simulated_month_loads_into_the_flock(
+    postgres: Any, make_flock: Flocks, tmp_path: Path
+) -> None:
     """A small simulated month: Flock loads it as written, with nothing to rebuild."""
     url = postgres.create()
     files = tmp_path / "flock-files-0"  # where the first flock of ``make_flock`` looks

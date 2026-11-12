@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import math
+from typing import TYPE_CHECKING
 
 import datasets
 import pytest
@@ -7,6 +10,12 @@ from flock.eval.model import ScoringModel
 from flock.eval.run import score_task
 from flock.eval.tasks import TASKS, Choice, Dataset, MCDoc, MultipleChoiceTask, Truncation
 from flock.eval.tasks.drcd import drcd_doc
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
+
+    from transformers import LlamaForCausalLM, PreTrainedTokenizerFast
 
 
 def row(id: str, context: str, question: str, *answers: str) -> dict:
@@ -35,7 +44,9 @@ ROWS = {
 
 
 @pytest.fixture
-def drcd_rows(monkeypatch, real_load):
+def drcd_rows(
+    monkeypatch: pytest.MonkeyPatch, real_load: Callable[..., list[dict[str, Any]]]
+) -> None:
     """`drcd_bpb` loads `ROWS` by split through the real `Dataset.load`."""
     monkeypatch.setattr(Dataset, "load", real_load)
     monkeypatch.setattr(
@@ -45,13 +56,13 @@ def drcd_rows(monkeypatch, real_load):
     )
 
 
-def test_doc_strips_every_field_and_scores_the_first_answer():
+def test_doc_strips_every_field_and_scores_the_first_answer() -> None:
     doc = drcd_doc(ROWS["test"][0])
 
     assert doc == MCDoc("1-1-1", (Choice("文章：水會結冰。\n問題：幾度？\n答案：", "零度"),), 0)
 
 
-def test_request_is_the_example_then_the_passage_and_question(drcd_rows):
+def test_request_is_the_example_then_the_passage_and_question(drcd_rows: None) -> None:
     task = TASKS["drcd_bpb"]
     assert isinstance(task, MultipleChoiceTask)
 
@@ -65,7 +76,7 @@ def test_request_is_the_example_then_the_passage_and_question(drcd_rows):
     assert len(built.requests) == len(built.docs) == 3
 
 
-def test_bpb_divides_by_the_answers_utf8_bytes(scorer, drcd_rows):
+def test_bpb_divides_by_the_answers_utf8_bytes(scorer: ScoringModel, drcd_rows: None) -> None:
     task = TASKS["drcd_bpb"]
     assert isinstance(task, MultipleChoiceTask)
     built = task.requests(*task.load())
@@ -81,7 +92,9 @@ def test_bpb_divides_by_the_answers_utf8_bytes(scorer, drcd_rows):
     assert result.metrics == {"bpb": pytest.approx(sum(bpb) / 3, rel=1e-5)}
 
 
-def test_long_passages_are_cut_from_the_left_and_counted(lm, tokenizer, drcd_rows):
+def test_long_passages_are_cut_from_the_left_and_counted(
+    lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast, drcd_rows: None
+) -> None:
     task = TASKS["drcd_bpb"]
     assert isinstance(task, MultipleChoiceTask)
     built = task.requests(*task.load())
@@ -103,7 +116,7 @@ def test_long_passages_are_cut_from_the_left_and_counted(lm, tokenizer, drcd_row
     )
 
 
-def test_scores_do_not_depend_on_batching(scorer, drcd_rows):
+def test_scores_do_not_depend_on_batching(scorer: ScoringModel, drcd_rows: None) -> None:
     task = TASKS["drcd_bpb"]
     assert isinstance(task, MultipleChoiceTask)
     one_batch = score_task(scorer, task)

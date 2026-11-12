@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import math
 import re
 import shutil
+from typing import TYPE_CHECKING
 
 import asyncpg
 import pytest
@@ -14,8 +17,14 @@ from app.api.src.db.database import SchemaError
 from app.api.src.db.migrate import Migrations
 from app.api.src.settings import Settings
 
+if TYPE_CHECKING:
+    from pathlib import Path
+    from typing import Any
 
-def test_migration_files_are_numbered_in_sequence():
+    from tests.app.conftest import Flocks, FlockServer
+
+
+def test_migration_files_are_numbered_in_sequence() -> None:
     names = [path.name for path in Migrations().files()]
     assert names, "no migrations found"
     assert all(re.fullmatch(r"\d{4}_[a-z0-9_]+\.sql", name) for name in names), names
@@ -23,7 +32,7 @@ def test_migration_files_are_numbered_in_sequence():
     assert numbers == list(range(1, len(names) + 1))
 
 
-def test_migrate_applies_everything_once(postgres):
+def test_migrate_applies_everything_once(postgres: Any) -> None:
     url = postgres.create(migrated=False)
     migrations = Migrations()
     expected = [path.stem for path in migrations.files()]
@@ -41,14 +50,16 @@ def test_migrate_applies_everything_once(postgres):
     assert asyncio.run(recorded()) == expected
 
 
-def test_server_migrates_on_startup(postgres, make_flock):
+def test_server_migrates_on_startup(postgres: Any, make_flock: Flocks) -> None:
     url = postgres.create(migrated=False)
     api = make_flock(database_url=url).client()  # the default: migrate_on_startup=True
     api.create_run("p", "r1")
     assert api.only_run("p")["state"] == "running"
 
 
-def test_server_refuses_unmigrated_database_when_told_not_to_migrate(postgres, tmp_path):
+def test_server_refuses_unmigrated_database_when_told_not_to_migrate(
+    postgres: Any, tmp_path: Path
+) -> None:
     settings = Settings(
         database_url=postgres.create(migrated=False), files_dir=tmp_path, migrate_on_startup=False
     )
@@ -57,12 +68,12 @@ def test_server_refuses_unmigrated_database_when_told_not_to_migrate(postgres, t
 
 
 @pytest.mark.parametrize(("raw", "expected"), [("false", False), ("0", False), ("TRUE", True)])
-def test_boolean_settings_parse_words(raw, expected):
+def test_boolean_settings_parse_words(raw: str, expected: bool) -> None:
     environ = {"FLOCK_MIGRATE_ON_STARTUP": raw}
     assert Settings.load(environ=environ).migrate_on_startup is expected
 
 
-def test_servers_share_a_database(flock, tmp_path):
+def test_servers_share_a_database(flock: FlockServer, tmp_path: Path) -> None:
     """Any number of servers use one database (D83): there is no server lock any more."""
 
     async def second() -> list[str]:
@@ -76,7 +87,7 @@ def test_servers_share_a_database(flock, tmp_path):
     assert asyncio.run(second()) == ["flock"]
 
 
-def test_0002_upgrades_existing_data(postgres, make_flock, tmp_path):
+def test_0002_upgrades_existing_data(postgres: Any, make_flock: Flocks, tmp_path: Path) -> None:
     """A database written before system metrics existed keeps its history and gains them."""
     url = postgres.create(migrated=False)
     before = tmp_path / "before"
@@ -158,7 +169,7 @@ def test_0002_upgrades_existing_data(postgres, make_flock, tmp_path):
     ]
 
 
-def test_0003_creates_projects_from_runs(postgres, make_flock, tmp_path):
+def test_0003_creates_projects_from_runs(postgres: Any, make_flock: Flocks, tmp_path: Path) -> None:
     """Runs written before projects were records get a project each, from their names."""
     url = postgres.create(migrated=False)
     before = tmp_path / "before"
@@ -228,7 +239,7 @@ def test_0003_creates_projects_from_runs(postgres, make_flock, tmp_path):
     assert api.get("/api/v1/projects/flock/q").json()["run_count"] == 1
 
 
-def test_0004_creates_orgs_from_entities(postgres, make_flock, tmp_path):
+def test_0004_creates_orgs_from_entities(postgres: Any, make_flock: Flocks, tmp_path: Path) -> None:
     """Entities of existing projects become orgs; the first account then administers them all."""
     url = postgres.create(migrated=False)
     before = tmp_path / "before"
@@ -297,7 +308,9 @@ def test_0004_creates_orgs_from_entities(postgres, make_flock, tmp_path):
     ]
 
 
-def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(postgres, make_flock, tmp_path):
+def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(
+    postgres: Any, make_flock: Flocks, tmp_path: Path
+) -> None:
     """Runs logged before 0005 are billed from creation to their last heartbeat, split by
     month, and the GPUs in their already uploaded metadata are read on startup."""
     url = postgres.create(migrated=False)
@@ -367,7 +380,9 @@ def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(postgres, make_floc
         assert (budget["gpu_hours"], budget["spent"]) == (2.0, 20.0)  # an hour, 2 GPUs, each
 
 
-def test_0008_shows_existing_orgs_by_their_name(postgres, make_flock, tmp_path):
+def test_0008_shows_existing_orgs_by_their_name(
+    postgres: Any, make_flock: Flocks, tmp_path: Path
+) -> None:
     """Organizations from before display names are shown as they were named, and keep that
     name as their ID."""
     url = postgres.create(migrated=False)
@@ -422,7 +437,9 @@ def test_0008_shows_existing_orgs_by_their_name(postgres, make_flock, tmp_path):
     assert (renamed["name"], renamed["display_name"]) == ("Cerulean Labs", "Cerulean")
 
 
-def test_0009_keeps_the_spend_of_projects_deleted_before_it(postgres, make_flock, tmp_path):
+def test_0009_keeps_the_spend_of_projects_deleted_before_it(
+    postgres: Any, make_flock: Flocks, tmp_path: Path
+) -> None:
     """Spend of projects deleted before 0009 is one deleted project per org, without a name,
     which admins can leave out of the budget like any other."""
     url = postgres.create(migrated=False)
@@ -473,7 +490,7 @@ def test_0009_keeps_the_spend_of_projects_deleted_before_it(postgres, make_flock
     assert api.get("/api/v1/orgs/flock/budget").json()["spent"] == 0
 
 
-def test_0012_refuses_an_org_named_storage(postgres, tmp_path):
+def test_0012_refuses_an_org_named_storage(postgres: Any, tmp_path: Path) -> None:
     """The Storage tab takes `/storage/`: an org of that name stops the migration, with a
     message saying what to do, and the migration runs once it's renamed."""
     url = postgres.create(migrated=False)
@@ -509,7 +526,9 @@ def test_0012_refuses_an_org_named_storage(postgres, tmp_path):
     ]
 
 
-def test_0013_moves_runs_into_the_run_table_and_series_chunks(postgres, make_flock, tmp_path):
+def test_0013_moves_runs_into_the_run_table_and_series_chunks(
+    postgres: Any, make_flock: Flocks, tmp_path: Path
+) -> None:
     """Runs from before 0013 get their values, columns, metrics and chunks: compacted series
     are copied in SQL, uncompacted ones (an active run's) rebuilt from raw lines, and configs
     and summaries holding NaN read leniently. An interrupted backfill resumes."""
@@ -656,7 +675,7 @@ def test_0013_moves_runs_into_the_run_table_and_series_chunks(postgres, make_flo
     }
 
 
-def test_0014_refuses_an_org_named_datasets(postgres, tmp_path):
+def test_0014_refuses_an_org_named_datasets(postgres: Any, tmp_path: Path) -> None:
     """The Datasets tab takes `/datasets/`, as Storage took `/storage/` (0012)."""
     url = postgres.create(migrated=False)
     before = tmp_path / "before"
@@ -689,7 +708,7 @@ def test_0014_refuses_an_org_named_datasets(postgres, tmp_path):
     ]
 
 
-def test_0015_refuses_an_org_named_models(postgres, tmp_path):
+def test_0015_refuses_an_org_named_models(postgres: Any, tmp_path: Path) -> None:
     """The Models tab takes `/models/`, as Datasets took `/datasets/` (0014)."""
     url = postgres.create(migrated=False)
     before = tmp_path / "before"
@@ -721,7 +740,7 @@ def test_0015_refuses_an_org_named_models(postgres, tmp_path):
     ]
 
 
-def test_0016_leaves_existing_projects_and_datasets_private(postgres, tmp_path):
+def test_0016_leaves_existing_projects_and_datasets_private(postgres: Any, tmp_path: Path) -> None:
     url = postgres.create(migrated=False)
     before = tmp_path / "before"
     before.mkdir()
@@ -759,7 +778,9 @@ def test_0016_leaves_existing_projects_and_datasets_private(postgres, tmp_path):
     assert [tuple(row) for row in rows] == [("lab", False), ("new", True)]
 
 
-def test_0017_credits_each_project_to_its_earliest_runs_owner(postgres, tmp_path):
+def test_0017_credits_each_project_to_its_earliest_runs_owner(
+    postgres: Any, tmp_path: Path
+) -> None:
     url = postgres.create(migrated=False)
     before = tmp_path / "before"
     before.mkdir()

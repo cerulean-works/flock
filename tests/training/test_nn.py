@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from dataclasses import replace
+from typing import TYPE_CHECKING
 
 import pytest
 import torch
@@ -12,9 +15,12 @@ from transformers.models.olmo2.modeling_olmo2 import (
 from flock.training.core.nn import GroupedAttentionWithRoPE
 from tests.training._reference import check_gqa_parity, check_swiglu_parity, hf_config
 
+if TYPE_CHECKING:
+    from flock.training.core.models.olmo2 import Olmo2Config
+
 
 @pytest.mark.parametrize("mask_type", ["none", "causal", "padding", "additive"])
-def test_attention_matches_pytorch_multihead_attention(mask_type):
+def test_attention_matches_pytorch_multihead_attention(mask_type: str) -> None:
     """The shared module also supports ordinary attention without OLMo QK-norm/RoPE."""
     torch.manual_seed(0)
     attention = GroupedAttentionWithRoPE(hidden_size=16, num_attention_heads=4, bias=True)
@@ -79,15 +85,15 @@ def test_attention_matches_pytorch_multihead_attention(mask_type):
 
 @pytest.mark.parametrize("kv_heads", [4, 2, 1])
 @pytest.mark.parametrize("causal", [False, True])
-def test_gqa_matches_explicit_pytorch_attention(kv_heads, causal):
+def test_gqa_matches_explicit_pytorch_attention(kv_heads: int, causal: bool) -> None:
     check_gqa_parity(kv_heads, torch.device("cpu"), torch.float32, causal)
 
 
-def test_swiglu_matches_huggingface(config):
+def test_swiglu_matches_huggingface(config: Olmo2Config) -> None:
     check_swiglu_parity(config, torch.device("cpu"), torch.float32)
 
 
-def test_rope_matches_huggingface_at_nonzero_positions(config):
+def test_rope_matches_huggingface_at_nonzero_positions(config: Olmo2Config) -> None:
     reference_config = hf_config(config)
     attention = GroupedAttentionWithRoPE(hidden_size=32, num_attention_heads=4)
     x = torch.linspace(-2, 2, 2 * 4 * 5 * 8).reshape(2, 4, 5, 8).requires_grad_()
@@ -103,7 +109,9 @@ def test_rope_matches_huggingface_at_nonzero_positions(config):
 
 
 @pytest.mark.parametrize("kv_heads", [4, 2, 1])
-def test_flattened_qk_norm_and_rotary_attention_match_huggingface(config, kv_heads):
+def test_flattened_qk_norm_and_rotary_attention_match_huggingface(
+    config: Olmo2Config, kv_heads: int
+) -> None:
     config = replace(config, num_key_value_heads=kv_heads)
     reference_config = hf_config(config)
     reference_config._attn_implementation = "eager"

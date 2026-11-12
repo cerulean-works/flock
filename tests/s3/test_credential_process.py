@@ -39,7 +39,7 @@ def keys(env: S3Env) -> set[str]:
     return {k["access_key_id"] for k in listed}
 
 
-def test_flock_s3_configure_profile(env: S3Env, flock_env: dict[str, str]):
+def test_flock_s3_configure_profile(env: S3Env, flock_env: dict[str, str]) -> None:
     bucket = env.bucket()
     done = subprocess.run(
         [flock_executable(), "s3", "configure", "--profile", "lab"],
@@ -61,7 +61,7 @@ def test_flock_s3_configure_profile(env: S3Env, flock_env: dict[str, str]):
         assert " x\n" in listed.stdout
 
 
-def test_credential_process_rotates_short_keys(env: S3Env, flock_env: dict[str, str]):
+def test_credential_process_rotates_short_keys(env: S3Env, flock_env: dict[str, str]) -> None:
     """botocore asks the process again once a key has fewer than 15 minutes left: with keys of
     11 minutes, each request gets a new one."""
     bucket = env.bucket()

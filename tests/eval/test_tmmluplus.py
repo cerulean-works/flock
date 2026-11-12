@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import math
+from typing import TYPE_CHECKING
 
 import datasets
 import pytest
@@ -22,6 +25,13 @@ from flock.eval.tasks.tmmluplus import (
     TMMLUPLUS_BENCHMARK,
     tmmluplus_doc,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
+
+    from flock.eval.model import ScoringModel
+
 
 ROWS = {
     "train": [
@@ -72,7 +82,9 @@ ROWS = {
 
 
 @pytest.fixture
-def tmmluplus_rows(monkeypatch, real_load):
+def tmmluplus_rows(
+    monkeypatch: pytest.MonkeyPatch, real_load: Callable[..., list[dict[str, Any]]]
+) -> None:
     """Every task loads `ROWS` by split through the real `Dataset.load`, which numbers the rows."""
     monkeypatch.setattr(Dataset, "load", real_load)
     monkeypatch.setattr(
@@ -82,7 +94,7 @@ def tmmluplus_rows(monkeypatch, real_load):
     )
 
 
-def test_doc_strips_text_and_scores_answers_with_no_leading_space():
+def test_doc_strips_text_and_scores_answers_with_no_leading_space() -> None:
     doc = tmmluplus_doc({**ROWS["test"][0], "index": 0})
 
     assert doc == MCDoc(
@@ -97,7 +109,7 @@ def test_doc_strips_text_and_scores_answers_with_no_leading_space():
     )
 
 
-def test_request_is_header_then_shots_then_question(tmmluplus_rows):
+def test_request_is_header_then_shots_then_question(tmmluplus_rows: None) -> None:
     task = TASKS["tmmluplus_organic_chemistry"]
     assert isinstance(task, MultipleChoiceTask)
 
@@ -115,7 +127,7 @@ def test_request_is_header_then_shots_then_question(tmmluplus_rows):
     assert built.requests[8].continuation == "0 度"
 
 
-def test_short_dev_split_shows_every_dev_row(tmmluplus_rows):
+def test_short_dev_split_shows_every_dev_row(tmmluplus_rows: None) -> None:
     chemistry = TASKS["tmmluplus_organic_chemistry"]
     accounting = TASKS["tmmluplus_accounting"]
     assert isinstance(chemistry, MultipleChoiceTask)
@@ -128,7 +140,7 @@ def test_short_dev_split_shows_every_dev_row(tmmluplus_rows):
     assert [shot.id for shot in shots] == ["0", "1", "2"]
 
 
-def test_chinese_choices_count_characters_and_utf8_bytes(tmmluplus_rows):
+def test_chinese_choices_count_characters_and_utf8_bytes(tmmluplus_rows: None) -> None:
     task = TASKS["tmmluplus_organic_chemistry"]
     assert isinstance(task, MultipleChoiceTask)
     built = task.requests(*task.load())
@@ -149,7 +161,9 @@ def test_chinese_choices_count_characters_and_utf8_bytes(tmmluplus_rows):
     assert layout.num_bytes[0, 0].item() == 5
 
 
-def test_metrics_on_chinese_text_follow_their_definitions(scorer, tmmluplus_rows):
+def test_metrics_on_chinese_text_follow_their_definitions(
+    scorer: ScoringModel, tmmluplus_rows: None
+) -> None:
     task = TASKS["tmmluplus_organic_chemistry"]
     assert isinstance(task, MultipleChoiceTask)
     built = task.requests(*task.load())
@@ -174,7 +188,7 @@ def test_metrics_on_chinese_text_follow_their_definitions(scorer, tmmluplus_rows
     assert result.metrics["bpb"] == pytest.approx(sum(bpb) / len(built.docs), rel=1e-5)
 
 
-def test_cloze_takes_other_prefixes_and_separator():
+def test_cloze_takes_other_prefixes_and_separator() -> None:
     assert cloze(
         "為什麼？", ("因為",), question_prefix="問題：", answer_prefix="答案：", separator=""
     ) == (Choice("問題：為什麼？\n答案：", "因為"),)
@@ -183,7 +197,7 @@ def test_cloze_takes_other_prefixes_and_separator():
         MCDoc("x", cloze("為什麼？", ("因為", ""), separator=""), 0)
 
 
-def test_subjects_and_categories_match_the_card():
+def test_subjects_and_categories_match_the_card() -> None:
     categories = TMMLUPLUS_BENCHMARK.categories
     names = [subject.name for category in categories for subject in category.subjects]
     sizes = {category.name: len(category.subjects) for category in categories}
@@ -197,7 +211,7 @@ def test_subjects_and_categories_match_the_card():
     ]
 
 
-def test_total_is_the_mean_of_the_category_means():
+def test_total_is_the_mean_of_the_category_means() -> None:
     metrics = {task.name: {"acc_per_char": 0.0, "bpb": 1.0} for task in TMMLUPLUS.tasks}
     # One STEM subject scores 1 and the other 13 score 0, so STEM scores 1 / 14.
     metrics["tmmluplus_physics"] = {"acc_per_char": 1.0, "bpb": 3.0}
@@ -208,12 +222,12 @@ def test_total_is_the_mean_of_the_category_means():
     assert SUITES["tmmluplus:bpb"].score(metrics) == pytest.approx((1 + 2 / 14) / 4 + 3 / 4)
 
 
-def test_tmmluplus_all_runs_every_subject_once():
+def test_tmmluplus_all_runs_every_subject_once() -> None:
     assert SUITES["tmmluplus:all"].tasks == TMMLUPLUS.tasks
     assert SUITES["tmmluplus:taiwan:bpb"].tasks == TAIWAN_TASKS
 
 
-def test_a_test_row_repeating_a_dev_row_skips_that_shot(tmmluplus_rows):
+def test_a_test_row_repeating_a_dev_row_skips_that_shot(tmmluplus_rows: None) -> None:
     # As `official_document_management`'s test row 129 repeats its dev row 0 in v1.1, with the
     # choices in another order.
     task = TASKS["tmmluplus_organic_chemistry"]

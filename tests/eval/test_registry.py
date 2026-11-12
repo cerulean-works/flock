@@ -83,7 +83,7 @@ def test_evaluate_scores_a_saved_version_and_records_its_number_and_digest(
     tokenizer: PreTrainedTokenizerFast,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-):
+) -> None:
     first = models.save_to_hub(olmo, "flock/tiny")
     other = Olmo2(dataclasses.replace(olmo.config, init_seed=7))
     second = models.save_to_hub(other, "flock/tiny", tags=["release"])
@@ -117,7 +117,9 @@ def test_evaluate_scores_a_saved_version_and_records_its_number_and_digest(
     )
 
 
-def test_an_unknown_version_fails_before_scoring(signed_in: User, olmo: Olmo2, tmp_path: Path):
+def test_an_unknown_version_fails_before_scoring(
+    signed_in: User, olmo: Olmo2, tmp_path: Path
+) -> None:
     models.save_to_hub(olmo, "flock/tiny")
     with pytest.raises(models.ModelError, match="version 9 of flock/tiny not found"):
         evaluate(EvalConfig(model="flock:flock/tiny@9", tasks=("toy",), out=tmp_path / "out"))
