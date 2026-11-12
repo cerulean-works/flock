@@ -330,6 +330,19 @@ class Trainer:
             self.logger.info("Resuming training from checkpoint")
             if resume_from_checkpoint is True:
                 checkpoints = self._checkpoints()
+                checkpoint_save_time: dict[str, str] = {}
+
+                for checkpoint in checkpoints:
+                    try:
+                        metadata = json.loads((checkpoint / "flock.json").read_text())
+                        checkpoint_save_time[checkpoint.name] = metadata.get("saved_at", "")
+                    except JSONDecodeError as e:
+                        self.logger.warning(
+                            f"Failed to read metadata for checkpoint {checkpoint}: {e}"
+                        )
+                        checkpoint_save_time[checkpoint.name] = ""
+
+                checkpoints.sort(key=lambda path: checkpoint_save_time.get(path.name, ""))
                 if not checkpoints:
                     raise FileNotFoundError(f"No checkpoints found in {self.output_dir}")
                 checkpoint = checkpoints[-1]
