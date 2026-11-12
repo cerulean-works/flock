@@ -61,7 +61,6 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
         shuffle: bool = True,
         seed=42,
         skip_batches=0,
-        drop_last=False,
     ):
         super().__init__()
         self.dataset_size = dataset_size
@@ -69,11 +68,8 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
         self.shuffle = shuffle
         self.seed = seed
         self.skip_batches = skip_batches
-        self.drop_last = drop_last
 
     def __len__(self) -> int:
-        if self.drop_last:
-            return self.dataset_size // self.batch_size
         return ceil(self.dataset_size / self.batch_size)
 
     def __iter__(self) -> Iterator[list[int]]:
@@ -81,15 +77,16 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
         generator.manual_seed(self.seed)
 
         indices = (
-            torch.randperm(self.dataset_size, generator=generator).tolist()
+            torch.randperm(self.dataset_size, generator=generator)
             if self.shuffle
-            else list(range(self.dataset_size))
+            else range(self.dataset_size)
         )
 
         for batch_idx in range(self.skip_batches, len(self)):
             start = batch_idx * self.batch_size
             end = start + self.batch_size
-            yield indices[start:end]
+            batch = indices[start:end]
+            yield batch.tolist() if isinstance(batch, torch.Tensor) else list(batch)
 
 
 @dataclass(frozen=True, kw_only=True)
