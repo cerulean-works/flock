@@ -19,7 +19,7 @@ from torch.optim import AdamW, Muon, Optimizer
 from torch.utils.data import DataLoader
 from transformers import TokenizersBackend
 
-from flock.hub.models import save_to_hub
+from flock.hub.models import PendingUpload, save_to_hub
 from flock.hub.models.files import import_path, read_training_state, weight_files, write_model
 from flock.training.core.checkpoint import TrainerCheckpoint
 from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableBatchDataSampler
@@ -182,6 +182,8 @@ class Trainer:
         self.save_to_hub_repo = config.save_to_hub_repo
         self.overwrite_output_dir = config.overwrite_output_dir
 
+        self.pending_uploads: dict[Path, PendingUpload] = {}
+
         if self.save_steps is not None and self.save_steps <= 0:
             raise ValueError("save_steps must be a positive integer or None")
         if self.save_total_limit is not None and self.save_total_limit <= 0:
@@ -264,6 +266,41 @@ class Trainer:
         random.seed(self.seed)
         torch.manual_seed(self.seed)
 
+    def _inner_training_loop(self, dataloader: DataLoader, start_step: int):
+        """Trainer's inner training loop that can be resumed from a checkpoint."""
+        for step, batch in enumerate(dataloader, start=start_step + 1):
+            self.optimizer.zero_grad()
+
+            batch = cast(Batch, batch)
+            batch = {k: v.to(self.device, non_blocking=True) for k, v in batch.items()}
+
+            with torch.autocast(self.device.type, dtype=self.model_dtype):
+                output: torch.Tensor = self.model(batch)
+                loss, num_tokens = self._calc_batch_loss(output, batch["labels"])
+
+            loss.backward()
+            grad_norm = torch.nn.utils.clip_grad_norm_(
+                self.model.parameters(),
+                max_norm=self.max_norm,
+            )
+
+            self.optimizer.step()
+            self.lr_scheduler.step()
+
+            self.state.update(add_step=1, loss=loss, grad_norm=grad_norm, tokens=num_tokens)
+
+            if step % self.logging_steps == 0 or step == self.total_steps:
+                metrics_dict = self.state.get_logging_metrics()
+                self.logger.info(metrics_dict)
+                self.run.log(metrics_dict)
+                self.state.reset_window()
+
+            if self.save_steps is None:
+                continue
+
+            if step % self.save_steps == 0 or step == self.total_steps:
+                self.save_model()
+
     def train(self, resume_from_checkpoint: bool | str | Path = False):
         """Train one pass, optionally restoring the latest or a specified local checkpoint.
 
@@ -305,49 +342,35 @@ class Trainer:
                 f"Resuming from step {start_step}, with {self.total_steps - start_step} steps remaining"
             )
 
-        self.model.train()
+        try:
+            self.model.train()
+            self.logger.info("Starting training")
+            self._inner_training_loop(dataloader, start_step)
+        finally:
+            self.save_model(blocking=True)
 
-        self.logger.info("Starting training")
-        for step, batch in enumerate(dataloader, start=start_step + 1):
-            self.optimizer.zero_grad()
-
-            batch = cast(Batch, batch)
-            batch = {k: v.to(self.device, non_blocking=True) for k, v in batch.items()}
-
-            with torch.autocast(self.device.type, dtype=self.model_dtype):
-                output: torch.Tensor = self.model(batch)
-                loss, num_tokens = self._calc_batch_loss(output, batch["labels"])
-
-            loss.backward()
-            grad_norm = torch.nn.utils.clip_grad_norm_(
-                self.model.parameters(),
-                max_norm=self.max_norm,
-            )
-
-            self.optimizer.step()
-            self.lr_scheduler.step()
-
-            self.state.update(add_step=1, loss=loss, grad_norm=grad_norm, tokens=num_tokens)
-
-            if step % self.logging_steps == 0 or step == self.total_steps:
-                metrics_dict = self.state.get_logging_metrics()
-                self.logger.info(metrics_dict)
-                self.run.log(metrics_dict)
-                self.state.reset_window()
-
-            if self.save_steps is None:
-                continue
-
-            if step % self.save_steps == 0 or step == self.total_steps:
-                self.save_model()
-
-    def save_model(self):
+    def save_model(self, blocking=False):
+        for checkpoint, upload in list(self.pending_uploads.items()):
+            if not upload.done():
+                self.pending_uploads.pop(checkpoint)
         step = int(self.state.step.item())
 
         self.logger.info(f"Saving model at step {step}")
         save_path = self.output_dir.joinpath(f"checkpoint-{step}")
         if save_path.exists() and not self.overwrite_output_dir:
             raise FileExistsError(f"Checkpoint already exists: {save_path}")
+
+        if save_path in self.pending_uploads:
+            # A folder upload reads in place; finish it before replacing those files.
+            upload = self.pending_uploads[save_path]
+            try:
+                upload.result()
+            except Exception:
+                self.logger.exception(
+                    f"Failed to upload checkpoint {checkpoint} to hub {self.save_to_hub_repo}"
+                )
+            del self.pending_uploads[checkpoint]
+
         # Publish the directory only after weights and training state are fully written.
         with tempfile.TemporaryDirectory(prefix=".checkpoint-", dir=self.output_dir) as temporary:
             staged = Path(temporary) / "model"
@@ -364,18 +387,23 @@ class Trainer:
             staged.rename(save_path)
         if self.save_to_hub_repo is not None:
             try:
-                # Make non-blocking
-                save_to_hub(
-                    save_path,
-                    self.save_to_hub_repo,
-                    run=self.run,
-                    step=step,
-                    tags=[f"checkpoint-{step}"],
+                upload_promise = cast(
+                    PendingUpload,
+                    save_to_hub(
+                        save_path,
+                        self.save_to_hub_repo,
+                        run=self.run,
+                        step=step,
+                        tags=[f"checkpoint-{step}"],
+                        blocking=False,
+                    ),
                 )
+                self.pending_uploads[save_path] = upload_promise
             except Exception:
                 self.logger.exception(
                     f"Failed to save checkpoint {save_path} to hub {self.save_to_hub_repo}"
                 )
+
         if self.save_total_limit is not None:
             checkpoints = self._checkpoints()
             checkpoint_save_time: dict[str, str] = {}
@@ -390,10 +418,25 @@ class Trainer:
 
             checkpoints.sort(key=lambda path: checkpoint_save_time.get(path.name, ""))
 
-            while len(checkpoints) > self.save_total_limit:
-                checkpoint_to_delete = checkpoints.pop(0)
+            for checkpoint_to_delete in checkpoints[: -self.save_total_limit]:
+                # Retain the newest checkpoints plus any older ones still being read.
+                if checkpoint_to_delete in self.pending_uploads:
+                    continue
                 self.logger.info(f"Deleting old checkpoint {checkpoint_to_delete}")
                 shutil.rmtree(checkpoint_to_delete)
+
+        if blocking:
+            self.logger.info("Waiting for pending uploads to finish...")
+            for checkpoint in list(self.pending_uploads):
+                upload = self.pending_uploads[checkpoint]
+                try:
+                    upload.result()
+                except Exception:
+                    self.logger.exception(
+                        f"Failed to upload checkpoint {checkpoint} to hub {self.save_to_hub_repo}"
+                    )
+                del self.pending_uploads[checkpoint]
+            self.logger.info("All pending uploads finished")
 
     def load_checkpoint(self, checkpoint: str | Path):
         """Restore model weights and training state from a local checkpoint folder."""

@@ -2,6 +2,8 @@ import copy
 import json
 import os
 import random
+import threading
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from typing import cast
 
@@ -16,6 +18,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
+from flock.hub.models import upload as hub_upload
 from flock.training.core.data_utils import LanceBatchCollator
 from flock.training.core.lr_scheduler import CosineConfig, WSDConfig
 from flock.training.core.models import BaseModel
@@ -266,6 +269,9 @@ def test_checkpoint_upload_uses_complete_local_folder(trainer_factory, monkeypat
         assert (folder / "model.safetensors").is_file()
         assert (folder / "training_state/python_rng_state.safetensors").is_file()
         uploads.append((folder, name, options))
+        pending = Future()
+        pending.set_result(None)
+        return pending
 
     monkeypatch.setattr("flock.training.core.trainer.save_to_hub", upload)
     trainer.save_model()
@@ -273,10 +279,11 @@ def test_checkpoint_upload_uses_complete_local_folder(trainer_factory, monkeypat
         (
             trainer.output_dir / "checkpoint-0",
             "cerulean/test-model",
-            {"run": run, "step": 0, "tags": ["checkpoint-0"]},
+            {"run": run, "step": 0, "tags": ["checkpoint-0"], "blocking": False},
         )
     ]
     assert uploads[0][0].is_dir()
+    trainer.wrap_up()
 
 
 def test_failed_checkpoint_write_does_not_publish_or_prune(trainer_factory, monkeypatch):
@@ -578,6 +585,9 @@ def test_failed_upload_continues_training_and_retention(
         upload_attempts.append(options["step"])
         if options["step"] == failed_step:
             raise OSError("upload interrupted")
+        pending = Future()
+        pending.set_result(None)
+        return pending
 
     monkeypatch.setattr("flock.training.core.trainer.save_to_hub", upload)
     trainer.train()
@@ -593,6 +603,211 @@ def test_failed_upload_continues_training_and_retention(
     restored.load_checkpoint(trainer.output_dir / "checkpoint-3")
     assert_nested_equal(restored.model.state_dict(), trainer.model.state_dict())
     assert_nested_equal(restored.get_trainer_state(), expected)
+
+
+def test_async_uploads_overlap_training_and_keep_sources_until_finished(
+    trainer_factory, monkeypatch
+):
+    trainer, _, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        save_steps=1,
+        save_total_limit=1,
+        save_to_hub_repo="cerulean/test-model",
+    )
+    release = threading.Event()
+    all_started = threading.Event()
+    lock = threading.Lock()
+    started = []
+    uploaded = []
+
+    def push(source, ref, options, **kwargs):
+        with lock:
+            started.append(options["step"])
+            if len(started) == 3:
+                all_started.set()
+        assert release.wait(10), "upload was never released"
+        # Folder uploads read these files in the worker, after save_model has returned.
+        assert (source / "model.safetensors").read_bytes()
+        assert (source / "training_state/optimizer_state_dict.safetensors").read_bytes()
+        assert json.loads((source / "flock.json").read_text())["step"] == options["step"]
+        with lock:
+            uploaded.append(options["step"])
+
+    monkeypatch.setattr(hub_upload, "push", push)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        training = executor.submit(trainer.train)
+        try:
+            assert all_started.wait(10), "training blocked on an unfinished upload"
+            assert not training.done(), "train returned before uploads finished"
+            assert trainer.state.step.item() == 3
+            assert [p.name for p in trainer._checkpoints()] == [
+                "checkpoint-1",
+                "checkpoint-2",
+                "checkpoint-3",
+            ]
+        finally:
+            release.set()
+            training.result(timeout=10)
+
+    assert sorted(uploaded) == [1, 2, 3]
+    assert [p.name for p in trainer._checkpoints()] == ["checkpoint-3"]
+    assert not trainer.pending_uploads
+    trainer.wrap_up()  # Repeated cleanup must be harmless.
+
+
+@pytest.mark.parametrize("failed_step", [2, 3])
+def test_async_upload_failure_is_logged_and_other_uploads_finish(
+    trainer_factory, monkeypatch, caplog, failed_step
+):
+    trainer, _, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        save_steps=1,
+        save_total_limit=1,
+        save_to_hub_repo="cerulean/test-model",
+    )
+    uploaded = []
+
+    def push(source, ref, options, **kwargs):
+        if options["step"] == failed_step:
+            raise OSError("background upload interrupted")
+        uploaded.append(options["step"])
+
+    monkeypatch.setattr(hub_upload, "push", push)
+    trainer.train()
+    assert sorted(uploaded) == [step for step in (1, 2, 3) if step != failed_step]
+    assert trainer.state.step.item() == 3
+    assert [p.name for p in trainer._checkpoints()] == ["checkpoint-3"]
+    assert "background upload interrupted" in caplog.text
+    assert str(trainer.output_dir / f"checkpoint-{failed_step}") in caplog.text
+    assert not trainer.pending_uploads
+    records = len(caplog.records)
+    trainer.wrap_up()
+    assert len(caplog.records) == records
+
+
+@pytest.mark.parametrize("error_type", [RuntimeError, KeyboardInterrupt])
+def test_training_error_drains_uploads_and_preserves_original_exception(
+    trainer_factory, monkeypatch, error_type
+):
+    trainer, _, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        save_steps=1,
+        save_to_hub_repo="cerulean/test-model",
+    )
+    pending = Future()
+    monkeypatch.setattr("flock.training.core.trainer.save_to_hub", lambda *a, **kw: pending)
+    forward = trainer.model.forward
+
+    def fail_on_second_batch(batch):
+        if trainer.state.step.item() == 1:
+            pending.set_exception(OSError("background upload failed"))
+            raise error_type("training interrupted")
+        return forward(batch)
+
+    monkeypatch.setattr(trainer.model, "forward", fail_on_second_batch)
+    with pytest.raises(error_type, match="training interrupted"):
+        trainer.train()
+    assert pending.done()
+    assert not trainer.pending_uploads
+
+
+def test_overwrite_waits_for_upload_to_finish_reading_original_checkpoint(
+    trainer_factory, monkeypatch
+):
+    trainer, _, _ = trainer_factory(
+        overwrite_output_dir=True, save_to_hub_repo="cerulean/test-model"
+    )
+    release = threading.Event()
+    waiting = threading.Event()
+    snapshots = []
+
+    def push(source, ref, options, **kwargs):
+        assert release.wait(10), "upload was never released"
+        snapshots.append((source / "model.safetensors").read_bytes())
+
+    monkeypatch.setattr(hub_upload, "push", push)
+    pending = []
+    save_to_hub = hub_upload.save_to_hub
+
+    def upload(*args, **kwargs):
+        result = save_to_hub(*args, **kwargs)
+        pending.append(result)
+        return result
+
+    monkeypatch.setattr("flock.training.core.trainer.save_to_hub", upload)
+    trainer.save_model()
+    checkpoint = trainer.output_dir / "checkpoint-0/model.safetensors"
+    original = checkpoint.read_bytes()
+    with torch.no_grad():
+        for parameter in trainer.model.parameters():
+            parameter.add_(1)
+    result = pending[0].result
+
+    def wait_for_original(timeout=None):
+        waiting.set()
+        return result(timeout)
+
+    monkeypatch.setattr(pending[0], "result", wait_for_original)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        overwrite = executor.submit(trainer.save_model)
+        try:
+            assert waiting.wait(10), "overwrite did not wait for the existing upload"
+            assert not overwrite.done()
+            assert checkpoint.read_bytes() == original
+        finally:
+            release.set()
+            overwrite.result(timeout=10)
+            trainer.wrap_up()
+
+    assert snapshots == [original, checkpoint.read_bytes()]
+    assert snapshots[0] != snapshots[1]
+    assert not trainer.pending_uploads
+
+
+def test_completed_uploads_are_reaped_on_the_next_save(trainer_factory, monkeypatch):
+    trainer, _, _ = trainer_factory(save_total_limit=1, save_to_hub_repo="cerulean/test-model")
+    uploads = []
+
+    def upload(*args, **kwargs):
+        pending = Future()
+        uploads.append(pending)
+        return pending
+
+    monkeypatch.setattr("flock.training.core.trainer.save_to_hub", upload)
+    trainer.save_model()
+    uploads[0].set_result(None)
+    trainer.state.step.fill_(1)
+    trainer.save_model()
+    assert [p.name for p in trainer._checkpoints()] == ["checkpoint-1"]
+    assert list(trainer.pending_uploads) == [trainer.output_dir / "checkpoint-1"]
+    uploads[1].set_result(None)
+    trainer.wrap_up()
+    assert not trainer.pending_uploads
+
+
+def test_failed_submission_keeps_latest_checkpoint_while_old_upload_is_pending(
+    trainer_factory, monkeypatch
+):
+    trainer, _, _ = trainer_factory(save_total_limit=1, save_to_hub_repo="cerulean/test-model")
+    pending = Future()
+
+    def upload(*args, **kwargs):
+        if kwargs["step"] == 1:
+            raise OSError("could not start upload")
+        return pending
+
+    monkeypatch.setattr("flock.training.core.trainer.save_to_hub", upload)
+    trainer.save_model()
+    trainer.state.step.fill_(1)
+    trainer.save_model()
+    assert [p.name for p in trainer._checkpoints()] == ["checkpoint-0", "checkpoint-1"]
+    pending.set_result(None)
+    trainer.wrap_up()
+    assert [p.name for p in trainer._checkpoints()] == ["checkpoint-1"]
+    assert not trainer.pending_uploads
 
 
 @pytest.mark.parametrize("changed_field", ["dataset_size", "batch_size", "seed", "input_column"])
