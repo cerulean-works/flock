@@ -1067,6 +1067,7 @@ source = { virtual = "flock/training" }
 dependencies = [
     { name = "flock" },
     { name = "huggingface-hub" },
+    { name = "pydantic" },
     { name = "tokenizers" },
     { name = "torch", version = "2.14.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux' or extra != 'group-5-flock-cpu-tests' or extra == 'group-5-flock-gpu'" },
     { name = "torch", version = "2.14.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'linux' and extra == 'group-5-flock-cpu-tests') or (extra == 'group-5-flock-cpu-tests' and extra == 'group-5-flock-gpu')" },
@@ -1078,6 +1079,7 @@ dependencies = [
 requires-dist = [
     { name = "flock", editable = "." },
     { name = "huggingface-hub", specifier = ">=2.2.0" },
+    { name = "pydantic", specifier = ">=2.14.1" },
     { name = "tokenizers", specifier = ">=0.23.3" },
     { name = "torch", specifier = ">=2.14.1" },
     { name = "tqdm", specifier = ">=4.70.1" },

@@ -1,3 +1,5 @@
+import copy
+import io
 from typing import cast
 
 import pytest
@@ -102,3 +104,112 @@ def test_negative_step_is_rejected():
 def test_unknown_schedule_is_rejected():
     with pytest.raises(TypeError, match="Unsupported scheduler config"):
         lr_multiplier(0, cast(LRSchedulerConfig, object()), total_steps=4)
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        CosineConfig(warmup_steps=2, min_lr_ratio=0.1),
+        WSDConfig(warmup_steps=2, decay_steps=2, min_lr_ratio=0.2),
+    ],
+)
+@pytest.mark.parametrize("completed_steps", [1, 4, 7])
+def test_saved_scheduler_resumes_like_uninterrupted_training(config, completed_steps):
+    optimizer = make_optimizer()
+    scheduler = StepLRScheduler(optimizer, config, total_steps=8)
+    for _ in range(completed_steps):
+        optimizer.step()
+        scheduler.step()
+
+    checkpoint = io.BytesIO()
+    torch.save(scheduler.state_dict(), checkpoint)
+    checkpoint.seek(0)
+    state = torch.load(checkpoint, weights_only=True)
+
+    resumed_optimizer = make_optimizer()
+    resumed = StepLRScheduler(resumed_optimizer, config, total_steps=8)
+    resumed_optimizer.load_state_dict(optimizer.state_dict())
+    resumed.load_state_dict(state)
+
+    assert resumed.config == config
+    assert resumed.total_steps == 8
+    assert resumed.completed_steps == completed_steps
+    assert resumed.get_last_lr() == pytest.approx(scheduler.get_last_lr())
+    for _ in range(completed_steps, 10):
+        optimizer.step()
+        resumed_optimizer.step()
+        scheduler.step()
+        resumed.step()
+        assert resumed.get_last_lr() == pytest.approx(scheduler.get_last_lr())
+
+
+def test_scheduler_state_does_not_share_mutable_values():
+    scheduler = StepLRScheduler(
+        make_optimizer(), CosineConfig(warmup_steps=2, min_lr_ratio=0.1), total_steps=8
+    )
+    state = scheduler.state_dict()
+    state["base_lrs"][0] = 10.0
+    state["config"]["warmup_steps"] = 7
+    assert scheduler.base_lrs == [0.2, 0.05]
+    assert scheduler.config.warmup_steps == 2
+
+    state = scheduler.state_dict()
+    scheduler.load_state_dict(state)
+    state["base_lrs"][0] = 10.0
+    assert scheduler.base_lrs == [0.2, 0.05]
+
+
+def test_loading_scheduler_rejects_different_parameter_group_counts():
+    scheduler = StepLRScheduler(
+        make_optimizer(), CosineConfig(warmup_steps=0, min_lr_ratio=0.1), total_steps=8
+    )
+    resumed_optimizer = torch.optim.SGD([torch.nn.Parameter(torch.ones(1))], lr=0.3)
+    resumed = StepLRScheduler(resumed_optimizer, scheduler.config, total_steps=8)
+    with pytest.raises(ValueError, match="parameter groups"):
+        resumed.load_state_dict(scheduler.state_dict())
+    assert resumed.get_last_lr() == [0.3]
+
+
+@pytest.mark.parametrize(
+    "field, value, error",
+    [
+        ("config", {"type": "cosine", "warmup_steps": 1, "min_lr_ratio": 0.1}, "config"),
+        ("config", {"type": "wsd", "warmup_steps": 2, "decay_steps": 2}, "config"),
+        ("config", {"type": "unknown"}, "Unsupported scheduler config type"),
+        ("total_steps", 10, "total_steps"),
+        ("base_lrs", [0.3, 0.05], "base_lrs"),
+        ("base_lrs", [0.2, 0.3], "base_lrs"),
+        ("base_lrs", [0.2], "parameter groups"),
+        ("completed_steps", -1, "nonnegative"),
+    ],
+)
+def test_incompatible_scheduler_state_is_rejected_without_mutation(field, value, error):
+    scheduler = StepLRScheduler(
+        make_optimizer(), CosineConfig(warmup_steps=2, min_lr_ratio=0.1), total_steps=8
+    )
+    expected = scheduler.state_dict()
+    expected_optimizer = copy.deepcopy(scheduler.optimizer.state_dict())
+    invalid = copy.deepcopy(expected)
+    invalid[field] = value
+    for check in (scheduler.validate_state_dict, scheduler.load_state_dict):
+        with pytest.raises(ValueError, match=error):
+            check(invalid)
+        assert scheduler.state_dict() == expected
+        assert scheduler.optimizer.state_dict() == expected_optimizer
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        CosineConfig(warmup_steps=2, min_lr_ratio=0.1),
+        WSDConfig(warmup_steps=2, decay_steps=2, min_lr_ratio=0.1),
+    ],
+    ids=["cosine", "wsd"],
+)
+def test_scheduler_preflight_does_not_apply_saved_progress(config):
+    scheduler = StepLRScheduler(make_optimizer(), config, total_steps=8)
+    expected = scheduler.state_dict()
+    saved = {**expected, "completed_steps": 4}
+    scheduler.validate_state_dict(saved)
+    assert scheduler.state_dict() == expected
+    assert scheduler.get_last_lr() == [0.0, 0.0]

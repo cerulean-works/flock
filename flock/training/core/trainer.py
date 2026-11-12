@@ -1,25 +1,37 @@
+import json
 import logging
 import math
 import random
+import shutil
+import tempfile
 from dataclasses import asdict, dataclass
-from typing import Literal, cast, overload
+from json import JSONDecodeError
+from pathlib import Path
+from typing import Any, Literal, cast, overload
 
 import torch
 import torch.nn.functional as F
 import wandb
 from lance.torch.data import SafeLanceDataset
-from torch.nn import Module
+from safetensors.torch import load_model
+from torch import nn
 from torch.optim import AdamW, Muon, Optimizer
 from torch.utils.data import DataLoader
 from transformers import TokenizersBackend
 
-from flock.training.core.data_utils import Batch, LanceBatchCollator
+from flock.hub.models import PendingUpload, save_to_hub
+from flock.hub.models.files import import_path, read_training_state, weight_files, write_model
+from flock.training.core.checkpoint import TrainerCheckpoint
+from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableBatchDataSampler
 from flock.training.core.lr_scheduler import LRSchedulerConfig, StepLRScheduler
+from flock.training.core.models import BaseModel
 from flock.training.core.optimization import AdamWConfig, MuonConfig, OptimizerConfig
 
 
 @dataclass(frozen=True, kw_only=True)
 class TrainerConfig:
+    run_name: str
+
     input_column: str
     batch_size: int
 
@@ -32,6 +44,12 @@ class TrainerConfig:
     wandb_project: str
     wandb_mode: Literal["online", "offline", "disabled", "shared"] = "online"
 
+    output_dir: str | None = None
+    save_steps: int | None = None
+    save_total_limit: int | None = None
+    save_to_hub_repo: str | None = None
+    overwrite_output_dir: bool = False
+
     # Master weights are always stored in FP32, but the model can be trained in BF16.
     model_dtype: torch.dtype = torch.bfloat16
     max_norm: float = 1.0
@@ -39,23 +57,103 @@ class TrainerConfig:
     seed: int = 42
 
 
+class TrainerState(nn.Module):
+    loss_sum: torch.Tensor
+    loss_max: torch.Tensor
+    grad_norm_sum: torch.Tensor
+    grad_norm_max: torch.Tensor
+
+    step: torch.Tensor
+    total_tokens: torch.Tensor
+    window_tokens: torch.Tensor
+    window_steps: torch.Tensor
+
+    def __init__(self):
+        super().__init__()
+        self.register_buffer("loss_sum", torch.zeros((), dtype=torch.float))
+        self.register_buffer("loss_max", torch.zeros((), dtype=torch.float))
+        self.register_buffer("grad_norm_sum", torch.zeros((), dtype=torch.float))
+        self.register_buffer("grad_norm_max", torch.zeros((), dtype=torch.float))
+
+        self.register_buffer("step", torch.zeros((), dtype=torch.int64))
+        self.register_buffer("total_tokens", torch.zeros((), dtype=torch.int64))
+        self.register_buffer("window_tokens", torch.zeros((), dtype=torch.int64))
+        self.register_buffer("window_steps", torch.zeros((), dtype=torch.int64))
+
+    @torch.no_grad()
+    def update(
+        self, add_step: int, loss: torch.Tensor, grad_norm: torch.Tensor, tokens: torch.Tensor
+    ):
+        self.loss_sum.add_(loss.detach() * tokens)
+        self.loss_max = torch.maximum(loss.detach(), self.loss_max)
+
+        self.grad_norm_sum.add_(grad_norm.detach())
+        self.grad_norm_max = torch.maximum(grad_norm.detach(), self.grad_norm_max)
+
+        self.step.add_(add_step)
+        self.total_tokens.add_(tokens)
+        self.window_tokens.add_(tokens)
+        self.window_steps.add_(1)
+
+    def get_logging_metrics(self) -> dict[str, int | float]:
+        step, mean_loss, max_loss, mean_grad, max_grad = torch.stack(
+            (
+                self.step,
+                self.loss_sum / self.window_tokens.clamp_min(1),
+                self.loss_max,
+                self.grad_norm_sum / self.window_steps,
+                self.grad_norm_max,
+            )
+        ).tolist()
+
+        return {
+            "global_step": step,
+            "train/loss_mean": mean_loss,
+            "train/loss_window_max": max_loss,
+            "train/grad_norm_mean": mean_grad,
+            "train/grad_norm_window_max": max_grad,
+        }
+
+    @torch.no_grad()
+    def reset_window(self):
+        for name in (
+            "loss_sum",
+            "loss_max",
+            "grad_norm_sum",
+            "grad_norm_max",
+            "window_tokens",
+            "window_steps",
+        ):
+            getattr(self, name).zero_()
+
+    @torch.no_grad()
+    def reset_global(self):
+        self.reset_window()
+        self.step.zero_()
+        self.total_tokens.zero_()
+
+
 class Trainer:
     def __init__(
         self,
         *,
         config: TrainerConfig,
-        model: Module,
+        model: BaseModel,
         tokenizer: TokenizersBackend,
         dataset: SafeLanceDataset,
     ):
+        self.run_name = config.run_name
         self.seed = config.seed
-        self.device = (
-            torch.device("cuda:0")
-            if torch.cuda.is_available()
-            else torch.device("mps:0")
-            if torch.mps.is_available()
-            else torch.device("cpu")
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+        self.state = TrainerState().to(self.device)
+
+        self.logger = logging.getLogger(__name__)
+        self.run = wandb.init(
+            project=config.wandb_project, mode=config.wandb_mode, config=asdict(config)
         )
+        self.run.define_metric("global_step")
+        self.run.define_metric("train/*", step_metric="global_step")
 
         self.model = model.to(self.device)
         self.tokenizer = tokenizer
@@ -74,16 +172,26 @@ class Trainer:
         self.optimizer = self._get_optimizer(config.optimizer_config)
         self.lr_scheduler = self._get_lr_scheduler(config.lr_scheduler_config, self.total_steps)
 
-        self.logger = logging.getLogger(__name__)
-        self.run = wandb.init(
-            project=config.wandb_project, mode=config.wandb_mode, config=asdict(config)
+        self.output_dir: Path = (
+            Path(config.output_dir)
+            if config.output_dir is not None
+            else Path.cwd().joinpath(".training-checkpoints").joinpath(self.run_name)
         )
-        self.run.define_metric("global_step")
-        self.run.define_metric("train/*", step_metric="global_step")
+        self.save_steps = config.save_steps
+        self.save_total_limit = config.save_total_limit
+        self.save_to_hub_repo = config.save_to_hub_repo
+        self.overwrite_output_dir = config.overwrite_output_dir
 
-    def _get_training_dataloader(self) -> DataLoader:
-        collator = LanceBatchCollator(self.tokenizer, self.ds_input_column)
+        self.pending_uploads: dict[Path, PendingUpload] = {}
 
+        if self.save_steps is not None and self.save_steps <= 0:
+            raise ValueError("save_steps must be a positive integer or None")
+        if self.save_total_limit is not None and self.save_total_limit <= 0:
+            raise ValueError("save_total_limit must be a positive integer or None")
+
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+    def _get_training_dataloader(self, skip_batches: int = 0) -> DataLoader:
         if self.dataloader_num_workers < 0:
             raise ValueError("dataloader_num_workers must be non-negative")
         if self.dataloader_num_workers == 0 and self.dataloader_prefetch_factor is not None:
@@ -93,18 +201,29 @@ class Trainer:
         elif self.dataloader_prefetch_factor is not None and self.dataloader_prefetch_factor < 1:
             raise ValueError("dataloader_prefetch_factor must be >= 1")
 
+        collator = LanceBatchCollator(self.tokenizer, self.ds_input_column)
+        sampler = ResumableBatchDataSampler(
+            batch_size=self.batch_size,
+            dataset_size=len(self.dataset),
+            shuffle=True,
+            seed=self.seed,
+            skip_batches=skip_batches,
+        )
+
         return DataLoader(
             self.dataset,
-            batch_size=self.batch_size,
-            shuffle=True,
+            # this sampler does batching + shuffling, so we don't need to set batch_size or shuffle here
+            batch_sampler=sampler,
             num_workers=self.dataloader_num_workers,
             collate_fn=collator.collate_fn,
             # lance multi-threads internally, so its best we not use fork
             multiprocessing_context="spawn" if self.dataloader_num_workers > 0 else None,
             # accelerate batch host to device transfers
-            pin_memory=True,
+            pin_memory=self.device.type == "cuda",
             prefetch_factor=self.dataloader_prefetch_factor,
             persistent_workers=self.dataloader_num_workers > 0,
+            # Starting a resumed iterator must not consume the model's RNG stream.
+            generator=torch.Generator().manual_seed(self.seed),
         )
 
     @overload
@@ -147,28 +266,9 @@ class Trainer:
         random.seed(self.seed)
         torch.manual_seed(self.seed)
 
-    def train(self):
-        self.logger.info("Setting up trainer...")
-
-        # Set random state at beginning of training to ensure reproducibility
-        self._set_seed()
-
-        loss_sum = torch.zeros((), dtype=torch.float, device=self.device)
-        loss_max = torch.zeros((), dtype=torch.float, device=self.device)
-        grad_norm_sum = torch.zeros((), dtype=torch.float, device=self.device)
-        grad_norm_max = torch.zeros((), dtype=torch.float, device=self.device)
-
-        window_tokens = torch.zeros((), dtype=torch.int64, device=self.device)
-        window_steps = torch.zeros((), dtype=torch.int64, device=self.device)
-
-        self.logger.info("Initializing training dataloader")
-        dataloader = self._get_training_dataloader()
-        self.logger.info(f"Dataloader with {len(dataloader)} steps loaded")
-        self.model.train()
-        total_tokens = torch.zeros((), dtype=torch.int64, device=self.device)
-
-        self.logger.info("Starting training")
-        for idx, batch in enumerate(dataloader):
+    def _inner_training_loop(self, dataloader: DataLoader, start_step: int):
+        """Trainer's inner training loop that can be resumed from a checkpoint."""
+        for step, batch in enumerate(dataloader, start=start_step + 1):
             self.optimizer.zero_grad()
 
             batch = cast(Batch, batch)
@@ -187,39 +287,292 @@ class Trainer:
             self.optimizer.step()
             self.lr_scheduler.step()
 
-            loss_sum += loss.detach() * num_tokens
-            loss_max = torch.maximum(loss_max, loss.detach())
-            grad_norm_sum += grad_norm.detach()
-            grad_norm_max = torch.maximum(grad_norm_max, grad_norm.detach())
+            self.state.update(add_step=1, loss=loss, grad_norm=grad_norm, tokens=num_tokens)
 
-            total_tokens += num_tokens
-            window_tokens += num_tokens
-            window_steps += 1
-
-            if (idx + 1) % self.logging_steps == 0 or (idx + 1) == self.total_steps:
-                mean_loss, max_loss, mean_grad, max_grad = torch.stack(
-                    (
-                        loss_sum / window_tokens.clamp_min(1),
-                        loss_max,
-                        grad_norm_sum / window_steps,
-                        grad_norm_max,
-                    )
-                ).tolist()
-
-                metrics_dict = {
-                    "global_step": idx + 1,
-                    "train/loss_mean": mean_loss,
-                    "train/loss_window_max": max_loss,
-                    "train/grad_norm_mean": mean_grad,
-                    "train/grad_norm_window_max": max_grad,
-                }
-
+            if step % self.logging_steps == 0 or step == self.total_steps:
+                metrics_dict = self.state.get_logging_metrics()
                 self.logger.info(metrics_dict)
                 self.run.log(metrics_dict)
+                self.state.reset_window()
 
-                loss_sum.zero_()
-                loss_max.zero_()
-                grad_norm_sum.zero_()
-                grad_norm_max.zero_()
-                window_tokens.zero_()
-                window_steps.zero_()
+            if self.save_steps is None:
+                continue
+
+            if step % self.save_steps == 0 or step == self.total_steps:
+                self.save_model()
+
+    def train(self, resume_from_checkpoint: bool | str | Path = False):
+        """Train one pass, optionally restoring the latest or a specified local checkpoint.
+
+        Args:
+            resume_from_checkpoint (`bool`, `str` or `Path`, *optional*, defaults to `False`):
+                With `True`, use the highest numbered checkpoint in `output_dir`.
+                A path selects a checkpoint folder explicitly.
+        """
+        if self.total_steps == 0:
+            raise ValueError("Training requires a non-empty dataset")
+        self.logger.info("Setting up trainer...")
+        # Set random state at beginning of training to ensure reproducibility
+        self._set_seed()
+
+        if not resume_from_checkpoint:
+            if any(self.output_dir.iterdir()) and not self.overwrite_output_dir:
+                raise RuntimeError(
+                    f"Save directory {self.output_dir} is not empty. "
+                    "Resume from a checkpoint or specify an empty directory."
+                )
+            self.state.reset_global()
+            start_step = 0
+            self.logger.info("Initializing training dataloader")
+            dataloader = self._get_training_dataloader()
+            self.logger.info(f"Dataloader with {len(dataloader)} steps loaded")
+        else:
+            self.logger.info("Resuming training from checkpoint")
+            if resume_from_checkpoint is True:
+                checkpoints = self._checkpoints()
+                checkpoint_save_time: dict[str, str] = {}
+
+                for checkpoint in checkpoints:
+                    try:
+                        metadata = json.loads((checkpoint / "flock.json").read_text())
+                        checkpoint_save_time[checkpoint.name] = metadata.get("saved_at", "")
+                    except JSONDecodeError as e:
+                        self.logger.warning(
+                            f"Failed to read metadata for checkpoint {checkpoint}: {e}"
+                        )
+                        checkpoint_save_time[checkpoint.name] = ""
+
+                checkpoints.sort(key=lambda path: checkpoint_save_time.get(path.name, ""))
+                if not checkpoints:
+                    raise FileNotFoundError(f"No checkpoints found in {self.output_dir}")
+                checkpoint = checkpoints[-1]
+            else:
+                checkpoint = Path(resume_from_checkpoint)
+            self.load_checkpoint(checkpoint)
+            start_step = int(self.state.step.item())
+            dataloader = self._get_training_dataloader(skip_batches=start_step)
+            self.logger.info(
+                f"Resuming from step {start_step}, with {self.total_steps - start_step} steps remaining"
+            )
+
+        try:
+            self.model.train()
+            self.logger.info("Starting training")
+            self._inner_training_loop(dataloader, start_step)
+        finally:
+            if self.pending_uploads or (self.save_steps and self.state.step % self.save_steps != 0):
+                self.save_model(blocking=True)
+
+    def save_model(self, blocking=False):
+        for checkpoint, upload in list(self.pending_uploads.items()):
+            if upload.done():
+                try:
+                    upload.result()
+                except Exception:
+                    self.logger.exception(
+                        f"Failed to upload checkpoint {checkpoint} to hub {self.save_to_hub_repo}"
+                    )
+                del self.pending_uploads[checkpoint]
+        step = int(self.state.step.item())
+
+        self.logger.info(f"Saving model at step {step}")
+        save_path = self.output_dir.joinpath(f"checkpoint-{step}")
+        if save_path.exists() and not self.overwrite_output_dir and not blocking:
+            raise FileExistsError(f"Checkpoint already exists: {save_path}")
+
+        if save_path in self.pending_uploads:
+            # A folder upload reads in place; finish it before replacing those files.
+            upload = self.pending_uploads[save_path]
+            try:
+                upload.result()
+            except Exception:
+                self.logger.exception(
+                    f"Failed to upload checkpoint {save_path} to hub {self.save_to_hub_repo}"
+                )
+            del self.pending_uploads[save_path]
+
+        # A blocking call for an already published step only needs to finish uploads.
+        if not (blocking and save_path.exists()):
+            # Publish the directory only after weights and training state are fully written.
+            with tempfile.TemporaryDirectory(
+                prefix=".checkpoint-", dir=self.output_dir
+            ) as temporary:
+                staged = Path(temporary) / "model"
+                write_model(
+                    self.model,
+                    staged,
+                    shard_size=5 * 2**30,
+                    run=f"{self.run.entity}/{self.run.project}/{self.run.id}",
+                    step=step,
+                    training_state=self.get_trainer_state(),
+                )
+                if save_path.exists():
+                    shutil.rmtree(save_path)
+                staged.rename(save_path)
+            if self.save_to_hub_repo is not None:
+                try:
+                    upload_promise = cast(
+                        PendingUpload,
+                        save_to_hub(
+                            save_path,
+                            self.save_to_hub_repo,
+                            run=self.run,
+                            step=step,
+                            tags=[f"checkpoint-{step}"],
+                            blocking=False,
+                        ),
+                    )
+                    self.pending_uploads[save_path] = upload_promise
+                except Exception:
+                    self.logger.exception(
+                        f"Failed to save checkpoint {save_path} to hub {self.save_to_hub_repo}"
+                    )
+
+        if blocking:
+            self.logger.info("Waiting for pending uploads to finish...")
+            for checkpoint in list(self.pending_uploads):
+                upload = self.pending_uploads[checkpoint]
+                try:
+                    upload.result()
+                except Exception:
+                    self.logger.exception(
+                        f"Failed to upload checkpoint {checkpoint} to hub {self.save_to_hub_repo}"
+                    )
+                del self.pending_uploads[checkpoint]
+            self.logger.info("All pending uploads finished")
+
+        if self.save_total_limit is not None:
+            checkpoints = self._checkpoints()
+            checkpoint_save_time: dict[str, str] = {}
+
+            for checkpoint in checkpoints:
+                try:
+                    metadata = json.loads((checkpoint / "flock.json").read_text())
+                    checkpoint_save_time[checkpoint.name] = metadata.get("saved_at", "")
+                except JSONDecodeError as e:
+                    self.logger.warning(f"Failed to read metadata for checkpoint {checkpoint}: {e}")
+                    checkpoint_save_time[checkpoint.name] = ""
+
+            checkpoints.sort(key=lambda path: checkpoint_save_time.get(path.name, ""))
+
+            for checkpoint_to_delete in checkpoints[: -self.save_total_limit]:
+                # Retain the newest checkpoints plus any older ones still being read.
+                if checkpoint_to_delete in self.pending_uploads:
+                    continue
+                self.logger.info(f"Deleting old checkpoint {checkpoint_to_delete}")
+                shutil.rmtree(checkpoint_to_delete)
+
+    def load_checkpoint(self, checkpoint: str | Path):
+        """Restore model weights and training state from a local checkpoint folder."""
+
+        checkpoint = Path(checkpoint)
+        metadata = json.loads((checkpoint / "flock.json").read_text())
+        config = json.loads((checkpoint / "config.json").read_text())
+
+        if metadata["architecture"] != import_path(type(self.model)) or config != json.loads(
+            json.dumps(asdict(self.model.config))
+        ):
+            raise ValueError("Checkpoint model architecture or config does not match the trainer")
+
+        state = {
+            path.stem: read_training_state(path)
+            for path in (checkpoint / "training_state").glob("*.safetensors")
+        }
+        if not state:
+            raise ValueError(f"Checkpoint has no training state: {checkpoint}")
+
+        checkpoint_state = self._validate_trainer_state(state)
+
+        missing = set(self.model.state_dict())
+        unexpected = set()
+        for path in weight_files(checkpoint):
+            # Each shard contains only part of the model; check strictness over all shards.
+            shard_missing, shard_unexpected = load_model(self.model, path, strict=False)
+            missing.intersection_update(shard_missing)
+            unexpected.update(shard_unexpected)
+        if missing or unexpected:
+            raise RuntimeError(
+                f"Checkpoint weights do not match the model: "
+                f"missing keys {sorted(missing)}, unexpected keys {sorted(unexpected)}"
+            )
+
+        self.load_trainer_state(checkpoint_state)
+
+    @property
+    def data_config(self) -> dict[str, Any]:
+        return {
+            "dataset_size": len(self.dataset),
+            "batch_size": self.batch_size,
+            "seed": self.seed,
+            "input_column": self.ds_input_column,
+        }
+
+    def get_trainer_state(self) -> dict[str, Any]:
+        return {
+            "trainer_state_dict": self.state.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "lr_scheduler_state_dict": self.lr_scheduler.state_dict(),
+            "cpu_rng_state": torch.get_rng_state(),
+            "cuda_rng_state": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+            "python_rng_state": random.getstate(),
+            "data_config": self.data_config,
+        }
+
+    def _validate_trainer_state(
+        self, state: dict[str, Any] | TrainerCheckpoint
+    ) -> TrainerCheckpoint:
+        """Reject incompatible resume settings before loading any checkpoint state."""
+        checkpoint = TrainerCheckpoint.model_validate(
+            state,
+            context={"data_config": self.data_config, "total_steps": self.total_steps},
+        )
+        self.lr_scheduler.validate_state_dict(checkpoint.lr_scheduler_state_dict.model_dump())
+
+        saved_groups = checkpoint.optimizer_state_dict["param_groups"]
+        current_groups = self.optimizer.param_groups
+        if len(saved_groups) != len(current_groups):
+            raise ValueError("Checkpoint optimizer parameter groups do not match this run")
+        for index, (saved, current) in enumerate(zip(saved_groups, current_groups, strict=True)):
+            if len(saved["params"]) != len(current["params"]):
+                raise ValueError(
+                    f"Checkpoint optimizer parameter group {index} size does not match this run"
+                )
+            # The current LR depends on progress; original LRs are checked by the scheduler.
+            saved_settings = {
+                key: value for key, value in saved.items() if key not in ("params", "lr")
+            }
+            current_settings = {
+                key: value for key, value in current.items() if key not in ("params", "lr")
+            }
+            if saved_settings != current_settings:
+                raise ValueError(
+                    f"Checkpoint optimizer parameter group {index} settings do not match this run"
+                )
+        return checkpoint
+
+    def load_trainer_state(self, state: dict[str, Any] | TrainerCheckpoint):
+        checkpoint = self._validate_trainer_state(state)
+
+        self.state.load_state_dict(checkpoint.trainer_state_dict.model_dump())
+        self.optimizer.load_state_dict(checkpoint.optimizer_state_dict)
+        self.lr_scheduler.load_state_dict(checkpoint.lr_scheduler_state_dict.model_dump())
+
+        torch.set_rng_state(checkpoint.cpu_rng_state)
+        random.setstate(checkpoint.python_rng_state)
+        if torch.cuda.is_available():
+            if checkpoint.cuda_rng_state is not None:
+                torch.cuda.set_rng_state_all(checkpoint.cuda_rng_state)
+            else:
+                self.logger.warning(
+                    "CUDA is available but no CUDA RNG state was found in the loaded trainer state."
+                )
+
+    def _checkpoints(self) -> list[Path]:
+        return sorted(
+            (
+                path
+                for path in self.output_dir.glob("checkpoint-*")
+                if path.is_dir() and path.name.removeprefix("checkpoint-").isdigit()
+            ),
+            key=lambda path: int(path.name.removeprefix("checkpoint-")),
+        )

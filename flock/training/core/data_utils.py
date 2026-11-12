@@ -1,8 +1,11 @@
+from collections.abc import Iterator
 from dataclasses import dataclass, field
+from math import ceil
 from typing import Any
 
 import torch
 from lance.torch.data import SafeLanceDataset
+from torch.utils.data import Sampler
 from transformers import TokenizersBackend
 from typing_extensions import TypedDict
 
@@ -48,6 +51,42 @@ class LanceBatchCollator:
             "attention_mask": mask[:, :-1],
             "labels": labels,
         }
+
+
+class ResumableBatchDataSampler(Sampler[list[int]]):
+    def __init__(
+        self,
+        batch_size: int,
+        dataset_size: int,
+        shuffle: bool = True,
+        seed: int = 42,
+        skip_batches: int = 0,
+    ):
+        super().__init__()
+        self.dataset_size = dataset_size
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.seed = seed
+        self.skip_batches = skip_batches
+
+    def __len__(self) -> int:
+        return ceil(self.dataset_size / self.batch_size)
+
+    def __iter__(self) -> Iterator[list[int]]:
+        generator = torch.Generator()
+        generator.manual_seed(self.seed)
+
+        indices = (
+            torch.randperm(self.dataset_size, generator=generator)
+            if self.shuffle
+            else range(self.dataset_size)
+        )
+
+        for batch_idx in range(self.skip_batches, len(self)):
+            start = batch_idx * self.batch_size
+            end = start + self.batch_size
+            batch = indices[start:end]
+            yield batch.tolist() if isinstance(batch, torch.Tensor) else list(batch)
 
 
 @dataclass(frozen=True, kw_only=True)

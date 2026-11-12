@@ -27,10 +27,12 @@ if __name__ == "__main__":
     lr_sched_conf = WSDConfig(warmup_steps=100, decay_steps=100)
 
     trainer_conf = TrainerConfig(
+        run_name="olmo2_dolma3",
         input_column="text",
         batch_size=2,
         optimizer_config=optim_conf,
         lr_scheduler_config=lr_sched_conf,
+        save_steps=200,
         dataloader_num_workers=2,
         dataloader_prefetch_factor=1,
         wandb_project="test",
