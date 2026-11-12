@@ -95,10 +95,15 @@ def test_model_preserves_padding_logits_and_gradients(math_kernel, config):
         (torch.ones(1, 1, 4, 4, dtype=torch.bool), "boolean"),
         (torch.ones(1, 4), "boolean"),
         (torch.tensor([[True, False, True, False]]), "contiguous"),
+        (torch.tensor([[False, True, False, True]]), "contiguous"),
+        (
+            torch.tensor([[True, True, False, False], [False, True, False, True]]),
+            "contiguous",
+        ),
     ],
 )
 def test_unsupported_masks_raise_before_activation(mask, message):
-    q = torch.randn(1, 2, 4, 8)
+    q = torch.randn(mask.shape[0], 2, 4, 8)
     with pytest.raises(ValueError, match=message):
         flash_attention_3(q, q, q, attention_mask=mask, is_causal=True)
 

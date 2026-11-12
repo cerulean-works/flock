@@ -1,8 +1,8 @@
-from torch._tensor import Tensor
 from collections.abc import Generator
 from contextlib import contextmanager
 
 import torch
+from torch._tensor import Tensor
 from torch.nn import attention
 
 from .sdpa import sdpa_attention
@@ -25,7 +25,8 @@ def _fa3_context(device: torch.device, dtype: torch.dtype) -> Generator[None]:
             attention.activate_flash_attention_impl("FA3")
         except ImportError as error:
             raise ImportError(
-                "PyTorch's FA3 integration requires a compatible FlashAttention-3 installation. "
+                "PyTorch's FA3 integration requires a compatible FlashAttention-3 installation; "
+                "installing torch alone does not provide the FA3 kernels."
             ) from error
     elif active != "FA3":
         raise RuntimeError(f"Cannot activate FA3 while {active!r} is active in this process")
@@ -82,6 +83,10 @@ def flash_attention_3(
         positions = torch.arange(q.shape[2], device=q.device)
         starts = torch.where(attention_mask, positions, q.shape[2]).amin(dim=-1)
         stops = starts + attention_mask.sum(dim=-1)
+
+        span_mask = (positions >= starts[:, None]) & (positions < stops[:, None])
+        if not torch.equal(attention_mask, span_mask):
+            raise ValueError("FA3 padding masks must contain one contiguous token span per row")
         spans = torch.stack((starts, stops), dim=-1).tolist()
 
     with _fa3_context(q.device, q.dtype):
