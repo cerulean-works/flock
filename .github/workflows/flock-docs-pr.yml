@@ -21,4 +21,6 @@ jobs:
       project: flock
       path_to_docs: flock/docs/source
       python_version: "3.14"
-      mock_deps: torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx,safetensors,sentencepiece
+      # Pydantic generates configuration signatures and installs typing-extensions.
+      pre_command: uv pip install 'pydantic>=2.14.1'
+      mock_deps: torch,transformers,huggingface_hub,datasets,tokenizers,wandb,httpx,safetensors,sentencepiece,lance
