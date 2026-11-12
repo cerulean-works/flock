@@ -1,10 +1,17 @@
+from __future__ import annotations
+
 import dataclasses
+from typing import TYPE_CHECKING
 
 import pytest
 
 from flock.eval.tasks import SUITES, TASKS, Suite
 
 from .toy import TASK
+
+if TYPE_CHECKING:
+    from typing import Any
+
 
 OTHER = dataclasses.replace(TASK, name="other", primary_metric="acc_raw")
 THIRD = dataclasses.replace(TASK, name="third", primary_metric="acc_raw")
@@ -18,12 +25,12 @@ METRICS = {
 }
 
 
-def test_score_reads_each_tasks_primary_metric_unless_metric_is_set():
+def test_score_reads_each_tasks_primary_metric_unless_metric_is_set() -> None:
     assert Suite("rc", (TASK, OTHER)).score(METRICS) == pytest.approx((0.5 + 0.9) / 2)
     assert Suite("bpb", (TASK, OTHER), metric="bpb").score(METRICS) == pytest.approx(1.5)
 
 
-def test_nested_suites_count_as_one_member_under_their_own_metric():
+def test_nested_suites_count_as_one_member_under_their_own_metric() -> None:
     inner = Suite("inner", (OTHER, THIRD), metric="acc_raw")
     outer = Suite("outer", (TASK, inner))
 
@@ -37,7 +44,7 @@ def test_nested_suites_count_as_one_member_under_their_own_metric():
     assert bpb.score(METRICS) == pytest.approx((4.0 + 1.5) / 2)
 
 
-def test_scale_is_what_a_scored_suites_mean_is_on():
+def test_scale_is_what_a_scored_suites_mean_is_on() -> None:
     inner = Suite("inner", (OTHER, THIRD), metric="acc_raw")
     assert (Suite("rc", (TASK, inner)).scale, inner.scale) == ("accuracy", "accuracy")
     # Read through a member suite when that comes first.
@@ -49,13 +56,13 @@ def test_scale_is_what_a_scored_suites_mean_is_on():
         _ = Suite("all", (inner, Suite("bpb_only", (GOLD_ONLY,))), scored=False).scale
 
 
-def test_a_suite_may_share_a_name_with_a_task():
+def test_a_suite_may_share_a_name_with_a_task() -> None:
     # The registries keep tasks and suites apart; `evaluate` refuses a run that reaches both
     # under one name, since results look members up by name.
     assert Suite("toy", (TASK,)).tasks == (TASK,)
 
 
-def test_two_suites_over_one_task_list_share_their_tasks():
+def test_two_suites_over_one_task_list_share_their_tasks() -> None:
     rc = Suite("rc", (TASK, OTHER))
     bpb = Suite("bpb", (TASK, OTHER), metric="bpb")
     group = Suite("group", (rc, bpb), scored=False)
@@ -64,13 +71,13 @@ def test_two_suites_over_one_task_list_share_their_tasks():
     assert [suite.name for suite in group.suites] == ["rc", "bpb", "group"]
 
 
-def test_unscored_suite_has_no_score():
+def test_unscored_suite_has_no_score() -> None:
     group = Suite("group", (Suite("rc", (TASK,)),), scored=False)
     with pytest.raises(ValueError, match="no score"):
         group.score(METRICS)
 
 
-def test_score_needs_every_member_tasks_metric():
+def test_score_needs_every_member_tasks_metric() -> None:
     with pytest.raises(KeyError, match="other"):
         Suite("rc", (TASK, OTHER)).score({"toy": METRICS["toy"]})
 
@@ -119,12 +126,12 @@ def test_score_needs_every_member_tasks_metric():
         ),
     ],
 )
-def test_suite_rejects_bad_definitions(kwargs, match):
+def test_suite_rejects_bad_definitions(kwargs: dict[str, Any], match: str) -> None:
     with pytest.raises(ValueError, match=match):
         Suite("s", **kwargs)
 
 
-def test_registry_suites_hold_registered_tasks():
+def test_registry_suites_hold_registered_tasks() -> None:
     qa = (
         "arc_easy",
         "arc_challenge",
@@ -162,7 +169,7 @@ def test_registry_suites_hold_registered_tasks():
         assert all(TASKS[task.name] is task for task in suite.tasks)
 
 
-def test_zh_tw_suites_count_each_benchmark_once():
+def test_zh_tw_suites_count_each_benchmark_once() -> None:
     zh_tw, zh_tw_bpb = SUITES["zh_tw"], SUITES["zh_tw:bpb"]
     assert [member.name for member in zh_tw.members] == ["tmmluplus", "tw_mock_exams"]
     assert [member.name for member in zh_tw_bpb.members] == [

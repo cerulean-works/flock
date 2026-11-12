@@ -1,9 +1,19 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import datasets
 import pytest
 
 from flock.eval.run import score_task
 from flock.eval.tasks import SUITES, TASKS, Choice, Dataset, MultipleChoiceTask
 from flock.eval.tasks.zh_cn import CEVAL, CMMLU, ZH_CN, ZH_CN_BPB, ceval_doc, cmmlu_doc
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
+
+    from flock.eval.model import ScoringModel
 
 
 def ceval_row(position: int, question: str, choices: list[str], answer: str) -> dict:
@@ -48,7 +58,9 @@ ROWS = {
 
 
 @pytest.fixture
-def zh_cn_rows(monkeypatch, real_load):
+def zh_cn_rows(
+    monkeypatch: pytest.MonkeyPatch, real_load: Callable[..., list[dict[str, Any]]]
+) -> None:
     """Every TMMLU+, C-Eval and CMMLU task loads `ROWS` through the real `Dataset.load`, which numbers the rows."""
     monkeypatch.setattr(Dataset, "load", real_load)
     monkeypatch.setattr(
@@ -58,7 +70,9 @@ def zh_cn_rows(monkeypatch, real_load):
     )
 
 
-def test_requests_are_each_benchmarks_header_then_five_dev_rows_then_the_question(zh_cn_rows):
+def test_requests_are_each_benchmarks_header_then_five_dev_rows_then_the_question(
+    zh_cn_rows: None,
+) -> None:
     examples = (
         "问题：中国最长的河流是哪一条？\n答案：长江\n\n"
         "问题：一年有几个月？\n答案：12\n\n"
@@ -90,7 +104,7 @@ def test_requests_are_each_benchmarks_header_then_five_dev_rows_then_the_questio
         assert built.requests[12].continuation == "0 度"
 
 
-def test_a_test_row_repeating_a_dev_row_sees_the_other_four(zh_cn_rows):
+def test_a_test_row_repeating_a_dev_row_sees_the_other_four(zh_cn_rows: None) -> None:
     task = TASKS["cmmlu_logical"]
     assert isinstance(task, MultipleChoiceTask)
     docs, shots = task.load()
@@ -101,7 +115,9 @@ def test_a_test_row_repeating_a_dev_row_sees_the_other_four(zh_cn_rows):
     assert "答案：苹果\n\n" not in context
 
 
-def test_dropped_rows_are_left_out_of_the_test_split_only(zh_cn_rows, monkeypatch):
+def test_dropped_rows_are_left_out_of_the_test_split_only(
+    zh_cn_rows: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # `operating_system` drops row 32 (033.D8), so it needs 34 rows here.
     rows = [ceval_row(i, f"第{i}题？", ["甲", "乙", "丙", "丁"], "A") for i in range(34)]
     monkeypatch.setitem(ROWS, ("ceval/ceval-exam", "test"), rows)
@@ -124,7 +140,9 @@ def test_dropped_rows_are_left_out_of_the_test_split_only(zh_cn_rows, monkeypatc
 
 # One test for the three benchmarks, since `Benchmark.tasks` builds all their tasks.
 @pytest.mark.parametrize("name", ["tmmluplus_organic_chemistry", "ceval_logic", "cmmlu_logical"])
-def test_scores_do_not_depend_on_batching(scorer, zh_cn_rows, name):
+def test_scores_do_not_depend_on_batching(
+    scorer: ScoringModel, zh_cn_rows: None, name: str
+) -> None:
     task = TASKS[name]
     assert isinstance(task, MultipleChoiceTask)
     one_batch = score_task(scorer, task)
@@ -133,7 +151,7 @@ def test_scores_do_not_depend_on_batching(scorer, zh_cn_rows, name):
     assert score_task(scorer, task).metrics == pytest.approx(one_batch.metrics, abs=1e-5)
 
 
-def test_doc_reads_each_benchmarks_columns():
+def test_doc_reads_each_benchmarks_columns() -> None:
     ceval = ceval_doc({**ceval_row(0, *TEST[1]), "index": 7})
     cmmlu = cmmlu_doc({**cmmlu_row(*TEST[1]), "index": 7})
 
@@ -142,7 +160,7 @@ def test_doc_reads_each_benchmarks_columns():
     assert ceval.choices[1] == Choice("问题：哪一种动物会飞？\n答案：", "老鹰")
 
 
-def test_subject_tables_match_the_benchmarks_files():
+def test_subject_tables_match_the_benchmarks_files() -> None:
     for benchmark, sizes in (
         (CEVAL, {"stem": 20, "social_science": 10, "humanities": 11, "other": 11}),
         (CMMLU, {"stem": 17, "social_science": 22, "humanities": 13, "other": 15}),
@@ -160,7 +178,7 @@ def test_subject_tables_match_the_benchmarks_files():
     assert not any(s.china_specific for category in CEVAL.categories for s in category.subjects)
 
 
-def test_each_benchmark_averages_its_subjects_and_zh_cn_weighs_both_equally():
+def test_each_benchmark_averages_its_subjects_and_zh_cn_weighs_both_equally() -> None:
     metrics = {task.name: {"acc_per_char": 0.0, "bpb": 1.0} for task in ZH_CN.tasks}
     # One of C-Eval's 11 humanities subjects scores 1.
     metrics["ceval_logic"] = {"acc_per_char": 1.0, "bpb": 3.0}
@@ -173,7 +191,7 @@ def test_each_benchmark_averages_its_subjects_and_zh_cn_weighs_both_equally():
     assert ZH_CN_BPB.score(metrics) == pytest.approx((1 + 2 / 52 + 1) / 2)
 
 
-def test_all_groups_run_every_subject_once():
+def test_all_groups_run_every_subject_once() -> None:
     assert SUITES["ceval:all"].tasks == SUITES["ceval"].tasks
     assert SUITES["cmmlu:all"].tasks == SUITES["cmmlu"].tasks
     assert ZH_CN.tasks == ZH_CN_BPB.tasks

@@ -1,10 +1,13 @@
 """The proxy's S3 operations (D61), through boto3, raw signed requests, the AWS CLI and Lance."""
 
+from __future__ import annotations
+
 import os
 import shutil
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from typing import TYPE_CHECKING
 from urllib.parse import unquote
 
 import httpx
@@ -14,8 +17,16 @@ from botocore.exceptions import ClientError
 from tests.s3.conftest import Creds, S3Env, code, status
 from tests.s3.test_chunked import crc32, frame
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from contextlib import AbstractContextManager
+    from pathlib import Path
+    from typing import Any
 
-def test_objects_round_trip(env: S3Env):
+    from tests.conftest import Clock
+
+
+def test_objects_round_trip(env: S3Env) -> None:
     bucket = env.bucket()
     s3 = env.s3(env.key("alice"))
     key = "run-1/a b+c=d/ü.txt"
@@ -39,7 +50,7 @@ def test_objects_round_trip(env: S3Env):
     assert code(error.value) == "NoSuchKey"
 
 
-def test_presigned_urls(env: S3Env):
+def test_presigned_urls(env: S3Env) -> None:
     bucket = env.bucket()
     s3 = env.s3(env.key("alice"))
     s3.put_object(Bucket=bucket, Key="a b", Body=b"presigned")
@@ -49,7 +60,7 @@ def test_presigned_urls(env: S3Env):
     assert httpx.get(url.replace("a%20b", "a%20c")).status_code == 403
 
 
-def test_bucket_operations(env: S3Env):
+def test_bucket_operations(env: S3Env) -> None:
     bucket = env.bucket()
     s3 = env.s3(env.key("alice"))
     assert s3.head_bucket(Bucket=bucket)["ResponseMetadata"]["HTTPStatusCode"] == 200
@@ -59,7 +70,7 @@ def test_bucket_operations(env: S3Env):
     assert status(error.value) == 404
 
 
-def test_listings_with_prefixes_and_pagination(env: S3Env):
+def test_listings_with_prefixes_and_pagination(env: S3Env) -> None:
     bucket = env.bucket()
     s3 = env.s3(env.key("alice"))
     names = sorted([f"a/{i:02}" for i in range(7)] + ["b", "c/x y+z", "c/ü", "d/e/f"])
@@ -100,7 +111,7 @@ def test_listings_with_prefixes_and_pagination(env: S3Env):
     assert [o["Key"] for o in rest["Contents"]] == ["a/04", "a/05", "a/06"]
 
 
-def test_aws_chunked_uploads_are_decoded(env: S3Env):
+def test_aws_chunked_uploads_are_decoded(env: S3Env) -> None:
     """Recent AWS SDKs send uploads aws-chunked with a checksum trailer by default."""
     bucket = env.bucket()
     alice = env.key("alice")
@@ -133,7 +144,7 @@ def test_aws_chunked_uploads_are_decoded(env: S3Env):
     assert signed.status_code == 501
 
 
-def test_multipart_uploads(env: S3Env):
+def test_multipart_uploads(env: S3Env) -> None:
     bucket = env.bucket()
     s3 = env.s3(env.key("alice"))
     key = "data/big.bin"
@@ -164,7 +175,7 @@ def test_multipart_uploads(env: S3Env):
     assert code(error.value) in ("NoSuchUpload", "NoSuchKey")  # Ceph says NoSuchKey
 
 
-def test_ranges_and_conditional_reads(env: S3Env):
+def test_ranges_and_conditional_reads(env: S3Env) -> None:
     bucket = env.bucket()
     s3 = env.s3(env.key("alice"))
     data = bytes(range(256)) * 64
@@ -183,7 +194,7 @@ def test_ranges_and_conditional_reads(env: S3Env):
     assert status(error.value) == 412
 
 
-def test_if_none_match_writes_once(env: S3Env):
+def test_if_none_match_writes_once(env: S3Env) -> None:
     """Conditional writes are forwarded, so the S3 server settles races between writers."""
     bucket = env.bucket()
     s3 = env.s3(env.key("alice"))
@@ -215,7 +226,7 @@ def test_if_none_match_writes_once(env: S3Env):
     assert body == f"writer {won.index(True)}".encode()
 
 
-def test_copies_between_the_orgs_buckets(env: S3Env):
+def test_copies_between_the_orgs_buckets(env: S3Env) -> None:
     source, target = env.bucket(), env.bucket()
     other = env.bucket(org="lab")
     s3 = env.s3(env.key("alice"))
@@ -249,7 +260,7 @@ def test_copies_between_the_orgs_buckets(env: S3Env):
     assert code(error.value) == "NoSuchBucket"
 
 
-def test_delete_objects(env: S3Env):
+def test_delete_objects(env: S3Env) -> None:
     bucket = env.bucket()
     s3 = env.s3(env.key("alice"))
     for key in ("a", "b", "c d"):
@@ -261,7 +272,7 @@ def test_delete_objects(env: S3Env):
     assert [o["Key"] for o in s3.list_objects_v2(Bucket=bucket)["Contents"]] == ["b"]
 
 
-def test_unsupported_requests(env: S3Env):
+def test_unsupported_requests(env: S3Env) -> None:
     bucket = env.bucket()
     s3 = env.s3(env.key("alice"))
     s3.put_object(Bucket=bucket, Key="x", Body=b"x")
@@ -277,7 +288,7 @@ def test_unsupported_requests(env: S3Env):
         assert code(error.value) == "NotImplemented"
 
 
-def test_bad_credentials_are_refused(env: S3Env):
+def test_bad_credentials_are_refused(env: S3Env) -> None:
     bucket = env.bucket()
     good = env.key("alice")
     env.s3(good).put_object(Bucket=bucket, Key="x", Body=b"x")
@@ -294,7 +305,7 @@ def test_bad_credentials_are_refused(env: S3Env):
     assert unsigned.status_code == 403
 
 
-def test_an_expired_key_is_refused(env: S3Env, clock):
+def test_an_expired_key_is_refused(env: S3Env, clock: Callable[[str], Clock]) -> None:
     wall = clock("app.api.src.s3_proxy.app")
     bucket = env.bucket()
     creds = env.key("alice", ttl=1)
@@ -305,7 +316,9 @@ def test_an_expired_key_is_refused(env: S3Env, clock):
     assert code(error.value) == "ExpiredToken"
 
 
-def test_lowering_the_maximum_refuses_older_keys_at_once(env: S3Env, invalidates):
+def test_lowering_the_maximum_refuses_older_keys_at_once(
+    env: S3Env, invalidates: Callable[[str], AbstractContextManager[None]]
+) -> None:
     bucket = env.bucket(org="lab")
     old, new = env.key("olga"), env.key("olga")
     env.s3(old).put_object(Bucket=bucket, Key="x", Body=b"x")
@@ -324,7 +337,9 @@ def test_lowering_the_maximum_refuses_older_keys_at_once(env: S3Env, invalidates
         lab.patch("/api/v1/orgs/lab", {"s3_key_max_ttl": 30 * 86400})
 
 
-def test_a_revoked_key_is_cut_off_at_once(env: S3Env, invalidates):
+def test_a_revoked_key_is_cut_off_at_once(
+    env: S3Env, invalidates: Callable[[str], AbstractContextManager[None]]
+) -> None:
     bucket = env.bucket()
     creds = env.key("alice")
     s3 = env.s3(creds)
@@ -343,7 +358,9 @@ def test_a_revoked_key_is_cut_off_at_once(env: S3Env, invalidates):
     assert code(error.value) == "InvalidAccessKeyId"
 
 
-def test_a_removed_member_is_cut_off_at_once(env: S3Env, invalidates):
+def test_a_removed_member_is_cut_off_at_once(
+    env: S3Env, invalidates: Callable[[str], AbstractContextManager[None]]
+) -> None:
     user = env.flock.add_user(f"{env.name('leaver')}@flock.test")
     bucket = env.bucket()
     creds = Creds(**{
@@ -360,7 +377,7 @@ def test_a_removed_member_is_cut_off_at_once(env: S3Env, invalidates):
     assert code(error.value) == "AccessDenied"
 
 
-def test_read_only_keys_cannot_write(env: S3Env):
+def test_read_only_keys_cannot_write(env: S3Env) -> None:
     bucket = env.bucket()
     env.s3(env.key("alice")).put_object(Bucket=bucket, Key="x", Body=b"x")
     s3 = env.s3(env.key("alice", read_only=True))
@@ -378,12 +395,12 @@ def test_read_only_keys_cannot_write(env: S3Env):
         assert code(error.value) == "AccessDenied"
 
 
-def test_last_used_is_recorded_once_a_minute(env: S3Env, wait_for):
+def test_last_used_is_recorded_once_a_minute(env: S3Env, wait_for: Callable[..., Any]) -> None:
     bucket = env.bucket()
     creds = env.key("alice")
     s3 = env.s3(creds)
 
-    def last_used():
+    def last_used() -> Any:
         rows = env.sql(
             "SELECT last_used_at FROM s3_keys WHERE access_key_id = $1", creds.access_key_id
         )
@@ -397,7 +414,7 @@ def test_last_used_is_recorded_once_a_minute(env: S3Env, wait_for):
     assert last_used() == first
 
 
-def test_the_aws_cli(env: S3Env, tmp_path):
+def test_the_aws_cli(env: S3Env, tmp_path: Path) -> None:
     aws = shutil.which("aws")
     if aws is None:
         pytest.skip("the AWS CLI isn't installed")
@@ -435,7 +452,7 @@ def test_the_aws_cli(env: S3Env, tmp_path):
     assert run("s3", "ls", f"s3://{bucket}/") == ""
 
 
-def test_lance_through_the_proxy(env: S3Env):
+def test_lance_through_the_proxy(env: S3Env) -> None:
     lance = pytest.importorskip("lance")
     pa = pytest.importorskip("pyarrow")
     bucket = env.bucket()

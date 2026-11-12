@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 import datetime as dt
+from typing import TYPE_CHECKING
 
 import pytest
 
 from app.api.src.core import gpus
+
+if TYPE_CHECKING:
+    from typing import Any
 
 
 @pytest.mark.parametrize(
@@ -26,7 +32,7 @@ from app.api.src.core import gpus
         ("NVIDIA", None),
     ],
 )
-def test_normalize(name, expected):
+def test_normalize(name: str, expected: str | None) -> None:
     assert gpus.normalize(name) == expected
 
 
@@ -45,15 +51,23 @@ def test_normalize(name, expected):
         ([1, 2], (None, 0)),
     ],
 )
-def test_detect(metadata, expected):
+def test_detect(
+    metadata: dict[str, str | int]
+    | dict[str, Any]
+    | dict[str, str]
+    | dict[str, dict[str, str | int]]
+    | dict[str, int | dict[str, str]]
+    | list[int],
+    expected: tuple[str, int] | tuple[None, int],
+) -> None:
     assert gpus.detect(metadata) == expected
 
 
-def at(*args) -> float:
+def at(*args: Any) -> float:
     return dt.datetime(*args, tzinfo=dt.UTC).timestamp()
 
 
-def test_split_by_month():
+def test_split_by_month() -> None:
     sep, oct_, nov = dt.date(2026, 9, 1), dt.date(2026, 10, 1), dt.date(2026, 11, 1)
     assert gpus.split_by_month(at(2026, 10, 5), at(2026, 10, 5, 1)) == [(oct_, 3600.0)]
     assert gpus.split_by_month(at(2026, 9, 30, 23), at(2026, 11, 1, 1)) == [
@@ -68,7 +82,7 @@ def test_split_by_month():
     assert gpus.split_by_month(5.0, 5.0) == []
 
 
-def test_months():
+def test_months() -> None:
     assert gpus.parse_month("2026-02") == dt.date(2026, 2, 1)
     assert gpus.format_month(dt.date(2026, 2, 1)) == "2026-02"
     for bad in ("2026-2", "2026-13", "feb"):

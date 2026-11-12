@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import dataclasses
 import json
 from pathlib import Path
-from typing import Self
+from typing import TYPE_CHECKING, Never, Self
 
 import httpx
 import pytest
@@ -14,6 +16,11 @@ from flock.eval.results import Results, SuiteResult
 from flock.eval.tracking import log_results_file, log_to_tracker
 
 from .toy import PROVENANCE, task_result
+
+if TYPE_CHECKING:
+    from types import TracebackType
+    from typing import Any
+
 
 # Cut from banked results files: their provenance as written, and a suite with its tasks.
 LOGGED = Path(__file__).parent / "logged"
@@ -30,16 +37,21 @@ class FakeRun:
     def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         self.calls["exit_code"] = 1 if exc_type is not None else 0
 
 
 @pytest.fixture
-def logged(monkeypatch):
+def logged(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Captures what `wandb.init` and the run receive, without the SDK."""
     calls = {"summary": {}}
 
-    def init(**kwargs):
+    def init(**kwargs: Any) -> FakeRun:
         calls["init"] = kwargs
         return FakeRun(calls, calls["summary"])
 
@@ -67,7 +79,7 @@ class FakeHub:
 
 
 @pytest.fixture
-def hub(monkeypatch) -> FakeHub:
+def hub(monkeypatch: pytest.MonkeyPatch) -> FakeHub:
     """A fake Flock API, signed in to through `FLOCK_TOKEN`."""
     fake = FakeHub()
     monkeypatch.setenv("FLOCK_HOST", HOST)
@@ -76,7 +88,7 @@ def hub(monkeypatch) -> FakeHub:
     return fake
 
 
-def test_log_to_tracker_logs_scored_suites_and_members(logged):
+def test_log_to_tracker_logs_scored_suites_and_members(logged: dict[str, Any]) -> None:
     results = Results(
         PROVENANCE,
         [
@@ -112,11 +124,13 @@ def test_log_to_tracker_logs_scored_suites_and_members(logged):
     assert logged["exit_code"] == 0
 
 
-def test_a_failed_summary_update_finishes_the_run_as_failed(monkeypatch):
+def test_a_failed_summary_update_finishes_the_run_as_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls = {}
 
     class FailingSummary:
-        def update(self, values):
+        def update(self, values: dict[str, Any]) -> Never:
             raise ConnectionError("tracker unreachable")
 
     monkeypatch.setattr(wandb, "init", lambda **kwargs: FakeRun(calls, FailingSummary()))
@@ -128,7 +142,9 @@ def test_a_failed_summary_update_finishes_the_run_as_failed(monkeypatch):
     assert calls["exit_code"] == 1
 
 
-def test_log_to_tracker_sends_a_flock_model_and_its_digest_in_the_config(logged):
+def test_log_to_tracker_sends_a_flock_model_and_its_digest_in_the_config(
+    logged: dict[str, Any],
+) -> None:
     # The run's config names the exact version scored, by number and digest.
     provenance = dataclasses.replace(
         PROVENANCE, model="flock:acme/olmo2-1b@12", model_digest="d" * 64
@@ -141,7 +157,9 @@ def test_log_to_tracker_sends_a_flock_model_and_its_digest_in_the_config(logged)
     assert logged["init"]["config"]["model_digest"] == "d" * 64
 
 
-def test_a_written_file_logs_the_run_its_live_run_logged(logged, hub, tmp_path):
+def test_a_written_file_logs_the_run_its_live_run_logged(
+    logged: dict[str, Any], hub: FakeHub, tmp_path: Path
+) -> None:
     results = Results(
         PROVENANCE,
         [task_result("toy", {"acc_raw": 0.5, "bpb": 1.0}), task_result("other", {"acc_raw": 0.7})],
@@ -157,7 +175,9 @@ def test_a_written_file_logs_the_run_its_live_run_logged(logged, hub, tmp_path):
 
 
 @pytest.mark.parametrize("schema", [6, 7, 8])
-def test_a_banked_file_logs_its_provenance_as_written(logged, hub, schema):
+def test_a_banked_file_logs_its_provenance_as_written(
+    logged: dict[str, Any], hub: FakeHub, schema: int
+) -> None:
     path = LOGGED / f"schema{schema}.json"
     written = json.loads(path.read_text())
 
@@ -191,7 +211,9 @@ def test_a_banked_file_logs_its_provenance_as_written(logged, hub, schema):
     }
 
 
-def test_a_null_score_in_a_written_file_is_not_logged(logged, hub, tmp_path):
+def test_a_null_score_in_a_written_file_is_not_logged(
+    logged: dict[str, Any], hub: FakeHub, tmp_path: Path
+) -> None:
     # `Results.write` turns an infinite or NaN score into null; the run has no value for it.
     results = Results(
         PROVENANCE,
@@ -204,7 +226,7 @@ def test_a_null_score_in_a_written_file_is_not_logged(logged, hub, tmp_path):
     assert logged["summary"] == {"toy/acc_raw": 0.5, "toy/docs_per_second": 2.0}
 
 
-def test_a_schema_6_file_logs_no_kernel_and_no_bos(logged, hub):
+def test_a_schema_6_file_logs_no_kernel_and_no_bos(logged: dict[str, Any], hub: FakeHub) -> None:
     # Schema 6 predates both fields. Its missing `sdpa_backend` means an unknown kernel, which a
     # logged `None` (no pin applied) would misstate.
     log_results_file(LOGGED / "schema6.json", "model-evals")
@@ -213,7 +235,9 @@ def test_a_schema_6_file_logs_no_kernel_and_no_bos(logged, hub):
     assert "add_bos" not in logged["init"]["config"]
 
 
-def test_a_file_already_logged_is_refused_before_any_run(logged, hub):
+def test_a_file_already_logged_is_refused_before_any_run(
+    logged: dict[str, Any], hub: FakeHub
+) -> None:
     hub.found = ["run-1"]
 
     with pytest.raises(ValueError, match="already logged as acme/model-evals/run-1"):
@@ -222,7 +246,9 @@ def test_a_file_already_logged_is_refused_before_any_run(logged, hub):
     assert "init" not in logged
 
 
-def test_a_project_that_does_not_exist_yet_holds_no_duplicate(logged, hub):
+def test_a_project_that_does_not_exist_yet_holds_no_duplicate(
+    logged: dict[str, Any], hub: FakeHub
+) -> None:
     hub.status, hub.error = 404, {"error": "project acme/model-evals not found"}
 
     log_results_file(LOGGED / "schema7.json", "model-evals")
@@ -230,7 +256,9 @@ def test_a_project_that_does_not_exist_yet_holds_no_duplicate(logged, hub):
     assert logged["init"]["project"] == "model-evals"
 
 
-def test_a_404_from_anything_but_a_missing_project_logs_nothing(logged, hub):
+def test_a_404_from_anything_but_a_missing_project_logs_nothing(
+    logged: dict[str, Any], hub: FakeHub
+) -> None:
     # A server without the run query answers a bare 404, which must not pass as "no project".
     hub.status, hub.error = 404, {"detail": "Not Found"}
 
@@ -240,7 +268,7 @@ def test_a_404_from_anything_but_a_missing_project_logs_nothing(logged, hub):
     assert "init" not in logged
 
 
-def test_a_refused_query_logs_nothing(logged, hub):
+def test_a_refused_query_logs_nothing(logged: dict[str, Any], hub: FakeHub) -> None:
     hub.status = 403
 
     with pytest.raises(ValueError, match="refused the run query"):
@@ -249,7 +277,9 @@ def test_a_refused_query_logs_nothing(logged, hub):
     assert "init" not in logged
 
 
-def test_schemas_before_6_are_refused_before_any_query(logged, hub, tmp_path):
+def test_schemas_before_6_are_refused_before_any_query(
+    logged: dict[str, Any], hub: FakeHub, tmp_path: Path
+) -> None:
     path = tmp_path / "results.json"
     written = json.loads((LOGGED / "schema6.json").read_text())
     path.write_text(json.dumps({**written, "schema_version": 5}))
@@ -260,7 +290,9 @@ def test_schemas_before_6_are_refused_before_any_query(logged, hub, tmp_path):
     assert hub.queries == []
 
 
-def test_the_log_command_prints_where_the_run_went_or_why_not(logged, hub):
+def test_the_log_command_prints_where_the_run_went_or_why_not(
+    logged: dict[str, Any], hub: FakeHub
+) -> None:
     path = str(LOGGED / "schema8.json")
 
     result = CliRunner().invoke(main, ["log", path, "--project", "model-evals"])
@@ -273,8 +305,10 @@ def test_the_log_command_prints_where_the_run_went_or_why_not(logged, hub):
     assert "already logged as acme/model-evals/run-1" in refused.output
 
 
-def test_the_log_command_reports_a_tracker_refusal_in_one_line(hub, monkeypatch):
-    def refuse(**kwargs):
+def test_the_log_command_reports_a_tracker_refusal_in_one_line(
+    hub: FakeHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(**kwargs: Any) -> Never:
         raise wandb.errors.AuthenticationError("API key is invalid")
 
     monkeypatch.setattr(wandb, "init", refuse)

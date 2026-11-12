@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 import pytest
 
@@ -15,7 +17,7 @@ from app.api.src.core.history import History, Series
         ([], True),
     ],
 )
-def test_series_blob_round_trip(rows, dense):
+def test_series_blob_round_trip(rows: list[int], dense: bool) -> None:
     vals = [float(r) * 0.5 - 1 for r in rows]
     original = Series()
     original.extend(rows, vals)
@@ -30,7 +32,7 @@ def test_series_blob_round_trip(rows, dense):
 
 @pytest.mark.parametrize("x_key", ["_step", "_runtime"])
 @pytest.mark.parametrize("sparse", [False, True])
-def test_curve_with_axis_newer_than_run_line_count(x_key, sparse):
+def test_curve_with_axis_newer_than_run_line_count(x_key: str, sparse: bool) -> None:
     hist = History()
     hist.append_rows(0, [{x_key: 0, "loss": 1.0}, {} if sparse else {x_key: 1}, {x_key: 2}])
     # Run metadata was read before another request appended the newer chunks.
@@ -47,7 +49,7 @@ def test_curve_with_axis_newer_than_run_line_count(x_key, sparse):
     np.testing.assert_array_equal(y, [1.0])
 
 
-def test_x_at_missing_rows_after_dense_axis():
+def test_x_at_missing_rows_after_dense_axis() -> None:
     hist = History()
     hist.append_rows(0, [{"_step": 0}, {"_step": 1}])
     # A requested row beyond the dense axis should be missing, like a sparse-axis gap.
@@ -55,7 +57,7 @@ def test_x_at_missing_rows_after_dense_axis():
 
 
 @pytest.mark.parametrize("axis_rows", [[], [1, 4], [0, 1, 2, 3, 4]])
-def test_x_at_matches_only_logged_rows(axis_rows):
+def test_x_at_matches_only_logged_rows(axis_rows: list[int]) -> None:
     hist = History(n_rows=5)
     axis = Series()
     axis.extend(axis_rows, [row * 0.5 for row in axis_rows])

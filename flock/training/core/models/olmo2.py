@@ -23,7 +23,7 @@ class Olmo2Config:
     init_seed: int = 42
     hf_repo: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         for name in (
             "vocab_size",
             "hidden_size",
@@ -68,7 +68,7 @@ OLMO2_7B_CONFIG = Olmo2Config(
 
 
 class Olmo2DecoderLayer(nn.Module):
-    def __init__(self, config: Olmo2Config):
+    def __init__(self, config: Olmo2Config) -> None:
         super().__init__()
         head_dim = config.hidden_size // config.num_attention_heads
         self.self_attn = GroupedAttentionWithRoPE(
@@ -102,7 +102,7 @@ class Olmo2DecoderLayer(nn.Module):
 
 
 class Olmo2Model(nn.Module):
-    def __init__(self, config: Olmo2Config):
+    def __init__(self, config: Olmo2Config) -> None:
         super().__init__()
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList(
@@ -139,7 +139,7 @@ class Olmo2(BaseModel):
     Parameter names match Hugging Face's Olmo2ForCausalLM state dict.
     """
 
-    def __init__(self, config: Olmo2Config):
+    def __init__(self, config: Olmo2Config) -> None:
         super().__init__(
             max_position_embeddings=config.max_position_embeddings,
             hf_repo=config.hf_repo,

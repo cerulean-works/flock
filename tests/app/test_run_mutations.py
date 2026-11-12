@@ -1,13 +1,22 @@
+from __future__ import annotations
+
 import asyncio
+from typing import TYPE_CHECKING
 
 from app.api.src.api.dashboard import Snapshot
 from app.api.src.api.runs import RunSelection
 from tests.app.utils import history_rows, system_samples
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from tests.app.conftest import Client, EventStream, Flocks
+
+
 RUNS = "/api/v1/projects/flock/p/runs"
 
 
-def table(api, project: str = "p", columns: str = "tags,group,notes,display_name") -> dict:
+def table(api: Client, project: str = "p", columns: str = "tags,group,notes,display_name") -> dict:
     data = api.runs(project, columns=columns, sort="name")
     return {
         name: dict(zip(data["columns"], row))
@@ -18,7 +27,9 @@ def table(api, project: str = "p", columns: str = "tags,group,notes,display_name
 # ---------------------------------------------------------------------- edits
 
 
-def test_patch_sets_and_clears_attributes(make_flock, events):
+def test_patch_sets_and_clears_attributes(
+    make_flock: Flocks, events: Callable[..., EventStream]
+) -> None:
     server = make_flock()
     api = server.client()
     api.create_run("p", "r1", tags=["a"])
@@ -47,7 +58,7 @@ def test_patch_sets_and_clears_attributes(make_flock, events):
     }
 
 
-def test_bulk_update_by_filter(api):
+def test_bulk_update_by_filter(api: Client) -> None:
     for i in range(4):
         api.create_run("p", f"r{i}", config={"i": i}, tags=["base", "keep"])
     body = {
@@ -75,7 +86,7 @@ def test_bulk_update_by_filter(api):
 # ---------------------------------------------------------------------- deletes
 
 
-def test_delete_runs(make_flock, events):
+def test_delete_runs(make_flock: Flocks, events: Callable[..., EventStream]) -> None:
     server = make_flock()
     store = server.store
     api = server.client()
@@ -110,7 +121,7 @@ def test_delete_runs(make_flock, events):
     assert sorted(deleted.json()["ids"]) == ["r3", "r4"]
     assert api.post(f"{RUNS}/delete", {}).status == 400
 
-    def check(client) -> None:
+    def check(client: Client) -> None:
         assert client.runs("p", sort="config.i")["ids"] == ["r1", "r2"]
         assert client.runs("p")["ids"] == ["r2", "r1"]  # newest first
         assert client.runs("p", filter={"config.i": {"$gt": 1}})["ids"] == ["r2"]
@@ -129,7 +140,7 @@ def test_delete_runs(make_flock, events):
     check(make_flock(reuse=server).client())
 
 
-def test_delete_while_reading(make_flock):
+def test_delete_while_reading(make_flock: Flocks) -> None:
     server = make_flock()
     store = server.store
     api = server.client()
@@ -156,7 +167,7 @@ def test_delete_while_reading(make_flock):
     assert [r["id"] for r in api.workspace()["runs"]] == ["r9", "r7", "r5", "r3", "r1"]
 
 
-def test_files_of_deleted_runs_are_swept_on_startup(make_flock):
+def test_files_of_deleted_runs_are_swept_on_startup(make_flock: Flocks) -> None:
     server = make_flock()
     api = server.client()
     api.create_run("p", "r1")
@@ -172,7 +183,7 @@ def test_files_of_deleted_runs_are_swept_on_startup(make_flock):
 # ---------------------------------------------------------------------- moves
 
 
-def test_move_runs(make_flock, events):
+def test_move_runs(make_flock: Flocks, events: Callable[..., EventStream]) -> None:
     server = make_flock()
     store = server.store
     api = server.client()
@@ -204,7 +215,7 @@ def test_move_runs(make_flock, events):
     assert source_events.next_of("deleted") == {"runs": ["a", "b"], "moved_to": "dst"}
     assert {target_events.next_of("created")["run"] for _ in range(2)} == {"a", "b"}
 
-    def check(client) -> None:
+    def check(client: Client) -> None:
         assert client.runs("src")["ids"] == ["live"]
         assert client.runs("dst")["ids"] == ["b", "x", "a"]  # by creation time, newest first
         row = client.runs("dst", filter={"config.k": 1}, columns="summary.acc,state")

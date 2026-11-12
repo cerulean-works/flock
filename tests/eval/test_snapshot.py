@@ -16,7 +16,7 @@ from .snapshot import (
 )
 
 
-def test_every_registered_task_and_suite_matches_the_snapshot():
+def test_every_registered_task_and_suite_matches_the_snapshot() -> None:
     stored = json.loads(TASKS_FILE.read_text(encoding="utf-8"))
     live = definitions(TASKS, SUITES)
 
@@ -25,14 +25,14 @@ def test_every_registered_task_and_suite_matches_the_snapshot():
     assert not changed, "\n".join([*changed, REGENERATE])
 
 
-def test_every_prompt_path_renders_the_pinned_requests():
+def test_every_prompt_path_renders_the_pinned_requests() -> None:
     stored = json.loads(TOY_REQUESTS_FILE.read_text(encoding="utf-8"))
 
     changed = differences("toy task", stored, toy_requests(toy.PROMPT_PATHS))
     assert not changed, "\n".join([*changed, REGENERATE])
 
 
-def test_a_changed_revision_fails_naming_the_task_and_the_field():
+def test_a_changed_revision_fails_naming_the_task_and_the_field() -> None:
     arc_easy = TASKS["arc_easy"]
     moved = dataclasses.replace(
         arc_easy, dataset=dataclasses.replace(arc_easy.dataset, revision="f" * 40)
@@ -46,7 +46,7 @@ def test_a_changed_revision_fails_naming_the_task_and_the_field():
     ]
 
 
-def test_a_changed_row_written_out_changes_its_digest():
+def test_a_changed_row_written_out_changes_its_digest() -> None:
     first, *rest = toy.ROWS["train"]
     written = dataclasses.replace(toy.TASK, fewshot=Fewshot(rows=(first, *rest)))
     edited = dataclasses.replace(
@@ -60,7 +60,7 @@ def test_a_changed_row_written_out_changes_its_digest():
     assert changed.startswith("task toy: fewshot.rows.sha256 was ")
 
 
-def test_differences_see_new_null_and_empty_fields_and_json_types():
+def test_differences_see_new_null_and_empty_fields_and_json_types() -> None:
     stored = {"toy": {"fewshot": {"rows": []}, "scored": True, "num_shots": 1}}
     live = {"toy": {"fewshot": {}, "scored": 1, "num_shots": 1.0, "data_file": None}}
 
@@ -76,7 +76,7 @@ def test_differences_see_new_null_and_empty_fields_and_json_types():
     ]
 
 
-def test_a_row_function_without_a_stable_name_is_refused():
+def test_a_row_function_without_a_stable_name_is_refused() -> None:
     closure = dataclasses.replace(toy.TASK, to_doc=lambda row: toy.TASK.to_doc(row))
 
     with pytest.raises(TypeError, match="toy: to_doc must be a module-level function"):

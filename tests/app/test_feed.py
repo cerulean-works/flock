@@ -1,3 +1,13 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Any
+
+    from tests.app.conftest import Client, FlockServer
+
+
 FEED = "/api/v1/feed"
 
 
@@ -5,7 +15,7 @@ def kinds(items: list[dict]) -> list[tuple[str, str]]:
     return [(i["kind"], i["run"]["id"] if "run" in i else i["project"]) for i in items]
 
 
-def test_the_feed_lists_what_happened_newest_first(flock, api):
+def test_the_feed_lists_what_happened_newest_first(flock: FlockServer, api: Client) -> None:
     alice = flock.add_user("alice@lab.test")
     api.create_run("p", "r1")
     api.stream("p", "r1", [], complete=0)
@@ -51,7 +61,7 @@ def test_the_feed_lists_what_happened_newest_first(flock, api):
     # Pages of 2, following the cursor, list the same items.
     seen, cursor = [], None
     while True:
-        params = {"limit": 2, **({"cursor": cursor} if cursor else {})}
+        params: dict[str, Any] = {"limit": 2, **({"cursor": cursor} if cursor else {})}
         page = api.get(FEED, **params).json()
         seen += page["items"]
         cursor = page["next"]
@@ -67,7 +77,7 @@ def test_the_feed_lists_what_happened_newest_first(flock, api):
     assert kinds(in_p) == [expected[0], *expected[4:]]
 
 
-def test_feed_visibility_and_bad_requests(flock, api):
+def test_feed_visibility_and_bad_requests(flock: FlockServer, api: Client) -> None:
     alice = flock.add_user("alice@lab.test")
     assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
     api.create_run("secret", "s1")  # in flock

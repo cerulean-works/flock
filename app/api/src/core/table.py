@@ -1,7 +1,7 @@
 import fnmatch
 import re
-from collections.abc import Iterable, Sequence
-from typing import TypeGuard
+from collections.abc import Callable, Iterable, Sequence
+from typing import Any, TypeGuard
 
 import numpy as np
 
@@ -456,7 +456,7 @@ class ColumnTable:
         raise FilterError(f"unknown operator {op}")
 
     @staticmethod
-    def _scan(obj: np.ndarray, predicate) -> np.ndarray:
+    def _scan(obj: np.ndarray, predicate: Callable[[Any], bool]) -> np.ndarray:
         return np.fromiter(
             (v is not None and predicate(v) for v in obj), dtype=bool, count=len(obj)
         )
@@ -489,7 +489,7 @@ class ColumnTable:
             missing = [r for r in result if not present[r]]
             have = [r for r in result if present[r]]
 
-            def key_fn(r: int, num=num, obj=obj) -> tuple:
+            def key_fn(r: int, num: np.ndarray = num, obj: np.ndarray | None = obj) -> tuple:
                 if obj is not None and obj[r] is not None:
                     v = obj[r]
                     if isinstance(v, str):

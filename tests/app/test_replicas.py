@@ -1,10 +1,12 @@
 """Several replicas on one database (012): nothing one replica does depends on memory another
 lacks, so clients may reach any of them, in any order."""
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.api.src.core.imports import Imports
 from tests.app.conftest import Client, Flocks
@@ -12,12 +14,21 @@ from tests.app.test_device import CLIENT, START, TOKEN
 from tests.app.test_wandb_import import FakeWandb, source, wandb, wandb_run
 from tests.app.utils import history_rows
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from contextlib import AbstractContextManager
+
+    import pytest
+
+    from tests.app.conftest import EventStream, WandbClient
+
+
 SESSIONS = "/api/v1/me/cli-sessions"
 
 __all__ = ["wandb"]  # the fake W&B fixture, used here too
 
 
-def test_requests_spread_over_replicas_see_one_flock(make_flock: Flocks):
+def test_requests_spread_over_replicas_see_one_flock(make_flock: Flocks) -> None:
     replicas = make_flock.replicas(2)
     api = replicas.client()  # each request to the next replica
     api.create_run("p", "r1", config={"lr": 0.1})
@@ -32,8 +43,10 @@ def test_requests_spread_over_replicas_see_one_flock(make_flock: Flocks):
 
 
 def test_a_dashboard_streams_a_run_logged_through_the_other_replica(
-    make_flock: Flocks, make_wandb_client, events
-):
+    make_flock: Flocks,
+    make_wandb_client: Callable[..., WandbClient],
+    events: Callable[..., EventStream],
+) -> None:
     first, second = make_flock.replicas(2)
     proc = make_wandb_client(first).popen(
         """
@@ -48,6 +61,7 @@ def test_a_dashboard_streams_a_run_logged_through_the_other_replica(
         run.finish()
         """
     )
+    assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
     try:
         line = proc.stdout.readline()
         assert line.startswith("LOGGED"), line + proc.stderr.read()
@@ -73,8 +87,8 @@ def test_a_dashboard_streams_a_run_logged_through_the_other_replica(
 
 
 def test_a_run_deleted_on_one_replica_stays_deleted_while_its_client_logs_through_the_other(
-    make_flock: Flocks, make_wandb_client
-):
+    make_flock: Flocks, make_wandb_client: Callable[..., WandbClient]
+) -> None:
     first, second = make_flock.replicas(2)
     proc = make_wandb_client(first).popen(
         """
@@ -90,6 +104,7 @@ def test_a_run_deleted_on_one_replica_stays_deleted_while_its_client_logs_throug
         print("FINISHED", flush=True)
         """
     )
+    assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
     try:
         line = proc.stdout.readline()
         assert line.startswith("LOGGED"), line + proc.stderr.read()
@@ -110,8 +125,8 @@ def test_a_run_deleted_on_one_replica_stays_deleted_while_its_client_logs_throug
 
 
 def test_a_session_revoked_on_one_replica_is_refused_by_the_other_at_once(
-    make_flock: Flocks, notification
-):
+    make_flock: Flocks, notification: Callable[..., AbstractContextManager[None]]
+) -> None:
     first, second = make_flock.replicas(2)
     alice = first.add_user("alice@lab.test")
     on_second = second.client(token=alice.token)
@@ -134,7 +149,7 @@ def test_a_session_revoked_on_one_replica_is_refused_by_the_other_at_once(
     assert as_alice.get("/api/v1/orgs/flock").json()["role"] == "member"
 
 
-def test_a_sign_in_approved_on_one_replica_is_polled_on_the_other(make_flock: Flocks):
+def test_a_sign_in_approved_on_one_replica_is_polled_on_the_other(make_flock: Flocks) -> None:
     first, second = make_flock.replicas(2)
     alice = first.add_user("alice@lab.test")
     started = second.anonymous().post(START, {"client": CLIENT}).json()
@@ -149,8 +164,11 @@ def test_a_sign_in_approved_on_one_replica_is_polled_on_the_other(make_flock: Fl
 
 
 def test_an_import_of_a_killed_replica_is_marked_interrupted_by_the_other(
-    make_flock: Flocks, wandb: FakeWandb, wait_for, monkeypatch
-):
+    make_flock: Flocks,
+    wandb: FakeWandb,
+    wait_for: Callable[..., Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(Imports, "HEARTBEAT", 0.2)
     monkeypatch.setattr(Imports, "STALE_AFTER", 1.0)
     first, second = make_flock.replicas(2)
@@ -183,8 +201,8 @@ def test_an_import_of_a_killed_replica_is_marked_interrupted_by_the_other(
 
 
 def test_a_replica_killed_mid_request_loses_nothing_it_acknowledged(
-    make_flock: Flocks, monkeypatch
-):
+    make_flock: Flocks, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """What a replica acknowledged is kept, and what it was writing when it died isn't half
     there: the other replica sees the run as it was, and can write to it at once."""
     first, second = make_flock.replicas(2)
@@ -229,7 +247,7 @@ def test_a_replica_killed_mid_request_loses_nothing_it_acknowledged(
     assert other.only_run("p")["summary.loss"] == 9.0
 
 
-def _quietly(call, *args, **kwargs) -> None:
+def _quietly(call: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
     # The replica dies under this request: no answer comes.
     with contextlib.suppress(Exception):
         call(*args, **kwargs)

@@ -1,9 +1,18 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pytest
 
 from tests.app.utils import history_rows, sample_runtimes, system_samples
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
-def test_system_metrics_are_their_own_stream(api):
+    from tests.app.conftest import Client, EventStream, Flocks, FlockServer, WandbClient
+
+
+def test_system_metrics_are_their_own_stream(api: Client) -> None:
     api.create_run("p", "r1")
     samples = system_samples(4, {"system.cpu": lambda i: 10.0 * i})
     samples[1]["system.gpu.0.gpu"] = 55.0  # sparse, like keys that appear after warmup
@@ -29,7 +38,7 @@ def test_system_metrics_are_their_own_stream(api):
     assert api.get("/api/v1/projects/flock/p/history", keys="x", stream="gpu").status == 422
 
 
-def test_resent_system_samples_are_not_duplicated(api):
+def test_resent_system_samples_are_not_duplicated(api: Client) -> None:
     api.create_run("p", "r1")
     samples = system_samples(6, {"system.cpu": float})
     api.stream("p", "r1", events=samples[:4])
@@ -38,7 +47,7 @@ def test_resent_system_samples_are_not_duplicated(api):
     assert series["system.cpu"]["y"] == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 
-def test_system_metrics_compact_and_survive_restart(make_flock):
+def test_system_metrics_compact_and_survive_restart(make_flock: Flocks) -> None:
     server = make_flock()
     api = server.client()
     api.create_run("p", "r1")
@@ -61,7 +70,7 @@ def test_system_metrics_compact_and_survive_restart(make_flock):
     assert restarted.workspace(system="true")["system_metrics"] == ["system.cpu"]
 
 
-def test_snapshot_includes_system_curves_on_request(api):
+def test_snapshot_includes_system_curves_on_request(api: Client) -> None:
     api.create_run("p", "r1")
     samples = system_samples(4, {"system.cpu": lambda i: 10.0 * i})
     api.stream("p", "r1", history_rows(3, loss=float), events=samples)
@@ -80,7 +89,9 @@ def test_snapshot_includes_system_curves_on_request(api):
     assert full["curves"][("r1", "loss")] == plain["curves"][("r1", "loss")]
 
 
-def test_stream_replays_then_pushes_system_samples(api, events):
+def test_stream_replays_then_pushes_system_samples(
+    api: Client, events: Callable[..., EventStream]
+) -> None:
     api.create_run("p", "r1")
     samples = system_samples(5, {"system.cpu": float})
     api.stream("p", "r1", events=samples[:3])
@@ -101,7 +112,9 @@ def test_stream_replays_then_pushes_system_samples(api, events):
     assert pushed["series"]["system.cpu"] == {"rows": [4], "x": sample_runtimes([4]), "y": [4.0]}
 
 
-def test_streams_only_carry_system_samples_when_asked(api, events):
+def test_streams_only_carry_system_samples_when_asked(
+    api: Client, events: Callable[..., EventStream]
+) -> None:
     api.create_run("p", "r1")
     live = events("p", "r1")
     live.next_of("hello")
@@ -113,7 +126,9 @@ def test_streams_only_carry_system_samples_when_asked(api, events):
     assert "system" not in seen
 
 
-def test_wandb_sdk_system_metrics(flock, api, wandb_client):
+def test_wandb_sdk_system_metrics(
+    flock: FlockServer, api: Client, wandb_client: WandbClient
+) -> None:
     """The SDK's system monitor samples reach the system stream."""
     wandb_client.run(
         """
@@ -141,7 +156,7 @@ def test_wandb_sdk_system_metrics(flock, api, wandb_client):
 
 
 @pytest.mark.parametrize("stream", ["history", "system"])
-def test_run_history_defaults_x_by_stream(api, stream):
+def test_run_history_defaults_x_by_stream(api: Client, stream: str) -> None:
     api.create_run("p", "r1")
     api.stream("p", "r1", history_rows(2, loss=float), events=system_samples(2, {"cpu": float}))
     resp = api.get("/api/v1/projects/flock/p/runs/r1/history", stream=stream).json()

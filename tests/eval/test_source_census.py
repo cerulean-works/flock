@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import gzip
 import json
 import math
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import datasets
 import pyarrow as pa
@@ -14,6 +17,10 @@ from flock.eval.tasks import Dataset, Suite
 from flock.eval.tasks.suite import source_suite
 
 from .toy import DOMAIN_ROWS, TEXT_ROWS
+
+if TYPE_CHECKING:
+    from transformers import PreTrainedTokenizerFast
+
 
 # A dataset card in the shape of Paloma's and tw-text's: one configuration per source, each
 # split a pattern, or a list of them, over the repo's files. `forum` and `draft` are sources the
@@ -71,7 +78,9 @@ def toy_suite(sources: dict[str, tuple[str, ...]]) -> Suite:
 
 
 @pytest.fixture
-def repo(tmp_path, monkeypatch, tokenizer) -> Path:
+def repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tokenizer: PreTrainedTokenizerFast
+) -> Path:
     """A local copy of the toy dataset's files, which the census downloads and lists from."""
     root = tmp_path / "repo"
     root.mkdir()
@@ -91,7 +100,7 @@ def repo(tmp_path, monkeypatch, tokenizer) -> Path:
     real_names = datasets.get_dataset_config_names
     real_builder = datasets.load_dataset_builder
 
-    def builder(repo_id, name, revision):
+    def builder(repo_id: str, name: str | None, revision: str) -> SimpleNamespace:
         data_files = {}
         resolved = real_builder(str(root), name).config.data_files
         assert resolved is not None  # A card with configurations always resolves its files.
@@ -113,7 +122,9 @@ def repo(tmp_path, monkeypatch, tokenizer) -> Path:
     return root
 
 
-def test_count_source_reads_jsonl_gz_and_parquet_alike(tmp_path, tokenizer):
+def test_count_source_reads_jsonl_gz_and_parquet_alike(
+    tmp_path: Path, tokenizer: PreTrainedTokenizerFast
+) -> None:
     write_jsonl_gz(tmp_path / "test-0.jsonl.gz", DOMAIN_ROWS)
     write_jsonl_gz(tmp_path / "test-1.jsonl.gz", [])
     write_parquet(tmp_path / "test.parquet", DOMAIN_ROWS)
@@ -130,7 +141,9 @@ def test_count_source_reads_jsonl_gz_and_parquet_alike(tmp_path, tokenizer):
     )["empty_files"] == ["test-1.jsonl.gz"]
 
 
-def test_count_source_counts_bytes_tokens_and_windows_per_domain(tmp_path, tokenizer):
+def test_count_source_counts_bytes_tokens_and_windows_per_domain(
+    tmp_path: Path, tokenizer: PreTrainedTokenizerFast
+) -> None:
     write_jsonl_gz(tmp_path / "test.jsonl.gz", DOMAIN_ROWS)
 
     counts = source_census.count_source(tokenizer, 4, [tmp_path / "test.jsonl.gz"])
@@ -151,7 +164,9 @@ def test_count_source_counts_bytes_tokens_and_windows_per_domain(tmp_path, token
     assert counts["domain_tokens"] == {"news": lengths[0] + lengths[2], "exam": lengths[1]}
 
 
-def test_count_source_ranks_palomas_numbered_domains_before_counting_documents(tmp_path, tokenizer):
+def test_count_source_ranks_palomas_numbered_domains_before_counting_documents(
+    tmp_path: Path, tokenizer: PreTrainedTokenizerFast
+) -> None:
     rows = [
         {"id": "1", "text": "a", "subdomain": "10_b"},
         {"id": "2", "text": "a", "subdomain": "2_a"},
@@ -164,7 +179,9 @@ def test_count_source_ranks_palomas_numbered_domains_before_counting_documents(t
     assert list(counts["domain_docs"]) == ["2_a", "10_b"]
 
 
-def test_count_source_counts_rows_without_a_subdomain_under_the_empty_domain(tmp_path, tokenizer):
+def test_count_source_counts_rows_without_a_subdomain_under_the_empty_domain(
+    tmp_path: Path, tokenizer: PreTrainedTokenizerFast
+) -> None:
     rows = [*DOMAIN_ROWS, {**TEXT_ROWS[0], "id": "t-4"}, {**TEXT_ROWS[1], "subdomain": None}]
     write_jsonl_gz(tmp_path / "test.jsonl.gz", rows)
 
@@ -173,7 +190,9 @@ def test_count_source_counts_rows_without_a_subdomain_under_the_empty_domain(tmp
     assert counts["domain_docs"] == {"news": 2, "": 2, "exam": 1}
 
 
-def test_count_source_writes_every_total_for_a_source_of_empty_files(tmp_path, tokenizer):
+def test_count_source_writes_every_total_for_a_source_of_empty_files(
+    tmp_path: Path, tokenizer: PreTrainedTokenizerFast
+) -> None:
     write_jsonl_gz(tmp_path / "test.jsonl.gz", [])
 
     counts = source_census.count_source(tokenizer, 4, [tmp_path / "test.jsonl.gz"])
@@ -182,15 +201,17 @@ def test_count_source_writes_every_total_for_a_source_of_empty_files(tmp_path, t
     assert counts["empty_files"] == ["test.jsonl.gz"]
 
 
-def test_count_source_rejects_another_format(tmp_path, tokenizer):
+def test_count_source_rejects_another_format(
+    tmp_path: Path, tokenizer: PreTrainedTokenizerFast
+) -> None:
     (tmp_path / "test.csv").write_text("id,text\n")
     with pytest.raises(ValueError, match="reads .jsonl.gz and .parquet files only"):
         source_census.count_source(tokenizer, 4, [tmp_path / "test.csv"])
 
 
 def test_the_census_passes_when_the_suite_lists_every_domain_and_reports_left_out_sources(
-    repo, tmp_path, monkeypatch, capsys
-):
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     monkeypatch.setitem(source_census.SUITES, "toy", toy_suite(SOURCES))
     out = tmp_path / "census.json"
 
@@ -214,8 +235,8 @@ def test_the_census_passes_when_the_suite_lists_every_domain_and_reports_left_ou
 
 
 def test_the_census_fails_when_a_domain_is_not_listed_or_not_in_the_split(
-    repo, tmp_path, monkeypatch
-):
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     out = tmp_path / "census.json"
 
     # `exam` is in the split and no task scores it.

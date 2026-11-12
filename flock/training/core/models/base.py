@@ -47,7 +47,7 @@ class BaseModel(nn.Module, ABC):
         hf_repo: str | None = None,
         initializer_range: float = 0.02,
         init_seed: int = 42,
-    ):
+    ) -> None:
         super().__init__()
         if max_position_embeddings <= 0:
             raise ValueError("max_position_embeddings must be positive")
@@ -73,7 +73,7 @@ class BaseModel(nn.Module, ABC):
             generator.manual_seed(self.init_seed)
             self.apply(lambda module: self._init_weights(module, generator))
 
-    def _init_weights(self, module: nn.Module, generator: torch.Generator):
+    def _init_weights(self, module: nn.Module, generator: torch.Generator) -> None:
         if isinstance(module, (nn.Linear, nn.Embedding)):
             nn.init.normal_(
                 module.weight, mean=0.0, std=self.initializer_range, generator=generator

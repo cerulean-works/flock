@@ -371,7 +371,9 @@ class _Sender:
 # ---------------------------------------------------------------------- uploads (D100, D102)
 
 
-def _open(registry: Registry, ref: Ref, files: Mapping[str, Mapping[str, Any]], options: dict):
+def _open(
+    registry: Registry, ref: Ref, files: Mapping[str, Mapping[str, Any]], options: dict
+) -> dict[str, Any] | ModelVersion:
     """Opens an upload: its answer, or the version that already has the dedupe key."""
     declared = [{"path": p, "size": f["size"]} for p, f in sorted(files.items())]
     answer = registry.call(
@@ -386,7 +388,9 @@ def _commit(registry: Registry, journal: Journal) -> ModelVersion:
     return ModelVersion.from_api(registry.call("POST", path, body))
 
 
-def _send(journal: Journal, registry: Registry, check: bool, progress: Progress | None):
+def _send(
+    journal: Journal, registry: Registry, check: bool, progress: Progress | None
+) -> ModelVersion:
     """Sends what's missing (asking S3 first with `check`), commits and cleans up."""
     _Sender(journal, s3_client(journal.ref.org), progress).run(check)
     version = _commit(registry, journal)

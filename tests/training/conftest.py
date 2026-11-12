@@ -1,6 +1,9 @@
 """Small, offline fixtures shared by the training tests."""
 
+from __future__ import annotations
+
 import random
+from typing import TYPE_CHECKING
 
 import pytest
 import torch
@@ -9,9 +12,12 @@ from transformers import TokenizersBackend
 
 from flock.training.core.models.olmo2 import Olmo2Config
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 
 @pytest.fixture(autouse=True)
-def isolated_random_state(monkeypatch):
+def isolated_random_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     state = random.getstate()
     monkeypatch.setenv("HF_HUB_OFFLINE", "1")
     monkeypatch.setenv("TRANSFORMERS_OFFLINE", "1")
@@ -26,7 +32,7 @@ def isolated_random_state(monkeypatch):
 
 
 @pytest.fixture(autouse=True, scope="module")
-def one_thread():
+def one_thread() -> Iterator[None]:
     threads = torch.get_num_threads()
     torch.set_num_threads(1)
     try:
@@ -36,7 +42,7 @@ def one_thread():
 
 
 @pytest.fixture
-def config():
+def config() -> Olmo2Config:
     return Olmo2Config(
         vocab_size=32,
         hidden_size=32,
@@ -49,7 +55,7 @@ def config():
 
 
 @pytest.fixture
-def tokenizer():
+def tokenizer() -> TokenizersBackend:
     backend = Tokenizer(
         models.WordLevel(
             {"[UNK]": 0, "[EOS]": 1, "a": 2, "b": 3, "c": 4, "d": 5},
@@ -67,7 +73,7 @@ def tokenizer():
 
 
 @pytest.fixture
-def cuda_device(monkeypatch):
+def cuda_device(monkeypatch: pytest.MonkeyPatch) -> Iterator[torch.device]:
     """GPU selection is explicit: a requested GPU test must never silently skip."""
     monkeypatch.setenv("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     assert torch.cuda.is_available(), (

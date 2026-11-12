@@ -32,7 +32,9 @@ def parse_duration(text: str) -> float:
 class Duration(click.ParamType):
     name = "duration"
 
-    def convert(self, value: Any, param: click.Parameter | None, ctx: click.Context | None):
+    def convert(
+        self, value: Any, param: click.Parameter | None, ctx: click.Context | None
+    ) -> float:
         return value if isinstance(value, float) else parse_duration(str(value))
 
 

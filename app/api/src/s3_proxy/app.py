@@ -385,7 +385,9 @@ class Proxy:
             background=BackgroundTask(response.aclose),
         )
 
-    async def _renamed(self, call: Call, response: httpx.Response, location: bool = False):
+    async def _renamed(
+        self, call: Call, response: httpx.Response, location: bool = False
+    ) -> Response:
         """A small upstream XML answer with the bucket called by the client's name."""
         body = await response.aread()
         if response.status_code >= 300:

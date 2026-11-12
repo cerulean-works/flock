@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import subprocess
 import sys
@@ -5,12 +7,16 @@ import textwrap
 import threading
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 
 from app.api.src.core.avatars import Avatars
+
+if TYPE_CHECKING:
+    from tests.app.conftest import Client, Flocks, FlockServer, Response
+
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"pixels" * 10
 JPEG = b"\xff\xd8\xff\xe0" + b"jfif" * 10
@@ -65,12 +71,12 @@ def gravatar() -> Iterator[FakeGravatar]:
     assert not fake.thread.is_alive()
 
 
-def settled(server) -> None:
+def settled(server: FlockServer) -> None:
     """Wait for the background Gravatar fetches of new accounts."""
     server.call(server.store.avatars.flush())
 
 
-def test_flush_finishes_when_a_completed_fetch_still_has_a_pending_callback():
+def test_flush_finishes_when_a_completed_fetch_still_has_a_pending_callback() -> None:
     # A timeout outside the event loop also catches a loop that spins without yielding.
     code = """
         import asyncio
@@ -96,11 +102,11 @@ def test_flush_finishes_when_a_completed_fetch_still_has_a_pending_callback():
     )
 
 
-def put_image(client, path: str, data: bytes):
+def put_image(client: Client, path: str, data: bytes) -> Response:
     return client.request("PUT", path, body=data, headers={"Content-Type": "image/png"})
 
 
-def test_new_accounts_get_their_gravatar(make_flock, gravatar):
+def test_new_accounts_get_their_gravatar(make_flock: Flocks, gravatar: FakeGravatar) -> None:
     gravatar.add("admin@flock.test", PNG)
     gravatar.add("bob@lab.test", JPEG)
     server = make_flock(gravatar=True, gravatar_url=gravatar.url)  # signs up the admin
@@ -130,7 +136,7 @@ def test_new_accounts_get_their_gravatar(make_flock, gravatar):
     assert members["bob@lab.test"]["avatar_url"] == bob.api.get(ME).json()["avatar_url"]
 
 
-def test_uploading_and_removing_avatars(flock):
+def test_uploading_and_removing_avatars(flock: FlockServer) -> None:
     alice = flock.add_user("alice@lab.test")
     bob = flock.add_user("bob@lab.test")
     path = "/api/v1/me/avatar"
@@ -162,7 +168,7 @@ def test_uploading_and_removing_avatars(flock):
     assert flock.anonymous().request("PUT", path, body=PNG).status == 401
 
 
-def test_organization_avatars(flock):
+def test_organization_avatars(flock: FlockServer) -> None:
     admin = flock.client()
     alice = flock.add_user("alice@lab.test")
     path = "/api/v1/orgs/flock/avatar"
@@ -186,7 +192,7 @@ def test_organization_avatars(flock):
     assert flock.anonymous().get(lab_url).status == 404
 
 
-def test_fetching_gravatar_on_request(make_flock, gravatar):
+def test_fetching_gravatar_on_request(make_flock: Flocks, gravatar: FakeGravatar) -> None:
     off = make_flock()
     assert off.client().post("/api/v1/me/avatar/gravatar", {}).status == 409
 
@@ -204,7 +210,9 @@ def test_fetching_gravatar_on_request(make_flock, gravatar):
     assert server.anonymous().get(fetched["avatar_url"]).body == PNG
 
 
-def test_new_accounts_keep_an_avatar_set_before_their_gravatar_arrives(make_flock, gravatar):
+def test_new_accounts_keep_an_avatar_set_before_their_gravatar_arrives(
+    make_flock: Flocks, gravatar: FakeGravatar
+) -> None:
     server = make_flock(gravatar=True, gravatar_url=gravatar.url)
     alice = server.add_user("alice@lab.test")
     settled(server)
@@ -215,7 +223,7 @@ def test_new_accounts_keep_an_avatar_set_before_their_gravatar_arrives(make_floc
     assert alice.api.get(ME).json()["avatar_source"] == "upload"
 
 
-def test_avatars_survive_a_restart(make_flock):
+def test_avatars_survive_a_restart(make_flock: Flocks) -> None:
     server = make_flock()
     alice = server.add_user("alice@lab.test")
     url = put_image(alice.api, "/api/v1/me/avatar", PNG).json()["avatar_url"]

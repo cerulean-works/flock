@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pytest
 import torch
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
@@ -9,6 +13,11 @@ from flock.eval.tasks.perplexity import _docs_by_domain
 
 from . import toy
 
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+    from typing import Any
+
+
 CORPUS = [
     "Question: Which gas do plants take in?\nAnswer: carbon dioxide",
     "Question: 臺灣最高的山是哪一座？\nAnswer: 玉山",
@@ -17,7 +26,7 @@ CORPUS = [
 
 
 @pytest.fixture(scope="session", autouse=True)
-def one_thread():
+def one_thread() -> Iterator[None]:
     """Tiny models run fastest on one CPU thread; more threads only contend."""
     threads = torch.get_num_threads()
     torch.set_num_threads(1)
@@ -63,7 +72,7 @@ def scorer(lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast) -> ScoringM
 
 
 @pytest.fixture(autouse=True)
-def offline_rows(monkeypatch):
+def offline_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     """Every task in every eval test reads `toy.ROWS` by split instead of downloading. A test that loads another task must patch `Dataset.load` with rows in that task's format."""
     monkeypatch.setattr(Dataset, "load", toy.load)
     # A developer's own staging root must not send `real_load` tests to staged copies.
@@ -74,6 +83,6 @@ def offline_rows(monkeypatch):
 
 
 @pytest.fixture(scope="session")
-def real_load():
+def real_load() -> Callable[..., list[dict[str, Any]]]:
     """The real `Dataset.load`, for tests of loading itself. Session scope: pytest builds it before the function-scoped `offline_rows` patches the method, and no patch outlives its test."""
     return Dataset.load

@@ -414,7 +414,9 @@ def endpoint(
         return {**config, "org": api.default_org(org)}
 
 
-def list_buckets(org: str | None = None, *, host: str | None = None, token: str | None = None):
+def list_buckets(
+    org: str | None = None, *, host: str | None = None, token: str | None = None
+) -> list[dict[str, Any]]:
     """The buckets of `org` (default: yours), as `GET /api/v1/orgs/{org}/buckets` lists them."""
     with _Api(host, token) as api:
         return api.call("GET", f"orgs/{api.default_org(org)}/buckets")["buckets"]

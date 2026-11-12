@@ -1,5 +1,9 @@
+from __future__ import annotations
+
 import copy
+from collections.abc import Callable
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 import torch
@@ -10,6 +14,7 @@ from transformers import (
     Gemma4ForConditionalGeneration,
     Gemma4TextConfig,
     Gemma4VisionConfig,
+    PreTrainedModel,
     PreTrainedTokenizerBase,
 )
 
@@ -17,6 +22,15 @@ from flock.eval import model
 from flock.eval.model import FlockCausalLM, ModelRef, ScoringModel
 from flock.eval.requests import Request
 from flock.training.core.models import Olmo2, Olmo2Config
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from typing import Self
+
+    from transformers import LlamaForCausalLM, PreTrainedTokenizerFast
+
+    from flock.eval.model import Encoded
+
 
 REQUESTS = [
     Request("Question: Which gas do plants take in?\nAnswer:", " carbon dioxide"),
@@ -67,7 +81,7 @@ def greedy_requests(scorer: ScoringModel) -> list[Request]:
     return requests
 
 
-def test_model_ref_parse():
+def test_model_ref_parse() -> None:
     ref = ModelRef.parse("allenai/OLMo-2-0425-1B@a1847dff")
     assert (ref.repo, ref.revision) == ("allenai/OLMo-2-0425-1B", "a1847dff")
     assert str(ref) == "allenai/OLMo-2-0425-1B@a1847dff"
@@ -76,7 +90,7 @@ def test_model_ref_parse():
 @pytest.mark.parametrize(
     "model_id", ["allenai/OLMo-2-0425-1B", "allenai/OLMo-2-0425-1B@", "@abc", "org/repo@a@b"]
 )
-def test_model_ref_requires_one_revision(model_id):
+def test_model_ref_requires_one_revision(model_id: str) -> None:
     with pytest.raises(ValueError, match="repo@revision"):
         ModelRef.parse(model_id)
 
@@ -90,7 +104,7 @@ def test_model_ref_requires_one_revision(model_id):
         ("flock:acme/olmo2-1b@checkpoint-12000", "acme/olmo2-1b", "checkpoint-12000"),
     ],
 )
-def test_model_ref_parses_flock_models(model_id, repo, revision):
+def test_model_ref_parses_flock_models(model_id: str, repo: str, revision: str) -> None:
     ref = ModelRef.parse(model_id)
     assert (ref.repo, ref.revision, ref.kind, ref.digest) == (repo, revision, "flock", None)
     assert str(ref) == f"flock:{repo}@{revision}"
@@ -108,15 +122,17 @@ def test_model_ref_parses_flock_models(model_id, repo, revision):
         "flock:a/b@1@2",
     ],
 )
-def test_model_ref_refuses_malformed_flock_models(model_id):
+def test_model_ref_refuses_malformed_flock_models(model_id: str) -> None:
     with pytest.raises(ValueError, match=r"flock:org/name\[@version\]"):
         ModelRef.parse(model_id)
 
 
-def test_model_ref_resolves_a_flock_version_to_its_number_and_digest(monkeypatch):
+def test_model_ref_resolves_a_flock_version_to_its_number_and_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     asked = []
 
-    def resolve(ref):
+    def resolve(ref: str) -> SimpleNamespace:
         asked.append(ref)
         return SimpleNamespace(org="acme", name="olmo2-1b", number=12, digest="d" * 64)
 
@@ -127,7 +143,9 @@ def test_model_ref_resolves_a_flock_version_to_its_number_and_digest(monkeypatch
     assert str(resolved) == "flock:acme/olmo2-1b@12"
 
 
-def test_from_pretrained_refuses_a_flock_model_without_a_tokenizer(monkeypatch):
+def test_from_pretrained_refuses_a_flock_model_without_a_tokenizer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     version = SimpleNamespace(org="acme", name="m", number=1, digest="d" * 64)
     loaded = SimpleNamespace(get_hf_tokenizer=lambda: None)
     hub = SimpleNamespace(resolve=lambda ref: version, load_from_hub=lambda ref, **kw: loaded)
@@ -136,7 +154,9 @@ def test_from_pretrained_refuses_a_flock_model_without_a_tokenizer(monkeypatch):
         ScoringModel.from_pretrained("flock:acme/m", device="cpu")
 
 
-def test_a_multimodal_model_takes_max_length_from_its_text_config(tokenizer):
+def test_a_multimodal_model_takes_max_length_from_its_text_config(
+    tokenizer: PreTrainedTokenizerFast,
+) -> None:
     # As Gemma 4's: no top-level max_position_embeddings, a vision config with its own, and an
     # audio tower. The text config's length is short enough to cut some requests.
     text_config = Gemma4TextConfig(
@@ -188,7 +208,9 @@ def test_a_multimodal_model_takes_max_length_from_its_text_config(tokenizer):
     assert towers_ran == []
 
 
-def test_a_wrapped_flock_model_scores_as_its_own_forward_pass(tokenizer):
+def test_a_wrapped_flock_model_scores_as_its_own_forward_pass(
+    tokenizer: PreTrainedTokenizerFast,
+) -> None:
     flock_model = Olmo2(
         Olmo2Config(
             vocab_size=len(tokenizer),
@@ -221,43 +243,49 @@ def test_a_wrapped_flock_model_scores_as_its_own_forward_pass(tokenizer):
 
 
 class FakeHub:
-    def __init__(self, sha):
+    def __init__(self, sha: str | None) -> None:
         self.sha = sha
 
-    def model_info(self, repo, revision):
+    def model_info(self, repo: str, revision: str) -> Self:
         return self
 
 
-def test_model_ref_resolve_keeps_commit_hash_offline(monkeypatch):
+def test_model_ref_resolve_keeps_commit_hash_offline(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(model, "HfApi", None)
     ref = ModelRef("allenai/OLMo-2-0425-1B", "a" * 40)
     assert ref.resolve() is ref
 
 
-def test_model_ref_resolve_asks_hub_for_branch(monkeypatch):
+def test_model_ref_resolve_asks_hub_for_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(model, "HfApi", lambda: FakeHub("b" * 40))
     assert ModelRef("org/repo", "main").resolve() == ModelRef("org/repo", "b" * 40)
 
 
-def test_model_ref_resolve_requires_commit_hash(monkeypatch):
+def test_model_ref_resolve_requires_commit_hash(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(model, "HfApi", lambda: FakeHub(None))
     with pytest.raises(ValueError, match="no commit hash for org/repo@main"):
         ModelRef("org/repo", "main").resolve()
 
 
 @pytest.mark.parametrize("batch_tokens", [0, -5])
-def test_rejects_non_positive_batch_tokens(lm, tokenizer, batch_tokens):
+def test_rejects_non_positive_batch_tokens(
+    lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast, batch_tokens: int
+) -> None:
     with pytest.raises(ValueError, match="batch_tokens must be at least 1"):
         ScoringModel(lm, tokenizer, name="tiny@0", batch_tokens=batch_tokens)
 
 
-def test_from_pretrained_rejects_batch_tokens_before_loading(monkeypatch):
+def test_from_pretrained_rejects_batch_tokens_before_loading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(model, "load_tokenizer", None)  # any load would fail on None
     with pytest.raises(ValueError, match="batch_tokens must be at least 1"):
         ScoringModel.from_pretrained("org/repo@" + "a" * 40, batch_tokens=0)
 
 
-def test_encode_splits_at_context_tokens(scorer, tokenizer):
+def test_encode_splits_at_context_tokens(
+    scorer: ScoringModel, tokenizer: PreTrainedTokenizerFast
+) -> None:
     request = Request("Question: Which gas do plants take in?\nAnswer:", " carbon dioxide")
     context, continuation = scorer.encode(request)
     whole = tokenizer.encode(request.context + request.continuation, add_special_tokens=False)
@@ -266,11 +294,13 @@ def test_encode_splits_at_context_tokens(scorer, tokenizer):
     assert tokenizer.decode(continuation) == " carbon dioxide"
 
 
-def test_encode_moves_trailing_whitespace_to_continuation(scorer):
+def test_encode_moves_trailing_whitespace_to_continuation(scorer: ScoringModel) -> None:
     assert scorer.encode(Request("Answer: ", "fox")) == scorer.encode(Request("Answer:", " fox"))
 
 
-def test_encode_empty_context_uses_eos_without_bos(scorer, tokenizer):
+def test_encode_empty_context_uses_eos_without_bos(
+    scorer: ScoringModel, tokenizer: PreTrainedTokenizerFast
+) -> None:
     assert tokenizer.bos_token_id is None
     context, continuation = scorer.encode(Request("", " fox"))
     assert context == [tokenizer.eos_token_id]
@@ -279,7 +309,9 @@ def test_encode_empty_context_uses_eos_without_bos(scorer, tokenizer):
     assert scorer.encode(Request("  ", "fox")) == (context, tokenizer.encode("  fox"))
 
 
-def test_empty_context_scores_after_eos_without_bos(scorer, tokenizer):
+def test_empty_context_scores_after_eos_without_bos(
+    scorer: ScoringModel, tokenizer: PreTrainedTokenizerFast
+) -> None:
     # Qwen's tokenizers, like this one, have no BOS token (Qwen3's `bos_token` is null).
     assert tokenizer.bos_token_id is None
     ids = [tokenizer.eos_token_id, *tokenizer.encode(" fox", add_special_tokens=False)]
@@ -292,14 +324,16 @@ def test_empty_context_scores_after_eos_without_bos(scorer, tokenizer):
     )
 
 
-def test_encode_empty_context_without_bos_or_eos_raises(lm, tokenizer):
+def test_encode_empty_context_without_bos_or_eos_raises(
+    lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast
+) -> None:
     bare = copy.deepcopy(tokenizer)
     bare.eos_token = None
     with pytest.raises(ValueError, match="neither"):
         ScoringModel(lm, bare, name="tiny@0").encode(Request("", " fox"))
 
 
-def test_loglikelihood_matches_unbatched_reference(scorer):
+def test_loglikelihood_matches_unbatched_reference(scorer: ScoringModel) -> None:
     scores = scorer.loglikelihood(REQUESTS)
     expected = torch.tensor([reference(scorer, r) for r in REQUESTS])
     torch.testing.assert_close(scores.logprob, expected, atol=1e-4, rtol=1e-5)
@@ -308,7 +342,9 @@ def test_loglikelihood_matches_unbatched_reference(scorer):
 
 
 @pytest.mark.parametrize("batch_tokens", [1, 40, 100, 10_000])
-def test_loglikelihood_is_batch_size_and_padding_invariant(scorer, batch_tokens):
+def test_loglikelihood_is_batch_size_and_padding_invariant(
+    scorer: ScoringModel, batch_tokens: int
+) -> None:
     # The default budget puts every request in one batch. batch_tokens=1 scores each request
     # alone, and the budgets between left-pad short requests next to long ones.
     one_batch = scorer.loglikelihood(REQUESTS)
@@ -319,7 +355,9 @@ def test_loglikelihood_is_batch_size_and_padding_invariant(scorer, batch_tokens)
 
 
 @pytest.mark.parametrize("batch_tokens", [1, 40, 100, 10_000])
-def test_is_greedy_matches_an_unbatched_argmax_at_every_batch_budget(scorer, batch_tokens):
+def test_is_greedy_matches_an_unbatched_argmax_at_every_batch_budget(
+    scorer: ScoringModel, batch_tokens: int
+) -> None:
     requests = greedy_requests(scorer)
     expected = [greedy_reference(scorer, request) for request in requests]
     assert any(expected) and not all(expected)  # both outcomes are checked
@@ -328,20 +366,21 @@ def test_is_greedy_matches_an_unbatched_argmax_at_every_batch_budget(scorer, bat
     assert scorer.loglikelihood(requests).is_greedy.tolist() == expected
 
 
-def test_loglikelihood_keeps_request_order(scorer):
+def test_loglikelihood_keeps_request_order(scorer: ScoringModel) -> None:
     forward = scorer.loglikelihood(REQUESTS).logprob
     backward = scorer.loglikelihood(REQUESTS[::-1]).logprob
     torch.testing.assert_close(backward, forward.flip(0), atol=1e-4, rtol=1e-5)
 
 
-def test_empty_continuation_raises(scorer):
+def test_empty_continuation_raises(scorer: ScoringModel) -> None:
     with pytest.raises(ValueError, match="no tokens"):
         scorer.loglikelihood([Request("Answer:", ""), REQUESTS[0]])
 
 
-def test_loglikelihood_restores_each_module_mode(scorer):
+def test_loglikelihood_restores_each_module_mode(scorer: ScoringModel) -> None:
     scorer.model.train()
-    frozen = scorer.model.model.embed_tokens.eval()
+    assert isinstance(scorer.model, PreTrainedModel)
+    frozen = cast(torch.nn.Embedding, scorer.model.get_input_embeddings()).eval()
     try:
         scorer.loglikelihood(REQUESTS)
         assert scorer.model.training
@@ -356,8 +395,12 @@ def test_loglikelihood_restores_each_module_mode(scorer):
     [("cuda", "sdpa", "EFFICIENT_ATTENTION"), ("cuda", "eager", None), ("cpu", "sdpa", None)],
 )
 def test_sdpa_backend_is_set_on_cuda_with_sdpa_attention_only(
-    scorer, monkeypatch, device, attention, backend
-):
+    scorer: ScoringModel,
+    monkeypatch: pytest.MonkeyPatch,
+    device: str,
+    attention: str,
+    backend: str | None,
+) -> None:
     # On the CPU there is no efficient kernel and no cuDNN to pin away, so CPU scores, which CI
     # checks against unbatched references, run unpinned as before.
     monkeypatch.setattr(ScoringModel, "device", property(lambda self: torch.device(device)))
@@ -376,12 +419,14 @@ def sdpa_flags() -> tuple[bool, bool, bool, bool]:
     )
 
 
-def test_every_forward_pass_runs_pinned_and_the_flags_come_back(scorer, monkeypatch):
+def test_every_forward_pass_runs_pinned_and_the_flags_come_back(
+    scorer: ScoringModel, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(ScoringModel, "sdpa_backend", property(lambda self: "EFFICIENT_ATTENTION"))
-    forward = scorer.model.forward
+    forward = cast(Callable[..., Any], scorer.model.forward)
     seen = []
 
-    def recording_forward(**kwargs):
+    def recording_forward(**kwargs: Any) -> Any:
         seen.append(sdpa_flags())
         # The CPU has no efficient kernel, so the pass itself runs on the math one. This inner
         # pin gives the outer one back on exit.
@@ -403,7 +448,12 @@ def test_every_forward_pass_runs_pinned_and_the_flags_come_back(scorer, monkeypa
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="the pin applies on CUDA only")
 @pytest.mark.parametrize("flock", [False, True], ids=["transformers", "flock"])
-def test_on_cuda_scoring_runs_pinned_and_repeats_in_bf16(lm, tokenizer, monkeypatch, flock):
+def test_on_cuda_scoring_runs_pinned_and_repeats_in_bf16(
+    lm: LlamaForCausalLM,
+    tokenizer: PreTrainedTokenizerFast,
+    monkeypatch: pytest.MonkeyPatch,
+    flock: bool,
+) -> None:
     # Both models have grouped-query attention (4 heads, 2 key-value heads), which Flock's
     # attention hands to SDPA as `enable_gqa`: the pinned kernel must run it.
     if flock:
@@ -418,12 +468,13 @@ def test_on_cuda_scoring_runs_pinned_and_repeats_in_bf16(lm, tokenizer, monkeypa
         )
         cuda_model = FlockCausalLM(Olmo2(config).to("cuda", torch.bfloat16))
     else:
-        cuda_model = copy.deepcopy(lm).to("cuda", torch.bfloat16)
+        cuda_model = copy.deepcopy(lm)
+        cast(torch.nn.Module, cuda_model).to(device="cuda", dtype=torch.bfloat16)
     scorer = ScoringModel(cuda_model, tokenizer, name="tiny@0")
     forward = cuda_model.forward
     seen = []
 
-    def recording_forward(**kwargs):
+    def recording_forward(**kwargs: Any) -> Any:
         seen.append(sdpa_flags())
         return forward(**kwargs)
 
@@ -440,8 +491,10 @@ def test_on_cuda_scoring_runs_pinned_and_repeats_in_bf16(lm, tokenizer, monkeypa
     assert first.isfinite().all() and rolling[0].isfinite().all()
 
 
-def test_score_rejects_a_model_that_ignores_logits_to_keep(scorer, monkeypatch):
-    forward = scorer.model.forward
+def test_score_rejects_a_model_that_ignores_logits_to_keep(
+    scorer: ScoringModel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forward = cast(Callable[..., Any], scorer.model.forward)
     monkeypatch.setattr(
         scorer.model, "forward", lambda **kwargs: forward(**kwargs | {"logits_to_keep": 0})
     )
@@ -450,12 +503,16 @@ def test_score_rejects_a_model_that_ignores_logits_to_keep(scorer, monkeypatch):
 
 
 @pytest.mark.parametrize("max_length", [0, -1])
-def test_scoring_model_rejects_max_length_below_one(lm, tokenizer, max_length):
+def test_scoring_model_rejects_max_length_below_one(
+    lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast, max_length: int
+) -> None:
     with pytest.raises(ValueError, match="max_length must be at least 1"):
         ScoringModel(lm, tokenizer, name="tiny@0", max_length=max_length)
 
 
-def test_long_inputs_truncate_from_the_left(lm, tokenizer):
+def test_long_inputs_truncate_from_the_left(
+    lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast
+) -> None:
     scorer = ScoringModel(lm, tokenizer, name="tiny@0", max_length=8)
     request = Request("The quick brown fox jumps over the lazy dog.", " fox")
     assert sum(map(len, scorer.encode(request))) > 9
@@ -464,11 +521,13 @@ def test_long_inputs_truncate_from_the_left(lm, tokenizer):
     )
 
 
-def test_requests_that_fit_record_no_cut(scorer):
+def test_requests_that_fit_record_no_cut(scorer: ScoringModel) -> None:
     assert scorer.loglikelihood(REQUESTS).tokens_cut.tolist() == [0] * len(REQUESTS)
 
 
-def test_tokens_cut_counts_what_left_truncation_drops(lm, tokenizer):
+def test_tokens_cut_counts_what_left_truncation_drops(
+    lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast
+) -> None:
     scorer = ScoringModel(lm, tokenizer, name="tiny@0", max_length=8)
     requests = [Request("The quick brown fox jumps over the lazy dog.", " fox"), Request("A", " b")]
     window = sum(map(len, scorer.encode(requests[0])))
@@ -477,7 +536,9 @@ def test_tokens_cut_counts_what_left_truncation_drops(lm, tokenizer):
     assert scorer.loglikelihood(requests).tokens_cut.tolist() == [window - 9, 0]
 
 
-def test_truncation_is_logged(lm, tokenizer, caplog):
+def test_truncation_is_logged(
+    lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast, caplog: pytest.LogCaptureFixture
+) -> None:
     scorer = ScoringModel(lm, tokenizer, name="tiny@0", max_length=8)
     requests = [Request("The quick brown fox jumps over the lazy dog.", " fox"), Request("A", " b")]
 
@@ -486,14 +547,16 @@ def test_truncation_is_logged(lm, tokenizer, caplog):
     assert "1 of 2 requests exceed 8 tokens" in caplog.text
 
 
-def test_continuation_longer_than_max_length_raises(lm, tokenizer):
+def test_continuation_longer_than_max_length_raises(
+    lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast
+) -> None:
     scorer = ScoringModel(lm, tokenizer, name="tiny@0", max_length=2)
     with pytest.raises(ValueError, match="longer than 2 tokens"):
         scorer.loglikelihood([Request("Answer:", " jumps over the lazy dog.")])
 
 
 @pytest.mark.parametrize("chunk_positions", [1, 5, 11, 4096])
-def test_target_logprobs_is_the_same_in_any_chunks(chunk_positions):
+def test_target_logprobs_is_the_same_in_any_chunks(chunk_positions: int) -> None:
     # 3 rows of 5 positions: chunks of 1 row, 1 row, 2 rows (uneven last chunk) and all rows.
     torch.manual_seed(0)
     logits = torch.randn(3, 5, 7, dtype=torch.bfloat16)
@@ -512,7 +575,7 @@ def test_target_logprobs_is_the_same_in_any_chunks(chunk_positions):
     assert torch.equal(is_argmax, whole_is_argmax)
 
 
-def test_target_logprobs_breaks_argmax_ties_to_the_first_token():
+def test_target_logprobs_breaks_argmax_ties_to_the_first_token() -> None:
     # As `torch.argmax` in OLMES: a target tied with an earlier token is not the argmax.
     logits = torch.tensor([[[1.0, 3.0, 3.0]]])
     _, is_argmax = model._target_logprobs(logits, torch.tensor([[2]]))
@@ -521,13 +584,18 @@ def test_target_logprobs_breaks_argmax_ties_to_the_first_token():
     assert is_argmax.item()
 
 
-def test_batched_rows_do_not_see_each_other(scorer, monkeypatch):
+def test_batched_rows_do_not_see_each_other(
+    scorer: ScoringModel, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # The gradient of one request's score reaches only its own row's real tokens, so nothing
     # leaks across rows or from padding through the attention mask or position ids.
     inputs = []
-    forward = scorer.model.forward
+    forward = cast(Callable[..., Any], scorer.model.forward)
 
-    def embedded_forward(input_ids, attention_mask, **kwargs):
+    def embedded_forward(
+        input_ids: torch.Tensor, attention_mask: torch.Tensor, **kwargs: Any
+    ) -> Any:
+        assert isinstance(scorer.model, PreTrainedModel)
         embedded = scorer.model.get_input_embeddings()(input_ids).detach().requires_grad_()
         inputs.append((embedded, attention_mask))
         return forward(inputs_embeds=embedded, attention_mask=attention_mask, **kwargs)
@@ -554,8 +622,11 @@ TEXTS = [
 ]
 
 
-def lm_eval_windows(token_list, prefix_token, max_seq_len):
+def lm_eval_windows(
+    token_list: list[int], prefix_token: int | None, max_seq_len: int
+) -> list[tuple[list[int], list[int]]]:
     """lm-evaluation-harness 0.4.3's `get_rolling_token_windows` with `context_len=1`, each window passed through `make_disjoint_window` (`lm_eval/utils.py`), copied as the reference."""
+    assert prefix_token is not None
     first_seq_len = min(max_seq_len, len(token_list))
     windows = [([prefix_token] + token_list[: first_seq_len - 1], token_list[:first_seq_len])]
     predicted = first_seq_len
@@ -573,8 +644,9 @@ def lm_eval_windows(token_list, prefix_token, max_seq_len):
     return [(a[: len(a) - (len(b) - 1)], b) for a, b in windows]
 
 
-def rolling_reference(scorer, text, window):
+def rolling_reference(scorer: ScoringModel, text: str, window: int) -> float:
     """A text's summed log-probability over lm-evaluation-harness's windows, one unbatched forward pass each."""
+    assert isinstance(scorer.tokenizer, PreTrainedTokenizerBase)
     ids = scorer.tokenizer.encode(text, add_special_tokens=False)
     total = 0.0
     for context, continuation in lm_eval_windows(ids, scorer.tokenizer.eos_token_id, window):
@@ -589,15 +661,18 @@ def rolling_reference(scorer, text, window):
     return total
 
 
-def text_lengths(scorer):
+def text_lengths(scorer: ScoringModel) -> list[int]:
+    assert isinstance(scorer.tokenizer, PreTrainedTokenizerBase)
     return [len(scorer.tokenizer.encode(text, add_special_tokens=False)) for text in TEXTS]
 
 
-def recorded_windows(scorer, monkeypatch, texts, window):
+def recorded_windows(
+    scorer: ScoringModel, monkeypatch: pytest.MonkeyPatch, texts: list[str], window: int
+) -> list[tuple[list[int], list[int]]]:
     """The (context, continuation) windows `rolling_loglikelihood` scores, in order."""
     windows = []
 
-    def record(encoded):
+    def record(encoded: Sequence[Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
         windows.extend(encoded)
         return torch.zeros(len(encoded)), torch.ones(len(encoded), dtype=torch.bool)
 
@@ -608,7 +683,10 @@ def recorded_windows(scorer, monkeypatch, texts, window):
 
 
 @pytest.mark.parametrize("window", [1, 3, 7, 8, 9, 64])
-def test_rolling_windows_are_lm_eval_windows(scorer, monkeypatch, window):
+def test_rolling_windows_are_lm_eval_windows(
+    scorer: ScoringModel, monkeypatch: pytest.MonkeyPatch, window: int
+) -> None:
+    assert isinstance(scorer.tokenizer, PreTrainedTokenizerBase)
     expected = []
     for text in TEXTS:
         ids = scorer.tokenizer.encode(text, add_special_tokens=False)
@@ -620,8 +698,10 @@ def test_rolling_windows_are_lm_eval_windows(scorer, monkeypatch, window):
     assert recorded_windows(scorer, monkeypatch, TEXTS, window) == expected
 
 
-def test_a_text_is_greedy_only_if_every_window_is(scorer, monkeypatch):
-    def score(encoded):
+def test_a_text_is_greedy_only_if_every_window_is(
+    scorer: ScoringModel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def score(encoded: Sequence[Encoded]) -> tuple[torch.Tensor, torch.Tensor]:
         is_greedy = torch.ones(len(encoded), dtype=torch.bool)
         is_greedy[1] = False  # the first text's second window: windows run text by text
         return torch.zeros(len(encoded)), is_greedy
@@ -633,7 +713,9 @@ def test_a_text_is_greedy_only_if_every_window_is(scorer, monkeypatch):
 
 
 @pytest.mark.parametrize("offset", [None, 3, 0, -1])
-def test_rolling_loglikelihood_matches_unbatched_windows(scorer, offset):
+def test_rolling_loglikelihood_matches_unbatched_windows(
+    scorer: ScoringModel, offset: None | int
+) -> None:
     # The window is set from the longest text: a third of it (over two windows), or that text's
     # length plus 3 (shorter), plus 0 (exactly one window), or minus 1 (one token longer).
     longest = max(text_lengths(scorer))
@@ -650,7 +732,9 @@ def test_rolling_loglikelihood_matches_unbatched_windows(scorer, offset):
 
 
 @pytest.mark.parametrize("batch_tokens", [1, 40, 10_000])
-def test_rolling_loglikelihood_is_batch_size_and_order_invariant(scorer, batch_tokens):
+def test_rolling_loglikelihood_is_batch_size_and_order_invariant(
+    scorer: ScoringModel, batch_tokens: int
+) -> None:
     window = max(text_lengths(scorer)) // 3
     one_batch = scorer.rolling_loglikelihood(TEXTS, window).logprob
     scorer.batch_tokens = batch_tokens
@@ -658,7 +742,9 @@ def test_rolling_loglikelihood_is_batch_size_and_order_invariant(scorer, batch_t
     torch.testing.assert_close(backward, one_batch.flip(0), atol=1e-4, rtol=1e-5)
 
 
-def test_add_bos_starts_every_non_empty_context_with_bos(lm, tokenizer):
+def test_add_bos_starts_every_non_empty_context_with_bos(
+    lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast
+) -> None:
     with_bos = copy.deepcopy(tokenizer)
     with_bos.bos_token = "<|pad|>"
     plain = ScoringModel(lm, with_bos, name="tiny@0")
@@ -684,7 +770,9 @@ def test_add_bos_starts_every_non_empty_context_with_bos(lm, tokenizer):
     )
 
 
-def test_a_context_with_no_ids_never_scores_from_a_padding_logit(scorer, monkeypatch):
+def test_a_context_with_no_ids_never_scores_from_a_padding_logit(
+    scorer: ScoringModel, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tokenize = scorer.tokenize
     monkeypatch.setattr(
         scorer,
@@ -703,12 +791,16 @@ def test_a_context_with_no_ids_never_scores_from_a_padding_logit(scorer, monkeyp
     )
 
 
-def test_add_bos_needs_a_bos_token(lm, tokenizer):
+def test_add_bos_needs_a_bos_token(
+    lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast
+) -> None:
     with pytest.raises(ValueError, match="add_bos is set, but the tokenizer has no BOS token"):
         ScoringModel(lm, tokenizer, name="tiny@0", add_bos=True)
 
 
-def test_from_pretrained_refuses_add_bos_before_the_weights_load(tokenizer, monkeypatch):
+def test_from_pretrained_refuses_add_bos_before_the_weights_load(
+    tokenizer: PreTrainedTokenizerFast, monkeypatch: pytest.MonkeyPatch
+) -> None:
     loaded = []
     monkeypatch.setattr(model, "load_tokenizer", lambda ref: tokenizer)
     monkeypatch.setattr(
@@ -721,7 +813,9 @@ def test_from_pretrained_refuses_add_bos_before_the_weights_load(tokenizer, monk
     assert loaded == []
 
 
-def test_rolling_loglikelihood_starts_from_bos_when_there_is_one(lm, tokenizer, monkeypatch):
+def test_rolling_loglikelihood_starts_from_bos_when_there_is_one(
+    lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast, monkeypatch: pytest.MonkeyPatch
+) -> None:
     with_bos = copy.deepcopy(tokenizer)
     with_bos.bos_token = "<|pad|>"
     scorer = ScoringModel(lm, with_bos, name="tiny@0")
@@ -730,11 +824,13 @@ def test_rolling_loglikelihood_starts_from_bos_when_there_is_one(lm, tokenizer, 
 
 
 @pytest.mark.parametrize("window", [0, 129])
-def test_rolling_loglikelihood_rejects_a_window_outside_max_length(scorer, window):
+def test_rolling_loglikelihood_rejects_a_window_outside_max_length(
+    scorer: ScoringModel, window: int
+) -> None:
     with pytest.raises(ValueError, match="window must be from 1 to max_length 128"):
         scorer.rolling_loglikelihood(TEXTS, window)
 
 
-def test_rolling_loglikelihood_rejects_an_empty_text(scorer):
+def test_rolling_loglikelihood_rejects_an_empty_text(scorer: ScoringModel) -> None:
     with pytest.raises(ValueError, match="text has no tokens"):
         scorer.rolling_loglikelihood(["fox", ""], 8)

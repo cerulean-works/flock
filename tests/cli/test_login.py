@@ -1,7 +1,10 @@
 """`flock login` and `flock logout`, against a real Flock."""
 
+from __future__ import annotations
+
 import re
 import socket
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -10,6 +13,17 @@ from flock.cli import login as login_module
 from flock.cli.credentials import DEFAULT_HOST
 from flock.cli.login import login_host
 from tests.app.utils import machines
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from contextlib import AbstractContextManager
+    from pathlib import Path
+
+    from click.testing import Result
+
+    from tests.app.conftest import Flocks, FlockServer, User
+    from tests.cli.conftest import Browser
+
 
 ME = "/api/v1/me"
 
@@ -20,7 +34,9 @@ def code_in(output: str) -> str:
     return match.group(1)
 
 
-def test_logging_in_without_a_terminal(server, alice, browser, flock_cli):
+def test_logging_in_without_a_terminal(
+    server: FlockServer, alice: User, browser: Browser, flock_cli: Callable[..., Result]
+) -> None:
     approval = browser.answer()
     result = flock_cli("login", "--host", server.url)
     approval.join()
@@ -44,7 +60,13 @@ def test_logging_in_without_a_terminal(server, alice, browser, flock_cli):
 
 
 @pytest.mark.parametrize("why", ["--no-browser", "ssh"])
-def test_no_browser_on_request_or_over_ssh(server, browser, flock_cli, monkeypatch, why):
+def test_no_browser_on_request_or_over_ssh(
+    server: FlockServer,
+    browser: Browser,
+    flock_cli: Callable[..., Result],
+    monkeypatch: pytest.MonkeyPatch,
+    why: str,
+) -> None:
     monkeypatch.setattr(login_module, "_terminal", lambda: True)
     monkeypatch.setattr(login_module.webbrowser, "open", lambda url: pytest.fail("opened"))
     args = ["login", "--host", server.url, "--no-wandb"]
@@ -60,7 +82,12 @@ def test_no_browser_on_request_or_over_ssh(server, browser, flock_cli, monkeypat
     assert f"Open {server.url}/device in a browser" in result.stdout
 
 
-def test_a_terminal_opens_the_browser_on_enter(server, browser, flock_cli, monkeypatch):
+def test_a_terminal_opens_the_browser_on_enter(
+    server: FlockServer,
+    browser: Browser,
+    flock_cli: Callable[..., Result],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(login_module, "_terminal", lambda: True)
     opened = []
 
@@ -78,7 +105,14 @@ def test_a_terminal_opens_the_browser_on_enter(server, browser, flock_cli, monke
     assert credentials.load() is not None
 
 
-def test_logging_in_again(server, alice, browser, signed_in, flock_cli, monkeypatch):
+def test_logging_in_again(
+    server: FlockServer,
+    alice: User,
+    browser: Browser,
+    signed_in: str,
+    flock_cli: Callable[..., Result],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Without a terminal, a working sign-in is kept.
     result = flock_cli("login", "--host", server.url)
     assert result.exit_code == 0, result.output
@@ -110,7 +144,12 @@ def test_logging_in_again(server, alice, browser, signed_in, flock_cli, monkeypa
     assert "Already logged in" not in result.stdout
 
 
-def test_the_default_host_and_its_precedence(server, browser, flock_cli, monkeypatch):
+def test_the_default_host_and_its_precedence(
+    server: FlockServer,
+    browser: Browser,
+    flock_cli: Callable[..., Result],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     assert login_host(None) == DEFAULT_HOST == "https://flock-api.cerulean.works"
     credentials.save("http://saved.test/", "flock_cli_x", {"email": "a@b.c"})
     assert login_host(None) == "http://saved.test"
@@ -126,7 +165,9 @@ def test_the_default_host_and_its_precedence(server, browser, flock_cli, monkeyp
     assert f"✓ Logged in to {server.url} as alice@lab.test" in result.stdout
 
 
-def test_a_denied_sign_in_saves_nothing(server, browser, flock_cli):
+def test_a_denied_sign_in_saves_nothing(
+    server: FlockServer, browser: Browser, flock_cli: Callable[..., Result]
+) -> None:
     approval = browser.answer(approve=False)
     result = flock_cli("login", "--host", server.url)
     approval.join()
@@ -135,7 +176,9 @@ def test_a_denied_sign_in_saves_nothing(server, browser, flock_cli):
     assert credentials.load() is None
 
 
-def test_an_expired_code_saves_nothing(make_flock, flock_cli, monkeypatch):
+def test_an_expired_code_saves_nothing(
+    make_flock: Flocks, flock_cli: Callable[..., Result], monkeypatch: pytest.MonkeyPatch
+) -> None:
     server = make_flock(device_code_ttl=0.3)
     monkeypatch.setattr(server.store.accounts, "DEVICE_INTERVAL", 0.05)
     result = flock_cli("login", "--host", server.url)
@@ -144,7 +187,9 @@ def test_an_expired_code_saves_nothing(make_flock, flock_cli, monkeypatch):
     assert credentials.load() is None
 
 
-def test_an_interrupted_login_saves_nothing(server, flock_cli, monkeypatch):
+def test_an_interrupted_login_saves_nothing(
+    server: FlockServer, flock_cli: Callable[..., Result], monkeypatch: pytest.MonkeyPatch
+) -> None:
     def interrupt(seconds: float) -> None:
         raise KeyboardInterrupt
 
@@ -155,15 +200,20 @@ def test_an_interrupted_login_saves_nothing(server, flock_cli, monkeypatch):
     assert credentials.load() is None
 
 
-def test_an_unreachable_server(flock_cli):
+def test_an_unreachable_server(flock_cli: Callable[..., Result]) -> None:
     result = flock_cli("login", "--host", "http://127.0.0.1:9")
     assert result.exit_code == 1
     assert result.stderr.startswith("Error: Couldn't reach http://127.0.0.1:9")
 
 
 def test_logout_ends_the_session_on_the_server(
-    server, alice, signed_in, flock_cli, isolated, notification
-):
+    server: FlockServer,
+    alice: User,
+    signed_in: str,
+    flock_cli: Callable[..., Result],
+    isolated: Path,
+    notification: Callable[..., AbstractContextManager[None]],
+) -> None:
     with notification(server.store.bus, server.loop, "flock_auth", "sessions"):
         result = flock_cli("logout")
     assert result.exit_code == 0, result.output
@@ -174,7 +224,7 @@ def test_logout_ends_the_session_on_the_server(
     assert flock_cli("logout").stdout == "Not logged in.\n"
 
 
-def test_logout_deletes_the_file_when_the_server_is_down(flock_cli):
+def test_logout_deletes_the_file_when_the_server_is_down(flock_cli: Callable[..., Result]) -> None:
     credentials.save("http://127.0.0.1:9", "flock_cli_x", {"email": "a@b.c"})
     result = flock_cli("logout")
     assert result.exit_code == 0, result.output
@@ -183,7 +233,9 @@ def test_logout_deletes_the_file_when_the_server_is_down(flock_cli):
     assert credentials.load() is None
 
 
-def test_logout_of_a_revoked_sign_in(server, alice, signed_in, flock_cli):
+def test_logout_of_a_revoked_sign_in(
+    server: FlockServer, alice: User, signed_in: str, flock_cli: Callable[..., Result]
+) -> None:
     (session,) = machines(alice)
     alice.api.delete(f"/api/v1/me/cli-sessions/{session['id']}")
     result = flock_cli("logout")
@@ -192,7 +244,12 @@ def test_logout_of_a_revoked_sign_in(server, alice, signed_in, flock_cli):
     assert credentials.load() is None
 
 
-def test_logout_refuses_a_token_from_the_environment(server, signed_in, flock_cli, monkeypatch):
+def test_logout_refuses_a_token_from_the_environment(
+    server: FlockServer,
+    signed_in: str,
+    flock_cli: Callable[..., Result],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FLOCK_TOKEN", signed_in)
     result = flock_cli("logout")
     assert result.exit_code == 1
@@ -201,7 +258,9 @@ def test_logout_refuses_a_token_from_the_environment(server, signed_in, flock_cl
     assert server.client(token=signed_in).get(ME).status == 200
 
 
-def test_logout_names_the_wandb_key_it_leaves(server, alice, signed_in, flock_cli):
+def test_logout_names_the_wandb_key_it_leaves(
+    server: FlockServer, alice: User, signed_in: str, flock_cli: Callable[..., Result]
+) -> None:
     saved = credentials.load()
     assert saved is not None
     key = {"name": "wandb on node-7", "prefix": "flock-wandb-"}

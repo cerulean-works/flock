@@ -1,11 +1,21 @@
 """Public projects (015): read-only access for anyone with the link, on projects an org admin
 made public."""
 
+from __future__ import annotations
+
 import json
+from typing import TYPE_CHECKING
 
 import pytest
 
 from tests.app.conftest import Client, EventStream, FlockServer
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
+
+    from tests.app.conftest import Response
+
 
 P = "/api/v1/projects/flock"
 
@@ -38,12 +48,12 @@ MEMBERS_ONLY = [
 ]
 
 
-def call(client: Client, method: str, path: str, body=None):
+def call(client: Client, method: str, path: str, body: Any = None) -> Response:
     return client.request(method, P + path, body=body)
 
 
 @pytest.fixture
-def setup(flock: FlockServer):
+def setup(flock: FlockServer) -> tuple[Client, Client, Client, Client]:
     """A project ``p`` with a finished run ``r1`` (logged by the super admin), a member of
     ``flock``, an outsider (a member of ``lab`` only), and an anonymous client."""
     api = flock.client()
@@ -62,7 +72,9 @@ def publish(api: Client, project: str = "p", visibility: str = "public") -> dict
     return resp.json()
 
 
-def test_outsiders_read_public_projects_and_get_404_on_private_ones(setup):
+def test_outsiders_read_public_projects_and_get_404_on_private_ones(
+    setup: tuple[Client, Client, Client, Client],
+) -> None:
     api, _, outsider, anon = setup
     # The same answer as for a project that doesn't exist, so its existence isn't revealed.
     unknown = call(anon, "GET", "/nope")
@@ -86,7 +98,9 @@ def test_outsiders_read_public_projects_and_get_404_on_private_ones(setup):
         assert call(client, "GET", "/p/runs/r1/files/config.yaml").body == b"lr: 0.1\n"
 
 
-def test_members_only_routes_refuse_outsiders_on_public_projects(setup):
+def test_members_only_routes_refuse_outsiders_on_public_projects(
+    setup: tuple[Client, Client, Client, Client],
+) -> None:
     api, _, outsider, anon = setup
     publish(api)
     for method, path, body in MEMBERS_ONLY:
@@ -97,7 +111,9 @@ def test_members_only_routes_refuse_outsiders_on_public_projects(setup):
     assert call(api, "GET", "/p/runs/r1").status == 200  # nothing was changed or deleted
 
 
-def test_bad_credentials_are_401_not_the_public_view(setup, flock):
+def test_bad_credentials_are_401_not_the_public_view(
+    setup: tuple[Client, Client, Client, Client], flock: FlockServer
+) -> None:
     api, _, _, _ = setup
     publish(api)
     expired = Client(flock.port, token="a.b.c")
@@ -111,7 +127,7 @@ def test_bad_credentials_are_401_not_the_public_view(setup, flock):
     assert "wandb keys only work with the wandb SDK" in resp.json()["error"]
 
 
-def test_outsiders_see_no_cost_or_email(setup):
+def test_outsiders_see_no_cost_or_email(setup: tuple[Client, Client, Client, Client]) -> None:
     api, member, outsider, anon = setup
     publish(api)
     for client in (api, member):
@@ -129,7 +145,9 @@ def test_outsiders_see_no_cost_or_email(setup):
         assert client.runs("p", filter={"owner": run["owner"]})["ids"] == ["r1"]
 
 
-def test_outsiders_get_run_metadata_without_who_ran_it(setup):
+def test_outsiders_get_run_metadata_without_who_ran_it(
+    setup: tuple[Client, Client, Client, Client],
+) -> None:
     api, member, outsider, anon = setup
     metadata = {"email": "a@x.io", "username": "alice", "program": "train.py", "host": "n1"}
     api.upload("p", "r1", "wandb-metadata.json", json.dumps(metadata).encode())
@@ -146,7 +164,9 @@ def test_outsiders_get_run_metadata_without_who_ran_it(setup):
         assert call(client, "GET", path).status == 404
 
 
-def test_admins_change_visibility_of_projects_they_didnt_create(setup, flock):
+def test_admins_change_visibility_of_projects_they_didnt_create(
+    setup: tuple[Client, Client, Client, Client], flock: FlockServer
+) -> None:
     api, member, outsider, _ = setup
     assert member.patch(f"{P}/p", {"visibility": "public"}).status == 403
     assert outsider.patch(f"{P}/p", {"visibility": "public"}).status == 404
@@ -173,7 +193,9 @@ def test_admins_change_visibility_of_projects_they_didnt_create(setup, flock):
     assert call(outsider, "GET", "/p").status == 404
 
 
-def test_creators_change_visibility_and_nothing_else(setup, flock):
+def test_creators_change_visibility_and_nothing_else(
+    setup: tuple[Client, Client, Client, Client], flock: FlockServer
+) -> None:
     api, member, outsider, _ = setup
     other = flock.add_user("n@x.io").api
     # A project created in the dashboard, and one created by a run's upload (D118).
@@ -196,7 +218,11 @@ def test_creators_change_visibility_and_nothing_else(setup, flock):
     assert publish(api, "m")["visibility"] == "public"
 
 
-def test_going_private_ends_outsiders_streams_only(setup, flock, events):
+def test_going_private_ends_outsiders_streams_only(
+    setup: tuple[Client, Client, Client, Client],
+    flock: FlockServer,
+    events: Callable[..., EventStream],
+) -> None:
     api, member, outsider, anon = setup
     api.create_run("p", "live")
     publish(api)
@@ -218,7 +244,9 @@ def test_going_private_ends_outsiders_streams_only(setup, flock, events):
     assert resp.status == 404
 
 
-def test_outsiders_see_an_org_only_with_public_things(setup):
+def test_outsiders_see_an_org_only_with_public_things(
+    setup: tuple[Client, Client, Client, Client],
+) -> None:
     api, member, outsider, anon = setup
     for client in (outsider, anon):
         assert client.get("/api/v1/orgs/flock").status == 404
@@ -242,7 +270,9 @@ def test_outsiders_see_an_org_only_with_public_things(setup):
     assert {p["name"] for p in listed} == {"p", "hidden"}
 
 
-def test_runs_moved_into_a_public_project_become_readable(setup):
+def test_runs_moved_into_a_public_project_become_readable(
+    setup: tuple[Client, Client, Client, Client],
+) -> None:
     api, _, _, anon = setup
     api.create_run("q", "r2")
     api.stream("q", "r2", complete=0)

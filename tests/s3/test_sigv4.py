@@ -68,7 +68,7 @@ AWS_EXAMPLES = {
 
 
 @pytest.mark.parametrize("example", AWS_EXAMPLES)
-def test_aws_header_examples(example):
+def test_aws_header_examples(example: str) -> None:
     method, path, query, headers, signed, signature = AWS_EXAMPLES[example]
     headers = [*headers, ("Authorization", authorization(signed, signature))]
     request = sigv4.parse_request(method, path, query, headers, WHEN)
@@ -82,7 +82,7 @@ def test_aws_header_examples(example):
     assert not sigv4.parse_request(method, path + "x", query, headers, WHEN).verify(SECRET)
 
 
-def test_aws_presigned_example():
+def test_aws_presigned_example() -> None:
     query = (
         "X-Amz-Algorithm=AWS4-HMAC-SHA256"
         f"&X-Amz-Credential={AKID}%2F20130524%2Fus-east-1%2Fs3%2Faws4_request"
@@ -96,7 +96,7 @@ def test_aws_presigned_example():
         sigv4.parse_request("GET", "/test.txt", query, [("Host", HOST)], WHEN + 86401)
 
 
-def test_our_signer_matches_the_aws_example():
+def test_our_signer_matches_the_aws_example() -> None:
     method, path, query, _, _, signature = AWS_EXAMPLES["get-object"]
     out = sigv4.sign(
         method, HOST, path, sigv4.parse_query(query), {"Range": "bytes=0-9"},
@@ -105,7 +105,13 @@ def test_our_signer_matches_the_aws_example():
     assert out["authorization"].endswith(f"Signature={signature}")
 
 
-def botocore_request(url: str, method: str = "GET", headers=None, body=b"", presign=False):
+def botocore_request(
+    url: str,
+    method: str = "GET",
+    headers: dict[str, str] | None = None,
+    body: bytes = b"",
+    presign: bool = False,
+) -> tuple[str, str, str, list[tuple[str, str]]]:
     """Sign with botocore (an independent implementation); returns parse_request's inputs."""
     request = AWSRequest(method=method, url=url, data=body, headers=headers or {})
     credentials = Credentials("FLKTESTTESTTESTTESTT", "s3cr3t")
@@ -116,8 +122,8 @@ def botocore_request(url: str, method: str = "GET", headers=None, body=b"", pres
         S3SigV4Auth(credentials, "s3", "eu-west-9").add_auth(request)
     prepared = request.prepare()
     parts = urlsplit(prepared.url)
-    headers = [("Host", parts.netloc), *prepared.headers.items()]
-    return method, parts.path, parts.query, headers
+    signed_headers = [("Host", parts.netloc), *prepared.headers.items()]
+    return method, parts.path, parts.query, signed_headers
 
 
 @pytest.mark.parametrize("presign", [False, True])
@@ -125,7 +131,7 @@ def botocore_request(url: str, method: str = "GET", headers=None, body=b"", pres
     "path",
     ["/checkpoints/run-1/model.safetensors", "/datasets/a b/c+d=e$f/%/ü~x", "/"],
 )
-def test_botocore_signatures_verify(path, presign):
+def test_botocore_signatures_verify(path: str, presign: bool) -> None:
     url = "http://127.0.0.1:9000" + sigv4.uri_encode(path)
     query = "?list-type=2&prefix=a%2Fb%20c&continuation-token=x%3D%3D&delimiter=%2F"
     method, raw_path, raw_query, headers = botocore_request(url + query, presign=presign)
@@ -136,7 +142,7 @@ def test_botocore_signatures_verify(path, presign):
     assert not request.verify("s3cr3T")
 
 
-def test_payload_hash_is_signed_and_streaming_refused():
+def test_payload_hash_is_signed_and_streaming_refused() -> None:
     method, path, query, headers = botocore_request("http://h/datasets/o/d/x", "PUT", body=b"hello")
     request = sigv4.parse_request(method, path, query, headers, time.time())
     assert request.payload_hash == hashlib.sha256(b"hello").hexdigest()
@@ -155,7 +161,7 @@ def test_payload_hash_is_signed_and_streaming_refused():
     assert error.value.status == 501 and error.value.code == "NotImplemented"
 
 
-def test_clock_skew_and_malformed_requests():
+def test_clock_skew_and_malformed_requests() -> None:
     method, path, query, headers = botocore_request("http://h/datasets/o/d/x")
     now = time.time()
     assert sigv4.parse_request(method, path, query, headers, now + 14 * 60).verify("s3cr3t")
@@ -173,7 +179,7 @@ def test_clock_skew_and_malformed_requests():
         sigv4.parse_request(method, path, query, unsigned_host, now)
 
 
-def test_signer_round_trips_through_the_verifier():
+def test_signer_round_trips_through_the_verifier() -> None:
     now = time.time()
     path = sigv4.uri_encode("/bucket/datasets/2b0c/_versions/18446744073709551614.manifest")
     params = [("uploadId", "a/b+c"), ("partNumber", "3")]

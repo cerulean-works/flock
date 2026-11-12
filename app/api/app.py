@@ -3,7 +3,8 @@ import contextlib
 import logging
 import signal
 import threading
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
+from types import FrameType
 
 import asyncpg
 from fastapi import FastAPI, Request
@@ -77,7 +78,11 @@ def create_app(store: Store) -> FastAPI:
                 previous = signal.getsignal(sig)
                 if callable(previous):
 
-                    def on_signal(signum, frame, previous=previous):
+                    def on_signal(
+                        signum: int,
+                        frame: FrameType | None,
+                        previous: Callable[[int, FrameType | None], object] = previous,
+                    ) -> None:
                         loop.call_soon_threadsafe(store.drain)
                         previous(signum, frame)
 

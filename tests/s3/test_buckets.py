@@ -1,7 +1,10 @@
 """Org buckets (D53, D54): creating and deleting them in Flock, and who reaches them."""
 
+from __future__ import annotations
+
 import asyncio
 import threading
+from typing import TYPE_CHECKING
 
 import pytest
 from botocore.exceptions import ClientError
@@ -10,6 +13,15 @@ from tests.app.conftest import Flocks, S3Flock
 from tests.app.utils import cli_login
 from tests.conftest import S3Server
 from tests.s3.conftest import S3Env, code, make_env
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
+
+    import asyncpg
+
+    from tests.app.conftest import Client
+
 
 BUCKETS = "/api/v1/orgs/{org}/buckets"
 
@@ -20,7 +32,7 @@ def buckets_of(env: S3Env, org: str = "flock", user: str = "admin") -> list[str]
     return [b["name"] for b in listed.json()["buckets"]]
 
 
-def test_creating_a_bucket(env: S3Env):
+def test_creating_a_bucket(env: S3Env) -> None:
     name = env.name("ckpt")
     alice = env.users["alice"]
     cli = env.flock.client(
@@ -57,7 +69,7 @@ def test_creating_a_bucket(env: S3Env):
     assert {name, third} <= set(buckets_of(env, user="bob"))
 
 
-def test_bucket_names(env: S3Env):
+def test_bucket_names(env: S3Env) -> None:
     limit = 57 - len(env.flock.bucket_prefix)
     listed = env.api("alice").get(BUCKETS.format(org="flock")).json()
     assert listed["name_limit"] == limit
@@ -84,7 +96,7 @@ def test_bucket_names(env: S3Env):
         assert api.post(BUCKETS.format(org="flock"), {"name": good}).status == 201
 
 
-def test_s3_cannot_create_or_delete_buckets(env: S3Env):
+def test_s3_cannot_create_or_delete_buckets(env: S3Env) -> None:
     name = env.bucket()
     s3 = env.s3(env.key("carol"))
     for call in (
@@ -98,7 +110,7 @@ def test_s3_cannot_create_or_delete_buckets(env: S3Env):
     assert name in buckets_of(env)
 
 
-def test_list_buckets_shows_the_keys_org(env: S3Env):
+def test_list_buckets_shows_the_keys_org(env: S3Env) -> None:
     mine, theirs = env.bucket(), env.bucket(org="lab")
     names = [b["Name"] for b in env.s3(env.key("alice")).list_buckets()["Buckets"]]
     assert names == sorted(buckets_of(env))
@@ -107,7 +119,7 @@ def test_list_buckets_shows_the_keys_org(env: S3Env):
     assert theirs in lab and mine not in lab
 
 
-def test_two_orgs_with_a_bucket_of_the_same_name(env: S3Env):
+def test_two_orgs_with_a_bucket_of_the_same_name(env: S3Env) -> None:
     name = env.name("shared")
     env.bucket(org="flock", name=name)
     env.bucket(org="lab", name=name)
@@ -119,7 +131,7 @@ def test_two_orgs_with_a_bucket_of_the_same_name(env: S3Env):
     assert env.upstream_name(name, "flock") != env.upstream_name(name, "lab")
 
 
-def test_buckets_outside_flock_are_not_there(env: S3Env):
+def test_buckets_outside_flock_are_not_there(env: S3Env) -> None:
     """A bucket that exists upstream but has no row in Flock is NoSuchBucket, even when its
     name is one Flock would give it."""
     name = env.name("ghost")
@@ -136,7 +148,7 @@ def test_buckets_outside_flock_are_not_there(env: S3Env):
     assert refused.status == 409, refused.body
 
 
-def test_permissions(env: S3Env):
+def test_permissions(env: S3Env) -> None:
     """D54: members and admins read and write objects; only admins delete buckets; anyone else
     reaches nothing."""
     name = env.bucket(user="alice")
@@ -185,7 +197,9 @@ def purged(env: S3Env, upstream_name: str) -> bool:
     return rows[0]["purged_at"] is not None
 
 
-def test_deleting_a_bucket(make_flock: Flocks, s3_server: S3Server, wait_for):
+def test_deleting_a_bucket(
+    make_flock: Flocks, s3_server: S3Server, wait_for: Callable[..., Any]
+) -> None:
     env = make_env(make_flock, s3_server)
     name = env.bucket()
     upstream = env.upstream_name(name)
@@ -225,8 +239,8 @@ def test_deleting_a_bucket(make_flock: Flocks, s3_server: S3Server, wait_for):
 
 
 def test_deleting_an_org_purges_its_buckets_after_a_restart(
-    make_flock: Flocks, s3_server: S3Server, wait_for
-):
+    make_flock: Flocks, s3_server: S3Server, wait_for: Callable[..., Any]
+) -> None:
     env = make_env(make_flock, s3_server)
     admin = env.api("admin")
     assert admin.post("/api/v1/orgs", {"name": "doomed"}).status == 201
@@ -254,7 +268,7 @@ def test_deleting_an_org_purges_its_buckets_after_a_restart(
     assert not set(upstream) & set(s3_server.buckets(env.flock.bucket_prefix))
 
 
-def test_renaming_an_org_leaves_its_buckets(env: S3Env):
+def test_renaming_an_org_leaves_its_buckets(env: S3Env) -> None:
     name = env.bucket(org="lab")
     s3 = env.s3(env.key("olga"))
     s3.put_object(Bucket=name, Key="x", Body=b"x")
@@ -265,11 +279,11 @@ def test_renaming_an_org_leaves_its_buckets(env: S3Env):
     assert s3.get_object(Bucket=name, Key="x")["Body"].read() == b"x"
 
 
-def test_orgs_stop_at_pk_99999(make_flock: Flocks, s3_server: S3Server):
+def test_orgs_stop_at_pk_99999(make_flock: Flocks, s3_server: S3Server) -> None:
     flock = make_flock.s3(s3_server)
     admin = flock.client()
 
-    def org_names():
+    def org_names() -> list[asyncpg.Record]:
         return flock.call(flock.store.db.fetch("SELECT name FROM orgs ORDER BY pk"))
 
     flock.call(flock.store.db.execute("ALTER TABLE orgs ALTER COLUMN pk RESTART WITH 99999"))
@@ -289,11 +303,11 @@ def test_orgs_stop_at_pk_99999(make_flock: Flocks, s3_server: S3Server):
     assert status_of_org(admin, "one-too-many") == 404
 
 
-def status_of_org(client, name: str) -> int:
+def status_of_org(client: Client, name: str) -> int:
     return client.get(f"/api/v1/orgs/{name}").status
 
 
-def test_server_errors_creating_upstream_leave_nothing(env: S3Env):
+def test_server_errors_creating_upstream_leave_nothing(env: S3Env) -> None:
     """If the S3 server refuses the bucket, Flock keeps no row or event of it."""
     name = env.name("refused")
     upstream = env.flock.store.s3.upstream

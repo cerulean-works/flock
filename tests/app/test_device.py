@@ -1,35 +1,44 @@
 """Device sign-in (RFC 8628), the flow behind ``flock login``."""
 
+from __future__ import annotations
+
 import re
+from typing import TYPE_CHECKING
 
 from tests.app.utils import cli_login
+
+if TYPE_CHECKING:
+    import pytest
+
+    from tests.app.conftest import Client, Flocks, FlockServer, Response, User
+
 
 START = "/api/v1/auth/device"
 TOKEN = "/api/v1/auth/device/token"
 CLIENT = {"hostname": "node-7", "platform": "Linux x86_64"}
 
 
-def start(server) -> dict:
+def start(server: FlockServer) -> dict:
     resp = server.anonymous().post(START, {"client": CLIENT})
     assert resp.status == 200, resp.body
     return resp.json()
 
 
-def poll(server, started: dict):
+def poll(server: FlockServer, started: dict) -> Response:
     return server.anonymous().post(TOKEN, {"device_code": started["device_code"]})
 
 
-def error(resp) -> str:
+def error(resp: Response) -> str:
     assert resp.status == 400, resp.body
     return resp.json()["error"]
 
 
-def browser(server, user):
+def browser(server: FlockServer, user: User) -> Client:
     """A client on ``user``'s browser session (an access token), like the approval page."""
     return server.client(token=user.signup["access_token"])
 
 
-def test_a_sign_in_waits_for_approval_and_gives_a_token_once(flock):
+def test_a_sign_in_waits_for_approval_and_gives_a_token_once(flock: FlockServer) -> None:
     alice = flock.add_user("alice@lab.test")
     started = start(flock)
     assert re.fullmatch(
@@ -73,7 +82,7 @@ def test_a_sign_in_waits_for_approval_and_gives_a_token_once(flock):
     assert browser(flock, alice).post(f"{START}/{typed}", {"approve": True}).status == 404
 
 
-def test_a_denied_sign_in(flock):
+def test_a_denied_sign_in(flock: FlockServer) -> None:
     alice = flock.add_user("alice@lab.test")
     started = start(flock)
     code = started["user_code"]
@@ -85,7 +94,7 @@ def test_a_denied_sign_in(flock):
     assert [s["name"] for s in listed] == ["tests"]  # add_user's only
 
 
-def test_codes_expire(make_flock):
+def test_codes_expire(make_flock: Flocks) -> None:
     server = make_flock(device_code_ttl=0.5)
     alice = server.add_user("alice@lab.test")
     started = start(server)
@@ -98,7 +107,7 @@ def test_codes_expire(make_flock):
     assert error(server.anonymous().post(TOKEN, {"device_code": "unknown"})) == "expired_token"
 
 
-def test_polling_too_often_slows_the_client_down(flock):
+def test_polling_too_often_slows_the_client_down(flock: FlockServer) -> None:
     started = start(flock)
     assert error(poll(flock, started)) == "authorization_pending"
     slowed = poll(flock, started)
@@ -112,7 +121,7 @@ def test_polling_too_often_slows_the_client_down(flock):
     assert error(poll(flock, started)) == "authorization_pending"
 
 
-def test_only_a_browser_session_can_approve(flock):
+def test_only_a_browser_session_can_approve(flock: FlockServer) -> None:
     alice = flock.add_user("alice@lab.test")
     cli = flock.client(token=cli_login(flock, browser(flock, alice)))
     started = start(flock)
@@ -129,7 +138,7 @@ def test_only_a_browser_session_can_approve(flock):
     assert error(poll(flock, started)) == "authorization_pending"
 
 
-def test_wrong_codes_are_limited_per_user(flock):
+def test_wrong_codes_are_limited_per_user(flock: FlockServer) -> None:
     alice = flock.add_user("alice@lab.test")
     bob = flock.add_user("bob@lab.test")
     started = start(flock)
@@ -148,8 +157,8 @@ def test_wrong_codes_are_limited_per_user(flock):
     assert browser(flock, alice).get(f"{START}/{started['user_code']}").status == 200
 
 
-def test_pending_sign_ins_are_capped(flock):
-    flock.store.accounts.MAX_DEVICE_GRANTS = 3
+def test_pending_sign_ins_are_capped(flock: FlockServer, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(flock.store.accounts, "MAX_DEVICE_GRANTS", 3)
     for _ in range(3):
         start(flock)
     refused = flock.anonymous().post(START, {"client": CLIENT})
@@ -159,7 +168,7 @@ def test_pending_sign_ins_are_capped(flock):
     start(flock)
 
 
-def test_pending_sign_ins_survive_a_restart(make_flock):
+def test_pending_sign_ins_survive_a_restart(make_flock: Flocks) -> None:
     """Pending sign-ins are rows (D84), so a restart (or another replica) keeps them."""
     server = make_flock()
     alice = server.add_user("alice@lab.test")

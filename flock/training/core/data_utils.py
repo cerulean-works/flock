@@ -25,7 +25,7 @@ class LanceBatchCollator:
     do this is just to write a global class.
     """
 
-    def __init__(self, tokenizer: TokenizersBackend, input_column: str):
+    def __init__(self, tokenizer: TokenizersBackend, input_column: str) -> None:
         self.tokenizer = tokenizer
         self.input_column = input_column
 
@@ -62,7 +62,7 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
         seed: int = 42,
         skip_batches: int = 0,
         drop_last: bool = False,
-    ):
+    ) -> None:
         super().__init__()
         self.dataset_size = dataset_size
         self.batch_size = batch_size

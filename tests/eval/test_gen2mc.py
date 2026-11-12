@@ -11,7 +11,7 @@ from flock.eval.tasks.gen2mc import coqa_doc, drop_doc, jeopardy_doc, naturalqs_
 CHOICES = {"text": ["Oslo", "Bergen"], "label": ["A", "B"]}
 
 
-def test_coqa_scores_after_the_datasets_own_prompt():
+def test_coqa_scores_after_the_datasets_own_prompt() -> None:
     row = {"id": "c", "query_original": "Story.\n\nQuestion: Where?\nAnswer:", "answerKey": "B"}
     context = "Story.\n\nQuestion: Where?\nAnswer:"
 
@@ -20,7 +20,7 @@ def test_coqa_scores_after_the_datasets_own_prompt():
     )
 
 
-def test_drop_and_squad_put_their_passage_before_the_question():
+def test_drop_and_squad_put_their_passage_before_the_question() -> None:
     drop = {"id": "d", "passage_original": " P. ", "question_original": "Who?", "answerKey": "A"}
     squad = {
         "id": "s",
@@ -38,7 +38,7 @@ def test_drop_and_squad_put_their_passage_before_the_question():
     )
 
 
-def test_jeopardy_splits_the_category_at_the_first_colon():
+def test_jeopardy_splits_the_category_at_the_first_colon() -> None:
     row = {"id": "j", "context_original": "CITIES:  Its 2 harbours: both cold", "answerKey": "A"}
 
     assert jeopardy_doc({**row, "choices": CHOICES}).choices[0] == Choice(
@@ -46,7 +46,7 @@ def test_jeopardy_splits_the_category_at_the_first_colon():
     )
 
 
-def test_naturalqs_asks_the_rewritten_question():
+def test_naturalqs_asks_the_rewritten_question() -> None:
     row = {
         "id": "n",
         "question": "Where is it?",
@@ -69,7 +69,7 @@ HEADS = {
 }
 
 
-def test_gen2mc_shots_render_olmes_heads():
+def test_gen2mc_shots_render_olmes_heads() -> None:
     coqa = TASKS["coqa"]
     assert isinstance(coqa, MultipleChoiceTask)
     assert coqa.fewshot is None
@@ -84,6 +84,6 @@ def test_gen2mc_shots_render_olmes_heads():
         assert hashlib.sha256(head.encode()).hexdigest()[:16] == digest
 
 
-def test_gen2mc_rejects_a_key_that_is_not_one_letter():
+def test_gen2mc_rejects_a_key_that_is_not_one_letter() -> None:
     with pytest.raises(ValueError):
         naturalqs_doc({"id": "n", "question": "q", "choices": CHOICES, "answerKey": ""})

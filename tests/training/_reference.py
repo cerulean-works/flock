@@ -35,7 +35,7 @@ def hf_config(config: Olmo2Config) -> HFConfig:
     )
 
 
-def token_batch(padding: str, device: torch.device):
+def token_batch(padding: str, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
     if padding == "left":
         ids = [[0, 0, 2, 3, 4, 5], [6, 7, 8, 9, 10, 11]]
         mask = [[0, 0, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1]]
@@ -58,7 +58,13 @@ TOLERANCES = {
 }
 
 
-def assert_parity(actual, expected, dtype, kind, name):
+def assert_parity(
+    actual: torch.Tensor | None,
+    expected: torch.Tensor | None,
+    dtype: torch.dtype,
+    kind: str,
+    name: str,
+) -> None:
     assert actual is not None, name
     assert expected is not None, name
     atol, rtol = TOLERANCES[dtype][kind]
@@ -71,7 +77,9 @@ def assert_parity(actual, expected, dtype, kind, name):
     )
 
 
-def olmo2_training_parity(config, padding, device, dtype):
+def olmo2_training_parity(
+    config: Olmo2Config, padding: str, device: torch.device, dtype: torch.dtype
+) -> None:
     model = Olmo2(config).to(device=device, dtype=dtype)
     reference_config = hf_config(config)
     reference_config._attn_implementation = "eager"
@@ -122,7 +130,7 @@ def olmo2_training_parity(config, padding, device, dtype):
         assert_parity(parameter, reference.get_parameter(name), dtype, "update", name)
 
 
-def check_swiglu_parity(config, device, dtype):
+def check_swiglu_parity(config: Olmo2Config, device: torch.device, dtype: torch.dtype) -> None:
     model = SwiGLU(hidden_size=config.hidden_size, intermediate_size=config.intermediate_size)
     reference = Olmo2MLP(hf_config(config))
     reference.load_state_dict(model.state_dict(), strict=True)
@@ -140,7 +148,7 @@ def check_swiglu_parity(config, device, dtype):
         assert_parity(parameter.grad, reference.get_parameter(name).grad, dtype, "gradients", name)
 
 
-def check_gqa_parity(kv_heads, device, dtype, causal):
+def check_gqa_parity(kv_heads: int, device: torch.device, dtype: torch.dtype, causal: bool) -> None:
     attention = GroupedAttentionWithRoPE(
         hidden_size=32, num_attention_heads=4, num_key_value_heads=kv_heads, bias=True
     ).to(device=device, dtype=dtype)

@@ -1,18 +1,30 @@
+from __future__ import annotations
+
 import contextlib
 import json
 import os
 import signal
 import subprocess
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
 
 from app.api.src.core import gpus
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
+
+    from tests.app.conftest import Client, Flocks, FlockServer, WandbClient
+
+
 pytest.importorskip("wandb")
 
 
-def test_login_cli_stores_credentials_for_the_server(flock, wandb_client, api_key):
+def test_login_cli_stores_credentials_for_the_server(
+    flock: FlockServer, wandb_client: WandbClient, api_key: str
+) -> None:
     proc = wandb_client.cli("login", "--host", flock.url, api_key, WANDB_SILENT="false")
     combined = proc.stdout + proc.stderr
     assert "flock" in combined  # "Currently logged in as: flock"
@@ -21,7 +33,7 @@ def test_login_cli_stores_credentials_for_the_server(flock, wandb_client, api_ke
     assert api_key in netrc
 
 
-def test_login_cli_rejects_unknown_key(flock, wandb_client):
+def test_login_cli_rejects_unknown_key(flock: FlockServer, wandb_client: WandbClient) -> None:
     alice = flock.add_user("alice@lab.test")
     proc = wandb_client.cli("login", "--host", flock.url, "z" * 40, check=False)
     assert proc.returncode != 0
@@ -31,7 +43,9 @@ def test_login_cli_rejects_unknown_key(flock, wandb_client):
     assert "alice@lab.test" in ok.stdout + ok.stderr
 
 
-def test_wandb_keys_pass_the_sdks_check_and_log_runs(flock, make_wandb_client):
+def test_wandb_keys_pass_the_sdks_check_and_log_runs(
+    flock: FlockServer, make_wandb_client: Callable[..., WandbClient]
+) -> None:
     from wandb.sdk.lib.wbauth.validation import check_api_key
 
     alice = flock.add_user("alice@lab.test")
@@ -54,7 +68,9 @@ def test_wandb_keys_pass_the_sdks_check_and_log_runs(flock, make_wandb_client):
     assert refused.status == 401  # but not the REST API (D72)
 
 
-def test_init_log_summary_and_config(flock, api, wandb_client):
+def test_init_log_summary_and_config(
+    flock: FlockServer, api: Client, wandb_client: WandbClient
+) -> None:
     wandb_client.run(
         """
         import math
@@ -164,7 +180,9 @@ def test_init_log_summary_and_config(flock, api, wandb_client):
     assert miss["total"] == 0
 
 
-def test_metrics_are_visible_while_the_run_is_still_logging(flock, api, wandb_client, wait_for):
+def test_metrics_are_visible_while_the_run_is_still_logging(
+    flock: FlockServer, api: Client, wandb_client: WandbClient, wait_for: Callable[..., Any]
+) -> None:
     proc = wandb_client.popen(
         """
         import sys
@@ -179,12 +197,13 @@ def test_metrics_are_visible_while_the_run_is_still_logging(flock, api, wandb_cl
         run.finish()
         """
     )
+    assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
     try:
         line = proc.stdout.readline()
         assert line.startswith("LOGGED"), line + proc.stderr.read()
         run_id = line.split()[1]
 
-        def live_curve():
+        def live_curve() -> dict[str, Any] | None:
             data = api.get("/api/v1/projects/flock/live/history", keys="loss", running="1").json()
             runs = data["runs"]
             if runs and len(runs[0]["series"].get("loss", {}).get("x", [])) == 20:
@@ -212,7 +231,9 @@ def test_metrics_are_visible_while_the_run_is_still_logging(flock, api, wandb_cl
     assert running["runs"] == []
 
 
-def test_failed_runs_record_exit_code(flock, api, wandb_client):
+def test_failed_runs_record_exit_code(
+    flock: FlockServer, api: Client, wandb_client: WandbClient
+) -> None:
     proc = wandb_client.run(
         """
         run = wandb.init(project="failures", name="crashy", settings=SETTINGS)
@@ -236,7 +257,9 @@ def test_failed_runs_record_exit_code(flock, api, wandb_client):
     assert rows == {"crashy": ("failed", 1), "exit-two": ("failed", 2)}
 
 
-def test_resume_continues_history_and_summary(flock, api, wandb_client):
+def test_resume_continues_history_and_summary(
+    flock: FlockServer, api: Client, wandb_client: WandbClient
+) -> None:
     script = """
         import sys
         run = wandb.init(project="resume", id="resumable1", resume=sys.argv[1], settings=SETTINGS)
@@ -267,7 +290,7 @@ def test_resume_continues_history_and_summary(flock, api, wandb_client):
     assert series["only_second"]["x"] == [5, 6, 7, 8, 9]
 
 
-def test_resume_must_fails_for_unknown_run(flock, wandb_client):
+def test_resume_must_fails_for_unknown_run(flock: FlockServer, wandb_client: WandbClient) -> None:
     proc = wandb_client.run(
         """
         wandb.init(project="resume", id="doesnotexist", resume="must", settings=SETTINGS)
@@ -277,7 +300,9 @@ def test_resume_must_fails_for_unknown_run(flock, wandb_client):
     assert proc.returncode != 0
 
 
-def test_data_survives_server_restart(make_flock, make_wandb_client):
+def test_data_survives_server_restart(
+    make_flock: Flocks, make_wandb_client: Callable[..., WandbClient]
+) -> None:
     first = make_flock()
     make_wandb_client(first).run(
         """
@@ -311,7 +336,9 @@ def test_data_survives_server_restart(make_flock, make_wandb_client):
     assert api.runs("persist")["total"] == 2
 
 
-def test_offline_run_synced_with_cli(flock, api, wandb_client):
+def test_offline_run_synced_with_cli(
+    flock: FlockServer, api: Client, wandb_client: WandbClient
+) -> None:
     wandb_client.run(
         """
         run = wandb.init(project="offline", name="synced-later", config={"seed": 7})
@@ -334,7 +361,7 @@ def test_offline_run_synced_with_cli(flock, api, wandb_client):
     assert series["loss"]["y"] == [float(10 - i) for i in range(10)]
 
 
-def test_concurrent_runs(flock, api, wandb_client):
+def test_concurrent_runs(flock: FlockServer, api: Client, wandb_client: WandbClient) -> None:
     procs = [
         wandb_client.popen(
             """
@@ -350,6 +377,7 @@ def test_concurrent_runs(flock, api, wandb_client):
         for worker in range(4)
     ]
     for proc in procs:
+        assert proc.stderr is not None
         assert proc.wait(timeout=180) == 0, proc.stderr.read()
 
     data = api.runs("parallel", columns="config.worker,state,group", sort="config.worker")
@@ -361,7 +389,9 @@ def test_concurrent_runs(flock, api, wandb_client):
         assert curve["series"]["loss"]["x"] == list(range(100))
 
 
-def test_members_log_to_their_orgs_and_only_resume_their_runs(flock, make_wandb_client):
+def test_members_log_to_their_orgs_and_only_resume_their_runs(
+    flock: FlockServer, make_wandb_client: Callable[..., WandbClient]
+) -> None:
     admin = flock.client()
     assert admin.post("/api/v1/orgs", {"name": "lab"}).status == 201
     alice = flock.add_user("alice@lab.test", org="lab")
@@ -405,7 +435,9 @@ def test_members_log_to_their_orgs_and_only_resume_their_runs(flock, make_wandb_
     assert proc.returncode != 0
 
 
-def test_killed_client_is_marked_crashed(make_flock, make_wandb_client, wait_for):
+def test_killed_client_is_marked_crashed(
+    make_flock: Flocks, make_wandb_client: Callable[..., WandbClient], wait_for: Callable[..., Any]
+) -> None:
     server = make_flock(crash_timeout=3.0)
     client = make_wandb_client(server)
     proc = client.popen(
@@ -417,6 +449,7 @@ def test_killed_client_is_marked_crashed(make_flock, make_wandb_client, wait_for
         time.sleep(600)
         """
     )
+    assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
     try:
         assert proc.stdout.readline().startswith("STARTED")
         api = server.client()
@@ -440,7 +473,9 @@ def test_killed_client_is_marked_crashed(make_flock, make_wandb_client, wait_for
             proc.kill()
 
 
-def test_force_deleted_run_stays_deleted_while_its_client_finishes(flock, api, wandb_client):
+def test_force_deleted_run_stays_deleted_while_its_client_finishes(
+    flock: FlockServer, api: Client, wandb_client: WandbClient
+) -> None:
     """A run deleted under a live client: the client finishes normally and the run doesn't
     come back from the client's later requests."""
     proc = wandb_client.popen(
@@ -457,6 +492,7 @@ def test_force_deleted_run_stays_deleted_while_its_client_finishes(flock, api, w
         print("FINISHED", flush=True)
         """
     )
+    assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
     try:
         line = proc.stdout.readline()
         assert line.startswith("LOGGED"), line + proc.stderr.read()
@@ -477,7 +513,9 @@ def test_force_deleted_run_stays_deleted_while_its_client_finishes(flock, api, w
     assert api.get("/api/v1/projects/flock/doomed").json()["run_count"] == 0
 
 
-def test_moved_run_is_not_resumed_at_its_old_path(flock, api, wandb_client):
+def test_moved_run_is_not_resumed_at_its_old_path(
+    flock: FlockServer, api: Client, wandb_client: WandbClient
+) -> None:
     script = """
         import sys
         run = wandb.init(project="before", id="mover", resume="allow", settings=SETTINGS)
@@ -495,7 +533,9 @@ def test_moved_run_is_not_resumed_at_its_old_path(flock, api, wandb_client):
     assert api.run_history("before", "mover", keys="loss")["loss"]["y"] == [2.0]
 
 
-def test_offline_run_synced_into_a_deleted_project(flock, api, wandb_client):
+def test_offline_run_synced_into_a_deleted_project(
+    flock: FlockServer, api: Client, wandb_client: WandbClient
+) -> None:
     wandb_client.run(
         """
         run = wandb.init(project="reborn", name="first")
@@ -518,7 +558,9 @@ def test_offline_run_synced_into_a_deleted_project(flock, api, wandb_client):
     assert (row["display_name"], row["summary.loss"]) == ("offline", 2.0)
 
 
-def test_step_metric_definitions_reach_the_dashboard(flock, api, wandb_client):
+def test_step_metric_definitions_reach_the_dashboard(
+    flock: FlockServer, api: Client, wandb_client: WandbClient
+) -> None:
     """Hugging Face's WandbCallback plots every metric against train/global_step."""
     wandb_client.run(
         """

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import base64
 import dataclasses
@@ -16,7 +18,7 @@ import time
 from collections.abc import Coroutine, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import asyncpg
@@ -32,6 +34,9 @@ from app.api.src.db.migrate import Migrations
 from app.api.src.s3_proxy.app import create_app as create_proxy_app
 from app.api.src.settings import Settings
 from tests.conftest import S3Server
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class Response:
@@ -109,7 +114,9 @@ class Client:
     def graphql(self, query: str, variables: dict | None = None, **kwargs: Any) -> Response:
         return self.post("/graphql", {"query": query, "variables": variables or {}}, **kwargs)
 
-    def file_stream(self, entity: str, project: str, run: str, payload: dict, gzipped=False):
+    def file_stream(
+        self, entity: str, project: str, run: str, payload: dict, gzipped: bool = False
+    ) -> Response:
         body = orjson.dumps(payload)
         headers = {}
         if gzipped:
@@ -123,7 +130,12 @@ class Client:
     # ------------------------------------------------------------------ protocol shorthands
 
     def create_run(
-        self, project: str | None, name: str, config=None, tags=None, display_name=None
+        self,
+        project: str | None,
+        name: str,
+        config: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        display_name: str | None = None,
     ) -> dict:
         """Create or update a run the way the SDK does (UpsertBucket); returns the payload."""
         query = """
@@ -155,15 +167,15 @@ class Client:
 
     def stream(
         self,
-        project,
-        name,
-        history=None,
-        offset=0,
-        summary=None,
-        complete=None,
-        events=None,
-        events_offset=0,
-        **extra,
+        project: str,
+        name: str,
+        history: list[dict[str, Any]] | list[str] | None = None,
+        offset: int = 0,
+        summary: dict[str, Any] | None = None,
+        complete: int | None = None,
+        events: list[dict[str, Any]] | None = None,
+        events_offset: int = 0,
+        **extra: Any,
     ) -> dict:
         """Send one file_stream request; ``complete`` is the exit code that ends the run.
 
@@ -188,7 +200,7 @@ class Client:
         assert resp.status == 200, resp.body
         return resp.json()
 
-    def upload(self, project: str, run: str, name: str, data: bytes, entity: str = "flock"):
+    def upload(self, project: str, run: str, name: str, data: bytes, entity: str = "flock") -> None:
         """Upload a run file as the SDK does: a signed URL from CreateRunFiles, then a PUT."""
         query = """
         mutation CreateRunFiles($entity: String!, $project: String!, $run: String!,
@@ -219,7 +231,7 @@ class Client:
         assert data["total"] == 1, data
         return {name: values[0] for name, values in data["data"].items()}
 
-    def run_history(self, project: str, run: str, entity: str = "flock", **params) -> dict:
+    def run_history(self, project: str, run: str, entity: str = "flock", **params: Any) -> dict:
         resp = self.get(f"/api/v1/projects/{entity}/{project}/runs/{run}/history", **params)
         assert resp.status == 200, resp.body
         return resp.json()["series"]
@@ -783,7 +795,9 @@ SETTINGS = wandb.Settings(x_file_stream_transmit_interval=1)
             check,
         )
 
-    def cli(self, *args: str, check: bool = True, timeout: float = 180, **env: str):
+    def cli(
+        self, *args: str, check: bool = True, timeout: float = 180, **env: str
+    ) -> subprocess.CompletedProcess[str]:
         """Run the ``wandb`` command line tool."""
         return self._finish(
             subprocess.run(
@@ -877,7 +891,7 @@ def wandb_client(flock: FlockServer, tmp_path: Path) -> WandbClient:
 
 
 @pytest.fixture
-def make_wandb_client(tmp_path: Path):
+def make_wandb_client(tmp_path: Path) -> Callable[..., WandbClient]:
     """Factory of wandb clients, each with its own working directory."""
     pytest.importorskip("wandb")
     count = itertools.count()
@@ -889,7 +903,7 @@ def make_wandb_client(tmp_path: Path):
 
 
 @pytest.fixture
-def events(request: pytest.FixtureRequest) -> Iterator:
+def events(request: pytest.FixtureRequest) -> Iterator[Callable[..., EventStream]]:
     """Opens dashboard event streams (on the ``api`` flock unless a client is given)."""
     streams: list[EventStream] = []
 
@@ -910,8 +924,8 @@ def events(request: pytest.FixtureRequest) -> Iterator:
 
 
 @pytest.fixture
-def wait_for():
-    def wait(predicate, timeout: float = 30.0, interval: float = 0.05):
+def wait_for() -> Callable[..., Any]:
+    def wait(predicate: Callable[[], Any], timeout: float = 30.0, interval: float = 0.05) -> Any:
         deadline = time.monotonic() + timeout
         while True:
             value = predicate()

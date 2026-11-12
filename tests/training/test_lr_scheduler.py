@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import copy
 import io
 from typing import cast
@@ -15,7 +17,7 @@ from flock.training.core.lr_scheduler import (
 )
 
 
-def make_optimizer():
+def make_optimizer() -> torch.optim.SGD:
     return torch.optim.SGD(
         [
             {"params": [torch.nn.Parameter(torch.ones(1))], "lr": 0.2},
@@ -26,7 +28,7 @@ def make_optimizer():
 
 @pytest.mark.parametrize("warmup_steps", [0, 2])
 @pytest.mark.parametrize("minimum", [0.0, 0.1])
-def test_cosine_matches_huggingface_through_last_update(warmup_steps, minimum):
+def test_cosine_matches_huggingface_through_last_update(warmup_steps: int, minimum: float) -> None:
     optimizer, reference_optimizer = make_optimizer(), make_optimizer()
     scheduler = StepLRScheduler(
         optimizer, CosineConfig(warmup_steps=warmup_steps, min_lr_ratio=minimum), 8
@@ -52,7 +54,7 @@ def test_cosine_matches_huggingface_through_last_update(warmup_steps, minimum):
     "step, expected",
     [(0, 0.0), (1, 0.5), (2, 1.0), (5, 1.0), (6, 1.0), (7, 0.6), (8, 0.2), (12, 0.2)],
 )
-def test_wsd_boundaries_against_hand_calculated_values(step, expected):
+def test_wsd_boundaries_against_hand_calculated_values(step: int, expected: float) -> None:
     config = WSDConfig(warmup_steps=2, decay_steps=2, min_lr_ratio=0.2)
     assert lr_multiplier(step, config, total_steps=8) == pytest.approx(expected)
 
@@ -64,12 +66,12 @@ def test_wsd_boundaries_against_hand_calculated_values(step, expected):
         WSDConfig(warmup_steps=0, decay_steps=2, min_lr_ratio=0.1),
     ],
 )
-def test_completed_schedules_stay_at_the_floor(config):
+def test_completed_schedules_stay_at_the_floor(config: LRSchedulerConfig) -> None:
     for step in (8, 9, 16):
         assert lr_multiplier(step, config, total_steps=8) == pytest.approx(0.1)
 
 
-def test_scheduler_prepares_the_next_update_without_changing_weights():
+def test_scheduler_prepares_the_next_update_without_changing_weights() -> None:
     optimizer = make_optimizer()
     weight = optimizer.param_groups[0]["params"][0]
     scheduler = StepLRScheduler(
@@ -86,7 +88,7 @@ def test_scheduler_prepares_the_next_update_without_changing_weights():
     assert weight.item() == pytest.approx(0.9)
 
 
-def test_scheduler_rejects_parameter_groups_added_after_creation():
+def test_scheduler_rejects_parameter_groups_added_after_creation() -> None:
     optimizer = make_optimizer()
     scheduler = StepLRScheduler(
         optimizer, CosineConfig(warmup_steps=0, min_lr_ratio=0.0), total_steps=4
@@ -96,12 +98,12 @@ def test_scheduler_rejects_parameter_groups_added_after_creation():
         scheduler.step()
 
 
-def test_negative_step_is_rejected():
+def test_negative_step_is_rejected() -> None:
     with pytest.raises(ValueError, match="nonnegative"):
         lr_multiplier(-1, CosineConfig(warmup_steps=0, min_lr_ratio=0.0), total_steps=4)
 
 
-def test_unknown_schedule_is_rejected():
+def test_unknown_schedule_is_rejected() -> None:
     with pytest.raises(TypeError, match="Unsupported scheduler config"):
         lr_multiplier(0, cast(LRSchedulerConfig, object()), total_steps=4)
 
@@ -114,7 +116,9 @@ def test_unknown_schedule_is_rejected():
     ],
 )
 @pytest.mark.parametrize("completed_steps", [1, 4, 7])
-def test_saved_scheduler_resumes_like_uninterrupted_training(config, completed_steps):
+def test_saved_scheduler_resumes_like_uninterrupted_training(
+    config: LRSchedulerConfig, completed_steps: int
+) -> None:
     optimizer = make_optimizer()
     scheduler = StepLRScheduler(optimizer, config, total_steps=8)
     for _ in range(completed_steps):
@@ -143,7 +147,7 @@ def test_saved_scheduler_resumes_like_uninterrupted_training(config, completed_s
         assert resumed.get_last_lr() == pytest.approx(scheduler.get_last_lr())
 
 
-def test_scheduler_state_does_not_share_mutable_values():
+def test_scheduler_state_does_not_share_mutable_values() -> None:
     scheduler = StepLRScheduler(
         make_optimizer(), CosineConfig(warmup_steps=2, min_lr_ratio=0.1), total_steps=8
     )
@@ -159,7 +163,7 @@ def test_scheduler_state_does_not_share_mutable_values():
     assert scheduler.base_lrs == [0.2, 0.05]
 
 
-def test_loading_scheduler_rejects_different_parameter_group_counts():
+def test_loading_scheduler_rejects_different_parameter_group_counts() -> None:
     scheduler = StepLRScheduler(
         make_optimizer(), CosineConfig(warmup_steps=0, min_lr_ratio=0.1), total_steps=8
     )
@@ -183,7 +187,11 @@ def test_loading_scheduler_rejects_different_parameter_group_counts():
         ("completed_steps", -1, "nonnegative"),
     ],
 )
-def test_incompatible_scheduler_state_is_rejected_without_mutation(field, value, error):
+def test_incompatible_scheduler_state_is_rejected_without_mutation(
+    field: str,
+    value: dict[str, str | float] | dict[str, str | int] | dict[str, str] | int | list[float],
+    error: str,
+) -> None:
     scheduler = StepLRScheduler(
         make_optimizer(), CosineConfig(warmup_steps=2, min_lr_ratio=0.1), total_steps=8
     )
@@ -206,7 +214,7 @@ def test_incompatible_scheduler_state_is_rejected_without_mutation(field, value,
     ],
     ids=["cosine", "wsd"],
 )
-def test_scheduler_preflight_does_not_apply_saved_progress(config):
+def test_scheduler_preflight_does_not_apply_saved_progress(config: LRSchedulerConfig) -> None:
     scheduler = StepLRScheduler(make_optimizer(), config, total_steps=8)
     expected = scheduler.state_dict()
     saved = {**expected, "completed_steps": 4}

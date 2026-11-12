@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import threading
 import time
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlparse
 
 import jwt
@@ -10,6 +12,10 @@ import orjson
 import pytest
 
 from app.api.src.api.auth import Google
+
+if TYPE_CHECKING:
+    from tests.app.conftest import Flocks, FlockServer
+
 
 CLIENT_ID = "client-id.apps.googleusercontent.com"
 CALLBACK = "/api/v1/auth/google/callback"
@@ -47,7 +53,14 @@ class FakeGoogle:
         self.thread.start()
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}/token"
 
-    def sign_in(self, flock, email: str, sub: str = "", invite: str | None = None, **claims):
+    def sign_in(
+        self,
+        flock: FlockServer,
+        email: str,
+        sub: str = "",
+        invite: str | None = None,
+        **claims: Any,
+    ) -> str:
         """Run the browser's side of a sign-in; returns where the callback redirects to.
 
         Google is told to come back through the dashboard (``APP_URL``), which proxies the
@@ -57,7 +70,11 @@ class FakeGoogle:
         state = claims.pop("state", None)
         no_cookie = claims.pop("no_cookie", False)
         browser = flock.anonymous()
-        start = browser.get("/api/v1/auth/google/start", **({"invite": invite} if invite else {}))
+        start = (
+            browser.get("/api/v1/auth/google/start", invite=invite)
+            if invite
+            else browser.get("/api/v1/auth/google/start")
+        )
         assert start.status == 302, start.body
         location = urlparse(start.headers["location"])
         query = {key: values[0] for key, values in parse_qs(location.query).items()}
@@ -83,7 +100,7 @@ class FakeGoogle:
         assert callback.status == 302, callback.body
         return callback.headers["location"]
 
-    def tokens(self, flock, location: str) -> dict:
+    def tokens(self, flock: FlockServer, location: str) -> dict:
         """Exchange the one-time code a successful sign-in redirected with."""
         assert location.startswith("https://ui.test/auth/google?code="), location
         code = location.partition("code=")[2]
@@ -95,7 +112,7 @@ class FakeGoogle:
 
 
 @pytest.fixture
-def google(monkeypatch) -> Iterator[FakeGoogle]:
+def google(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeGoogle]:
     fake = FakeGoogle()
     monkeypatch.setattr(Google, "TOKEN_URL", fake.url)
     yield fake
@@ -105,7 +122,7 @@ def google(monkeypatch) -> Iterator[FakeGoogle]:
     assert not fake.thread.is_alive()
 
 
-GOOGLE_SETTINGS = {
+GOOGLE_SETTINGS: dict[str, Any] = {
     "google_client_id": CLIENT_ID,
     "google_client_secret": "client-secret",
     "web_url": APP_URL,
@@ -113,7 +130,7 @@ GOOGLE_SETTINGS = {
 }
 
 
-def test_google_sign_in_as_the_first_user(make_flock, google):
+def test_google_sign_in_as_the_first_user(make_flock: Flocks, google: FakeGoogle) -> None:
     server = make_flock(bootstrap=False, **GOOGLE_SETTINGS)
     assert server.anonymous().get("/api/v1/auth/config").json()["google"] is True
     tokens = google.tokens(server, google.sign_in(server, "Root@Gmail.com", sub="g-1"))
@@ -131,7 +148,9 @@ def test_google_sign_in_as_the_first_user(make_flock, google):
     assert again["user"]["id"] == user["id"]  # found by Google id, whatever the email now
 
 
-def test_google_links_existing_accounts_and_accepts_invites(make_flock, google):
+def test_google_links_existing_accounts_and_accepts_invites(
+    make_flock: Flocks, google: FakeGoogle
+) -> None:
     server = make_flock(**GOOGLE_SETTINGS)
     alice = server.add_user("alice@lab.test")
     linked = google.tokens(server, google.sign_in(server, "Alice@lab.test"))
@@ -168,14 +187,19 @@ def test_google_links_existing_accounts_and_accepts_invites(make_flock, google):
         ({"email_verified": False}, "unverified"),
     ],
 )
-def test_google_sign_ins_that_fail_verification(make_flock, google, claims, error):
+def test_google_sign_ins_that_fail_verification(
+    make_flock: Flocks,
+    google: FakeGoogle,
+    claims: Any,
+    error: str,
+) -> None:
     server = make_flock(bootstrap=False, **GOOGLE_SETTINGS)
     location = google.sign_in(server, "root@gmail.com", **claims)
     assert location.startswith(f"https://ui.test/login?error={error}&message="), location
     assert server.anonymous().get("/api/v1/auth/config").json()["signup_open"] is True
 
 
-def test_google_errors_and_configuration(make_flock, google):
+def test_google_errors_and_configuration(make_flock: Flocks, google: FakeGoogle) -> None:
     server = make_flock(**GOOGLE_SETTINGS)
     denied = server.anonymous().get(CALLBACK, error="access_denied")
     assert denied.headers["location"].startswith("https://ui.test/login?error=google")
@@ -184,7 +208,7 @@ def test_google_errors_and_configuration(make_flock, google):
     assert plain.anonymous().get(CALLBACK, code="x", state="y").status == 404
 
 
-def test_google_callback_defaults_to_the_flock_without_a_dashboard_url(make_flock):
+def test_google_callback_defaults_to_the_flock_without_a_dashboard_url(make_flock: Flocks) -> None:
     settings = {k: v for k, v in GOOGLE_SETTINGS.items() if k not in ("web_url", "api_public_url")}
     server = make_flock(bootstrap=False, **settings)
     start = server.anonymous().get("/api/v1/auth/google/start")

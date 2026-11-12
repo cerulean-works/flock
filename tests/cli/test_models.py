@@ -2,6 +2,8 @@
 saving and loading tiny models, the journal and resuming after crashes injected at each point
 of a push, the download cache, and the CLI."""
 
+from __future__ import annotations
+
 import asyncio
 import dataclasses
 import hashlib
@@ -13,7 +15,7 @@ import sys
 import threading
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any, Never
 
 import asyncpg
 import pytest
@@ -28,6 +30,14 @@ from flock.training.core.models import Olmo2, Olmo2Config
 from tests.app.conftest import Flocks, S3Flock, User
 from tests.app.utils import cli_login
 from tests.conftest import S3Server
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from click.testing import Result
+
+    from flock.hub.models._common import ModelFile
+
 
 MIB = 1024 * 1024
 TINY = Olmo2Config(
@@ -159,7 +169,7 @@ class Calls:
 # ---------------------------------------------------------------------- round trips (D104)
 
 
-def test_round_trip_single_and_sharded(flock, signed_in, cache_dir):
+def test_round_trip_single_and_sharded(flock: S3Flock, signed_in: str, cache_dir: Path) -> None:
     model = tiny()
     version = models.save_to_hub(model, "flock/tiny", run="flock/pretrain/abc", step=7)
     assert isinstance(version, models.ModelVersion)
@@ -209,7 +219,7 @@ def test_round_trip_single_and_sharded(flock, signed_in, cache_dir):
     assert [m["model"] for m in models.list_models()] == ["flock/tiny"]
 
 
-def test_references():
+def test_references() -> None:
     assert Ref.parse("acme/olmo2-1b") == Ref("acme", "olmo2-1b", None)
     assert Ref.parse("acme/olmo2-1b@12").version == "12"
     assert Ref.parse("acme/olmo2-1b@primary").version == "primary"
@@ -220,14 +230,16 @@ def test_references():
         Ref.parse("acme/olmo2-1b@12", version=False)
 
 
-def test_config_must_be_a_frozen_dataclass(flock, signed_in):
+def test_config_must_be_a_frozen_dataclass(flock: S3Flock, signed_in: str) -> None:
     model = tiny()
     model.config = {"hidden_size": 16}
     with pytest.raises(TypeError, match="frozen dataclass"):
         models.save_to_hub(model, "flock/tiny")
 
 
-def test_training_state_is_skipped_unless_asked_for(flock, signed_in, cache_dir):
+def test_training_state_is_skipped_unless_asked_for(
+    flock: S3Flock, signed_in: str, cache_dir: Path
+) -> None:
     model = tiny()
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
     batch = {"input_ids": torch.zeros(1, 4, dtype=torch.long), "attention_mask": torch.ones(1, 4)}
@@ -258,7 +270,9 @@ def test_training_state_is_skipped_unless_asked_for(flock, signed_in, cache_dir)
     assert torch.equal(restored.state_dict()["state"][0]["exp_avg"], first)
 
 
-def test_allow_and_ignore_choose_the_files(flock, signed_in, tmp_path, cache_dir):
+def test_allow_and_ignore_choose_the_files(
+    flock: S3Flock, signed_in: str, tmp_path: Path, cache_dir: Path
+) -> None:
     source = folder_model(tmp_path / "m", big=1024)
     models.save_to_hub(source, "flock/m")
     folder = models.download("flock/m", allow="*.json")
@@ -271,12 +285,12 @@ def test_allow_and_ignore_choose_the_files(flock, signed_in, tmp_path, cache_dir
 
 
 def test_blocking_false_returns_once_the_files_are_on_disk(
-    flock, signed_in, cache_dir, monkeypatch
-):
+    flock: S3Flock, signed_in: str, cache_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     gate = threading.Event()
     real = upload._Sender.run
 
-    def held(self, check):
+    def held(self: upload._Sender, check: bool) -> None:
         assert gate.wait(30)
         return real(self, check)
 
@@ -300,7 +314,9 @@ def test_blocking_false_returns_once_the_files_are_on_disk(
     assert all(torch.equal(loaded[k], v) for k, v in expected.items())
 
 
-def test_dedupe_key_returns_the_version_already_saved(flock, signed_in, cache_dir):
+def test_dedupe_key_returns_the_version_already_saved(
+    flock: S3Flock, signed_in: str, cache_dir: Path
+) -> None:
     run: Any = SimpleNamespace(entity="flock", project="pretrain", id="abc")  # as a wandb.Run
     first = models.save_to_hub(tiny(), "flock/tiny", run=run, step=100)
     again = models.save_to_hub(tiny(seed=3), "flock/tiny", run=run, step=100)
@@ -314,7 +330,9 @@ def test_dedupe_key_returns_the_version_already_saved(flock, signed_in, cache_di
     assert isinstance(other, models.ModelVersion) and other.number == 2
 
 
-def test_keep_local_keeps_the_written_model(flock, signed_in, cache_dir):
+def test_keep_local_keeps_the_written_model(
+    flock: S3Flock, signed_in: str, cache_dir: Path
+) -> None:
     models.save_to_hub(tiny(), "flock/tiny", keep_local=True)
     (kept,) = uploads(cache_dir)
     folder = cache_dir / "uploads" / kept
@@ -339,7 +357,14 @@ def check_version(source: Path, name: str = "flock/m") -> models.ModelVersion:
 
 
 @pytest.fixture
-def crashed(flock, signed_in, small_parts, tmp_path, cache_dir, monkeypatch):
+def crashed(
+    flock: S3Flock,
+    signed_in: str,
+    small_parts: int,
+    tmp_path: Path,
+    cache_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[Path, Callable[..., dict[str, Any]], Calls]:
     """Pushes a folder one request at a time and crashes where the test says, then resumes:
     returns ``(push, calls)``, where ``push(event, nth)`` crashes, and ``calls`` counts what
     the resume sent."""
@@ -357,7 +382,9 @@ def crashed(flock, signed_in, small_parts, tmp_path, cache_dir, monkeypatch):
     return source, push, calls
 
 
-def test_resume_after_a_crash_mid_part(crashed, cache_dir):
+def test_resume_after_a_crash_mid_part(
+    crashed: tuple[Path, Callable[..., dict[str, Any]], Calls], cache_dir: Path
+) -> None:
     source, push, calls = crashed
     journal = push("before-send.s3.UploadPart", 2)
     big = journal["files"]["model.safetensors"]
@@ -373,7 +400,9 @@ def test_resume_after_a_crash_mid_part(crashed, cache_dir):
     check_version(source)
 
 
-def test_resume_after_a_crash_between_parts(crashed, cache_dir, flock):
+def test_resume_after_a_crash_between_parts(
+    crashed: tuple[Path, Callable[..., dict[str, Any]], Calls], cache_dir: Path, flock: S3Flock
+) -> None:
     source, push, calls = crashed
     journal = push("after-call.s3.UploadPart", 2)  # part 2 landed; the client never knew
     # A part that landed with other bytes is sent again.
@@ -388,7 +417,9 @@ def test_resume_after_a_crash_between_parts(crashed, cache_dir, flock):
     check_version(source)
 
 
-def test_resume_after_a_crash_between_files(crashed, cache_dir):
+def test_resume_after_a_crash_between_files(
+    crashed: tuple[Path, Callable[..., dict[str, Any]], Calls], cache_dir: Path
+) -> None:
     source, push, calls = crashed
     journal = push("after-call.s3.PutObject", 2)
     assert [p for p, f in journal["files"].items() if f["done"]] == ["README.md"]
@@ -401,7 +432,9 @@ def test_resume_after_a_crash_between_files(crashed, cache_dir):
     check_version(source)
 
 
-def test_resume_a_file_whose_multipart_upload_is_gone(crashed, cache_dir, flock):
+def test_resume_a_file_whose_multipart_upload_is_gone(
+    crashed: tuple[Path, Callable[..., dict[str, Any]], Calls], cache_dir: Path, flock: S3Flock
+) -> None:
     source, push, calls = crashed
     journal = push("before-send.s3.UploadPart", 3)
     s3 = flock.s3.client()
@@ -415,12 +448,16 @@ def test_resume_a_file_whose_multipart_upload_is_gone(crashed, cache_dir, flock)
     check_version(source)
 
 
-def test_resume_after_a_crash_before_the_commit(crashed, cache_dir, monkeypatch):
+def test_resume_after_a_crash_before_the_commit(
+    crashed: tuple[Path, Callable[..., dict[str, Any]], Calls],
+    cache_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     source, _push, calls = crashed
     real = upload._commit
     with monkeypatch.context() as patched:
 
-        def before(registry, journal):
+        def before(registry: upload.Registry, journal: upload.Journal) -> Never:
             raise Crash("commit")
 
         patched.setattr(upload, "_commit", before)
@@ -435,12 +472,16 @@ def test_resume_after_a_crash_before_the_commit(crashed, cache_dir, monkeypatch)
     check_version(source)
 
 
-def test_resume_after_the_commit_was_sent(crashed, cache_dir, monkeypatch):
+def test_resume_after_the_commit_was_sent(
+    crashed: tuple[Path, Callable[..., dict[str, Any]], Calls],
+    cache_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     source, _push, calls = crashed
     real = upload._commit
     with monkeypatch.context() as patched:
 
-        def after(registry, journal):
+        def after(registry: upload.Registry, journal: upload.Journal) -> Never:
             real(registry, journal)
             raise Crash("commit answered")
 
@@ -456,7 +497,9 @@ def test_resume_after_the_commit_was_sent(crashed, cache_dir, monkeypatch):
     assert uploads(cache_dir) == []
 
 
-def test_saving_a_model_again_resumes_its_upload(flock, signed_in, cache_dir, monkeypatch):
+def test_saving_a_model_again_resumes_its_upload(
+    flock: S3Flock, signed_in: str, cache_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A restarted job saving the same run and step finishes the earlier upload instead of
     writing the model again."""
     calls = Calls(monkeypatch)
@@ -475,7 +518,11 @@ def test_saving_a_model_again_resumes_its_upload(flock, signed_in, cache_dir, mo
     assert uploads(cache_dir) == []
 
 
-def test_a_changed_file_refuses_to_resume(crashed, cache_dir, flock_cli):
+def test_a_changed_file_refuses_to_resume(
+    crashed: tuple[Path, Callable[..., dict[str, Any]], Calls],
+    cache_dir: Path,
+    flock_cli: Callable[..., Result],
+) -> None:
     source, push, _calls = crashed
     journal = push("before-send.s3.UploadPart", 2)
     (source / "README.md").write_text("# changed\n")
@@ -493,7 +540,9 @@ def test_a_changed_file_refuses_to_resume(crashed, cache_dir, flock_cli):
     assert uploads(cache_dir) == []
 
 
-def test_an_expired_upload_starts_over(crashed, cache_dir, flock):
+def test_an_expired_upload_starts_over(
+    crashed: tuple[Path, Callable[..., dict[str, Any]], Calls], cache_dir: Path, flock: S3Flock
+) -> None:
     source, push, calls = crashed
     journal = push("before-send.s3.UploadPart", 2)
     sql(
@@ -509,7 +558,9 @@ def test_an_expired_upload_starts_over(crashed, cache_dir, flock):
     check_version(source)
 
 
-def test_an_expired_upload_whose_files_are_gone_is_forgotten(crashed, cache_dir, flock):
+def test_an_expired_upload_whose_files_are_gone_is_forgotten(
+    crashed: tuple[Path, Callable[..., dict[str, Any]], Calls], cache_dir: Path, flock: S3Flock
+) -> None:
     source, push, _calls = crashed
     journal = push("before-send.s3.UploadPart", 2)
     sql(flock, "UPDATE model_uploads SET state = 'expired' WHERE ulid = $1", journal["ulid"])
@@ -522,20 +573,32 @@ def test_an_expired_upload_whose_files_are_gone_is_forgotten(crashed, cache_dir,
 
 
 @pytest.fixture
-def pushed(flock, signed_in, tmp_path) -> tuple[Path, models.ModelVersion]:
+def pushed(flock: S3Flock, signed_in: str, tmp_path: Path) -> tuple[Path, models.ModelVersion]:
     source = folder_model(tmp_path / "m", big=3 * MIB)
     version = models.save_to_hub(source, "flock/m")
     assert isinstance(version, models.ModelVersion)
     return source, version
 
 
-def test_a_download_resumes_from_its_partial_file(pushed, cache_dir, monkeypatch):
+def test_a_download_resumes_from_its_partial_file(
+    pushed: tuple[Path, models.ModelVersion], cache_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     source, version = pushed
     calls = Calls(monkeypatch, cache)
     ranges = []
     real = cache._Fetcher.chunk
 
-    def chunk(self, file, partial, target, index, count, start, end, order):
+    def chunk(
+        self: cache._Fetcher,
+        file: ModelFile,
+        partial: Path,
+        target: Path,
+        index: int,
+        count: int,
+        start: int,
+        end: int,
+        order: dict[str, Any],
+    ) -> None:
         ranges.append((file.path, start, end))
         return real(self, file, partial, target, index, count, start, end, order)
 
@@ -560,7 +623,9 @@ def test_a_download_resumes_from_its_partial_file(pushed, cache_dir, monkeypatch
     assert calls.counts == {}
 
 
-def test_a_corrupted_file_is_rejected(pushed, cache_dir):
+def test_a_corrupted_file_is_rejected(
+    pushed: tuple[Path, models.ModelVersion], cache_dir: Path
+) -> None:
     source, version = pushed
     folder = cache_dir / "models" / "flock" / "m" / version.digest
     folder.mkdir(parents=True)
@@ -603,7 +668,9 @@ print(json.dumps({"folder": str(folder), "gets": len(gets)}))
 """
 
 
-def test_two_processes_share_one_download(pushed, cache_dir):
+def test_two_processes_share_one_download(
+    pushed: tuple[Path, models.ModelVersion], cache_dir: Path
+) -> None:
     source, version = pushed
     started = [
         subprocess.Popen(
@@ -623,7 +690,9 @@ def test_two_processes_share_one_download(pushed, cache_dir):
     )
 
 
-def test_architectures_outside_flock_training_are_refused(flock, signed_in, tmp_path):
+def test_architectures_outside_flock_training_are_refused(
+    flock: S3Flock, signed_in: str, tmp_path: Path
+) -> None:
     source = folder_model(tmp_path / "m", big=64)
     (source / "flock.json").write_text(
         json.dumps(
@@ -652,7 +721,9 @@ def test_architectures_outside_flock_training_are_refused(flock, signed_in, tmp_
         models.load_from_hub("flock/m", device="cpu")
 
 
-def test_read_only_keys_are_enough_to_download(pushed, flock, alice):
+def test_read_only_keys_are_enough_to_download(
+    pushed: tuple[Path, models.ModelVersion], flock: S3Flock, alice: User
+) -> None:
     keys = alice.api.get("/api/v1/me/s3-keys").json()["keys"]
     before = {k["access_key_id"] for k in keys}
     models.download("flock/m")
@@ -664,7 +735,13 @@ def test_read_only_keys_are_enough_to_download(pushed, flock, alice):
 # ---------------------------------------------------------------------- the CLI (D105)
 
 
-def test_cli_commands(flock, signed_in, flock_cli, tmp_path, cache_dir):
+def test_cli_commands(
+    flock: S3Flock,
+    signed_in: str,
+    flock_cli: Callable[..., Result],
+    tmp_path: Path,
+    cache_dir: Path,
+) -> None:
     source = folder_model(tmp_path / "m", big=1024)
     (source / ".DS_Store").write_text("skipped")
     pushed = flock_cli("models", "push", str(source), "flock/m", "--tag", "release")
@@ -714,7 +791,15 @@ def test_cli_commands(flock, signed_in, flock_cli, tmp_path, cache_dir):
     )
 
 
-def test_cli_uploads(flock, signed_in, flock_cli, small_parts, tmp_path, cache_dir, monkeypatch):
+def test_cli_uploads(
+    flock: S3Flock,
+    signed_in: str,
+    flock_cli: Callable[..., Result],
+    small_parts: int,
+    tmp_path: Path,
+    cache_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FLOCK_MODELS_CONCURRENCY", "1")
     source = folder_model(tmp_path / "m")
     calls = Calls(monkeypatch)
@@ -773,7 +858,7 @@ def test_cli_uploads(flock, signed_in, flock_cli, small_parts, tmp_path, cache_d
     assert state == "aborted"
 
 
-def test_the_package_imports_no_heavy_library():
+def test_the_package_imports_no_heavy_library() -> None:
     for module in (models, cache, upload):
         source = Path(module.__file__).read_text()
         top_level = [line for line in source.splitlines() if line.startswith(("import ", "from "))]

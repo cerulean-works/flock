@@ -10,7 +10,7 @@ import pytest
 from app.api.src.settings import Settings
 
 
-def test_settings_read_canonical_urls_and_explicit_overrides():
+def test_settings_read_canonical_urls_and_explicit_overrides() -> None:
     settings = Settings.load(
         {"web_url": "https://dashboard.example.com"},
         environ={
@@ -30,7 +30,7 @@ def test_settings_read_canonical_urls_and_explicit_overrides():
 
 @pytest.mark.parametrize("compose", ["app/compose.yaml", "app/api/compose.dev.yaml"])
 @pytest.mark.parametrize("configured", [False, True])
-def test_compose_configuration(compose, configured):
+def test_compose_configuration(compose: str, configured: bool) -> None:
     if not shutil.which("docker"):
         pytest.skip("Docker Compose is needed to validate deployment configuration")
     root = Path(__file__).resolve().parents[2]
@@ -109,7 +109,7 @@ def test_compose_configuration(compose, configured):
 
 
 @pytest.mark.parametrize("compose", ["app/compose.yaml", "app/api/compose.dev.yaml"])
-def test_compose_s3_proxy_service(compose):
+def test_compose_s3_proxy_service(compose: str) -> None:
     """The S3 proxy is a service of its own under the ``s3`` profile, reading the S3 settings
     and the API's database."""
     if not shutil.which("docker"):

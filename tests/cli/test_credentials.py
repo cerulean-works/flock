@@ -1,19 +1,25 @@
 """`flock.cli.credentials`: the saved sign-in, and the order credentials are picked in."""
 
+from __future__ import annotations
+
 import ast
 import json
 import pickle
 import stat
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, Never
 
 import pytest
 
 from flock.cli import credentials
 from flock.cli.credentials import DEFAULT_HOST, Credentials, resolve
 
+if TYPE_CHECKING:
+    from typing import Any
 
-def test_the_file_is_private_and_written_whole(isolated):
+
+def test_the_file_is_private_and_written_whole(isolated: Path) -> None:
     path = credentials.save("http://flock.test/", "flock_cli_secret", {"email": "a@b.c"})
     assert path == isolated / "credentials.json"
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
@@ -23,7 +29,7 @@ def test_the_file_is_private_and_written_whole(isolated):
     assert (saved["host"], saved["token"]) == ("http://flock.test", "flock_cli_secret")
 
     # A write that fails leaves the previous sign-in, and no temporary file.
-    def fail(*args, **kwargs):
+    def fail(*args: Any, **kwargs: Any) -> Never:
         raise OSError("disk full")
 
     with pytest.MonkeyPatch.context() as patch:
@@ -38,7 +44,7 @@ def test_the_file_is_private_and_written_whole(isolated):
     assert credentials.load() is None
 
 
-def test_an_unreadable_file_counts_as_no_sign_in(isolated):
+def test_an_unreadable_file_counts_as_no_sign_in(isolated: Path) -> None:
     isolated.mkdir()
     (isolated / "credentials.json").write_text("{not json")
     assert credentials.load() is None
@@ -47,7 +53,7 @@ def test_an_unreadable_file_counts_as_no_sign_in(isolated):
     assert resolve() is None
 
 
-def test_the_config_dir(monkeypatch, tmp_path):
+def test_the_config_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("FLOCK_CONFIG_DIR")
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     assert credentials.config_dir() == tmp_path / "home" / ".config" / "flock"
@@ -57,7 +63,7 @@ def test_the_config_dir(monkeypatch, tmp_path):
     assert credentials.credentials_path() == tmp_path / "flock" / "credentials.json"
 
 
-def test_resolve_order(monkeypatch):
+def test_resolve_order(monkeypatch: pytest.MonkeyPatch) -> None:
     assert resolve() is None
     credentials.save("http://saved.test", "flock_cli_saved", {})
     assert resolve() == Credentials("http://saved.test", "flock_cli_saved", "file")
@@ -86,13 +92,13 @@ def test_resolve_order(monkeypatch):
     assert credentials.auth_headers() == {}
 
 
-def test_credentials_hide_the_token_and_pickle():
+def test_credentials_hide_the_token_and_pickle() -> None:
     found = Credentials("http://flock.test", "flock_cli_secret", "file")
     assert "secret" not in repr(found)
     assert pickle.loads(pickle.dumps(found)) == found  # e.g. to DataLoader workers
 
 
-def test_credentials_uses_only_the_standard_library():
+def test_credentials_uses_only_the_standard_library() -> None:
     tree = ast.parse(Path(credentials.__file__).read_text())
     imported = {
         alias.name.partition(".")[0]

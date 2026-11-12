@@ -1,3 +1,5 @@
+from collections.abc import Awaitable
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 
@@ -40,7 +42,7 @@ async def read_image(request: Request) -> bytes:
     return bytes(data)
 
 
-async def changed(change) -> None:
+async def changed(change: Awaitable[object]) -> None:
     try:
         await change
     except ImageError as e:

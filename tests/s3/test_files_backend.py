@@ -16,7 +16,7 @@ def keys(s3_server: S3Server, bucket: str) -> list[str]:
     return sorted(item["Key"] for item in listed)
 
 
-def test_run_files_live_in_the_bucket(make_flock: Flocks, s3_server: S3Server):
+def test_run_files_live_in_the_bucket(make_flock: Flocks, s3_server: S3Server) -> None:
     bucket = f"{s3_server.bucket_prefix()}files"
     flock = make_flock.s3(s3_server, files_backend="s3", files_bucket=bucket)
     store = flock.store
@@ -42,7 +42,7 @@ def test_run_files_live_in_the_bucket(make_flock: Flocks, s3_server: S3Server):
     assert keys(s3_server, bucket) == []
 
 
-def test_files_move_to_the_bucket_while_served(make_flock: Flocks, s3_server: S3Server):
+def test_files_move_to_the_bucket_while_served(make_flock: Flocks, s3_server: S3Server) -> None:
     """A flock on the local backend switches to s3: files not copied yet are still served from
     the directory, and ``scripts/migrate_files.py`` copies them (again: it resumes)."""
     local = make_flock.s3(s3_server)

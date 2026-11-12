@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import json
 import math
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 import orjson
@@ -7,10 +10,17 @@ import pytest
 
 from tests.app.utils import history_rows
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
+
+    from tests.app.conftest import Client, Flocks, FlockServer
+
+
 # ---------------------------------------------------------------------- protocol
 
 
-def test_upsert_creates_then_updates(api):
+def test_upsert_creates_then_updates(api: Client) -> None:
     first = api.create_run("p", "r1", config={"lr": 0.1}, tags=["a"])
     assert first["inserted"] is True
     assert first["bucket"]["name"] == "r1"
@@ -30,7 +40,7 @@ def test_upsert_creates_then_updates(api):
     }
 
 
-def test_file_stream_retries_do_not_duplicate_history(api):
+def test_file_stream_retries_do_not_duplicate_history(api: Client) -> None:
     api.create_run("p", "r1")
     batch = history_rows(10, loss=lambda s: 1 / (s + 1))
     api.stream("p", "r1", batch[:6])
@@ -40,7 +50,7 @@ def test_file_stream_retries_do_not_duplicate_history(api):
     assert curve["loss"]["x"] == list(range(10))
 
 
-def test_non_finite_values_and_bad_lines(api):
+def test_non_finite_values_and_bad_lines(api: Client) -> None:
     api.create_run("p", "r1")
     history = [
         '{"_step": 0, "loss": NaN}',
@@ -55,7 +65,7 @@ def test_non_finite_values_and_bad_lines(api):
     assert "img" not in series
 
 
-def test_summary_replaces_previous_summary(api):
+def test_summary_replaces_previous_summary(api: Client) -> None:
     api.create_run("p", "r1")
     api.stream("p", "r1", summary={"loss": 1.0, "gone": 5, "nested": {"x": 1}})
     api.stream("p", "r1", summary={"loss": 0.5, "nested": {"y": 2}})
@@ -63,7 +73,7 @@ def test_summary_replaces_previous_summary(api):
     assert data == {"summary.loss": [0.5], "summary.nested.y": [2]}
 
 
-def test_run_states(api):
+def test_run_states(api: Client) -> None:
     for name in ("ok", "bad", "pre"):
         api.create_run("p", name)
     api.stream("p", "ok", complete=0)
@@ -77,7 +87,7 @@ def test_run_states(api):
     }
 
 
-def test_resume_status_reports_tail(api):
+def test_resume_status_reports_tail(api: Client) -> None:
     api.create_run("p", "r1", config={"lr": 0.1})
     api.stream("p", "r1", history_rows(3, loss=float), summary={"loss": 2.0})
     query = """
@@ -98,7 +108,7 @@ def test_resume_status_reports_tail(api):
     assert api.graphql(query, {"project": "zz", "name": "r1"}).json()["data"]["model"] is None
 
 
-def test_unknown_operations_and_bad_requests(api, flock):
+def test_unknown_operations_and_bad_requests(api: Client, flock: FlockServer) -> None:
     body = api.graphql("query Mystery { mystery { id } }").json()
     assert body["data"] is None and "Mystery" in body["errors"][0]["message"]
     # Operations are recognised by their root field when no name is sent.
@@ -113,7 +123,7 @@ def test_unknown_operations_and_bad_requests(api, flock):
     assert bad_upload.status == 403
 
 
-def test_uploads_use_signed_urls(api):
+def test_uploads_use_signed_urls(api: Client) -> None:
     api.create_run("p", "r1")
     query = """
     mutation CreateRunFiles($entity: String!, $project: String!, $run: String!, $files: [String!]!) {
@@ -133,7 +143,7 @@ def test_uploads_use_signed_urls(api):
     assert api.get("/api/v1/projects/flock/p/runs/r1/files/media/images/a.png").body == b"\x89PNG"
 
 
-def test_unnamed_projects_and_public_upload_urls(make_flock):
+def test_unnamed_projects_and_public_upload_urls(make_flock: Flocks) -> None:
     server = make_flock(
         web_url="https://dashboard.example.com/",
         api_public_url="https://api.example.com/",
@@ -158,7 +168,9 @@ def test_unnamed_projects_and_public_upload_urls(make_flock):
     assert "errors" not in state, state
 
 
-def test_stale_runs_are_marked_crashed_and_revive(make_flock, wait_for):
+def test_stale_runs_are_marked_crashed_and_revive(
+    make_flock: Flocks, wait_for: Callable[..., Any]
+) -> None:
     server = make_flock(crash_timeout=0.3)
     api = server.client()
     api.create_run("p", "r1")
@@ -168,7 +180,7 @@ def test_stale_runs_are_marked_crashed_and_revive(make_flock, wait_for):
     assert api.runs("p", columns=["state"])["data"]["state"] == ["running"]
 
 
-def chunk_counts(server, name: str) -> dict[str, int]:
+def chunk_counts(server: FlockServer, name: str) -> dict[str, int]:
     """How many chunks each history metric of run ``name`` (project ``p``) is stored in."""
     records = server.call(
         server.store.db.fetch(
@@ -180,7 +192,7 @@ def chunk_counts(server, name: str) -> dict[str, int]:
     return dict(records)
 
 
-def test_finished_runs_are_compacted_into_one_chunk_per_metric(make_flock):
+def test_finished_runs_are_compacted_into_one_chunk_per_metric(make_flock: Flocks) -> None:
     server = make_flock()
     api = server.client()
     expected = {}
@@ -202,7 +214,7 @@ def test_finished_runs_are_compacted_into_one_chunk_per_metric(make_flock):
     assert {r["id"]: r["series"]["loss"]["y"] for r in data} == pytest.approx(expected)
 
 
-def test_active_runs_compact_once_they_have_many_chunks(api, flock):
+def test_active_runs_compact_once_they_have_many_chunks(api: Client, flock: FlockServer) -> None:
     api.create_run("p", "r1")
     api.create_run("p", "few")
     every = flock.store.COMPACT_AFTER
@@ -218,7 +230,7 @@ def test_active_runs_compact_once_they_have_many_chunks(api, flock):
     assert series["loss"]["y"] == [float(s) for s in range(every + 2)]
 
 
-def test_resumed_compacted_run_appends(api, flock):
+def test_resumed_compacted_run_appends(api: Client, flock: FlockServer) -> None:
     api.create_run("p", "r1")
     api.stream("p", "r1", history_rows(5, loss=float), complete=0)
     flock.call(flock.store.flush())  # compacted into one chunk per metric
@@ -228,7 +240,9 @@ def test_resumed_compacted_run_appends(api, flock):
     assert api.runs("p", columns=["state"])["data"]["state"] == ["running"]
 
 
-def test_resumed_uncompacted_run_does_not_duplicate_history(api, flock):
+def test_resumed_uncompacted_run_does_not_duplicate_history(
+    api: Client, flock: FlockServer
+) -> None:
     """A finished run whose chunks were never compacted (e.g. a server crash) resumes; the
     lines of the resuming request, and lines it resends, must not be applied twice."""
     api.create_run("p", "r1")
@@ -243,7 +257,7 @@ def test_resumed_uncompacted_run_does_not_duplicate_history(api, flock):
 
 
 @pytest.fixture
-def table_api(api):
+def table_api(api: Client) -> Client:
     """Six runs with mixed config/summary types, created oldest (r0) to newest (r5)."""
     specs = [
         ({"lr": 0.1, "opt": "adam", "amp": True}, {"loss": 0.9, "acc": 0.1}, ["base"]),
@@ -289,13 +303,17 @@ def table_api(api):
         ({"no.such.column": None}, ["r5", "r4", "r3", "r2", "r1", "r0"]),
     ],
 )
-def test_filters(table_api, expr, expected):
+def test_filters(
+    table_api: Client,
+    expr: dict[str, Any],
+    expected: list[str],
+) -> None:
     data = table_api.runs("t", filter=expr, all_ids=True)
     assert data["all_ids"] == expected
     assert data["total"] == len(expected)
 
 
-def test_filter_via_query_string(table_api):
+def test_filter_via_query_string(table_api: Client) -> None:
     resp = table_api.get(
         "/api/v1/projects/flock/t/runs", filter=json.dumps({"config.opt": "sgd"}), columns="name"
     )
@@ -312,13 +330,16 @@ def test_filter_via_query_string(table_api):
         [1, 2],
     ],
 )
-def test_invalid_filters_are_rejected(table_api, bad):
+def test_invalid_filters_are_rejected(
+    table_api: Client,
+    bad: dict[str, Any] | list[int],
+) -> None:
     resp = table_api.post("/api/v1/projects/flock/t/runs/query", {"filter": bad})
     assert resp.status == 400
     assert "error" in resp.json()
 
 
-def test_sorting(table_api):
+def test_sorting(table_api: Client) -> None:
     by_lr = table_api.runs("t", sort="config.lr", columns=["config.lr"])
     assert by_lr["ids"] == ["r2", "r3", "r1", "r5", "r0", "r4"]  # missing last
     by_lr_desc = table_api.runs("t", sort="-config.lr")
@@ -330,7 +351,7 @@ def test_sorting(table_api):
     assert table_api.runs("t")["ids"] == ["r5", "r4", "r3", "r2", "r1", "r0"]
 
 
-def test_columns_and_paging(table_api):
+def test_columns_and_paging(table_api: Client) -> None:
     page = table_api.runs("t", columns=["config.l*", "summary.loss", "nope"], limit=2, offset=1)
     assert page["total"] == 6
     assert page["ids"] == ["r4", "r3"]
@@ -349,7 +370,7 @@ def test_columns_and_paging(table_api):
     assert [c["name"] for c in found] == ["config.amp"]
 
 
-def test_long_strings_and_lists_are_kept_and_filtered(api):
+def test_long_strings_and_lists_are_kept_and_filtered(api: Client) -> None:
     """Values too long to index (0013) are stored, filtered and sorted like short ones."""
     long_text = "x" * 3000 + "".join(f"{i:04d}" for i in range(2000))  # 11 kB, varied
     long_list = [f"item-{i:04d}" for i in range(200)]
@@ -378,7 +399,7 @@ def test_long_strings_and_lists_are_kept_and_filtered(api):
     assert ids({"tags": {"$ne": "baseline"}}) == ["long"]
 
 
-def test_not_found(api):
+def test_not_found(api: Client) -> None:
     assert api.get("/api/v1/projects/flock/nope/runs").status == 404
     api.create_run("p", "r1")
     assert api.get("/api/v1/projects/flock/p/runs/nope").status == 404
@@ -389,7 +410,7 @@ def test_not_found(api):
 
 
 @pytest.fixture
-def curves_api(api):
+def curves_api(api: Client) -> Client:
     for i in range(60):
         name = f"c{i:02d}"
         api.create_run("curves", name, config={"idx": i})
@@ -398,7 +419,7 @@ def curves_api(api):
     return api
 
 
-def test_history_defaults_to_newest_50_runs(curves_api):
+def test_history_defaults_to_newest_50_runs(curves_api: Client) -> None:
     data = curves_api.get("/api/v1/projects/flock/curves/history", keys="loss").json()
     assert [r["id"] for r in data["runs"]] == [f"c{i:02d}" for i in range(59, 9, -1)]
     first = data["runs"][0]
@@ -407,7 +428,7 @@ def test_history_defaults_to_newest_50_runs(curves_api):
     assert first["series"]["loss"]["y"] == pytest.approx([59 + s / 100 for s in range(30)])
 
 
-def test_history_selection(curves_api):
+def test_history_selection(curves_api: Client) -> None:
     base = "/api/v1/projects/flock/curves/history"
     running = curves_api.get(base, keys="loss", running="1").json()["runs"]
     assert [r["id"] for r in running] == ["c59", "c58", "c57"]
@@ -422,7 +443,7 @@ def test_history_selection(curves_api):
     assert curves_api.get(base).status == 422  # keys is required
 
 
-def test_history_x_axis_and_downsampling(curves_api):
+def test_history_x_axis_and_downsampling(curves_api: Client) -> None:
     base = "/api/v1/projects/flock/curves/runs/c05/history"
     by_time = curves_api.get(base, keys="loss", x="_runtime").json()["series"]["loss"]
     assert by_time["x"] == pytest.approx([s * 0.1 for s in range(30)])
@@ -435,7 +456,7 @@ def test_history_x_axis_and_downsampling(curves_api):
     assert all(not math.isnan(v) for v in by_epoch["y"])
 
 
-def test_run_detail_and_logs(api):
+def test_run_detail_and_logs(api: Client) -> None:
     api.create_run("p", "r1", config={"lr": 0.1, "_wandb": {"t": 1}})
     api.stream(
         "p",

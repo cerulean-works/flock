@@ -48,7 +48,7 @@ def credentials(flock: S3Flock, alice: User) -> dict[str, dict[str, str]]:
     }
 
 
-def test_each_credential_does_its_own_job(flock):
+def test_each_credential_does_its_own_job(flock: S3Flock) -> None:
     alice = flock.add_user("alice@lab.test")
     anon = flock.anonymous()
     # (REST API, wandb protocol, S3 key exchange): the status, and the error if refused.
@@ -75,7 +75,7 @@ def test_each_credential_does_its_own_job(flock):
             assert wandb.json()["data"]["viewer"]["username"] == alice.email
 
 
-def test_only_s3_keys_reach_the_proxy(flock):
+def test_only_s3_keys_reach_the_proxy(flock: S3Flock) -> None:
     alice = flock.add_user("alice@lab.test")
     for kind, headers in credentials(flock, alice).items():
         got = httpx.get(f"{flock.proxy.url}/", headers=headers)
@@ -94,7 +94,7 @@ def test_only_s3_keys_reach_the_proxy(flock):
     assert s3.list_buckets()["ResponseMetadata"]["HTTPStatusCode"] == 200
 
 
-def test_wandb_keys_are_refused_however_they_are_sent(flock):
+def test_wandb_keys_are_refused_however_they_are_sent(flock: S3Flock) -> None:
     alice = flock.add_user("alice@lab.test")
     anon = flock.anonymous()
     for headers in (basic(alice.api_key), bearer(alice.api_key), {"x-api-key": alice.api_key}):
@@ -109,7 +109,7 @@ def test_wandb_keys_are_refused_however_they_are_sent(flock):
     assert anon.get("/api/v1/auth/config", headers=basic(alice.api_key)).status == 200
 
 
-def test_wandb_keys(flock):
+def test_wandb_keys(flock: S3Flock) -> None:
     alice = flock.add_user("alice@lab.test")
     created = alice.api.post(WANDB_KEYS, {"name": "laptop"})  # with a CLI token
     assert created.status == 201, created.body
@@ -140,7 +140,7 @@ def test_wandb_keys(flock):
     assert alice.api.delete(f"{WANDB_KEYS}/{key_id}").status == 404
 
 
-def test_the_old_api_keys_routes_still_work(flock):
+def test_the_old_api_keys_routes_still_work(flock: S3Flock) -> None:
     alice = flock.add_user("alice@lab.test")
     old = "/api/v1/me/api-keys"
     created = alice.api.post(old, {"name": "ci"})
@@ -154,7 +154,7 @@ def test_the_old_api_keys_routes_still_work(flock):
     assert (refused.status, refused.json()["error"]) == (401, REFUSED)
 
 
-def test_accepting_an_invite_signed_in_refuses_wandb_keys(flock):
+def test_accepting_an_invite_signed_in_refuses_wandb_keys(flock: S3Flock) -> None:
     alice = flock.add_user("alice@lab.test")
     assert flock.client().post("/api/v1/orgs", {"name": "lab"}).status == 201
     invite = flock.client().post("/api/v1/orgs/lab/invites", {"email": alice.email}).json()

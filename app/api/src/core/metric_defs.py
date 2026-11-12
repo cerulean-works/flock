@@ -4,8 +4,7 @@ wandb-core keeps them in ``config["_wandb"]["value"]["m"]``: a list of ``MetricR
 encoded with field numbers as keys (``core/internal/runmetric/runconfigmetrics.go``,
 ``corelib.ProtoEncodeToDict``). For example, Hugging Face's ``WandbCallback`` produces::
 
-    [{"1": "train/global_step", "6": [3], "7": []},
-     {"2": "*", "5": 1, "6": [1], "7": []}]
+    [{"1": "train/global_step", "6": [3], "7": []}, {"2": "*", "5": 1, "6": [1], "7": []}]
 
 - ``"1"`` is the metric's name, or ``"2"`` a glob: a name ending in ``*``, which matches every
   key starting with what comes before it.

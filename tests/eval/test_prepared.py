@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import copy
 import dataclasses
+from typing import TYPE_CHECKING, Never
 
 import pytest
 
@@ -9,6 +12,14 @@ from flock.eval.run import prepare_task, score_prepared, score_task
 from flock.eval.tasks import Dataset
 
 from .toy import TASK, TEXT_TASK
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from typing import Any
+
+    from transformers import LlamaForCausalLM, PreTrainedTokenizerFast
+
+    from flock.eval.tasks import Task
 
 
 def untimed(result: TaskResult) -> dict:
@@ -21,7 +32,9 @@ def untimed(result: TaskResult) -> dict:
 
 
 @pytest.mark.parametrize("task", [TASK, TEXT_TASK], ids=["multiple_choice", "perplexity"])
-def test_a_prepared_task_scores_as_score_task_does_at_every_call(scorer, task, tmp_path):
+def test_a_prepared_task_scores_as_score_task_does_at_every_call(
+    scorer: ScoringModel, task: Task, tmp_path: Path
+) -> None:
     one_call = score_task(scorer, task, limit=2, out=tmp_path / "one-call")
     prepared = prepare_task(scorer, task, limit=2)
     first = score_prepared(scorer, prepared, out=tmp_path / "step-1")
@@ -37,11 +50,13 @@ def test_a_prepared_task_scores_as_score_task_does_at_every_call(scorer, task, t
 
 
 @pytest.mark.parametrize("task", [TASK, TEXT_TASK], ids=["multiple_choice", "perplexity"])
-def test_scoring_a_prepared_task_neither_loads_nor_tokenizes(scorer, task, monkeypatch):
+def test_scoring_a_prepared_task_neither_loads_nor_tokenizes(
+    scorer: ScoringModel, task: Task, monkeypatch: pytest.MonkeyPatch
+) -> None:
     prepared = prepare_task(scorer, task)
     expected = untimed(score_prepared(scorer, prepared))
 
-    def refuse(*args, **kwargs):
+    def refuse(*args: Any, **kwargs: Any) -> Never:
         raise AssertionError("scoring a prepared task loaded or tokenized again")
 
     # The task's own methods, not only `Dataset.load`: a perplexity task's split is cached after
@@ -55,7 +70,9 @@ def test_scoring_a_prepared_task_neither_loads_nor_tokenizes(scorer, task, monke
     assert untimed(score_prepared(scorer, prepared)) == expected
 
 
-def test_a_prepared_task_refuses_a_model_with_another_tokenizer(lm, tokenizer, scorer):
+def test_a_prepared_task_refuses_a_model_with_another_tokenizer(
+    lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast, scorer: ScoringModel
+) -> None:
     prepared = prepare_task(scorer, TASK)
     # An equal copy is refused too: the check is identity, which costs nothing per step.
     other = ScoringModel(lm, copy.deepcopy(tokenizer), name="other@0")
@@ -67,7 +84,9 @@ def test_a_prepared_task_refuses_a_model_with_another_tokenizer(lm, tokenizer, s
     assert untimed(score_prepared(same, prepared)) == untimed(score_prepared(scorer, prepared))
 
 
-def test_a_prepared_task_refuses_a_model_with_another_add_bos(lm, tokenizer):
+def test_a_prepared_task_refuses_a_model_with_another_add_bos(
+    lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast
+) -> None:
     with_bos = copy.deepcopy(tokenizer)
     with_bos.bos_token = "<|pad|>"
     plain = ScoringModel(lm, with_bos, name="plain@0")
@@ -83,7 +102,9 @@ def test_a_prepared_task_refuses_a_model_with_another_add_bos(lm, tokenizer):
     )
 
 
-def test_the_scoring_models_max_length_is_checked_at_every_call(lm, tokenizer, scorer):
+def test_the_scoring_models_max_length_is_checked_at_every_call(
+    lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast, scorer: ScoringModel
+) -> None:
     prepared = prepare_task(scorer, TEXT_TASK)
     short = ScoringModel(lm, tokenizer, name="tiny@0", max_length=4)
 
@@ -91,7 +112,7 @@ def test_the_scoring_models_max_length_is_checked_at_every_call(lm, tokenizer, s
         score_prepared(short, prepared)
 
 
-def test_prepare_task_rejects_a_limit_below_one(scorer):
+def test_prepare_task_rejects_a_limit_below_one(scorer: ScoringModel) -> None:
     for task in (TASK, TEXT_TASK):
         with pytest.raises(ValueError, match="limit must be at least 1"):
             prepare_task(scorer, task, limit=0)

@@ -6,7 +6,7 @@ from torch.nn import functional as F
 class SwiGLU(nn.Module):
     """Gated SiLU MLP: down(silu(gate(x)) * up(x))."""
 
-    def __init__(self, *, hidden_size: int, intermediate_size: int, bias: bool = False):
+    def __init__(self, *, hidden_size: int, intermediate_size: int, bias: bool = False) -> None:
         super().__init__()
         if hidden_size <= 0 or intermediate_size <= 0:
             raise ValueError("hidden_size and intermediate_size must be positive")
