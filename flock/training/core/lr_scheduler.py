@@ -109,7 +109,10 @@ class StepLRScheduler:
         if completed_steps < 0:
             raise ValueError("completed_steps must be nonnegative")
 
-        self.config = config
+        if config != self.config:
+            raise ValueError(
+                f"Scheduler config does not match the saved scheduler: {config} != {self.config}"
+            )
         self.total_steps = state_dict["total_steps"]
         self.base_lrs = base_lrs
         self.completed_steps = completed_steps
