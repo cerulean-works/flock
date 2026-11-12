@@ -360,18 +360,24 @@ class Trainer:
             self.logger.info("Starting training")
             self._inner_training_loop(dataloader, start_step)
         finally:
-            if self.save_steps and self.state.step % self.save_steps != 0:
+            if self.pending_uploads or (self.save_steps and self.state.step % self.save_steps != 0):
                 self.save_model(blocking=True)
 
     def save_model(self, blocking=False):
         for checkpoint, upload in list(self.pending_uploads.items()):
             if upload.done():
-                self.pending_uploads.pop(checkpoint)
+                try:
+                    upload.result()
+                except Exception:
+                    self.logger.exception(
+                        f"Failed to upload checkpoint {checkpoint} to hub {self.save_to_hub_repo}"
+                    )
+                del self.pending_uploads[checkpoint]
         step = int(self.state.step.item())
 
         self.logger.info(f"Saving model at step {step}")
         save_path = self.output_dir.joinpath(f"checkpoint-{step}")
-        if save_path.exists() and not self.overwrite_output_dir:
+        if save_path.exists() and not self.overwrite_output_dir and not blocking:
             raise FileExistsError(f"Checkpoint already exists: {save_path}")
 
         if save_path in self.pending_uploads:
@@ -381,42 +387,59 @@ class Trainer:
                 upload.result()
             except Exception:
                 self.logger.exception(
-                    f"Failed to upload checkpoint {checkpoint} to hub {self.save_to_hub_repo}"
+                    f"Failed to upload checkpoint {save_path} to hub {self.save_to_hub_repo}"
                 )
-            del self.pending_uploads[checkpoint]
+            del self.pending_uploads[save_path]
 
-        # Publish the directory only after weights and training state are fully written.
-        with tempfile.TemporaryDirectory(prefix=".checkpoint-", dir=self.output_dir) as temporary:
-            staged = Path(temporary) / "model"
-            write_model(
-                self.model,
-                staged,
-                shard_size=5 * 2**30,
-                run=f"{self.run.entity}/{self.run.project}/{self.run.id}",
-                step=step,
-                training_state=self.get_trainer_state(),
-            )
-            if save_path.exists():
-                shutil.rmtree(save_path)
-            staged.rename(save_path)
-        if self.save_to_hub_repo is not None:
-            try:
-                upload_promise = cast(
-                    PendingUpload,
-                    save_to_hub(
-                        save_path,
-                        self.save_to_hub_repo,
-                        run=self.run,
-                        step=step,
-                        tags=[f"checkpoint-{step}"],
-                        blocking=False,
-                    ),
+        # A blocking call for an already published step only needs to finish uploads.
+        if not (blocking and save_path.exists()):
+            # Publish the directory only after weights and training state are fully written.
+            with tempfile.TemporaryDirectory(
+                prefix=".checkpoint-", dir=self.output_dir
+            ) as temporary:
+                staged = Path(temporary) / "model"
+                write_model(
+                    self.model,
+                    staged,
+                    shard_size=5 * 2**30,
+                    run=f"{self.run.entity}/{self.run.project}/{self.run.id}",
+                    step=step,
+                    training_state=self.get_trainer_state(),
                 )
-                self.pending_uploads[save_path] = upload_promise
-            except Exception:
-                self.logger.exception(
-                    f"Failed to save checkpoint {save_path} to hub {self.save_to_hub_repo}"
-                )
+                if save_path.exists():
+                    shutil.rmtree(save_path)
+                staged.rename(save_path)
+            if self.save_to_hub_repo is not None:
+                try:
+                    upload_promise = cast(
+                        PendingUpload,
+                        save_to_hub(
+                            save_path,
+                            self.save_to_hub_repo,
+                            run=self.run,
+                            step=step,
+                            tags=[f"checkpoint-{step}"],
+                            blocking=False,
+                        ),
+                    )
+                    self.pending_uploads[save_path] = upload_promise
+                except Exception:
+                    self.logger.exception(
+                        f"Failed to save checkpoint {save_path} to hub {self.save_to_hub_repo}"
+                    )
+
+        if blocking:
+            self.logger.info("Waiting for pending uploads to finish...")
+            for checkpoint in list(self.pending_uploads):
+                upload = self.pending_uploads[checkpoint]
+                try:
+                    upload.result()
+                except Exception:
+                    self.logger.exception(
+                        f"Failed to upload checkpoint {checkpoint} to hub {self.save_to_hub_repo}"
+                    )
+                del self.pending_uploads[checkpoint]
+            self.logger.info("All pending uploads finished")
 
         if self.save_total_limit is not None:
             checkpoints = self._checkpoints()
@@ -438,19 +461,6 @@ class Trainer:
                     continue
                 self.logger.info(f"Deleting old checkpoint {checkpoint_to_delete}")
                 shutil.rmtree(checkpoint_to_delete)
-
-        if blocking:
-            self.logger.info("Waiting for pending uploads to finish...")
-            for checkpoint in list(self.pending_uploads):
-                upload = self.pending_uploads[checkpoint]
-                try:
-                    upload.result()
-                except Exception:
-                    self.logger.exception(
-                        f"Failed to upload checkpoint {checkpoint} to hub {self.save_to_hub_repo}"
-                    )
-                del self.pending_uploads[checkpoint]
-            self.logger.info("All pending uploads finished")
 
     def load_checkpoint(self, checkpoint: str | Path):
         """Restore model weights and training state from a local checkpoint folder."""

@@ -175,8 +175,11 @@ def test_loading_scheduler_rejects_different_parameter_group_counts():
     [
         ("config", {"type": "cosine", "warmup_steps": 1, "min_lr_ratio": 0.1}, "config"),
         ("config", {"type": "wsd", "warmup_steps": 2, "decay_steps": 2}, "config"),
+        ("config", {"type": "unknown"}, "Unsupported scheduler config type"),
         ("total_steps", 10, "total_steps"),
         ("base_lrs", [0.3, 0.05], "base_lrs"),
+        ("base_lrs", [0.2, 0.3], "base_lrs"),
+        ("base_lrs", [0.2], "parameter groups"),
         ("completed_steps", -1, "nonnegative"),
     ],
 )
@@ -195,10 +198,16 @@ def test_incompatible_scheduler_state_is_rejected_without_mutation(field, value,
         assert scheduler.optimizer.state_dict() == expected_optimizer
 
 
-def test_scheduler_preflight_does_not_apply_saved_progress():
-    scheduler = StepLRScheduler(
-        make_optimizer(), CosineConfig(warmup_steps=2, min_lr_ratio=0.1), total_steps=8
-    )
+@pytest.mark.parametrize(
+    "config",
+    [
+        CosineConfig(warmup_steps=2, min_lr_ratio=0.1),
+        WSDConfig(warmup_steps=2, decay_steps=2, min_lr_ratio=0.1),
+    ],
+    ids=["cosine", "wsd"],
+)
+def test_scheduler_preflight_does_not_apply_saved_progress(config):
+    scheduler = StepLRScheduler(make_optimizer(), config, total_steps=8)
     expected = scheduler.state_dict()
     saved = {**expected, "completed_steps": 4}
     scheduler.validate_state_dict(saved)
