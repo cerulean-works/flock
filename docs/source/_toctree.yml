@@ -87,6 +87,10 @@ reference:
   sections:
   - local: hub/models
     title: Models API
+- title: Training
+  sections:
+  - local: training/python-api
+    title: Training API
 - title: Evals
   sections:
   - local: evals/commands

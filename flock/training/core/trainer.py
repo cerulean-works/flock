@@ -1,3 +1,5 @@
+"""Train causal language models with evaluation and resumable local checkpoints."""
+
 import json
 import logging
 import math
@@ -34,6 +36,65 @@ from flock.training.core.optimization import AdamWConfig, MuonConfig, OptimizerC
 
 
 class TrainerConfig(PydanticBaseModel):
+    """Configure one shuffled training pass and its tracking, evaluation and saves.
+
+    Fields are frozen after validation; nested lists are still mutable. Unknown
+    fields are rejected. Positive intervals count optimizer updates, not tokens.
+
+    Args:
+        run_name (`str`):
+            Name used for the default checkpoint directory and evaluation labels.
+            This is not passed to `wandb.init` as the tracking run's name.
+        input_column (`str`): Text column read from each Lance row.
+        batch_size (`int`): Positive number of dataset rows per optimizer update.
+        optimizer_config (`OptimizerConfig`):
+            Optimizer settings. Only `AdamWConfig` is currently implemented.
+        lr_scheduler_config (`LRSchedulerConfig`): Cosine or warmup-stable-decay settings.
+        dataloader_prefetch_factor (`int`, *optional*, defaults to `4`):
+            Positive batches prefetched per worker. Must be `None` with zero workers.
+            With workers, `None` uses PyTorch's default.
+        dataloader_num_workers (`int`, *optional*, defaults to `4`):
+            Nonnegative number of spawned loader processes.
+        validation_tasks (`list[str]`, *optional*, defaults to `[]`):
+            Registered evaluation task keys. An empty list skips evaluation.
+        validation_steps (`int`, *optional*):
+            Positive evaluation interval. Also evaluates at the final update when set.
+        validation_limit (`int`, *optional*): Positive document limit per task.
+        validation_batch_tokens (`int`, *optional*, defaults to `32768`):
+            Positive padded-token budget per scoring batch. One request can exceed it.
+        wandb_project (`str`): Project passed to `wandb.init` during construction.
+        wandb_mode (`str`, *optional*, defaults to `"online"`):
+            Tracking mode: `"online"`, `"offline"`, `"disabled"` or `"shared"`.
+        output_dir (`str`, *optional*):
+            Checkpoint root. Uses `.training-checkpoints/<run_name>` in the current
+            directory when omitted. The trainer creates it during construction.
+        save_steps (`int`, *optional*):
+            Positive checkpoint interval. Also saves at the final update and during
+            loop cleanup when the current step is between intervals.
+        save_total_limit (`int`, *optional*):
+            Positive local retention limit, ordered by `flock.json`'s `saved_at`.
+            Older checkpoints with pending uploads are temporarily retained.
+        save_to_hub_repo (`str`, *optional*):
+            Hub destination `org/model`. Each new checkpoint starts an asynchronous
+            upload tagged `checkpoint-<step>`.
+        overwrite_output_dir (`bool`, *optional*, defaults to `False`):
+            Allow fresh training in a nonempty directory and replacement of a step's
+            checkpoint. Blocking saves reuse an existing step without rewriting it.
+        model_dtype (`torch.dtype`, *optional*, defaults to `torch.bfloat16`):
+            Autocast dtype. The trainer moves the model without changing its weight
+            dtype; supply FP32 weights to retain FP32 master parameters.
+        max_norm (`float`, *optional*, defaults to `1.0`):
+            Finite, nonnegative gradient clipping threshold. Zero clips gradients to zero.
+        logging_steps (`int`, *optional*, defaults to `10`):
+            Positive logging interval. Also logs at the final update.
+        seed (`int`, *optional*, defaults to `42`):
+            Python/PyTorch training seed and deterministic sampler seed. Model
+            initialization is controlled separately by the model configuration.
+
+    Raises:
+        `pydantic.ValidationError`: If fields or the worker/prefetch combination are invalid.
+    """
+
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
 
     run_name: str
@@ -70,6 +131,7 @@ class TrainerConfig(PydanticBaseModel):
     @field_validator("validation_tasks")
     @classmethod
     def validate_tasks(cls, tasks: list[str]) -> list[str]:
+        """Reject task keys absent from the evaluation registry."""
         if any(task not in TASKS for task in tasks):
             raise ValueError(
                 f"Invalid validation task(s) specified. Supported tasks are: {list(TASKS.keys())}"
@@ -78,6 +140,7 @@ class TrainerConfig(PydanticBaseModel):
 
     @model_validator(mode="after")
     def validate_dataloader(self) -> Self:
+        """Require disabled prefetching when loading in the training process."""
         if self.dataloader_num_workers == 0 and self.dataloader_prefetch_factor is not None:
             raise ValueError(
                 "dataloader_prefetch_factor must be None when dataloader_num_workers is 0"
@@ -86,6 +149,12 @@ class TrainerConfig(PydanticBaseModel):
 
 
 class TrainerState(nn.Module):
+    """Accumulate device-resident counters and metrics as checkpointable buffers.
+
+    Loss means are weighted by valid target tokens. Gradient norm means are
+    weighted by updates. Window resets preserve global step and token counts.
+    """
+
     loss_sum: torch.Tensor
     loss_max: torch.Tensor
     grad_norm_sum: torch.Tensor
@@ -97,6 +166,7 @@ class TrainerState(nn.Module):
     window_steps: torch.Tensor
 
     def __init__(self) -> None:
+        """Initialize scalar FP32 metric buffers and int64 counters to zero."""
         super().__init__()
         self.register_buffer("loss_sum", torch.zeros((), dtype=torch.float))
         self.register_buffer("loss_max", torch.zeros((), dtype=torch.float))
@@ -112,6 +182,14 @@ class TrainerState(nn.Module):
     def update(
         self, add_step: int, loss: torch.Tensor, grad_norm: torch.Tensor, tokens: torch.Tensor
     ) -> None:
+        """Record one batch's detached metrics and increment progress.
+
+        Args:
+            add_step (`int`): Increment added to the global optimizer-step count.
+            loss (`torch.Tensor`): Scalar mean loss over valid targets.
+            grad_norm (`torch.Tensor`): Scalar gradient norm before clipping.
+            tokens (`torch.Tensor`): Scalar number of valid targets in the batch.
+        """
         self.loss_sum.add_(loss.detach() * tokens)
         self.loss_max = torch.maximum(loss.detach(), self.loss_max)
 
@@ -124,6 +202,11 @@ class TrainerState(nn.Module):
         self.window_steps.add_(1)
 
     def get_logging_metrics(self) -> dict[str, int | float]:
+        """Return global step and window means/maxima as host values.
+
+        Call after at least one update: the gradient mean divides by window steps.
+        Converting the stacked tensors to a list synchronizes accelerator work.
+        """
         step, mean_loss, max_loss, mean_grad, max_grad = torch.stack(
             (
                 self.step,
@@ -144,6 +227,7 @@ class TrainerState(nn.Module):
 
     @torch.no_grad()
     def reset_window(self) -> None:
+        """Clear window metrics and counts while preserving global progress."""
         for name in (
             "loss_sum",
             "loss_max",
@@ -156,12 +240,37 @@ class TrainerState(nn.Module):
 
     @torch.no_grad()
     def reset_global(self) -> None:
+        """Clear all metrics, the global step and the total target-token count."""
         self.reset_window()
         self.step.zero_()
         self.total_tokens.zero_()
 
 
 class Trainer:
+    """Train a causal model for one shuffled pass on CUDA device 0 or CPU.
+
+    Construction starts a W&B run, moves the supplied model without casting its
+    weights, constructs the optimizer/scheduler and creates the output directory.
+    Each batch is one optimizer update, including a final partial batch. Finish
+    tracking explicitly with `trainer.run.finish()` after training or evaluation.
+
+    Args:
+        config ([`training.TrainerConfig`]): Validated training and persistence settings.
+        model ([`training.core.models.BaseModel`]):
+            Model accepting a `Batch` and returning `[batch, sequence, vocabulary]`
+            logits. Supply FP32 weights for the default BF16 autocast workflow.
+        tokenizer (`TokenizersBackend`):
+            Tokenizer configured with a padding token, padding side and maximum
+            length. The collator applies padding, truncation and target shifting.
+        dataset (`SafeLanceDataset`): Finite, indexable dataset of text rows.
+
+    Raises:
+        `NotImplementedError`: If the optimizer configuration selects Muon.
+
+    There is no gradient accumulation, distributed training or automatic dtype
+    conversion. Use a main-module guard when starting spawned loader workers.
+    """
+
     def __init__(
         self,
         *,
@@ -170,6 +279,7 @@ class Trainer:
         tokenizer: TokenizersBackend,
         dataset: SafeLanceDataset,
     ) -> None:
+        """Initialize tracking, device placement, optimization and checkpoint storage."""
         self.run_name = config.run_name
         self.seed = config.seed
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -222,6 +332,7 @@ class Trainer:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_training_dataloader(self, skip_batches: int = 0) -> DataLoader:
+        """Build a seeded, resumable loader with spawned workers and CUDA pinning."""
         collator = LanceBatchCollator(self.tokenizer, self.ds_input_column)
         sampler = ResumableBatchDataSampler(
             batch_size=self.batch_size,
@@ -254,6 +365,7 @@ class Trainer:
     def _get_optimizer(self: Trainer, config: MuonConfig) -> Muon: ...
 
     def _get_optimizer(self, config: OptimizerConfig) -> Optimizer:
+        """Construct AdamW from all model parameters; reject unimplemented optimizers."""
         if isinstance(config, AdamWConfig):
             return AdamW(self.model.parameters(), **asdict(config))
         if isinstance(config, MuonConfig):
@@ -264,11 +376,18 @@ class Trainer:
         )
 
     def _get_lr_scheduler(self, config: LRSchedulerConfig, total_steps: int) -> StepLRScheduler:
+        """Apply the initial rate and return an optimizer-update scheduler."""
         return StepLRScheduler(self.optimizer, config, total_steps)
 
     def _calc_batch_loss(
         self, output: torch.Tensor, labels: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return FP32 token-mean cross-entropy and the nonignored target count.
+
+        Logits have shape `[batch, sequence, vocabulary]`; labels have shape
+        `[batch, sequence]` and are already shifted. Ignore `-100` targets and
+        clamp the denominator to one so an all-ignored batch has zero loss.
+        """
         # output is [B, T, V], labels is [B, T]
         num_tokens = (labels != -100).sum()
 
@@ -284,11 +403,12 @@ class Trainer:
         return loss, num_tokens
 
     def _set_seed(self) -> None:
+        """Seed Python and PyTorch before starting or restoring training."""
         random.seed(self.seed)
         torch.manual_seed(self.seed)
 
     def _inner_training_loop(self, dataloader: DataLoader, start_step: int) -> None:
-        """Trainer's inner training loop that can be resumed from a checkpoint."""
+        """Update once per batch, then log, save and evaluate at configured intervals."""
         for step, batch in enumerate(dataloader, start=start_step + 1):
             self.optimizer.zero_grad()
 
@@ -327,12 +447,24 @@ class Trainer:
                 self.evaluate()
 
     def train(self, resume_from_checkpoint: bool | str | Path = False) -> None:
-        """Train one pass, optionally restoring the latest or a specified local checkpoint.
+        """Train one pass, optionally restoring a local checkpoint before iteration.
 
         Args:
             resume_from_checkpoint (`bool`, `str` or `Path`, *optional*, defaults to `False`):
-                With `True`, use the highest numbered checkpoint in `output_dir`.
-                A path selects a checkpoint folder explicitly.
+                With `True`, select the checkpoint with the latest `saved_at` in
+                `flock.json`. A path selects a checkpoint folder explicitly.
+                With `False`, reset counters and start from the current model weights.
+
+        Raises:
+            `ValueError`: If the dataset is empty or checkpoint settings are incompatible.
+            `RuntimeError`: If fresh training finds a nonempty output directory and
+                `overwrite_output_dir` is false, or checkpoint weights do not match.
+            `FileNotFoundError`: If automatic resume finds no checkpoint.
+
+        Resume skips already consumed batches in the seeded permutation. Loop
+        cleanup saves an off-interval step when saving is enabled and waits for
+        outstanding uploads. Training errors propagate after cleanup. The W&B
+        run remains open; call `run.finish()` in your own `finally` block.
         """
         if self.total_steps == 0:
             raise ValueError("Training requires a non-empty dataset")
@@ -390,7 +522,16 @@ class Trainer:
 
     @torch.no_grad()
     def evaluate(self) -> None:
-        """Scores cached validation tasks using the training autocast dtype, then restores modes."""
+        """Score configured tasks and log metrics at the current global step.
+
+        Prepare and cache tokenized requests on first use. Use the training
+        autocast dtype, disabling autocast for FP32 evaluation. Restore every
+        module's previous training mode even on failure. Return without logging
+        if no tasks are configured. Log and skip `KeyError` or `FileExistsError`
+        raised during preparation/scoring; propagate other errors.
+
+        Metrics use `eval/<task>/<metric>` keys. No scores are returned.
+        """
         if not self.validation_tasks:
             return
 
@@ -438,6 +579,26 @@ class Trainer:
         self.run.log(log_dict)
 
     def save_model(self, blocking: bool = False) -> None:
+        """Write weights and complete resumable state to `checkpoint-<step>`.
+
+        Stage files under the output root, then rename the completed directory
+        into place. If configured, start a Hub upload tagged with the step.
+        Upload errors are logged; local write errors propagate. Prune local
+        checkpoints by `saved_at`, protecting folders still being uploaded.
+        Local retention never deletes Hub versions.
+
+        Args:
+            blocking (`bool`, *optional*, defaults to `False`):
+                Wait for all pending uploads. Reuse an existing current-step
+                checkpoint without rewriting or starting another upload.
+
+        Raises:
+            `FileExistsError`: If a nonblocking save would replace an existing
+                checkpoint and `overwrite_output_dir` is false.
+
+        Returns `None`; asynchronous handles are held in `pending_uploads`.
+        A pending older upload can temporarily exceed `save_total_limit`.
+        """
         for checkpoint, upload in list(self.pending_uploads.items()):
             if upload.done():
                 try:
@@ -537,8 +698,21 @@ class Trainer:
                 shutil.rmtree(checkpoint_to_delete)
 
     def load_checkpoint(self, checkpoint: str | Path) -> None:
-        """Restore model weights and training state from a local checkpoint folder."""
+        """Restore weights, optimizer, schedule, counters and RNGs from local files.
 
+        Args:
+            checkpoint (`str` or `Path`): Folder containing the model and training state.
+
+        Raises:
+            `ValueError`: If the model configuration or resume settings differ, or
+                training state is absent or invalid.
+            `RuntimeError`: If the combined weight shards have missing or extra keys.
+            `FileNotFoundError`: If required checkpoint files are absent.
+
+        This method does not run training or construct a resumed loader. Use
+        `train(resume_from_checkpoint=checkpoint)` to continue the pass. Dataset
+        contents and tokenizer identity are not checked.
+        """
         checkpoint = Path(checkpoint)
         metadata = json.loads((checkpoint / "flock.json").read_text())
         config = json.loads((checkpoint / "config.json").read_text())
@@ -574,6 +748,7 @@ class Trainer:
 
     @property
     def data_config(self) -> dict[str, Any]:
+        """Return dataset size, batch size, seed and input column used for resume checks."""
         return {
             "dataset_size": len(self.dataset),
             "batch_size": self.batch_size,
@@ -582,6 +757,12 @@ class Trainer:
         }
 
     def get_trainer_state(self) -> dict[str, Any]:
+        """Return optimizer, schedule, metric, RNG and data state for persistence.
+
+        Model weights are saved separately. State tensors can share storage
+        with live objects; serialize immediately rather than keeping this as an
+        immutable in-memory snapshot.
+        """
         return {
             "trainer_state_dict": self.state.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
@@ -625,6 +806,18 @@ class Trainer:
         return checkpoint
 
     def load_trainer_state(self, state: dict[str, Any] | TrainerCheckpoint) -> None:
+        """Validate and restore training state without loading model weights.
+
+        Args:
+            state (`dict[str, Any]` or `TrainerCheckpoint`): State from
+                `get_trainer_state` or a deserialized checkpoint.
+
+        Raises:
+            `ValueError`: If progress, data, optimizer or scheduler settings differ.
+
+        Restores Python, CPU and saved CUDA RNG states. Logs a warning when CUDA
+        is available but the checkpoint has no CUDA RNG state.
+        """
         checkpoint = self._validate_trainer_state(state)
 
         self.state.load_state_dict(checkpoint.trainer_state_dict.model_dump())
@@ -642,6 +835,7 @@ class Trainer:
                 )
 
     def _checkpoints(self) -> list[Path]:
+        """List numbered checkpoint folders in numeric step order, ignoring staging paths."""
         return sorted(
             (
                 path

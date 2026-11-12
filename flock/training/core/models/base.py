@@ -1,3 +1,5 @@
+"""Share seeded initialization, tokenizer loading and causal input preparation."""
+
 from abc import ABC, abstractmethod
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -13,10 +15,10 @@ from flock.training.core.data_utils import Batch
 
 
 def _converted_from_sentencepiece(repo: str, tokenizer: PreTrainedTokenizerBase) -> bool:
-    """
-    Whether `AutoTokenizer` just built `tokenizer` by converting a SentencePiece model in `repo`: its class is built on one, and no `tokenizer.json` is on disk for that load to have read.
+    """Detect a SentencePiece conversion without a shipped `tokenizer.json`.
 
-    Reads only the local folder or the cache, so it adds no Hub call. A class that names no such file passes, whatever it was built from.
+    Read only the local folder or cache, adding no Hub call. Tokenizer classes
+    that name no SentencePiece vocabulary file are not considered conversions.
     """
     if not any(
         Path(name).suffix in {".model", ".spm"} for name in tokenizer.vocab_files_names.values()
@@ -31,14 +33,25 @@ def _converted_from_sentencepiece(repo: str, tokenizer: PreTrainedTokenizerBase)
 
 
 class BaseModel(nn.Module, ABC):
-    """Shared initialization, input preparation and tokenizer loading for causal models.
+    """Provide initialization, input preparation and tokenizer loading for causal models.
 
-    Subclasses set ``config`` and take it as their only constructor argument, so a saved model
-    can be rebuilt from its ``config.json``.
+    Subclasses set `config` to a frozen dataclass and accept it as their only
+    constructor argument, so Hub loading can rebuild them from `config.json`.
+    Build subclass modules inside `_initialize_weights()` and implement `_forward`.
+
+    Args:
+        max_position_embeddings (`int`): Positive maximum input sequence length.
+        hf_repo (`str`, *optional*): Tokenizer repository or local directory.
+        initializer_range (`float`, *optional*, defaults to `0.02`):
+            Positive normal-initialization standard deviation for linear and embedding weights.
+        init_seed (`int`, *optional*, defaults to `42`): Private initialization seed.
+
+    Raises:
+        `ValueError`: If the sequence limit or initialization scale is nonpositive.
     """
 
     config: Any
-    """The model's settings: a frozen dataclass (``Olmo2Config`` for ``Olmo2``)."""
+    """The model's settings: a frozen dataclass (`Olmo2Config` for `Olmo2`)."""
 
     def __init__(
         self,
@@ -48,6 +61,7 @@ class BaseModel(nn.Module, ABC):
         initializer_range: float = 0.02,
         init_seed: int = 42,
     ) -> None:
+        """Validate and store initialization and tokenizer settings."""
         super().__init__()
         if max_position_embeddings <= 0:
             raise ValueError("max_position_embeddings must be positive")
@@ -74,12 +88,28 @@ class BaseModel(nn.Module, ABC):
             self.apply(lambda module: self._init_weights(module, generator))
 
     def _init_weights(self, module: nn.Module, generator: torch.Generator) -> None:
+        """Initialize linear and embedding weights from the supplied normal RNG stream."""
         if isinstance(module, (nn.Linear, nn.Embedding)):
             nn.init.normal_(
                 module.weight, mean=0.0, std=self.initializer_range, generator=generator
             )
 
     def get_hf_tokenizer(self) -> TokenizersBackend | None:
+        """Load the configured tokenizer with left padding and the model's length limit.
+
+        Returns:
+            `TokenizersBackend` or `None`: Loaded tokenizer, or `None` when `hf_repo`
+            is unset. Request EOS insertion and use EOS, then BOS, as the padding
+            token if no padding token exists. Verify a usable padding token before
+            collation if the repository defines neither special token.
+
+        Raises:
+            `ValueError`: If loading converts SentencePiece without a shipped
+                `tokenizer.json`, which can change tokenization.
+            `TypeError`: If loading does not produce a `TokenizersBackend`.
+
+        Loading may download tokenizer files. No model weights are loaded.
+        """
         if self.hf_repo is None:
             return None
 
@@ -109,10 +139,21 @@ class BaseModel(nn.Module, ABC):
         return tokenizer
 
     def forward(self, batch: Batch) -> torch.Tensor:  # ty: ignore[invalid-mutable-override]
-        """Run a collated Batch; attention masks use True/1 for real tokens.
+        """Return full-sequence logits for a collated batch.
 
         Labels in a batch are ignored: the trainer owns target alignment and loss.
         Position IDs are contiguous over each row's real tokens.
+
+        Args:
+            batch (`Batch`): Token IDs and a matching mask shaped `[batch, sequence]`.
+                Mask values `True` or `1` identify real tokens.
+
+        Returns:
+            `torch.Tensor`: Logits shaped `[batch, sequence, vocabulary]`.
+
+        Raises:
+            `ValueError`: If IDs are not rank two, length is outside the configured
+                range, or the attention mask shape differs from the IDs.
         """
         input_ids = batch["input_ids"]
         attention_mask = batch["attention_mask"]
