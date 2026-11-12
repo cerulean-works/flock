@@ -1,3 +1,5 @@
+"""Expose causal model implementations, architecture presets and the model registry."""
+
 from .base import BaseModel
 from .olmo2 import OLMO2_1B_CONFIG, OLMO2_7B_CONFIG, Olmo2, Olmo2Config
 

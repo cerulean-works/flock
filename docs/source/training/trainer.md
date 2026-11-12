@@ -4,21 +4,24 @@
 batch produces one optimizer update: tokenize the text, build next-token targets,
 compute cross-entropy, backpropagate, clip gradients, update weights and advance
 the learning rate. Padding targets are ignored when computing loss.
+The [Training API](python-api) lists configuration fields, defaults and public methods.
 
 ## Run the scaffold experiment
 
-The [experiment recipe](https://github.com/cerulean-works/flock/blob/feat/scaffold-training-loop/flock/training/experiments/scaffold/olmo2_dolma3.py) reads
+The [experiment recipe](https://github.com/cerulean-works/flock/blob/main/flock/training/experiments/scaffold/olmo2_dolma3.py) reads
 `s3://flock-datasets/finepdfs` at version `1`, using its `text` column. The current
 `get_dataset` helper calls `s3.get_process` for read-only access to `cerulean-labs`,
 which your account must have access to. This sets up Lance's native credential
 process and its environment automatically. Pinning a version keeps the training
 data fixed between runs.
 
-The recipe initializes a fresh OLMo 2 1B model in bfloat16; it does not load
+The recipe initializes a fresh OLMo 2 1B model with FP32 weights and uses BF16
+autocast for training; it does not load
 pretrained weights. Its Hugging Face repository supplies the tokenizer. Use a
 compatible GPU with enough memory for the model, gradients and optimizer state.
 The trainer selects CUDA when available, otherwise CPU, but does not change the model's
-dtype for those devices. The recipe currently logs offline.
+dtype for those devices. The recipe logs offline and saves local checkpoints
+every 200 updates and at the final update.
 
 1. [Install the workspace](../installation), then sign in from the repository root:
 
@@ -59,6 +62,7 @@ config = TrainerConfig(
     dataloader_prefetch_factor=1,
     wandb_project="test",
     wandb_mode="offline",
+    save_steps=200,
 )
 ```
 
@@ -70,15 +74,11 @@ last `decay_steps`. Choose warmup and decay lengths that fit the run. For cosine
 decay immediately after warmup, use
 `CosineConfig(warmup_steps=100, min_lr_ratio=0.1)` instead.
 
-| Setting | Meaning |
-|---|---|
-| `input_column` | Required text column. Rows must contain text with usable next-token targets. |
-| `optimizer_config` | AdamW learning rate and betas. `MuonConfig` is exported but not implemented. |
-| `dataloader_num_workers` | Worker processes; default `4`. Use `0` to load data in the training process, with `dataloader_prefetch_factor=None`. |
-| `dataloader_prefetch_factor` | Batches prefetched per worker; default `4`. Use a positive integer with workers, or `None` to let the loader choose. |
-| `max_norm` | Gradient-clipping threshold; default `1.0`. |
-| `logging_steps` | Updates per logging window; default `10`. |
-| `wandb_project`, `wandb_mode` | Project is required. The mode defaults to `online`; use `offline` to keep logs locally or `disabled` to turn logging off. |
+Use `dataloader_num_workers=0` and `dataloader_prefetch_factor=None` to load in
+the training process. With workers, use a positive prefetch count or `None` for
+PyTorch's default. `TrainerConfig` rejects unknown fields and invalid intervals.
+AdamW is implemented; selecting `MuonConfig` raises `NotImplementedError`.
+See [Configuration](python-api#configuration) for all fields and defaults.
 
 With the recipe's `model`, `tokenizer` and `dataset` already constructed, run:
 
@@ -86,8 +86,10 @@ With the recipe's `model`, `tokenizer` and `dataset` already constructed, run:
 from flock.training import Trainer
 
 trainer = Trainer(config=config, model=model, tokenizer=tokenizer, dataset=dataset)
-trainer.train()
-trainer.run.finish()
+try:
+    trainer.train()
+finally:
+    trainer.run.finish()
 ```
 
 When using workers, create the data, model and trainer inside an
@@ -96,6 +98,103 @@ workers with `spawn`. The tokenizer
 controls padding and truncation; a custom model must accept the collated batch
 and return logits shaped `[batch, sequence, vocabulary]`. The collator already
 shifts labels for next-token prediction, so the model should not shift them again.
+The resulting tensors have shape `[batch, padded_length - 1]`. Targets use `-100`
+when either the input or target position is padding. Loss is summed cross-entropy
+over valid targets divided by their count; an all-ignored batch has zero loss.
+Supply text that produces at least two tokens per row for useful training.
+
+## Try a local run
+
+This complete example trains a tiny model on three local rows, saves two
+checkpoints, and restores the latest one in a new trainer. It needs the installed
+workspace but no sign-in, downloaded tokenizer or remote dataset. Temporary
+files are removed when it finishes. Save it as a Python script and run it from
+your workspace environment.
+
+```python runnable:local-training
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import lance
+import pyarrow as pa
+import torch
+from tokenizers import Tokenizer, models, pre_tokenizers
+from transformers import TokenizersBackend
+
+from flock.training import AdamWConfig, CosineConfig, Trainer, TrainerConfig
+from flock.training import DatasetConfig, Olmo2Config, get_dataset
+from flock.training.core.models import Olmo2
+
+
+def main() -> None:
+    backend = Tokenizer(
+        models.WordLevel({"[UNK]": 0, "[PAD]": 1, "a": 2, "b": 3, "c": 4}, unk_token="[UNK]")
+    )
+    backend.pre_tokenizer = pre_tokenizers.Whitespace()
+    tokenizer = TokenizersBackend(
+        tokenizer_object=backend,
+        unk_token="[UNK]",
+        pad_token="[PAD]",
+        padding_side="left",
+        model_max_length=16,
+    )
+    model_config = Olmo2Config(
+        vocab_size=5,
+        hidden_size=16,
+        intermediate_size=32,
+        num_hidden_layers=1,
+        num_attention_heads=2,
+        num_key_value_heads=2,
+        max_position_embeddings=16,
+    )
+    with TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        uri = str(root / "text.lance")
+        lance.write_dataset(pa.table({"text": ["a b c", "b c", "c a b"]}), uri)
+        dataset = get_dataset(DatasetConfig(uri=uri, version=1))
+        config = TrainerConfig(
+            run_name="local-example",
+            input_column="text",
+            batch_size=2,
+            optimizer_config=AdamWConfig(lr=1e-3, betas=(0.9, 0.95)),
+            lr_scheduler_config=CosineConfig(warmup_steps=0, min_lr_ratio=0.1),
+            dataloader_num_workers=0,
+            dataloader_prefetch_factor=None,
+            wandb_project="local-example",
+            wandb_mode="disabled",
+            model_dtype=torch.float32,
+            output_dir=str(root / "checkpoints"),
+            save_steps=1,
+        )
+        trainer = Trainer(
+            config=config, model=Olmo2(model_config), tokenizer=tokenizer, dataset=dataset
+        )
+        try:
+            trainer.train()
+            assert int(trainer.state.step.item()) == 2  # doc-builder: hide
+            print(f"Completed {int(trainer.state.step.item())} updates")
+        finally:
+            trainer.run.finish()
+        resumed = Trainer(
+            config=config, model=Olmo2(model_config), tokenizer=tokenizer, dataset=dataset
+        )
+        try:
+            resumed.train(resume_from_checkpoint=True)
+            assert int(resumed.state.step.item()) == 2  # doc-builder: hide
+            print(f"Restored {int(resumed.state.step.item())} updates")
+        finally:
+            resumed.run.finish()
+
+
+main()
+```
+
+Both lines report `2` updates. The three rows form one full batch and one
+partial batch. The resumed pass is already complete, so it performs no further
+updates. The example uses FP32 autocast settings for a small CPU run; the trainer
+still selects CUDA if it is available.
+PyTorch warns that FP32 training autocast is unsupported and disables it;
+the example's weights and computations remain FP32.
 
 ## Check the run
 
@@ -109,7 +208,7 @@ project in [Cerulean's dashboard](https://flock.cerulean.works).
 
 The trained weights remain in `trainer.model`. The scaffold has no gradient
 accumulation or distributed training.
-See the [trainer implementation](https://github.com/cerulean-works/flock/blob/feat/scaffold-training-loop/flock/training/core/trainer.py) for the current loop.
+See the [trainer implementation](https://github.com/cerulean-works/flock/blob/main/flock/training/core/trainer.py) for the current loop.
 
 ## Validate during training
 
@@ -118,12 +217,9 @@ Set `validation_tasks` to registered [task names](../evals/tasks) and
 and at the final update, logging each metric as `eval/<task>/<metric>` against
 `global_step`. You can also call `trainer.evaluate()` directly.
 
-| Setting | Default | Meaning |
-|---|---|---|
-| `validation_tasks` | `[]` | Task names to score. An empty list skips validation. |
-| `validation_steps` | `None` | Positive number of updates between validations. `None` disables automatic validation. |
-| `validation_limit` | `None` | Score only the first positive number of documents per task, or all documents with `None`. |
-| `validation_batch_tokens` | `32768` | Positive padded-token budget per scoring batch. Lower it to fit evaluation beside the training model, gradients and optimizer state. A single request can exceed the budget. |
+Use `validation_limit` for a document prefix and `validation_batch_tokens` to
+control padded scoring batch sizes. A single request can exceed that budget.
+The [configuration reference](python-api#configuration) lists defaults.
 
 Each task is loaded and tokenized on its first validation, then its prepared
 requests are reused for later steps. Disabled validation does not load tasks.
@@ -145,28 +241,28 @@ the checkpoint is saved first so an evaluation failure leaves it available to re
 ## Save and resume training
 
 Set `save_steps` in `TrainerConfig` to save after that many updates and at the
-end of the pass. With the default `None`, training does not save automatically.
+end of the pass. The default `None` disables scheduled saving.
 Each checkpoint holds model weights, model configuration, optimizer and scheduler
 state, training counters, the unfinished logging window, and Python and PyTorch
 RNG states. Checkpoints use the [Hub model format](../hub/models#what-a-version-holds).
 
-| Setting | Meaning |
-|---|---|
-| `output_dir` | Checkpoint directory; defaults to `.training-checkpoints/<run_name>` under the current directory. |
-| `save_steps` | Positive number of updates between saves, or `None` to disable automatic saving. |
-| `save_total_limit` | Positive maximum number of local checkpoint folders to keep, or `None` to keep all. The lowest numbered checkpoints are removed after a successful save. |
-| `save_to_hub_repo` | Optional `org/model` destination. Each save uploads the complete local checkpoint with a `checkpoint-<step>` tag. Local retention does not delete Hub versions. |
-| `overwrite_output_dir` | Defaults to `False`: fresh training requires an empty output directory, and existing checkpoint folders cannot be replaced. Set to `True` to permit reuse and replacement. |
+Set `output_dir` for a checkpoint root, or use the default
+`.training-checkpoints/<run_name>`. Fresh training requires an empty directory
+unless `overwrite_output_dir=True`. `save_total_limit` retains the most recently
+saved local checkpoints by `flock.json`'s `saved_at`, protecting older folders
+while their uploads are pending. The limit can temporarily be exceeded.
 
 A checkpoint appears as `output_dir/checkpoint-<step>` only after all of its files
 have been written. Construct a new trainer with the same model configuration,
-tokenizer, pinned dataset, batch size and seed, then resume the latest numbered
-checkpoint:
+tokenizer, pinned dataset, batch size and seed, then resume the checkpoint with
+the latest `saved_at` timestamp:
 
 ```python
 trainer = Trainer(config=config, model=model, tokenizer=tokenizer, dataset=dataset)
-trainer.train(resume_from_checkpoint=True)
-trainer.run.finish()
+try:
+    trainer.train(resume_from_checkpoint=True)
+finally:
+    trainer.run.finish()
 ```
 
 You can also pass a specific local folder:
@@ -177,8 +273,9 @@ trainer.train(resume_from_checkpoint=".training-checkpoints/olmo2_dolma3/checkpo
 
 The trainer restores weights into the existing model and resumes after the saved
 number of batches in the seeded shuffle. Logging and saving keep their original
-step numbers. Resume rejects a changed model configuration, dataset size, batch
-size, seed, or input column. Keep the dataset contents and tokenizer unchanged;
+step numbers. Resume rejects a changed model architecture/configuration, dataset
+size, batch size, seed, input column, optimizer group settings or scheduler
+configuration/base rates. Keep the dataset contents and tokenizer unchanged;
 the checkpoint does not verify their identity. Resume initializes a new tracking
 run and records the restored global steps there.
 
@@ -193,3 +290,15 @@ checkpoint = models.download(
 )
 trainer.train(resume_from_checkpoint=checkpoint)
 ```
+
+For manual saves, call `trainer.save_model()`. Set `save_to_hub_repo="org/model"`
+to start an asynchronous upload of each new checkpoint with a `checkpoint-<step>`
+tag. `trainer.save_model(blocking=True)` waits for pending uploads; it reuses an
+existing current-step checkpoint without rewriting it or starting another upload.
+Upload failures are logged and leave the local checkpoint available. Local
+retention does not delete Hub versions.
+
+After entering the training loop, cleanup waits for pending uploads and, when
+automatic saving is enabled, saves the current step if it falls between save
+intervals. This also happens when the loop raises an exception. Local save errors
+propagate. Always finish the tracking run in your own `finally` block.

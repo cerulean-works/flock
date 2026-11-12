@@ -1,3 +1,5 @@
+"""Apply update-indexed warmup and cosine decay to optimizer learning rates."""
+
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from math import cos, pi
@@ -8,12 +10,33 @@ from torch.optim import Optimizer
 
 @dataclass(frozen=True, kw_only=True)
 class CosineConfig:
+    """Configure linear warmup followed by cosine decay to the run endpoint.
+
+    Args:
+        warmup_steps (`int`): Warmup updates. Use zero to start at the base rate.
+        min_lr_ratio (`float`): Endpoint learning rate divided by the base rate.
+
+    Choose `0 <= warmup_steps < total_steps` and `0 <= min_lr_ratio <= 1`.
+    This dataclass does not validate schedule bounds.
+    """
+
     warmup_steps: int
     min_lr_ratio: float
 
 
 @dataclass(frozen=True, kw_only=True)
 class WSDConfig:
+    """Configure linear warmup, a stable base rate and final cosine decay.
+
+    Args:
+        warmup_steps (`int`): Warmup updates, starting at zero learning rate.
+        decay_steps (`int`): Number of final updates assigned to cosine decay.
+        min_lr_ratio (`float`, *optional*, defaults to `0.0`): Endpoint/base rate ratio.
+
+    Choose nonnegative warmup, positive decay, `warmup_steps + decay_steps <=
+    total_steps` and a ratio between zero and one. Bounds are not validated.
+    """
+
     warmup_steps: int
     decay_steps: int
     min_lr_ratio: float = 0.0
@@ -23,7 +46,21 @@ type LRSchedulerConfig = CosineConfig | WSDConfig
 
 
 def lr_multiplier(step: int, config: LRSchedulerConfig, total_steps: int) -> float:
-    """Return a multiplier for each parameter group's original learning rate."""
+    """Return the learning-rate multiplier after `step` completed updates.
+
+    Args:
+        step (`int`): Nonnegative number of completed optimizer updates.
+        config (`LRSchedulerConfig`): Warmup and decay settings.
+        total_steps (`int`): Total planned optimizer updates.
+
+    Returns:
+        `float`: Factor applied to every group's original learning rate. Step
+        zero has a zero factor when warmup is enabled. Decay stops at `min_lr_ratio`.
+
+    Raises:
+        `ValueError`: If `step` is negative.
+        `TypeError`: If the scheduler configuration is unsupported.
+    """
     if step < 0:
         raise ValueError("step must be nonnegative")
 
@@ -46,7 +83,16 @@ def lr_multiplier(step: int, config: LRSchedulerConfig, total_steps: int) -> flo
 
 
 class StepLRScheduler:
-    """LR schedulers that apply directly to an existing PyTorch optimizer."""
+    """Apply a shared schedule multiplier to each optimizer group's base rate.
+
+    Construction immediately sets the rate for zero completed updates. Call
+    `step()` after each optimizer update to prepare the next update's rate.
+
+    Args:
+        optimizer (`Optimizer`): Optimizer whose current rates become base rates.
+        config (`LRSchedulerConfig`): Cosine or warmup-stable-decay settings.
+        total_steps (`int`): Planned number of optimizer updates.
+    """
 
     def __init__(
         self,
@@ -54,6 +100,7 @@ class StepLRScheduler:
         config: LRSchedulerConfig,
         total_steps: int,
     ) -> None:
+        """Capture base rates and apply the initial schedule multiplier."""
         self.optimizer = optimizer
         self.config = config
         self.total_steps = total_steps
@@ -62,6 +109,7 @@ class StepLRScheduler:
         self._apply_lr()
 
     def _apply_lr(self) -> None:
+        """Set group rates for completed progress, rejecting changed group counts."""
         if len(self.optimizer.param_groups) != len(self.base_lrs):
             raise ValueError("Optimizer parameter groups changed after scheduler creation")
         factor = lr_multiplier(self.completed_steps, self.config, self.total_steps)
@@ -74,6 +122,7 @@ class StepLRScheduler:
         self._apply_lr()
 
     def get_last_lr(self) -> list[float]:
+        """Return the current learning rate of each optimizer parameter group."""
         return [float(group["lr"]) for group in self.optimizer.param_groups]
 
     def state_dict(self) -> dict[str, Any]:
@@ -89,7 +138,15 @@ class StepLRScheduler:
         }
 
     def validate_state_dict(self, state_dict: Mapping[str, Any]) -> None:
-        """Check saved schedule settings without changing the scheduler or optimizer."""
+        """Check saved settings without changing the scheduler or optimizer.
+
+        Args:
+            state_dict (`Mapping[str, Any]`): Mapping produced by `state_dict()`.
+
+        Raises:
+            `ValueError`: If the saved schedule, base rates, group count or total
+                steps differ, or completed steps are negative.
+        """
         config_fields = dict(state_dict["config"])
         config_type = config_fields.pop("type")
         if config_type == "cosine":
@@ -119,6 +176,12 @@ class StepLRScheduler:
         """Restore progress and apply the learning rates for the next update.
 
         Restore the optimizer's state before calling this method.
+
+        Args:
+            state_dict (`Mapping[str, Any]`): Mapping produced by `state_dict()`.
+
+        Raises:
+            `ValueError`: If saved settings fail `validate_state_dict`.
         """
         self.validate_state_dict(state_dict)
         self.completed_steps = state_dict["completed_steps"]

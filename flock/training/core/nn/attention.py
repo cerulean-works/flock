@@ -1,14 +1,28 @@
+"""Provide grouped self-attention with optional rotary position embeddings."""
+
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 
 class GroupedAttentionWithRoPE(nn.Module):
-    """Self-attention with MHA/GQA projections and optional Q/K normalization and RoPE.
+    """Apply MHA/GQA projections with optional Q/K normalization and RoPE.
 
     Q/K normalization modules act on the full projected widths before splitting
     into heads. Pass modules that accept those widths (hidden_size for Q and
     num_key_value_heads * head_dim for K).
+
+    Args:
+        hidden_size (`int`): Positive input/output width divisible by query-head count.
+        num_attention_heads (`int`): Positive query-head count.
+        num_key_value_heads (`int`, *optional*):
+            Positive KV-head count dividing query-head count. Defaults to query-head count.
+        bias (`bool`, *optional*, defaults to `False`): Add biases to all projections.
+        q_norm (`nn.Module`, *optional*): Normalization over the projected query width.
+        k_norm (`nn.Module`, *optional*): Normalization over the projected key width.
+
+    Raises:
+        `ValueError`: If widths/head counts are nonpositive or not divisible.
     """
 
     def __init__(
@@ -21,6 +35,7 @@ class GroupedAttentionWithRoPE(nn.Module):
         q_norm: nn.Module | None = None,
         k_norm: nn.Module | None = None,
     ) -> None:
+        """Validate head dimensions and construct projections and normalization."""
         super().__init__()
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
@@ -46,6 +61,7 @@ class GroupedAttentionWithRoPE(nn.Module):
         self.k_norm = k_norm if k_norm is not None else nn.Identity()
 
     def _apply_rope(self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+        """Apply split-half rotary coordinates and restore the input tensor's dtype."""
         # Split-half coordinates match Hugging Face's rotary checkpoint layout.
         first, second = x.chunk(2, dim=-1)
         rotated = torch.cat((-second, first), dim=-1)
@@ -65,6 +81,21 @@ class GroupedAttentionWithRoPE(nn.Module):
         Masks follow SDPA semantics: True allows attention; floats are additive.
         Supply either a complete attention mask (including causal constraints)
         or is_causal=True for unmasked causal attention.
+
+        Args:
+            x (`torch.Tensor`): Hidden states shaped `[batch, sequence, hidden]`.
+            position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
+                Cosines and sines for split-half RoPE. Omit to skip rotary embeddings.
+            attention_mask (`torch.Tensor`, *optional*): SDPA mask broadcastable to
+                `[batch, heads, sequence, sequence]`, including causal constraints.
+            is_causal (`bool`, *optional*, defaults to `False`):
+                Use SDPA causal attention when no explicit mask is supplied.
+
+        Returns:
+            `torch.Tensor`: Projected states with the same shape as `x`.
+
+        Raises:
+            `ValueError`: If rotary embeddings are supplied with an odd head width.
         """
         batch_size, seq_len, _ = x.shape
 
