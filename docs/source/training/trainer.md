@@ -250,80 +250,53 @@ the example's weights and computations remain FP32.
 
 ## Choose an attention backend
 
-Flock's `Olmo2Config.attn_implementation` selects the attention computation in every
-decoder layer. It defaults to `"sdpa"`, the built-in PyTorch implementation.
-Omit this field to keep SDPA: existing model construction and experiment configs
-need no changes. Set it only when selecting another implementation.
+`Olmo2Config.attn_implementation` defaults to `"sdpa"`, which lets PyTorch choose
+an attention kernel. Leave it unset to keep the default.
 
-Projection weights, Q/K normalization and RoPE belong to the attention layer.
-The selected backend receives the prepared Q/K/V and returns the attention output.
-
-Selection and registration follow the naming in Hugging Face's
-[attention interface](https://huggingface.co/docs/transformers/main/en/attention_interface).
-To use a custom implementation, import `AttentionInterface` from
-`flock.training.core.attention` and call `AttentionInterface.register(name, function)`.
-Then select the registered name with `attn_implementation` in the config.
-`AttentionInterface.get_interface(name)` resolves the name to its function.
-Registration and lookup use class methods with one shared mapping.
-
-Flock has its own registry and function signature. Functions
-follow the `AttentionFunction` interface: Q/K/V use `[batch, heads, sequence,
-head_dim]`, with keyword arguments `attention_mask` and `is_causal`. SDPA accepts
-complete masks: boolean masks allow attention where True, and floating masks add
-to the scores. The output uses
-the same layout, with Q's heads and sequence length. Implementations handle GQA
-when Q has more heads than K/V, and report unsupported inputs as errors.
-
-The layer resolves the function at construction. Changing the registry later
-does not change existing layers. Unknown names raise `ValueError`. Selecting
-`"sdpa"` lets PyTorch choose the SDPA kernel.
-
-The backend name is saved in `config.json`, so register custom implementations
-before loading their models in another process. A config without this field
-defaults to `"sdpa"`. The in-memory evaluation adapter reports the selected name;
-only `"sdpa"` receives the evaluator's SDPA kernel pin.
+Pass a `[batch, sequence]` padding mask in `Batch["attention_mask"]`, with True/1
+for real tokens. OLMo 2 handles causality and prepares the backend's mask for you.
 
 ### Use FlashAttention-3
 
-Set `attn_implementation="flash_attention_3"` in your `Olmo2Config`. Flock calls
-PyTorch's [`activate_flash_attention_impl("FA3")`](https://docs.pytorch.org/docs/2.14/generated/torch.nn.attention.activate_flash_attention_impl.html)
-on the first attention call, then uses `scaled_dot_product_attention` with the
-Flash backend selected. Unsupported inputs raise an error; this selection does
-not fall back to another kernel.
+FA3 requires a Hopper GPU (compute capability 9.0), FP16 or BF16 Q/K/V, and an
+external FlashAttention-3 installation compatible with your PyTorch and CUDA
+versions. The trainer uses BF16 autocast by default.
 
-This requires a Hopper GPU (compute capability 9.0), FP16 or BF16 Q/K/V, and a
-compatible external FlashAttention-3 installation. PyTorch alone does not include
-that installation. The [PyTorch 2.14 integration](https://github.com/pytorch/pytorch/blob/v2.14.1/torch/nn/attention/_fa3.py)
-expects an importable `flash_attn_interface` module exposing FA3 forward and
-backward operators. Match the FA3 build to your PyTorch and CUDA versions.
-The trainer's default BF16 autocast supplies the required Q/K/V dtype while
-keeping master weights in FP32.
+```python
+from dataclasses import replace
 
-FA3 accepts a boolean `[batch, sequence]` padding mask, with True for real tokens,
-and a separate `is_causal` flag. OLMo 2 prepares these automatically. Unpadded
-batches use one batched SDPA call per layer. Padded batches use separate SDPA calls
-over each row's valid span, preserving the original outputs at padded query
-positions too. This avoids a dense sequence-squared mask, but adds Python and
-kernel-launch overhead; it is not a packed variable-length kernel. Left padding,
-right padding, padding at both ends and empty rows are supported. Masks with
-holes, arbitrary dense masks and unequal Q/K sequence lengths are unsupported.
+from flock.training.core.models import OLMO2_1B_CONFIG
 
-PyTorch activates FA3 for the whole process. Flock keeps it active after forward
-so backward uses the matching implementation. This also affects other calls that
-select PyTorch's Flash backend in the same process. Do not switch or restore the
-implementation while an earlier forward still needs backward.
-
-On a configured Hopper machine, run the actual FA3 forward, backward and optimizer
-parity checks against Hugging Face eager attention:
-
-```bash
-uv run --no-sync python -m pytest -q tests/training/test_flash_attention_3_gpu.py -m fa3 -n 0
+config = replace(OLMO2_1B_CONFIG, attn_implementation="flash_attention_3")
 ```
 
-These tests fail if CUDA or the FA3 requirements are missing. Use
-`-m 'gpu and not fa3'` when selecting the other GPU tests. The normal CPU suite
-checks padding adaptation and model parity with a substituted math kernel; it
-does not validate FA3 GPU execution or performance.
+Unsupported inputs raise an error; there is no fallback. FA3 supports full-sequence
+self-attention with padding at either end and empty rows. Masks with holes,
+dense masks and unequal Q/K sequence lengths are unsupported. Padded batches
+run attention per row, avoiding a dense mask but adding kernel-launch overhead.
+
+FA3 activation affects PyTorch's Flash backend throughout the process. Keep it
+active until all pending backward passes finish.
+
+### Register a custom backend
+
+Register your attention function with a matching mask preparer. For an
+`attention_fn` that accepts SDPA masks:
+
+```python
+from flock.training.core.attention import AttentionInterface, prepare_sdpa_mask
+
+AttentionInterface.register("custom", attention_fn, mask_preparer=prepare_sdpa_mask)
+```
+
+Set `attn_implementation="custom"` to select it. Register before constructing or
+loading the model; saved configs keep the backend name.
+
+The function takes Q/K/V shaped `[batch, heads, sequence, head_dim]` and keyword
+arguments `attention_mask` and `is_causal`. Return the same layout, with Q's heads
+and sequence length. For another mask format, supply a preparer that takes a
+boolean 2D `padding_mask` (or `None`) and keyword-only `is_causal`, and returns
+`PreparedAttentionMask(attention_mask, is_causal)`.
 
 ## Check the run
 
