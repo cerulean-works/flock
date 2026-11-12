@@ -4,21 +4,26 @@ import math
 import random
 import shutil
 import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from json import JSONDecodeError
 from pathlib import Path
-from typing import Any, Literal, cast, overload
+from typing import Any, Literal, Self, cast, overload
 
 import torch
 import torch.nn.functional as F
 import wandb
 from lance.torch.data import SafeLanceDataset
+from pydantic import BaseModel as PydanticBaseModel
+from pydantic import ConfigDict, Field, field_validator, model_validator
 from safetensors.torch import load_model
 from torch import nn
 from torch.optim import AdamW, Muon, Optimizer
 from torch.utils.data import DataLoader
 from transformers import TokenizersBackend
 
+from flock.eval.model import DEFAULT_BATCH_TOKENS, FlockCausalLM, ScoringModel
+from flock.eval.run import PreparedTask, prepare_task, score_prepared
+from flock.eval.tasks import TASKS
 from flock.hub.models import PendingUpload, save_to_hub
 from flock.hub.models.files import import_path, read_training_state, weight_files, write_model
 from flock.training.core.checkpoint import TrainerCheckpoint
@@ -28,33 +33,56 @@ from flock.training.core.models import BaseModel
 from flock.training.core.optimization import AdamWConfig, MuonConfig, OptimizerConfig
 
 
-@dataclass(frozen=True, kw_only=True)
-class TrainerConfig:
+class TrainerConfig(PydanticBaseModel):
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
+
     run_name: str
 
     input_column: str
-    batch_size: int
+    batch_size: int = Field(gt=0)
 
     optimizer_config: OptimizerConfig
     lr_scheduler_config: LRSchedulerConfig
 
-    dataloader_prefetch_factor: int | None = 4
-    dataloader_num_workers: int = 4
+    dataloader_prefetch_factor: int | None = Field(default=4, gt=0)
+    dataloader_num_workers: int = Field(default=4, ge=0)
+
+    validation_tasks: list[str] = Field(default_factory=list)
+    validation_steps: int | None = Field(default=None, gt=0)
+    validation_limit: int | None = Field(default=None, gt=0)
+    validation_batch_tokens: int = Field(default=DEFAULT_BATCH_TOKENS, gt=0)
 
     wandb_project: str
     wandb_mode: Literal["online", "offline", "disabled", "shared"] = "online"
 
     output_dir: str | None = None
-    save_steps: int | None = None
-    save_total_limit: int | None = None
+    save_steps: int | None = Field(default=None, gt=0)
+    save_total_limit: int | None = Field(default=None, gt=0)
     save_to_hub_repo: str | None = None
     overwrite_output_dir: bool = False
 
     # Master weights are always stored in FP32, but the model can be trained in BF16.
     model_dtype: torch.dtype = torch.bfloat16
-    max_norm: float = 1.0
-    logging_steps: int = 10
+    max_norm: float = Field(default=1.0, ge=0, allow_inf_nan=False)
+    logging_steps: int = Field(default=10, gt=0)
     seed: int = 42
+
+    @field_validator("validation_tasks")
+    @classmethod
+    def validate_tasks(cls, tasks: list[str]) -> list[str]:
+        if any(task not in TASKS for task in tasks):
+            raise ValueError(
+                f"Invalid validation task(s) specified. Supported tasks are: {list(TASKS.keys())}"
+            )
+        return tasks
+
+    @model_validator(mode="after")
+    def validate_dataloader(self) -> Self:
+        if self.dataloader_num_workers == 0 and self.dataloader_prefetch_factor is not None:
+            raise ValueError(
+                "dataloader_prefetch_factor must be None when dataloader_num_workers is 0"
+            )
+        return self
 
 
 class TrainerState(nn.Module):
@@ -150,10 +178,11 @@ class Trainer:
 
         self.logger = logging.getLogger(__name__)
         self.run = wandb.init(
-            project=config.wandb_project, mode=config.wandb_mode, config=asdict(config)
+            project=config.wandb_project, mode=config.wandb_mode, config=config.model_dump()
         )
         self.run.define_metric("global_step")
         self.run.define_metric("train/*", step_metric="global_step")
+        self.run.define_metric("eval/*", step_metric="global_step")
 
         self.model = model.to(self.device)
         self.tokenizer = tokenizer
@@ -172,6 +201,12 @@ class Trainer:
         self.optimizer = self._get_optimizer(config.optimizer_config)
         self.lr_scheduler = self._get_lr_scheduler(config.lr_scheduler_config, self.total_steps)
 
+        self.validation_tasks = config.validation_tasks
+        self.validation_steps = config.validation_steps
+        self.validation_limit = config.validation_limit
+        self.validation_batch_tokens = config.validation_batch_tokens
+        self._prepared_validation_tasks: dict[str, PreparedTask] = {}
+
         self.output_dir: Path = (
             Path(config.output_dir)
             if config.output_dir is not None
@@ -184,23 +219,9 @@ class Trainer:
 
         self.pending_uploads: dict[Path, PendingUpload] = {}
 
-        if self.save_steps is not None and self.save_steps <= 0:
-            raise ValueError("save_steps must be a positive integer or None")
-        if self.save_total_limit is not None and self.save_total_limit <= 0:
-            raise ValueError("save_total_limit must be a positive integer or None")
-
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_training_dataloader(self, skip_batches: int = 0) -> DataLoader:
-        if self.dataloader_num_workers < 0:
-            raise ValueError("dataloader_num_workers must be non-negative")
-        if self.dataloader_num_workers == 0 and self.dataloader_prefetch_factor is not None:
-            raise ValueError(
-                "dataloader_prefetch_factor must be None when dataloader_num_workers is 0"
-            )
-        elif self.dataloader_prefetch_factor is not None and self.dataloader_prefetch_factor < 1:
-            raise ValueError("dataloader_prefetch_factor must be >= 1")
-
         collator = LanceBatchCollator(self.tokenizer, self.ds_input_column)
         sampler = ResumableBatchDataSampler(
             batch_size=self.batch_size,
@@ -295,11 +316,15 @@ class Trainer:
                 self.run.log(metrics_dict)
                 self.state.reset_window()
 
-            if self.save_steps is None:
-                continue
-
-            if step % self.save_steps == 0 or step == self.total_steps:
+            if self.save_steps is not None and (
+                step % self.save_steps == 0 or step == self.total_steps
+            ):
                 self.save_model()
+
+            if self.validation_steps and (
+                step % self.validation_steps == 0 or step == self.total_steps
+            ):
+                self.evaluate()
 
     def train(self, resume_from_checkpoint: bool | str | Path = False):
         """Train one pass, optionally restoring the latest or a specified local checkpoint.
@@ -362,6 +387,55 @@ class Trainer:
         finally:
             if self.pending_uploads or (self.save_steps and self.state.step % self.save_steps != 0):
                 self.save_model(blocking=True)
+
+    @torch.no_grad()
+    def evaluate(self):
+        """Scores cached validation tasks using the training autocast dtype, then restores modes."""
+        if not self.validation_tasks:
+            return
+
+        step = int(self.state.step.item())
+        scorer = ScoringModel(
+            FlockCausalLM(self.model),
+            self.tokenizer,
+            name=f"{self.run_name}@step-{step}",
+            batch_tokens=self.validation_batch_tokens,
+        )
+
+        # In eval mode, the model is not updated and dropout is disabled. We restore the original modes after evaluation.
+        modes = [(module, module.training) for module in self.model.modules()]
+        try:
+            self.model.eval()
+            # Prepare on the first evaluation, so disabled validation never loads data.
+            # Keep token IDs on the host and reuse them at every subsequent step.
+            for task in self.validation_tasks:
+                if task not in self._prepared_validation_tasks:
+                    self._prepared_validation_tasks[task] = prepare_task(
+                        scorer, TASKS[task], limit=self.validation_limit
+                    )
+            # Match training precision without casting or copying the FP32 master weights.
+            with torch.autocast(
+                self.device.type,
+                dtype=self.model_dtype,
+                enabled=self.model_dtype != torch.float32,
+            ):
+                results = {
+                    task: score_prepared(scorer, self._prepared_validation_tasks[task])
+                    for task in self.validation_tasks
+                }
+        except (FileExistsError, KeyError) as e:
+            self.logger.error(f"Error during evaluation, skipping: {e}")
+            return
+        finally:
+            for module, training in modes:
+                module.training = training
+
+        log_dict = {"global_step": step}
+        for task_key, score_dict in results.items():
+            for metric_key, score in score_dict.metrics.items():
+                log_dict[f"eval/{task_key}/{metric_key}"] = score
+
+        self.run.log(log_dict)
 
     def save_model(self, blocking=False):
         for checkpoint, upload in list(self.pending_uploads.items()):
