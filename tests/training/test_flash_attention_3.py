@@ -10,7 +10,11 @@ from torch._subclasses.fake_tensor import FakeTensorMode
 from torch.nn import attention
 from torch.nn import functional as F
 
-from flock.training.core.attention import flash_attention_3, sdpa_attention
+from flock.training.core.attention import (
+    flash_attention_3,
+    prepare_flash_attention_mask,
+    sdpa_attention,
+)
 from flock.training.core.models.olmo2 import Olmo2
 from tests.training._reference import olmo2_training_parity
 from tests.training.test_olmo2 import make_batch
@@ -50,7 +54,8 @@ def test_padding_adapter_outputs_and_gradients(math_kernel, kv_heads, is_causal,
     if is_causal:
         dense_mask = dense_mask & torch.ones(5, 5, dtype=torch.bool).tril()
 
-    actual = flash_attention_3(*inputs, attention_mask=mask, is_causal=is_causal)
+    attention_mask = prepare_flash_attention_mask(mask, is_causal=is_causal)
+    actual = flash_attention_3(*inputs, attention_mask=attention_mask, is_causal=is_causal)
     with attention.sdpa_kernel(attention.SDPBackend.MATH):
         expected = sdpa_attention(*reference_inputs, attention_mask=dense_mask)
     torch.testing.assert_close(actual, expected)
@@ -125,6 +130,101 @@ def test_unpadded_model_uses_one_batched_fa3_call_per_layer(math_kernel, config,
         assert call.kwargs["is_causal"] is True
 
 
+@pytest.mark.parametrize("num_layers", [2, 4])
+def test_model_prepares_padding_before_layers_once_per_forward(
+    math_kernel, config, monkeypatch, num_layers
+):
+    config = replace(config, num_hidden_layers=num_layers)
+    model = Olmo2(replace(config, attn_implementation="flash_attention_3"))
+    reference = Olmo2(config)
+    ids = torch.tensor([[0, 2, 3, 0], [4, 5, 6, 7]])
+    mask = torch.zeros_like(ids, dtype=torch.bool)
+    batch = make_batch(ids, mask)
+    host_reads = []
+    received = []
+    original_equal = torch.equal
+    original_cpu = torch.Tensor.cpu
+    original_item = torch.Tensor.item
+
+    def equal(*args, **kwargs):
+        host_reads.append("equal")
+        return original_equal(*args, **kwargs)
+
+    def cpu(tensor, *args, **kwargs):
+        host_reads.append("cpu")
+        return original_cpu(tensor, *args, **kwargs)
+
+    def item(tensor):
+        host_reads.append("item")
+        return original_item(tensor)
+
+    def record_padding(module, args):
+        # Validation and transfer must finish before the first decoder layer.
+        assert host_reads == ["item", "equal", "cpu"]
+        received.append(args[-1])
+
+    for layer in model.model.layers:
+        layer.register_forward_pre_hook(record_padding)
+
+    previous = None
+    for rows, expected_spans in (
+        ([[0, 1, 1, 0], [0, 0, 0, 0]], ((1, 3), (4, 4))),
+        ([[1, 1, 0, 0], [0, 0, 1, 1]], ((0, 2), (2, 4))),
+    ):
+        # Reusing and mutating the same input mask must not reuse stale metadata.
+        mask.copy_(torch.tensor(rows, dtype=torch.bool))
+        host_reads.clear()
+        received.clear()
+        with monkeypatch.context() as patch:
+            patch.setattr(torch, "equal", equal)
+            patch.setattr(torch.Tensor, "cpu", cpu)
+            patch.setattr(torch.Tensor, "item", item)
+            actual = model(batch)
+
+        assert host_reads == ["item", "equal", "cpu"]
+        assert len(received) == num_layers
+        prepared = received[0]
+        assert isinstance(prepared, torch.Tensor)
+        assert all(padding is prepared for padding in received)
+        torch.testing.assert_close(prepared, torch.tensor(expected_spans))
+        assert prepared is not previous
+        previous = prepared
+        torch.testing.assert_close(actual, reference(batch))
+
+
+def test_model_rejects_noncontiguous_padding_before_decoder_layers(config, monkeypatch):
+    model = Olmo2(replace(config, attn_implementation="flash_attention_3"))
+    layer_forward = Mock(side_effect=AssertionError("invalid padding reached a decoder layer"))
+    monkeypatch.setattr(model.model.layers[0], "forward", layer_forward)
+    batch = make_batch(torch.tensor([[2, 0, 3, 0]]), torch.tensor([[1, 0, 1, 0]]))
+    with pytest.raises(ValueError, match="contiguous"):
+        model(batch)
+    layer_forward.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "spans",
+    [
+        torch.tensor([[1, 3], [0, 0]]),
+        torch.tensor([[1, 3, 4]]),
+        torch.tensor([[1.0, 3.0]]),
+        torch.tensor([[False, True, True, False]]),
+        torch.empty(1, 2, dtype=torch.int64, device="meta"),
+    ],
+)
+def test_fa3_requires_prepared_cpu_spans(spans):
+    q = torch.randn(1, 2, 4, 8)
+    with pytest.raises(ValueError, match="prepared CPU int64"):
+        flash_attention_3(q, q, q, attention_mask=spans)
+
+
+@pytest.mark.parametrize("span", [[-1, 2], [3, 2], [1, 5]])
+def test_prepared_spans_must_fit_query(math_kernel, span):
+    q = torch.randn(1, 2, 4, 8)
+    with pytest.raises(ValueError, match="sequence length"):
+        flash_attention_3(q, q, q, attention_mask=torch.tensor([span]))
+
+
 @pytest.mark.parametrize(
     "mask, message",
     [
@@ -138,10 +238,9 @@ def test_unpadded_model_uses_one_batched_fa3_call_per_layer(math_kernel, config,
         ),
     ],
 )
-def test_unsupported_masks_raise_before_activation(mask, message):
-    q = torch.randn(mask.shape[0], 2, 4, 8)
+def test_preparer_rejects_unsupported_padding(mask, message):
     with pytest.raises(ValueError, match=message):
-        flash_attention_3(q, q, q, attention_mask=mask, is_causal=True)
+        prepare_flash_attention_mask(mask, is_causal=True)
 
 
 def test_rejects_non_square_attention():

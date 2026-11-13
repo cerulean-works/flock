@@ -63,9 +63,11 @@ def test_sdpa_preparation_preserves_query_visibility_and_gradients(is_causal):
 
 @pytest.mark.parametrize("is_causal", [False, True])
 @pytest.mark.parametrize("empty", [False, True])
-def test_flash_preparation_keeps_padding_separate_from_causality(is_causal, empty):
+def test_flash_preparation_stores_host_spans(is_causal, empty):
     mask = torch.tensor([[False, True, True, False], [False] * 4])
     if empty:
         mask.fill_(False)
     prepared = prepare_flash_attention_mask(mask, is_causal=is_causal)
-    assert prepared is mask
+    assert prepared is not None
+    expected = torch.tensor([[4, 4], [4, 4]] if empty else [[1, 3], [4, 4]])
+    torch.testing.assert_close(prepared, expected)

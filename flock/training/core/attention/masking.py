@@ -27,5 +27,21 @@ def prepare_sdpa_mask(padding_mask: torch.Tensor | None, *, is_causal: bool) -> 
 def prepare_flash_attention_mask(
     padding_mask: torch.Tensor | None, *, is_causal: bool
 ) -> torch.Tensor | None:
-    """Keep padding and causality separate for the FlashAttention adapter."""
-    return _padding_mask_or_none(padding_mask)
+    """Return validated `[batch, 2]` start/stop spans as a CPU int64 tensor.
+
+    Stops are exclusive. Prepare once per model forward and reuse across layers.
+    Return `None` when there is no padding; causality stays in `is_causal`.
+    """
+    padding_mask = _padding_mask_or_none(padding_mask)
+    if padding_mask is None:
+        return None
+
+    sequence = padding_mask.shape[1]
+    positions = torch.arange(sequence, device=padding_mask.device)
+    starts = torch.where(padding_mask, positions, sequence).amin(dim=-1)
+    stops = starts + padding_mask.sum(dim=-1)
+
+    span_mask = (positions >= starts[:, None]) & (positions < stops[:, None])
+    if not torch.equal(padding_mask, span_mask):
+        raise ValueError("FA3 padding masks must contain one contiguous token span per row")
+    return torch.stack((starts, stops), dim=-1).cpu()

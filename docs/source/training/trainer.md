@@ -274,6 +274,9 @@ Unsupported inputs raise an error; there is no fallback. FA3 supports full-seque
 self-attention with padding at either end and empty rows. Masks with holes,
 dense masks and unequal Q/K sequence lengths are unsupported. Padded batches
 run attention per row, avoiding a dense mask but adding kernel-launch overhead.
+The model validates padding and copies token spans to a CPU int64 tensor once per
+forward. All decoder layers reuse those spans without repeating contiguity
+validation or host transfers.
 
 FA3 activation affects PyTorch's Flash backend throughout the process. Keep it
 active until all pending backward passes finish.
@@ -299,8 +302,14 @@ SDPA, an explicit mask must include the causal restriction. The `sdpa_attention`
 adapter enables the kernel's causal flag only when the mask is `None`.
 
 For another mask format, supply a preparer that takes a boolean 2D `padding_mask`
-(or `None`) and keyword-only `is_causal`. Return a mask tensor or `None`. The model
+(or `None`) and keyword-only `is_causal`. Return a tensor or `None`. The model
 prepares the mask once per forward and shares it across decoder layers.
+
+For FA3, `prepare_flash_attention_mask` returns a CPU int64 tensor shaped
+`[batch, 2]`. Each row contains the start and exclusive stop of the valid token
+span. Direct callers of `flash_attention_3` must prepare their padding mask first
+and pass these spans. Each attention call reads slice indices from the CPU tensor
+without waiting for CUDA. Unpadded inputs use `None` and one batched attention call.
 
 ## Check the run
 

@@ -78,33 +78,26 @@ def flash_attention_3(
     if q.device != k.device or q.device != v.device or q.dtype != k.dtype or q.dtype != v.dtype:
         raise ValueError("FA3 Q/K/V must share a device and dtype")
 
-    # Each span represents a range of non-padding token positions in the sequence,
-    # specified as [start, end] (start inclusive, end exclusive).
-    spans: list[list[int]] | None = None
-    if attention_mask is not None:
-        if (
-            attention_mask.dtype != torch.bool
-            # the mask must have the same shape as the query sequence (shape[0] is batch size, shape[1] is sequence length)
-            or attention_mask.shape != (q.shape[0], q.shape[2])
-            or attention_mask.device != q.device
-        ):
-            raise ValueError("FA3 expects a boolean [batch, sequence] padding mask on Q's device")
-
-        positions = torch.arange(q.shape[2], device=q.device)
-        starts = torch.where(attention_mask, positions, q.shape[2]).amin(dim=-1)
-        stops = starts + attention_mask.sum(dim=-1)
-
-        span_mask = (positions >= starts[:, None]) & (positions < stops[:, None])
-        if not torch.equal(attention_mask, span_mask):
-            raise ValueError("FA3 padding masks must contain one contiguous token span per row")
-        spans = torch.stack((starts, stops), dim=-1).tolist()
+    if attention_mask is not None and (
+        attention_mask.shape != (q.shape[0], 2)
+        or attention_mask.device.type != "cpu"
+        or attention_mask.dtype != torch.int64
+    ):
+        raise ValueError(
+            "FA3 expects prepared CPU int64 [batch, 2] padding spans; "
+            "call prepare_flash_attention_mask first"
+        )
 
     with _fa3_context(q.device, q.dtype):
-        if spans is None:
+        if attention_mask is None:
             return sdpa_attention(q, k, v, is_causal=is_causal)
 
         rows = []
-        for row, (start, stop) in enumerate(spans):
+        for row, span in enumerate(attention_mask):
+            # The spans are already on the CPU, so indexing never waits for CUDA.
+            start, stop = int(span[0]), int(span[1])
+            if not 0 <= start <= stop <= q.shape[2]:
+                raise ValueError("FA3 padding spans must lie within Q's sequence length")
             query: Tensor = q[row : row + 1]
             key: Tensor = k[row : row + 1, :, start:stop]
             value = v[row : row + 1, :, start:stop]
