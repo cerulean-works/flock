@@ -197,6 +197,9 @@ describe('what this browser keeps for a project', () => {
 			'_step',
 			2
 		]);
+		// A weight of 0 is kept as picked, not turned into no smoothing.
+		ws.smoothing = { type: 'ema', param: 0 };
+		expect(ws.smoothing).toEqual({ type: 'ema', param: 0 });
 		ws.smoothing = { type: 'gaussian', param: 12 };
 		ws.showOriginal = false;
 		ws.ignoreOutliers = true;
@@ -223,11 +226,11 @@ describe('what this browser keeps for a project', () => {
 		const old = workspace(runs(1));
 		old.restoreLayout();
 		expect(old.smoothing).toEqual({ type: 'ema', param: 0.8 });
-		// A weight of 0 is no smoothing.
+		// An old weight of 0 loads as an EMA of 0, which draws unsmoothed.
 		localStorage.setItem(LAYOUT, JSON.stringify({ settings: { smoothing: 0 } }));
 		const zero = workspace(runs(1));
 		zero.restoreLayout();
-		expect(zero.smoothing).toEqual({ type: 'none', param: 0 });
+		expect(zero.smoothing).toEqual({ type: 'ema', param: 0 });
 		expect(old.defaultRows).toBe(12);
 	});
 

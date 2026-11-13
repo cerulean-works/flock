@@ -244,9 +244,6 @@ export function clampSmoothing(type: SmoothingType, param: number): number {
 	return type === 'average' ? Math.round(v) : v;
 }
 
-/** `s`, or no smoothing when its parameter leaves the line as it is (an EMA weight of 0). */
-export const normalSmoothing = (s: Smoothing): Smoothing => (smooths(s) ? s : NO_SMOOTHING);
-
 /** Whether `s` changes a line at all: a zero weight or a window of one leaves it as it is. */
 export function smooths(s: Smoothing): boolean {
 	switch (s.type) {

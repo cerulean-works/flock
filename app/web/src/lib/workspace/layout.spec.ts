@@ -187,10 +187,12 @@ describe('parsePanelConfig', () => {
 			smoothing: 0.2
 		});
 		expect(panelSmoothing({})).toBeUndefined();
-		// A weight of 0 was no smoothing, and is kept as such.
-		expect(parsePanelConfig({ smoothing: 0 })).toEqual({ smoothingType: 'none' });
+		// A weight of 0 is kept as picked: it draws unsmoothed.
+		expect(parsePanelConfig({ smoothing: 0 })).toEqual({ smoothing: 0 });
+		expect(panelSmoothing({ smoothing: 0 })).toEqual({ type: 'ema', param: 0 });
 		expect(parsePanelConfig({ smoothingType: 'twema', smoothing: 0 })).toEqual({
-			smoothingType: 'none'
+			smoothingType: 'twema',
+			smoothing: 0
 		});
 	});
 

@@ -155,9 +155,10 @@ Built in the planned order on `feat/workspace-panels`, one commit per step.
   The time weighted EMA decays by `weight` over the run's average gap between finite points,
   so on evenly logged steps it equals the EMA. The Gaussian's sigma is in points, like the
   running average's window, as sigma in steps barely smoothed a run of thousands of steps.
-  Unset workspace smoothing, and an EMA or time weighted EMA weight of 0, read as no smoothing.
-  An old nonzero weight still loads as an EMA. One `SmoothingPicker` serves the workspace settings and the
-  editor, where a "Workspace" method follows the workspace, in place of the old switch.
+  Unset workspace smoothing reads as no smoothing. A weight of 0 is kept as the viewer picked
+  it (an EMA of 0 stays an EMA) and draws unsmoothed. An old saved weight, 0 included, loads as
+  an EMA. One `SmoothingPicker` serves the workspace settings and the editor, where a
+  "Workspace" method follows the workspace, in place of the old switch.
 - **Settings (D132).** They are kept in the layout as `settings`, next to the panels, and read
   through getters on `Workspace`, so the controls bind to them as before. A run's page shares
   them, as it shares the layout.

@@ -3,7 +3,6 @@ import {
 	clampSmoothing,
 	ema,
 	gaussian,
-	normalSmoothing,
 	pointAt,
 	runningAverage,
 	Series,
@@ -230,7 +229,5 @@ describe('smoothing methods', () => {
 		expect(clampSmoothing('average', 4.4)).toBe(4);
 		expect(clampSmoothing('gaussian', 1000)).toBe(100);
 		expect(smooths({ type: 'gaussian', param: 0.1 })).toBe(true);
-		expect(normalSmoothing({ type: 'twema', param: 0 })).toEqual({ type: 'none', param: 0 });
-		expect(normalSmoothing({ type: 'ema', param: 0.3 })).toEqual({ type: 'ema', param: 0.3 });
 	});
 });

@@ -161,6 +161,6 @@ describe('panel drafts', () => {
 		};
 		expect(configOf(none, defaults).config).toEqual({ smoothingType: 'none' });
 		const zero = { ...none, smoothing: { type: 'ema' as const, param: 0 } };
-		expect(configOf(zero, defaults).config).toEqual({ smoothingType: 'none' });
+		expect(configOf(zero, defaults).config).toEqual({ smoothingType: 'ema', smoothing: 0 });
 	});
 });
