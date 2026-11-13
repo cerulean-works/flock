@@ -20,6 +20,8 @@ guide:
   sections:
   - local: hub/use-datasets
     title: Use datasets
+  - local: hub/import-datasets-from-hf
+    title: Import datasets from Hugging Face
   - local: hub/store-models
     title: Store and load models
 - title: Training
