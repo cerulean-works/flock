@@ -22,6 +22,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY app/api/app.py app/api/__init__.py /app/app/api/
 COPY app/api/src /app/app/api/src
 COPY app/api/scripts /app/app/api/scripts
+# Hugging Face imports (D124) run flock.hub's own code, which reads Flock's credentials module.
+COPY flock/hub /app/flock/hub
+COPY flock/cli/__init__.py flock/cli/credentials.py /app/flock/cli/
 RUN /opt/venv/bin/python -m compileall -q /app
 
 
