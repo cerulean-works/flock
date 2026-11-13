@@ -40,7 +40,7 @@ flock models import Qwen/Qwen3-0.6B acme/qwen3-0.6b --primary
 from flock.hub import models
 from flock.training.core.models import HFCompatibleModel
 
-model = models.load_from_hub("acme/qwen3-0.6b")       # an HFCompatibleModel
+model = models.load_from_hub("acme/qwen3-0.6b")  # an HFCompatibleModel
 fresh = HFCompatibleModel.from_hf("Qwen/Qwen3-0.6B")  # same architecture, fresh weights
 ```
 
@@ -65,12 +65,14 @@ The numbering continues from 016.
 ```python
 from flock.hub import datasets
 
-folder = datasets.download_from_hf("HuggingFaceFW/fineweb-edu", "/scratch/fineweb-edu",
-                                   config="sample-10BT")
+folder = datasets.download_from_hf(
+    "HuggingFaceFW/fineweb-edu", "/scratch/fineweb-edu", config="sample-10BT"
+)
 written = datasets.convert(folder, "web/fineweb-edu", workers=64)
 # or both at once
-written = datasets.import_from_hf("HuggingFaceFW/fineweb-edu", "web/fineweb-edu",
-                                  config="sample-10BT")
+written = datasets.import_from_hf(
+    "HuggingFaceFW/fineweb-edu", "web/fineweb-edu", config="sample-10BT"
+)
 ```
 
 - **`download_from_hf(repo, to, *, config=None, splits=None, revision=None)`** needs network
@@ -211,10 +213,10 @@ In `flock/training/core/models/hf.py`:
 ```python
 @dataclass(frozen=True, kw_only=True)
 class HFCompatibleConfig:
-    hf_config: dict[str, Any]          # a transformers config.json, as a dict
-    max_position_embeddings: int | None = None   # defaults to hf_config's
-    hf_repo: str | None = None         # tokenizer repository or folder
-    initializer_range: float | None = None       # defaults to hf_config's, then 0.02
+    hf_config: dict[str, Any]  # a transformers config.json, as a dict
+    max_position_embeddings: int | None = None  # defaults to hf_config's
+    hf_repo: str | None = None  # tokenizer repository or folder
+    initializer_range: float | None = None  # defaults to hf_config's, then 0.02
     init_seed: int = 42
     attn_implementation: str = "sdpa"
 
@@ -223,8 +225,9 @@ class HFCompatibleModel(BaseModel):
     def __init__(self, config: HFCompatibleConfig) -> None: ...
 
     @classmethod
-    def from_hf(cls, repo: str, *, revision: str | None = None, pretrained: bool = False,
-                **overrides: Any) -> "HFCompatibleModel": ...
+    def from_hf(
+        cls, repo: str, *, revision: str | None = None, pretrained: bool = False, **overrides: Any
+    ) -> "HFCompatibleModel": ...
 ```
 
 - **Only the definition comes from transformers.** The constructor turns `hf_config` into a
