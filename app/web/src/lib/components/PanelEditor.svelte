@@ -10,7 +10,7 @@
 	import { Slider } from '#lib/components/ui/slider/index.js';
 	import { Switch } from '#lib/components/ui/switch/index.js';
 	import { SYSTEM_X_AXES, axisChoiceLabel, resolveAxis, type AxisKind } from '#lib/chart/axes.ts';
-	import { LINE_WIDTH_MAX, LINE_WIDTH_MIN, SMOOTHING_MAX } from '#lib/workspace/layout.ts';
+	import { LINE_WIDTH_MAX, LINE_WIDTH_MIN } from '#lib/workspace/layout.ts';
 	import {
 		configOf,
 		draftOf,
@@ -22,6 +22,7 @@
 	import Autocomplete, { type AutocompleteOption } from './Autocomplete.svelte';
 	import LinePlot from './LinePlot.svelte';
 	import PanelLegend from './PanelLegend.svelte';
+	import SmoothingPicker from './SmoothingPicker.svelte';
 	import XAxisPicker from './XAxisPicker.svelte';
 
 	/**
@@ -327,34 +328,12 @@
 
 							<section class="grid gap-5" aria-labelledby="panel-smoothing-heading">
 								<h3 id="panel-smoothing-heading" class="font-medium">Smoothing</h3>
-								<div class="grid gap-3">
-									<div class="flex items-center justify-between gap-4">
-										<Label for="panel-smoothing">Custom smoothing</Label>
-										<Switch
-											id="panel-smoothing"
-											checked={draft.smoothing != null}
-											onCheckedChange={(on) => set('smoothing', on ? ws.smoothing : null)}
-										/>
-									</div>
-									<div class="flex items-center gap-3">
-										<Slider
-											type="single"
-											value={draft.smoothing ?? ws.smoothing}
-											onValueChange={(v) => set('smoothing', v)}
-											min={0}
-											max={SMOOTHING_MAX}
-											step={0.01}
-											disabled={draft.smoothing == null}
-											aria-label="Smoothing"
-										/>
-										<output class="w-9 text-right text-muted-foreground tabular-nums">
-											{(draft.smoothing ?? ws.smoothing).toFixed(2)}
-										</output>
-									</div>
-									{#if draft.smoothing == null}
-										<p class="text-xs text-muted-foreground">Follows the workspace's settings.</p>
-									{/if}
-								</div>
+								<SmoothingPicker
+									id="panel-smoothing"
+									value={draft.smoothing}
+									inherit={ws.smoothing}
+									onchange={(v) => set('smoothing', v)}
+								/>
 								{@render tristate(
 									'panel-original',
 									'Show original lines',

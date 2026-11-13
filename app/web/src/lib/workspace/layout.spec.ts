@@ -8,6 +8,7 @@ import {
 	pageStart,
 	pinFirst,
 	parseLayout,
+	panelSmoothing,
 	parsePanelConfig
 } from './layout.ts';
 
@@ -108,6 +109,33 @@ describe('parsePanelConfig', () => {
 			smoothing: 0.99,
 			lineWidth: 0.5
 		});
+		expect(parsePanelConfig({ smoothingType: 'average', smoothing: 500 })).toEqual({
+			smoothingType: 'average',
+			smoothing: 100
+		});
+		expect(parsePanelConfig({ smoothingType: 'gaussian', smoothing: 0 })).toEqual({
+			smoothingType: 'gaussian',
+			smoothing: 0.1
+		});
+	});
+
+	it('reads smoothing methods, and an old weight alone as an EMA', () => {
+		expect(panelSmoothing(parsePanelConfig({ smoothing: 0.5 })!)).toEqual({
+			type: 'ema',
+			param: 0.5
+		});
+		expect(parsePanelConfig({ smoothingType: 'none', smoothing: 0.5 })).toEqual({
+			smoothingType: 'none'
+		});
+		expect(parsePanelConfig({ smoothingType: 'twema' })).toEqual({
+			smoothingType: 'twema',
+			smoothing: 0.6
+		});
+		// An unknown method is dropped; its weight is read as an EMA's.
+		expect(parsePanelConfig({ smoothingType: 'median', smoothing: 0.2 })).toEqual({
+			smoothing: 0.2
+		});
+		expect(panelSmoothing({})).toBeUndefined();
 	});
 
 	it('keeps the x axis, and the axis x bounds were set on only with bounds', () => {

@@ -5,7 +5,8 @@
  */
 
 import type { MetricDef, MetricStream, PanelDef } from '#lib/types.ts';
-import { LINE_WIDTH_MAX, LINE_WIDTH_MIN, SMOOTHING_MAX, type PanelConfig } from './layout.ts';
+import { clampSmoothing, type Smoothing } from '#lib/chart/series.ts';
+import { LINE_WIDTH_MAX, LINE_WIDTH_MIN, panelSmoothing, type PanelConfig } from './layout.ts';
 
 /** A panel as it is drawn. */
 export interface PanelView extends PanelDef {
@@ -68,7 +69,7 @@ export interface PanelDraft {
 	yLabel: string;
 	ignoreOutliers: Tristate;
 	/** Null follows the workspace. */
-	smoothing: number | null;
+	smoothing: Smoothing | null;
 	showOriginal: Tristate;
 	/** Null for the default width. */
 	lineWidth: number | null;
@@ -104,7 +105,7 @@ export function draftOf(
 		yMax: num(config.yMax),
 		yLabel: config.yLabel ?? '',
 		ignoreOutliers: tri(config.ignoreOutliers),
-		smoothing: config.smoothing ?? null,
+		smoothing: panelSmoothing(config) ?? null,
 		showOriginal: tri(config.showOriginal),
 		lineWidth: config.lineWidth ?? null,
 		legend: tri(config.legend),
@@ -167,8 +168,11 @@ export function configOf(
 	}
 	const ignoreOutliers = untri(draft.ignoreOutliers);
 	if (ignoreOutliers != null) config.ignoreOutliers = ignoreOutliers;
-	if (draft.smoothing != null)
-		config.smoothing = Math.max(0, Math.min(SMOOTHING_MAX, draft.smoothing));
+	if (draft.smoothing != null) {
+		const { type, param } = draft.smoothing;
+		config.smoothingType = type;
+		if (type !== 'none') config.smoothing = clampSmoothing(type, param);
+	}
 	const showOriginal = untri(draft.showOriginal);
 	if (showOriginal != null) config.showOriginal = showOriginal;
 	if (draft.lineWidth != null)

@@ -10,7 +10,7 @@ import {
 	unmapAt,
 	type XAxis
 } from '#lib/chart/axes.ts';
-import { slotOf, type Series } from '#lib/chart/series.ts';
+import { NO_SMOOTHING, slotOf, type Series, type Smoothing } from '#lib/chart/series.ts';
 import {
 	LIVE_STATES,
 	type MetricStream,
@@ -228,7 +228,7 @@ export class Workspace {
 	pinnedId = $state<string | null>(null);
 	cursor = $state.raw<Cursor | null>(null);
 
-	smoothing = $state(0);
+	smoothing = $state.raw<Smoothing>(NO_SMOOTHING);
 	showOriginal = $state(true);
 	ignoreOutliers = $state(false);
 	/** The x axis of panels that don't set their own: one of `X_AXES`, or a metric key. */

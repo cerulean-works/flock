@@ -75,7 +75,8 @@ describe('panel drafts', () => {
 			yMin: 0,
 			yMax: 2.5,
 			ignoreOutliers: false,
-			smoothing: 0.4,
+			smoothingType: 'gaussian' as const,
+			smoothing: 4,
 			showOriginal: true,
 			lineWidth: 2,
 			legend: true,
@@ -120,7 +121,30 @@ describe('panel drafts', () => {
 	});
 
 	it('clamps sliders to their range', () => {
-		const draft = { ...draftOf({}, defaults.metrics), smoothing: 2, lineWidth: 9 };
-		expect(configOf(draft, defaults).config).toEqual({ smoothing: 0.99, lineWidth: 4 });
+		const draft = {
+			...draftOf({}, defaults.metrics),
+			smoothing: { type: 'ema' as const, param: 2 },
+			lineWidth: 9
+		};
+		expect(configOf(draft, defaults).config).toEqual({
+			smoothingType: 'ema',
+			smoothing: 0.99,
+			lineWidth: 4
+		});
+		const window = { ...draft, smoothing: { type: 'average' as const, param: 7.6 } };
+		expect(configOf(window, defaults).config).toMatchObject({ smoothing: 8 });
+	});
+
+	it('read an old smoothing weight as an EMA', () => {
+		expect(draftOf({ smoothing: 0.3 }, defaults.metrics).smoothing).toEqual({
+			type: 'ema',
+			param: 0.3
+		});
+		expect(draftOf({}, defaults.metrics).smoothing).toBeNull();
+		const none = {
+			...draftOf({}, defaults.metrics),
+			smoothing: { type: 'none' as const, param: 0 }
+		};
+		expect(configOf(none, defaults).config).toEqual({ smoothingType: 'none' });
 	});
 });

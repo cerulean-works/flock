@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { ema, pointAt, Series, smoothed, snapStep } from './series.ts';
+import {
+	clampSmoothing,
+	ema,
+	gaussian,
+	pointAt,
+	runningAverage,
+	Series,
+	smooth,
+	smoothed,
+	smooths,
+	snapStep,
+	timeWeightedEma
+} from './series.ts';
 
 /** Flock's sampling (Snapshot.build in app/api/src/api/dashboard.py). */
 function sampleIndices(raw: number, n: number) {
@@ -95,10 +107,12 @@ describe('live appends', () => {
 
 	it('invalidates cached smoothing', () => {
 		const s = new Series(Float32Array.from([0, 0]), Float64Array.from([0, 1]));
-		const before = smoothed(s, 0.5);
-		expect(smoothed(s, 0.5)).toBe(before);
+		const ema5 = { type: 'ema' as const, param: 0.5 };
+		const before = smoothed(s, ema5);
+		expect(smoothed(s, ema5)).toBe(before);
+		expect(smoothed(s, { type: 'twema', param: 0.5 })).not.toBe(before);
 		s.append([2], [10]);
-		const after = smoothed(s, 0.5);
+		const after = smoothed(s, ema5);
 		expect(after).not.toBe(before);
 		expect(after.length).toBe(3);
 	});
@@ -140,5 +154,77 @@ describe('non-finite values', () => {
 		expect(Number.isNaN(out[3])).toBe(true);
 		expect(out[2]).toBeCloseTo(2, 5);
 		expect(out[4]).toBeCloseTo(2, 5);
+	});
+});
+
+describe('smoothing methods', () => {
+	const xs = (...v: number[]) => Float64Array.from(v);
+	const ys = (...v: number[]) => Float32Array.from(v);
+
+	it('leave the line as it is when they would not change it', () => {
+		const v = ys(1, 5, 2);
+		const x = xs(0, 1, 2);
+		expect(smooth(x, v, { type: 'none', param: 0 })).toBe(v);
+		expect(smooth(x, v, { type: 'ema', param: 0 })).toBe(v);
+		expect(smooth(x, v, { type: 'average', param: 1 })).toBe(v);
+		expect(Array.from(smoothed(new Series(v, x), { type: 'twema', param: 0 }))).toEqual([1, 5, 2]);
+	});
+
+	it('time weighted EMA matches the EMA on evenly logged steps', () => {
+		const v = ys(3, 1, 4, 1, 5, 9, 2, 6);
+		const even = timeWeightedEma(xs(0, 10, 20, 30, 40, 50, 60, 70), v, 0.7);
+		const plain = ema(v, 0.7);
+		for (let i = 0; i < v.length; i++) expect(even[i]).toBeCloseTo(plain[i], 5);
+	});
+
+	it('time weighted EMA decays more across a longer gap', () => {
+		// The same values; the last point comes after a gap of five average steps.
+		const v = ys(0, 0, 0, 0, 10);
+		const even = timeWeightedEma(xs(0, 1, 2, 3, 4), v, 0.8);
+		const gap = timeWeightedEma(xs(0, 1, 2, 3, 8), v, 0.8);
+		expect(gap[4]).toBeGreaterThan(even[4]);
+	});
+
+	it('running average is the mean of the last window points, skipping gaps', () => {
+		const out = runningAverage(ys(1, 2, NaN, 3, 4, 5), 3);
+		expect(Array.from(out).map((v) => (Number.isNaN(v) ? null : v))).toEqual([
+			1,
+			1.5,
+			null,
+			2,
+			3,
+			4
+		]);
+	});
+
+	it('gaussian keeps a constant line and is centered', () => {
+		for (const v of gaussian(xs(0, 1, 2, 3, 4), ys(2, 2, 2, 2, 2), 1.5))
+			expect(v).toBeCloseTo(2, 5);
+		// A straight line is unchanged in the middle, where the kernel is symmetric.
+		const line = gaussian(xs(0, 1, 2, 3, 4, 5, 6), ys(0, 1, 2, 3, 4, 5, 6), 0.8);
+		expect(line[3]).toBeCloseTo(3, 4);
+		// A spike is spread to its neighbours, but no further than 3 sigma.
+		const spike = gaussian(xs(0, 1, 2, 3, 4, 5, 6), ys(0, 0, 0, 7, 0, 0, 0), 0.5);
+		expect(spike[3]).toBeLessThan(7);
+		expect(spike[2]).toBeGreaterThan(0);
+		expect(spike[0]).toBe(0);
+	});
+
+	it('all skip non-finite points', () => {
+		const v = ys(2, Infinity, 2, NaN, 2);
+		const x = xs(0, 1, 2, 3, 4);
+		for (const type of ['ema', 'twema', 'average', 'gaussian'] as const) {
+			const out = smooth(x, v, { type, param: type === 'average' ? 3 : 0.5 });
+			expect(Number.isNaN(out[1]) && Number.isNaN(out[3])).toBe(true);
+			for (const i of [0, 2, 4]) expect(out[i]).toBeCloseTo(2, 5);
+		}
+	});
+
+	it('clamp their parameter to what each method takes', () => {
+		expect(clampSmoothing('ema', 2)).toBe(0.99);
+		expect(clampSmoothing('average', 0)).toBe(1);
+		expect(clampSmoothing('average', 4.4)).toBe(4);
+		expect(clampSmoothing('gaussian', 1000)).toBe(100);
+		expect(smooths({ type: 'gaussian', param: 0.1 })).toBe(true);
 	});
 });

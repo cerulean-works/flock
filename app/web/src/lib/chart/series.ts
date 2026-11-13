@@ -194,6 +194,71 @@ export function snapStep(lines: Iterable<Series>, step: number): number {
 	return best;
 }
 
+/** How a line is smoothed: W&B's five methods. */
+export type SmoothingType = 'none' | 'ema' | 'twema' | 'average' | 'gaussian';
+
+/** A smoothing method and its parameter (a weight, a window of points or a sigma in x units). */
+export interface Smoothing {
+	type: SmoothingType;
+	param: number;
+}
+
+/** Each method's name, the bounds and step of its parameter, and the value it starts at. */
+export const SMOOTHING_METHODS: Record<
+	SmoothingType,
+	{ label: string; param: string; min: number; max: number; step: number; start: number }
+> = {
+	none: { label: 'No smoothing', param: '', min: 0, max: 0, step: 1, start: 0 },
+	ema: {
+		label: 'Exponential moving average',
+		param: 'Weight',
+		min: 0,
+		max: 0.99,
+		step: 0.01,
+		start: 0.6
+	},
+	twema: {
+		label: 'Time weighted EMA',
+		param: 'Weight',
+		min: 0,
+		max: 0.99,
+		step: 0.01,
+		start: 0.6
+	},
+	average: { label: 'Running average', param: 'Window', min: 1, max: 100, step: 1, start: 10 },
+	gaussian: { label: 'Gaussian', param: 'Sigma', min: 0.1, max: 100, step: 0.1, start: 10 }
+};
+
+export const SMOOTHING_TYPES = Object.keys(SMOOTHING_METHODS) as SmoothingType[];
+
+export const NO_SMOOTHING: Smoothing = { type: 'ema', param: 0 };
+
+export const isSmoothingType = (v: unknown): v is SmoothingType =>
+	typeof v === 'string' && v in SMOOTHING_METHODS;
+
+/** `param` within what `type` takes (a whole number of points for a running average). */
+export function clampSmoothing(type: SmoothingType, param: number): number {
+	const { min, max } = SMOOTHING_METHODS[type];
+	if (type === 'none') return 0;
+	const v = Math.max(min, Math.min(max, Number.isFinite(param) ? param : min));
+	return type === 'average' ? Math.round(v) : v;
+}
+
+/** Whether `s` changes a line at all: a zero weight or a window of one leaves it as it is. */
+export function smooths(s: Smoothing): boolean {
+	switch (s.type) {
+		case 'none':
+			return false;
+		case 'ema':
+		case 'twema':
+			return s.param > 0;
+		case 'average':
+			return s.param > 1;
+		case 'gaussian':
+			return s.param > 0;
+	}
+}
+
 /**
  * Debiased exponential moving average, the same smoothing W&B applies by default.
  * `weight` 0 returns the input unchanged. Non-finite points stay gaps and don't feed the average,
@@ -217,18 +282,123 @@ export function ema(src: Float32Array, weight: number): Float32Array {
 	return out;
 }
 
+/**
+ * Time weighted EMA: a debiased EMA whose decay between two points scales with the gap between
+ * their steps. `weight` is the decay over the average gap, so an evenly logged line smooths
+ * exactly as `ema` smooths it, and an unevenly logged one smooths the same.
+ */
+export function timeWeightedEma(xs: Float64Array, src: Float32Array, weight: number): Float32Array {
+	if (weight <= 0) return src;
+	const n = Math.min(xs.length, src.length);
+	let first = NaN;
+	let last = NaN;
+	let count = 0;
+	for (let i = 0; i < n; i++) {
+		if (!Number.isFinite(src[i])) continue;
+		if (Number.isNaN(first)) first = xs[i];
+		last = xs[i];
+		count++;
+	}
+	const gap = count > 1 ? (last - first) / (count - 1) : 1;
+	const out = new Float32Array(src.length).fill(NaN);
+	let acc = 0;
+	let norm = 0;
+	let prev = NaN;
+	for (let i = 0; i < n; i++) {
+		const v = src[i];
+		if (!Number.isFinite(v)) continue;
+		const w = Number.isNaN(prev) || !(gap > 0) ? weight : weight ** ((xs[i] - prev) / gap);
+		acc = acc * w + (1 - w) * v;
+		norm = norm * w + (1 - w);
+		out[i] = acc / norm;
+		prev = xs[i];
+	}
+	return out;
+}
+
+/** Mean of the last `window` finite points, this one included. Non-finite points stay gaps. */
+export function runningAverage(src: Float32Array, window: number): Float32Array {
+	const size = Math.max(1, Math.round(window));
+	if (size <= 1) return src;
+	const out = new Float32Array(src.length).fill(NaN);
+	const kept = new Float64Array(size);
+	let sum = 0;
+	let count = 0;
+	for (let i = 0; i < src.length; i++) {
+		const v = src[i];
+		if (!Number.isFinite(v)) continue;
+		if (count >= size) sum -= kept[count % size];
+		kept[count % size] = v;
+		sum += v;
+		count++;
+		out[i] = sum / Math.min(count, size);
+	}
+	return out;
+}
+
+/**
+ * A centered Gaussian kernel over x (`sigma` in x units), truncated at 3 sigma: each point is
+ * the weighted mean of the finite points within that distance. Non-finite points stay gaps.
+ */
+export function gaussian(xs: Float64Array, src: Float32Array, sigma: number): Float32Array {
+	if (!(sigma > 0)) return src;
+	const n = Math.min(xs.length, src.length);
+	const out = new Float32Array(src.length).fill(NaN);
+	const reach = 3 * sigma;
+	const k = -1 / (2 * sigma * sigma);
+	let lo = 0;
+	let hi = 0;
+	for (let i = 0; i < n; i++) {
+		if (!Number.isFinite(src[i])) continue;
+		const x = xs[i];
+		while (xs[lo] < x - reach) lo++;
+		if (hi < i) hi = i;
+		while (hi + 1 < n && xs[hi + 1] <= x + reach) hi++;
+		let sum = 0;
+		let norm = 0;
+		for (let j = lo; j <= hi; j++) {
+			const v = src[j];
+			if (!Number.isFinite(v)) continue;
+			const d = xs[j] - x;
+			const w = Math.exp(d * d * k);
+			sum += w * v;
+			norm += w;
+		}
+		out[i] = sum / norm;
+	}
+	return out;
+}
+
+/** `src` (with steps `xs`) smoothed by `s`; `src` itself when `s` leaves it as it is. */
+export function smooth(xs: Float64Array, src: Float32Array, s: Smoothing): Float32Array {
+	if (!smooths(s)) return src;
+	switch (s.type) {
+		case 'ema':
+			return ema(src, s.param);
+		case 'twema':
+			return timeWeightedEma(xs, src, s.param);
+		case 'average':
+			return runningAverage(src, s.param);
+		case 'gaussian':
+			return gaussian(xs, src, s.param);
+		default:
+			return src;
+	}
+}
+
 const smoothCache = new WeakMap<
 	Series,
-	{ weight: number; version: number; values: Float32Array }
+	{ type: SmoothingType; param: number; version: number; values: Float32Array }
 >();
 
-/** Smoothed values of a series, memoised until the series or the weight changes. */
-export function smoothed(series: Series, weight: number): Float32Array {
-	if (weight <= 0) return series.y;
+/** Smoothed values of a series, memoised until the series, the method or its parameter change. */
+export function smoothed(series: Series, s: Smoothing): Float32Array {
+	if (!smooths(s)) return series.y;
 	const hit = smoothCache.get(series);
-	if (hit && hit.weight === weight && hit.version === series.version) return hit.values;
-	const values = ema(series.y, weight);
-	smoothCache.set(series, { weight, version: series.version, values });
+	if (hit && hit.type === s.type && hit.param === s.param && hit.version === series.version)
+		return hit.values;
+	const values = smooth(series.x, series.y, s);
+	smoothCache.set(series, { type: s.type, param: s.param, version: series.version, values });
 	return values;
 }
 

@@ -3,6 +3,14 @@
  * so the ordering rules can be tested without a workspace.
  */
 
+import {
+	SMOOTHING_METHODS,
+	clampSmoothing,
+	isSmoothingType,
+	type Smoothing,
+	type SmoothingType
+} from '#lib/chart/series.ts';
+
 /**
  * How the viewer set up one panel (W&B's "Edit panel"). Everything is optional: what is unset
  * follows the panel's defaults and the workspace's line plot settings.
@@ -30,7 +38,12 @@ export interface PanelConfig {
 	yMax?: number;
 	yLabel?: string;
 	ignoreOutliers?: boolean;
-	/** Smoothing weight, 0 (none) to 0.99. */
+	/**
+	 * Smoothing method. Unset with `smoothing` set is an EMA, as panels were smoothed before
+	 * there were other methods.
+	 */
+	smoothingType?: SmoothingType;
+	/** The method's parameter (see `SMOOTHING_METHODS`): an EMA weight, 0 (none) to 0.99. */
 	smoothing?: number;
 	showOriginal?: boolean;
 	/** In CSS pixels. */
@@ -67,7 +80,6 @@ export const EMPTY_LAYOUT: PanelLayout = {
 	pinned: []
 };
 
-export const SMOOTHING_MAX = 0.99;
 export const LINE_WIDTH_MIN = 0.5;
 export const LINE_WIDTH_MAX = 4;
 export const ROWS_MIN = 1;
@@ -83,6 +95,13 @@ const strings = (v: unknown): string[] =>
 	Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [];
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** A panel's own smoothing, or undefined when it follows the workspace's. */
+export function panelSmoothing(config: PanelConfig): Smoothing | undefined {
+	const type = config.smoothingType ?? (config.smoothing != null ? 'ema' : undefined);
+	if (!type) return undefined;
+	return { type, param: config.smoothing ?? SMOOTHING_METHODS[type].start };
+}
 
 /**
  * One panel's settings, keeping only what is well formed: unknown fields and values of the
@@ -111,7 +130,14 @@ export function parsePanelConfig(raw: unknown): PanelConfig | null {
 	}
 	for (const k of ['ignoreOutliers', 'showOriginal', 'legend', 'log'] as const)
 		if (typeof raw[k] === 'boolean') out[k] = raw[k];
-	if (finite(raw.smoothing)) out.smoothing = Math.max(0, Math.min(SMOOTHING_MAX, raw.smoothing));
+	if (isSmoothingType(raw.smoothingType)) {
+		out.smoothingType = raw.smoothingType;
+		if (raw.smoothingType !== 'none')
+			out.smoothing = clampSmoothing(
+				raw.smoothingType,
+				finite(raw.smoothing) ? raw.smoothing : SMOOTHING_METHODS[raw.smoothingType].start
+			);
+	} else if (finite(raw.smoothing)) out.smoothing = clampSmoothing('ema', raw.smoothing);
 	if (finite(raw.lineWidth))
 		out.lineWidth = Math.max(LINE_WIDTH_MIN, Math.min(LINE_WIDTH_MAX, raw.lineWidth));
 	if (out.xMin == null && out.xMax == null) delete out.xRangeAxis;

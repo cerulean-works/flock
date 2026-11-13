@@ -11,7 +11,8 @@
 	import { formatX, formatXTick, formatXValue } from '#lib/chart/axes.ts';
 	import { placeTip, Readout, tipSide, type TipBox } from '#lib/chart/readout.ts';
 	import { cancel, schedule } from '#lib/chart/scheduler.ts';
-	import { pointAt, SNAP_PX, smoothed, snapStep } from '#lib/chart/series.ts';
+	import { pointAt, SNAP_PX, smoothed, smooths, snapStep } from '#lib/chart/series.ts';
+	import { panelSmoothing } from '#lib/workspace/layout.ts';
 	import { scheme } from '#lib/theme.svelte.ts';
 	import { formatMetric, formatTick, sameItems } from '#lib/utils.ts';
 	import {
@@ -51,7 +52,8 @@
 	/** The x axis; curves are put on it (see #lib/chart/axes.ts) as they're read. */
 	const axis = $derived(ws.axisOf(view));
 	const zoom = $derived(ws.zoomOf(panel, axis.id));
-	const smoothing = $derived(config.smoothing ?? ws.smoothing);
+	const smoothing = $derived(panelSmoothing(config) ?? ws.smoothing);
+	const smoothes = $derived(smooths(smoothing));
 	const showOriginal = $derived(config.showOriginal ?? ws.showOriginal);
 	const ignoreOutliers = $derived(config.ignoreOutliers ?? ws.ignoreOutliers);
 
@@ -195,11 +197,11 @@
 	/** Inputs of the last painted base layer; identical inputs never repaint. */
 	let painted: unknown[] = [];
 	$effect(() => {
-		const inputs = [series, domain, w, h, dpr, smoothing > 0, showOriginal, lineWidth];
+		const inputs = [series, domain, w, h, dpr, smoothes, showOriginal, lineWidth];
 		const priority = active && onScreen ? 'urgent' : 'idle';
 		if (!base || !w || !h || sameItems(inputs, painted)) return;
 		const canvas = base;
-		const opts = { smoothing: smoothing > 0, showOriginal, zoomed: !!xRange, lineWidth };
+		const opts = { smoothing: smoothes, showOriginal, zoomed: !!xRange, lineWidth };
 		const s = series;
 		const d = domain;
 		const [cw, ch, cdpr] = [w, h, dpr];
@@ -343,7 +345,7 @@
 			side
 		});
 		const fmt = view.format;
-		const raw = smoothing > 0;
+		const raw = smoothes;
 		const byMetric = ws.byMetric(view);
 		const several = view.metrics.length > 1;
 		const rows: TipRow[] = [];
