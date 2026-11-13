@@ -25,7 +25,7 @@ guide:
   - local: hub/store-models
     title: Store and load models
   - local: hub/import-from-hf
-    title: Import from Hugging Face
+    title: Import models from Hugging Face
 - title: Training
   sections:
   - local: training/trainer

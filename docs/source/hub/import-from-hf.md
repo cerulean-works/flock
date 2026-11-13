@@ -1,4 +1,4 @@
-# Import from Hugging Face
+# Import models from Hugging Face
 
 You can bring a model from the Hugging Face Hub into your organization's model registry. The import stores it in Flock's own format, so `load_from_hub` and the trainer handle it like any other Flock model. Hugging Face is only the source of the files.
 
@@ -73,8 +73,8 @@ The import refuses:
 
 Importing the same commit into the same model again returns the version already made. If an import stopped partway, for example because the job ended, running it again finishes the upload. Imports from a folder outside the Hugging Face cache have no commit, so each run makes a new version.
 
-## Datasets
+## Import a dataset
 
-<!-- Placeholder: the dataset import half of this page is still to be written. -->
+To import a dataset instead, see [Import datasets from Hugging Face](import-datasets-from-hf).
 
 [Models API and CLI reference](models)
