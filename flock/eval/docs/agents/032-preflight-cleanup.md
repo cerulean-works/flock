@@ -43,6 +43,7 @@ The preflight now runs exactly what scoring will run, so it can't drift from it.
 ## 4. How it was actually built
 
 - **Checks.** The new test fails on 028's `evaluate`, which raised the multiple-choice task's refusal first. No task hash moved among the registered tasks, and the scorer and output locks show no mismatch against `main`.
+- **Rebased after 033 to 036 merged.** The cleanups were unchanged; only the imports met main's `pins` import, and the new test takes the type annotations main gave every test. The hash and lock checks were rerun against the rebased `main`. The number stays 032, the slot left free between 031 and 033.
 
 ### Known gaps
 
