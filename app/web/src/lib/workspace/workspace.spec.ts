@@ -190,7 +190,7 @@ describe('what this browser keeps for a project', () => {
 	it('keeps the line plot settings and reads them back', () => {
 		const ws = workspace(runs(2));
 		ws.restoreLayout();
-		expect(ws.smoothing).toEqual({ type: 'ema', param: 0 });
+		expect(ws.smoothing).toEqual({ type: 'none', param: 0 });
 		expect([ws.showOriginal, ws.ignoreOutliers, ws.xAxis, ws.defaultRows]).toEqual([
 			true,
 			false,
@@ -218,11 +218,16 @@ describe('what this browser keeps for a project', () => {
 		localStorage.setItem(LAYOUT, JSON.stringify({ sections: [], order: {}, height: {} }));
 		const ws = workspace(runs(1));
 		ws.restoreLayout();
-		expect(ws.smoothing).toEqual({ type: 'ema', param: 0 });
+		expect(ws.smoothing).toEqual({ type: 'none', param: 0 });
 		localStorage.setItem(LAYOUT, JSON.stringify({ settings: { smoothing: 0.8, rows: 99 } }));
 		const old = workspace(runs(1));
 		old.restoreLayout();
 		expect(old.smoothing).toEqual({ type: 'ema', param: 0.8 });
+		// A weight of 0 is no smoothing.
+		localStorage.setItem(LAYOUT, JSON.stringify({ settings: { smoothing: 0 } }));
+		const zero = workspace(runs(1));
+		zero.restoreLayout();
+		expect(zero.smoothing).toEqual({ type: 'none', param: 0 });
 		expect(old.defaultRows).toBe(12);
 	});
 

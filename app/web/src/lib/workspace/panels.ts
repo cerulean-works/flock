@@ -5,7 +5,7 @@
  */
 
 import type { MetricDef, MetricStream, PanelDef } from '#lib/types.ts';
-import { clampSmoothing, type Smoothing } from '#lib/chart/series.ts';
+import { clampSmoothing, normalSmoothing, type Smoothing } from '#lib/chart/series.ts';
 import { LINE_WIDTH_MAX, LINE_WIDTH_MIN, panelSmoothing, type PanelConfig } from './layout.ts';
 
 /** A panel as it is drawn. */
@@ -176,9 +176,12 @@ export function configOf(
 	const ignoreOutliers = untri(draft.ignoreOutliers);
 	if (ignoreOutliers != null) config.ignoreOutliers = ignoreOutliers;
 	if (draft.smoothing != null) {
-		const { type, param } = draft.smoothing;
-		config.smoothingType = type;
-		if (type !== 'none') config.smoothing = clampSmoothing(type, param);
+		const s = normalSmoothing({
+			type: draft.smoothing.type,
+			param: clampSmoothing(draft.smoothing.type, draft.smoothing.param)
+		});
+		config.smoothingType = s.type;
+		if (s.type !== 'none') config.smoothing = s.param;
 	}
 	const showOriginal = untri(draft.showOriginal);
 	if (showOriginal != null) config.showOriginal = showOriginal;

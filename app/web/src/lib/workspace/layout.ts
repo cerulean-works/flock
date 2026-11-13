@@ -7,6 +7,7 @@ import {
 	SMOOTHING_METHODS,
 	clampSmoothing,
 	isSmoothingType,
+	normalSmoothing,
 	type Smoothing,
 	type SmoothingType
 } from '#lib/chart/series.ts';
@@ -140,14 +141,17 @@ const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFi
  * clamped (or its starting one), else a weight alone as an EMA's.
  */
 function readSmoothing(raw: Record<string, unknown>, out: Record<string, unknown>) {
-	if (isSmoothingType(raw.smoothingType)) {
-		out.smoothingType = raw.smoothingType;
-		if (raw.smoothingType !== 'none')
-			out.smoothing = clampSmoothing(
-				raw.smoothingType,
-				finite(raw.smoothing) ? raw.smoothing : SMOOTHING_METHODS[raw.smoothingType].start
-			);
-	} else if (finite(raw.smoothing)) out.smoothing = clampSmoothing('ema', raw.smoothing);
+	const typed = isSmoothingType(raw.smoothingType) ? raw.smoothingType : undefined;
+	const type = typed ?? (finite(raw.smoothing) ? 'ema' : undefined);
+	if (!type) return;
+	const param = finite(raw.smoothing) ? raw.smoothing : SMOOTHING_METHODS[type].start;
+	const s = normalSmoothing({ type, param: clampSmoothing(type, param) });
+	// A weight of 0 is kept as no smoothing, rather than read as unset.
+	if (s.type === 'none') out.smoothingType = 'none';
+	else {
+		if (typed) out.smoothingType = s.type;
+		out.smoothing = s.param;
+	}
 }
 
 /** The workspace's line plot settings as saved, keeping only what is well formed. */
@@ -169,7 +173,7 @@ export function panelSmoothing(config: {
 }): Smoothing | undefined {
 	const type = config.smoothingType ?? (config.smoothing != null ? 'ema' : undefined);
 	if (!type) return undefined;
-	return { type, param: config.smoothing ?? SMOOTHING_METHODS[type].start };
+	return normalSmoothing({ type, param: config.smoothing ?? SMOOTHING_METHODS[type].start });
 }
 
 /**

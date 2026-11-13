@@ -90,7 +90,7 @@ plot settings and a panel's editor).
 | Exponential moving average | weight, 0 to 0.99 | Today's debiased EMA, unchanged. The default for old saved settings. |
 | Time weighted EMA | weight, 0 to 0.99 | EMA whose decay scales with the gap between steps, so unevenly logged runs smooth the same as even ones. |
 | Running average | window, 1 to 100 points | Mean of the last `window` finite points. |
-| Gaussian | sigma, 0.1 to 100 steps | Centered Gaussian kernel over x, truncated at 3 sigma. |
+| Gaussian | sigma, 0.1 to 100 points | Centered Gaussian kernel over the points, truncated at 3 sigma. |
 
 `PanelConfig.smoothing` (a number) stays readable, as an EMA weight. New settings are saved as
 `smoothingType` plus `smoothing`. The memoised cache in `series.ts` keys on both. All four
@@ -153,9 +153,10 @@ Built in the planned order on `feat/workspace-panels`, one commit per step.
 
 - **Smoothing (D134).** The methods live in `chart/series.ts` (`smooth`, `SMOOTHING_METHODS`).
   The time weighted EMA decays by `weight` over the run's average gap between finite points,
-  so on evenly logged steps it equals the EMA. The Gaussian's sigma is in the units of the x
-  axis the panel plots on, which are steps unless the panel uses another axis. The workspace
-  default stays an EMA of weight 0. One `SmoothingPicker` serves the workspace settings and the
+  so on evenly logged steps it equals the EMA. The Gaussian's sigma is in points, like the
+  running average's window, as sigma in steps barely smoothed a run of thousands of steps.
+  Unset workspace smoothing, and an EMA or time weighted EMA weight of 0, read as no smoothing.
+  An old nonzero weight still loads as an EMA. One `SmoothingPicker` serves the workspace settings and the
   editor, where a "Workspace" method follows the workspace, in place of the old switch.
 - **Settings (D132).** They are kept in the layout as `settings`, next to the panels, and read
   through getters on `Workspace`, so the controls bind to them as before. A run's page shares
@@ -177,5 +178,6 @@ Built in the planned order on `feat/workspace-panels`, one commit per step.
   little off the drawn line. Forecasts are skipped on wall time x axes, where a power law in
   epoch seconds means nothing, and their horizon is in the units of the panel's x axis.
   Forecasts count toward the y range unless outliers are ignored.
-- **Not checked by hand.** The UI was not tried in a browser. Checks, lint, unit tests and the
-  build pass.
+- **Step ticks.** An x axis of steps never ticks closer than 1, so an empty plot (an added
+  panel before a metric is picked) no longer reads `0 0 0 1 1 1`. Main did the same on any
+  empty chart.

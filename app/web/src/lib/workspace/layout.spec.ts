@@ -187,6 +187,11 @@ describe('parsePanelConfig', () => {
 			smoothing: 0.2
 		});
 		expect(panelSmoothing({})).toBeUndefined();
+		// A weight of 0 was no smoothing, and is kept as such.
+		expect(parsePanelConfig({ smoothing: 0 })).toEqual({ smoothingType: 'none' });
+		expect(parsePanelConfig({ smoothingType: 'twema', smoothing: 0 })).toEqual({
+			smoothingType: 'none'
+		});
 	});
 
 	it('keeps the x axis, and the axis x bounds were set on only with bounds', () => {
