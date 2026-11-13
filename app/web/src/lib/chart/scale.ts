@@ -13,6 +13,15 @@ export function niceTicks(lo: number, hi: number, count = 4): Ticks {
 	return ticksEvery(lo, hi, step);
 }
 
+/**
+ * Ticks for an axis of whole numbers (steps): as `niceTicks`, but never closer than 1, so a
+ * narrow range (an empty plot's 0 to 1) isn't labelled `0 0 0 1 1 1`.
+ */
+export function stepTicks(lo: number, hi: number, count = 4): Ticks {
+	const ticks = niceTicks(lo, hi, count);
+	return ticks.step >= 1 || !(hi > lo) ? ticks : ticksEvery(lo, hi, 1);
+}
+
 function ticksEvery(lo: number, hi: number, step: number): Ticks {
 	const values: number[] = [];
 	const start = Math.ceil(lo / step - 1e-9);

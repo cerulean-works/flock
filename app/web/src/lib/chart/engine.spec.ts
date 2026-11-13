@@ -199,3 +199,11 @@ describe('computeDomain forecasts', () => {
 		expect(d.y0).toBeGreaterThan(1);
 	});
 });
+
+describe('computeDomain step ticks', () => {
+	it('are whole steps, so an empty plot is not labelled 0 0 0 1 1 1', () => {
+		const d = computeDomain([], opts({ xKind: 'step' }));
+		expect(d.xTicks.values).toEqual([0, 1]);
+		expect(computeDomain([], opts()).xTicks.step).toBeLessThan(1);
+	});
+});

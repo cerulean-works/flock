@@ -1,5 +1,13 @@
 import type { AxisKind } from './axes.ts';
-import { logTicks, niceDomain, niceTicks, timeTicks, wallTicks, type Ticks } from './scale.ts';
+import {
+	logTicks,
+	niceDomain,
+	niceTicks,
+	stepTicks,
+	timeTicks,
+	wallTicks,
+	type Ticks
+} from './scale.ts';
 import type { Series } from './series.ts';
 
 export interface Domain {
@@ -160,11 +168,9 @@ export function computeDomain(lines: readonly PlotSeries[], opts: DomainOptions)
 		y0,
 		y1,
 		log: opts.log,
-		xTicks: (opts.xKind === 'duration' ? timeTicks : opts.xKind === 'time' ? wallTicks : niceTicks)(
-			x0,
-			x1,
-			opts.xTicks ?? 5
-		),
+		xTicks: ({ duration: timeTicks, time: wallTicks, step: stepTicks, number: niceTicks } as const)[
+			opts.xKind ?? 'number'
+		](x0, x1, opts.xTicks ?? 5),
 		yTicks: opts.log ? logTicks(y0, y1) : niceTicks(y0, y1, opts.yTicks ?? 4)
 	};
 }
