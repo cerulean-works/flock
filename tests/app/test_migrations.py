@@ -773,7 +773,11 @@ def test_0016_leaves_existing_projects_and_datasets_private(postgres: Any, tmp_p
             "SELECT pk, name, now(), now() FROM o, unnest(ARRAY['a', 'b']) AS name"
         )
     )
-    assert asyncio.run(Migrations().apply(url)) == ["0016_public_projects", "0017_project_creators"]
+    assert asyncio.run(Migrations().apply(url)) == [
+        "0016_public_projects",
+        "0017_project_creators",
+        "0018_hf_imports",
+    ]
     rows = asyncio.run(run("SELECT name, visibility FROM projects ORDER BY name"))
     assert [tuple(row) for row in rows] == [("a", "private"), ("b", "private")]
     assert asyncio.run(run("SELECT * FROM private_datasets")) == []
@@ -829,7 +833,7 @@ def test_0017_credits_each_project_to_its_earliest_runs_owner(
             """
         )
     )
-    assert asyncio.run(Migrations().apply(url)) == ["0017_project_creators"]
+    assert asyncio.run(Migrations().apply(url)) == ["0017_project_creators", "0018_hf_imports"]
     rows = asyncio.run(
         run(
             "SELECT p.name, u.name FROM projects p LEFT JOIN users u ON u.pk = p.created_by "
