@@ -70,4 +70,4 @@ To keep a checkpoint for good, tag it, for example `best`, or make it primary.
 
 ## Models on a run's page
 
-A run's **Overview** lists the model versions the run saved under **Checkpoints**, with their steps and tags. Each one links to the version in the Models tab. The [models reference](../hub/models) lists the naming rules and every command, and the [model endpoints](api/models) list what the tab calls.
+A run's **Overview** lists the model versions the run saved under **Checkpoints**, with their steps and tags. Each one links to the version in the Models tab. [Models API and CLI reference](../hub/models) · [Model registry endpoints](api/models)

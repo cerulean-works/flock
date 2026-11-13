@@ -1,6 +1,7 @@
 """What the parts of `flock.hub.models` share: references, versions, the registry's API, the
 local cache and the S3 client settings."""
 
+import hashlib
 import os
 import threading
 from collections.abc import Callable, Collection
@@ -18,7 +19,10 @@ of a download."""
 CONCURRENCY = 32
 """Part requests in flight at once, across every file (`FLOCK_MODELS_CONCURRENCY`)."""
 
+BUCKET = "flock-models"
 TRAINING_STATE = "training_state/"
+
+type Progress = Callable[[int], None]
 
 
 class ModelError(S3Error):
@@ -43,6 +47,14 @@ def concurrency() -> int:
     if not configured.isdigit() or int(configured) < 1:
         raise ValueError(f"FLOCK_MODELS_CONCURRENCY is {configured!r}, not a positive number")
     return int(configured)
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        while chunk := file.read(8 * 2**20):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 @dataclass(frozen=True)
@@ -203,9 +215,11 @@ def s3_client(org: str, read_only: bool = False, pool: int | None = None) -> Any
         raise ModelError(str(error), error.status, error.body) from None
 
 
-class Pool:
-    """One pool for every request of a push: tasks may add tasks, and the first failure stops
-    the rest and is raised by `wait`."""
+class TransferPool:
+    """Bound concurrent upload or download requests. File tasks may enqueue part tasks.
+
+    The first failure stops queued work. Running tasks finish before `wait` raises it.
+    """
 
     def __init__(self, workers: int) -> None:
         self._executor = ThreadPoolExecutor(workers, thread_name_prefix="flock-models")

@@ -1,6 +1,7 @@
-"""A model as a version's files (D99, D104): safetensors shards, `config.json` and `flock.json`
-written from a `BaseModel`, and the model built again from them. torch and safetensors are
-imported here only, so the rest of `flock.hub.models` stays light."""
+"""Read and write the files that reconstruct a model and its optional training state.
+
+This module imports torch and safetensors when serializing or loading tensors.
+"""
 
 import dataclasses
 import importlib
@@ -8,11 +9,11 @@ import json
 import os
 import subprocess
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from flock.hub.models._common import ModelError
+from flock.hub.models._common import TRAINING_STATE, ModelError
 
 if TYPE_CHECKING:
     import torch
@@ -64,25 +65,9 @@ def import_path(cls: type) -> str:
     return f"{cls.__module__}:{cls.__qualname__}"
 
 
-def check_config(model: BaseModel) -> Any:
-    config = getattr(model, "config", None)
-    params = getattr(type(config), "__dataclass_params__", None)
-    if config is None or params is None or not params.frozen:
-        raise TypeError(
-            f"{type(model).__name__}.config must be a frozen dataclass, so the model can be "
-            "built again from config.json"
-        )
-    return config
-
-
-# ---------------------------------------------------------------------- tensors
-
-
-def _unshared(tensors: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    """`tensors` without the names that alias another's exact tensor (tied weights, kept
-    once as safetensors' `save_model` keeps them), and with partial overlaps copied, since a
-    safetensors file can't hold tensors that share memory."""
-    seen: dict[tuple[Any, ...], str] = {}
+def _tensors_for_safetensors(tensors: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """Save identical tensor views once and give overlapping views independent storage."""
+    seen_views: set[tuple[Any, ...]] = set()
     storages: set[tuple[Any, ...]] = set()
     kept: dict[str, torch.Tensor] = {}
     for name, tensor in tensors.items():
@@ -90,11 +75,10 @@ def _unshared(tensors: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         if tensor.device.type == "meta":
             raise ValueError(f"{name} is on the meta device and has no values to save")
         storage = (tensor.device, tensor.untyped_storage().data_ptr())
-        view = (*storage, tensor.storage_offset(), tuple(tensor.shape), tensor.stride())
-        view += (tensor.dtype,)
-        if view in seen:
+        view = (*storage, tensor.storage_offset(), tensor.shape, tensor.stride(), tensor.dtype)
+        if view in seen_views:
             continue
-        seen[view] = name
+        seen_views.add(view)
         if storage in storages and tensor.untyped_storage().nbytes():
             tensor = tensor.clone()
         storages.add(storage)
@@ -106,7 +90,9 @@ def _nbytes(tensor: torch.Tensor) -> int:
     return tensor.numel() * tensor.element_size()
 
 
-def _shards(tensors: dict[str, torch.Tensor], shard_size: int) -> list[dict[str, torch.Tensor]]:
+def _split_weight_shards(
+    tensors: dict[str, torch.Tensor], shard_size: int
+) -> list[dict[str, torch.Tensor]]:
     """`tensors` in order, split into groups of at most `shard_size` bytes (a larger tensor
     alone in its own)."""
     shards: list[dict[str, torch.Tensor]] = [{}]
@@ -121,39 +107,38 @@ def _shards(tensors: dict[str, torch.Tensor], shard_size: int) -> list[dict[str,
     return shards
 
 
-def _save(tensors: dict[str, torch.Tensor], path: Path, metadata: dict[str, str]) -> None:
+def _write_safetensors(
+    tensors: dict[str, torch.Tensor], path: Path, metadata: dict[str, str]
+) -> None:
     from safetensors.torch import save_file
 
     path.parent.mkdir(parents=True, exist_ok=True)
     save_file(tensors, str(path), metadata={"format": "pt", **metadata})
 
 
-def write_weights(model: BaseModel, folder: Path, shard_size: int) -> list[str]:
-    """Writes `model`'s state dict to `folder` as `model.safetensors`, or as shards with
-    Hugging Face's index when it's larger than `shard_size`. Returns the files' names."""
-    tensors = _unshared(model.state_dict())
-    shards = _shards(tensors, shard_size)
+def _write_weights(model: BaseModel, folder: Path, shard_size: int) -> None:
+    """Write the weights and, when split across shards, a Hugging Face weight index."""
+    tensors = _tensors_for_safetensors(model.state_dict())
+    shards = _split_weight_shards(tensors, shard_size)
     if len(shards) == 1:
-        _save(shards[0], folder / SINGLE, {})
-        return [SINGLE]
+        _write_safetensors(shards[0], folder / SINGLE, {})
+        return
     names = [f"model-{i:05d}-of-{len(shards):05d}.safetensors" for i in range(1, len(shards) + 1)]
     weight_map = {}
     for name, shard in zip(names, shards, strict=True):
-        _save(shard, folder / name, {})
+        _write_safetensors(shard, folder / name, {})
         weight_map.update(dict.fromkeys(shard, name))
     index = {
         "metadata": {"total_size": sum(map(_nbytes, tensors.values()))},
         "weight_map": weight_map,
     }
     (folder / INDEX).write_text(json.dumps(index, indent=2) + "\n")
-    return [*names, INDEX]
 
 
-def _flatten(value: Any, path: str, tensors: dict[str, Any]) -> Any:
+def _encode_state(value: Any, path: str, tensors: dict[str, Any], tensor_type: type) -> Any:
     """`value`'s structure as JSON, with each tensor replaced by `{"tensor": key}` and put in
     `tensors` under its dotted path."""
-    torch = _torch()
-    if isinstance(value, torch.Tensor):
+    if isinstance(value, tensor_type):
         key = path or "tensor"
         while key in tensors:
             key += "_"
@@ -161,12 +146,14 @@ def _flatten(value: Any, path: str, tensors: dict[str, Any]) -> Any:
         return {"tensor": key}
     if isinstance(value, Mapping):
         items = [
-            [k, _flatten(v, f"{path}.{k}" if path else str(k), tensors)] for k, v in value.items()
+            [k, _encode_state(v, f"{path}.{k}" if path else str(k), tensors, tensor_type)]
+            for k, v in value.items()
         ]
         return {"dict": items}
     if isinstance(value, (list, tuple)):
         flat = [
-            _flatten(v, f"{path}.{i}" if path else str(i), tensors) for i, v in enumerate(value)
+            _encode_state(v, f"{path}.{i}" if path else str(i), tensors, tensor_type)
+            for i, v in enumerate(value)
         ]
         return {"tuple" if isinstance(value, tuple) else "list": flat}
     if value is None or isinstance(value, (bool, int, float, str)):
@@ -177,14 +164,14 @@ def _flatten(value: Any, path: str, tensors: dict[str, Any]) -> Any:
     )
 
 
-def _unflatten(node: dict[str, Any], tensors: Mapping[str, Any]) -> Any:
+def _decode_state(node: dict[str, Any], tensors: Mapping[str, Any]) -> Any:
     ((kind, value),) = node.items()
     if kind == "tensor":
         return tensors[value]
     if kind == "dict":
-        return {k: _unflatten(v, tensors) for k, v in value}
+        return {k: _decode_state(v, tensors) for k, v in value}
     if kind in ("list", "tuple"):
-        items = [_unflatten(v, tensors) for v in value]
+        items = [_decode_state(v, tensors) for v in value]
         return tuple(items) if kind == "tuple" else items
     return value
 
@@ -206,9 +193,9 @@ def write_training_state(state: Mapping[str, Any], folder: Path) -> list[str]:
         if flat:
             tensors = dict(value)
         else:
-            metadata[STRUCTURE] = json.dumps(_flatten(value, "", tensors))
-        path = f"training_state/{name}.safetensors"
-        _save(_unshared(tensors), folder / path, metadata)
+            metadata[STRUCTURE] = json.dumps(_encode_state(value, "", tensors, torch.Tensor))
+        path = f"{TRAINING_STATE}{name}.safetensors"
+        _write_safetensors(_tensors_for_safetensors(tensors), folder / path, metadata)
         written.append(path)
     return written
 
@@ -221,12 +208,7 @@ def read_training_state(path: Path, device: str | None = None) -> Any:
     with safe_open(str(path), framework="pt") as file:
         structure = (file.metadata() or {}).get(STRUCTURE)
     tensors = load_file(str(path), device=device or "cpu")
-    return tensors if structure is None else _unflatten(json.loads(structure), tensors)
-
-
-def dtype_name(model: BaseModel) -> str | None:
-    floating = [p.dtype for p in model.parameters() if p.dtype.is_floating_point]
-    return str(floating[0]).removeprefix("torch.") if floating else None
+    return tensors if structure is None else _decode_state(json.loads(structure), tensors)
 
 
 def write_model(
@@ -238,33 +220,36 @@ def write_model(
     step: int | None,
     training_state: Mapping[str, Any] | None,
 ) -> None:
-    """Writes `model` to `folder` as a version's files (D99)."""
+    """Write the configuration, provenance, weights, and optional training state."""
     _torch()
-    config = check_config(model)
+    config = getattr(model, "config", None)
+    params = getattr(type(config), "__dataclass_params__", None)
+    if config is None or params is None or not params.frozen:
+        raise TypeError(
+            f"{type(model).__name__}.config must be a frozen dataclass, so the model can be "
+            "built again from config.json"
+        )
+    dtype = next((p.dtype for p in model.parameters() if p.dtype.is_floating_point), None)
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "config.json").write_text(json.dumps(dataclasses.asdict(config), indent=2) + "\n")
-    described = {
+    provenance = {
         "format": FORMAT,
         "architecture": import_path(type(model)),
         "config_class": import_path(type(config)),
-        "dtype": dtype_name(model),
+        "dtype": str(dtype).removeprefix("torch.") if dtype is not None else None,
         "flock_commit": flock_commit(),
         "run": run,
         "step": step,
         "saved_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-    (folder / "flock.json").write_text(json.dumps(described, indent=2) + "\n")
-    write_weights(model, folder, shard_size)
+    (folder / "flock.json").write_text(json.dumps(provenance, indent=2) + "\n")
+    _write_weights(model, folder, shard_size)
     if training_state:
         write_training_state(training_state, folder)
 
 
-# ---------------------------------------------------------------------- loading
-
-
 def _flock_class(path: Any, what: str) -> type:
-    """The class `module:qualname` names, refusing anything outside `flock.training` so a
-    download never picks the code that runs."""
+    """Resolve an installed `flock.training` class from its `module:qualname`."""
     if not isinstance(path, str) or ":" not in path:
         raise ModelError(f"flock.json's {what} is {path!r}, not module:Class")
     module, _, qualname = path.partition(":")
@@ -285,7 +270,7 @@ def weight_files(folder: Path) -> list[Path]:
     return [folder / SINGLE]
 
 
-def _aliases(model: Any) -> dict[str, str]:
+def _tied_weight_names(model: BaseModel) -> dict[str, str]:
     """Each state-dict name that is the same tensor as an earlier one (tied weights), mapped to
     that one."""
     first: dict[int, str] = {}
@@ -309,13 +294,13 @@ def build(folder: Path, device: Any, dtype: Any) -> BaseModel:
 
     from flock.training.core.models.base import BaseModel
 
-    described = json.loads((folder / "flock.json").read_text())
-    if described.get("format") != FORMAT:
-        raise ModelError(f"flock.json has format {described.get('format')!r}, not {FORMAT}")
-    architecture: Any = _flock_class(described.get("architecture"), "architecture")
-    config_class = _flock_class(described.get("config_class"), "config_class")
+    provenance = json.loads((folder / "flock.json").read_text())
+    if provenance.get("format") != FORMAT:
+        raise ModelError(f"flock.json has format {provenance.get('format')!r}, not {FORMAT}")
+    architecture: Any = _flock_class(provenance.get("architecture"), "architecture")
+    config_class = _flock_class(provenance.get("config_class"), "config_class")
     if not issubclass(architecture, BaseModel):
-        raise ModelError(f"{described['architecture']} isn't a flock.training BaseModel")
+        raise ModelError(f"{provenance['architecture']} isn't a flock.training BaseModel")
     config = config_class(**json.loads((folder / "config.json").read_text()))
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -325,20 +310,10 @@ def build(folder: Path, device: Any, dtype: Any) -> BaseModel:
     state: dict[str, Any] = {}
     for path in weight_files(folder):
         state.update(load_file(str(path), device=str(device)))
-    for alias, name in _aliases(model).items():
+    for alias, name in _tied_weight_names(model).items():
         if alias not in state and name in state:
             state[alias] = state[name]
     if dtype is not None:
         state = {k: v.to(dtype) if v.is_floating_point() else v for k, v in state.items()}
     model.load_state_dict(state, assign=True, strict=True)
     return model.to(device)
-
-
-def walk(folder: Path) -> Iterator[str]:
-    """The files under `folder`, as relative POSIX paths in sorted order, skipping hidden files
-    and folders."""
-    for path in sorted(folder.rglob("*")):
-        relative = path.relative_to(folder)
-        if any(part.startswith(".") for part in relative.parts) or not path.is_file():
-            continue
-        yield relative.as_posix()

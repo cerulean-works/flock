@@ -407,15 +407,15 @@ def uploads_group() -> None:
 def uploads_list_command() -> None:
     """List interrupted uploads, with how much of each was sent."""
     with _failing():
-        found = [
-            (j, state) for j, state in upload.states(upload.journals()) if state != "committed"
-        ]
+        found = upload.interrupted_uploads()
     if not found:
         click.echo("No interrupted uploads on this machine.")
     for journal, state in found:
         files = journal.files.values()
-        done = sum(1 for f in files if f["done"])
-        sent = f"{done} of {len(files)} files, {human(journal.sent())} of {human(journal.total())}"
+        done = [file for file in files if file["done"]]
+        sent = human(sum(file["size"] for file in done))
+        total = human(sum(file["size"] for file in files))
+        sent = f"{len(done)} of {len(files)} files, {sent} of {total}"
         click.echo(f"{journal.ulid}\t{journal.model}\t{state}\t{sent}\t{journal.source}")
 
 

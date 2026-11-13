@@ -36,9 +36,6 @@ if TYPE_CHECKING:
 
     from click.testing import Result
 
-    from flock.hub.models._common import ModelFile
-
-
 MIB = 1024 * 1024
 TINY = Olmo2Config(
     vocab_size=64,
@@ -288,13 +285,13 @@ def test_blocking_false_returns_once_the_files_are_on_disk(
     flock: S3Flock, signed_in: str, cache_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     gate = threading.Event()
-    real = upload._Sender.run
+    real = upload.UploadTransfer.send_files
 
-    def held(self: upload._Sender, check: bool) -> None:
+    def held(self: upload.UploadTransfer, *, resume: bool) -> None:
         assert gate.wait(30)
-        return real(self, check)
+        real(self, resume=resume)
 
-    monkeypatch.setattr(upload._Sender, "run", held)
+    monkeypatch.setattr(upload.UploadTransfer, "send_files", held)
     model = tiny()
     expected = {k: v.clone() for k, v in model.state_dict().items()}
     pending = models.save_to_hub(model, "flock/tiny", blocking=False)
@@ -586,23 +583,18 @@ def test_a_download_resumes_from_its_partial_file(
     source, version = pushed
     calls = Calls(monkeypatch, cache)
     ranges = []
-    real = cache._Fetcher.chunk
+    real = cache._DownloadTransfer._download_range
 
-    def chunk(
-        self: cache._Fetcher,
-        file: ModelFile,
-        partial: Path,
-        target: Path,
-        index: int,
-        count: int,
+    def download_range(
+        self: cache._DownloadTransfer,
+        download: cache._DownloadFile,
         start: int,
         end: int,
-        order: dict[str, Any],
     ) -> None:
-        ranges.append((file.path, start, end))
-        return real(self, file, partial, target, index, count, start, end, order)
+        ranges.append((download.file.path, start, end))
+        real(self, download, start, end)
 
-    monkeypatch.setattr(cache._Fetcher, "chunk", chunk)
+    monkeypatch.setattr(cache._DownloadTransfer, "_download_range", download_range)
     folder = cache_dir / "models" / "flock" / "m" / version.digest
     folder.mkdir(parents=True)
     data = (source / "model.safetensors").read_bytes()

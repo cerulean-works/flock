@@ -1,14 +1,8 @@
-"""The registry's routes that need no files: listing models and versions, the primary version
-and tags (D107)."""
+"""List models and versions, and manage the primary version and tags."""
 
 from typing import Any
 
 from flock.hub.models._common import ModelVersion, Ref, Registry
-
-
-def _ref(ref: str) -> Ref:
-    parsed = Ref.parse(ref)
-    return parsed if parsed.version is not None else Ref(parsed.org, parsed.name, "primary")
 
 
 def set_primary(ref: str) -> ModelVersion:
@@ -25,7 +19,7 @@ def set_primary(ref: str) -> ModelVersion:
     Raises:
         [`~hub.models.ModelError`]: when the version doesn't exist or Flock refuses.
     """
-    parsed = _ref(ref)
+    parsed = Ref.parse(ref)
     with Registry() as registry:
         version = registry.resolve(parsed)
         answer = registry.call("PUT", f"{parsed.path}/primary", {"version": version.number})
@@ -51,7 +45,7 @@ def tag(ref: str, tag: str, *, move: bool = False) -> ModelVersion:
         [`~hub.models.ModelError`]: when the tag is on another version (`body["version"]` says which) and
             `move` isn't set, or the name isn't allowed.
     """
-    parsed = _ref(ref)
+    parsed = Ref.parse(ref)
     with Registry() as registry:
         version = registry.resolve(parsed)
         registry.call("PUT", f"{parsed.path}/tags/{tag}", {"version": version.number, "move": move})
