@@ -62,6 +62,8 @@ guide:
       title: Browse and manage models
     - local: app/share-publicly
       title: Share projects and datasets publicly
+    - local: app/import-hf
+      title: Import from Hugging Face
     - local: app/import-wandb
       title: Import W&B runs
     - local: app/configure-budgets
@@ -167,3 +169,5 @@ reference:
       title: Datasets
     - local: app/api/models
       title: Models
+    - local: app/api/hf-imports
+      title: Hugging Face imports

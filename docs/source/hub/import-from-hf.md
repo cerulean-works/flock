@@ -2,6 +2,8 @@
 
 You can bring a model from the Hugging Face Hub into your organization's model registry. The import stores it in Flock's own format, so `load_from_hub` and the trainer handle it like any other Flock model. Hugging Face is only the source of the files.
 
+You can also import from the **Models** tab, where the Flock server runs the import. See [Import from Hugging Face](../app/import-hf).
+
 ## Import a model
 
 [Sign in](../cli/sign-in) first. Then import a repository as a new version of a model in your organization:

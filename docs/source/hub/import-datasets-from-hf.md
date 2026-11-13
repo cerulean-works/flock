@@ -2,6 +2,8 @@
 
 Turn a dataset on the Hugging Face Hub into Lance datasets in your organization's `flock-datasets` bucket, one per split, so the trainer and the **Datasets** tab can use them. You can import in one step, or download on one machine and convert on another, which suits clusters whose compute nodes have no internet.
 
+Smaller datasets can also be imported from the **Datasets** tab, where the Flock server runs the import. See [Import from Hugging Face](../app/import-hf).
+
 ## Before you start
 
 [Install the workspace](../installation) and sign in to Flock on the machine that converts:
