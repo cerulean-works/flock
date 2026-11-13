@@ -2,11 +2,12 @@ import torch
 
 
 def _padding_mask_or_none(padding_mask: torch.Tensor | None) -> torch.Tensor | None:
-    if padding_mask is not None:
-        if padding_mask.ndim != 2 or padding_mask.dtype != torch.bool:
-            raise ValueError("Expected a boolean [batch, sequence] padding mask")
-        if padding_mask.all().item():
-            return None
+    if padding_mask is None:
+        return padding_mask
+    if padding_mask.ndim != 2 or padding_mask.dtype != torch.bool:
+        raise ValueError("Expected a boolean [batch, sequence] padding mask")
+    if padding_mask.all().item():
+        return None
     return padding_mask
 
 
