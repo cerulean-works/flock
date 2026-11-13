@@ -10,7 +10,7 @@
 	import { Slider } from '#lib/components/ui/slider/index.js';
 	import { Switch } from '#lib/components/ui/switch/index.js';
 	import { SYSTEM_X_AXES, axisChoiceLabel, resolveAxis, type AxisKind } from '#lib/chart/axes.ts';
-	import { LINE_WIDTH_MAX, LINE_WIDTH_MIN } from '#lib/workspace/layout.ts';
+	import { CUSTOM_SECTION, LINE_WIDTH_MAX, LINE_WIDTH_MIN } from '#lib/workspace/layout.ts';
 	import {
 		configOf,
 		draftOf,
@@ -18,7 +18,8 @@
 		type PanelDraft,
 		type Tristate
 	} from '#lib/workspace/panels.ts';
-	import { getWorkspace, metricColor } from '#lib/workspace/workspace.svelte.ts';
+	import { NEW_PANEL, getWorkspace, metricColor } from '#lib/workspace/workspace.svelte.ts';
+	import type { PanelDef } from '#lib/types.ts';
 	import Autocomplete, { type AutocompleteOption } from './Autocomplete.svelte';
 	import LinePlot from './LinePlot.svelte';
 	import PanelLegend from './PanelLegend.svelte';
@@ -27,24 +28,37 @@
 
 	/**
 	 * W&B's "Edit panel": the panel's settings beside a live preview of it. Edits show in the
-	 * preview only; Apply keeps them for this project in this browser, Cancel drops them.
+	 * preview only; Apply keeps them for this project in this browser, Cancel drops them. Opened
+	 * on `NEW_PANEL`, it sets up a new line plot, which Create adds.
 	 */
 
 	const ws = getWorkspace();
 
-	const panel = $derived(ws.editing == null ? -1 : ws.findPanel(ws.editing));
-	const def = $derived(panel === -1 ? null : ws.meta.panels[panel]);
+	/** A new line plot: of logged metrics, with none picked yet. */
+	const NEW_DEF: PanelDef = {
+		id: NEW_PANEL,
+		title: '',
+		section: CUSTOM_SECTION,
+		stream: 'history',
+		format: 'num',
+		metrics: []
+	};
+
+	const creating = $derived(ws.editing === NEW_PANEL);
+	const panel = $derived(ws.editing == null || creating ? -1 : ws.findPanel(ws.editing));
+	const def = $derived(creating ? NEW_DEF : panel === -1 ? null : ws.panelDefs[panel]);
 	/** The panel's own metric keys, which a draft plotting just those leaves unset. */
 	const own = $derived(def ? def.metrics.map((m) => ws.meta.metrics[m].key) : []);
 
 	// Closes here first; `ws.editing` is cleared once the closing animation is over, so the
 	// dialog keeps its content while it fades.
-	let open = $derived(panel !== -1);
+	let open = $derived(def != null);
 
 	// The form, filled when the editor opens. Untracked, so live updates and other tabs don't
 	// overwrite what is being typed; replaced (never mutated) as it's edited.
 	let draft = $derived.by((): PanelDraft | null => {
 		const p = panel;
+		if (creating) return draftOf({}, []);
 		return p === -1
 			? null
 			: untrack(() => draftOf(ws.panelConfig(p), own, ws.axisOf(ws.panels[p]).id));
@@ -125,8 +139,15 @@
 
 	function apply() {
 		if (!valid || !result) return;
-		ws.setPanelConfig(panel, result.config);
+		const { config } = result;
+		if (creating && config.metrics) ws.addPanel({ ...config, metrics: config.metrics });
+		else ws.setPanelConfig(panel, config);
 		open = false;
+	}
+
+	/** Back to the defaults; an added panel keeps its metrics, which it has no defaults for. */
+	function reset() {
+		draft = draftOf(ws.isCustom(panel) || creating ? { metrics: draft?.metrics } : {}, own);
 	}
 
 	const onOff = (on: boolean) => (on ? 'on' : 'off');
@@ -205,8 +226,10 @@
 	>
 		{#if def && draft && preview && axis}
 			<Dialog.Header class="border-b border-divider px-5 pt-4 pb-3.5">
-				<Dialog.Title>Edit panel</Dialog.Title>
-				<Dialog.Description class="truncate">{def.section} · {preview.title}</Dialog.Description>
+				<Dialog.Title>{creating ? 'Add panel' : 'Edit panel'}</Dialog.Title>
+				<Dialog.Description class="truncate">
+					{def.section}{preview.title ? ` · ${preview.title}` : ''}
+				</Dialog.Description>
 			</Dialog.Header>
 			<div class="flex min-h-0 flex-1 max-md:flex-col">
 				<!-- The preview: the panel as it would be, with the workspace's runs. -->
@@ -433,7 +456,7 @@
 				</aside>
 			</div>
 			<Dialog.Footer class="m-0 items-center rounded-b-xl sm:justify-between">
-				<Button variant="ghost" onclick={() => (draft = draftOf({}, own))}>
+				<Button variant="ghost" onclick={reset}>
 					<RotateCcwIcon /> Reset to defaults
 				</Button>
 				<div class="flex flex-col-reverse gap-2 sm:flex-row">
@@ -442,7 +465,7 @@
 							<Button {...props} variant="outline">Cancel</Button>
 						{/snippet}
 					</Dialog.Close>
-					<Button disabled={!valid} onclick={apply}>Apply</Button>
+					<Button disabled={!valid} onclick={apply}>{creating ? 'Create' : 'Apply'}</Button>
 				</div>
 			</Dialog.Footer>
 		{/if}

@@ -9,6 +9,7 @@ import {
 	pinFirst,
 	parseLayout,
 	panelSmoothing,
+	parseCustomPanels,
 	parsePanelConfig,
 	parsePlotSettings
 } from './layout.ts';
@@ -23,7 +24,8 @@ describe('parseLayout', () => {
 			rows: {},
 			panels: {},
 			pinned: [],
-			settings: {}
+			settings: {},
+			custom: []
 		});
 	});
 
@@ -56,7 +58,8 @@ describe('parseLayout', () => {
 			rows: {},
 			panels: {},
 			pinned: [],
-			settings: {}
+			settings: {},
+			custom: []
 		});
 	});
 
@@ -67,6 +70,28 @@ describe('parseLayout', () => {
 			height: {}
 		});
 		expect(layout.panels).toEqual({ loss: { log: true, yMax: 2 } });
+	});
+});
+
+describe('parseCustomPanels', () => {
+	it('keeps added panels with a custom id and at least one metric', () => {
+		const loss = { id: 'custom:a', config: { metrics: ['loss', 'val/loss'], log: true } };
+		expect(parseLayout({ custom: [loss] }).custom).toEqual([loss]);
+		expect(
+			parseCustomPanels([
+				loss,
+				// The same id twice, a metric's id, no metrics, a bare prefix, the wrong types.
+				{ id: 'custom:a', config: { metrics: ['acc'] } },
+				{ id: 'loss', config: { metrics: ['loss'] } },
+				{ id: 'custom:b', config: { metrics: [], title: 'Empty' } },
+				{ id: 'custom:c', config: { title: 'No metrics' } },
+				{ id: 'custom:', config: { metrics: ['loss'] } },
+				{ id: 3, config: { metrics: ['loss'] } },
+				'custom:d',
+				{ id: 'custom:e', config: { metrics: ['acc', 7, 'acc'], smoothing: 5 } }
+			])
+		).toEqual([loss, { id: 'custom:e', config: { metrics: ['acc'], smoothing: 0.99 } }]);
+		expect(parseCustomPanels({ 'custom:a': loss })).toEqual([]);
 	});
 });
 

@@ -227,7 +227,7 @@
 
 		// A pinned panel goes wherever it's put; past an unpinned one, the viewer is asked
 		// whether to unpin it once it's let go.
-		const id = ws.meta.panels[panel].id;
+		const id = ws.panelDefs[panel].id;
 		let cancelled = false;
 		const pointer = track(e, {
 			begin: () => {
@@ -262,7 +262,7 @@
 		const from = firstShown(section);
 		if (i + by < from || i + by >= from + per) showFrom(section, from + by * per);
 		rearrange();
-		if (pinned) ws.loosePanel = ws.meta.panels[panel].id;
+		if (pinned) ws.loosePanel = ws.panelDefs[panel].id;
 		ws.movePanel(section, panel, i + by);
 		if (pinned) ws.settlePinned(section, panel, i);
 		await tick();
@@ -504,7 +504,7 @@
 						]}
 						data-grid
 					>
-						{#each slice as p (ws.meta.panels[p].id)}
+						{#each slice as p (ws.panelDefs[p].id)}
 							{@const dragging = drag?.panel === p}
 							<div
 								class={['min-w-0', dragging ? 'relative z-2' : 'transition-transform']}

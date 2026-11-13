@@ -249,4 +249,55 @@ describe('what this browser keeps for a project', () => {
 		expect(ws.visible).toHaveLength(15);
 		expect(localStorage.getItem(HIDDEN)).toBeNull();
 	});
+
+	it('adds panels in a section of their own, first, and deletes them', () => {
+		const ws = workspace([{ defs: [], logged: ['train/loss', 'val/loss'] }]);
+		ws.restoreLayout();
+		const id = ws.addPanel({ metrics: ['train/loss', 'val/loss'], log: true });
+		expect(id.startsWith('custom:')).toBe(true);
+		const panel = ws.findPanel(id);
+		expect(ws.isCustom(panel)).toBe(true);
+		expect(ws.sections[0]).toEqual({ key: 'Custom panels', panels: [panel] });
+		const view = ws.panels[panel];
+		expect(view.metrics.map((m) => ws.meta.metrics[m].key)).toEqual(['train/loss', 'val/loss']);
+		expect(view.config.log).toBe(true);
+
+		// Kept in this browser with the layout.
+		const next = workspace([{ defs: [], logged: ['train/loss', 'val/loss'] }]);
+		next.restoreLayout();
+		expect(next.panels[next.findPanel(id)].title).toBe(view.title);
+
+		// Edited like any panel, but never left without metrics.
+		ws.setPanelConfig(panel, { metrics: ['val/loss'] });
+		expect(ws.panels[panel].title).toBe('val/loss');
+		ws.setPanelConfig(panel, null);
+		expect(ws.panels[panel].config).toEqual({ metrics: ['val/loss'] });
+
+		ws.togglePinned(panel);
+		ws.deletePanel(panel);
+		expect(ws.findPanel(id)).toBe(-1);
+		expect(ws.sections.map((s) => s.key)).not.toContain('Custom panels');
+		expect(ws.layout.pinned).toEqual([]);
+		// Built-in panels can't be deleted.
+		ws.deletePanel(0);
+		expect(ws.panels).toHaveLength(2);
+	});
+
+	it('keeps the custom section where the viewer moved it', () => {
+		const ws = workspace([{ defs: [], logged: ['train/loss', 'val/loss'] }]);
+		ws.restoreLayout();
+		ws.addPanel({ metrics: ['val/loss'] });
+		expect(ws.sections.map((s) => s.key)).toEqual(['Custom panels', 'train', 'val']);
+		ws.moveSection('Custom panels', 2);
+		expect(ws.sections.map((s) => s.key)).toEqual(['train', 'val', 'Custom panels']);
+	});
+
+	it('still shows an added panel whose metrics are gone, empty', () => {
+		const ws = workspace([{ defs: [], logged: ['loss'] }]);
+		ws.restoreLayout();
+		const id = ws.addPanel({ metrics: ['renamed/loss'] });
+		const view = ws.panels[ws.findPanel(id)];
+		expect(view.metrics).toEqual([]);
+		expect(view.title).toBe('renamed/loss');
+	});
 });

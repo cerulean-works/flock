@@ -8,6 +8,7 @@
 	import FullscreenPanel from '#lib/components/FullscreenPanel.svelte';
 	import PanelEditor from '#lib/components/PanelEditor.svelte';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
+	import PlusIcon from '@lucide/svelte/icons/plus';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
@@ -167,7 +168,7 @@
 		workspaceHrefWith(ws.meta.entity, ws.meta.project, page.url.search, changes);
 
 	const viewHref = (v: View) => hrefWith({ view: v === 'table' ? null : v });
-	const panelHref = (p: number) => hrefWith({ panel: ws.meta.panels[p].id, view: 'charts' });
+	const panelHref = (p: number) => hrefWith({ panel: ws.panelDefs[p].id, view: 'charts' });
 
 	function setView(v: View, e?: MouseEvent) {
 		e?.preventDefault();
@@ -353,6 +354,7 @@
 					<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} />
 				{:else}
 					<PlotSettings />
+					<Button variant="outline" onclick={() => ws.newPanel()}><PlusIcon /> Add panel</Button>
 				{/if}
 			{/if}
 

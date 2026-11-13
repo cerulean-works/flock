@@ -68,6 +68,20 @@ export interface PlotSettings {
 	rows?: number;
 }
 
+/** Ids of panels the viewer added start with this, so none is ever a metric's panel id. */
+export const CUSTOM_PREFIX = 'custom:';
+
+/** The section of the panels the viewer added, first in the workspace by default. */
+export const CUSTOM_SECTION = 'Custom panels';
+
+export const isCustomPanel = (id: string) => id.startsWith(CUSTOM_PREFIX);
+
+/** A line plot the viewer added: its settings, which always name the metrics it plots. */
+export interface CustomPanel {
+	id: string;
+	config: PanelConfig & { metrics: readonly string[] };
+}
+
 /**
  * How the viewer arranged a project's panels: section order, per section its panel order, plot
  * height and rows per page, and per panel its settings.
@@ -85,6 +99,8 @@ export interface PanelLayout {
 	/** Ids of the panels pinned to the front of their sections. */
 	pinned: readonly string[];
 	settings: PlotSettings;
+	/** Panels the viewer added, in the order they were added. */
+	custom: readonly CustomPanel[];
 }
 
 export const EMPTY_LAYOUT: PanelLayout = {
@@ -94,7 +110,8 @@ export const EMPTY_LAYOUT: PanelLayout = {
 	rows: {},
 	panels: {},
 	pinned: [],
-	settings: {}
+	settings: {},
+	custom: []
 };
 
 export const LINE_WIDTH_MIN = 0.5;
@@ -185,12 +202,31 @@ export function parsePanelConfig(raw: unknown): PanelConfig | null {
 }
 
 /**
+ * Added panels as saved, keeping those with a well formed id (unique, with `CUSTOM_PREFIX`) and
+ * settings that name at least one metric.
+ */
+export function parseCustomPanels(raw: unknown): CustomPanel[] {
+	if (!Array.isArray(raw)) return [];
+	const out: CustomPanel[] = [];
+	for (const item of raw) {
+		if (!isRecord(item)) continue;
+		const { id } = item;
+		if (typeof id !== 'string' || !isCustomPanel(id) || id.length <= CUSTOM_PREFIX.length) continue;
+		if (out.some((c) => c.id === id)) continue;
+		const config = parsePanelConfig(item.config);
+		if (config?.metrics?.length) out.push({ id, config: { ...config, metrics: config.metrics } });
+	}
+	return out;
+}
+
+/**
  * A layout read back from storage. Anything malformed is dropped rather than trusted; layouts
  * saved before sections could be moved (no `sections`) keep the default section order, those
  * saved before panels had settings (no `panels`) have none, and those saved before sections
  * could be resized to more rows (no `rows`) show the default number of rows, and those saved
  * before panels could be pinned (no `pinned`) have none pinned. Those saved before the line plot
- * settings were kept (no `settings`) use the default ones.
+ * settings were kept (no `settings`) use the default ones, and those saved before panels could
+ * be added (no `custom`) have none.
  */
 export function parseLayout(raw: unknown): PanelLayout {
 	if (!isRecord(raw)) return EMPTY_LAYOUT;
@@ -216,7 +252,8 @@ export function parseLayout(raw: unknown): PanelLayout {
 		rows,
 		panels,
 		pinned: [...new Set(strings(raw.pinned))],
-		settings: parsePlotSettings(raw.settings)
+		settings: parsePlotSettings(raw.settings),
+		custom: parseCustomPanels(raw.custom)
 	};
 }
 
