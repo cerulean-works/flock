@@ -2,6 +2,13 @@ import torch
 
 
 def _padding_mask_or_none(padding_mask: torch.Tensor | None) -> torch.Tensor | None:
+    """Validate a padding mask, returning `None` when no padding is present.
+
+    `padding_mask` must be `None` or a `torch.bool` tensor with shape
+    `(batch_size, sequence_length)`: one row per sequence and one column per
+    token. `True` marks a real token; `False` marks padding. An all-`True` mask
+    is treated as `None`.
+    """
     if padding_mask is None:
         return padding_mask
     if padding_mask.ndim != 2 or padding_mask.dtype != torch.bool:
@@ -29,6 +36,11 @@ def prepare_flash_attention_mask(
     padding_mask: torch.Tensor | None, *, is_causal: bool
 ) -> torch.Tensor | None:
     """Return validated `[batch, 2]` start/stop spans as a CPU int64 tensor.
+
+    The input boolean `[batch, sequence]` padding mask may be on CPU or CUDA,
+    including after `Trainer` moves the collator's batch to its device. This
+    function copies the prepared spans to CPU; keep them there when passing
+    them to `flash_attention_3` to avoid CUDA synchronization in each layer.
 
     Stops are exclusive. Prepare once per model forward and reuse across layers.
     Return `None` when there is no padding; causality stays in `is_causal`.

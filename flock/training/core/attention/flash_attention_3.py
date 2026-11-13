@@ -9,12 +9,10 @@ from .sdpa import sdpa_attention
 
 
 @contextmanager
-def _fa3_context(device: torch.device, dtype: torch.dtype) -> Generator[None]:
-    # FA3 have strict dtype and device requirement so we must check it before running.
+def _fa3_context(device: torch.device) -> Generator[None]:
+    # Validate hardware here; SDPA handles dtype dispatch under autocast.
     if device.type != "cuda":
         raise ValueError("flash_attention_3 requires CUDA tensors on a Hopper GPU")
-    if dtype not in (torch.float16, torch.bfloat16):
-        raise ValueError("flash_attention_3 requires float16 or bfloat16 Q/K/V")
     if torch.cuda.get_device_capability(device)[0] != 9:
         raise ValueError("flash_attention_3 requires a Hopper GPU (compute capability 9.0)")
 
@@ -43,7 +41,33 @@ def flash_attention_3(
     attention_mask: torch.Tensor | None = None,
     is_causal: bool = False,
 ) -> torch.Tensor:
-    """Run full-sequence self-attention through PyTorch's FA3 SDPA implementation."""
+    """Run full-sequence self-attention through PyTorch's FA3 SDPA implementation.
+
+    Q/K/V use four dimensions: batch size, number of attention heads, sequence
+    length, and features per head (`head_dim`), in that order. Batch size,
+    sequence length, and `head_dim` must match across Q/K/V. The number of query
+    heads must be a multiple of the number of key/value heads, supporting both
+    multi-head attention (MHA) and grouped-query attention (GQA).
+
+    Args:
+        q (`torch.Tensor`):
+            Queries with shape `(batch_size, num_query_heads, seq_len, head_dim)`.
+        k (`torch.Tensor`):
+            Keys with shape `(batch_size, num_kv_heads, seq_len, head_dim)`.
+        v (`torch.Tensor`):
+            Values with the same shape as `k`.
+        attention_mask (`torch.Tensor`, *optional*):
+            Prepared CPU int64 padding spans with shape `(batch_size, 2)`, as
+            returned by `prepare_flash_attention_mask`. These spans must stay
+            on the CPU even though Q/K/V are on CUDA, so reading slice indices
+            does not synchronize with CUDA in each layer. The preparer accepts
+            the original padding mask on either CPU or CUDA.
+        is_causal (`bool`, *optional*, defaults to `False`):
+            Whether to prevent attention to future tokens.
+
+    Returns:
+        `torch.Tensor`: Attention output with the same shape as `q`.
+    """
 
     if (
         q.ndim != 4
@@ -65,18 +89,8 @@ def flash_attention_3(
             "FA3 expects full-sequence Q/K/V with matching dimensions and MHA/GQA heads"
         )
 
-    # FP32 RMSNorm weights can leave Q/K in FP32 while V is already low precision.
-    # Apply CUDA autocast before validation, as SDPA would at its dispatch boundary.
-    if (
-        q.is_cuda
-        and torch.is_autocast_enabled("cuda")
-        and all(t.dtype in (torch.float16, torch.bfloat16, torch.float32) for t in (q, k, v))
-    ):
-        dtype = torch.get_autocast_dtype("cuda")
-        q, k, v = q.to(dtype), k.to(dtype), v.to(dtype)
-
-    if q.device != k.device or q.device != v.device or q.dtype != k.dtype or q.dtype != v.dtype:
-        raise ValueError("FA3 Q/K/V must share a device and dtype")
+    if q.device != k.device or q.device != v.device:
+        raise ValueError("FA3 Q/K/V must share a device")
 
     if attention_mask is not None and (
         attention_mask.shape != (q.shape[0], 2)
@@ -88,7 +102,7 @@ def flash_attention_3(
             "call prepare_flash_attention_mask first"
         )
 
-    with _fa3_context(q.device, q.dtype):
+    with _fa3_context(q.device):
         if attention_mask is None:
             return sdpa_attention(q, k, v, is_causal=is_causal)
 

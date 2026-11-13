@@ -28,7 +28,7 @@ def math_kernel(monkeypatch):
     monkeypatch.setattr(
         fa3_module,
         "_fa3_context",
-        lambda device, dtype: attention.sdpa_kernel(attention.SDPBackend.MATH),
+        lambda device: attention.sdpa_kernel(attention.SDPBackend.MATH),
     )
 
 
@@ -255,19 +255,11 @@ def test_cpu_request_does_not_fall_back():
         flash_attention_3(q, q, q)
 
 
-def test_fp32_request_does_not_fall_back():
-    with (
-        pytest.raises(ValueError, match="float16 or bfloat16"),
-        fa3_module._fa3_context(torch.device("cuda"), torch.float32),
-    ):
-        pytest.fail("unsupported dtype was accepted")
-
-
 def test_non_hopper_request_does_not_fall_back(monkeypatch):
     monkeypatch.setattr(torch.cuda, "get_device_capability", lambda device: (8, 0))
     with (
         pytest.raises(ValueError, match="Hopper"),
-        fa3_module._fa3_context(torch.device("cuda"), torch.bfloat16),
+        fa3_module._fa3_context(torch.device("cuda")),
     ):
         pytest.fail("unsupported GPU was accepted")
 
@@ -293,10 +285,9 @@ def fake_cuda(monkeypatch):
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("value_dtype", [torch.float32, torch.float16, torch.bfloat16])
-def test_cuda_autocast_reconciles_dtypes_before_validation(
-    fake_cuda, mock_activation, monkeypatch, dtype, value_dtype
-):
-    compute = Mock(side_effect=lambda q, k, v, **kwargs: torch.empty_like(q))
+def test_sdpa_handles_cuda_autocast_dtypes(fake_cuda, math_kernel, monkeypatch, dtype, value_dtype):
+    # Exercise real SDPA autocast dispatch without requiring CUDA kernels.
+    compute = Mock(wraps=sdpa_attention)
     monkeypatch.setattr(fa3_module, "sdpa_attention", compute)
     q = torch.empty(2, 4, 5, 8, device="cuda:0", dtype=torch.float32)
     k = torch.empty(2, 2, 5, 8, device="cuda:0", dtype=torch.float32)
@@ -308,39 +299,32 @@ def test_cuda_autocast_reconciles_dtypes_before_validation(
     assert output.shape == q.shape
     assert output.dtype == dtype
     compute.assert_called_once()
-    assert all(tensor.dtype == dtype for tensor in compute.call_args.args)
+    assert all(
+        actual is expected
+        for actual, expected in zip(compute.call_args.args, (q, k, v), strict=True)
+    )
     assert compute.call_args.kwargs["is_causal"] is True
     assert q.dtype == k.dtype == torch.float32
     assert v.dtype == value_dtype
 
 
 @pytest.mark.parametrize("autocast_device", ["cpu", "cuda"])
-def test_mixed_dtypes_require_enabled_cuda_autocast(fake_cuda, autocast_device):
+def test_mixed_dtypes_require_enabled_cuda_autocast(fake_cuda, mock_activation, autocast_device):
     q = torch.empty(1, 2, 4, 8, device="cuda:0")
     v = torch.empty_like(q, dtype=torch.bfloat16)
     with (
         torch.autocast(autocast_device, dtype=torch.bfloat16),
         torch.autocast("cuda", enabled=False),
-        pytest.raises(ValueError, match="share a device and dtype"),
+        pytest.raises(RuntimeError, match="same dtype"),
     ):
         flash_attention_3(q, q, v)
-
-
-@pytest.mark.parametrize("dtype", [torch.float64, torch.int64])
-def test_cuda_autocast_does_not_accept_unsupported_dtypes(fake_cuda, dtype):
-    q = torch.empty(1, 2, 4, 8, device="cuda:0", dtype=dtype)
-    with (
-        torch.autocast("cuda", dtype=torch.bfloat16),
-        pytest.raises(ValueError, match="float16 or bfloat16"),
-    ):
-        flash_attention_3(q, q, q)
 
 
 def test_activation_survives_forward_and_only_runs_once(mock_activation):
     state, activate = mock_activation
     with attention.sdpa_kernel(attention.SDPBackend.MATH):
         for _ in range(2):
-            with fa3_module._fa3_context(torch.device("cuda"), torch.bfloat16):
+            with fa3_module._fa3_context(torch.device("cuda")):
                 assert torch.backends.cuda.flash_sdp_enabled()
                 assert not torch.backends.cuda.math_sdp_enabled()
                 assert not torch.backends.cuda.mem_efficient_sdp_enabled()
@@ -357,7 +341,7 @@ def test_does_not_replace_another_active_implementation(mock_activation):
     state["active"] = "FA4"
     with (
         pytest.raises(RuntimeError, match="FA4"),
-        fa3_module._fa3_context(torch.device("cuda"), torch.bfloat16),
+        fa3_module._fa3_context(torch.device("cuda")),
     ):
         pytest.fail("conflicting implementation was replaced")
     activate.assert_not_called()
@@ -368,6 +352,6 @@ def test_missing_kernel_dependency_has_actionable_error(mock_activation):
     activate.side_effect = ModuleNotFoundError("flash_attn_interface")
     with (
         pytest.raises(ImportError, match="installing torch alone"),
-        fa3_module._fa3_context(torch.device("cuda"), torch.bfloat16),
+        fa3_module._fa3_context(torch.device("cuda")),
     ):
         pytest.fail("missing dependency was ignored")
