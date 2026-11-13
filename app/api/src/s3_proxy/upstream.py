@@ -212,11 +212,18 @@ class Upstream:
         return response
 
     async def put_object(
-        self, bucket: str, key: str, data: bytes, content_type: str | None = None
+        self,
+        bucket: str,
+        key: str,
+        data: bytes,
+        content_type: str | None = None,
+        metadata: Mapping[str, str] | None = None,
     ) -> None:
+        """PutObject, with ``metadata`` as ``x-amz-meta-*``."""
         headers = {"content-length": str(len(data))}
         if content_type:
             headers["content-type"] = content_type
+        headers.update({f"x-amz-meta-{name}": value for name, value in (metadata or {}).items()})
         payload_hash = hashlib.sha256(data).hexdigest()
         self._raise(await self.send("PUT", bucket, key, None, headers, data, payload_hash))
 
@@ -274,6 +281,20 @@ class Upstream:
             raise UpstreamError("InternalError", "no UploadId in the answer", 502)
         return upload_id
 
+    async def upload_part(
+        self, bucket: str, key: str, upload_id: str, number: int, data: bytes
+    ) -> str:
+        """UploadPart: part ``number`` (from 1) of a multipart upload; returns its ETag."""
+        params = {"partNumber": str(number), "uploadId": upload_id}
+        headers = {"content-length": str(len(data))}
+        payload_hash = hashlib.sha256(data).hexdigest()
+        response = await self.send("PUT", bucket, key, params, headers, data, payload_hash)
+        self._raise(response)
+        etag = response.headers.get("etag")
+        if not etag:
+            raise UpstreamError("InternalError", "no ETag in the part's answer", 502)
+        return etag
+
     async def abort_upload(self, bucket: str, key: str, upload_id: str) -> None:
         response = await self.send("DELETE", bucket, key, {"uploadId": upload_id})
         if response.status_code != 404:
@@ -296,10 +317,21 @@ class Upstream:
     def _source(bucket: str, key: str) -> str:
         return sigv4.uri_encode(f"/{bucket}/{key}")
 
-    async def copy_object(self, source_bucket: str, source_key: str, bucket: str, key: str) -> None:
+    async def copy_object(
+        self,
+        source_bucket: str,
+        source_key: str,
+        bucket: str,
+        key: str,
+        metadata: Mapping[str, str] | None = None,
+    ) -> None:
         """CopyObject, server side: ``source_key`` of ``source_bucket`` to ``key`` of ``bucket``
-        (objects up to 5 GiB; see ``copy_large``)."""
+        (objects up to 5 GiB; see ``copy_large``). With ``metadata``, the copy gets it in place
+        of the source's, which also lets an object be copied onto itself."""
         headers = {"x-amz-copy-source": self._source(source_bucket, source_key)}
+        if metadata is not None:
+            headers["x-amz-metadata-directive"] = "REPLACE"
+            headers.update({f"x-amz-meta-{name}": value for name, value in metadata.items()})
         self._copy_result(await self.send("PUT", bucket, key, headers=headers))
 
     async def copy_large(
