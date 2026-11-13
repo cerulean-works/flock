@@ -73,6 +73,7 @@ class Task:
     uri: str
     schema: pa.Schema
     storage_version: str | None
+    storage_options: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -284,6 +285,7 @@ def write_file(task: Task) -> Written:
             task.uri,
             schema=task.schema,
             data_storage_version=task.storage_version,
+            storage_options=task.storage_options,
         )
     except DatasetError:
         raise
@@ -375,8 +377,8 @@ class Progress:
 
 class Target:
     """
-    Where datasets are written: `s3://flock-datasets` through the proxy, or a local folder
-    (which tests use).
+    Where datasets are written: `s3://flock-datasets` through the proxy, a bucket the Flock API
+    reaches directly, or a local folder (which tests use).
 
     Args:
         root (`str`):
@@ -385,12 +387,21 @@ class Target:
             Reaches `base`, for copying dataset cards.
         base (`str`):
             `root` as `filesystem` names it.
+        storage_options (`dict[str, str]`, *optional*):
+            Lance's options for reaching `root`. Defaults to Lance's own, from the environment.
     """
 
-    def __init__(self, root: str, filesystem: pafs.FileSystem, base: str) -> None:
+    def __init__(
+        self,
+        root: str,
+        filesystem: pafs.FileSystem,
+        base: str,
+        storage_options: dict[str, str] | None = None,
+    ) -> None:
         self.root = root.rstrip("/")
         self.filesystem = filesystem
         self.base = base.rstrip("/")
+        self.storage_options = storage_options
 
     @classmethod
     def local(cls, root: str | Path) -> Target:
@@ -431,12 +442,14 @@ class Target:
         pafs.copy_files(str(local), destination, destination_filesystem=self.filesystem)
 
 
-def open_dataset(uri: str) -> lance.LanceDataset | None:
+def open_dataset(
+    uri: str, storage_options: dict[str, str] | None = None
+) -> lance.LanceDataset | None:
     """The latest version of the Lance dataset at `uri`, or `None` when there's none."""
     import lance
 
     try:
-        return lance.dataset(uri)
+        return lance.dataset(uri, storage_options=storage_options)
     except ValueError as error:
         if "not found" in str(error).lower():
             return None
@@ -468,6 +481,7 @@ def _run_pool(
     progress: Progress,
     paths: dict[tuple[str, int], str],
     worker: Callable[[Task], Written],
+    on_file: Callable[[Written], None] | None = None,
 ) -> list[Written]:
     global _report
     results: list[Written] = []
@@ -477,6 +491,8 @@ def _run_pool(
             for task in tasks:
                 written = worker(task)
                 progress.file(written, paths[task.split, task.index])
+                if on_file is not None:
+                    on_file(written)
                 results.append(written)
         finally:
             _report = previous
@@ -501,6 +517,8 @@ def _run_pool(
         for future in as_completed(futures):
             written = future.result()
             progress.file(written, paths[written.split, written.index])
+            if on_file is not None:
+                on_file(written)
             results.append(written)
     except BrokenProcessPool:
         raise DatasetError(
@@ -524,9 +542,11 @@ def run(
     mode: Mode = "create",
     stream: TextIO | None = None,
     worker: Callable[[Task], Written] = write_file,
+    on_file: Callable[[Written], None] | None = None,
 ) -> list[ConvertedSplit]:
     """[`~hub.datasets.convert`] to any `target`, once credentials are set up, showing progress
-    on `stream` (none by default)."""
+    on `stream` (none by default) and handing each file written to `on_file`. An exception
+    `on_file` raises stops the conversion before anything is committed."""
     import lance
     import pyarrow as pa
 
@@ -545,7 +565,8 @@ def run(
     # Every check happens before any worker writes: schemas, then the destinations.
     schemas = {split: unify(folder, files) for split, files in manifest.splits.items()}
     paths = split_paths(manifest, dest)
-    existing = {split: open_dataset(target.uri(path)) for split, path in paths.items()}
+    options = target.storage_options
+    existing = {split: open_dataset(target.uri(path), options) for split, path in paths.items()}
     taken = [paths[split] for split, found in existing.items() if found is not None]
     if mode == "create" and taken:
         raise DatasetError(
@@ -577,6 +598,7 @@ def run(
             target.uri(paths[split]),
             schemas[split],
             storage[split],
+            options,
         )
         for split, files in manifest.splits.items()
         for index, file in enumerate(files)
@@ -589,7 +611,7 @@ def run(
         for index, file in enumerate(files)
     }
     try:
-        results = _run_pool(tasks, count, progress, names, worker)
+        results = _run_pool(tasks, count, progress, names, worker, on_file)
     finally:
         progress.end()
 
@@ -617,7 +639,7 @@ def run(
             transaction_properties={"flock.source": json.dumps(source)},
         )
         uri = target.uri(paths[split])
-        committed = lance.LanceDataset.commit(uri, transaction)
+        committed = lance.LanceDataset.commit(uri, transaction, storage_options=options)
         converted.append(
             ConvertedSplit(split, paths[split], uri, committed.version, sum(w.rows for w in done))
         )

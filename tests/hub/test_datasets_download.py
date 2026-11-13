@@ -71,7 +71,7 @@ class FakeHub:
 @pytest.fixture
 def hub(monkeypatch: pytest.MonkeyPatch) -> FakeHub:
     fake = FakeHub(files=[])
-    monkeypatch.setattr(huggingface_hub, "HfApi", lambda: fake)
+    monkeypatch.setattr(huggingface_hub, "HfApi", lambda **_: fake)
     monkeypatch.setattr(huggingface_hub, "snapshot_download", fake.snapshot_download)
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", fake.hf_hub_download)
     return fake

@@ -227,6 +227,8 @@ def plan(
     config: str | None = None,
     splits: Collection[str] | None = None,
     revision: str | None = None,
+    token: str | bool | None = None,
+    endpoint: str | None = None,
 ) -> Manifest:
     """
     What [`download_from_hf`] would download, without downloading it: the commit, config and
@@ -241,6 +243,11 @@ def plan(
             The splits to download. Defaults to all.
         revision (`str`, *optional*):
             A branch, tag or commit. Defaults to `main`.
+        token (`str` or `bool`, *optional*):
+            The Hugging Face token, as `huggingface_hub` takes it. Defaults to your sign-in, and
+            `False` sends none.
+        endpoint (`str`, *optional*):
+            The Hub's URL. Defaults to `huggingface_hub`'s (`HF_ENDPOINT`).
 
     Returns:
         [`~hub.datasets.Manifest`]: the manifest the download writes.
@@ -250,7 +257,7 @@ def plan(
     """
     from huggingface_hub import HfApi
 
-    api = HfApi()
+    api = HfApi(endpoint=endpoint, token=token)
     info = _hub(lambda: api.dataset_info(repo, revision=revision), repo, revision)
     files = [s.rfilename for s in info.siblings or []]
     card = CARD if CARD in files else None
