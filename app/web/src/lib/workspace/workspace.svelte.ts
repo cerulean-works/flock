@@ -277,7 +277,7 @@ export class Workspace {
 	newRuns = $state(0);
 	/** Runs deleted or moved away (elsewhere) since this page was loaded. */
 	removedRuns = $state(0);
-	/** Metrics first logged since this page was loaded (charted after a refresh). */
+	/** Metrics first logged since this page was loaded (charted once it is read again). */
 	newMetrics = $state(0);
 	/** Live runs in the project (from the snapshot, then kept current by the stream). */
 	activeRuns = $state(0);
