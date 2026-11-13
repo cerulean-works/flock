@@ -1017,6 +1017,7 @@ source = { virtual = "flock/hub" }
 dependencies = [
     { name = "datasets" },
     { name = "flock" },
+    { name = "huggingface-hub" },
     { name = "pyarrow" },
     { name = "pylance" },
 ]
@@ -1034,6 +1035,7 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'models'", specifier = ">=1.43.118" },
     { name = "datasets", specifier = ">=5.1.0" },
     { name = "flock", editable = "." },
+    { name = "huggingface-hub", specifier = ">=2.2.0" },
     { name = "pyarrow", specifier = ">=26.0.0" },
     { name = "pylance", specifier = ">=14.0.0" },
     { name = "safetensors", marker = "extra == 'models'", specifier = ">=0.8.0" },
