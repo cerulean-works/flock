@@ -2,11 +2,12 @@
 
 | | |
 | --- | --- |
-| Status | proposed |
+| Status | applied |
 | Date | 2026-11-14 |
 | Builds on | [006](006-wandb-import.md), [013](013-datasets-tab.md), [014](014-model-registry.md) |
 | Amends | D104 (`load_from_hub` builds `HFCompatibleModel` too), D105 (`flock models import`), D108 (an Import button on the Models tab) |
 | Keeps | D85 to D103, D106, D107, D109 |
+| Result | 1369 tests in `tests` pass (54 new test functions, more cases with parameters), and 572 in `app/web`. Imports of `HuggingFaceTB/SmolLM2-135M`, `stanfordnlp/imdb` and `cornell-movie-review-data/rotten_tomatoes` from the real Hub through a local stack match the originals; see [section 6](#6-how-it-was-actually-built) |
 
 ## 1. Goal
 
@@ -351,12 +352,83 @@ One branch, `feat/hf-compat`, and one PR at the end, in four parts.
   until the temporary folder is removed.
 - **FSDP and tensor parallelism** for `HFCompatibleModel` are as missing as for `Olmo2`.
 
-## 5. Open for review
+## 5. Settled in review
 
-1. **Web imports on the API** with a 50 GB cap (D124), or should the web app only hand out the
-   CLI command and never run imports itself?
-2. **One Lance dataset per split** (D121), or one dataset per config with a `split` column?
-3. **`model.` prefix in tensor names** (D126), or strip it so a Flock version's names equal the
-   HF repo's?
-4. **This branch is cut from `refactor/simplify-hub-api`,** since model imports use the upload
-   code it changes. Should that merge first, or should this branch rebase on main?
+The user approved the doc as written, so each open question took the proposal:
+
+1. **Web imports run on the API,** with a size cap (D124).
+2. **One Lance dataset per split** (D121).
+3. **Tensor names keep the `model.` prefix** (D126).
+4. **`refactor/simplify-hub-api` merged into main** first, and this branch was rebased onto it.
+
+## 6. How it was actually built
+
+One PR on `feat/hf-compat`, in the four parts of section 3. Where the code differs from
+section 2:
+
+### 6.1. `HFCompatibleModel`
+
+- **No `from_config`.** It consults `auto_map` and remote code, so the constructor looks the
+  class up in `MODEL_FOR_CAUSAL_LM_MAPPING` and calls `_from_config` with
+  `dtype=torch.get_default_dtype()`. Without the dtype, a repo whose config names `bfloat16`
+  would build in bf16.
+- **transformers' own init is seeded** with `init_seed` too, so parameters Flock's init doesn't
+  cover are deterministic. Flock's `Linear` and `Embedding` init then runs as D128 says.
+- **`load_state_dict` ties the embeddings again** after loading, since `assign=True` would
+  leave a tied `lm_head` as its own parameter.
+- **Non-persistent buffers** (rotary frequencies) are filled on the CPU when the model is built
+  on the meta device, as transformers' `from_pretrained` does.
+- **`from_hf` follows `layer_types`** when `num_hidden_layers` is overridden and every layer
+  has one type. Mixed types need `layer_types` given too.
+
+### 6.2. Model imports
+
+- `flock/hub/models/headers.py` holds the torch-free header rewrite, and
+  `flock/hub/models/hf.py` the import, with the config and provenance helpers the API shares.
+- **The name and shape check runs before the upload,** not between upload and commit. The
+  guarantee is the same, and nothing is uploaded for nothing.
+- **Re-imports dedupe** on `huggingface:{repo}@{sha}`, so the same commit into the same model
+  returns its version, and an interrupted import resumes from its journal.
+- **Local folders:** one in the HF cache records its repo and commit. Any other records its
+  path, with no revision, so each import of it makes a new version.
+
+### 6.3. Dataset imports
+
+- The CLI lives in `flock/hub/datasets/cli.py`.
+- **`flock.source` is a Lance transaction property,** which the API's versions route already
+  returns as `properties`. It also has `"hub": "huggingface"`, as models' `source` does.
+- **A split the Hub only partly converted** (`partial-{split}`) is refused rather than imported
+  short.
+- **Scripts calling `convert` with more than one worker** need an `if __name__ == "__main__":`
+  guard, since workers are spawned. The guide says so.
+
+### 6.4. API and web
+
+- **Interrupted imports** follow D81 rather than D37. Other replicas may be running an import,
+  so a clean shutdown marks only its own, and rows whose heartbeat is over 60 seconds old are
+  marked at startup and by the periodic cleanup.
+- **Datasets are downloaded by the API with httpx,** after the same `plan()` the CLI uses, so a
+  cancel is instant. The conversion runs in a spawned child in its own process group, which a
+  cancel or shutdown kills with its workers.
+- **The server's own HF credentials are never used.** Planning passes `token or False`.
+- **sha256 metadata.** Files up to 64 MiB are one PUT with it. Bigger ones go up as multipart,
+  then a server-side copy onto themselves sets it. The commit is the unchanged one.
+- **No meta-device check in the API,** which has no torch. It refuses `.bin`-only repos,
+  configs with `auto_map`, and `model_type`s outside `core/causal_lms.py`. That file is
+  generated from transformers, and a test checks it still matches.
+- **Only whoever started an import, or an admin, cancels it,** as with upload aborts.
+- **The UI polls** every 2 seconds while an import runs. Finished rows stay for a day and can be
+  hidden.
+- **The default limit is 50 GiB,** so it reads "50 GB" in the UI's 1024-based sizes.
+- `FLOCK_HF_ENDPOINT` and `FLOCK_HF_DATASETS_SERVER` point the API at another Hub, for tests and
+  mirrors.
+
+### 6.5. Known gaps found while building
+
+- **JSON Lines types come from each file's first 16 MB.** A column that's empty there and filled
+  later stops the conversion with an error naming the file. Nothing wrong is written.
+- **Weights transformers converts while loading** (old names, fused MoE experts) fail the name
+  check and are refused.
+- **`get_dataset` always reads with `cerulean-labs`' credentials,** so training on another org's
+  imported dataset needs `s3.get_process(org=...)` and `SafeLanceDataset` directly. This
+  predates this stage.
