@@ -87,7 +87,7 @@ class Settings:
         doc="the Hub's dataset viewer API, which lists a dataset's configs, splits and sizes",
     )
     hf_import_max_bytes: int = field(
-        default=50_000_000_000,
+        default=50 * 2**30,
         doc="the largest Hugging Face dataset or model the web app imports, in bytes; bigger "
         "ones are refused with the flock command to run instead",
     )
