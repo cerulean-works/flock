@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 import torch
@@ -20,14 +20,13 @@ from flock.training.core.trainer import Trainer, TrainerConfig
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
-    from typing import Any
 
     from lance.torch.data import SafeLanceDataset
     from transformers import PretrainedConfig, PreTrainedModel, TokenizersBackend
 
     from flock.training.core.data_utils import Batch
 
-SIZES = {
+SIZES: dict[str, Any] = {
     "vocab_size": 32,
     "hidden_size": 16,
     "intermediate_size": 32,
@@ -83,10 +82,8 @@ def test_the_same_seed_gives_the_same_weights(repo: tuple[Path, PreTrainedModel]
     assert same_weights(first, second)
     other = HFCompatibleModel.from_hf(str(folder), init_seed=7)
     assert other.config.init_seed == 7
-    assert not torch.equal(
-        first.model.get_input_embeddings().weight, other.model.get_input_embeddings().weight
-    )
-    # Flock's init, not transformers' (which uses the global RNG), decides the weights.
+    embeddings = "model.model.embed_tokens.weight"
+    assert not torch.equal(first.state_dict()[embeddings], other.state_dict()[embeddings])
     assert first.config.hf_repo == str(folder.resolve())
     assert first.max_position_embeddings == 16
 
