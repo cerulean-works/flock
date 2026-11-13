@@ -33,8 +33,8 @@ The new version holds the same files as one made with `flock models import`. See
 
 A running import shows as a row at the top of the folder it writes to, or of the models list, with a progress bar:
 
-- a dataset downloads its files, then converts them to Lance;
-- a model uploads each file as it downloads, then Flock checks the files and numbers the version.
+- A dataset downloads its files, then converts them to Lance.
+- A model uploads each file as it downloads, then Flock checks the files and numbers the version.
 
 Click **Cancel** to stop it. Nothing it wrote stays: a dataset's splits are committed only at the end, and a model's upload is aborted.
 
@@ -53,9 +53,9 @@ Rows of imports that ended stay for a day, and **Hide** removes one from your vi
 
 The dialog refuses an import before it starts when:
 
-- the repository isn't on the Hub, or it's private or gated and the token can't read it;
-- a model has only pickled `.bin` weights, needs code from its repository, or isn't a causal language model that Flock can train;
-- a dataset has no files Flock reads and no Parquet conversion on the Hub;
-- the repository is larger than the server's limit. The dialog then shows the `flock datasets import` or `flock models import` command, filled in, to run from a machine [signed in](../cli/sign-in) to Flock.
+- The repository isn't on the Hub, or it's private or gated and the token can't read it.
+- A model has only pickled `.bin` weights, needs code from its repository, or isn't a causal language model that Flock can train.
+- A dataset has no files Flock reads and no Parquet conversion on the Hub.
+- The repository is larger than the server's limit. The dialog then shows the `flock datasets import` or `flock models import` command, filled in, to run from a machine [signed in](../cli/sign-in) to Flock.
 
 To script imports, see the [Hugging Face imports API](api/hf-imports).
