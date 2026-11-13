@@ -3,6 +3,7 @@ import {
 	clampSmoothing,
 	ema,
 	gaussian,
+	normalSmoothing,
 	pointAt,
 	runningAverage,
 	Series,
@@ -197,17 +198,20 @@ describe('smoothing methods', () => {
 		]);
 	});
 
-	it('gaussian keeps a constant line and is centered', () => {
-		for (const v of gaussian(xs(0, 1, 2, 3, 4), ys(2, 2, 2, 2, 2), 1.5))
-			expect(v).toBeCloseTo(2, 5);
+	it('gaussian keeps a constant line and is centered, in points', () => {
+		for (const v of gaussian(ys(2, 2, 2, 2, 2), 1.5)) expect(v).toBeCloseTo(2, 5);
 		// A straight line is unchanged in the middle, where the kernel is symmetric.
-		const line = gaussian(xs(0, 1, 2, 3, 4, 5, 6), ys(0, 1, 2, 3, 4, 5, 6), 0.8);
-		expect(line[3]).toBeCloseTo(3, 4);
-		// A spike is spread to its neighbours, but no further than 3 sigma.
-		const spike = gaussian(xs(0, 1, 2, 3, 4, 5, 6), ys(0, 0, 0, 7, 0, 0, 0), 0.5);
+		expect(gaussian(ys(0, 1, 2, 3, 4, 5, 6), 0.8)[3]).toBeCloseTo(3, 4);
+		// A spike is spread to its neighbours, but no further than 3 sigma points.
+		const spike = gaussian(ys(0, 0, 0, 7, 0, 0, 0), 0.5);
 		expect(spike[3]).toBeLessThan(7);
 		expect(spike[2]).toBeGreaterThan(0);
-		expect(spike[0]).toBe(0);
+		expect(spike[1]).toBe(0);
+		// Sigma counts points, whatever the steps between them.
+		const v = ys(3, 1, 4, 1, 5, 9, 2, 6);
+		expect(smooth(xs(0, 1, 2, 3, 4, 5, 6, 7), v, { type: 'gaussian', param: 2 })).toEqual(
+			smooth(xs(0, 10, 500, 501, 9000, 9001, 9002, 20000), v, { type: 'gaussian', param: 2 })
+		);
 	});
 
 	it('all skip non-finite points', () => {
@@ -226,5 +230,7 @@ describe('smoothing methods', () => {
 		expect(clampSmoothing('average', 4.4)).toBe(4);
 		expect(clampSmoothing('gaussian', 1000)).toBe(100);
 		expect(smooths({ type: 'gaussian', param: 0.1 })).toBe(true);
+		expect(normalSmoothing({ type: 'twema', param: 0 })).toEqual({ type: 'none', param: 0 });
+		expect(normalSmoothing({ type: 'ema', param: 0.3 })).toEqual({ type: 'ema', param: 0.3 });
 	});
 });

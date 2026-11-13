@@ -197,7 +197,7 @@ export function snapStep(lines: Iterable<Series>, step: number): number {
 /** How a line is smoothed: W&B's five methods. */
 export type SmoothingType = 'none' | 'ema' | 'twema' | 'average' | 'gaussian';
 
-/** A smoothing method and its parameter (a weight, a window of points or a sigma in x units). */
+/** A smoothing method and its parameter (a weight, or a window or sigma in points). */
 export interface Smoothing {
 	type: SmoothingType;
 	param: number;
@@ -231,7 +231,7 @@ export const SMOOTHING_METHODS: Record<
 
 export const SMOOTHING_TYPES = Object.keys(SMOOTHING_METHODS) as SmoothingType[];
 
-export const NO_SMOOTHING: Smoothing = { type: 'ema', param: 0 };
+export const NO_SMOOTHING: Smoothing = { type: 'none', param: 0 };
 
 export const isSmoothingType = (v: unknown): v is SmoothingType =>
 	typeof v === 'string' && v in SMOOTHING_METHODS;
@@ -243,6 +243,9 @@ export function clampSmoothing(type: SmoothingType, param: number): number {
 	const v = Math.max(min, Math.min(max, Number.isFinite(param) ? param : min));
 	return type === 'average' ? Math.round(v) : v;
 }
+
+/** `s`, or no smoothing when its parameter leaves the line as it is (an EMA weight of 0). */
+export const normalSmoothing = (s: Smoothing): Smoothing => (smooths(s) ? s : NO_SMOOTHING);
 
 /** Whether `s` changes a line at all: a zero weight or a window of one leaves it as it is. */
 export function smooths(s: Smoothing): boolean {
@@ -337,29 +340,24 @@ export function runningAverage(src: Float32Array, window: number): Float32Array 
 }
 
 /**
- * A centered Gaussian kernel over x (`sigma` in x units), truncated at 3 sigma: each point is
- * the weighted mean of the finite points within that distance. Non-finite points stay gaps.
+ * A centered Gaussian kernel over the points (`sigma` in points, like a running average's
+ * window), truncated at 3 sigma: each point is the weighted mean of the finite points within
+ * that many points of it. Non-finite points stay gaps.
  */
-export function gaussian(xs: Float64Array, src: Float32Array, sigma: number): Float32Array {
+export function gaussian(src: Float32Array, sigma: number): Float32Array {
 	if (!(sigma > 0)) return src;
-	const n = Math.min(xs.length, src.length);
-	const out = new Float32Array(src.length).fill(NaN);
-	const reach = 3 * sigma;
+	const n = src.length;
+	const out = new Float32Array(n).fill(NaN);
+	const reach = Math.floor(3 * sigma);
 	const k = -1 / (2 * sigma * sigma);
-	let lo = 0;
-	let hi = 0;
 	for (let i = 0; i < n; i++) {
 		if (!Number.isFinite(src[i])) continue;
-		const x = xs[i];
-		while (xs[lo] < x - reach) lo++;
-		if (hi < i) hi = i;
-		while (hi + 1 < n && xs[hi + 1] <= x + reach) hi++;
 		let sum = 0;
 		let norm = 0;
-		for (let j = lo; j <= hi; j++) {
+		for (let j = Math.max(0, i - reach); j <= Math.min(n - 1, i + reach); j++) {
 			const v = src[j];
 			if (!Number.isFinite(v)) continue;
-			const d = xs[j] - x;
+			const d = j - i;
 			const w = Math.exp(d * d * k);
 			sum += w * v;
 			norm += w;
@@ -380,7 +378,7 @@ export function smooth(xs: Float64Array, src: Float32Array, s: Smoothing): Float
 		case 'average':
 			return runningAverage(src, s.param);
 		case 'gaussian':
-			return gaussian(xs, src, s.param);
+			return gaussian(src, s.param);
 		default:
 			return src;
 	}
