@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | proposed |
+| Status | applied |
 | Date | 2026-11-14 |
 | Builds on | [001](001-wandb-compatible-flock.md) |
 | Keeps | everything before D129 |
@@ -146,3 +146,36 @@ to the existing ones (`series.spec.ts`, `panels.spec.ts`, `layout.spec.ts`):
 - Settings are still per browser. A viewer on another machine starts from the defaults.
 - The forecast is one curve shape. A run with a learning rate schedule that drops late (step
   decay) will be forecast poorly before the drop.
+
+## 5. How it was actually built
+
+Built in the planned order on `feat/workspace-panels`, one commit per step.
+
+- **Smoothing (D134).** The methods live in `chart/series.ts` (`smooth`, `SMOOTHING_METHODS`).
+  The time weighted EMA decays by `weight` over the run's average gap between finite points,
+  so on evenly logged steps it equals the EMA. The Gaussian's sigma is in the units of the x
+  axis the panel plots on, which are steps unless the panel uses another axis. The workspace
+  default stays an EMA of weight 0. One `SmoothingPicker` serves the workspace settings and the
+  editor, where a "Workspace" method follows the workspace, in place of the old switch.
+- **Settings (D132).** They are kept in the layout as `settings`, next to the panels, and read
+  through getters on `Workspace`, so the controls bind to them as before. A run's page shares
+  them, as it shares the layout.
+- **Newest runs (D133).** "Newest" is the run's `ordinal`, which Flock numbers by creation time.
+  A saved value that isn't a list (missing, or unreadable) counts as no saved state.
+- **Live runs (D129).** The page is read again 2 seconds after the first change, not 2 seconds
+  after the last, so a steady stream of new runs still reloads. While the viewer is busy it
+  checks again every 2 seconds. Open menus and popovers (such as the columns menu, where columns
+  are dragged) count as busy too.
+- **Custom panels (D130, D131).** `Workspace.panelDefs` is the page's panels followed by the
+  added ones, so added panels are numbered like any other and keep pinning, order, height,
+  rows and zoom. Their section key is "Custom panels". It goes first unless the viewer moved it.
+  A run's page shows them too. Delete panel takes effect at once, with no confirmation. Reset
+  to defaults keeps an added panel's metrics.
+- **Forecasts (D135, D136).** The fit is in `chart/forecast.ts`. After a grid of 48 asymptotes
+  it refines the best one with a golden section search, so a clean power law is recovered
+  closely. The forecast starts at the fitted value at the run's last step, which can sit a
+  little off the drawn line. Forecasts are skipped on wall time x axes, where a power law in
+  epoch seconds means nothing, and their horizon is in the units of the panel's x axis.
+  Forecasts count toward the y range unless outliers are ignored.
+- **Not checked by hand.** The UI was not tried in a browser. Checks, lint, unit tests and the
+  build pass.
