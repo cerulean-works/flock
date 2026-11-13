@@ -78,6 +78,24 @@ class Settings:
         default="https://api.wandb.ai",
         doc="W&B API that organization imports read from, unless the import names another",
     )
+    hf_endpoint: str = field(
+        default="https://huggingface.co",
+        doc="the Hugging Face Hub that imports from the web app read from",
+    )
+    hf_datasets_server: str = field(
+        default="https://datasets-server.huggingface.co",
+        doc="the Hub's dataset viewer API, which lists a dataset's configs, splits and sizes",
+    )
+    hf_import_max_bytes: int = field(
+        default=50_000_000_000,
+        doc="the largest Hugging Face dataset or model the web app imports, in bytes; bigger "
+        "ones are refused with the flock command to run instead",
+    )
+    hf_import_workers: int = field(
+        default=4,
+        doc="processes converting a Hugging Face dataset at once, and files of a model "
+        "uploaded at once, per import",
+    )
     crash_timeout: float = field(
         default=600.0, doc="seconds without heartbeats before a running run is marked crashed"
     )

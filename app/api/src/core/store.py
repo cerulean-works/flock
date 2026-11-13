@@ -21,6 +21,7 @@ from app.api.src.core.datasets import Datasets
 from app.api.src.core.errors import Conflict, Discarded, Forbidden, NotFound
 from app.api.src.core.feed import Feed
 from app.api.src.core.files import file_store
+from app.api.src.core.hf_imports import HFImports
 from app.api.src.core.history import History, Series, write_chunks
 from app.api.src.core.imports import Imports
 from app.api.src.core.live import Hub
@@ -381,6 +382,7 @@ class Store:
         self.s3 = S3(self)
         self.datasets = Datasets(self)
         self.models = Models(self)
+        self.hf_imports = HFImports(self)
 
     @staticmethod
     async def _prefixed(conn: asyncpg.Connection, pk: int, prefix: str) -> dict[str, Any]:
@@ -416,6 +418,7 @@ class Store:
             await self.s3.load()
             await self.datasets.load()
             await self.models.load()
+            await self.hf_imports.load()
             self._background(self._detect_missing_gpus())
             self._worker = asyncio.get_running_loop().create_task(self._work_loop())
         except BaseException:
@@ -426,6 +429,7 @@ class Store:
             raise
 
     async def close(self) -> None:
+        await self.hf_imports.close()
         await self.models.close()
         await self.datasets.close()
         await self.s3.close()
@@ -1726,6 +1730,7 @@ class Store:
         active unless ``force``. A background purge removes the rows and files (D80)."""
         # Its import stops first: it would wait on the locks taken below.
         await self.imports.cancel(org)
+        await self.hf_imports.cancel_org(org)
         now = time.time()
         async with self.db.pool.acquire() as conn, conn.transaction():
             await self._lock_org(conn, org, update=True)
@@ -2074,6 +2079,7 @@ class Store:
         )
         await self.accounts.sweep()
         await self.imports.sweep()
+        await self.hf_imports.sweep()
 
     # ------------------------------------------------------------------ series
 
