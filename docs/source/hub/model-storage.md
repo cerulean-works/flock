@@ -54,7 +54,7 @@ manifest.json                         every file's path, size and sha256, writte
 | Location | What it stores |
 |---|---|
 | `config.json` | The values of the model's frozen config dataclass. |
-| `flock.json` | The file format version, model and config classes as `module:Class`, the first floating-point parameter's dtype, the Flock commit, save time, and the supplied run path and step. Flock writes these files when saving a model object. A folder push uploads the files already on disk. |
+| `flock.json` | The file format version, model and config classes as `module:Class`, the first floating-point parameter's dtype, the Flock commit, save time, and the supplied run path and step. Flock writes these files when saving a model object. A folder push uploads the files already on disk. An [imported](import-from-hf) version also has `source`, the Hugging Face repository and commit it came from. |
 | Registry (PostgreSQL) | The authoritative version number, file list, digest, run link, step, and JSON supplied as `metadata=` (up to 256 KiB). The registry also tracks tags and the primary version. The run link resolves only when the named run exists in the model's organization. |
 | `manifest.json` | A registry-generated copy of the version's identity, digest, custom metadata, and file list. Flock writes it to the bucket after commit and can regenerate it from PostgreSQL. Downloads get the file list from the registry. |
 

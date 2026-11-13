@@ -16,6 +16,20 @@ Python functions and CLI commands for saving, loading, and managing Hub models. 
 
 [[autodoc]] hub.models.load_training_state
 
+## Importing from Hugging Face
+
+[[autodoc]] hub.models.import_from_hf
+
+[[autodoc]] hub.models.headers.rename_header
+
+[[autodoc]] hub.models.headers.rename_stream
+
+[[autodoc]] hub.models.headers.rename_file
+
+[[autodoc]] hub.models.headers.rename_index
+
+[[autodoc]] hub.models.headers.read_header
+
 ## Versions, tags and the primary
 
 [[autodoc]] hub.models.versions
@@ -43,6 +57,7 @@ flock models COMMAND [ARGS]
 | Command | Does |
 |---|---|
 | `flock models push DIR ORG/NAME [--tag TAG]… [--primary]` | Pushes a folder as a new version and prints it, such as `acme/olmo2-1b@12`. Hidden files are skipped. Resumes if an earlier push of the same folder stopped partway and no file changed since. |
+| `flock models import REPO ORG/NAME [--revision REV] [--tag TAG]… [--primary]` | Imports a Hugging Face model, from the Hub or a local folder, as a new version and prints it. See [Import from Hugging Face](import-from-hf). |
 | `flock models pull ORG/NAME[@REF] [--to DIR] [--include-training-state]` | Downloads a version into the cache, or also copies it to `DIR`, and prints the folder. With no `@REF`, the primary version. `training_state/` is skipped unless asked for. |
 | `flock models list [--org ORG]` | Lists models, with their latest and primary versions and the primary's size. |
 | `flock models versions ORG/NAME` | Lists versions, newest first, with tags, steps, sizes and which is primary. |
@@ -53,7 +68,7 @@ flock models COMMAND [ARGS]
 | `flock models uploads resume ULID` | Resumes an upload from its local files. The start of the ULID is enough when no other upload shares it. |
 | `flock models uploads abort ULID [--model ORG/NAME]` | Abandons an upload, deletes what it sent and its local folder. `--model` aborts an upload that has no journal on this machine. |
 
-`push` and `pull` show the bytes moved and the rate while they run. Every command exits with code `1` when the server refuses, saying why, and `2` when a reference isn't `org/name[@version]`.
+`push`, `import` and `pull` show the bytes moved and the rate while they run. Every command exits with code `1` when the server refuses, saying why, and `2` when a reference isn't `org/name[@version]`.
 
 ## Model references and names
 
