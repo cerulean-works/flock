@@ -133,7 +133,7 @@ def test_download_needs_no_sign_in(
     import huggingface_hub
 
     hub = FakeHub(files=["README.md", "train.csv", "test.csv"])
-    monkeypatch.setattr(huggingface_hub, "HfApi", lambda: hub)
+    monkeypatch.setattr(huggingface_hub, "HfApi", lambda **_: hub)
     monkeypatch.setattr(huggingface_hub, "snapshot_download", hub.snapshot_download)
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", hub.hf_hub_download)
     to = tmp_path / "words"
