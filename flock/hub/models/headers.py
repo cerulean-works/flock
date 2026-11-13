@@ -14,11 +14,10 @@ rename_file("upstream/model.safetensors", "staged/model.safetensors", hf_to_floc
 
 import json
 import os
-import shutil
 import struct
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import IO, Any
+from typing import Any, Protocol
 
 HF_PREFIX = "model."
 """What a Hugging Face tensor name gets in front of it in a Flock version (D126):
@@ -52,6 +51,18 @@ DTYPES = {
 type Rename = Callable[[str], str]
 
 
+class Reader(Protocol):
+    """A binary stream to read, such as an open file or an HTTP response body."""
+
+    def read(self, size: int, /) -> bytes: ...
+
+
+class Writer(Protocol):
+    """A binary stream to write, such as an open file or a buffer of multipart data."""
+
+    def write(self, data: bytes, /) -> object: ...
+
+
 @dataclass(frozen=True)
 class TensorInfo:
     """A tensor as a safetensors header describes it.
@@ -77,11 +88,11 @@ def hf_to_flock(name: str) -> str:
     return HF_PREFIX + name
 
 
-def read_header(stream: IO[bytes]) -> bytes:
+def read_header(stream: Reader) -> bytes:
     """Read a safetensors header from the start of a stream, leaving the stream at the data.
 
     Args:
-        stream (`IO[bytes]`): A binary stream at the start of a safetensors file. It needn't
+        stream (`Reader`): A binary stream at the start of a safetensors file. It needn't
             be seekable, so an HTTP response body works.
 
     Returns:
@@ -97,7 +108,7 @@ def read_header(stream: IO[bytes]) -> bytes:
     return _read_exactly(stream, length)
 
 
-def _read_exactly(stream: IO[bytes], size: int) -> bytes:
+def _read_exactly(stream: Reader, size: int) -> bytes:
     data = bytearray()
     while len(data) < size:
         chunk = stream.read(size - len(data))
@@ -164,12 +175,12 @@ def rename_header(header: bytes, rename: Rename) -> bytes:
     return struct.pack("<Q", len(encoded)) + encoded
 
 
-def rename_stream(source: IO[bytes], target: IO[bytes], rename: Rename) -> dict[str, TensorInfo]:
+def rename_stream(source: Reader, target: Writer, rename: Rename) -> dict[str, TensorInfo]:
     """Copy a safetensors stream to another with its tensors renamed, a chunk at a time.
 
     Args:
-        source (`IO[bytes]`): A binary stream at the start of a safetensors file.
-        target (`IO[bytes]`): Where the renamed file is written.
+        source (`Reader`): A binary stream at the start of a safetensors file.
+        target (`Writer`): Where the renamed file is written.
         rename (`Callable[[str], str]`): Maps each tensor name to its new name.
 
     Returns:
@@ -178,7 +189,8 @@ def rename_stream(source: IO[bytes], target: IO[bytes], rename: Rename) -> dict[
     header = read_header(source)
     new = rename_header(header, rename)
     target.write(new)
-    shutil.copyfileobj(source, target, CHUNK)
+    while chunk := source.read(CHUNK):
+        target.write(chunk)
     return tensors(new[8:])
 
 

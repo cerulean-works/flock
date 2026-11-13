@@ -14,7 +14,7 @@ from typing import Any
 import click
 
 from flock.hub import models, s3
-from flock.hub.models import cache, upload
+from flock.hub.models import cache, hf, upload
 from flock.hub.models._common import Ref, human
 from flock.hub.s3 import S3Error
 
@@ -295,6 +295,35 @@ def push_command(folder: Path, name: str, tags: tuple[str, ...], primary: bool) 
     progress = _Progress("Sent")
     with _failing():
         version = upload.push(folder.resolve(), ref, options, progress=progress)
+    progress.end()
+    click.echo(str(version))
+
+
+@models_group.command("import")
+@click.argument("repo")
+@click.argument("name")
+@click.option("--revision", help="A branch, tag or commit of the Hub repository (default: main).")
+@click.option("--tag", "tags", multiple=True, help="Tag the new version (repeat for more).")
+@click.option("--primary", is_flag=True, help="Make the new version primary once it's committed.")
+def import_command(
+    repo: str, name: str, revision: str | None, tags: tuple[str, ...], primary: bool
+) -> None:
+    """Import the Hugging Face model REPO as a new version of NAME (org/name).
+
+    REPO is a Hub repository such as Qwen/Qwen3-0.6B, or a local folder holding one. The
+    weights must be safetensors. They're renamed for Flock without being loaded, and checked
+    against the architecture before anything is uploaded. Running the same import again after
+    it stopped resumes it.
+    """
+    _ref(name, version=False)
+    progress = _Progress("Sent")
+    with _failing():
+        try:
+            version = hf.import_model(
+                repo, name, revision=revision, tags=tags, primary=primary, progress=progress
+            )
+        except ValueError as error:
+            raise click.ClickException(str(error)) from None
     progress.end()
     click.echo(str(version))
 
