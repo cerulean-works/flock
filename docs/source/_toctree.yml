@@ -85,6 +85,8 @@ reference:
     title: Python S3 API
 - title: Hub
   sections:
+  - local: hub/model-storage
+    title: Model storage and uploads
   - local: hub/models
     title: Models API
 - title: Training

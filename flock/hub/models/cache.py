@@ -1,31 +1,36 @@
-"""Downloading a version (D103) into the cache, `{cache}/models/{org}/{name}/{digest}/`: each
-file through `{path}.partial` with ranged GETs from one pool, checked against its sha256 before
-it's renamed into place, under a lock that processes downloading the same version share."""
+"""Download and load versions from the local cache.
+
+Processes share a lock per digest. Ranged GETs append to partial files, which are
+checked against the registry's SHA-256 before they are installed in the cache.
+"""
 
 import fcntl
 import fnmatch
-import hashlib
 import json
 import os
 import shutil
 import threading
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from flock.hub.models._common import (
+    BUCKET,
     PART_SIZE,
     TRAINING_STATE,
     ModelError,
     ModelFile,
     ModelVersion,
-    Pool,
+    Progress,
     Ref,
     Registry,
+    TransferPool,
     cache_root,
     concurrency,
     s3_client,
+    sha256_file,
 )
 
 if TYPE_CHECKING:
@@ -33,14 +38,11 @@ if TYPE_CHECKING:
 
     from flock.training.core.models.base import BaseModel
 
-BUCKET = "flock-models"
-CHUNK = PART_SIZE  # the bytes of each ranged GET
 PARTIAL = ".partial"
 LOCK = ".lock"
 COMPLETE = ".complete"  # the paths whose sha256 has been checked, as a JSON list
 
 type Patterns = str | Sequence[str] | None
-type Progress = Callable[[int], None]
 # Aliases are evaluated lazily, so the signature can name classes this module doesn't import.
 type Device = str | torch.device | None
 type DType = torch.dtype | None
@@ -85,7 +87,7 @@ def _locked(folder: Path) -> Generator[None]:
             fcntl.flock(file, fcntl.LOCK_UN)
 
 
-def _checked(folder: Path) -> set[str]:
+def _verified_paths(folder: Path) -> set[str]:
     try:
         found = json.loads((folder / COMPLETE).read_text())
     except OSError, ValueError:
@@ -93,90 +95,77 @@ def _checked(folder: Path) -> set[str]:
     return {p for p in found if isinstance(p, str) and (folder / p).is_file()}
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        while chunk := file.read(8 * 2**20):
-            digest.update(chunk)
-    return digest.hexdigest()
+@dataclass
+class _DownloadFile:
+    file: ModelFile
+    target: Path
+    partial: Path
+    next_offset: int
+    ready_to_append: threading.Condition = field(default_factory=threading.Condition)
 
 
-class _Fetcher:
+class _DownloadTransfer:
     def __init__(self, version: ModelVersion, folder: Path, progress: Progress | None) -> None:
         self.version = version
         self.folder = folder
         self.progress = progress
         self.s3 = s3_client(version.org, read_only=True)
-        self.pool = Pool(concurrency())
+        self.pool = TransferPool(concurrency())
 
     def run(self, files: Sequence[ModelFile]) -> None:
         for file in files:
-            self.pool.submit(self.file, file)
+            self.pool.submit(self._download_file, file)
         self.pool.wait()
 
-    def file(self, file: ModelFile) -> None:
+    def _download_file(self, file: ModelFile) -> None:
         target = self.folder / file.path
         partial = target.with_name(target.name + PARTIAL)
         target.parent.mkdir(parents=True, exist_ok=True)
-        have = partial.stat().st_size if partial.exists() else 0
-        if have > file.size:  # not this file's bytes: start again
+        offset = partial.stat().st_size if partial.exists() else 0
+        if offset > file.size:
             partial.unlink()
-            have = 0
+            offset = 0
         partial.touch()
-        # Resume from the partial file's size. Chunks are fetched at once but appended in
-        # order, so the partial file never has a hole.
-        ranges = [(start, min(start + CHUNK, file.size)) for start in range(have, file.size, CHUNK)]
-        if not ranges:
-            self.finish(file, partial, target)
+        download = _DownloadFile(file, target, partial, offset)
+        if offset == file.size:
+            self._verify_and_install(download)
             return
-        order = {"next": 0, "done": threading.Condition()}
-        for index, (start, end) in enumerate(ranges):
-            self.pool.submit(
-                self.chunk, file, partial, target, index, len(ranges), start, end, order
-            )
+        for start in range(offset, file.size, PART_SIZE):
+            end = min(start + PART_SIZE, file.size)
+            self.pool.submit(self._download_range, download, start, end)
 
-    def chunk(
-        self,
-        file: ModelFile,
-        partial: Path,
-        target: Path,
-        index: int,
-        count: int,
-        start: int,
-        end: int,
-        order: dict[str, Any],
-    ) -> None:
+    def _download_range(self, download: _DownloadFile, start: int, end: int) -> None:
+        file = download.file
         got = self.s3.get_object(
             Bucket=BUCKET, Key=self.version.prefix + file.path, Range=f"bytes={start}-{end - 1}"
         )
         data = got["Body"].read()
         if len(data) != end - start:
             raise ModelError(f"{file.path} came back with {len(data)} bytes, not {end - start}")
-        done: threading.Condition = order["done"]
-        with done:
-            # The chunk before was submitted first, so it's running or done: this never waits
-            # on a chunk that hasn't started.
-            while order["next"] != index:
+        # Fetch in parallel, then append in offset order so a partial file has no holes.
+        # Earlier ranges were queued first, so they can finish while this worker waits.
+        with download.ready_to_append:
+            while download.next_offset != start:
                 if self.pool.error is not None:
                     return
-                done.wait(1)
-            with partial.open("ab") as out:
+                download.ready_to_append.wait(1)
+            with download.partial.open("ab") as out:
                 out.write(data)
-            order["next"] += 1
-            done.notify_all()
+            download.next_offset = end
+            download.ready_to_append.notify_all()
         if self.progress is not None:
             self.progress(len(data))
-        if index == count - 1:
-            self.finish(file, partial, target)
+        if end == file.size:
+            self._verify_and_install(download)
 
-    def finish(self, file: ModelFile, partial: Path, target: Path) -> None:
-        if _sha256(partial) != file.sha256:
-            partial.unlink(missing_ok=True)
+    def _verify_and_install(self, download: _DownloadFile) -> None:
+        if sha256_file(download.partial) != download.file.sha256:
+            download.partial.unlink(missing_ok=True)
             raise ModelError(
-                f"{file.path} of {self.version} didn't match its sha256, so it was deleted. "
+                f"{download.file.path} of {self.version} didn't match its sha256, so it was deleted. "
                 "Download it again."
             )
-        os.replace(partial, target)
+        os.replace(download.partial, download.target)
 
 
 def fetch(
@@ -186,16 +175,16 @@ def fetch(
     returns the version's folder."""
     folder = version_folder(version)
     wanted = {f.path for f in files}
-    if wanted <= _checked(folder):
+    if wanted <= _verified_paths(folder):
         return folder
     folder.mkdir(parents=True, exist_ok=True)
     with _locked(folder):
-        checked = _checked(folder)
-        todo = [f for f in files if f.path not in checked]
-        if todo:
-            _Fetcher(version, folder, progress).run(todo)
+        verified = _verified_paths(folder)
+        missing = [file for file in files if file.path not in verified]
+        if missing:
+            _DownloadTransfer(version, folder, progress).run(missing)
         marker = folder / (COMPLETE + PARTIAL)
-        marker.write_text(json.dumps(sorted(checked | wanted)))
+        marker.write_text(json.dumps(sorted(verified | wanted)))
         os.replace(marker, folder / COMPLETE)
     return folder
 
@@ -261,8 +250,8 @@ def load_from_hub(
     """
     Downloads a version and builds the model with its weights.
 
-    The model's class and config class come from the version's `flock.json`, and must be in
-    `flock.training`, so a download never chooses what code runs. The model is built on the
+    The model and config classes are read from `flock.json` and must be in the installed
+    `flock.training` package. The model is built on the
     meta device, so no random initialization runs, and gets its weights with
     `load_state_dict(assign=True, strict=True)`. `training_state/` isn't downloaded.
 
@@ -295,9 +284,7 @@ def load_from_hub(
 
     version = resolve(ref)
     assert version.files is not None
-    folder = fetch(version, select(version.files, None, None, False))
-    model = build(folder, device, dtype)
-    return model
+    return build(fetch(version, select(version.files, None, None, False)), device, dtype)
 
 
 def load_training_state(ref: str, *, device: str | None = None) -> dict[str, Any]:

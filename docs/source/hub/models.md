@@ -1,86 +1,6 @@
 # Models API
 
-`flock.hub.models` and `flock models` store models as numbered versions in your organization's `flock-models` bucket. Start with [Store and load models](store-models).
-
-## Model references
-
-Every function and command that reads a version takes a reference:
-
-| Reference | Resolves to |
-|---|---|
-| `org/name` | the primary version |
-| `org/name@primary` | the primary version |
-| `org/name@12` | version 12 |
-| `org/name@checkpoint-12000` | the version tagged `checkpoint-12000` |
-
-A reference is resolved once, when it's used. Everything after uses the version number it resolved to.
-
-## Naming rules
-
-| Name | Rules |
-|---|---|
-| Model | Lowercase ASCII letters, digits, `.`, `-` and `_`. Starts with a letter or digit. At most 100 characters. |
-| Tag | ASCII letters, digits, `.`, `-` and `_`. Starts with a letter or digit. At most 100 characters. Can't be only digits, so `@12` always means version 12. Can't be `primary`. |
-| Checkpoint tag | `checkpoint-{step}`, where `step` is the number of optimizer steps taken before the save, with no leading zeros. A convention that training code follows, not added by Flock. |
-
-## Primary version
-
-| Behavior | Rule |
-|---|---|
-| Default | A reference with no `@` resolves to the primary version. |
-| Count | Exactly one per model, once it has a version. |
-| First version | Becomes primary when it's saved. |
-| Who changes it | Organization members and admins. |
-| How | **Make primary** in the **⋯** menu of a version in the **Versions** tab, `flock models primary`, `set_primary`, or `primary=True` when saving. |
-| When `primary=True` applies | When the upload finishes, not when it starts. |
-| Deleting | The primary version can't be deleted until another is made primary. |
-| Tags | `primary` isn't a tag. `tag` and `untag` refuse it. |
-
-## Tags
-
-| Behavior | Rule |
-|---|---|
-| Uniqueness | A tag names one version of a model. |
-| Adding a tag already on another version | Refused, unless you pass `move=True` (`--move` on the CLI). |
-| Checkpoint tags in the dashboard | Sorted by their number, and shown alone by the **Checkpoints** filter. |
-| Deleting a tagged version | Refused while it has a tag other than a checkpoint tag. Checkpoint tags are deleted with their version. |
-| Retention | **Model retention** in the organization settings, off by default. Checkpoint tags count as no tag, so retention can remove old checkpoints. The primary version and versions with other tags are always kept. |
-
-## What a version holds
-
-```text
-model.safetensors                     or shards, with model.safetensors.index.json
-config.json                           the model's config
-flock.json                            model class, config class, dtype, flock commit, run, step
-training_state/optimizer.safetensors  only if saved with training_state
-manifest.json                         every file's path, size and sha256, written by Flock
-```
-
-The version's digest is the sha256 of its file list, so two versions with the same digest hold the same bytes. `manifest.json` stays in the version's folder in `flock-models`. Downloads don't fetch it, since the registry answers the same list.
-
-`training_state` values that aren't flat state dicts, such as an optimizer's, keep their structure in the safetensors file's metadata, so `load_training_state` returns them as they were saved.
-
-## Local files
-
-| Path | Holds |
-|---|---|
-| `~/.cache/flock/models/{org}/{name}/{digest}/` | Downloaded versions, by digest. A file is renamed into place only after its sha256 matches. |
-| `…/{digest}/{path}.partial` | A file being downloaded. The next download continues from its size. |
-| `…/{digest}/.complete` | The files already checked, which later loads don't ask the server for. |
-| `…/{digest}/.lock` | The lock that processes downloading the same version share. |
-| `~/.cache/flock/uploads/{ulid}/journal.json` | An upload's journal, written before any byte is sent. |
-| `~/.cache/flock/uploads/{ulid}/model/` | The files `save_to_hub` wrote from a model. A pushed folder stays where it is. |
-
-The upload's folder is deleted once the version exists, unless `keep_local=True`, which keeps `model/` and deletes the journal.
-
-## Environment variables
-
-| Variable | Default | Meaning |
-|---|---|---|
-| `FLOCK_CACHE` | `~/.cache/flock` | Where downloads and upload journals are kept. |
-| `FLOCK_MODELS_CONCURRENCY` | `32` | Requests in flight at once, for every file of an upload or a download together. |
-
-Uploads send files of up to 64 MiB in one request and larger files in 64 MiB parts, each with `Content-MD5`. Downloads fetch 64 MiB ranges. Failed requests are retried by botocore's standard retry mode. Signing in works as [Credential resolution](../cli/credentials) describes, and downloads use read-only keys.
+Python functions and CLI commands for saving, loading, and managing Hub models. For metadata, dedupe keys, background uploads, and recovery, see [Model storage and uploads](model-storage). For examples, see [Store and load models](store-models).
 
 ## Saving and loading
 
@@ -135,16 +55,10 @@ flock models COMMAND [ARGS]
 
 `push` and `pull` show the bytes moved and the rate while they run. Every command exits with code `1` when the server refuses, saying why, and `2` when a reference isn't `org/name[@version]`.
 
-## Interrupted uploads
+## Model references and names
 
-| Behavior | Rule |
-|---|---|
-| When a version appears | Only once every file has finished uploading and the commit succeeded. |
-| What resuming sends | Only the files and parts not already in storage. A part whose bytes differ from the local file is sent again. |
-| What resuming needs | The local files the upload started from, unchanged in size and modified time. A changed file stops the resume and is named. |
-| Which uploads `save_to_hub` resumes | An upload of the same folder with unchanged files, or for a model, one with the same `dedupe_key`. Otherwise it starts a new upload. |
-| A crash after the commit was sent | Resuming commits again, which answers the same version. |
-| An expired or aborted upload | Resuming opens a new upload and sends every file again. `resume_uploads` forgets one whose local files changed or are gone. |
-| Local copy | Kept in `~/.cache/flock/uploads/` until the version exists, then deleted unless `keep_local=True`. |
-| Expiry | 7 days after the upload's last activity. What it sent is then deleted. |
-| Downloads | Resume each file from where it stopped, and check its sha256 before using it. A file that doesn't match is deleted and the download fails with its path. |
+Use `org/name@12` for a numbered version, `org/name@release` for a tag, or `org/name` (also `org/name@primary`) for the primary version. Use a numbered reference to keep loading the same version if a tag or the primary version moves.
+
+Model and tag names are up to 100 ASCII characters. They start with a letter or digit and may also contain `.`, `-`, and `_`. Model names use lowercase letters. Tags reserve `primary` in any case and names made entirely of digits.
+
+A `checkpoint-{step}` tag uses the optimizer step without leading zeros. Checkpoint tags cannot move, and versions with only checkpoint tags are eligible for retention. [Manage models and retention](../app/browse-models)

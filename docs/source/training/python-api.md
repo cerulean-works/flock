@@ -129,7 +129,7 @@ The `Olmo2` forward and tokenizer methods follow the `BaseModel` contract above.
 
 `save_model` persists weights and configuration alongside separate safetensors
 files for each top-level training-state entry. See the
-[Hub model format](../hub/models#what-a-version-holds) for file metadata.
+[Hub model format](../hub/model-storage#what-a-version-holds) for file metadata.
 These schemas and metric buffers are implementation-level APIs under
 `flock.training.core`.
 

@@ -244,7 +244,7 @@ Set `save_steps` in `TrainerConfig` to save after that many updates and at the
 end of the pass. The default `None` disables scheduled saving.
 Each checkpoint holds model weights, model configuration, optimizer and scheduler
 state, training counters, the unfinished logging window, and Python and PyTorch
-RNG states. Checkpoints use the [Hub model format](../hub/models#what-a-version-holds).
+RNG states. Checkpoints use the [Hub model format](../hub/model-storage#what-a-version-holds).
 
 Set `output_dir` for a checkpoint root, or use the default
 `.training-checkpoints/<run_name>`. Fresh training requires an empty directory

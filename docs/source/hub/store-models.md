@@ -152,16 +152,16 @@ What each part does:
 
 - **`blocking=False`** returns as soon as the weights are on local disk, and uploads in a background thread. Training waits only for the disk write. `result()` waits for the version.
 - **`run` and `step`** link the version to the run, so the run's page lists its checkpoints and the model's page shows which run and step each version came from.
-- **`training_state`** stores the optimizer next to the weights, in `training_state/`. `load_from_hub` and `download` skip it unless you pass `include_training_state=True`, so loading a model for eval stays fast. To resume training, `models.load_training_state("acme/olmo2-1b@checkpoint-12000")` returns `{"optimizer": ...}`, ready for `optimizer.load_state_dict`.
+- **`training_state`** stores the optimizer next to the weights, in `training_state/`. To fetch those files with `download`, pass `include_training_state=True`. To resume training, `models.load_training_state("acme/olmo2-1b@checkpoint-12000")` returns `{"optimizer": ...}`, ready for `optimizer.load_state_dict`.
 - **Restarts are safe.** With a `run` and a `step`, saving the same step of the same run again returns the version already saved instead of making another, or finishes that step's upload if it was interrupted. A checkpoint tag that's already on a version is refused rather than moved, so a tag always names the step it says.
 
 When the run is done, make the checkpoint you want others to use primary, from the **⋯** menu or with `set_primary`.
 
 ## Resume an interrupted upload
 
-An upload that stops partway, because the process was killed, the machine went down or the network dropped, is kept for 7 days. What already reached storage stays there, and resuming sends only what's missing. A version appears only when the whole upload has finished, so nobody can load a partial one.
+Once the client has written an upload's journal, it can resume after a process crash or network interruption. For an open upload, the client reuses matching files and parts already in storage. The version becomes visible when the registry commits it.
 
-Resuming needs the local files the upload started from. `save_to_hub` keeps them in `~/.cache/flock/uploads/` until the version exists, with a journal of what's been sent.
+To finish a transfer, keep its source files available and unchanged. When saving a model object, `save_to_hub` keeps the snapshot and journal in `~/.cache/flock/uploads/` until the version exists. A folder push reads the source directory in place.
 
 - **In Python,** `models.resume_uploads("acme/olmo2-1b")` finishes every upload of a model that this machine started. Calling `save_to_hub` again resumes too: with the same folder, or with a model and the same `run` and `step`.
 - **From the shell,** running the same `flock models push` again resumes. To see what's waiting and act on one upload, by its ID or the start of it:
@@ -176,7 +176,7 @@ If a file changed on disk since the upload started, resuming stops and names the
 
 An upload nobody resumes expires after 7 days of no activity, and what it uploaded is deleted. Resuming it later starts it again from the local files, if they haven't changed.
 
-Downloads resume too. If `load_from_hub` or `download` stops partway, the next call continues each file from where it stopped.
+Downloads resume too. If `load_from_hub` or `download` stops partway, the next call continues each file from where it stopped. [How interrupted uploads resume](model-storage#interrupted-uploads)
 
 ## Delete versions
 
@@ -189,4 +189,4 @@ Some versions can't be deleted until you change them:
 
 [Browse and manage models](../app/browse-models) covers the rest of the Models tab: the version picker, the tabs and the trash.
 
-The [models reference](models) lists every function, command and naming rule.
+[Models API and CLI reference](models)
