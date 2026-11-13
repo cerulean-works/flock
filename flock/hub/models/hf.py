@@ -11,7 +11,7 @@ import re
 import secrets
 import shutil
 import time
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -143,14 +143,86 @@ def snapshot(repo: str, revision: str | None = None, *, weights: bool = True) ->
     return Snapshot(Path(downloaded), repo, info.sha)
 
 
+def weight_files(index: dict[str, Any] | None, where: str = INDEX) -> list[str]:
+    """A version's safetensors files in order: the shards an index names, else `model.safetensors`.
+
+    Args:
+        index (`dict[str, Any]`, *optional*): The parsed `model.safetensors.index.json`, if the
+            weights are sharded.
+        where (`str`, *optional*): The index's name, for the error.
+
+    Raises:
+        [`~hub.models.ModelError`]: If the index has no `weight_map`.
+    """
+    if index is None:
+        return [SINGLE]
+    if not isinstance(index.get("weight_map"), dict):
+        raise ModelError(f"{where} has no weight_map")
+    return list(dict.fromkeys(index["weight_map"].values()))
+
+
 def _weights(folder: Path) -> tuple[dict[str, Any] | None, list[str]]:
     """The folder's safetensors index, if sharded, and its weight files in order."""
     if (folder / INDEX).exists():
         index = json.loads((folder / INDEX).read_text())
-        if not isinstance(index.get("weight_map"), dict):
-            raise ModelError(f"{folder / INDEX} has no weight_map")
-        return index, list(dict.fromkeys(index["weight_map"].values()))
+        return index, weight_files(index, str(folder / INDEX))
     return None, [SINGLE]
+
+
+def dedupe_key(repo: str, revision: str) -> str:
+    """What makes importing one commit of a repository again return the version it made."""
+    return f"huggingface:{repo}@{revision}"
+
+
+def version_config(hf_config: dict[str, Any], repo: str) -> dict[str, Any]:
+    """An imported version's `config.json`: [`training.HFCompatibleConfig`] with the repository's
+    own config and its tokenizer repository, as `dataclasses.asdict` gives it.
+
+    Args:
+        hf_config (`dict[str, Any]`): The repository's `config.json`.
+        repo (`str`): The repository, where the tokenizer comes from.
+    """
+    return {
+        "hf_config": json.loads(json.dumps(hf_config)),
+        "max_position_embeddings": None,
+        "hf_repo": repo,
+        "initializer_range": None,
+        "init_seed": 42,
+        "attn_implementation": "sdpa",
+    }
+
+
+def weight_dtype(found: Iterable[TensorInfo]) -> str | None:
+    """The torch dtype of the first floating-point tensor, which `flock.json` records."""
+    return next(
+        (DTYPES.get(info.dtype) for info in found if info.dtype.startswith(("F", "BF"))), None
+    )
+
+
+def provenance(repo: str, revision: str | None, dtype: str | None) -> dict[str, Any]:
+    """An imported version's `flock.json`, with where it came from under `source`.
+
+    Args:
+        repo (`str`): The repository.
+        revision (`str`, *optional*): The commit the files are from, when known.
+        dtype (`str`, *optional*): The weights' torch dtype, from [`weight_dtype`].
+    """
+    return {
+        "format": FORMAT,
+        "architecture": ARCHITECTURE,
+        "config_class": CONFIG_CLASS,
+        "dtype": dtype,
+        "flock_commit": flock_commit(),
+        "run": None,
+        "step": None,
+        "saved_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "source": {"hub": "huggingface", "repo": repo, "revision": revision},
+    }
+
+
+def dump(data: dict[str, Any]) -> bytes:
+    """JSON as an imported version's files hold it: indented, with a final newline."""
+    return (json.dumps(data, indent=2) + "\n").encode()
 
 
 def _renamed_tensors(folder: Path, files: Sequence[str]) -> dict[str, TensorInfo]:
@@ -227,7 +299,8 @@ def stage(found: Snapshot, staging: Path) -> None:
 
     folder = found.folder
     hf_config = json.loads((folder / CONFIG).read_text())
-    config = HFCompatibleConfig(hf_config=hf_config, hf_repo=found.repo)
+    fields = version_config(hf_config, found.repo)
+    config = HFCompatibleConfig(**fields)
     index, files = _weights(folder)
     renamed = _renamed_tensors(folder, files)
     check_weights(config, renamed)
@@ -237,29 +310,14 @@ def stage(found: Snapshot, staging: Path) -> None:
         (staging / name).parent.mkdir(parents=True, exist_ok=True)
         rename_file(folder / name, staging / name, hf_to_flock)
     if index is not None:
-        renamed_index = rename_index(index, hf_to_flock)
-        (staging / INDEX).write_text(json.dumps(renamed_index, indent=2) + "\n")
+        (staging / INDEX).write_bytes(dump(rename_index(index, hf_to_flock)))
     for name in RIDE_ALONG:
         if (folder / name).is_file():
             shutil.copyfile(folder / name, staging / name)
 
-    dtype = next(
-        (DTYPES.get(info.dtype) for info in renamed.values() if info.dtype.startswith(("F", "BF"))),
-        None,
-    )
-    (staging / CONFIG).write_text(json.dumps(dataclasses.asdict(config), indent=2) + "\n")
-    provenance = {
-        "format": FORMAT,
-        "architecture": ARCHITECTURE,
-        "config_class": CONFIG_CLASS,
-        "dtype": dtype,
-        "flock_commit": flock_commit(),
-        "run": None,
-        "step": None,
-        "saved_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "source": {"hub": "huggingface", "repo": found.repo, "revision": found.revision},
-    }
-    (staging / "flock.json").write_text(json.dumps(provenance, indent=2) + "\n")
+    (staging / CONFIG).write_bytes(dump(dataclasses.asdict(config)))
+    dtype = weight_dtype(renamed.values())
+    (staging / "flock.json").write_bytes(dump(provenance(found.repo, found.revision, dtype)))
 
 
 def import_from_hf(
@@ -335,10 +393,10 @@ def import_model(
 
     ref = Ref.parse(name, version=False)
     found = snapshot(repo, revision)
-    dedupe_key = f"huggingface:{found.repo}@{found.revision}" if found.revision else None
-    if dedupe_key is not None:
+    key = dedupe_key(found.repo, found.revision) if found.revision else None
+    if key is not None:
         for journal in journals(ref.model):
-            if journal.staged and journal.options.get("dedupe_key") == dedupe_key:
+            if journal.staged and journal.options.get("dedupe_key") == key:
                 return resume_journal(journal, progress)
     options = {
         "metadata": {},
@@ -346,7 +404,7 @@ def import_model(
         "primary": primary,
         "run": None,
         "step": None,
-        "dedupe_key": dedupe_key,
+        "dedupe_key": key,
     }
     staging = uploads_root() / f"{STAGING_PREFIX}{secrets.token_hex(8)}"
     try:
