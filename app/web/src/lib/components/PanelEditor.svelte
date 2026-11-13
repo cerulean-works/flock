@@ -9,7 +9,6 @@
 	import * as Select from '#lib/components/ui/select/index.js';
 	import { Slider } from '#lib/components/ui/slider/index.js';
 	import { Switch } from '#lib/components/ui/switch/index.js';
-	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { SYSTEM_X_AXES, axisChoiceLabel, resolveAxis, type AxisKind } from '#lib/chart/axes.ts';
 	import { LINE_WIDTH_MAX, LINE_WIDTH_MIN, SMOOTHING_MAX } from '#lib/workspace/layout.ts';
 	import {
@@ -166,7 +165,7 @@
 	{@const minError = errors[`${axis}Min`]}
 	{@const maxError = errors[`${axis}Max`]}
 	<div class="grid gap-2">
-		<Label for="panel-{axis}-min">Range{unit ? ` (${unit})` : ''}</Label>
+		<Label for="panel-{axis}-min">{axis.toUpperCase()} range{unit ? ` (${unit})` : ''}</Label>
 		<div class="grid grid-cols-2 gap-2">
 			<Input
 				id="panel-{axis}-min"
@@ -235,132 +234,88 @@
 					class="flex w-[380px] flex-none flex-col border-l border-divider max-md:w-full max-md:border-t max-md:border-l-0"
 					aria-label="Settings"
 				>
-					<Tabs.Root value="data" class="flex min-h-0 flex-1 flex-col gap-0">
-						<Tabs.List variant="line" class="mx-5 mt-2 w-auto justify-start">
-							<Tabs.Trigger value="data" class="flex-none">Data</Tabs.Trigger>
-							<Tabs.Trigger value="display" class="flex-none">Display preferences</Tabs.Trigger>
-						</Tabs.List>
-						<Tabs.Content value="data" class="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-6">
-							<div class="grid gap-5">
+					<div class="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-6">
+						<div class="grid gap-8">
+							<section class="grid gap-5" aria-labelledby="panel-data">
+								<h3 id="panel-data" class="font-medium">Data</h3>
 								<div class="grid gap-2">
-									<Label for="panel-title">Chart title</Label>
-									<Input
-										id="panel-title"
-										value={draft.title}
-										placeholder={autoTitle}
-										autocomplete="off"
-										oninput={(e) => set('title', e.currentTarget.value)}
-									/>
-								</div>
-
-								<fieldset class="grid gap-3">
-									<legend class="mb-3 text-xs text-muted-foreground">Y axis</legend>
-									<div class="grid gap-2">
-										<Label for="panel-add-metric">Metrics</Label>
-										<ul class="flex flex-wrap gap-1.5" aria-label="Metrics plotted">
-											{#each draft.metrics as key, k (key)}
-												<li
-													class="flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md bg-muted pr-0.5 pl-2 text-[13px]"
-													title={key}
+									<Label for="panel-add-metric">Metrics</Label>
+									<ul class="flex flex-wrap gap-1.5" aria-label="Metrics plotted">
+										{#each draft.metrics as key, k (key)}
+											<li
+												class="flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md bg-muted pr-0.5 pl-2 text-[13px]"
+												title={key}
+											>
+												<span
+													class="h-0.5 w-3 flex-none rounded-full"
+													style:background={ws.byMetric(preview)
+														? metricColor(k)
+														: 'var(--muted-foreground)'}
+												></span>
+												<span class="truncate">{labelOf(key)}</span>
+												<Button
+													variant="ghost"
+													size="icon-xs"
+													aria-label="Remove {labelOf(key)}"
+													onclick={() =>
+														set(
+															'metrics',
+															draft!.metrics.filter((m) => m !== key)
+														)}
 												>
-													<span
-														class="h-0.5 w-3 flex-none rounded-full"
-														style:background={ws.byMetric(preview)
-															? metricColor(k)
-															: 'var(--muted-foreground)'}
-													></span>
-													<span class="truncate">{labelOf(key)}</span>
-													<Button
-														variant="ghost"
-														size="icon-xs"
-														aria-label="Remove {labelOf(key)}"
-														onclick={() =>
-															set(
-																'metrics',
-																draft!.metrics.filter((m) => m !== key)
-															)}
-													>
-														<XIcon />
-													</Button>
-												</li>
-											{/each}
-										</ul>
-										<Autocomplete
-											bind:value={adding}
-											{options}
-											mono
-											placeholder="Add a metric…"
-											aria-label="Add a metric"
-											onPick={(o) => addMetric(o.value)}
-										/>
-										{#if errors.metrics}
-											<p class="text-xs text-destructive">{errors.metrics}</p>
-										{:else}
-											<p class="text-xs text-muted-foreground">
-												Plot several metrics on one chart. Only {def.stream === 'system'
-													? 'system metrics'
-													: 'logged metrics'} share this x axis.
-											</p>
-										{/if}
-									</div>
-									{@render range(
-										'y',
-										draft.yMin,
-										draft.yMax,
-										'',
-										(v) => set('yMin', v),
-										(v) => set('yMax', v)
-									)}
-									<div class="grid gap-2">
-										<Label for="panel-y-label">Label</Label>
-										<Input
-											id="panel-y-label"
-											value={draft.yLabel}
-											placeholder="None"
-											autocomplete="off"
-											oninput={(e) => set('yLabel', e.currentTarget.value)}
-										/>
-									</div>
-								</fieldset>
-
-								<fieldset class="grid gap-3">
-									<legend class="mb-3 text-xs text-muted-foreground">
-										X axis · {axis.label}
-									</legend>
-									<div class="grid gap-2">
-										<Label>Plotted against</Label>
-										<XAxisPicker
-											value={draft.xAxis}
-											stream={def.stream}
-											inherit="Workspace ({workspaceAxis})"
-											onchange={setAxis}
-										/>
-										{#if def.stream === 'system'}
-											<p class="text-xs text-muted-foreground">
-												System metrics are sampled on a timer, so they plot against time.
-											</p>
-										{/if}
-									</div>
-									{@render range(
-										'x',
-										draft.xMin,
-										draft.xMax,
-										UNITS[axis.kind],
-										(v) => set('xMin', v),
-										(v) => set('xMax', v)
-									)}
-									<div class="grid gap-2">
-										<Label for="panel-x-label">Label</Label>
-										<Input
-											id="panel-x-label"
-											value={draft.xLabel}
-											placeholder={axis.label}
-											autocomplete="off"
-											oninput={(e) => set('xLabel', e.currentTarget.value)}
-										/>
-									</div>
-								</fieldset>
-
+													<XIcon />
+												</Button>
+											</li>
+										{/each}
+									</ul>
+									<Autocomplete
+										bind:value={adding}
+										{options}
+										mono
+										placeholder="Add a metric…"
+										aria-label="Add a metric"
+										onPick={(o) => addMetric(o.value)}
+									/>
+									{#if errors.metrics}
+										<p class="text-xs text-destructive">{errors.metrics}</p>
+									{:else}
+										<p class="text-xs text-muted-foreground">
+											Plot several metrics on one chart. Only {def.stream === 'system'
+												? 'system metrics'
+												: 'logged metrics'} share this x axis.
+										</p>
+									{/if}
+								</div>
+								<div class="grid gap-2">
+									<Label>X axis</Label>
+									<XAxisPicker
+										value={draft.xAxis}
+										stream={def.stream}
+										inherit="Workspace ({workspaceAxis})"
+										onchange={setAxis}
+									/>
+									{#if def.stream === 'system'}
+										<p class="text-xs text-muted-foreground">
+											System metrics are sampled on a timer, so they plot against time.
+										</p>
+									{/if}
+								</div>
+								{@render range(
+									'x',
+									draft.xMin,
+									draft.xMax,
+									UNITS[axis.kind],
+									(v) => set('xMin', v),
+									(v) => set('xMax', v)
+								)}
+								{@render range(
+									'y',
+									draft.yMin,
+									draft.yMax,
+									'',
+									(v) => set('yMin', v),
+									(v) => set('yMax', v)
+								)}
 								{@render tristate(
 									'panel-outliers',
 									'Ignore outliers',
@@ -368,10 +323,10 @@
 									`Workspace (${onOff(ws.ignoreOutliers)})`,
 									(v) => set('ignoreOutliers', v)
 								)}
-							</div>
-						</Tabs.Content>
-						<Tabs.Content value="display" class="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-6">
-							<div class="grid gap-5">
+							</section>
+
+							<section class="grid gap-5" aria-labelledby="panel-smoothing-heading">
+								<h3 id="panel-smoothing-heading" class="font-medium">Smoothing</h3>
 								<div class="grid gap-3">
 									<div class="flex items-center justify-between gap-4">
 										<Label for="panel-smoothing">Custom smoothing</Label>
@@ -400,7 +355,6 @@
 										<p class="text-xs text-muted-foreground">Follows the workspace's settings.</p>
 									{/if}
 								</div>
-
 								{@render tristate(
 									'panel-original',
 									'Show original lines',
@@ -408,6 +362,58 @@
 									`Workspace (${onOff(ws.showOriginal)})`,
 									(v) => set('showOriginal', v)
 								)}
+							</section>
+
+							<section class="grid gap-5" aria-labelledby="panel-display">
+								<h3 id="panel-display" class="font-medium">Display</h3>
+								<div class="grid gap-2">
+									<Label for="panel-title">Chart title</Label>
+									<Input
+										id="panel-title"
+										value={draft.title}
+										placeholder={autoTitle}
+										autocomplete="off"
+										oninput={(e) => set('title', e.currentTarget.value)}
+									/>
+								</div>
+								<div class="grid gap-2">
+									<Label for="panel-x-label">X axis label</Label>
+									<Input
+										id="panel-x-label"
+										value={draft.xLabel}
+										placeholder={axis.label}
+										autocomplete="off"
+										oninput={(e) => set('xLabel', e.currentTarget.value)}
+									/>
+								</div>
+								<div class="grid gap-2">
+									<Label for="panel-y-label">Y axis label</Label>
+									<Input
+										id="panel-y-label"
+										value={draft.yLabel}
+										placeholder="None"
+										autocomplete="off"
+										oninput={(e) => set('yLabel', e.currentTarget.value)}
+									/>
+								</div>
+
+								<div class="flex items-center justify-between gap-4">
+									<Label for="panel-legend">Legend</Label>
+									<Select.Root
+										type="single"
+										value={draft.legend}
+										onValueChange={(v) => set('legend', v as Tristate)}
+									>
+										<Select.Trigger id="panel-legend" size="sm" class="w-40">
+											{{ inherit: 'Auto', on: 'Show', off: 'Hide' }[draft.legend]}
+										</Select.Trigger>
+										<Select.Content>
+											<Select.Item value="inherit">Auto</Select.Item>
+											<Select.Item value="on">Show</Select.Item>
+											<Select.Item value="off">Hide</Select.Item>
+										</Select.Content>
+									</Select.Root>
+								</div>
 
 								<div class="grid gap-3">
 									<div class="flex items-center justify-between gap-4">
@@ -435,24 +441,6 @@
 								</div>
 
 								<div class="flex items-center justify-between gap-4">
-									<Label for="panel-legend">Legend</Label>
-									<Select.Root
-										type="single"
-										value={draft.legend}
-										onValueChange={(v) => set('legend', v as Tristate)}
-									>
-										<Select.Trigger id="panel-legend" size="sm" class="w-40">
-											{{ inherit: 'Auto', on: 'Show', off: 'Hide' }[draft.legend]}
-										</Select.Trigger>
-										<Select.Content>
-											<Select.Item value="inherit">Auto</Select.Item>
-											<Select.Item value="on">Show</Select.Item>
-											<Select.Item value="off">Hide</Select.Item>
-										</Select.Content>
-									</Select.Root>
-								</div>
-
-								<div class="flex items-center justify-between gap-4">
 									<Label for="panel-log">Log scale (y)</Label>
 									<Switch
 										id="panel-log"
@@ -460,9 +448,9 @@
 										onCheckedChange={(on) => set('log', on)}
 									/>
 								</div>
-							</div>
-						</Tabs.Content>
-					</Tabs.Root>
+							</section>
+						</div>
+					</div>
 				</aside>
 			</div>
 			<Dialog.Footer class="m-0 items-center rounded-b-xl sm:justify-between">
