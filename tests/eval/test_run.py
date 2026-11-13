@@ -25,7 +25,7 @@ from flock.eval.run import EvalConfig, evaluate, score_task
 from flock.eval.tasks import MCDoc, Suite, cloze
 from flock.eval.tokenizer import SentencePieceTokenizer
 
-from .toy import PROMPT_PATHS, PROVENANCE, TASK, task_result
+from .toy import PROMPT_PATHS, PROVENANCE, TASK, TEXT_TASK, task_result
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -152,6 +152,25 @@ def test_a_refused_request_fails_before_any_task_scores(
     with pytest.raises(ValueError, match="toy: the continuation changes the context's tokens"):
         evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=out))
     assert not (out / "predictions" / "toy.jsonl").exists()
+
+
+def test_a_short_window_fails_before_any_task_is_tokenized(
+    offline_model: None,
+    lm: LlamaForCausalLM,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    resegmenting = resegmenting_scorer(lm, monkeypatch, tmp_path)
+    short = ScoringModel(lm, resegmenting.tokenizer, name="tiny@0", max_length=4)
+    assert short.checks_resegmentation
+    monkeypatch.setattr(ScoringModel, "from_pretrained", lambda *args, **kwargs: short)
+    monkeypatch.setitem(run.TASKS, TEXT_TASK.name, TEXT_TASK)
+    monkeypatch.setattr(
+        run, "prepare_task", lambda *args: pytest.fail("tokenized before the check")
+    )
+    # The multiple-choice task comes first, so a check sharing its loop would tokenize it first.
+    with pytest.raises(ValueError, match="window 8 is above tiny@0's max_length 4"):
+        evaluate(EvalConfig(model="tiny@0", tasks=("toy", TEXT_TASK.name)))
 
 
 def test_provenance_is_collected_before_scoring(

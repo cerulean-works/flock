@@ -33,7 +33,7 @@ from flock.eval.tasks import (
     Truncation,
 )
 from flock.eval.tasks.suite import by_name, pins
-from flock.eval.tokenizer import SentencePieceTokenizer, Tokenizer
+from flock.eval.tokenizer import Tokenizer
 
 # Why `evaluate` and `score_task` refuse an output that is already there, and what to do.
 _ONE_RUN = (
@@ -153,24 +153,23 @@ def evaluate(config: EvalConfig) -> Results:
         batch_tokens=config.batch_tokens,
         add_bos=config.add_bos,
     )
-    # Checked before scoring, so a model too short for a perplexity task fails before any is scored
-    # rather than after every task before it.
+    # Checked before scoring, so a model too short for a perplexity task fails in seconds rather
+    # than after every task before it.
     for task in tasks:
         if isinstance(task, PerplexityTask) and task.window > model.max_length:
             raise ValueError(
                 f"{task.name}: window {task.window} is above {model.name}'s max_length "
                 f"{model.max_length}"
             )
-        # A resegmented context fails the same way, not after the tasks before it. Tokenizing twice
-        # costs less than holding every task's tokens at once, and only this tokenizer refuses.
-        if isinstance(model.tokenizer, SentencePieceTokenizer) and not isinstance(
-            task, PerplexityTask
-        ):
-            docs, shots = task.load(config.limit)
-            try:
-                model.encode_requests(task.requests(docs, shots).requests)
-            except ValueError as error:
-                raise ValueError(f"{task.name}: {error}") from error
+    # A resegmented context fails the same way, not after the tasks before it. Preparing twice
+    # costs less than holding every task's tokens at once, and only such a model refuses.
+    if model.checks_resegmentation:
+        for task in tasks:
+            if isinstance(task, MultipleChoiceTask):
+                try:
+                    prepare_task(model, task, config.limit)
+                except ValueError as error:
+                    raise ValueError(f"{task.name}: {error}") from error
     # Collected before scoring, so the commit's dirty flag describes the tree as scoring starts
     # and `created_at` is when scoring started, as lm-evaluation-harness records `start_date`.
     provenance = Provenance.collect(
