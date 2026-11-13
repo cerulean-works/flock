@@ -9,8 +9,6 @@ from torch import nn
 from flock.training.core.attention import (
     AttentionInterface,
     GroupedAttentionWithRoPE,
-    MaskPreparationFunction,
-    PreparedAttentionMask,
 )
 from flock.training.core.nn import SwiGLU
 
@@ -131,7 +129,7 @@ class Olmo2DecoderLayer(nn.Module):
         x: torch.Tensor,
         cos: torch.Tensor,
         sin: torch.Tensor,
-        mask: PreparedAttentionMask,
+        attention_mask: torch.Tensor | None,
     ) -> torch.Tensor:
         """Return updated hidden states with the same shape as `x`.
 
@@ -148,8 +146,8 @@ class Olmo2DecoderLayer(nn.Module):
         attention_output = self.self_attn(
             x,
             position_embeddings=(cos, sin),
-            attention_mask=mask.attention_mask,
-            is_causal=mask.is_causal,
+            attention_mask=attention_mask,
+            is_causal=True,
         )
         x = x + self.post_attention_layernorm(attention_output)
         return x + self.post_feedforward_layernorm(self.mlp(x))
@@ -165,9 +163,7 @@ class Olmo2Model(nn.Module):
     def __init__(self, config: Olmo2Config) -> None:
         """Construct embeddings, decoder layers and final normalization."""
         super().__init__()
-        self.mask_preparer: MaskPreparationFunction = AttentionInterface.get_mask_preparer(
-            config.attn_implementation
-        )
+        self.mask_preparer = AttentionInterface.get_mask_preparer(config.attn_implementation)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList(
             Olmo2DecoderLayer(config) for _ in range(config.num_hidden_layers)

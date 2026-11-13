@@ -106,8 +106,8 @@ def test_model_resolves_mask_preparer_at_construction_and_prepares_once_per_forw
         return result
 
     def compute(q, k, v, *, attention_mask=None, is_causal=False):
-        assert attention_mask is preparations[-1].attention_mask
-        assert is_causal is preparations[-1].is_causal
+        assert attention_mask is preparations[-1]
+        assert is_causal is True
         calls.append((attention_mask, is_causal))
         return sdpa_attention(q, k, v, attention_mask=attention_mask, is_causal=is_causal)
 

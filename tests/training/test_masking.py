@@ -2,7 +2,11 @@ import pytest
 import torch
 from torch.nn import functional as F
 
-from flock.training.core.attention import prepare_flash_attention_mask, prepare_sdpa_mask
+from flock.training.core.attention import (
+    prepare_flash_attention_mask,
+    prepare_sdpa_mask,
+    sdpa_attention,
+)
 
 
 @pytest.mark.parametrize("prepare", [prepare_sdpa_mask, prepare_flash_attention_mask])
@@ -10,8 +14,11 @@ from flock.training.core.attention import prepare_flash_attention_mask, prepare_
 @pytest.mark.parametrize("mask", [None, torch.ones(2, 4, dtype=torch.bool)])
 def test_unpadded_masks_use_the_causal_flag(prepare, is_causal, mask):
     prepared = prepare(mask, is_causal=is_causal)
-    assert prepared.attention_mask is None
-    assert prepared.is_causal is is_causal
+    assert prepared is None
+    q, k, v = (torch.randn(2, 2, 4, 8) for _ in range(3))
+    actual = sdpa_attention(q, k, v, attention_mask=prepared, is_causal=is_causal)
+    expected = F.scaled_dot_product_attention(q, k, v, is_causal=is_causal)
+    torch.testing.assert_close(actual, expected)
 
 
 @pytest.mark.parametrize("prepare", [prepare_sdpa_mask, prepare_flash_attention_mask])
@@ -40,14 +47,11 @@ def test_sdpa_preparation_preserves_query_visibility_and_gradients(is_causal):
     )
     expected_mask = torch.tensor([visible, [[False] * 4] * 4])[:, None]
     prepared = prepare_sdpa_mask(mask, is_causal=is_causal)
-    assert prepared.attention_mask is not None
-    assert prepared.is_causal is False
-    torch.testing.assert_close(prepared.attention_mask.expand(2, 1, 4, 4), expected_mask)
+    assert prepared is not None
+    torch.testing.assert_close(prepared.expand(2, 1, 4, 4), expected_mask)
     inputs = [torch.randn(2, 2, 4, 8, requires_grad=True) for _ in range(3)]
     references = [tensor.detach().clone().requires_grad_() for tensor in inputs]
-    actual = F.scaled_dot_product_attention(
-        *inputs, attn_mask=prepared.attention_mask, is_causal=prepared.is_causal
-    )
+    actual = sdpa_attention(*inputs, attention_mask=prepared, is_causal=is_causal)
     expected = F.scaled_dot_product_attention(*references, attn_mask=expected_mask)
     torch.testing.assert_close(actual, expected)
     upstream = torch.randn_like(actual)
@@ -64,5 +68,4 @@ def test_flash_preparation_keeps_padding_separate_from_causality(is_causal, empt
     if empty:
         mask.fill_(False)
     prepared = prepare_flash_attention_mask(mask, is_causal=is_causal)
-    assert prepared.attention_mask is mask
-    assert prepared.is_causal is is_causal
+    assert prepared is mask

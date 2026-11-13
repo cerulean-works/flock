@@ -294,9 +294,13 @@ loading the model; saved configs keep the backend name.
 
 The function takes Q/K/V shaped `[batch, heads, sequence, head_dim]` and keyword
 arguments `attention_mask` and `is_causal`. Return the same layout, with Q's heads
-and sequence length. For another mask format, supply a preparer that takes a
-boolean 2D `padding_mask` (or `None`) and keyword-only `is_causal`, and returns
-`PreparedAttentionMask(attention_mask, is_causal)`.
+and sequence length. `is_causal` describes the model's attention pattern. With
+SDPA, an explicit mask must include the causal restriction. The `sdpa_attention`
+adapter enables the kernel's causal flag only when the mask is `None`.
+
+For another mask format, supply a preparer that takes a boolean 2D `padding_mask`
+(or `None`) and keyword-only `is_causal`. Return a mask tensor or `None`. The model
+prepares the mask once per forward and shares it across decoder layers.
 
 ## Check the run
 
