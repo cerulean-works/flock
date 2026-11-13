@@ -41,8 +41,10 @@ import {
 	mergeOrder,
 	migrateOrder,
 	moveKey,
+	panelSmoothing,
 	parseLayout,
-	pinFirst
+	pinFirst,
+	type PlotSettings
 } from './layout.ts';
 import { resolvePanel, type PanelView } from './panels.ts';
 
@@ -167,6 +169,11 @@ const hiddenKey = (entity: string, project: string) => `flock:hidden:${entity}/$
 /** Hidden runs kept per project, the latest hidden last: enough for any sweep. */
 const HIDDEN_MAX = 5000;
 
+/** Runs a project shows when this browser has no hidden runs saved for it: the newest. */
+export const NEWEST_SHOWN = 10;
+
+const DEFAULT_ROWS = 2;
+
 /** A value this browser kept, or null when there's none (or storage is blocked or unreadable). */
 function readStored(key: string): unknown {
 	try {
@@ -228,15 +235,8 @@ export class Workspace {
 	pinnedId = $state<string | null>(null);
 	cursor = $state.raw<Cursor | null>(null);
 
-	smoothing = $state.raw<Smoothing>(NO_SMOOTHING);
-	showOriginal = $state(true);
-	ignoreOutliers = $state(false);
-	/** The x axis of panels that don't set their own: one of `X_AXES`, or a metric key. */
-	xAxis = $state(DEFAULT_X_AXIS);
 	/** Bumped when live updates change a run's metric definitions. */
 	defsVersion = $state(0);
-	/** Rows of panels a section's page shows, unless the section was resized. */
-	defaultRows = $state(2);
 	/**
 	 * A panel or section is being moved, or a section resized: plots don't follow the pointer
 	 * (no crosshair, no hover) until it's let go.
@@ -649,6 +649,62 @@ export class Workspace {
 		return this.layouts[layoutKey(this.meta.entity, this.meta.project)] ?? EMPTY_LAYOUT;
 	}
 
+	// ------------------------------------------------------------------------------------------
+	// Line plot settings for panels that don't set their own, kept with the layout.
+
+	/** Smoothing of panels that don't set their own. */
+	get smoothing(): Smoothing {
+		return panelSmoothing(this.layout.settings) ?? NO_SMOOTHING;
+	}
+
+	set smoothing(s: Smoothing) {
+		this.#saveSettings({
+			smoothingType: s.type,
+			smoothing: s.type === 'none' ? undefined : s.param
+		});
+	}
+
+	get showOriginal(): boolean {
+		return this.layout.settings.showOriginal ?? true;
+	}
+
+	set showOriginal(on: boolean) {
+		this.#saveSettings({ showOriginal: on });
+	}
+
+	get ignoreOutliers(): boolean {
+		return this.layout.settings.ignoreOutliers ?? false;
+	}
+
+	set ignoreOutliers(on: boolean) {
+		this.#saveSettings({ ignoreOutliers: on });
+	}
+
+	/** The x axis of panels that don't set their own: one of `X_AXES`, or a metric key. */
+	get xAxis(): string {
+		return this.layout.settings.xAxis ?? DEFAULT_X_AXIS;
+	}
+
+	set xAxis(axis: string) {
+		this.#saveSettings({ xAxis: axis });
+	}
+
+	/** Rows of panels a section's page shows, unless the section was resized. */
+	get defaultRows(): number {
+		return this.layout.settings.rows ?? DEFAULT_ROWS;
+	}
+
+	set defaultRows(rows: number) {
+		this.#saveSettings({ rows: clampRows(rows) });
+	}
+
+	/** Change some of the line plot settings; undefined goes back to the default. */
+	#saveSettings(changes: PlotSettings) {
+		const settings: Record<string, unknown> = { ...this.layout.settings, ...changes };
+		for (const k of Object.keys(settings)) if (settings[k] === undefined) delete settings[k];
+		this.#saveLayout({ ...this.layout, settings });
+	}
+
 	/** A section's saved panel order, in today's panel ids. */
 	#orderOf(section: string): readonly string[] {
 		const saved = this.layout.order[section];
@@ -685,9 +741,11 @@ export class Workspace {
 	});
 
 	/**
-	 * Read this project's layout, column settings and hidden runs from the browser. Called after hydration,
-	 * so the page the server rendered (in the default layout) is what hydrates. A run's own page
-	 * (`hidden` false) leaves out the hidden runs, so the run it shows is never hidden.
+	 * Read this project's layout (with the line plot settings), column settings and hidden runs
+	 * from the browser. Called after hydration, so the page the server rendered (in the default
+	 * layout) is what hydrates. A run's own page (`hidden` false) leaves out the hidden runs, so
+	 * the run it shows is never hidden. A project with no hidden runs saved plots only its
+	 * `NEWEST_SHOWN` newest runs of the page.
 	 */
 	restoreLayout({ hidden: withHidden = true } = {}) {
 		const { entity, project } = this.meta;
@@ -699,8 +757,17 @@ export class Workspace {
 			this.#hiddenFor = hidden;
 			this.hidden.clear();
 			const saved = readStored(hidden);
-			if (Array.isArray(saved))
+			if (Array.isArray(saved)) {
 				for (const id of saved) if (typeof id === 'string') this.hidden.add(id);
+			} else {
+				// Opened here for the first time: only its newest runs are plotted, and that's
+				// kept like any other choice.
+				const newest = this.page.runs
+					.toSorted((a, b) => b.ordinal - a.ordinal)
+					.slice(0, NEWEST_SHOWN);
+				for (const r of this.page.runs) if (!newest.includes(r)) this.hidden.add(r.id);
+				this.#saveHidden();
+			}
 		}
 		const cols = columnsKey(entity, project);
 		if (!(cols in this.columnsByProject))

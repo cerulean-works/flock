@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AxisCurve, noAxes } from '#lib/chart/axes.ts';
 import { Series, slotOf } from '#lib/chart/series.ts';
 import { metricSections } from '#lib/data/snapshot.ts';
 import type { MetricDefinition, ProjectMeta, RunInfo, RunPage } from '#lib/types.ts';
-import { Workspace } from './workspace.svelte.ts';
+import { NEWEST_SHOWN, Workspace } from './workspace.svelte.ts';
 
 const steps = (n: number) => Float64Array.from({ length: n }, (_, i) => i);
 const line = (n: number) => new Series(new Float32Array(n).fill(1), steps(n));
@@ -165,5 +165,88 @@ describe('a cursor followed across x axes', () => {
 		expect(bare.historyStepAt(0, lr, 80)).toBeNaN();
 		expect(bare.xAtHistoryStep(0, lr, 4)).toBeNaN();
 		expect(ws.xAtHistoryStep(0, lr, 12)).toBeNaN();
+	});
+});
+
+/** This browser's storage, kept in memory. */
+function memoryStorage() {
+	const items = new Map<string, string>();
+	return {
+		getItem: (k: string) => items.get(k) ?? null,
+		setItem: (k: string, v: string) => void items.set(k, String(v)),
+		removeItem: (k: string) => void items.delete(k),
+		clear: () => items.clear()
+	};
+}
+
+describe('what this browser keeps for a project', () => {
+	beforeEach(() => vi.stubGlobal('localStorage', memoryStorage()));
+	afterEach(() => vi.unstubAllGlobals());
+
+	const runs = (n: number) => Array.from({ length: n }, () => ({ defs: [], logged: ['loss'] }));
+	const LAYOUT = 'flock:panels:flock/midterm-nanogpt';
+	const HIDDEN = 'flock:hidden:flock/midterm-nanogpt';
+
+	it('keeps the line plot settings and reads them back', () => {
+		const ws = workspace(runs(2));
+		ws.restoreLayout();
+		expect(ws.smoothing).toEqual({ type: 'ema', param: 0 });
+		expect([ws.showOriginal, ws.ignoreOutliers, ws.xAxis, ws.defaultRows]).toEqual([
+			true,
+			false,
+			'_step',
+			2
+		]);
+		ws.smoothing = { type: 'gaussian', param: 12 };
+		ws.showOriginal = false;
+		ws.ignoreOutliers = true;
+		ws.xAxis = '_runtime';
+		ws.defaultRows = 4;
+
+		const next = workspace(runs(2));
+		next.restoreLayout();
+		expect(next.smoothing).toEqual({ type: 'gaussian', param: 12 });
+		expect([next.showOriginal, next.ignoreOutliers, next.xAxis, next.defaultRows]).toEqual([
+			false,
+			true,
+			'_runtime',
+			4
+		]);
+	});
+
+	it('reads a layout saved before the settings were kept, and an old smoothing weight', () => {
+		localStorage.setItem(LAYOUT, JSON.stringify({ sections: [], order: {}, height: {} }));
+		const ws = workspace(runs(1));
+		ws.restoreLayout();
+		expect(ws.smoothing).toEqual({ type: 'ema', param: 0 });
+		localStorage.setItem(LAYOUT, JSON.stringify({ settings: { smoothing: 0.8, rows: 99 } }));
+		const old = workspace(runs(1));
+		old.restoreLayout();
+		expect(old.smoothing).toEqual({ type: 'ema', param: 0.8 });
+		expect(old.defaultRows).toBe(12);
+	});
+
+	it('plots only the newest runs of a project opened here for the first time', () => {
+		const ws = workspace(runs(15));
+		ws.restoreLayout();
+		// Ordinals follow creation: r14 is the newest.
+		expect(ws.visible.map((row) => ws.page.runs[row].id)).toEqual(
+			Array.from({ length: NEWEST_SHOWN }, (_, i) => `r${i + 5}`)
+		);
+		expect(JSON.parse(localStorage.getItem(HIDDEN)!)).toEqual(['r0', 'r1', 'r2', 'r3', 'r4']);
+	});
+
+	it('keeps saved hidden runs as they are, even none', () => {
+		localStorage.setItem(HIDDEN, '[]');
+		const ws = workspace(runs(15));
+		ws.restoreLayout();
+		expect(ws.visible).toHaveLength(15);
+	});
+
+	it("leaves a run's own page alone", () => {
+		const ws = workspace(runs(15));
+		ws.restoreLayout({ hidden: false });
+		expect(ws.visible).toHaveLength(15);
+		expect(localStorage.getItem(HIDDEN)).toBeNull();
 	});
 });

@@ -9,7 +9,8 @@ import {
 	pinFirst,
 	parseLayout,
 	panelSmoothing,
-	parsePanelConfig
+	parsePanelConfig,
+	parsePlotSettings
 } from './layout.ts';
 
 describe('parseLayout', () => {
@@ -21,7 +22,8 @@ describe('parseLayout', () => {
 			height: { train: 240 },
 			rows: {},
 			panels: {},
-			pinned: []
+			pinned: [],
+			settings: {}
 		});
 	});
 
@@ -53,7 +55,8 @@ describe('parseLayout', () => {
 			height: { b: 300 },
 			rows: {},
 			panels: {},
-			pinned: []
+			pinned: [],
+			settings: {}
 		});
 	});
 
@@ -64,6 +67,25 @@ describe('parseLayout', () => {
 			height: {}
 		});
 		expect(layout.panels).toEqual({ loss: { log: true, yMax: 2 } });
+	});
+});
+
+describe('parsePlotSettings', () => {
+	it('keeps what is well formed, clamped', () => {
+		const settings = {
+			smoothingType: 'average',
+			smoothing: 20,
+			showOriginal: false,
+			ignoreOutliers: true,
+			xAxis: '_runtime',
+			rows: 4
+		};
+		expect(parseLayout({ settings }).settings).toEqual(settings);
+		expect(parsePlotSettings({ smoothing: 2, rows: 0.2, xAxis: ' ', showOriginal: 'no' })).toEqual({
+			smoothing: 0.99,
+			rows: 1
+		});
+		expect(parsePlotSettings(null)).toEqual({});
 	});
 });
 

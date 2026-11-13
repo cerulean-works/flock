@@ -54,6 +54,21 @@ export interface PanelConfig {
 }
 
 /**
+ * The workspace's line plot settings, for panels that don't set their own (`PanelConfig`), and
+ * the rows a section shows unless it was resized. Unset follows the defaults.
+ */
+export interface PlotSettings {
+	/** As in `PanelConfig`: unset with `smoothing` set is an EMA. */
+	smoothingType?: SmoothingType;
+	smoothing?: number;
+	showOriginal?: boolean;
+	ignoreOutliers?: boolean;
+	/** One of `X_AXES` in #lib/chart/axes.ts, or a metric key. */
+	xAxis?: string;
+	rows?: number;
+}
+
+/**
  * How the viewer arranged a project's panels: section order, per section its panel order, plot
  * height and rows per page, and per panel its settings.
  */
@@ -69,6 +84,7 @@ export interface PanelLayout {
 	panels: Readonly<Record<string, PanelConfig>>;
 	/** Ids of the panels pinned to the front of their sections. */
 	pinned: readonly string[];
+	settings: PlotSettings;
 }
 
 export const EMPTY_LAYOUT: PanelLayout = {
@@ -77,7 +93,8 @@ export const EMPTY_LAYOUT: PanelLayout = {
 	height: {},
 	rows: {},
 	panels: {},
-	pinned: []
+	pinned: [],
+	settings: {}
 };
 
 export const LINE_WIDTH_MIN = 0.5;
@@ -96,8 +113,38 @@ const strings = (v: unknown): string[] =>
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
-/** A panel's own smoothing, or undefined when it follows the workspace's. */
-export function panelSmoothing(config: PanelConfig): Smoothing | undefined {
+/**
+ * Read a saved smoothing method and parameter into `out`: a known method with its parameter
+ * clamped (or its starting one), else a weight alone as an EMA's.
+ */
+function readSmoothing(raw: Record<string, unknown>, out: Record<string, unknown>) {
+	if (isSmoothingType(raw.smoothingType)) {
+		out.smoothingType = raw.smoothingType;
+		if (raw.smoothingType !== 'none')
+			out.smoothing = clampSmoothing(
+				raw.smoothingType,
+				finite(raw.smoothing) ? raw.smoothing : SMOOTHING_METHODS[raw.smoothingType].start
+			);
+	} else if (finite(raw.smoothing)) out.smoothing = clampSmoothing('ema', raw.smoothing);
+}
+
+/** The workspace's line plot settings as saved, keeping only what is well formed. */
+export function parsePlotSettings(raw: unknown): PlotSettings {
+	if (!isRecord(raw)) return {};
+	const out: Record<string, unknown> = {};
+	readSmoothing(raw, out);
+	for (const k of ['showOriginal', 'ignoreOutliers'] as const)
+		if (typeof raw[k] === 'boolean') out[k] = raw[k];
+	if (typeof raw.xAxis === 'string' && raw.xAxis.trim()) out.xAxis = raw.xAxis.trim();
+	if (finite(raw.rows)) out.rows = clampRows(raw.rows);
+	return out as PlotSettings;
+}
+
+/** Smoothing a panel (or the workspace) sets, or undefined when it sets none. */
+export function panelSmoothing(config: {
+	smoothingType?: SmoothingType;
+	smoothing?: number;
+}): Smoothing | undefined {
 	const type = config.smoothingType ?? (config.smoothing != null ? 'ema' : undefined);
 	if (!type) return undefined;
 	return { type, param: config.smoothing ?? SMOOTHING_METHODS[type].start };
@@ -130,14 +177,7 @@ export function parsePanelConfig(raw: unknown): PanelConfig | null {
 	}
 	for (const k of ['ignoreOutliers', 'showOriginal', 'legend', 'log'] as const)
 		if (typeof raw[k] === 'boolean') out[k] = raw[k];
-	if (isSmoothingType(raw.smoothingType)) {
-		out.smoothingType = raw.smoothingType;
-		if (raw.smoothingType !== 'none')
-			out.smoothing = clampSmoothing(
-				raw.smoothingType,
-				finite(raw.smoothing) ? raw.smoothing : SMOOTHING_METHODS[raw.smoothingType].start
-			);
-	} else if (finite(raw.smoothing)) out.smoothing = clampSmoothing('ema', raw.smoothing);
+	readSmoothing(raw, out);
 	if (finite(raw.lineWidth))
 		out.lineWidth = Math.max(LINE_WIDTH_MIN, Math.min(LINE_WIDTH_MAX, raw.lineWidth));
 	if (out.xMin == null && out.xMax == null) delete out.xRangeAxis;
@@ -149,7 +189,8 @@ export function parsePanelConfig(raw: unknown): PanelConfig | null {
  * saved before sections could be moved (no `sections`) keep the default section order, those
  * saved before panels had settings (no `panels`) have none, and those saved before sections
  * could be resized to more rows (no `rows`) show the default number of rows, and those saved
- * before panels could be pinned (no `pinned`) have none pinned.
+ * before panels could be pinned (no `pinned`) have none pinned. Those saved before the line plot
+ * settings were kept (no `settings`) use the default ones.
  */
 export function parseLayout(raw: unknown): PanelLayout {
 	if (!isRecord(raw)) return EMPTY_LAYOUT;
@@ -174,7 +215,8 @@ export function parseLayout(raw: unknown): PanelLayout {
 		height,
 		rows,
 		panels,
-		pinned: [...new Set(strings(raw.pinned))]
+		pinned: [...new Set(strings(raw.pinned))],
+		settings: parsePlotSettings(raw.settings)
 	};
 }
 
