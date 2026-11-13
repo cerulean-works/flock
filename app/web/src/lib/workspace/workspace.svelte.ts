@@ -764,6 +764,15 @@ export class Workspace {
 		this.#saveSettings({ ignoreOutliers: on });
 	}
 
+	/** Whether panels of logged metrics that don't set their own forecast their runs. */
+	get forecast(): boolean {
+		return this.layout.settings.forecast ?? false;
+	}
+
+	set forecast(on: boolean) {
+		this.#saveSettings({ forecast: on });
+	}
+
 	/** The x axis of panels that don't set their own: one of `X_AXES`, or a metric key. */
 	get xAxis(): string {
 		return this.layout.settings.xAxis ?? DEFAULT_X_AXIS;

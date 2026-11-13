@@ -102,6 +102,7 @@ describe('parsePlotSettings', () => {
 			smoothing: 20,
 			showOriginal: false,
 			ignoreOutliers: true,
+			forecast: true,
 			xAxis: '_runtime',
 			rows: 4
 		};
@@ -129,9 +130,12 @@ describe('parsePanelConfig', () => {
 			showOriginal: false,
 			lineWidth: 2,
 			legend: false,
-			log: true
+			log: true,
+			forecast: true,
+			forecastTo: 20000
 		};
 		expect(parsePanelConfig(config)).toEqual(config);
+		expect(parsePanelConfig({ forecast: 'yes', forecastTo: -5 })).toBeNull();
 	});
 
 	it('drops the wrong types, blank text and unknown fields', () => {

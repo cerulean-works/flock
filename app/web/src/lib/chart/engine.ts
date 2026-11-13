@@ -32,6 +32,11 @@ export interface DomainOptions {
 	yTicks?: number;
 	/** Fixed y bounds set on the panel, in data units (not log10); null leaves that end automatic. */
 	yRange?: readonly [number | null, number | null] | null;
+	/**
+	 * Forecasts drawn past the lines' ends: in the x range, and in the y range unless outliers
+	 * are ignored, as they aren't data to trim.
+	 */
+	forecasts?: readonly PlotSeries[];
 }
 
 /** Share of the x span left empty on each side of an unzoomed plot, so end points clear the frame. */
@@ -52,14 +57,17 @@ function inside(s: Series, x0: number, x1: number): [number, number] {
 	return [i0, i1];
 }
 
-export function computeDomain(series: PlotSeries[], opts: DomainOptions): Domain {
+export function computeDomain(lines: readonly PlotSeries[], opts: DomainOptions): Domain {
+	const forecasts = opts.forecasts ?? [];
+	const all = forecasts.length ? [...lines, ...forecasts] : lines;
+	const series = opts.ignoreOutliers ? lines : all;
 	let x0 = Infinity;
 	let x1 = -Infinity;
 	if (opts.zoom) {
 		[x0, x1] = opts.zoom;
 		if (!(x1 > x0)) x1 = x0 + 1;
 	} else {
-		for (const { series: s } of series) {
+		for (const { series: s } of all) {
 			if (!s.n) continue;
 			x0 = Math.min(x0, s.firstStep);
 			x1 = Math.max(x1, s.lastStep);
@@ -250,6 +258,8 @@ export interface BaseOptions {
 	showOriginal: boolean;
 	zoomed: boolean;
 	lineWidth: number;
+	/** Forecasts past the lines' ends, drawn dashed. */
+	forecasts?: readonly PlotSeries[];
 }
 
 /** All plotted runs at full strength. Redrawn only when data, domain or size changes. */
@@ -278,6 +288,17 @@ export function drawBase(s: Surface, series: PlotSeries[], d: Domain, o: BaseOpt
 		trace(s, p.series, p.values, d, o.zoomed);
 		ctx.strokeStyle = p.color;
 		ctx.stroke();
+	}
+	if (o.forecasts?.length) {
+		ctx.globalAlpha = 0.75;
+		ctx.setLineDash([4, 3]);
+		for (const p of o.forecasts) {
+			ctx.beginPath();
+			trace(s, p.series, p.values, d, o.zoomed);
+			ctx.strokeStyle = p.color;
+			ctx.stroke();
+		}
+		ctx.setLineDash([]);
 	}
 	ctx.restore();
 }

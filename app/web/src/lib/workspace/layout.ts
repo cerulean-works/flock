@@ -46,6 +46,10 @@ export interface PanelConfig {
 	/** The method's parameter (see `SMOOTHING_METHODS`): an EMA weight, 0 (none) to 0.99. */
 	smoothing?: number;
 	showOriginal?: boolean;
+	/** Extend each run's line with a fitted power law (see #lib/chart/forecast.ts). */
+	forecast?: boolean;
+	/** The x the forecast goes to; unset is twice the longest run's last step. */
+	forecastTo?: number;
 	/** In CSS pixels. */
 	lineWidth?: number;
 	/** Unset shows the legend when it names few enough lines. */
@@ -63,6 +67,7 @@ export interface PlotSettings {
 	smoothing?: number;
 	showOriginal?: boolean;
 	ignoreOutliers?: boolean;
+	forecast?: boolean;
 	/** One of `X_AXES` in #lib/chart/axes.ts, or a metric key. */
 	xAxis?: string;
 	rows?: number;
@@ -150,7 +155,7 @@ export function parsePlotSettings(raw: unknown): PlotSettings {
 	if (!isRecord(raw)) return {};
 	const out: Record<string, unknown> = {};
 	readSmoothing(raw, out);
-	for (const k of ['showOriginal', 'ignoreOutliers'] as const)
+	for (const k of ['showOriginal', 'ignoreOutliers', 'forecast'] as const)
 		if (typeof raw[k] === 'boolean') out[k] = raw[k];
 	if (typeof raw.xAxis === 'string' && raw.xAxis.trim()) out.xAxis = raw.xAxis.trim();
 	if (finite(raw.rows)) out.rows = clampRows(raw.rows);
@@ -192,8 +197,9 @@ export function parsePanelConfig(raw: unknown): PanelConfig | null {
 			delete out[hi];
 		}
 	}
-	for (const k of ['ignoreOutliers', 'showOriginal', 'legend', 'log'] as const)
+	for (const k of ['ignoreOutliers', 'showOriginal', 'legend', 'log', 'forecast'] as const)
 		if (typeof raw[k] === 'boolean') out[k] = raw[k];
+	if (finite(raw.forecastTo) && raw.forecastTo > 0) out.forecastTo = raw.forecastTo;
 	readSmoothing(raw, out);
 	if (finite(raw.lineWidth))
 		out.lineWidth = Math.max(LINE_WIDTH_MIN, Math.min(LINE_WIDTH_MAX, raw.lineWidth));

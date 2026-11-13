@@ -135,6 +135,20 @@ describe('panel drafts', () => {
 		expect(configOf(window, defaults).config).toMatchObject({ smoothing: 8 });
 	});
 
+	it('read the forecast and check its horizon', () => {
+		const config = { forecast: true, forecastTo: 5000 };
+		const draft = draftOf(config, defaults.metrics);
+		expect(draft).toMatchObject({ forecast: 'on', forecastTo: '5000' });
+		expect(configOf(draft, defaults).config).toEqual(config);
+		expect(configOf({ ...draft, forecastTo: ' ' }, defaults).config).toEqual({ forecast: true });
+		expect(configOf({ ...draft, forecastTo: 'soon' }, defaults).errors).toEqual({
+			forecastTo: 'Not a number'
+		});
+		expect(configOf({ ...draft, forecastTo: '-1' }, defaults).errors).toEqual({
+			forecastTo: 'Must be above zero'
+		});
+	});
+
 	it('read an old smoothing weight as an EMA', () => {
 		expect(draftOf({ smoothing: 0.3 }, defaults.metrics).smoothing).toEqual({
 			type: 'ema',

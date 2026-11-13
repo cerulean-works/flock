@@ -71,6 +71,9 @@ export interface PanelDraft {
 	/** Null follows the workspace. */
 	smoothing: Smoothing | null;
 	showOriginal: Tristate;
+	forecast: Tristate;
+	/** Blank goes to twice the longest run's last step. */
+	forecastTo: string;
 	/** Null for the default width. */
 	lineWidth: number | null;
 	legend: Tristate;
@@ -78,7 +81,9 @@ export interface PanelDraft {
 }
 
 /** Where a draft can't be applied, by field. */
-export type DraftErrors = Partial<Record<'xMin' | 'xMax' | 'yMin' | 'yMax' | 'metrics', string>>;
+export type DraftErrors = Partial<
+	Record<'xMin' | 'xMax' | 'yMin' | 'yMax' | 'metrics' | 'forecastTo', string>
+>;
 
 const tri = (v: boolean | undefined): Tristate => (v == null ? 'inherit' : v ? 'on' : 'off');
 const untri = (v: Tristate) => (v === 'inherit' ? undefined : v === 'on');
@@ -107,6 +112,8 @@ export function draftOf(
 		ignoreOutliers: tri(config.ignoreOutliers),
 		smoothing: panelSmoothing(config) ?? null,
 		showOriginal: tri(config.showOriginal),
+		forecast: tri(config.forecast),
+		forecastTo: num(config.forecastTo),
 		lineWidth: config.lineWidth ?? null,
 		legend: tri(config.legend),
 		log: config.log ?? false
@@ -175,6 +182,12 @@ export function configOf(
 	}
 	const showOriginal = untri(draft.showOriginal);
 	if (showOriginal != null) config.showOriginal = showOriginal;
+	const forecast = untri(draft.forecast);
+	if (forecast != null) config.forecast = forecast;
+	const to = bound(draft.forecastTo);
+	if (to === 'invalid') errors.forecastTo = 'Not a number';
+	else if (to !== undefined && !(to > 0)) errors.forecastTo = 'Must be above zero';
+	else if (to !== undefined) config.forecastTo = to;
 	if (draft.lineWidth != null)
 		config.lineWidth = Math.max(LINE_WIDTH_MIN, Math.min(LINE_WIDTH_MAX, draft.lineWidth));
 	const legend = untri(draft.legend);

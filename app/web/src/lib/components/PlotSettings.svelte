@@ -55,6 +55,10 @@
 			<Switch id="show-original" bind:checked={ws.showOriginal} disabled={!smooths(ws.smoothing)} />
 		</div>
 		<div class="flex items-center justify-between gap-4">
+			<Label for="forecast">Forecast</Label>
+			<Switch id="forecast" bind:checked={ws.forecast} />
+		</div>
+		<div class="flex items-center justify-between gap-4">
 			<Label for="ignore-outliers">Ignore outliers when scaling</Label>
 			<Switch id="ignore-outliers" bind:checked={ws.ignoreOutliers} />
 		</div>

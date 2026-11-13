@@ -182,3 +182,20 @@ describe('computeDomain with non-finite values', () => {
 		expect(d).toEqual(computeDomain([], opts({ zoom: [d.x0, d.x1] })));
 	});
 });
+
+describe('computeDomain forecasts', () => {
+	const line = plot([0, 50, 100], [10, 6, 5]);
+	const forecast = plot([100, 150, 200], [5, 4, 1]);
+
+	it('take the x range to their end, and count in the y range', () => {
+		const d = computeDomain([line], opts({ forecasts: [forecast] }));
+		expect(d.x1).toBeGreaterThan(200);
+		expect(d.y0).toBeLessThanOrEqual(1);
+	});
+
+	it('are left out of outlier trimming', () => {
+		const d = computeDomain([line], opts({ forecasts: [forecast], ignoreOutliers: true }));
+		expect(d.x1).toBeGreaterThan(200);
+		expect(d.y0).toBeGreaterThan(1);
+	});
+});

@@ -366,6 +366,36 @@
 								)}
 							</section>
 
+							{#if def.stream === 'history'}
+								<section class="grid gap-5" aria-labelledby="panel-forecast-heading">
+									<h3 id="panel-forecast-heading" class="font-medium">Forecast</h3>
+									{@render tristate(
+										'panel-forecast',
+										'Forecast',
+										draft.forecast,
+										`Workspace (${onOff(ws.forecast)})`,
+										(v) => set('forecast', v)
+									)}
+									<div class="grid gap-2">
+										<Label for="panel-forecast-to">
+											Forecast to {axis.kind === 'step' ? 'step' : axis.label}
+										</Label>
+										<Input
+											id="panel-forecast-to"
+											value={draft.forecastTo}
+											placeholder="Twice the longest run"
+											inputmode="decimal"
+											autocomplete="off"
+											aria-invalid={!!errors.forecastTo}
+											oninput={(e) => set('forecastTo', e.currentTarget.value)}
+										/>
+										{#if errors.forecastTo}
+											<p class="text-xs text-destructive">{errors.forecastTo}</p>
+										{/if}
+									</div>
+								</section>
+							{/if}
+
 							<section class="grid gap-5" aria-labelledby="panel-display">
 								<h3 id="panel-display" class="font-medium">Display</h3>
 								<div class="grid gap-2">

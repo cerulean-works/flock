@@ -9,6 +9,7 @@
 		type PlotSeries
 	} from '#lib/chart/engine.ts';
 	import { formatX, formatXTick, formatXValue } from '#lib/chart/axes.ts';
+	import { forecastOf } from '#lib/chart/forecast.ts';
 	import { placeTip, Readout, tipSide, type TipBox } from '#lib/chart/readout.ts';
 	import { cancel, schedule } from '#lib/chart/scheduler.ts';
 	import { pointAt, SNAP_PX, smoothed, smooths, snapStep } from '#lib/chart/series.ts';
@@ -37,8 +38,8 @@
 
 	let { panel, surface, active, root = null, view: preview }: Props = $props();
 
-	/** A line: one run's curve of one of the panel's metrics. */
-	type Line = PlotSeries & { metric: number };
+	/** A line: one run's curve of one of the panel's metrics, or its forecast. */
+	type Line = PlotSeries & { metric: number; forecast?: boolean };
 
 	const ws = getWorkspace();
 	// Canvas colors come from the theme tokens (read once the plot is in the document, and again
@@ -73,6 +74,28 @@
 		return out;
 	});
 
+	/**
+	 * Each line's forecast past its last point (see #lib/chart/forecast.ts), when the panel
+	 * forecasts: only logged metrics, and not on wall time, where a power law means nothing.
+	 */
+	const forecasting = $derived(
+		view.stream === 'history' && (config.forecast ?? ws.forecast) && axis.kind !== 'time'
+	);
+	const forecasts = $derived.by((): Line[] => {
+		if (!forecasting) return [];
+		let last = -Infinity;
+		for (const l of series) last = Math.max(last, l.series.lastStep);
+		const to = config.forecastTo ?? 2 * last;
+		const out: Line[] = [];
+		for (const l of series) {
+			const f = forecastOf(l.series, to);
+			if (f) out.push({ ...l, series: f, values: f.y, forecast: true });
+		}
+		return out;
+	});
+	/** Every line that reads out under the cursor: the lines, then their forecasts. */
+	const readable = $derived(forecasts.length ? [...series, ...forecasts] : series);
+
 	// Plot size in CSS pixels, measured after mount (0 during SSR).
 	let area = $state<HTMLDivElement>();
 	let base = $state<HTMLCanvasElement>();
@@ -104,7 +127,7 @@
 		if (on !== axis.id) return null;
 		let lo = Infinity;
 		let hi = -Infinity;
-		for (const { series: s } of series) {
+		for (const { series: s } of readable) {
 			if (!s.n) continue;
 			lo = Math.min(lo, s.firstStep);
 			hi = Math.max(hi, s.lastStep);
@@ -126,6 +149,7 @@
 			xKind: axis.kind,
 			ignoreOutliers,
 			yRange,
+			forecasts,
 			...tickCounts
 		})
 	);
@@ -197,11 +221,17 @@
 	/** Inputs of the last painted base layer; identical inputs never repaint. */
 	let painted: unknown[] = [];
 	$effect(() => {
-		const inputs = [series, domain, w, h, dpr, smoothes, showOriginal, lineWidth];
+		const inputs = [series, forecasts, domain, w, h, dpr, smoothes, showOriginal, lineWidth];
 		const priority = active && onScreen ? 'urgent' : 'idle';
 		if (!base || !w || !h || sameItems(inputs, painted)) return;
 		const canvas = base;
-		const opts = { smoothing: smoothes, showOriginal, zoomed: !!xRange, lineWidth };
+		const opts = {
+			smoothing: smoothes,
+			showOriginal,
+			zoomed: !!xRange,
+			lineWidth,
+			forecasts
+		};
 		const s = series;
 		const d = domain;
 		const [cw, ch, cdpr] = [w, h, dpr];
@@ -355,10 +385,11 @@
 			const label = ws.meta.metrics[line.metric].label;
 			const xAt = readout.step[k];
 			rows.push({
-				key: `${line.row}:${line.metric}`,
+				key: `${line.row}:${line.metric}${line.forecast ? ':forecast' : ''}`,
 				color: line.color,
 				value: formatMetric(readout.value[k], fmt),
-				raw: raw ? formatMetric(line.series.y[readout.point[k]], fmt) : null,
+				raw: raw && !line.forecast ? formatMetric(line.series.y[readout.point[k]], fmt) : null,
+				forecast: !!line.forecast,
 				name: byMetric ? label : ws.page.runs[line.row].name,
 				metric: !byMetric && several ? label : null,
 				step: xAt !== step ? formatXValue(axis, xAt) : null,
@@ -391,7 +422,7 @@
 		const cdpr = dpr;
 		const d = domain;
 		const c = cursor;
-		const lines = series;
+		const lines = readable;
 		const focus = focused;
 		const within = tol;
 		const withTip = tips;
@@ -439,7 +470,7 @@
 	function nearestLine(step: number, y: number): Line | null {
 		let best: Line | null = null;
 		let bestDist = surface === 'grid' ? 40 : 60;
-		for (const s of series) {
+		for (const s of readable) {
 			const i = pointAt(s.series, step, tol);
 			if (i < 0) continue;
 			const v = s.values[i];
@@ -462,7 +493,7 @@
 		// hundred steps, a metric logged once) have no point under most of the plot.
 		const raw = stepFromX(domain, w, x);
 		const snapped = snapStep(
-			series.map((s) => s.series),
+			readable.map((s) => s.series),
 			raw
 		);
 		const step = snapped >= domain.x0 && snapped <= domain.x1 ? snapped : raw;
