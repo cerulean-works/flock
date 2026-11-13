@@ -432,7 +432,7 @@ def test_the_size_limit_refuses_with_the_command_to_run(
     body = refused.json()
     assert body["too_large"] is True and body["size"] > 1000
     assert body["command"] == "flock models import acme/tiny flock/tiny --tag base --primary"
-    assert "more than the 1.0 kB this server imports" in body["error"]
+    assert "more than the 1000 B this server imports" in body["error"]
 
     preview = api.get(f"{IMPORTS}/preview", kind="model", repo="acme/tiny").json()
     assert preview["too_large"] is True and preview["max_bytes"] == 1000

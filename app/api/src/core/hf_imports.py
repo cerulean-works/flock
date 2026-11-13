@@ -82,13 +82,16 @@ class TooLarge(Exception):
         self.size = size
 
 
-def human(size: float) -> str:
-    """A byte count for people: ``12.3 GB``."""
-    for unit in ("B", "kB", "MB", "GB", "TB"):
-        if size < 1000 or unit == "TB":
-            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
-        size /= 1000
-    raise AssertionError
+def human(size: int) -> str:
+    """A byte count for people, as the web app shows one (``bytes`` in its utils): ``12 GB``."""
+    if size < 1024:
+        return f"{size} B"
+    value, unit = size / 1024, "KB"
+    for bigger in ("MB", "GB", "TB"):
+        if value < 1024:
+            break
+        value, unit = value / 1024, bigger
+    return f"{value:.1f} {unit}" if value < 10 else f"{round(value)} {unit}"
 
 
 def dataset_command(
