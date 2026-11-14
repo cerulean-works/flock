@@ -1,6 +1,6 @@
 # Browse and manage models
 
-Use the dashboard's **Models** tab to see your organization's stored models, choose which version loads by default, tag versions and delete the ones you no longer need. To push and load models, see [Store and load models](../hub/store-models).
+Use the dashboard's **Models** tab to see your organization's stored models, choose which version loads by default, tag versions, rename models and delete the ones you no longer need. To push and load models, see [Store and load models](../hub/store-models).
 
 **Models** is in the sidebar when the Flock server has S3 storage. It lists each model with its latest version, its primary version, the primary version's size and when it last changed. A model appears once its first upload starts, and its first version once that upload finishes.
 
@@ -49,9 +49,30 @@ The dialog refuses two kinds of version, and says what to do first:
 - **The primary version:** make another version primary.
 - **A version with a tag other than a checkpoint tag:** move or remove that tag. Checkpoint tags are deleted with their version.
 
-To delete a whole model with every version in it, click **Delete** in the model's header and type its name, such as `acme/olmo2-1b`.
+To delete a whole model with every version in it, click **Delete** in the model's header, or **Delete…** in the model's **⋯** menu in the list. Type its name, such as `acme/olmo2-1b`.
+
+To delete several models at once:
+
+1. In the list, hover a model's row and click the checkbox on its left. Shift-click another checkbox to check every row in between, or click the checkbox in the header to check them all.
+2. Click **Delete** in the bar that replaces the header's buttons.
+3. Type the number of models, and click the delete button.
+
+If one model can't be deleted, the rest still are, and the dialog lists the ones that weren't. Press Escape or click **Clear** to uncheck every row.
+
+Every type-to-confirm prompt has a **Copy** button next to the text to type, so you can paste it instead.
 
 Files in `flock-models` can't be deleted from **Storage**, so a version can't lose files once it's saved.
+
+## Rename a model
+
+Click **Rename** in the model's header, or **Rename…** in its **⋯** menu in the list. Type the new name and click **Rename**.
+
+Only the name changes, so a rename is instant whatever the model's size. The model keeps its versions, tags and primary version, and runs that link to it keep linking.
+
+- **Old refs stop working.** After renaming `acme/olmo2-1b` to `acme/olmo2-1b-base`, `acme/olmo2-1b@3` answers 404. There's no redirect, so update the code that loads it.
+- **The files stay in the old folder.** In `flock-models`, the model's files stay under its old name, and the **Storage** tab shows that folder by the old name. **Browse files** on the model's page opens the right folder.
+- **The new name must be free.** No other model can have it, including a deleted model in the trash. Delete that one for good first, or pick another name.
+- **Wait for uploads and imports.** A rename is refused while an upload to the model is open, or a [Hugging Face import](import-hf) into it is running, since those use the old name.
 
 ## Restore from the trash
 

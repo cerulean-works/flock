@@ -10,8 +10,8 @@ A `ref` is a version number, a tag or `primary`. Without one, the primary versio
 
 | Endpoint | Meaning |
 |---|---|
-| `GET` (the models path itself) | `{"models": [...]}`, by name. Each has `name`, `model` (`org/name`), `created_at`, `created_by`, `versions` (how many are live), `latest` and `primary` (numbers, `null` before the first version), `size` (the primary's bytes) and `updated_at`. Creates `flock-models` first if the organization has none. |
-| `GET {name}` | The model: `name`, `model`, `created_at`, `created_by`, `versions`, `latest`, `primary`, `primary_set_by`, `primary_set_at` and `tags` (`[{"name", "version", "moved_by", "moved_at"}]`). |
+| `GET` (the models path itself) | `{"models": [...]}`, by name. Each has `name`, `model` (`org/name`), `prefix` (its folder in `flock-models`, such as `olmo2-1b/`), `created_at`, `created_by`, `versions` (how many are live), `latest` and `primary` (numbers, `null` before the first version), `size` (the primary's bytes) and `updated_at`. Creates `flock-models` first if the organization has none. |
+| `GET {name}` | The model: `name`, `model`, `prefix`, `created_at`, `created_by`, `versions`, `latest`, `primary`, `primary_set_by`, `primary_set_at` and `tags` (`[{"name", "version", "moved_by", "moved_at"}]`). |
 | `GET {name}/resolve?ref` | The version `ref` names, with its files, as below. A model with no versions answers 404. |
 | `GET {name}/versions?before&checkpoints` | Live versions, newest first, 100 a page: `{"versions": [...], "cursor"}`. Pass `cursor` as `before` for the next page. `cursor` is `null` on the last. With `checkpoints=true`, only versions with a `checkpoint-{step}` tag. |
 | `GET {name}/versions/{number}` | One version, with its files. |
@@ -40,6 +40,18 @@ Members and admins can change these.
 | `DELETE {name}/tags/{tag}` | Removes the tag. The version stays. Answers 204. |
 
 Tag names are up to 100 ASCII letters, digits, `.`, `-` and `_`, starting with a letter or digit. A name of only digits, or `primary` in any case, answers 422.
+
+## Renaming[[renaming]]
+
+Members and admins can rename models.
+
+| Endpoint | Meaning |
+|---|---|
+| `PATCH {name}` | Renames the model to `{"name"}`. Answers the model, as `GET {name}` does. |
+
+Only the name changes, so a rename is instant. The model's files stay in its folder, `prefix`, which keeps the name the model was created with. Uploads and downloads use `prefix`, so they keep working. The old name stops resolving at once, so `acme/olmo2-1b@3` answers 404, with no redirect. Runs keep their links to the model.
+
+The new name follows the rules for names above. A name another model has, live or in the trash, answers 409 with `"taken": true`. A rename answers 409 while an upload to the model is open, or a Hugging Face import into it is running.
 
 ## Deleting[[deleting]]
 

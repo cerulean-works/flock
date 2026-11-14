@@ -93,10 +93,10 @@ The dashboard's **Datasets** item, at `/datasets/{org}`, browses the bucket:
 
 - **Datasets are found, not registered.** Any folder that holds a `_versions/` folder is a dataset, at any depth. Flock keeps no table of them, so whatever writes to S3 is what the tab shows. Other folders and files are listed too, and files open in the Storage tab. **New folder** makes an empty folder where you are, as the Storage tab's "Create folder" does, so you can lay out a path before writing a dataset into it.
 - **A dataset's page** shows its `README.md` (its card, read from the dataset's folder and the same for every version), its rows, its schema and its versions. Any version can be opened, by number or by tag. The rows show images, embeddings, long text and JSON in a readable form, and open a cell in full in a side panel.
-- **Deleting** moves the dataset to a trash bucket, `FLOCK_S3_TRASH_BUCKET`, which no S3 key can reach. Organization admins restore deleted datasets, or delete them for good, from the organization's settings page. After 14 days they're removed. Deleting a dataset's folder from the Storage tab or an S3 client skips the trash.
-- **Renaming** copies the dataset to its new path on the S3 server, then deletes the old objects. Anything still writing to the old path makes a new dataset there.
+- **Deleting** moves the dataset, or a folder with everything in it, to a trash bucket, `FLOCK_S3_TRASH_BUCKET`, which no S3 key can reach. Organization admins restore deleted datasets and folders, or delete them for good, from the organization's settings page. After 14 days they're removed. Deleting a dataset's folder from the Storage tab or an S3 client skips the trash.
+- **Renaming and moving** copy the dataset or folder to its new path on the S3 server, then delete the old objects. Anything still writing to the old path makes a new dataset there.
 - **Tags** name versions, and Lance never cleans up a tagged version. Add, move and remove them in the Versions tab.
-- **Limits.** Deleting and renaming copy the dataset in the request, so datasets over 10,000 objects or 100 GiB are refused, with an `aws s3` command to run instead.
+- **Limits.** Deleting, renaming and moving copy the objects in the request, so requests over 10,000 objects or 100 GiB are refused, with an `aws s3` command to run instead.
 
 Lance reads go straight from the API to the S3 server with the global key. Who wrote each version isn't recorded, since Lance doesn't store it. A writer can put it in `transaction_properties`. The routes are listed in [Datasets](api/datasets).
 
