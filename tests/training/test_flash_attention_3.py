@@ -48,7 +48,7 @@ def math_varlen(
     *,
     window_size: tuple[int, int],
     enable_gqa: bool,
-    num_splits: int,
+    num_splits: int | None,
 ) -> torch.Tensor:
     # Independent dense block attention detects incorrect sequence boundaries.
     q_batch = torch.repeat_interleave(torch.arange(cu_q.numel() - 1), cu_q.diff())
@@ -259,7 +259,7 @@ def test_padded_model_uses_one_varlen_call_per_layer(
         assert cu_q is cu_k
         torch.testing.assert_close(cu_q, torch.tensor([0, 2, 6], dtype=torch.int32))
         assert max_q == max_k == 4
-        assert call.kwargs["num_splits"] == 1
+        assert call.kwargs["num_splits"] is None
     dense.assert_not_called()
 
 
