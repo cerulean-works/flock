@@ -18,6 +18,7 @@ adds the same actions to the lists, for one row or many:
 2. **Moving and deleting many datasets** at once, folders included (D131, D132).
 3. **A ⋯ menu on each row** with Rename and Delete (D133).
 4. **Renaming models,** which isn't possible yet (D134).
+5. **A copy button in every type-to-confirm prompt,** and the name in it can be selected (D135).
 
 **Out of scope:**
 - selecting across pages ("Load more" loads more rows into the same selection, but there's no
@@ -107,6 +108,24 @@ The numbering continues from 017 (018 is taken on another branch).
 - **No Move for models.** Model names have one segment (014, section 6), so there's no folder
   to move into. Renaming covers the rest.
 
+### D135. Copying the name in delete prompts
+
+Added at the user's request while this doc was written.
+
+- **Every type-to-confirm prompt** gets a copy button next to the text to type, so it can be
+  pasted instead of typed. That's the delete dialogs for orgs, projects, buckets, runs,
+  datasets (delete and delete now), models (delete and delete now) and versions, and the new
+  ones in D131 and D132.
+- **The text to type can be selected.** It sits inside a `Label`, whose `select-none` stopped it
+  being selected or copied. The prompts share one new `ConfirmField` component (the line saying
+  what to type, the copy button, and the input), which keeps the text out of `select-none`.
+  `Label` itself keeps it elsewhere.
+- **The copy button** is a small icon button with the label "Copy". It shows a check for a
+  moment after copying, as `CopyBlock` does, and puts focus in the input so the next step is
+  pasting.
+- **The prompt still has to be filled in.** Pasting counts, and the delete button stays disabled
+  until the input matches.
+
 ---
 
 ## 3. Plan
@@ -128,6 +147,7 @@ cerulean-works/flock#105 merges.
 - A selection helper shared by both lists, the selection bar, the row menu, and the Move and
   Delete dialogs, following `RunsTable`, `MoveRunsDialog` and `DeleteRunsDialog`.
 - The model Rename dialog.
+- `ConfirmField`, used by every type-to-confirm dialog (D135).
 - Folder entries in org settings' "Deleted datasets".
 - UI copy in plain sentences.
 
@@ -140,7 +160,8 @@ cerulean-works/flock#105 merges.
   gives 404; a taken name refused; a rename during an open upload refused; `prefix` used by the
   trash and restore.
 - Web specs for the selection (hover, shift-click, select all, Escape), the bar, the menu, and
-  each dialog.
+  each dialog. A spec for `ConfirmField`: the copy button copies the exact text, the text can be
+  selected, and the delete button enables once the pasted text matches.
 - **Manual,** on the local stack: select and move two GLUE configs into a folder, delete a
   folder and restore it from org settings, rename a model and load it by its new name.
 
