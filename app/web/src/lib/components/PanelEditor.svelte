@@ -9,42 +9,58 @@
 	import * as Select from '#lib/components/ui/select/index.js';
 	import { Slider } from '#lib/components/ui/slider/index.js';
 	import { Switch } from '#lib/components/ui/switch/index.js';
-	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { SYSTEM_X_AXES, axisChoiceLabel, resolveAxis, type AxisKind } from '#lib/chart/axes.ts';
-	import { LINE_WIDTH_MAX, LINE_WIDTH_MIN, SMOOTHING_MAX } from '#lib/workspace/layout.ts';
+	import { CUSTOM_SECTION, LINE_WIDTH_MAX, LINE_WIDTH_MIN } from '#lib/workspace/layout.ts';
 	import {
 		configOf,
 		draftOf,
+		FORECAST_TIMES,
 		resolvePanel,
+		type ForecastBy,
 		type PanelDraft,
 		type Tristate
 	} from '#lib/workspace/panels.ts';
-	import { getWorkspace, metricColor } from '#lib/workspace/workspace.svelte.ts';
+	import { NEW_PANEL, getWorkspace, metricColor } from '#lib/workspace/workspace.svelte.ts';
+	import type { PanelDef } from '#lib/types.ts';
 	import Autocomplete, { type AutocompleteOption } from './Autocomplete.svelte';
 	import LinePlot from './LinePlot.svelte';
 	import PanelLegend from './PanelLegend.svelte';
+	import SmoothingPicker from './SmoothingPicker.svelte';
 	import XAxisPicker from './XAxisPicker.svelte';
 
 	/**
 	 * W&B's "Edit panel": the panel's settings beside a live preview of it. Edits show in the
-	 * preview only; Apply keeps them for this project in this browser, Cancel drops them.
+	 * preview only; Apply keeps them for this project in this browser, Cancel drops them. Opened
+	 * on `NEW_PANEL`, it sets up a new line plot, which Create adds.
 	 */
 
 	const ws = getWorkspace();
 
-	const panel = $derived(ws.editing == null ? -1 : ws.findPanel(ws.editing));
-	const def = $derived(panel === -1 ? null : ws.meta.panels[panel]);
+	/** A new line plot: of logged metrics, with none picked yet. */
+	const NEW_DEF: PanelDef = {
+		id: NEW_PANEL,
+		title: '',
+		section: CUSTOM_SECTION,
+		stream: 'history',
+		format: 'num',
+		metrics: []
+	};
+
+	const creating = $derived(ws.editing === NEW_PANEL);
+	const panel = $derived(ws.editing == null || creating ? -1 : ws.findPanel(ws.editing));
+	const def = $derived(creating ? NEW_DEF : panel === -1 ? null : ws.panelDefs[panel]);
 	/** The panel's own metric keys, which a draft plotting just those leaves unset. */
 	const own = $derived(def ? def.metrics.map((m) => ws.meta.metrics[m].key) : []);
 
 	// Closes here first; `ws.editing` is cleared once the closing animation is over, so the
 	// dialog keeps its content while it fades.
-	let open = $derived(panel !== -1);
+	let open = $derived(def != null);
 
 	// The form, filled when the editor opens. Untracked, so live updates and other tabs don't
 	// overwrite what is being typed; replaced (never mutated) as it's edited.
 	let draft = $derived.by((): PanelDraft | null => {
 		const p = panel;
+		if (creating) return draftOf({}, []);
 		return p === -1
 			? null
 			: untrack(() => draftOf(ws.panelConfig(p), own, ws.axisOf(ws.panels[p]).id));
@@ -74,6 +90,22 @@
 			? axisChoiceLabel('_runtime')
 			: axisChoiceLabel(ws.xAxis)
 	);
+
+	/** The choices of how a forecast's end is given; an x value is named after the axis. */
+	const FORECAST_BY = $derived<Record<ForecastBy, string>>({
+		times: 'Multiple of the longest run',
+		step: axis?.kind === 'step' || !axis ? 'Step' : axis.label
+	});
+
+	/** The number typed means something else now, so it starts over. */
+	function setForecastBy(by: ForecastBy) {
+		if (draft && draft.forecastBy !== by)
+			draft = {
+				...draft,
+				forecastBy: by,
+				forecastTo: by === 'times' ? String(FORECAST_TIMES) : ''
+			};
+	}
 
 	/** Another x axis, whose units the x bounds typed so far aren't in. */
 	function setAxis(v: string | null) {
@@ -125,8 +157,15 @@
 
 	function apply() {
 		if (!valid || !result) return;
-		ws.setPanelConfig(panel, result.config);
+		const { config } = result;
+		if (creating && config.metrics) ws.addPanel({ ...config, metrics: config.metrics });
+		else ws.setPanelConfig(panel, config);
 		open = false;
+	}
+
+	/** Back to the defaults; an added panel keeps its metrics, which it has no defaults for. */
+	function reset() {
+		draft = draftOf(ws.isCustom(panel) || creating ? { metrics: draft?.metrics } : {}, own);
 	}
 
 	const onOff = (on: boolean) => (on ? 'on' : 'off');
@@ -166,7 +205,7 @@
 	{@const minError = errors[`${axis}Min`]}
 	{@const maxError = errors[`${axis}Max`]}
 	<div class="grid gap-2">
-		<Label for="panel-{axis}-min">Range{unit ? ` (${unit})` : ''}</Label>
+		<Label for="panel-{axis}-min">{axis.toUpperCase()} range{unit ? ` (${unit})` : ''}</Label>
 		<div class="grid grid-cols-2 gap-2">
 			<Input
 				id="panel-{axis}-min"
@@ -205,8 +244,10 @@
 	>
 		{#if def && draft && preview && axis}
 			<Dialog.Header class="border-b border-divider px-5 pt-4 pb-3.5">
-				<Dialog.Title>Edit panel</Dialog.Title>
-				<Dialog.Description class="truncate">{def.section} · {preview.title}</Dialog.Description>
+				<Dialog.Title>{creating ? 'Add panel' : 'Edit panel'}</Dialog.Title>
+				<Dialog.Description class="truncate">
+					{def.section}{preview.title ? ` · ${preview.title}` : ''}
+				</Dialog.Description>
 			</Dialog.Header>
 			<div class="flex min-h-0 flex-1 max-md:flex-col">
 				<!-- The preview: the panel as it would be, with the workspace's runs. -->
@@ -235,13 +276,183 @@
 					class="flex w-[380px] flex-none flex-col border-l border-divider max-md:w-full max-md:border-t max-md:border-l-0"
 					aria-label="Settings"
 				>
-					<Tabs.Root value="data" class="flex min-h-0 flex-1 flex-col gap-0">
-						<Tabs.List variant="line" class="mx-5 mt-2 w-auto justify-start">
-							<Tabs.Trigger value="data" class="flex-none">Data</Tabs.Trigger>
-							<Tabs.Trigger value="display" class="flex-none">Display preferences</Tabs.Trigger>
-						</Tabs.List>
-						<Tabs.Content value="data" class="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-6">
-							<div class="grid gap-5">
+					<div class="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-6">
+						<div
+							class="grid gap-6 [&>section+section]:border-t [&>section+section]:border-divider [&>section+section]:pt-6"
+						>
+							<section class="grid gap-5" aria-labelledby="panel-data">
+								<h3
+									id="panel-data"
+									class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+								>
+									Data
+								</h3>
+								<div class="grid gap-2">
+									<Label for="panel-add-metric">Metrics</Label>
+									<ul class="flex flex-wrap gap-1.5" aria-label="Metrics plotted">
+										{#each draft.metrics as key, k (key)}
+											<li
+												class="flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md bg-muted pr-0.5 pl-2 text-[13px]"
+												title={key}
+											>
+												<span
+													class="h-0.5 w-3 flex-none rounded-full"
+													style:background={ws.byMetric(preview)
+														? metricColor(k)
+														: 'var(--muted-foreground)'}
+												></span>
+												<span class="truncate">{labelOf(key)}</span>
+												<Button
+													variant="ghost"
+													size="icon-xs"
+													aria-label="Remove {labelOf(key)}"
+													onclick={() =>
+														set(
+															'metrics',
+															draft!.metrics.filter((m) => m !== key)
+														)}
+												>
+													<XIcon />
+												</Button>
+											</li>
+										{/each}
+									</ul>
+									<Autocomplete
+										bind:value={adding}
+										{options}
+										mono
+										placeholder="Add a metric…"
+										aria-label="Add a metric"
+										onPick={(o) => addMetric(o.value)}
+									/>
+									{#if errors.metrics}
+										<p class="text-xs text-destructive">{errors.metrics}</p>
+									{:else}
+										<p class="text-xs text-muted-foreground">
+											Plot several metrics on one chart. Only {def.stream === 'system'
+												? 'system metrics'
+												: 'logged metrics'} share this x axis.
+										</p>
+									{/if}
+								</div>
+								<div class="grid gap-2">
+									<Label>X axis</Label>
+									<XAxisPicker
+										value={draft.xAxis}
+										stream={def.stream}
+										inherit="Workspace ({workspaceAxis})"
+										onchange={setAxis}
+									/>
+									{#if def.stream === 'system'}
+										<p class="text-xs text-muted-foreground">
+											System metrics are sampled on a timer, so they plot against time.
+										</p>
+									{/if}
+								</div>
+								{@render range(
+									'x',
+									draft.xMin,
+									draft.xMax,
+									UNITS[axis.kind],
+									(v) => set('xMin', v),
+									(v) => set('xMax', v)
+								)}
+								{@render range(
+									'y',
+									draft.yMin,
+									draft.yMax,
+									'',
+									(v) => set('yMin', v),
+									(v) => set('yMax', v)
+								)}
+								{@render tristate(
+									'panel-outliers',
+									'Ignore outliers',
+									draft.ignoreOutliers,
+									`Workspace (${onOff(ws.ignoreOutliers)})`,
+									(v) => set('ignoreOutliers', v)
+								)}
+							</section>
+
+							<section class="grid gap-5" aria-labelledby="panel-smoothing-heading">
+								<h3
+									id="panel-smoothing-heading"
+									class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+								>
+									Smoothing
+								</h3>
+								<SmoothingPicker
+									id="panel-smoothing"
+									value={draft.smoothing}
+									inherit={ws.smoothing}
+									onchange={(v) => set('smoothing', v)}
+								/>
+								{@render tristate(
+									'panel-original',
+									'Show original lines',
+									draft.showOriginal,
+									`Workspace (${onOff(ws.showOriginal)})`,
+									(v) => set('showOriginal', v)
+								)}
+							</section>
+
+							{#if def.stream === 'history'}
+								<section class="grid gap-5" aria-labelledby="panel-forecast-heading">
+									<h3
+										id="panel-forecast-heading"
+										class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+									>
+										Forecast
+									</h3>
+									{@render tristate(
+										'panel-forecast',
+										'Forecast',
+										draft.forecast,
+										`Workspace (${onOff(ws.forecast)})`,
+										(v) => set('forecast', v)
+									)}
+									<div class="grid gap-2">
+										<Label for="panel-forecast-to">Forecast to</Label>
+										<div class="flex gap-2">
+											<Select.Root
+												type="single"
+												value={draft.forecastBy}
+												onValueChange={(v) => setForecastBy(v as ForecastBy)}
+											>
+												<Select.Trigger size="sm" class="min-w-0 flex-1" aria-label="Forecast end">
+													{FORECAST_BY[draft.forecastBy]}
+												</Select.Trigger>
+												<Select.Content>
+													<Select.Item value="times">{FORECAST_BY.times}</Select.Item>
+													<Select.Item value="step">{FORECAST_BY.step}</Select.Item>
+												</Select.Content>
+											</Select.Root>
+											<Input
+												id="panel-forecast-to"
+												type="number"
+												class="w-28 flex-none"
+												value={draft.forecastTo}
+												min={draft.forecastBy === 'times' ? 1 : 0}
+												step={draft.forecastBy === 'times' ? 0.5 : 'any'}
+												autocomplete="off"
+												aria-invalid={!!errors.forecastTo}
+												oninput={(e) => set('forecastTo', e.currentTarget.value)}
+											/>
+										</div>
+										{#if errors.forecastTo}
+											<p class="text-xs text-destructive">{errors.forecastTo}</p>
+										{/if}
+									</div>
+								</section>
+							{/if}
+
+							<section class="grid gap-5" aria-labelledby="panel-display">
+								<h3
+									id="panel-display"
+									class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+								>
+									Display
+								</h3>
 								<div class="grid gap-2">
 									<Label for="panel-title">Chart title</Label>
 									<Input
@@ -252,162 +463,44 @@
 										oninput={(e) => set('title', e.currentTarget.value)}
 									/>
 								</div>
-
-								<fieldset class="grid gap-3">
-									<legend class="mb-3 text-xs text-muted-foreground">Y axis</legend>
-									<div class="grid gap-2">
-										<Label for="panel-add-metric">Metrics</Label>
-										<ul class="flex flex-wrap gap-1.5" aria-label="Metrics plotted">
-											{#each draft.metrics as key, k (key)}
-												<li
-													class="flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md bg-muted pr-0.5 pl-2 text-[13px]"
-													title={key}
-												>
-													<span
-														class="h-0.5 w-3 flex-none rounded-full"
-														style:background={ws.byMetric(preview)
-															? metricColor(k)
-															: 'var(--muted-foreground)'}
-													></span>
-													<span class="truncate">{labelOf(key)}</span>
-													<Button
-														variant="ghost"
-														size="icon-xs"
-														aria-label="Remove {labelOf(key)}"
-														onclick={() =>
-															set(
-																'metrics',
-																draft!.metrics.filter((m) => m !== key)
-															)}
-													>
-														<XIcon />
-													</Button>
-												</li>
-											{/each}
-										</ul>
-										<Autocomplete
-											bind:value={adding}
-											{options}
-											mono
-											placeholder="Add a metric…"
-											aria-label="Add a metric"
-											onPick={(o) => addMetric(o.value)}
-										/>
-										{#if errors.metrics}
-											<p class="text-xs text-destructive">{errors.metrics}</p>
-										{:else}
-											<p class="text-xs text-muted-foreground">
-												Plot several metrics on one chart. Only {def.stream === 'system'
-													? 'system metrics'
-													: 'logged metrics'} share this x axis.
-											</p>
-										{/if}
-									</div>
-									{@render range(
-										'y',
-										draft.yMin,
-										draft.yMax,
-										'',
-										(v) => set('yMin', v),
-										(v) => set('yMax', v)
-									)}
-									<div class="grid gap-2">
-										<Label for="panel-y-label">Label</Label>
-										<Input
-											id="panel-y-label"
-											value={draft.yLabel}
-											placeholder="None"
-											autocomplete="off"
-											oninput={(e) => set('yLabel', e.currentTarget.value)}
-										/>
-									</div>
-								</fieldset>
-
-								<fieldset class="grid gap-3">
-									<legend class="mb-3 text-xs text-muted-foreground">
-										X axis · {axis.label}
-									</legend>
-									<div class="grid gap-2">
-										<Label>Plotted against</Label>
-										<XAxisPicker
-											value={draft.xAxis}
-											stream={def.stream}
-											inherit="Workspace ({workspaceAxis})"
-											onchange={setAxis}
-										/>
-										{#if def.stream === 'system'}
-											<p class="text-xs text-muted-foreground">
-												System metrics are sampled on a timer, so they plot against time.
-											</p>
-										{/if}
-									</div>
-									{@render range(
-										'x',
-										draft.xMin,
-										draft.xMax,
-										UNITS[axis.kind],
-										(v) => set('xMin', v),
-										(v) => set('xMax', v)
-									)}
-									<div class="grid gap-2">
-										<Label for="panel-x-label">Label</Label>
-										<Input
-											id="panel-x-label"
-											value={draft.xLabel}
-											placeholder={axis.label}
-											autocomplete="off"
-											oninput={(e) => set('xLabel', e.currentTarget.value)}
-										/>
-									</div>
-								</fieldset>
-
-								{@render tristate(
-									'panel-outliers',
-									'Ignore outliers',
-									draft.ignoreOutliers,
-									`Workspace (${onOff(ws.ignoreOutliers)})`,
-									(v) => set('ignoreOutliers', v)
-								)}
-							</div>
-						</Tabs.Content>
-						<Tabs.Content value="display" class="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-6">
-							<div class="grid gap-5">
-								<div class="grid gap-3">
-									<div class="flex items-center justify-between gap-4">
-										<Label for="panel-smoothing">Custom smoothing</Label>
-										<Switch
-											id="panel-smoothing"
-											checked={draft.smoothing != null}
-											onCheckedChange={(on) => set('smoothing', on ? ws.smoothing : null)}
-										/>
-									</div>
-									<div class="flex items-center gap-3">
-										<Slider
-											type="single"
-											value={draft.smoothing ?? ws.smoothing}
-											onValueChange={(v) => set('smoothing', v)}
-											min={0}
-											max={SMOOTHING_MAX}
-											step={0.01}
-											disabled={draft.smoothing == null}
-											aria-label="Smoothing"
-										/>
-										<output class="w-9 text-right text-muted-foreground tabular-nums">
-											{(draft.smoothing ?? ws.smoothing).toFixed(2)}
-										</output>
-									</div>
-									{#if draft.smoothing == null}
-										<p class="text-xs text-muted-foreground">Follows the workspace's settings.</p>
-									{/if}
+								<div class="grid gap-2">
+									<Label for="panel-x-label">X axis label</Label>
+									<Input
+										id="panel-x-label"
+										value={draft.xLabel}
+										placeholder={axis.label}
+										autocomplete="off"
+										oninput={(e) => set('xLabel', e.currentTarget.value)}
+									/>
+								</div>
+								<div class="grid gap-2">
+									<Label for="panel-y-label">Y axis label</Label>
+									<Input
+										id="panel-y-label"
+										value={draft.yLabel}
+										placeholder="None"
+										autocomplete="off"
+										oninput={(e) => set('yLabel', e.currentTarget.value)}
+									/>
 								</div>
 
-								{@render tristate(
-									'panel-original',
-									'Show original lines',
-									draft.showOriginal,
-									`Workspace (${onOff(ws.showOriginal)})`,
-									(v) => set('showOriginal', v)
-								)}
+								<div class="flex items-center justify-between gap-4">
+									<Label for="panel-legend">Legend</Label>
+									<Select.Root
+										type="single"
+										value={draft.legend}
+										onValueChange={(v) => set('legend', v as Tristate)}
+									>
+										<Select.Trigger id="panel-legend" size="sm" class="w-40">
+											{{ inherit: 'Auto', on: 'Show', off: 'Hide' }[draft.legend]}
+										</Select.Trigger>
+										<Select.Content>
+											<Select.Item value="inherit">Auto</Select.Item>
+											<Select.Item value="on">Show</Select.Item>
+											<Select.Item value="off">Hide</Select.Item>
+										</Select.Content>
+									</Select.Root>
+								</div>
 
 								<div class="grid gap-3">
 									<div class="flex items-center justify-between gap-4">
@@ -435,24 +528,6 @@
 								</div>
 
 								<div class="flex items-center justify-between gap-4">
-									<Label for="panel-legend">Legend</Label>
-									<Select.Root
-										type="single"
-										value={draft.legend}
-										onValueChange={(v) => set('legend', v as Tristate)}
-									>
-										<Select.Trigger id="panel-legend" size="sm" class="w-40">
-											{{ inherit: 'Auto', on: 'Show', off: 'Hide' }[draft.legend]}
-										</Select.Trigger>
-										<Select.Content>
-											<Select.Item value="inherit">Auto</Select.Item>
-											<Select.Item value="on">Show</Select.Item>
-											<Select.Item value="off">Hide</Select.Item>
-										</Select.Content>
-									</Select.Root>
-								</div>
-
-								<div class="flex items-center justify-between gap-4">
 									<Label for="panel-log">Log scale (y)</Label>
 									<Switch
 										id="panel-log"
@@ -460,13 +535,13 @@
 										onCheckedChange={(on) => set('log', on)}
 									/>
 								</div>
-							</div>
-						</Tabs.Content>
-					</Tabs.Root>
+							</section>
+						</div>
+					</div>
 				</aside>
 			</div>
 			<Dialog.Footer class="m-0 items-center rounded-b-xl sm:justify-between">
-				<Button variant="ghost" onclick={() => (draft = draftOf({}, own))}>
+				<Button variant="ghost" onclick={reset}>
 					<RotateCcwIcon /> Reset to defaults
 				</Button>
 				<div class="flex flex-col-reverse gap-2 sm:flex-row">
@@ -475,7 +550,7 @@
 							<Button {...props} variant="outline">Cancel</Button>
 						{/snippet}
 					</Dialog.Close>
-					<Button disabled={!valid} onclick={apply}>Apply</Button>
+					<Button disabled={!valid} onclick={apply}>{creating ? 'Create' : 'Apply'}</Button>
 				</div>
 			</Dialog.Footer>
 		{/if}

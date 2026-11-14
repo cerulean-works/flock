@@ -25,7 +25,8 @@ import { projectUrl } from './cache.ts';
  * too, so curves keep growing on any x axis.
  *
  * Changes made elsewhere arrive too: edited attributes update the page in place; runs created,
- * moved in, deleted or moved away shift page boundaries, so they are offered as a refresh. A
+ * moved in, deleted or moved away shift page boundaries, so they are counted for the workspace
+ * to read the page again (as are metrics no run had logged). A
  * renamed, deleted or no longer public project (or a deleted org) ends the stream and is handed
  * to `onproject`.
  */
@@ -176,8 +177,8 @@ export class LiveConnection {
 	#hello(data: HelloEvent) {
 		const page = this.#page!;
 		this.#ws.activeRuns = data.active;
-		// Runs created since this page was read (they'd shift its rows, so they're offered
-		// as a refresh rather than inserted).
+		// Runs created since this page was read (they'd shift its rows, so the page is read
+		// again rather than have them inserted).
 		this.#ws.newRuns = Math.max(0, data.total - page.projectTotal);
 		for (const [id, info] of Object.entries(data.runs)) {
 			const run = page.runs[this.#row(id)];
@@ -208,7 +209,7 @@ export class LiveConnection {
 			if (key.startsWith('_')) continue; // wandb's times: mappings only
 			const m = this.#metrics[stream].get(key);
 			if (m === undefined) {
-				// A metric no run had logged when the page loaded: offered as a refresh.
+				// A metric no run had logged when the page loaded: charted once the page is read again.
 				this.#unseenMetrics.add(`${stream}:${key}`);
 				this.#ws.newMetrics = this.#unseenMetrics.size;
 				continue;

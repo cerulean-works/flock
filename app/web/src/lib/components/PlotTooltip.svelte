@@ -8,6 +8,8 @@
 		value: string;
 		/** The unsmoothed value, when smoothing is on. */
 		raw: string | null;
+		/** A reading of the line's forecast, past its last point. */
+		forecast: boolean;
 		name: string;
 		/** The line's metric, on panels of several metrics with several runs. */
 		metric: string | null;
@@ -114,6 +116,7 @@
 					>{r.value}</span
 				>
 				{#if r.raw != null}<span class="flex-none text-faint">{r.raw}</span>{/if}
+				{#if r.forecast}<span class="flex-none text-faint">Forecast</span>{/if}
 				<span class="truncate"
 					>{r.name}{#if r.metric}<span class="text-faint"> · {r.metric}</span>{/if}</span
 				>

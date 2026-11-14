@@ -8,6 +8,7 @@
 	import FullscreenPanel from '#lib/components/FullscreenPanel.svelte';
 	import PanelEditor from '#lib/components/PanelEditor.svelte';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
+	import PlusIcon from '@lucide/svelte/icons/plus';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
@@ -108,16 +109,35 @@
 	/** Outside the org: read-only, with no run actions (D116). */
 	const readonly = $derived(data.shell.access === 'public');
 
-	let refreshing = $state(false);
-	async function showNewRuns() {
-		refreshing = true;
-		clearRunPages();
-		try {
-			await refreshAll();
-		} finally {
-			refreshing = false;
-		}
-	}
+	// Runs created or removed elsewhere, and metrics first logged, shift the page: it is read
+	// again by itself, at most once every `RELOAD_MS` however many arrive, and not while the
+	// viewer is in the middle of something it would disturb (that waits until it ends).
+	const RELOAD_MS = 2000;
+	const stale = $derived(ws.newRuns > 0 || ws.removedRuns > 0 || ws.newMetrics > 0);
+
+	/** A drag, a selection in the table, or an open dialog or menu. */
+	const busy = () =>
+		ws.dragging ||
+		ws.selected.size > 0 ||
+		ws.dialog != null ||
+		ws.editing != null ||
+		ws.unpinAsk != null ||
+		!!document.querySelector(OPEN_LAYER);
+
+	$effect(() => {
+		if (!stale) return;
+		let timer = setTimeout(function reload() {
+			if (busy()) {
+				timer = setTimeout(reload, RELOAD_MS);
+				return;
+			}
+			// Counted again from the page read now (see LiveConnection).
+			ws.newRuns = ws.removedRuns = ws.newMetrics = 0;
+			clearRunPages();
+			void refreshAll();
+		}, RELOAD_MS);
+		return () => clearTimeout(timer);
+	});
 
 	/** The runs' name column, beside the table's columns or the charts; the viewer can drag it. */
 	let nameW = $derived(data.shell.nameW);
@@ -148,7 +168,7 @@
 		workspaceHrefWith(ws.meta.entity, ws.meta.project, page.url.search, changes);
 
 	const viewHref = (v: View) => hrefWith({ view: v === 'table' ? null : v });
-	const panelHref = (p: number) => hrefWith({ panel: ws.meta.panels[p].id, view: 'charts' });
+	const panelHref = (p: number) => hrefWith({ panel: ws.panelDefs[p].id, view: 'charts' });
 
 	function setView(v: View, e?: MouseEvent) {
 		e?.preventDefault();
@@ -247,16 +267,6 @@
 		return `${ws.pinned === f && ws.hover == null ? 'Pinned · ' : ''}${ws.page.runs[f].name}`;
 	});
 
-	const updatesLabel = $derived(
-		[
-			ws.newRuns && `${ws.newRuns} new ${ws.newRuns === 1 ? 'run' : 'runs'}`,
-			ws.removedRuns && `${ws.removedRuns} ${ws.removedRuns === 1 ? 'run' : 'runs'} removed`,
-			ws.newMetrics && `${ws.newMetrics} new ${ws.newMetrics === 1 ? 'metric' : 'metrics'}`
-		]
-			.filter(Boolean)
-			.join(' · ')
-	);
-
 	/** The runs shown are a search's or a filter's, not all of the project's. */
 	const narrowed = $derived(!!ws.page.query.search || ws.page.query.filters.length > 0);
 
@@ -304,17 +314,6 @@
 			{/if}
 		{/snippet}
 		{#snippet actions()}
-			{#if ws.newRuns > 0 || ws.removedRuns > 0 || ws.newMetrics > 0}
-				<Button
-					variant="secondary"
-					size="sm"
-					class="new-runs"
-					onclick={showNewRuns}
-					disabled={refreshing}
-				>
-					{updatesLabel} · {refreshing ? 'Loading…' : 'Show'}
-				</Button>
-			{/if}
 			<LiveStatus />
 		{/snippet}
 		{#snippet toolbar()}
@@ -355,6 +354,7 @@
 					<ColumnsMenu onjump={(key) => table?.scrollToColumn(key)} />
 				{:else}
 					<PlotSettings />
+					<Button variant="outline" onclick={() => ws.newPanel()}><PlusIcon /> Add panel</Button>
 				{/if}
 			{/if}
 

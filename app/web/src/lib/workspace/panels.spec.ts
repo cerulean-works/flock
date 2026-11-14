@@ -75,7 +75,8 @@ describe('panel drafts', () => {
 			yMin: 0,
 			yMax: 2.5,
 			ignoreOutliers: false,
-			smoothing: 0.4,
+			smoothingType: 'gaussian' as const,
+			smoothing: 4,
 			showOriginal: true,
 			lineWidth: 2,
 			legend: true,
@@ -120,7 +121,64 @@ describe('panel drafts', () => {
 	});
 
 	it('clamps sliders to their range', () => {
-		const draft = { ...draftOf({}, defaults.metrics), smoothing: 2, lineWidth: 9 };
-		expect(configOf(draft, defaults).config).toEqual({ smoothing: 0.99, lineWidth: 4 });
+		const draft = {
+			...draftOf({}, defaults.metrics),
+			smoothing: { type: 'ema' as const, param: 2 },
+			lineWidth: 9
+		};
+		expect(configOf(draft, defaults).config).toEqual({
+			smoothingType: 'ema',
+			smoothing: 0.99,
+			lineWidth: 4
+		});
+		const window = { ...draft, smoothing: { type: 'average' as const, param: 7.6 } };
+		expect(configOf(window, defaults).config).toMatchObject({ smoothing: 8 });
+	});
+
+	it('read the forecast and check its horizon', () => {
+		const config = { forecast: true, forecastTo: 5000 };
+		const draft = draftOf(config, defaults.metrics);
+		expect(draft).toMatchObject({ forecast: 'on', forecastTo: '5000' });
+		expect(configOf(draft, defaults).config).toEqual(config);
+		expect(configOf({ ...draft, forecastTo: ' ' }, defaults).config).toEqual({ forecast: true });
+		expect(configOf({ ...draft, forecastTo: 'soon' }, defaults).errors).toEqual({
+			forecastTo: 'Not a number'
+		});
+		expect(configOf({ ...draft, forecastTo: '-1' }, defaults).errors).toEqual({
+			forecastTo: 'Must be above zero'
+		});
+	});
+
+	it('give a forecast end as a multiple of the longest run', () => {
+		const draft = draftOf({ forecast: true }, defaults.metrics);
+		expect(draft).toMatchObject({ forecastBy: 'times', forecastTo: '2' });
+		expect(configOf(draft, defaults).config).toEqual({ forecast: true });
+		expect(configOf({ ...draft, forecastTo: '3' }, defaults).config).toEqual({
+			forecast: true,
+			forecastTimes: 3
+		});
+		expect(configOf({ ...draft, forecastTo: '1' }, defaults).errors).toEqual({
+			forecastTo: 'Must be above 1'
+		});
+		expect(draftOf({ forecastTimes: 1.5 }, defaults.metrics)).toMatchObject({
+			forecastBy: 'times',
+			forecastTo: '1.5'
+		});
+		expect(draftOf({ forecastTo: 9000 }, defaults.metrics).forecastBy).toBe('step');
+	});
+
+	it('read an old smoothing weight as an EMA', () => {
+		expect(draftOf({ smoothing: 0.3 }, defaults.metrics).smoothing).toEqual({
+			type: 'ema',
+			param: 0.3
+		});
+		expect(draftOf({}, defaults.metrics).smoothing).toBeNull();
+		const none = {
+			...draftOf({}, defaults.metrics),
+			smoothing: { type: 'none' as const, param: 0 }
+		};
+		expect(configOf(none, defaults).config).toEqual({ smoothingType: 'none' });
+		const zero = { ...none, smoothing: { type: 'ema' as const, param: 0 } };
+		expect(configOf(zero, defaults).config).toEqual({ smoothingType: 'ema', smoothing: 0 });
 	});
 });

@@ -2,6 +2,7 @@
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Settings2Icon from '@lucide/svelte/icons/settings-2';
+	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { getWorkspace } from '#lib/workspace/workspace.svelte.ts';
@@ -59,5 +60,11 @@
 			<DropdownMenu.Item onSelect={onpng}><DownloadIcon /> Download PNG</DropdownMenu.Item>
 			<DropdownMenu.Item onSelect={oncsv}><DownloadIcon /> Download CSV</DropdownMenu.Item>
 		</DropdownMenu.Group>
+		{#if ws.isCustom(panel)}
+			<DropdownMenu.Separator />
+			<DropdownMenu.Item variant="destructive" onSelect={() => ws.deletePanel(panel)}>
+				<Trash2Icon /> Delete panel
+			</DropdownMenu.Item>
+		{/if}
 	</DropdownMenu.Content>
 </DropdownMenu.Root>

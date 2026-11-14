@@ -146,7 +146,7 @@
 		const i = id ? ws.findPanel(id) : -1;
 		return i === -1 || tab !== 'charts' ? null : i;
 	});
-	const panelHref = (p: number) => withParam(page.url, 'panel', ws.meta.panels[p].id);
+	const panelHref = (p: number) => withParam(page.url, 'panel', ws.panelDefs[p].id);
 	const neighbours = $derived.by(() => {
 		if (fullscreen == null) return { prev: null, next: null };
 		const flat = ws.sections.flatMap((s) => s.panels);

@@ -5,7 +5,8 @@
  */
 
 import type { MetricDef, MetricStream, PanelDef } from '#lib/types.ts';
-import { LINE_WIDTH_MAX, LINE_WIDTH_MIN, SMOOTHING_MAX, type PanelConfig } from './layout.ts';
+import { clampSmoothing, type Smoothing } from '#lib/chart/series.ts';
+import { LINE_WIDTH_MAX, LINE_WIDTH_MIN, panelSmoothing, type PanelConfig } from './layout.ts';
 
 /** A panel as it is drawn. */
 export interface PanelView extends PanelDef {
@@ -55,6 +56,12 @@ export function resolvePanel(
 
 export type Tristate = 'inherit' | 'on' | 'off';
 
+/** How a forecast's end is given: as a multiple of the longest run, or as an x value. */
+export type ForecastBy = 'times' | 'step';
+
+/** The multiple of the longest run a forecast goes to, unless set. */
+export const FORECAST_TIMES = 2;
+
 export interface PanelDraft {
 	title: string;
 	metrics: string[];
@@ -68,8 +75,13 @@ export interface PanelDraft {
 	yLabel: string;
 	ignoreOutliers: Tristate;
 	/** Null follows the workspace. */
-	smoothing: number | null;
+	smoothing: Smoothing | null;
 	showOriginal: Tristate;
+	forecast: Tristate;
+	/** Whether `forecastTo` is a multiple of the longest run or an x value. */
+	forecastBy: ForecastBy;
+	/** Blank goes to twice the longest run's last step. */
+	forecastTo: string;
 	/** Null for the default width. */
 	lineWidth: number | null;
 	legend: Tristate;
@@ -77,7 +89,9 @@ export interface PanelDraft {
 }
 
 /** Where a draft can't be applied, by field. */
-export type DraftErrors = Partial<Record<'xMin' | 'xMax' | 'yMin' | 'yMax' | 'metrics', string>>;
+export type DraftErrors = Partial<
+	Record<'xMin' | 'xMax' | 'yMin' | 'yMax' | 'metrics' | 'forecastTo', string>
+>;
 
 const tri = (v: boolean | undefined): Tristate => (v == null ? 'inherit' : v ? 'on' : 'off');
 const untri = (v: Tristate) => (v === 'inherit' ? undefined : v === 'on');
@@ -104,8 +118,11 @@ export function draftOf(
 		yMax: num(config.yMax),
 		yLabel: config.yLabel ?? '',
 		ignoreOutliers: tri(config.ignoreOutliers),
-		smoothing: config.smoothing ?? null,
+		smoothing: panelSmoothing(config) ?? null,
 		showOriginal: tri(config.showOriginal),
+		forecast: tri(config.forecast),
+		forecastBy: config.forecastTo != null ? 'step' : 'times',
+		forecastTo: num(config.forecastTo ?? config.forecastTimes ?? FORECAST_TIMES),
 		lineWidth: config.lineWidth ?? null,
 		legend: tri(config.legend),
 		log: config.log ?? false
@@ -167,10 +184,24 @@ export function configOf(
 	}
 	const ignoreOutliers = untri(draft.ignoreOutliers);
 	if (ignoreOutliers != null) config.ignoreOutliers = ignoreOutliers;
-	if (draft.smoothing != null)
-		config.smoothing = Math.max(0, Math.min(SMOOTHING_MAX, draft.smoothing));
+	if (draft.smoothing != null) {
+		const { type, param } = draft.smoothing;
+		config.smoothingType = type;
+		if (type !== 'none') config.smoothing = clampSmoothing(type, param);
+	}
 	const showOriginal = untri(draft.showOriginal);
 	if (showOriginal != null) config.showOriginal = showOriginal;
+	const forecast = untri(draft.forecast);
+	if (forecast != null) config.forecast = forecast;
+	const to = bound(draft.forecastTo);
+	if (to === 'invalid') errors.forecastTo = 'Not a number';
+	else if (to === undefined) {
+		// Blank follows the default.
+	} else if (draft.forecastBy === 'step') {
+		if (to > 0) config.forecastTo = to;
+		else errors.forecastTo = 'Must be above zero';
+	} else if (!(to > 1)) errors.forecastTo = 'Must be above 1';
+	else if (to !== FORECAST_TIMES) config.forecastTimes = to;
 	if (draft.lineWidth != null)
 		config.lineWidth = Math.max(LINE_WIDTH_MIN, Math.min(LINE_WIDTH_MAX, draft.lineWidth));
 	const legend = untri(draft.legend);

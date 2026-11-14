@@ -8,7 +8,10 @@ import {
 	pageStart,
 	pinFirst,
 	parseLayout,
-	parsePanelConfig
+	panelSmoothing,
+	parseCustomPanels,
+	parsePanelConfig,
+	parsePlotSettings
 } from './layout.ts';
 
 describe('parseLayout', () => {
@@ -20,7 +23,9 @@ describe('parseLayout', () => {
 			height: { train: 240 },
 			rows: {},
 			panels: {},
-			pinned: []
+			pinned: [],
+			settings: {},
+			custom: []
 		});
 	});
 
@@ -52,7 +57,9 @@ describe('parseLayout', () => {
 			height: { b: 300 },
 			rows: {},
 			panels: {},
-			pinned: []
+			pinned: [],
+			settings: {},
+			custom: []
 		});
 	});
 
@@ -63,6 +70,48 @@ describe('parseLayout', () => {
 			height: {}
 		});
 		expect(layout.panels).toEqual({ loss: { log: true, yMax: 2 } });
+	});
+});
+
+describe('parseCustomPanels', () => {
+	it('keeps added panels with a custom id and at least one metric', () => {
+		const loss = { id: 'custom:a', config: { metrics: ['loss', 'val/loss'], log: true } };
+		expect(parseLayout({ custom: [loss] }).custom).toEqual([loss]);
+		expect(
+			parseCustomPanels([
+				loss,
+				// The same id twice, a metric's id, no metrics, a bare prefix, the wrong types.
+				{ id: 'custom:a', config: { metrics: ['acc'] } },
+				{ id: 'loss', config: { metrics: ['loss'] } },
+				{ id: 'custom:b', config: { metrics: [], title: 'Empty' } },
+				{ id: 'custom:c', config: { title: 'No metrics' } },
+				{ id: 'custom:', config: { metrics: ['loss'] } },
+				{ id: 3, config: { metrics: ['loss'] } },
+				'custom:d',
+				{ id: 'custom:e', config: { metrics: ['acc', 7, 'acc'], smoothing: 5 } }
+			])
+		).toEqual([loss, { id: 'custom:e', config: { metrics: ['acc'], smoothing: 0.99 } }]);
+		expect(parseCustomPanels({ 'custom:a': loss })).toEqual([]);
+	});
+});
+
+describe('parsePlotSettings', () => {
+	it('keeps what is well formed, clamped', () => {
+		const settings = {
+			smoothingType: 'average',
+			smoothing: 20,
+			showOriginal: false,
+			ignoreOutliers: true,
+			forecast: true,
+			xAxis: '_runtime',
+			rows: 4
+		};
+		expect(parseLayout({ settings }).settings).toEqual(settings);
+		expect(parsePlotSettings({ smoothing: 2, rows: 0.2, xAxis: ' ', showOriginal: 'no' })).toEqual({
+			smoothing: 0.99,
+			rows: 1
+		});
+		expect(parsePlotSettings(null)).toEqual({});
 	});
 });
 
@@ -81,9 +130,14 @@ describe('parsePanelConfig', () => {
 			showOriginal: false,
 			lineWidth: 2,
 			legend: false,
-			log: true
+			log: true,
+			forecast: true,
+			forecastTo: 20000
 		};
 		expect(parsePanelConfig(config)).toEqual(config);
+		expect(parsePanelConfig({ forecast: 'yes', forecastTo: -5 })).toBeNull();
+		expect(parsePanelConfig({ forecastTimes: 3 })).toEqual({ forecastTimes: 3 });
+		expect(parsePanelConfig({ forecastTimes: 1 })).toBeNull();
 	});
 
 	it('drops the wrong types, blank text and unknown fields', () => {
@@ -107,6 +161,40 @@ describe('parsePanelConfig', () => {
 		expect(parsePanelConfig({ smoothing: 3, lineWidth: 0 })).toEqual({
 			smoothing: 0.99,
 			lineWidth: 0.5
+		});
+		expect(parsePanelConfig({ smoothingType: 'average', smoothing: 500 })).toEqual({
+			smoothingType: 'average',
+			smoothing: 100
+		});
+		expect(parsePanelConfig({ smoothingType: 'gaussian', smoothing: 0 })).toEqual({
+			smoothingType: 'gaussian',
+			smoothing: 0.1
+		});
+	});
+
+	it('reads smoothing methods, and an old weight alone as an EMA', () => {
+		expect(panelSmoothing(parsePanelConfig({ smoothing: 0.5 })!)).toEqual({
+			type: 'ema',
+			param: 0.5
+		});
+		expect(parsePanelConfig({ smoothingType: 'none', smoothing: 0.5 })).toEqual({
+			smoothingType: 'none'
+		});
+		expect(parsePanelConfig({ smoothingType: 'twema' })).toEqual({
+			smoothingType: 'twema',
+			smoothing: 0.6
+		});
+		// An unknown method is dropped; its weight is read as an EMA's.
+		expect(parsePanelConfig({ smoothingType: 'median', smoothing: 0.2 })).toEqual({
+			smoothing: 0.2
+		});
+		expect(panelSmoothing({})).toBeUndefined();
+		// A weight of 0 is kept as picked: it draws unsmoothed.
+		expect(parsePanelConfig({ smoothing: 0 })).toEqual({ smoothing: 0 });
+		expect(panelSmoothing({ smoothing: 0 })).toEqual({ type: 'ema', param: 0 });
+		expect(parsePanelConfig({ smoothingType: 'twema', smoothing: 0 })).toEqual({
+			smoothingType: 'twema',
+			smoothing: 0
 		});
 	});
 

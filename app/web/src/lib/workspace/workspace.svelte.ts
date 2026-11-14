@@ -10,11 +10,12 @@ import {
 	unmapAt,
 	type XAxis
 } from '#lib/chart/axes.ts';
-import { slotOf, type Series } from '#lib/chart/series.ts';
+import { NO_SMOOTHING, slotOf, type Series, type Smoothing } from '#lib/chart/series.ts';
 import {
 	LIVE_STATES,
 	type MetricStream,
 	type Owner,
+	type PanelDef,
 	type ProjectMeta,
 	type RunPage,
 	type SectionDef
@@ -33,16 +34,21 @@ import {
 	parseColumnPrefs
 } from './columns.ts';
 import {
+	CUSTOM_PREFIX,
+	CUSTOM_SECTION,
 	EMPTY_LAYOUT,
 	type PanelConfig,
 	type PanelLayout,
 	arrange,
 	clampRows,
+	isCustomPanel,
 	mergeOrder,
 	migrateOrder,
 	moveKey,
+	panelSmoothing,
 	parseLayout,
-	pinFirst
+	pinFirst,
+	type PlotSettings
 } from './layout.ts';
 import { resolvePanel, type PanelView } from './panels.ts';
 
@@ -167,6 +173,14 @@ const hiddenKey = (entity: string, project: string) => `flock:hidden:${entity}/$
 /** Hidden runs kept per project, the latest hidden last: enough for any sweep. */
 const HIDDEN_MAX = 5000;
 
+/** `Workspace.editing` while the panel editor creates a new panel. */
+export const NEW_PANEL = `${CUSTOM_PREFIX}new`;
+
+/** Runs a project shows when this browser has no hidden runs saved for it: the newest. */
+export const NEWEST_SHOWN = 10;
+
+const DEFAULT_ROWS = 2;
+
 /** A value this browser kept, or null when there's none (or storage is blocked or unreadable). */
 function readStored(key: string): unknown {
 	try {
@@ -228,15 +242,8 @@ export class Workspace {
 	pinnedId = $state<string | null>(null);
 	cursor = $state.raw<Cursor | null>(null);
 
-	smoothing = $state(0);
-	showOriginal = $state(true);
-	ignoreOutliers = $state(false);
-	/** The x axis of panels that don't set their own: one of `X_AXES`, or a metric key. */
-	xAxis = $state(DEFAULT_X_AXIS);
 	/** Bumped when live updates change a run's metric definitions. */
 	defsVersion = $state(0);
-	/** Rows of panels a section's page shows, unless the section was resized. */
-	defaultRows = $state(2);
 	/**
 	 * A panel or section is being moved, or a section resized: plots don't follow the pointer
 	 * (no crosshair, no hover) until it's let go.
@@ -254,7 +261,7 @@ export class Workspace {
 	loosePanel = $state<string | null>(null);
 	/** A pinned panel left past unpinned ones, waiting on the viewer to unpin it or put it back. */
 	unpinAsk = $state.raw<{ section: string; panel: number; from: number } | null>(null);
-	/** Id of the panel open in the panel editor. */
+	/** Id of the panel open in the panel editor, or `NEW_PANEL` for one being created. */
 	editing = $state<string | null>(null);
 	readonly collapsed = new SvelteSet<string>();
 	/**
@@ -277,7 +284,7 @@ export class Workspace {
 	newRuns = $state(0);
 	/** Runs deleted or moved away (elsewhere) since this page was loaded. */
 	removedRuns = $state(0);
-	/** Metrics first logged since this page was loaded (charted after a refresh). */
+	/** Metrics first logged since this page was loaded (charted once it is read again). */
 	newMetrics = $state(0);
 	/** Live runs in the project (from the snapshot, then kept current by the stream). */
 	activeRuns = $state(0);
@@ -558,19 +565,44 @@ export class Workspace {
 		return out;
 	});
 
-	/** Every panel of the page with its settings applied, as `meta.panels` orders them. */
+	/**
+	 * Every panel of the page: those of its metrics (`meta.panels`), then those the viewer
+	 * added. Panels are numbered by their index here.
+	 */
+	panelDefs = $derived.by((): PanelDef[] => {
+		const custom = this.layout.custom;
+		if (!custom.length) return this.meta.panels;
+		return [
+			...this.meta.panels,
+			...custom.map((c): PanelDef => ({
+				id: c.id,
+				// What it is called when it sets no title and none of its metrics are here.
+				title: c.config.metrics.join(', '),
+				section: CUSTOM_SECTION,
+				stream: 'history',
+				format: 'num',
+				metrics: []
+			}))
+		];
+	});
+
+	/** Every panel of the page with its settings applied, as `panelDefs` orders them. */
 	panels = $derived.by((): PanelView[] => {
 		const configs = this.layout.panels;
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- rebuilt, never mutated
+		const custom = new Map(this.layout.custom.map((c) => [c.id, c.config]));
 		const metrics = this.meta.metrics;
 		const index = this.#metricIndex;
-		return this.meta.panels.map((p) =>
-			resolvePanel(p, configs[p.id], metrics, (stream, key) => index[stream].get(key))
+		return this.panelDefs.map((p) =>
+			resolvePanel(p, custom.get(p.id) ?? configs[p.id], metrics, (stream, key) =>
+				index[stream].get(key)
+			)
 		);
 	});
 
 	/** Index of a panel by id (or by a metric key it plots, from older links); -1 for none. */
 	findPanel(id: string) {
-		const panels = this.meta.panels;
+		const panels = this.panelDefs;
 		const i = panels.findIndex((p) => p.id === id);
 		if (i !== -1) return i;
 		const alias = this.#aliases.get(id);
@@ -601,9 +633,21 @@ export class Workspace {
 		return this.panels[panel].config;
 	}
 
-	/** Replace a panel's settings; empty or null goes back to its defaults. */
+	/**
+	 * Replace a panel's settings; empty or null goes back to its defaults. An added panel's
+	 * settings must name its metrics: without any, they're left as they are.
+	 */
 	setPanelConfig(panel: number, config: PanelConfig | null) {
-		const id = this.meta.panels[panel].id;
+		const id = this.panelDefs[panel].id;
+		if (isCustomPanel(id)) {
+			const metrics = config?.metrics;
+			if (!metrics?.length) return;
+			const custom = this.layout.custom.map((c) =>
+				c.id === id ? { id, config: { ...config, metrics } } : c
+			);
+			this.#saveLayout({ ...this.layout, custom });
+			return;
+		}
 		const next = { ...this.layout.panels };
 		if (config && Object.keys(config).length) next[id] = config;
 		else delete next[id];
@@ -613,7 +657,44 @@ export class Workspace {
 	/** Open a panel in the panel editor. */
 	editPanel(panel: number) {
 		this.cursor = null;
-		this.editing = this.meta.panels[panel].id;
+		this.editing = this.panelDefs[panel].id;
+	}
+
+	/** Open the panel editor on a new line plot, which `addPanel` adds once it's created. */
+	newPanel() {
+		this.cursor = null;
+		this.editing = NEW_PANEL;
+	}
+
+	/** Whether a panel is one the viewer added (and can delete). */
+	isCustom(panel: number) {
+		return isCustomPanel(this.panelDefs[panel]?.id ?? '');
+	}
+
+	/** Add a line plot of `config.metrics`, last in its section; its id. */
+	addPanel(config: PanelConfig & { metrics: readonly string[] }): string {
+		let id: string;
+		do id = `${CUSTOM_PREFIX}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+		while (this.layout.custom.some((c) => c.id === id));
+		this.#saveLayout({ ...this.layout, custom: [...this.layout.custom, { id, config }] });
+		return id;
+	}
+
+	/** Delete a panel the viewer added, with where it was put and pinned. */
+	deletePanel(panel: number) {
+		const id = this.panelDefs[panel]?.id;
+		if (!id || !isCustomPanel(id)) return;
+		const { custom, order, pinned } = this.layout;
+		this.#saveLayout({
+			...this.layout,
+			custom: custom.filter((c) => c.id !== id),
+			order: Object.fromEntries(
+				Object.entries(order).map(([k, ids]) => [k, ids.filter((p) => p !== id)])
+			),
+			pinned: pinned.filter((p) => p !== id)
+		});
+		this.zoom.delete(id);
+		if (this.editing === id) this.editing = null;
 	}
 
 	isLog(panel: number) {
@@ -629,24 +710,92 @@ export class Workspace {
 	 * The panel's drag-zoom on `axis` (by default the one it plots on), if the viewer zoomed
 	 * in there. Switching axes leaves a zoom behind rather than misreading its units.
 	 */
-	zoomOf(panel: number, axis = this.axisOf(this.panels[panel]).id): XRange | null {
-		const zoom = this.zoom.get(this.meta.panels[panel].id);
-		return zoom?.axis === axis ? zoom.range : null;
+	zoomOf(panel: number, axis?: string): XRange | null {
+		const view = this.panels[panel];
+		if (!view) return null; // a panel being created
+		const zoom = this.zoom.get(view.id);
+		return zoom?.axis === (axis ?? this.axisOf(view).id) ? zoom.range : null;
 	}
 
 	/**
 	 * Zoom a panel in on `axis` (by default the one it plots on); null goes back to its x range
 	 * (set in its settings, else the data's).
 	 */
-	setZoom(panel: number, range: XRange | null, axis = this.axisOf(this.panels[panel]).id) {
-		const id = this.meta.panels[panel].id;
-		if (range) this.zoom.set(id, { axis, range });
-		else this.zoom.delete(id);
+	setZoom(panel: number, range: XRange | null, axis?: string) {
+		const view = this.panels[panel];
+		if (!view) return;
+		if (range) this.zoom.set(view.id, { axis: axis ?? this.axisOf(view).id, range });
+		else this.zoom.delete(view.id);
 	}
 
 	/** This project's panel layout. */
 	get layout(): PanelLayout {
 		return this.layouts[layoutKey(this.meta.entity, this.meta.project)] ?? EMPTY_LAYOUT;
+	}
+
+	// ------------------------------------------------------------------------------------------
+	// Line plot settings for panels that don't set their own, kept with the layout.
+
+	/** Smoothing of panels that don't set their own. */
+	get smoothing(): Smoothing {
+		return panelSmoothing(this.layout.settings) ?? NO_SMOOTHING;
+	}
+
+	set smoothing(s: Smoothing) {
+		this.#saveSettings({
+			smoothingType: s.type,
+			smoothing: s.type === 'none' ? undefined : s.param
+		});
+	}
+
+	get showOriginal(): boolean {
+		return this.layout.settings.showOriginal ?? true;
+	}
+
+	set showOriginal(on: boolean) {
+		this.#saveSettings({ showOriginal: on });
+	}
+
+	get ignoreOutliers(): boolean {
+		return this.layout.settings.ignoreOutliers ?? false;
+	}
+
+	set ignoreOutliers(on: boolean) {
+		this.#saveSettings({ ignoreOutliers: on });
+	}
+
+	/** Whether panels of logged metrics that don't set their own forecast their runs. */
+	get forecast(): boolean {
+		return this.layout.settings.forecast ?? false;
+	}
+
+	set forecast(on: boolean) {
+		this.#saveSettings({ forecast: on });
+	}
+
+	/** The x axis of panels that don't set their own: one of `X_AXES`, or a metric key. */
+	get xAxis(): string {
+		return this.layout.settings.xAxis ?? DEFAULT_X_AXIS;
+	}
+
+	set xAxis(axis: string) {
+		this.#saveSettings({ xAxis: axis });
+	}
+
+	/** Rows of panels a section's page shows, unless the section was resized. */
+	get defaultRows(): number {
+		return this.layout.settings.rows ?? DEFAULT_ROWS;
+	}
+
+	set defaultRows(rows: number) {
+		this.#saveSettings({ rows: clampRows(rows) });
+	}
+
+	/** Change some of the line plot settings; undefined goes back to the default. */
+	#saveSettings(changes: PlotSettings) {
+		const settings: Record<string, unknown> = { ...this.layout.settings, ...changes };
+		for (const k of Object.keys(settings)) if (settings[k] === undefined) delete settings[k];
+		this.#saveLayout({ ...this.layout, settings });
 	}
 
 	/** A section's saved panel order, in today's panel ids. */
@@ -668,10 +817,23 @@ export class Workspace {
 	 */
 	sections = $derived.by((): SectionDef[] => {
 		const { order, sections } = this.layout;
-		const panels = this.meta.panels;
+		const panels = this.panelDefs;
 		const pinned = this.pinnedPanels;
 		const loose = this.loosePanel;
-		return arrange(this.meta.sections, (s) => s.key, sections).map((sec) => {
+		let all = this.meta.sections;
+		let saved = sections;
+		const added = this.layout.custom.length;
+		if (added) {
+			// Added panels go in a section of their own, first unless the viewer moved it.
+			const from = this.meta.panels.length;
+			const custom = {
+				key: CUSTOM_SECTION,
+				panels: Array.from({ length: added }, (_, k) => from + k)
+			};
+			all = [custom, ...all];
+			if (!saved.includes(CUSTOM_SECTION)) saved = [CUSTOM_SECTION, ...saved];
+		}
+		return arrange(all, (s) => s.key, saved).map((sec) => {
 			let of = order[sec.key]
 				? arrange(sec.panels, (p) => panels[p].id, this.#orderOf(sec.key))
 				: sec.panels;
@@ -685,9 +847,11 @@ export class Workspace {
 	});
 
 	/**
-	 * Read this project's layout, column settings and hidden runs from the browser. Called after hydration,
-	 * so the page the server rendered (in the default layout) is what hydrates. A run's own page
-	 * (`hidden` false) leaves out the hidden runs, so the run it shows is never hidden.
+	 * Read this project's layout (with the line plot settings), column settings and hidden runs
+	 * from the browser. Called after hydration, so the page the server rendered (in the default
+	 * layout) is what hydrates. A run's own page (`hidden` false) leaves out the hidden runs, so
+	 * the run it shows is never hidden. A project with no hidden runs saved plots only its
+	 * `NEWEST_SHOWN` newest runs of the page.
 	 */
 	restoreLayout({ hidden: withHidden = true } = {}) {
 		const { entity, project } = this.meta;
@@ -699,8 +863,17 @@ export class Workspace {
 			this.#hiddenFor = hidden;
 			this.hidden.clear();
 			const saved = readStored(hidden);
-			if (Array.isArray(saved))
+			if (Array.isArray(saved)) {
 				for (const id of saved) if (typeof id === 'string') this.hidden.add(id);
+			} else {
+				// Opened here for the first time: only its newest runs are plotted, and that's
+				// kept like any other choice.
+				const newest = this.page.runs
+					.toSorted((a, b) => b.ordinal - a.ordinal)
+					.slice(0, NEWEST_SHOWN);
+				for (const r of this.page.runs) if (!newest.includes(r)) this.hidden.add(r.id);
+				this.#saveHidden();
+			}
 		}
 		const cols = columnsKey(entity, project);
 		if (!(cols in this.columnsByProject))
@@ -724,8 +897,8 @@ export class Workspace {
 	movePanel(section: string, panel: number, to: number): boolean {
 		const sec = this.sections.find((s) => s.key === section);
 		if (!sec) return false;
-		const ids = sec.panels.map((p) => this.meta.panels[p].id);
-		const id = this.meta.panels[panel].id;
+		const ids = sec.panels.map((p) => this.panelDefs[p].id);
+		const id = this.panelDefs[panel].id;
 		const pins = ids.filter((k) => k !== id && this.pinnedPanels.has(k)).length;
 		if (!this.pinnedPanels.has(id)) to = Math.max(to, pins);
 		else if (this.loosePanel !== id) to = Math.min(to, pins);
@@ -741,12 +914,12 @@ export class Workspace {
 	}
 
 	isPinned(panel: number) {
-		return this.pinnedPanels.has(this.meta.panels[panel].id);
+		return this.pinnedPanels.has(this.panelDefs[panel].id);
 	}
 
 	/** Pin a panel to the front of its section, or unpin it (it goes behind those still pinned). */
 	togglePinned(panel: number) {
-		const { id, section } = this.meta.panels[panel];
+		const { id, section } = this.panelDefs[panel];
 		const pinned = this.layout.pinned.filter((k) => k !== id);
 		if (pinned.length === this.layout.pinned.length) {
 			this.#saveLayout({ ...this.layout, pinned: [...pinned, id] });
@@ -772,7 +945,7 @@ export class Workspace {
 		const ask = this.unpinAsk;
 		if (!ask) return;
 		if (unpin) {
-			const id = this.meta.panels[ask.panel].id;
+			const id = this.panelDefs[ask.panel].id;
 			this.#saveLayout({ ...this.layout, pinned: this.layout.pinned.filter((k) => k !== id) });
 		} else this.movePanel(ask.section, ask.panel, ask.from);
 		this.loosePanel = null;
