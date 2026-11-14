@@ -166,7 +166,8 @@ def flash_attention_3(
                 maximum,
                 window_size=window,
                 enable_gqa=q.shape[1] != k.shape[1],
-                num_splits=1,
+                # Let the "torch intelligence" decide how to split the attention computation.
+                num_splits=None,
             )
             output = cast(Tensor, output)
 
