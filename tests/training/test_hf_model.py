@@ -263,14 +263,14 @@ def test_training_and_resuming_from_a_checkpoint(
     interrupted = make_trainer(
         HFCompatibleModel(start.config), tokenizer, tmp_path / "resumed", monkeypatch
     )
-    save = interrupted.save_model
+    save = interrupted.checkpoint_manager.save_model
 
     def save_and_stop(blocking: bool = False) -> None:
         save(blocking)
         if interrupted.state.step.item() == 1:
             raise InterruptedError("stop after the first checkpoint")
 
-    monkeypatch.setattr(interrupted, "save_model", save_and_stop)
+    monkeypatch.setattr(interrupted.checkpoint_manager, "save_model", save_and_stop)
     with pytest.raises(InterruptedError):
         interrupted.train()
 

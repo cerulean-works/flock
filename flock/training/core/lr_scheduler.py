@@ -2,7 +2,7 @@ from collections.abc import Mapping
 from math import cos, floor, pi
 from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from torch.optim import Optimizer
 
 type TrainingTime = (
@@ -150,6 +150,32 @@ def lr_multiplier(step: int, config: LRSchedulerConfig, total_steps: int) -> flo
     return ratio
 
 
+class LRSchedulerState(BaseModel):
+    """Describe the scheduler state persisted separately from the optimizer.
+
+    Attributes:
+        config (`dict[str, Any]`): Learning-rate timeframes and interpolation fields.
+        total_steps (`int`): Nonnegative planned update count.
+        base_lrs (`list[float]`): Original rate for each optimizer parameter group.
+        completed_steps (`int`): Nonnegative completed update count.
+    """
+
+    model_config = ConfigDict(strict=True, extra="forbid", revalidate_instances="always")
+
+    config: dict[str, Any]
+    total_steps: int = Field(ge=0)
+    base_lrs: list[float]
+    completed_steps: int = Field(ge=0)
+
+    @field_validator("completed_steps", mode="before")
+    @classmethod
+    def validate_progress(cls, value: Any) -> int:
+        """Require an integer update count without accepting booleans or coercion."""
+        if type(value) is not int or value < 0:
+            raise ValueError("completed_steps must be a nonnegative integer")
+        return value
+
+
 class StepLRScheduler:
     """Apply a shared timeframe schedule to each optimizer group's base rate.
 
@@ -212,18 +238,15 @@ class StepLRScheduler:
             `ValueError`: If the saved schedule, base rates, group count or total
                 steps differ, or completed steps are invalid.
         """
-        config = LRSchedulerConfig.model_validate(state_dict["config"])
-        base_lrs = list(state_dict["base_lrs"])
+        state = LRSchedulerState.model_validate(dict(state_dict))
+        config = LRSchedulerConfig.model_validate(state.config)
+        base_lrs = state.base_lrs
         if len(base_lrs) != len(self.optimizer.param_groups):
             raise ValueError("Optimizer parameter groups do not match the saved scheduler")
-        completed_steps = state_dict["completed_steps"]
-        if type(completed_steps) is not int or completed_steps < 0:
-            raise ValueError("completed_steps must be a nonnegative integer")
         # JSON preserves integer versus fractional timestamps; numeric equality alone does not.
         if config.model_dump_json() != self.config.model_dump_json():
             raise ValueError("Scheduler config does not match the saved scheduler")
-        total_steps = state_dict["total_steps"]
-        if type(total_steps) is not int or total_steps != self.total_steps:
+        if state.total_steps != self.total_steps:
             raise ValueError("Scheduler total_steps does not match the saved scheduler")
         if base_lrs != self.base_lrs:
             raise ValueError("Scheduler base_lrs do not match the saved scheduler")

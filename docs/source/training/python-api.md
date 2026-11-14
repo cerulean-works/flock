@@ -8,11 +8,10 @@
 [[autodoc]] training.Trainer
     - train
     - evaluate
-    - save_model
-    - load_checkpoint
     - data_config
-    - get_trainer_state
-    - load_trainer_state
+    - state_dict
+    - validate_state_dict
+    - load_state_dict
 
 ## Configuration
 
@@ -159,7 +158,7 @@ The `Olmo2` forward and tokenizer methods follow the `BaseModel` contract above.
 
 ## Checkpoint state
 
-`save_model` persists weights and configuration alongside separate safetensors
+`trainer.checkpoint_manager.save_model()` persists weights and configuration alongside separate safetensors
 files for each top-level training-state entry. See the
 [Hub model format](../hub/model-storage#what-a-version-holds) for file metadata.
 These schemas and metric buffers are implementation-level APIs under
@@ -167,17 +166,29 @@ These schemas and metric buffers are implementation-level APIs under
 
 [[autodoc]] training.core.trainer.TrainerState
 
-[[autodoc]] training.core.checkpoint.CheckpointSchema
+[[autodoc]] training.core.trainer.CheckpointDataConfig
     - none
 
-[[autodoc]] training.core.checkpoint.CheckpointDataConfig
+[[autodoc]] training.core.trainer.CheckpointTrainerState
     - none
 
-[[autodoc]] training.core.checkpoint.CheckpointTrainerState
+[[autodoc]] training.core.lr_scheduler.LRSchedulerState
     - none
 
-[[autodoc]] training.core.checkpoint.CheckpointSchedulerState
+[[autodoc]] training.core.trainer.TrainerCheckpoint
     - none
 
-[[autodoc]] training.core.checkpoint.TrainerCheckpoint
-    - none
+## Checkpoint persistence
+
+Use `trainer.checkpoint_manager.save_model()` for manual saves and
+`trainer.checkpoint_manager.load_checkpoint(path)` to restore a local checkpoint.
+The `CheckpointManager` stages local writes, tracks pending uploads,
+selects the latest checkpoint and applies retention. The trainer, metric buffers
+and scheduler validate their saved state before restoration. Optimizer group
+compatibility checks remain in the trainer.
+
+[[autodoc]] training.core.checkpoint.CheckpointManager
+    - save_model
+    - load_checkpoint
+    - checkpoints
+    - latest_checkpoint

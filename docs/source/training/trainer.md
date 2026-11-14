@@ -453,12 +453,24 @@ checkpoint = models.download(
 trainer.train(resume_from_checkpoint=checkpoint)
 ```
 
-For manual saves, call `trainer.save_model()`. Set `save_to_hub_repo="org/model"`
+Use `trainer.state_dict()` to capture training state without model weights.
+`trainer.validate_state_dict(state)` checks the run contract and optimizer group
+compatibility, and asks the metric buffers and scheduler to validate their state
+without changing them.
+`trainer.load_state_dict(state)` performs these checks before restoring any
+training state. Tensors can share storage with live objects, so serialize the
+result immediately or deep-copy it for an in-memory snapshot.
+
+For manual saves, call `trainer.checkpoint_manager.save_model()`. Set `save_to_hub_repo="org/model"`
 to start an asynchronous upload of each new checkpoint with a `checkpoint-<step>`
-tag. `trainer.save_model(blocking=True)` waits for pending uploads; it reuses an
+tag. `trainer.checkpoint_manager.save_model(blocking=True)` waits for pending uploads; it reuses an
 existing current-step checkpoint without rewriting it or starting another upload.
 Upload failures are logged and leave the local checkpoint available. Local
-retention does not delete Hub versions.
+retention does not delete Hub versions. Use
+`trainer.checkpoint_manager.load_checkpoint(path)` to restore a local checkpoint
+without starting training. Pending uploads and saved checkpoint folders are
+available through `trainer.checkpoint_manager.pending_uploads` and
+`trainer.checkpoint_manager.checkpoints()` respectively.
 
 After entering the training loop, cleanup waits for pending uploads and, when
 automatic saving is enabled, saves the current step if it falls between save

@@ -519,3 +519,29 @@ def test_one_update_segment_and_constant_segment() -> None:
         ]
     )
     assert [lr_multiplier(step, config, 2) for step in range(4)] == [0, 0.5, 0.5, 0.5]
+
+
+@pytest.mark.parametrize(
+    "change",
+    ["missing", "extra", "boolean-progress", "string-progress", "invalid-base-lrs"],
+)
+def test_scheduler_owns_strict_state_validation(change: str) -> None:
+    scheduler = StepLRScheduler(make_optimizer(), cosine_schedule(2, 0.1), total_steps=8)
+    expected = scheduler.state_dict()
+    expected_optimizer = copy.deepcopy(scheduler.optimizer.state_dict())
+    saved = copy.deepcopy(expected)
+    if change == "missing":
+        del saved["config"]
+    elif change == "extra":
+        saved["unknown"] = 1
+    elif change == "boolean-progress":
+        saved["completed_steps"] = True
+    elif change == "string-progress":
+        saved["completed_steps"] = "2"
+    else:
+        saved["base_lrs"] = ["0.2", 0.05]
+    for check in (scheduler.validate_state_dict, scheduler.load_state_dict):
+        with pytest.raises(ValueError):
+            check(saved)
+        assert scheduler.state_dict() == expected
+        assert scheduler.optimizer.state_dict() == expected_optimizer
