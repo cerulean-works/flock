@@ -30,6 +30,8 @@ from app.api.src.core.models import Models
 from app.api.src.core.names import ADJECTIVES, NOUNS
 from app.api.src.core.s3 import S3
 from app.api.src.db.database import Database
+from app.api.src.db.instances import Instance
+from app.api.src.db.migrate import Migrations
 from app.api.src.settings import Settings
 from app.api.src.utils import encode_id, loads_lenient, parse_rows
 
@@ -356,11 +358,19 @@ class Store:
     # Org pks stay below 100000 so S3 bucket names have room for them (D53).
     MAX_ORG_PK: ClassVar[int] = 99999
 
-    def __init__(self, settings: Settings) -> None:
+    # How often each API process applies the contract migrations that are due (D147).
+    CONTRACT_INTERVAL: ClassVar[float] = 60.0
+
+    def __init__(self, settings: Settings, migrations: Migrations | None = None) -> None:
         self.settings = settings
         self.files_dir = settings.files_dir
         self.files = file_store(settings)  # D82
-        self.db = Database(settings.database_url, max_size=settings.pool_size)
+        self.migrations = migrations or Migrations()
+        self.db = Database(
+            settings.database_url, max_size=settings.pool_size, migrations=self.migrations
+        )
+        self.instance: Instance | None = None
+        self._contracts: asyncio.Task | None = None
         self._tasks: set[asyncio.Task] = set()
         # Wakes this replica's background work early: a run finished, or runs were deleted.
         self._work_wanted = asyncio.Event()
@@ -409,6 +419,8 @@ class Store:
         await self.files.open()
         await self.db.open(migrate=self.settings.migrate_on_startup)
         try:
+            self.instance = Instance(self.db.pool, "api", self.migrations)
+            await self.instance.start()
             secret = await self.db.fetchval("SELECT value FROM meta WHERE key = 'upload_secret'")
             self.secret = bytes.fromhex(secret)
             self.relay.start(self.db.pool)
@@ -421,7 +433,12 @@ class Store:
             await self.hf_imports.load()
             self._background(self._detect_missing_gpus())
             self._worker = asyncio.get_running_loop().create_task(self._work_loop())
+            # With migrations on startup off, the migration Job applies contracts too.
+            if self.settings.migrate_on_startup:
+                loop = asyncio.get_running_loop()
+                self._contracts = loop.create_task(self._contract_loop())
         except BaseException:
+            await self._stop_instance()
             await self.bus.close()
             await self.relay.close()
             await self.db.close()
@@ -444,10 +461,33 @@ class Store:
             tasks = list(self._tasks)
             await asyncio.gather(*tasks, return_exceptions=True)
             self._tasks.difference_update(tasks)
+        await self._stop_instance()
         await self.bus.close()
         await self.relay.close()
         await self.db.close()
         await self.files.close()
+
+    async def _stop_instance(self) -> None:
+        if self._contracts is not None:
+            self._contracts.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._contracts
+            self._contracts = None
+        if self.instance is not None:
+            await self.instance.close()
+            self.instance = None
+
+    async def _contract_loop(self) -> None:
+        """Apply the contract migrations that are due every ``CONTRACT_INTERVAL`` (D147). The
+        advisory lock lets one process apply each, and the others skip that round."""
+        while True:
+            await asyncio.sleep(self.CONTRACT_INTERVAL)
+            try:
+                await self.migrations.apply_contracts(
+                    self.settings.database_url, self.settings.contract_delay, wait=False
+                )
+            except Exception:
+                log.exception("applying contract migrations failed")
 
     @property
     def ready(self) -> bool:

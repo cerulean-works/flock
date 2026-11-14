@@ -74,6 +74,8 @@ guide:
       title: Run Flock locally
     - local: app/deploy
       title: Deploy another Flock installation
+    - local: app/deploy-dokploy
+      title: Deploy on Dokploy with Docker Swarm
     - local: app/operate
       title: Operate a Flock installation
     - local: app/build-dashboard-client

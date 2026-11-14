@@ -71,11 +71,12 @@ def test_compose_configuration(compose: str, configured: bool) -> None:
     assert "flock-api" in services["api"]["networks"]["default"]["aliases"]
     api_env = services["api"]["environment"]
     settings = Settings.load(environ=api_env)
-    # Every API option is configurable; DB and files are provided by the stack/image.
+    # Every API option is configurable; DB and files are provided by the stack/image. The
+    # S3 proxy's pool is the proxy's alone (D143).
     assert set(api_env) == {
         f"FLOCK_{field.name.upper()}"
         for field in dataclasses.fields(Settings)
-        if field.name != "files_dir"
+        if field.name not in ("files_dir", "s3_pool_size")
     }
     assert settings.pool_size == (8 if configured else Settings.pool_size)
     assert settings.gravatar is (not configured)

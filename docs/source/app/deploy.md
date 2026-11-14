@@ -2,11 +2,13 @@
 
 Cerulean's service is already configured for normal users. This guide is for operators creating another installation, with its own database, domains and storage. [CLI sign-in](../cli/sign-in) uses Cerulean by default; clients of your separate installation must select its API explicitly.
 
+Use Compose for local development and for trying Flock out. For production, a Docker Swarm stack is recommended, because a redeploy then never interrupts running experiments. See [Deploy on Docker Swarm](#deploy-on-docker-swarm).
+
 A deployment has an API, a dashboard and PostgreSQL, plus durable run-file storage. The dashboard's public origin, the API's public address and its internal service address are different network routes. Set them consistently before creating accounts.
 
 ## Deploy with Compose
 
-Run the API, dashboard and PostgreSQL behind your reverse proxy.
+Run the API, dashboard and PostgreSQL behind your reverse proxy. Every redeploy has a short outage, so prefer a [Swarm stack](#deploy-on-docker-swarm) in production.
 
 You need a Flock checkout, Docker with Compose v2, durable storage and two public routes: one for the dashboard and one for the API. The production Compose file publishes no host ports. Your reverse proxy must reach the Compose services.
 
@@ -110,6 +112,12 @@ You need a [working Flock deployment](#deploy-with-compose), an upstream S3 serv
 Use `flock-s3`, rather than the generic service name `s3`, as the reverse proxy target. See [Upgrade Flock](operate#upgrade-flock) for existing deployments with the old name.
 
 [Settings](configuration#s3-settings) covers regions, prefixes and trash storage. [S3 behavior](s3-behavior) explains key limits and supported operations. The upstream administrative key is for the server; users receive Flock-scoped keys.
+
+## Deploy on Docker Swarm
+
+For production, run Flock as a Docker Swarm stack rather than with Compose. A stack starts each new release before it stops the old one, so a redeploy doesn't interrupt runs that are logging or reading from S3. With Compose, Traefik answers 404 for the few seconds between the old API stopping and the new one becoming healthy, and runs logging at that moment crash.
+
+`app/compose.swarm.yaml` is the stack. It runs the same services as `app/compose.yaml`, with images that CI publishes, since a stack can't build. [Deploy on Dokploy with Docker Swarm](deploy-dokploy) walks through every step, including moving an existing Compose deployment.
 
 ## Enable Google sign-in
 

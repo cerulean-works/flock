@@ -1,0 +1,220 @@
+# Flock as a Docker Swarm stack (D138), deployed with `docker stack deploy` or as a Dokploy
+# "Stack". compose.yaml stays the file for local runs and for Compose deployments.
+#
+# Differences from compose.yaml: images come from the registry, at the `main` tag CI moves
+# (D141), Traefik labels sit under `deploy` (D140), each app service starts its new task before
+# the old one stops (D139), and there is no `build`, `depends_on` or `profiles`, which Swarm
+# ignores (D145).
+#
+#   docker stack deploy --with-registry-auth -c compose.swarm.yaml flock
+
+# The same update for every app service: start the new task, wait until it's healthy, watch it
+# for 30 seconds, and only then stop the old one. A task that fails in that time rolls back.
+x-start-first: &start-first
+  replicas: 1
+  update_config:
+    order: start-first
+    parallelism: 1
+    failure_action: rollback
+    monitor: 30s
+  rollback_config:
+    order: start-first
+  restart_policy:
+    condition: any
+
+services:
+  ui:
+    image: ${FLOCK_IMAGE_PREFIX:-ghcr.io/cerulean-works}/flock-ui:${FLOCK_VERSION:-main}
+    environment:
+      FLOCK_API_URL: ${FLOCK_API_URL:-http://flock-api:8080}
+      FLOCK_API_PUBLIC_URL: ${FLOCK_API_PUBLIC_URL:-http://localhost:8080}
+    networks:
+      - dokploy-network
+      - internal
+    deploy:
+      <<: *start-first
+      # Swarm reads labels for Traefik here, not on the container. lbswarm routes to the
+      # service's virtual IP, which Swarm switches to the new task once it's healthy (D140).
+      # Traefik v3's swarm provider reads traefik.swarm.*. The traefik.docker.* twins are for a
+      # Traefik v2 docker provider in swarm mode, and either is ignored where it doesn't apply.
+      labels:
+        - traefik.enable=true
+        - traefik.swarm.lbswarm=true
+        - traefik.docker.lbswarm=true
+        - traefik.swarm.network=dokploy-network
+        - traefik.docker.network=dokploy-network
+        - traefik.http.routers.flock-ui.rule=Host(`${FLOCK_WEB_HOST:?set FLOCK_WEB_HOST to the dashboard domain}`)
+        - traefik.http.routers.flock-ui.entrypoints=${FLOCK_TRAEFIK_ENTRYPOINT:-websecure}
+        - traefik.http.routers.flock-ui.tls.certresolver=${FLOCK_TRAEFIK_CERTRESOLVER:-letsencrypt}
+        - traefik.http.routers.flock-ui.service=flock-ui
+        - traefik.http.services.flock-ui.loadbalancer.server.port=3000
+
+  api:
+    image: ${FLOCK_IMAGE_PREFIX:-ghcr.io/cerulean-works}/flock-api:${FLOCK_VERSION:-main}
+    networks:
+      dokploy-network:
+      internal:
+        # The dashboard's FLOCK_API_URL, and not the generic `api` name on a shared network.
+        aliases: [flock-api]
+    environment:
+      FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
+      FLOCK_LISTEN_DATABASE_URL: ${FLOCK_LISTEN_DATABASE_URL:-}
+      FLOCK_FILES_BACKEND: ${FLOCK_FILES_BACKEND:-}
+      FLOCK_FILES_BUCKET: ${FLOCK_FILES_BUCKET:-}
+      FLOCK_WEB_URL: ${FLOCK_WEB_URL:-http://localhost:3000}
+      FLOCK_API_PUBLIC_URL: ${FLOCK_API_PUBLIC_URL:-http://localhost:8080}
+      FLOCK_MIGRATE_ON_STARTUP: ${FLOCK_MIGRATE_ON_STARTUP:-}
+      FLOCK_CONTRACT_DELAY: ${FLOCK_CONTRACT_DELAY:-}
+      FLOCK_JWT_SECRET: ${FLOCK_JWT_SECRET:-}
+      FLOCK_ACCESS_TOKEN_TTL: ${FLOCK_ACCESS_TOKEN_TTL:-}
+      FLOCK_REFRESH_TOKEN_TTL: ${FLOCK_REFRESH_TOKEN_TTL:-}
+      FLOCK_INVITE_TTL: ${FLOCK_INVITE_TTL:-}
+      FLOCK_RESET_TTL: ${FLOCK_RESET_TTL:-}
+      FLOCK_DEVICE_CODE_TTL: ${FLOCK_DEVICE_CODE_TTL:-}
+      FLOCK_CLI_SESSION_TTL: ${FLOCK_CLI_SESSION_TTL:-}
+      FLOCK_GOOGLE_CLIENT_ID: ${FLOCK_GOOGLE_CLIENT_ID:-}
+      FLOCK_GOOGLE_CLIENT_SECRET: ${FLOCK_GOOGLE_CLIENT_SECRET:-}
+      FLOCK_GOOGLE_REDIRECT_URL: ${FLOCK_GOOGLE_REDIRECT_URL:-}
+      FLOCK_GRAVATAR: ${FLOCK_GRAVATAR:-}
+      FLOCK_GRAVATAR_URL: ${FLOCK_GRAVATAR_URL:-}
+      FLOCK_WANDB_BASE_URL: ${FLOCK_WANDB_BASE_URL:-}
+      FLOCK_CRASH_TIMEOUT: ${FLOCK_CRASH_TIMEOUT:-}
+      FLOCK_S3_UPSTREAM_ENDPOINT: ${FLOCK_S3_UPSTREAM_ENDPOINT:-}
+      FLOCK_S3_UPSTREAM_REGION: ${FLOCK_S3_UPSTREAM_REGION:-}
+      FLOCK_S3_UPSTREAM_ACCESS_KEY_ID: ${FLOCK_S3_UPSTREAM_ACCESS_KEY_ID:-}
+      FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY: ${FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY:-}
+      FLOCK_S3_BUCKET_PREFIX: ${FLOCK_S3_BUCKET_PREFIX:-}
+      FLOCK_S3_PUBLIC_URL: ${FLOCK_S3_PUBLIC_URL:-}
+      FLOCK_S3_TRASH_BUCKET: ${FLOCK_S3_TRASH_BUCKET:-}
+      FLOCK_POOL_SIZE: ${FLOCK_POOL_SIZE:-}
+      FLOCK_CORS_ORIGINS: ${FLOCK_CORS_ORIGINS:-}
+      FLOCK_LOG_LEVEL: ${FLOCK_LOG_LEVEL:-}
+    # Run files, with the default local files backend. With FLOCK_FILES_BACKEND=s3 they go to
+    # FLOCK_FILES_BUCKET instead and the volume only holds files not migrated yet. During an
+    # update the old and new task mount it at once, which the local backend allows.
+    volumes:
+      - files:/data/files
+    # The image's check, with a 15 minute start period: the API migrates and backfills before it
+    # serves, and a failed check during a long backfill would roll the deploy back (D139).
+    # Failures in the start period don't count, and the first pass makes the task healthy.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      start_period: 15m
+    # Time for requests in flight, such as a large file_stream batch or upload, to finish once
+    # the old task has failed /readyz and ended its event streams (D142).
+    stop_grace_period: 30s
+    deploy:
+      <<: *start-first
+      labels:
+        - traefik.enable=true
+        - traefik.swarm.lbswarm=true
+        - traefik.docker.lbswarm=true
+        - traefik.swarm.network=dokploy-network
+        - traefik.docker.network=dokploy-network
+        - traefik.http.routers.flock-api.rule=Host(`${FLOCK_API_HOST:?set FLOCK_API_HOST to the API domain}`)
+        - traefik.http.routers.flock-api.entrypoints=${FLOCK_TRAEFIK_ENTRYPOINT:-websecure}
+        - traefik.http.routers.flock-api.tls.certresolver=${FLOCK_TRAEFIK_CERTRESOLVER:-letsencrypt}
+        - traefik.http.routers.flock-api.service=flock-api
+        - traefik.http.services.flock-api.loadbalancer.server.port=8080
+
+  # The S3 proxy (D61). It keeps no state and takes no lock. Each worker is one event loop on one
+  # core, so FLOCK_S3_WORKERS sets how many cores it can use, and each has a pool of
+  # FLOCK_S3_POOL_SIZE connections (D143). It fails its health check until the API has applied
+  # the migrations it reads, and Swarm restarts it until then (D145).
+  flock-s3:
+    image: ${FLOCK_IMAGE_PREFIX:-ghcr.io/cerulean-works}/flock-api:${FLOCK_VERSION:-main}
+    command: ["uvicorn", "app.api.src.s3_proxy.app:app", "--host", "0.0.0.0", "--port", "8090", "--workers", "${FLOCK_S3_WORKERS:-4}"]
+    networks:
+      - dokploy-network
+      - internal
+    environment:
+      FLOCK_DATABASE_URL: postgresql://flock:${POSTGRES_PASSWORD:-flock}@postgres:5432/flock
+      FLOCK_LISTEN_DATABASE_URL: ${FLOCK_LISTEN_DATABASE_URL:-}
+      FLOCK_S3_UPSTREAM_ENDPOINT: ${FLOCK_S3_UPSTREAM_ENDPOINT:-}
+      FLOCK_S3_UPSTREAM_REGION: ${FLOCK_S3_UPSTREAM_REGION:-}
+      FLOCK_S3_UPSTREAM_ACCESS_KEY_ID: ${FLOCK_S3_UPSTREAM_ACCESS_KEY_ID:-}
+      FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY: ${FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY:-}
+      FLOCK_S3_BUCKET_PREFIX: ${FLOCK_S3_BUCKET_PREFIX:-}
+      FLOCK_S3_PUBLIC_URL: ${FLOCK_S3_PUBLIC_URL:-}
+      FLOCK_S3_TRASH_BUCKET: ${FLOCK_S3_TRASH_BUCKET:-}
+      FLOCK_WEB_URL: ${FLOCK_WEB_URL:-http://localhost:3000}
+      FLOCK_POOL_SIZE: ${FLOCK_POOL_SIZE:-}
+      FLOCK_S3_POOL_SIZE: ${FLOCK_S3_POOL_SIZE:-}
+      FLOCK_LOG_LEVEL: ${FLOCK_LOG_LEVEL:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+    # A GET of a large object streams for as long as the client reads. The old task stops taking
+    # connections on SIGTERM and gets 2 minutes for open downloads (D142).
+    stop_grace_period: 120s
+    deploy:
+      <<: *start-first
+      labels:
+        - traefik.enable=true
+        - traefik.swarm.lbswarm=true
+        - traefik.docker.lbswarm=true
+        - traefik.swarm.network=dokploy-network
+        - traefik.docker.network=dokploy-network
+        - traefik.http.routers.flock-s3.rule=Host(`${FLOCK_S3_HOST:?set FLOCK_S3_HOST to the S3 proxy domain}`)
+        - traefik.http.routers.flock-s3.entrypoints=${FLOCK_TRAEFIK_ENTRYPOINT:-websecure}
+        - traefik.http.routers.flock-s3.tls.certresolver=${FLOCK_TRAEFIK_CERTRESOLVER:-letsencrypt}
+        - traefik.http.routers.flock-s3.service=flock-s3
+        - traefik.http.services.flock-s3.loadbalancer.server.port=8090
+
+  # One replica, stopped before a new one starts, since two PostgreSQL processes must never share
+  # a data directory. Pinned to the manager node so its volume never moves (D144). Its tag is
+  # fixed, so a redeploy leaves it running unless this spec changes.
+  postgres:
+    image: postgres:18.4
+    networks:
+      - internal
+    environment:
+      POSTGRES_USER: flock
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flock}
+      POSTGRES_DB: flock
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${POSTGRES_SHARED_BUFFERS:-1GB}
+      - -c
+      - effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-3GB}
+      - -c
+      - max_wal_size=4GB
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flock -d flock"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    deploy:
+      replicas: 1
+      update_config:
+        order: stop-first
+      restart_policy:
+        condition: any
+      placement:
+        constraints: [node.role == manager]
+
+networks:
+  # Traefik's network, created by Dokploy.
+  dokploy-network:
+    external: true
+  # The stack's own network, the only one PostgreSQL is on.
+  internal:
+    driver: overlay
+
+# A stack prefixes volume names with its own name, which isn't the Compose project's. So both
+# volumes are external, named after the ones the Compose deployment created, such as
+# flock-app_postgres-data, and the stack keeps the data already there (D144).
+volumes:
+  postgres-data:
+    external: true
+    name: ${FLOCK_POSTGRES_VOLUME:?set FLOCK_POSTGRES_VOLUME to the existing PostgreSQL volume}
+  files:
+    external: true
+    name: ${FLOCK_FILES_VOLUME:?set FLOCK_FILES_VOLUME to the existing run files volume}

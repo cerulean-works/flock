@@ -654,7 +654,7 @@ class S3Flock(FlockServer):
         }
         super().__init__(database_url, files_dir, **{**configured, **settings})
         # The flock has applied the migrations the proxy reads.
-        self.proxy = ProxyServer(dataclasses.replace(self.store.settings, pool_size=8), sock)
+        self.proxy = ProxyServer(dataclasses.replace(self.store.settings, s3_pool_size=8), sock)
 
     def credentials(self, client: Client | None = None, **body: Any) -> dict:
         """An ephemeral S3 key of ``client``'s user (the super admin by default)."""
