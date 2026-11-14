@@ -253,6 +253,9 @@ the example's weights and computations remain FP32.
 Watch `global_step`, `train/loss_mean`, `train/loss_window_max`,
 `train/grad_norm_mean` and `train/grad_norm_window_max`. Mean loss is weighted by
 the number of valid target tokens; gradient norms are measured before clipping.
+`train/tokens` counts the valid target tokens since the previous log, and
+`train/total_tokens` counts them over the whole run, continuing across a resume.
+A valid target is a label that is not `-100`, so padding never counts.
 With the recipe's `wandb_mode="offline"`, check the local run directory or
 [sync the run later](../app/log-runs#resume-or-sync-a-run). For live logging, set
 `wandb_mode="online"`, accept SDK setup during `flock login`, and check the
