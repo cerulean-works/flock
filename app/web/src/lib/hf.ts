@@ -2,7 +2,7 @@
  * dialogs fill in, and how an import reads in its row. */
 
 import { nameOf, parentOf } from './datasets.ts';
-import type { HFImport } from './types.ts';
+import type { HFDatasetPreview, HFImport } from './types.ts';
 import { bytes } from './utils.ts';
 
 /** The dashboard's endpoint for the org's imports: the list (no `op`), `preview` or one import. */
@@ -48,19 +48,68 @@ export function defaultModelName(repo: string): string {
 const quote = (word: string) =>
 	/^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll("'", `'"'"'`)}'`;
 
-/** The `flock datasets import` command for what the dataset dialog asks, as the API writes it. */
+/** The splits checked in the dataset dialog: each checked config with its checked splits, or
+ * null for a config whose splits aren't known (all of them). */
+export type SplitChoice = Record<string, string[] | null>;
+
+/** A dataset's configs, as its preview lists them. */
+type Configs = HFDatasetPreview['configs'];
+
+/** What the dialog sends as `configs`: each chosen config, in the preview's order, with its
+ * splits in order, or null when every split is chosen. */
+export function chosenConfigs(
+	configs: Configs,
+	choice: SplitChoice
+): Record<string, string[] | null> {
+	const out: Record<string, string[] | null> = {};
+	for (const config of configs) {
+		if (!(config.name in choice)) continue;
+		const picked = choice[config.name];
+		const names = config.splits?.map((s) => s.name) ?? null;
+		out[config.name] =
+			picked === null || !names || names.every((n) => picked.includes(n))
+				? null
+				: names.filter((n) => picked.includes(n));
+	}
+	return out;
+}
+
+/** The bytes the chosen splits take, as far as the preview knows. */
+export function chosenSize(configs: Configs, choice: SplitChoice): number {
+	let total = 0;
+	for (const config of configs) {
+		const picked = choice[config.name];
+		if (picked === undefined) continue;
+		if (picked === null || !config.splits) total += config.size ?? 0;
+		else for (const s of config.splits) if (picked.includes(s.name)) total += s.size ?? 0;
+	}
+	return total;
+}
+
+/** The `flock datasets import` command for what the dataset dialog asks, as the API writes it.
+ * Configs whose splits differ need a command each, one per line. */
 export function datasetCommand(
 	org: string,
 	repo: string,
 	dest: string,
-	config: string | null,
-	splits: string[] | null
+	configs: Record<string, string[] | null>
 ): string {
-	const words = ['flock', 'datasets', 'import', repo, dest];
-	if (config) words.push('--config', config);
-	for (const split of splits ?? []) words.push('--split', split);
-	words.push('--org', org);
-	return words.map(quote).join(' ');
+	const groups = new Map<string, { names: string[]; splits: string[] | null }>();
+	for (const [name, splits] of Object.entries(configs)) {
+		const key = JSON.stringify(splits);
+		const group = groups.get(key) ?? { names: [], splits };
+		group.names.push(name);
+		groups.set(key, group);
+	}
+	return [...groups.values()]
+		.map(({ names, splits }) => {
+			const words = ['flock', 'datasets', 'import', repo, dest];
+			for (const name of names) words.push('--config', name);
+			for (const split of splits ?? []) words.push('--split', split);
+			words.push('--org', org);
+			return words.map(quote).join(' ');
+		})
+		.join('\n');
 }
 
 /** The imports a page shows: a dataset's in the folder it lands in, every model's. */

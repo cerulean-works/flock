@@ -153,7 +153,7 @@ describe('HFDatasetDialog', () => {
 					{ name: 'test', size: 1024, rows: 2 }
 				]
 			},
-			{ name: 'fr', size: null, splits: null }
+			{ name: 'fr', size: 512, splits: [{ name: 'train', size: 512, rows: 3 }] }
 		],
 		default_config: 'en',
 		max_bytes: 2500
@@ -183,17 +183,38 @@ describe('HFDatasetDialog', () => {
 			.toBeVisible();
 		await expect.element(screen.getByRole('button', { name: 'Import' })).toBeDisabled();
 
-		await screen.getByLabelText('train').click();
+		// The default config is checked with all its splits, and the others aren't.
+		await expect.element(screen.getByLabelText('en', { exact: true })).toBeChecked();
+		await expect.element(screen.getByLabelText('fr', { exact: true })).not.toBeChecked();
+		await expect.element(screen.getByLabelText('test of en')).toBeChecked();
+
+		await screen.getByLabelText('train of en').click();
+		await screen.getByLabelText('train of fr').click();
 		await screen.getByRole('button', { name: 'Import' }).click();
 		expect(body(calls.at(-1)?.init)).toEqual({
 			kind: 'dataset',
 			repo: 'acme/data',
-			config: 'en',
-			splits: ['test'],
+			configs: { en: ['test'], fr: null },
 			dest: 'web/data',
 			token: 'hf_secret'
 		});
 		expect(started).toHaveBeenCalledWith(job());
+	});
+
+	it('needs a split chosen before it imports', async () => {
+		serve({ '/api/imports/acme/hf/preview': () => ({ ...preview, max_bytes: 10 ** 9 }) });
+		render(HFDatasetDialog, { open: true, org: 'acme', folder: '', onstarted: vi.fn() });
+		await screen.getByLabelText('Repository').fill('acme/data');
+		await screen.getByRole('button', { name: 'Continue' }).click();
+		await expect.element(screen.getByLabelText('Folder')).toHaveValue('data');
+		const button = screen.getByRole('button', { name: 'Import' });
+		await expect.element(button).toBeEnabled();
+		await screen.getByLabelText('en', { exact: true }).click();
+		await expect.element(screen.getByLabelText('test of en')).not.toBeChecked();
+		await expect.element(button).toBeDisabled();
+		await screen.getByLabelText('test of en').click();
+		await expect.element(screen.getByLabelText('en', { exact: true })).not.toBeChecked();
+		await expect.element(button).toBeEnabled();
 	});
 
 	it('shows the command when the API refuses an import as too large', async () => {

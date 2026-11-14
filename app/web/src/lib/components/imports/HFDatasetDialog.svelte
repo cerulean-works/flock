@@ -5,15 +5,25 @@
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
-	import * as Select from '#lib/components/ui/select/index.js';
 	import { pathError } from '#lib/datasets.ts';
-	import { HFError, datasetCommand, defaultFolder, hfApi, hfCall, repoError } from '#lib/hf.ts';
+	import {
+		HFError,
+		type SplitChoice,
+		chosenConfigs,
+		chosenSize,
+		datasetCommand,
+		defaultFolder,
+		hfApi,
+		hfCall,
+		repoError
+	} from '#lib/hf.ts';
 	import type { HFDatasetPreview, HFImport } from '#lib/types.ts';
 	import { bytes } from '#lib/utils.ts';
 	import CopyBlock from '../CopyBlock.svelte';
 	import FormError from '../FormError.svelte';
 
-	// Asks for a dataset on the Hub, then its config, splits and the folder to write to (D124).
+	// Asks for a dataset on the Hub, then the configs and splits to import and the folder to
+	// write to (D124, D129).
 	interface Props {
 		open: boolean;
 		org: string;
@@ -24,35 +34,49 @@
 
 	let { open = $bindable(), org, folder, onstarted }: Props = $props();
 
+	type Config = HFDatasetPreview['configs'][number];
+
 	let repo = $state('');
 	let token = $state('');
 	let preview = $state<HFDatasetPreview | null>(null);
-	let config = $state('');
-	let chosen = $state<string[]>([]);
+	let choice = $state<SplitChoice>({});
 	let dest = $state('');
 	let error = $state<string | null>(null);
 	let command = $state<string | null>(null);
 	let pending = $state(false);
 
-	const current = $derived(preview?.configs.find((c) => c.name === config) ?? null);
-	const splits = $derived(current?.splits ?? null);
-	const all = $derived(!splits || chosen.length === splits.length);
-	const size = $derived(
-		splits
-			? splits.filter((s) => chosen.includes(s.name)).reduce((n, s) => n + (s.size ?? 0), 0)
-			: (current?.size ?? 0)
-	);
+	const configs = $derived(preview?.configs ?? []);
+	const several = $derived(configs.length > 1);
+	const chosen = $derived(chosenConfigs(configs, choice));
+	const empty = $derived(!Object.keys(chosen).length);
+	const size = $derived(chosenSize(configs, choice));
 	const tooLarge = $derived(!!preview && size > preview.max_bytes);
 	const shownCommand = $derived(
 		command ??
-			(tooLarge
-				? datasetCommand(org, preview?.repo ?? repo, dest.trim(), config, all ? null : chosen)
-				: null)
+			(tooLarge && !empty ? datasetCommand(org, preview?.repo ?? repo, dest.trim(), chosen) : null)
 	);
 
-	function choose(name: string) {
-		config = name;
-		chosen = preview?.configs.find((c) => c.name === name)?.splits?.map((s) => s.name) ?? [];
+	const allSplits = (config: Config) => config.splits?.map((s) => s.name) ?? null;
+	const picked = (config: Config): string[] => choice[config.name] ?? [];
+	const whole = (config: Config) =>
+		config.name in choice &&
+		(choice[config.name] === null || picked(config).length === (config.splits?.length ?? 0));
+
+	function setConfig(config: Config, on: boolean) {
+		const next = { ...choice };
+		if (on) next[config.name] = allSplits(config);
+		else delete next[config.name];
+		choice = next;
+		command = null;
+	}
+
+	function setSplit(config: Config, split: string, on: boolean) {
+		const was = picked(config);
+		const names = (allSplits(config) ?? []).filter((n) => (n === split ? on : was.includes(n)));
+		const next = { ...choice };
+		if (names.length) next[config.name] = names;
+		else delete next[config.name];
+		choice = next;
 		command = null;
 	}
 
@@ -67,7 +91,8 @@
 				{ token: token.trim() || undefined }
 			);
 			preview = found;
-			choose(found.default_config ?? found.configs[0]?.name ?? '');
+			const first = found.configs.find((c) => c.name === found.default_config) ?? found.configs[0];
+			choice = first ? { [first.name]: allSplits(first) } : {};
 			dest = defaultFolder(folder, target);
 		} catch (e) {
 			error = (e as Error).message;
@@ -77,9 +102,9 @@
 	}
 
 	async function start() {
-		if (!preview) return;
+		if (!preview || empty) return;
 		const target = dest.trim();
-		error = pathError(target) ?? (splits && !chosen.length ? 'Choose at least one split' : null);
+		error = pathError(target);
 		if (error) return;
 		pending = true;
 		command = null;
@@ -89,8 +114,7 @@
 				body: {
 					kind: 'dataset',
 					repo: preview.repo,
-					config: config || null,
-					splits: all ? null : chosen,
+					configs: chosen,
 					dest: target,
 					token: token.trim() || null
 				}
@@ -109,8 +133,7 @@
 		repo = '';
 		token = '';
 		preview = null;
-		config = '';
-		chosen = [];
+		choice = {};
 		dest = '';
 		error = null;
 		command = null;
@@ -164,50 +187,42 @@
 					</p>
 				</div>
 			{:else}
-				{#if preview.configs.length > 1}
-					<div class="grid gap-2">
-						<Label for="hf-dataset-config">Config</Label>
-						<Select.Root type="single" value={config} onValueChange={choose}>
-							<Select.Trigger id="hf-dataset-config" class="w-full">{config}</Select.Trigger>
-							<Select.Content>
-								{#each preview.configs as c (c.name)}
-									<Select.Item value={c.name} label={c.name}>
-										{c.name}
-										{#if c.size}
-											<span class="ml-auto text-xs text-muted-foreground tabular-nums">
-												{bytes(c.size)}
-											</span>
-										{/if}
-									</Select.Item>
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					</div>
-				{/if}
 				<fieldset class="grid gap-2">
-					<legend class="mb-2 text-sm font-medium">Splits</legend>
-					{#if splits}
-						{#each splits as split (split.name)}
+					<legend class="mb-2 text-sm font-medium"
+						>{several ? 'Configs and splits' : 'Splits'}</legend
+					>
+					{#each configs as config (config.name)}
+						{#if several}
 							<div class="flex items-center gap-2.5">
 								<Checkbox
-									id="hf-split-{split.name}"
-									checked={chosen.includes(split.name)}
-									onCheckedChange={(on) =>
-										(chosen = on
-											? splits
-													.map((s) => s.name)
-													.filter((n) => n === split.name || chosen.includes(n))
-											: chosen.filter((n) => n !== split.name))}
+									id="hf-config-{config.name}"
+									checked={whole(config)}
+									indeterminate={config.name in choice && !whole(config)}
+									onCheckedChange={(on) => setConfig(config, on)}
 								/>
-								<Label for="hf-split-{split.name}" class="flex-1 font-normal">{split.name}</Label>
+								<Label for="hf-config-{config.name}" class="flex-1">{config.name}</Label>
+								<span class="text-[12.5px] text-muted-foreground tabular-nums">
+									{config.size ? bytes(config.size) : ''}
+								</span>
+							</div>
+						{/if}
+						{#each config.splits ?? [] as split (split.name)}
+							<div class={['flex items-center gap-2.5', several && 'pl-6.5']}>
+								<Checkbox
+									id="hf-split-{config.name}-{split.name}"
+									aria-label={several ? `${split.name} of ${config.name}` : undefined}
+									checked={picked(config).includes(split.name)}
+									onCheckedChange={(on) => setSplit(config, split.name, on)}
+								/>
+								<Label for="hf-split-{config.name}-{split.name}" class="flex-1 font-normal">
+									{split.name}
+								</Label>
 								<span class="text-[12.5px] text-muted-foreground tabular-nums">
 									{split.size === null ? '' : bytes(split.size)}
 								</span>
 							</div>
 						{/each}
-					{:else}
-						<p class="text-[13px] text-muted-foreground">Every split of {config} is imported.</p>
-					{/if}
+					{/each}
 				</fieldset>
 				<div class="grid gap-2">
 					<Label for="hf-dataset-dest">Folder</Label>
@@ -233,7 +248,7 @@
 				<Button type="button" variant="outline" disabled={pending} onclick={() => (open = false)}>
 					Cancel
 				</Button>
-				<Button type="submit" disabled={pending || tooLarge}>
+				<Button type="submit" disabled={pending || (!!preview && (tooLarge || empty))}>
 					{#if pending}<LoaderCircleIcon class="animate-spin" />{/if}
 					{preview ? 'Import' : 'Continue'}
 				</Button>

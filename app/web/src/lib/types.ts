@@ -912,9 +912,8 @@ export interface HFImport {
 	sha: string | null;
 	/** The dataset folder, or the model's name. */
 	dest: string;
-	/** A dataset's config and splits. */
-	config?: string;
-	splits?: string[];
+	/** A dataset's configs, each with the splits imported. */
+	configs?: Record<string, string[]>;
 	/** A model version's tags, and whether it becomes primary. */
 	tags?: string[];
 	primary?: boolean;
@@ -927,9 +926,9 @@ export interface HFImport {
 	rows_done: number;
 	/** From 0 to 1. */
 	progress: number;
-	/** Each split's dataset, or the model's version. */
+	/** Each config's and split's dataset, or the model's version. */
 	result: {
-		datasets?: { split: string; path: string; version: number; rows: number }[];
+		datasets?: { config: string; split: string; path: string; version: number; rows: number }[];
 		model?: string;
 		version?: number;
 		existing?: boolean;

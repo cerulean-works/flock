@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+	chosenConfigs,
+	chosenSize,
 	datasetCommand,
 	defaultFolder,
 	defaultModelName,
@@ -9,7 +11,7 @@ import {
 	progressText,
 	repoError
 } from './hf.ts';
-import type { HFImport } from './types.ts';
+import type { HFDatasetPreview, HFImport } from './types.ts';
 
 const job = (fields: Partial<HFImport> = {}): HFImport => ({
 	id: 1,
@@ -60,12 +62,45 @@ describe('Hugging Face imports', () => {
 	});
 
 	it('writes the flock command as the API does', () => {
-		expect(datasetCommand('acme', 'a/b', 'web/b', 'default', null)).toBe(
+		expect(datasetCommand('acme', 'a/b', 'web/b', { default: null })).toBe(
 			'flock datasets import a/b web/b --config default --org acme'
 		);
-		expect(datasetCommand('acme', 'a/b', 'my data', 'en', ['train', 'test'])).toBe(
+		expect(datasetCommand('acme', 'a/b', 'my data', { en: ['train', 'test'] })).toBe(
 			"flock datasets import a/b 'my data' --config en --split train --split test --org acme"
 		);
+		expect(datasetCommand('acme', 'a/b', 'b', { en: null, fr: null })).toBe(
+			'flock datasets import a/b b --config en --config fr --org acme'
+		);
+		// Configs whose splits differ need a command each.
+		expect(datasetCommand('acme', 'a/b', 'b', { en: ['test'], fr: null, de: ['test'] })).toBe(
+			'flock datasets import a/b b --config en --config de --split test --org acme\n' +
+				'flock datasets import a/b b --config fr --org acme'
+		);
+	});
+
+	it('sends each config with its splits, and null when every split is chosen', () => {
+		const configs: HFDatasetPreview['configs'] = [
+			{
+				name: 'en',
+				size: 3000,
+				splits: [
+					{ name: 'train', size: 2000, rows: null },
+					{ name: 'test', size: 1000, rows: null }
+				]
+			},
+			{ name: 'fr', size: 500, splits: [{ name: 'train', size: 500, rows: null }] },
+			{ name: 'de', size: 700, splits: null }
+		];
+		expect(chosenConfigs(configs, { fr: ['train'], en: ['test'] })).toEqual({
+			en: ['test'],
+			fr: null
+		});
+		expect(chosenConfigs(configs, { en: ['test', 'train'], de: null })).toEqual({
+			en: null,
+			de: null
+		});
+		expect(chosenConfigs(configs, {})).toEqual({});
+		expect(chosenSize(configs, { en: ['test'], fr: ['train'], de: null })).toBe(2200);
 	});
 
 	it('shows a dataset’s imports in the folder it lands in, and every model’s', () => {
