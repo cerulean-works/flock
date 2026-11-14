@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -64,9 +65,10 @@ def test_convert_and_list_through_the_proxy(
     assert done.exit_code == 0, done.output
     assert "✓ default/train at imports/words/train: version 1, 500 rows" in done.output
     assert "✓ default/test at imports/words/test: version 1, 10 rows" in done.output
-    assert (
-        "default/train 1/4: data/train-0.parquet (250 rows, " in done.output
-    )  # a line per file, off a terminal
+    # A line per file off a terminal, numbered in the order workers finish them.
+    assert re.search(
+        r"^default/train [1-4]/4: data/train-0\.parquet \(250 rows, ", done.output, re.MULTILINE
+    )
 
     train = lance.dataset("s3://flock-datasets/imports/words/train")
     assert train.to_table().to_pylist() == rows(0, 500)

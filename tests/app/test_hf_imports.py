@@ -752,5 +752,7 @@ def test_deleting_the_org_cancels_its_imports(
     pk = api.post("/api/v1/orgs/lab/imports/hf", model_body()).json()["id"]
     wait_for(lambda: api.get(f"/api/v1/orgs/lab/imports/hf/{pk}").json()["bytes_done"] > 0)
     assert api.delete("/api/v1/orgs/lab").status == 204
-    assert sql(flock, "SELECT state FROM hf_imports WHERE pk = $1", pk)[0][0] == "cancelled"
+    # The background purge (D80) may already have removed the org, and the row with it.
+    states = sql(flock, "SELECT state FROM hf_imports WHERE pk = $1", pk)
+    assert [row[0] for row in states] in ([], ["cancelled"])
     wait_for(lambda: flock.store.hf_imports.jobs == {})
