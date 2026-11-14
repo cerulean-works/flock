@@ -12,7 +12,7 @@ import torch
 from transformers import AutoModelForCausalLM, LlamaConfig, Olmo2Config, Qwen3Config
 
 from flock.hub.models.files import build, write_model
-from flock.training.core.lr_scheduler import CosineConfig
+from flock.training.core.lr_scheduler import LRSchedulerConfig, LRScheduleSegment
 from flock.training.core.models import HFCompatibleConfig, HFCompatibleModel, registry
 from flock.training.core.optimization import AdamWConfig
 from flock.training.core.trainer import Trainer, TrainerConfig
@@ -224,7 +224,13 @@ def make_trainer(
                 "input_column": "text",
                 "batch_size": 2,
                 "optimizer_config": AdamWConfig(lr=0.01, betas=(0.8, 0.9)),
-                "lr_scheduler_config": CosineConfig(warmup_steps=0, min_lr_ratio=0.1),
+                "lr_scheduler_config": LRSchedulerConfig(
+                    schedule=[
+                        LRScheduleSegment(
+                            start=0, end=1.0, start_ratio=1.0, end_ratio=0.1, interpolation="cosine"
+                        )
+                    ]
+                ),
                 "dataloader_num_workers": 0,
                 "dataloader_prefetch_factor": None,
                 "wandb_project": "offline-test",

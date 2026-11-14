@@ -30,7 +30,7 @@ from flock.hub.models.files import write_training_state
 from flock.training.core import trainer as trainer_module
 from flock.training.core.checkpoint import TrainerCheckpoint
 from flock.training.core.data_utils import LanceBatchCollator
-from flock.training.core.lr_scheduler import CosineConfig, WSDConfig
+from flock.training.core.lr_scheduler import LRSchedulerConfig, LRScheduleSegment
 from flock.training.core.models import BaseModel
 from flock.training.core.models.olmo2 import Olmo2
 from flock.training.core.optimization import AdamWConfig, MuonConfig
@@ -51,7 +51,6 @@ if TYPE_CHECKING:
     from flock.hub.models._common import ModelVersion, Ref
     from flock.hub.models.upload import PendingUpload
     from flock.training.core.data_utils import Batch
-    from flock.training.core.lr_scheduler import LRSchedulerConfig
     from flock.training.core.models.olmo2 import Olmo2Config
 
 
@@ -112,7 +111,17 @@ def trainer_factory(
                     "input_column": "text",
                     "batch_size": 2,
                     "optimizer_config": AdamWConfig(lr=0.01, betas=(0.8, 0.9)),
-                    "lr_scheduler_config": CosineConfig(warmup_steps=0, min_lr_ratio=0.1),
+                    "lr_scheduler_config": LRSchedulerConfig(
+                        schedule=[
+                            LRScheduleSegment(
+                                start=0,
+                                end=1.0,
+                                start_ratio=1.0,
+                                end_ratio=0.1,
+                                interpolation="cosine",
+                            )
+                        ]
+                    ),
                     "dataloader_num_workers": num_workers,
                     "dataloader_prefetch_factor": prefetch_factor,
                     "wandb_project": "offline-test",
@@ -665,8 +674,23 @@ def simulated_cuda_rng(monkeypatch: pytest.MonkeyPatch) -> Callable[[int], list[
 @pytest.mark.parametrize(
     "schedule",
     [
-        CosineConfig(warmup_steps=1, min_lr_ratio=0.1),
-        WSDConfig(warmup_steps=1, decay_steps=1, min_lr_ratio=0.1),
+        LRSchedulerConfig(
+            schedule=[
+                LRScheduleSegment(start=0, end=1, start_ratio=0.0, end_ratio=1.0),
+                LRScheduleSegment(
+                    start=1, end=1.0, start_ratio=1.0, end_ratio=0.1, interpolation="cosine"
+                ),
+            ]
+        ),
+        LRSchedulerConfig(
+            schedule=[
+                LRScheduleSegment(start=0, end=1, start_ratio=0.0, end_ratio=1.0),
+                LRScheduleSegment(start=1, end=2, start_ratio=1, end_ratio=1),
+                LRScheduleSegment(
+                    start=2, end=1.0, start_ratio=1.0, end_ratio=0.1, interpolation="cosine"
+                ),
+            ]
+        ),
     ],
     ids=["cosine", "wsd"],
 )
@@ -902,7 +926,14 @@ def test_checkpoint_preserves_tied_parameters_and_optimizer_references(
     cast(Olmo2, trainer.model).lm_head.weight = cast(Olmo2, trainer.model).model.embed_tokens.weight
     trainer.optimizer = trainer._get_optimizer(AdamWConfig(lr=0.01, betas=(0.8, 0.9)))
     trainer.lr_scheduler = trainer._get_lr_scheduler(
-        CosineConfig(warmup_steps=0, min_lr_ratio=0.1), trainer.total_steps
+        LRSchedulerConfig(
+            schedule=[
+                LRScheduleSegment(
+                    start=0, end=1.0, start_ratio=1.0, end_ratio=0.1, interpolation="cosine"
+                )
+            ]
+        ),
+        trainer.total_steps,
     )
 
     def write_shards(model: BaseModel, folder: Path, **options: Any) -> None:
@@ -999,8 +1030,23 @@ def test_saved_checkpoints_remain_independent_of_later_updates(
 @pytest.mark.parametrize(
     "schedule",
     [
-        CosineConfig(warmup_steps=1, min_lr_ratio=0.1),
-        WSDConfig(warmup_steps=1, decay_steps=1, min_lr_ratio=0.1),
+        LRSchedulerConfig(
+            schedule=[
+                LRScheduleSegment(start=0, end=1, start_ratio=0.0, end_ratio=1.0),
+                LRScheduleSegment(
+                    start=1, end=1.0, start_ratio=1.0, end_ratio=0.1, interpolation="cosine"
+                ),
+            ]
+        ),
+        LRSchedulerConfig(
+            schedule=[
+                LRScheduleSegment(start=0, end=1, start_ratio=0.0, end_ratio=1.0),
+                LRScheduleSegment(start=1, end=2, start_ratio=1, end_ratio=1),
+                LRScheduleSegment(
+                    start=2, end=1.0, start_ratio=1.0, end_ratio=0.1, interpolation="cosine"
+                ),
+            ]
+        ),
     ],
     ids=["cosine", "wsd"],
 )
@@ -1047,13 +1093,41 @@ def test_loading_restores_progress_with_matching_settings_and_different_current_
 @pytest.mark.parametrize(
     "overrides, error",
     [
-        ({"lr_scheduler_config": WSDConfig(warmup_steps=0, decay_steps=1)}, "Scheduler config"),
         (
-            {"lr_scheduler_config": CosineConfig(warmup_steps=1, min_lr_ratio=0.1)},
+            {
+                "lr_scheduler_config": LRSchedulerConfig(
+                    schedule=[
+                        LRScheduleSegment(
+                            start=2, end=1.0, start_ratio=1.0, end_ratio=0.0, interpolation="cosine"
+                        )
+                    ]
+                )
+            },
             "Scheduler config",
         ),
         (
-            {"lr_scheduler_config": CosineConfig(warmup_steps=0, min_lr_ratio=0.2)},
+            {
+                "lr_scheduler_config": LRSchedulerConfig(
+                    schedule=[
+                        LRScheduleSegment(start=0, end=1, start_ratio=0.0, end_ratio=1.0),
+                        LRScheduleSegment(
+                            start=1, end=1.0, start_ratio=1.0, end_ratio=0.1, interpolation="cosine"
+                        ),
+                    ]
+                )
+            },
+            "Scheduler config",
+        ),
+        (
+            {
+                "lr_scheduler_config": LRSchedulerConfig(
+                    schedule=[
+                        LRScheduleSegment(
+                            start=0, end=1.0, start_ratio=1.0, end_ratio=0.2, interpolation="cosine"
+                        )
+                    ]
+                )
+            },
             "Scheduler config",
         ),
         ({"optimizer_config": AdamWConfig(lr=0.3, betas=(0.8, 0.9))}, "base_lrs"),
@@ -1098,7 +1172,7 @@ def test_incompatible_schedule_or_optimizer_is_rejected_before_loading(
         ("group-size", "group 0 size"),
         ("weight_decay", "group 0 settings"),
         ("eps", "group 0 settings"),
-        ("decay_steps", "Scheduler config"),
+        ("decay-start", "Scheduler config"),
     ],
 )
 def test_incompatible_optimizer_layout_or_wsd_settings_reject_before_loading(
@@ -1109,7 +1183,15 @@ def test_incompatible_optimizer_layout_or_wsd_settings_reject_before_loading(
     change: str,
     error: str,
 ) -> None:
-    schedule = WSDConfig(warmup_steps=1, decay_steps=1, min_lr_ratio=0.1)
+    schedule = LRSchedulerConfig(
+        schedule=[
+            LRScheduleSegment(start=0, end=1, start_ratio=0.0, end_ratio=1.0),
+            LRScheduleSegment(start=1, end=2, start_ratio=1, end_ratio=1),
+            LRScheduleSegment(
+                start=2, end=1.0, start_ratio=1.0, end_ratio=0.1, interpolation="cosine"
+            ),
+        ]
+    )
     source, _, _ = trainer_factory(
         num_workers=0, prefetch_factor=None, lr_scheduler_config=schedule
     )
@@ -1121,8 +1203,10 @@ def test_incompatible_optimizer_layout_or_wsd_settings_reject_before_loading(
         groups.append(copy.deepcopy(groups[0]))
     elif change == "group-size":
         groups[0]["params"].pop()
-    elif change == "decay_steps":
-        saved["lr_scheduler_state_dict"]["config"]["decay_steps"] = 2
+    elif change == "decay-start":
+        saved_schedule = saved["lr_scheduler_state_dict"]["config"]["schedule"]
+        saved_schedule[-2]["end"] = 0.75
+        saved_schedule[-1]["start"] = 0.75
     else:
         groups[0][change] *= 2
 
@@ -1907,13 +1991,11 @@ def test_empty_dataset_is_rejected_without_an_optimizer_update(
     trainer_factory: TrainerFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    trainer, run, _ = trainer_factory(dataset=[])
     updates = []
-    monkeypatch.setattr(trainer.optimizer, "step", lambda: updates.append(True))
-    with pytest.raises(ValueError):
-        trainer.train()
+    monkeypatch.setattr(torch.optim.AdamW, "step", lambda self: updates.append(True))
+    with pytest.raises(ValueError, match="total_steps"):
+        trainer_factory(dataset=[])
     assert updates == []
-    assert run.metrics == []
 
 
 def test_real_spawned_loader_reads_temporary_lance_dataset(

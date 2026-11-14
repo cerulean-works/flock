@@ -64,7 +64,7 @@ class CheckpointSchedulerState(CheckpointSchema):
     """Describe the scheduler state persisted separately from the optimizer.
 
     Attributes:
-        config (`dict[str, Any]`): Schedule discriminator and configuration fields.
+        config (`dict[str, Any]`): Learning-rate timeframes and interpolation fields.
         total_steps (`int`): Nonnegative planned update count.
         base_lrs (`list[float]`): Original rate for each optimizer parameter group.
         completed_steps (`int`): Nonnegative completed update count.

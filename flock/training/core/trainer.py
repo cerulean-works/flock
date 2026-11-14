@@ -49,7 +49,7 @@ class TrainerConfig(PydanticBaseModel):
         batch_size (`int`): Positive number of dataset rows per optimizer update.
         optimizer_config (`OptimizerConfig`):
             Optimizer settings. Only `AdamWConfig` is currently implemented.
-        lr_scheduler_config (`LRSchedulerConfig`): Cosine or warmup-stable-decay settings.
+        lr_scheduler_config (`LRSchedulerConfig`): Learning-rate timeframes and interpolation.
         dataloader_prefetch_factor (`int`, *optional*, defaults to `4`):
             Positive batches prefetched per worker. Must be `None` with zero workers.
             With workers, `None` uses PyTorch's default.
