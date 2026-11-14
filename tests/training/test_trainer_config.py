@@ -30,6 +30,7 @@ def config_values() -> dict[str, Any]:
     "field",
     [
         "batch_size",
+        "max_steps",
         "logging_steps",
         "validation_steps",
         "validation_limit",

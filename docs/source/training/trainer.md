@@ -68,6 +68,9 @@ config = TrainerConfig(
 
 `batch_size` counts dataset rows per update. The run has
 `ceil(len(dataset) / batch_size)` updates, including a final partial batch.
+Set `max_steps` to end the run earlier: training stops after that many updates of
+the same shuffled order, and both schedules decay over the shorter run. A checkpoint
+resumes only with the same effective number of updates.
 **WSD** means warmup, stable, decay: increase the learning rate linearly, hold it
 at the optimizer's configured rate, then decay it with a cosine curve over the
 last `decay_steps`. Choose warmup and decay lengths that fit the run. For cosine

@@ -147,6 +147,102 @@ def test_trainer_initializes_schedule_and_metric_step(
     ]
 
 
+@pytest.mark.parametrize("max_steps", [3, 100])
+def test_step_cap_at_or_past_the_pass_changes_nothing(
+    trainer_factory: TrainerFactory, max_steps: int
+) -> None:
+    default, default_run, _ = trainer_factory(num_workers=0, prefetch_factor=None)
+    default.train()
+    capped, capped_run, _ = trainer_factory(
+        num_workers=0, prefetch_factor=None, max_steps=max_steps
+    )
+    capped.train()
+    assert capped.total_steps == capped.lr_scheduler.total_steps == 3
+    assert capped_run.metrics == default_run.metrics
+    assert_nested_equal(capped.model.state_dict(), default.model.state_dict())
+    assert_nested_equal(capped.get_trainer_state(), default.get_trainer_state())
+
+
+@pytest.mark.parametrize(
+    "schedule",
+    [
+        CosineConfig(warmup_steps=0, min_lr_ratio=0.1),
+        WSDConfig(warmup_steps=0, decay_steps=1, min_lr_ratio=0.1),
+    ],
+    ids=["cosine", "wsd"],
+)
+def test_step_cap_ends_the_run_and_its_schedule_at_the_cap(
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    schedule: LRSchedulerConfig,
+) -> None:
+    trainer, run, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        logging_steps=5,
+        save_steps=5,
+        max_steps=2,
+        lr_scheduler_config=schedule,
+    )
+    seen_batches = []
+    forward = trainer.model._forward
+
+    def recording_forward(*args: Any) -> torch.Tensor:
+        seen_batches.append(args[0].detach().clone())
+        return forward(*args)
+
+    monkeypatch.setattr(trainer.model, "_forward", recording_forward)
+    trainer.train()
+    uncapped, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
+    first_two = list(uncapped._get_training_dataloader())[:2]
+
+    assert trainer.total_steps == trainer.lr_scheduler.total_steps == 2
+    assert trainer.lr_scheduler.completed_steps == 2
+    # The decay ends at the cap, not at the end of the full pass.
+    assert trainer.lr_scheduler.get_last_lr() == pytest.approx([0.001])
+    assert [metrics["global_step"] for metrics in run.metrics] == [2]
+    assert [path.name for path in trainer._checkpoints()] == ["checkpoint-2"]
+    assert_nested_equal(seen_batches, [batch["input_ids"] for batch in first_two])
+
+
+def test_step_cap_resumes_to_the_same_update_and_rejects_a_changed_cap(
+    trainer_factory: TrainerFactory, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def make(output_dir: Path, max_steps: int = 2) -> TrainerBundle:
+        return trainer_factory(
+            num_workers=0,
+            prefetch_factor=None,
+            output_dir=str(output_dir),
+            save_steps=1,
+            max_steps=max_steps,
+        )
+
+    reference, reference_run, _ = make(tmp_path / "reference")
+    reference.train()
+
+    interrupted, first_run, _ = make(tmp_path / "resumed")
+    save = interrupted.save_model
+
+    def save_and_interrupt() -> None:
+        save()
+        raise InterruptedError("simulate process exit after the first checkpoint")
+
+    monkeypatch.setattr(interrupted, "save_model", save_and_interrupt)
+    with pytest.raises(InterruptedError):
+        interrupted.train()
+
+    changed, _, _ = make(interrupted.output_dir, max_steps=3)
+    with pytest.raises(ValueError, match="progress do not match this run"):
+        changed.train(resume_from_checkpoint=True)
+
+    resumed, resumed_run, _ = make(interrupted.output_dir)
+    resumed.train(resume_from_checkpoint=True)
+    assert int(resumed.state.step.item()) == 2
+    assert first_run.metrics + resumed_run.metrics == reference_run.metrics
+    assert_nested_equal(resumed.model.state_dict(), reference.model.state_dict())
+    assert_nested_equal(resumed.get_trainer_state(), reference.get_trainer_state())
+
+
 @pytest.fixture
 def validation_tasks(monkeypatch: pytest.MonkeyPatch) -> list[PerplexityTask | MultipleChoiceTask]:
     """Real task/scorer paths with local rows and the training fixture's tokenizer."""

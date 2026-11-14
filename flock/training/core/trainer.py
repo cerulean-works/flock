@@ -7,6 +7,7 @@ import random
 import shutil
 import tempfile
 from dataclasses import asdict
+from itertools import islice
 from json import JSONDecodeError
 from pathlib import Path
 from typing import Any, Literal, Self, cast, overload
@@ -47,6 +48,9 @@ class TrainerConfig(PydanticBaseModel):
             This is not passed to `wandb.init` as the tracking run's name.
         input_column (`str`): Text column read from each Lance row.
         batch_size (`int`): Positive number of dataset rows per optimizer update.
+        max_steps (`int`, *optional*):
+            Positive cap on optimizer updates. The run and its learning-rate schedule
+            end at the cap, or at the end of the pass if that comes first.
         optimizer_config (`OptimizerConfig`):
             Optimizer settings. Only `AdamWConfig` is currently implemented.
         lr_scheduler_config (`LRSchedulerConfig`): Cosine or warmup-stable-decay settings.
@@ -101,6 +105,7 @@ class TrainerConfig(PydanticBaseModel):
 
     input_column: str
     batch_size: int = Field(gt=0)
+    max_steps: int | None = Field(default=None, gt=0)
 
     optimizer_config: OptimizerConfig
     lr_scheduler_config: LRSchedulerConfig
@@ -312,6 +317,9 @@ class Trainer:
         self.logging_steps = config.logging_steps
 
         self.total_steps = math.ceil(len(self.dataset) / self.batch_size)
+        if config.max_steps is not None:
+            # The schedules and the checkpoint check plan over the capped run.
+            self.total_steps = min(self.total_steps, config.max_steps)
         self.optimizer = self._get_optimizer(config.optimizer_config)
         self.lr_scheduler = self._get_lr_scheduler(config.lr_scheduler_config, self.total_steps)
 
@@ -413,7 +421,9 @@ class Trainer:
 
     def _inner_training_loop(self, dataloader: DataLoader, start_step: int) -> None:
         """Update once per batch, then log, save and evaluate at configured intervals."""
-        for step, batch in enumerate(dataloader, start=start_step + 1):
+        # The loader yields the whole pass; a step cap stops it early.
+        batches = islice(dataloader, self.total_steps - start_step)
+        for step, batch in enumerate(batches, start=start_step + 1):
             self.optimizer.zero_grad()
 
             batch = cast(Batch, batch)
