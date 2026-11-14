@@ -142,13 +142,13 @@ A new CLI group, next to `flock models`:
 
 | Command | Does |
 | --- | --- |
-| `flock datasets import REPO DEST [--config] [--split]… [--revision] [--workers] [--mode] [--org] [--keep DIR]` | download and convert in one step |
-| `flock datasets download REPO --to DIR [--config] [--split]… [--revision]` | download only |
+| `flock datasets import REPO DEST [--config]… [--split]… [--revision] [--workers] [--mode] [--org] [--keep DIR]` | download and convert in one step |
+| `flock datasets download REPO --to DIR [--config]… [--split]… [--revision]` | download only |
 | `flock datasets convert DIR DEST [--workers] [--mode] [--org]` | convert a downloaded folder |
 | `flock datasets list [PATH] [--org]` | what the Datasets tab shows at a folder |
 
-`--config` defaults to the repo's only config, or `default`, and asks for one when there are
-several and none is called that. `--split` repeats and defaults to all.
+`--config` repeats (D129). It defaults to the repo's only config, or `default`, and asks for
+one when there are several and none is called that. `--split` repeats and defaults to all.
 
 ### D123. A model import writes a normal Flock version
 
@@ -285,6 +285,26 @@ class HFCompatibleModel(BaseModel):
 - **`initializer_range`** defaults to the HF config's, so a fresh Qwen starts at Qwen's scale.
 - **Pretrained models** are built on the meta device and given their weights, as `build` does,
   so no time goes into an init that's thrown away.
+
+### D129. Several configs in one import
+
+Added after the first review, at the user's request.
+
+- **`config` takes several.** `download_from_hf`, `import_from_hf`, `flock datasets download` and
+  `flock datasets import` take a list of configs (`--config` repeated). One name still works as
+  before.
+- **One folder, one conversion.** The download puts every chosen config's files in one folder.
+  `flock-import.json` lists each config's splits and files. `convert` writes them all with one
+  pool of workers, and commits each split of each config on its own, so each one still appears
+  in full or not at all.
+- **Where they land.** `{dest}/{config}/{split}` whenever the repo has several configs, as D121
+  says. The dataset card goes to `{dest}/README.md` and to each split's folder.
+- **Splits across configs.** `--split` keeps a split in every chosen config that has it. A split
+  that no chosen config has is refused. A config left with no splits is refused too.
+- **The web app.** The dataset dialog shows each config with a checkbox and its splits under it.
+  The default config is checked. The API takes `configs` (a list) in place of `config`, and the
+  size limit counts every chosen config. One import makes every dataset, and its result lists
+  them all.
 
 ---
 
