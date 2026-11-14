@@ -248,6 +248,84 @@ still selects CUDA if it is available.
 PyTorch warns that FP32 training autocast is unsupported and disables it;
 the example's weights and computations remain FP32.
 
+## Choose an attention backend
+
+`Olmo2Config.attn_implementation` defaults to `"sdpa"`, which lets PyTorch choose
+an attention kernel. Leave it unset to keep the default.
+
+Pass a `[batch, sequence]` padding mask in `Batch["attention_mask"]`, with True/1
+for real tokens. OLMo 2 handles causality and prepares the backend's mask for you.
+
+### Use FlashAttention-3
+
+FA3 requires a Hopper GPU (compute capability 9.0), FP16 or BF16 Q/K/V, and an
+external FlashAttention-3 installation compatible with your PyTorch and CUDA
+versions. The trainer uses BF16 autocast by default.
+
+```python
+from dataclasses import replace
+
+from flock.training.core.models import OLMO2_1B_CONFIG
+
+config = replace(OLMO2_1B_CONFIG, attn_implementation="flash_attention_3")
+```
+
+Unsupported inputs raise an error; there is no fallback. FA3 supports full-sequence
+self-attention with padding at either end and empty rows. Masks with holes,
+dense masks and unequal Q/K sequence lengths are unsupported. For padded batches,
+each layer packs real-token Q/K/V and calls PyTorch's
+`torch.nn.attention.varlen.varlen_attn` once using the registered FA3 kernels.
+The model validates padding and copies token spans to a
+CPU int64 tensor once per forward. All decoder layers reuse those spans. Each
+attention call builds packing indices and cumulative sequence lengths on CPU,
+copies those tensors to CUDA, and restores the packed output to the batch shape.
+Unpadded batches use one batched SDPA call per layer.
+
+The padded path uses a single split (`num_splits=1`) and casts packed Q/K/V to
+the CUDA autocast dtype when autocast is enabled. PyTorch's FA3 integration
+honors its deterministic-algorithm setting during backward.
+
+FA3 attention outputs are zero at padding query positions. Final model logits at
+those positions can differ from SDPA because residual connections still process
+padding tokens. Compare real-token outputs and ignore padding in the loss; the
+trainer's collator already excludes targets involving padding. Empty rows are
+omitted from the packed batch. An entirely padded batch skips the attention
+kernels while retaining zero gradients.
+
+FA3 activation affects PyTorch's Flash backend throughout the process. Keep it
+active until all pending backward passes finish.
+
+### Register a custom backend
+
+Register your attention function with a matching mask preparer. For an
+`attention_fn` that accepts SDPA masks:
+
+```python
+from flock.training.core.attention import AttentionInterface, prepare_sdpa_mask
+
+AttentionInterface.register("custom", attention_fn, mask_preparer=prepare_sdpa_mask)
+```
+
+Set `attn_implementation="custom"` to select it. Register before constructing or
+loading the model; saved configs keep the backend name.
+
+The function takes Q/K/V shaped `[batch, heads, sequence, head_dim]` and keyword
+arguments `attention_mask` and `is_causal`. Return the same layout, with Q's heads
+and sequence length. `is_causal` describes the model's attention pattern. With
+SDPA, an explicit mask must include the causal restriction. The `sdpa_attention`
+adapter enables the kernel's causal flag only when the mask is `None`.
+
+For another mask format, supply a preparer that takes a boolean 2D `padding_mask`
+(or `None`) and keyword-only `is_causal`. Return a tensor or `None`. The model
+prepares the mask once per forward and shares it across decoder layers.
+
+For FA3, `prepare_flash_attention_mask` returns a CPU int64 tensor shaped
+`[batch, 2]`. Each row contains the start and exclusive stop of the valid token
+span. Direct callers of `flash_attention_3` must prepare their padding mask first
+and pass these spans on CPU, even though Q/K/V are on CUDA. Each attention call
+derives its packing tensors from the spans, so scalar reads stay on CPU.
+Unpadded inputs use `None` and one batched attention call.
+
 ## Check the run
 
 Watch `global_step`, `train/loss_mean`, `train/loss_window_max`,

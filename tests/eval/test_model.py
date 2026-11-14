@@ -21,6 +21,7 @@ from transformers import (
 from flock.eval import model
 from flock.eval.model import FlockCausalLM, ModelRef, ScoringModel
 from flock.eval.requests import Request
+from flock.training.core.attention import AttentionInterface, prepare_sdpa_mask, sdpa_attention
 from flock.training.core.models import Olmo2, Olmo2Config
 
 if TYPE_CHECKING:
@@ -208,9 +209,17 @@ def test_a_multimodal_model_takes_max_length_from_its_text_config(
     assert towers_ran == []
 
 
+@pytest.mark.parametrize("attn_implementation", ["sdpa", "custom"])
 def test_a_wrapped_flock_model_scores_as_its_own_forward_pass(
     tokenizer: PreTrainedTokenizerFast,
+    monkeypatch: pytest.MonkeyPatch,
+    attn_implementation: str,
 ) -> None:
+    if attn_implementation == "custom":
+        monkeypatch.setattr(
+            AttentionInterface, "_global_mapping", AttentionInterface._global_mapping.copy()
+        )
+        AttentionInterface.register("custom", sdpa_attention, mask_preparer=prepare_sdpa_mask)
     flock_model = Olmo2(
         Olmo2Config(
             vocab_size=len(tokenizer),
@@ -220,10 +229,15 @@ def test_a_wrapped_flock_model_scores_as_its_own_forward_pass(
             num_attention_heads=4,
             num_key_value_heads=2,
             max_position_embeddings=128,
+            attn_implementation=attn_implementation,
         )
     )
     scorer = ScoringModel(FlockCausalLM(flock_model), tokenizer, name="flock:acme/m@1")
-    assert (scorer.max_length, scorer.attention, scorer.dtype) == (128, "sdpa", torch.float32)
+    assert (scorer.max_length, scorer.attention, scorer.dtype) == (
+        128,
+        attn_implementation,
+        torch.float32,
+    )
     assert scorer.device == torch.device("cpu")
     scores = scorer.loglikelihood(REQUESTS)
 

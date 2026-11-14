@@ -1,11 +1,16 @@
 """Implement full-sequence OLMo 2 models and fresh-initialization presets."""
 
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import nn
 
-from flock.training.core.nn import GroupedAttentionWithRoPE, SwiGLU
+from flock.training.core.attention import (
+    AttentionInterface,
+    GroupedAttentionWithRoPE,
+)
+from flock.training.core.nn import SwiGLU
 
 from .base import BaseModel
 
@@ -28,6 +33,8 @@ class Olmo2Config:
             Positive normal-initialization standard deviation.
         init_seed (`int`, *optional*, defaults to `42`): Model weight initialization seed.
         hf_repo (`str`, *optional*): Tokenizer repository or directory, never pretrained weights.
+        attn_implementation (`str`, *optional*, defaults to `"sdpa"`):
+            Registered attention implementation to use.
 
     Raises:
         `ValueError`: If dimensions, head divisibility or positive scales are invalid.
@@ -45,6 +52,8 @@ class Olmo2Config:
     initializer_range: float = 0.02
     init_seed: int = 42
     hf_repo: str | None = None
+    # Attention implementation is optional.
+    attn_implementation: str = "sdpa"
 
     def __post_init__(self) -> None:
         """Validate positive dimensions, grouped heads and an even RoPE head width."""
@@ -108,6 +117,8 @@ class Olmo2DecoderLayer(nn.Module):
             num_key_value_heads=config.num_key_value_heads,
             q_norm=nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps),
             k_norm=nn.RMSNorm(config.num_key_value_heads * head_dim, eps=config.rms_norm_eps),
+            # Attention implementation is optional.
+            attn_implementation=config.attn_implementation,
         )
         self.mlp = SwiGLU(
             hidden_size=config.hidden_size, intermediate_size=config.intermediate_size
@@ -128,8 +139,8 @@ class Olmo2DecoderLayer(nn.Module):
             x (`torch.Tensor`): Hidden states shaped `[batch, sequence, hidden]`.
             cos (`torch.Tensor`): RoPE cosines broadcastable to attention heads.
             sin (`torch.Tensor`): RoPE sines with the same shape as `cos`.
-            attention_mask (`torch.Tensor` or `None`): Complete SDPA attention mask.
-                With `None`, use SDPA's causal mode.
+            attention_mask (`torch.Tensor` or `None`):
+                Mask prepared for the selected attention implementation.
 
         Returns:
             `torch.Tensor`: Hidden states shaped `[batch, sequence, hidden]`.
@@ -138,7 +149,7 @@ class Olmo2DecoderLayer(nn.Module):
             x,
             position_embeddings=(cos, sin),
             attention_mask=attention_mask,
-            is_causal=attention_mask is None,
+            is_causal=True,
         )
         x = x + self.post_attention_layernorm(attention_output)
         return x + self.post_feedforward_layernorm(self.mlp(x))
@@ -154,6 +165,7 @@ class Olmo2Model(nn.Module):
     def __init__(self, config: Olmo2Config) -> None:
         """Construct embeddings, decoder layers and final normalization."""
         super().__init__()
+        self.mask_preparer = AttentionInterface.get_mask_preparer(config.attn_implementation)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList(
             Olmo2DecoderLayer(config) for _ in range(config.num_hidden_layers)
@@ -172,14 +184,15 @@ class Olmo2Model(nn.Module):
 
         Args:
             input_ids (`torch.Tensor`): Token IDs shaped `[batch, sequence]`.
-            attention_mask (`torch.Tensor` or `None`): Complete SDPA mask, or
-                `None` for causal attention without padding.
+            attention_mask (`torch.Tensor` or `None`): Boolean padding mask shaped
+                `[batch, sequence]`; `None` means every token is valid.
             position_ids (`torch.Tensor`): Positions shaped `[batch, sequence]`.
 
         Returns:
             `torch.Tensor`: Normalized states shaped `[batch, sequence, hidden]`.
         """
-        x = self.embed_tokens(input_ids)
+        mask = self.mask_preparer(attention_mask, is_causal=True)
+        x: Any = self.embed_tokens(input_ids)
         # Build frequencies in float32 even when model weights are cast to bfloat16.
         inv_freq = self.rope_theta ** (
             -torch.arange(0, self.head_dim, 2, device=x.device, dtype=torch.float32) / self.head_dim
@@ -188,7 +201,7 @@ class Olmo2Model(nn.Module):
         angles = torch.cat((freqs, freqs), dim=-1).unsqueeze(1)
         cos, sin = angles.cos(), angles.sin()
         for layer in self.layers:
-            x = layer(x, cos, sin, attention_mask)
+            x: Any = layer(x, cos, sin, mask)
         return self.norm(x)
 
 

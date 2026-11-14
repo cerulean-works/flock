@@ -2,7 +2,8 @@
 
 import torch
 from torch import nn
-from torch.nn import functional as F
+
+from .registry import AttentionFunction, AttentionInterface
 
 
 class GroupedAttentionWithRoPE(nn.Module):
@@ -12,6 +13,9 @@ class GroupedAttentionWithRoPE(nn.Module):
     into heads. Pass modules that accept those widths (hidden_size for Q and
     num_key_value_heads * head_dim for K).
 
+    `attn_implementation` selects a registered function and defaults to `sdpa`.
+    The kernel is resolved at construction; projections and RoPE stay in this module.
+
     Args:
         hidden_size (`int`): Positive input/output width divisible by query-head count.
         num_attention_heads (`int`): Positive query-head count.
@@ -20,6 +24,8 @@ class GroupedAttentionWithRoPE(nn.Module):
         bias (`bool`, *optional*, defaults to `False`): Add biases to all projections.
         q_norm (`nn.Module`, *optional*): Normalization over the projected query width.
         k_norm (`nn.Module`, *optional*): Normalization over the projected key width.
+        attn_implementation (`str`, *optional*, defaults to `"sdpa"`):
+            Registered attention implementation to use.
 
     Raises:
         `ValueError`: If widths/head counts are nonpositive or not divisible.
@@ -34,11 +40,13 @@ class GroupedAttentionWithRoPE(nn.Module):
         bias: bool = False,
         q_norm: nn.Module | None = None,
         k_norm: nn.Module | None = None,
+        # By default, use PyTorch's SDPA implementation.
+        attn_implementation: str = "sdpa",
     ) -> None:
         """Validate head dimensions and construct projections and normalization."""
         super().__init__()
         if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
+            num_key_value_heads: int = num_attention_heads
         if hidden_size <= 0 or num_attention_heads <= 0 or num_key_value_heads <= 0:
             raise ValueError("hidden_size and attention head counts must be positive")
         if hidden_size % num_attention_heads:
@@ -49,6 +57,7 @@ class GroupedAttentionWithRoPE(nn.Module):
         self.num_heads = num_attention_heads
         self.num_kv_heads = num_key_value_heads
         self.head_dim = hidden_size // num_attention_heads
+        self.attention_fn: AttentionFunction = AttentionInterface.get_interface(attn_implementation)
 
         kv_size = num_key_value_heads * self.head_dim
 
@@ -75,21 +84,20 @@ class GroupedAttentionWithRoPE(nn.Module):
         attention_mask: torch.Tensor | None = None,
         is_causal: bool = False,
     ) -> torch.Tensor:
-        """Map [batch, sequence, hidden] to the same shape using PyTorch SDPA.
+        """Map [batch, sequence, hidden] to the same shape using the selected attention function.
 
         RoPE cos/sin must broadcast to [batch, heads, sequence, head_dim].
-        Masks follow SDPA semantics: True allows attention; floats are additive.
-        Supply either a complete attention mask (including causal constraints)
-        or is_causal=True for unmasked causal attention.
+        attention_mask and is_causal are forwarded unchanged to the selected
+        attention function, which defines supported mask formats and combinations.
 
         Args:
             x (`torch.Tensor`): Hidden states shaped `[batch, sequence, hidden]`.
             position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Cosines and sines for split-half RoPE. Omit to skip rotary embeddings.
-            attention_mask (`torch.Tensor`, *optional*): SDPA mask broadcastable to
-                `[batch, heads, sequence, sequence]`, including causal constraints.
+            attention_mask (`torch.Tensor`, *optional*):
+                Mask prepared for the selected attention implementation.
             is_causal (`bool`, *optional*, defaults to `False`):
-                Use SDPA causal attention when no explicit mask is supplied.
+                Request causal attention from the selected implementation.
 
         Returns:
             `torch.Tensor`: Projected states with the same shape as `x`.
@@ -103,7 +111,7 @@ class GroupedAttentionWithRoPE(nn.Module):
         k = self.k_norm(self.k_proj(x)).view(batch_size, seq_len, self.num_kv_heads, self.head_dim)
         v = self.v_proj(x).view(batch_size, seq_len, self.num_kv_heads, self.head_dim)
 
-        q, k = q.transpose(1, 2), k.transpose(1, 2)
+        q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
 
         if position_embeddings is not None:
             if self.head_dim % 2:
@@ -112,13 +120,12 @@ class GroupedAttentionWithRoPE(nn.Module):
             q = self._apply_rope(q, cos, sin)
             k = self._apply_rope(k, cos, sin)
 
-        output = F.scaled_dot_product_attention(
+        output = self.attention_fn(
             q,
             k,
-            v.transpose(1, 2),
-            attn_mask=attention_mask,
+            v,
+            attention_mask=attention_mask,
             is_causal=is_causal,
-            enable_gqa=self.num_heads != self.num_kv_heads,
         )
 
         return self.o_proj(output.transpose(1, 2).reshape(batch_size, seq_len, -1))

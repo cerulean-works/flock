@@ -127,7 +127,7 @@ The `Olmo2` forward and tokenizer methods follow the `BaseModel` contract above.
 
 ### Neural network layers
 
-[[autodoc]] training.core.nn.GroupedAttentionWithRoPE
+[[autodoc]] training.core.attention.GroupedAttentionWithRoPE
     - forward
 
 [[autodoc]] training.core.nn.SwiGLU

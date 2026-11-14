@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import replace
+import json
+from dataclasses import asdict, replace
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
@@ -9,13 +10,14 @@ import torch
 from huggingface_hub import constants
 from torch.nn import functional as F
 
+from flock.training.core.attention import AttentionInterface, prepare_sdpa_mask, sdpa_attention
 from flock.training.core.data_utils import Batch, LanceBatchCollator
 from flock.training.core.models.olmo2 import OLMO2_1B_CONFIG, OLMO2_7B_CONFIG, Olmo2
 from tests.training._reference import olmo2_training_parity
 
 if TYPE_CHECKING:
     from pathlib import Path
-    from typing import Any
+    from typing import Any, NoReturn
 
     from transformers import TokenizersBackend
 
@@ -54,6 +56,94 @@ def test_causality_and_padding_invariance(config: Olmo2Config) -> None:
         ):
             actual = model(make_batch(torch.tensor(padded), torch.tensor(mask)))
             torch.testing.assert_close(actual[:, start : start + 4], expected)
+
+
+def test_attn_implementation_survives_config_round_trip_and_reaches_every_layer(
+    config: Olmo2Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+
+    def recording_attention(
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        *,
+        attention_mask: torch.Tensor | None = None,
+        is_causal: bool = False,
+    ) -> torch.Tensor:
+        calls.append(attention_mask)
+        return sdpa_attention(q, k, v, attention_mask=attention_mask, is_causal=is_causal)
+
+    monkeypatch.setattr(
+        AttentionInterface, "_global_mapping", AttentionInterface._global_mapping.copy()
+    )
+    AttentionInterface.register("recording", recording_attention, mask_preparer=prepare_sdpa_mask)
+    selected_config = replace(config, attn_implementation="recording")
+    restored_config = type(config)(**json.loads(json.dumps(asdict(selected_config))))
+    assert restored_config.attn_implementation == "recording"
+    model = Olmo2(restored_config)
+    reference = Olmo2(config)
+    reference.load_state_dict(model.state_dict(), strict=True)
+    batch = make_batch(torch.tensor([[0, 2, 3, 4]]), torch.tensor([[0, 1, 1, 1]]))
+    torch.testing.assert_close(model(batch), reference(batch))
+    assert len(calls) == config.num_hidden_layers
+
+
+def test_config_without_attn_implementation_defaults_to_sdpa(config: Olmo2Config) -> None:
+    saved = asdict(config)
+    del saved["attn_implementation"]
+    restored = type(config)(**saved)
+    model = Olmo2(restored)
+    assert restored.attn_implementation == "sdpa"
+    batch = make_batch(torch.tensor([[2, 3, 4]]))
+    torch.testing.assert_close(model(batch), Olmo2(config)(batch))
+
+
+def test_model_resolves_mask_preparer_at_construction_and_prepares_once_per_forward(
+    config: Olmo2Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    preparations = []
+    calls = []
+
+    def prepare(padding_mask: torch.Tensor | None, *, is_causal: bool) -> torch.Tensor | None:
+        assert padding_mask is not None
+        assert padding_mask.ndim == 2 and padding_mask.dtype == torch.bool
+        assert is_causal is True
+        result = prepare_sdpa_mask(padding_mask, is_causal=is_causal)
+        preparations.append(result)
+        return result
+
+    def compute(
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        *,
+        attention_mask: torch.Tensor | None = None,
+        is_causal: bool = False,
+    ) -> torch.Tensor:
+        assert attention_mask is preparations[-1]
+        assert is_causal is True
+        calls.append((attention_mask, is_causal))
+        return sdpa_attention(q, k, v, attention_mask=attention_mask, is_causal=is_causal)
+
+    def replacement(*args: Any, **kwargs: Any) -> NoReturn:
+        pytest.fail("an existing model looked up a replaced backend")
+
+    monkeypatch.setattr(
+        AttentionInterface, "_global_mapping", AttentionInterface._global_mapping.copy()
+    )
+    AttentionInterface.register("prepared", compute, mask_preparer=prepare)
+    model = Olmo2(replace(config, attn_implementation="prepared"))
+    reference = Olmo2(config)
+    AttentionInterface.register("prepared", replacement, mask_preparer=replacement)
+    assert AttentionInterface.get_interface("prepared") is replacement
+    assert AttentionInterface.get_mask_preparer("prepared") is replacement
+
+    for count, mask in enumerate(([[0, 1, 1, 0]], [[1, 1, 1, 1]]), start=1):
+        batch = make_batch(torch.tensor([[0, 2, 3, 0]]), torch.tensor(mask))
+        torch.testing.assert_close(model(batch), reference(batch))
+        assert len(preparations) == count
+        assert len(calls) == count * config.num_hidden_layers
 
 
 @pytest.fixture
