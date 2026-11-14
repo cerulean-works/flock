@@ -106,7 +106,7 @@ Traefik's Swarm provider, by default, routes to each task's own IP and refreshes
 15 seconds. During a start-first update that leaves up to 15 seconds in which Traefik still sends
 requests to a task that has already been told to stop.
 
-With `traefik.docker.lbswarm=true`, Traefik routes to the service's virtual IP instead, and
+With `traefik.swarm.lbswarm=true`, Traefik routes to the service's virtual IP instead, and
 Swarm's own load balancer picks the task. Swarm takes a task out of the virtual IP before it
 sends it `SIGTERM`, and adds the new one only once it's healthy, so the switch is immediate.
 The router also exists for as long as the service does, so it can never 404 during a deploy.
@@ -117,7 +117,7 @@ Labels go under `deploy.labels`, as Swarm requires:
 deploy:
   labels:
     - traefik.enable=true
-    - traefik.docker.lbswarm=true
+    - traefik.swarm.lbswarm=true
     - traefik.http.routers.flock-api.rule=Host(`api.flock.example.com`)
     - traefik.http.routers.flock-api.entrypoints=websecure
     - traefik.http.routers.flock-api.tls.certresolver=letsencrypt
@@ -423,6 +423,7 @@ Where the build differs from the sections above:
   the tag to a digest on every deploy, so a moved tag is an update and a rollback returns to the
   digest before. For migrations, a skipped release is the one risk, so the step between an
   expand and its contract keeps the old and new columns in step with a trigger, not in code.
-- **Both Traefik label families (D140).** The stack sets `traefik.swarm.*` (Traefik v3's Swarm
-  provider) and `traefik.docker.*` (a v2 Docker provider in Swarm mode). Whichever doesn't apply
-  is ignored.
+- **Only Traefik's Swarm labels (D140).** The stack first set both `traefik.swarm.*` and
+  `traefik.docker.*`, expecting Traefik to ignore whichever didn't apply. Traefik v3 instead
+  skips a service that has both ("both Docker and Swarm labels are defined"), which left every
+  domain answering 404 on the first deploy. The stack now sets only `traefik.swarm.*`.
