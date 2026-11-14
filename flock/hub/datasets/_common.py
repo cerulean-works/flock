@@ -61,12 +61,10 @@ class Manifest:
             The Hugging Face dataset, as `owner/name`.
         revision (`str`):
             The commit the files were downloaded at.
-        config (`str`):
-            The config downloaded.
         configs (`list[str]`):
             Every config of the repo, which decides where splits land.
-        splits (`dict[str, list[DataFile]]`):
-            Each split's files, in order.
+        splits (`dict[str, dict[str, list[DataFile]]]`):
+            Each config downloaded, with each of its splits' files in order.
         card (`str`, *optional*):
             The dataset card, relative to the folder.
         ref (`str`, *optional*):
@@ -75,28 +73,34 @@ class Manifest:
 
     repo: str
     revision: str
-    config: str
     configs: list[str]
-    splits: dict[str, list[DataFile]]
+    splits: dict[str, dict[str, list[DataFile]]]
     card: str | None = None
     ref: str | None = None
-    version: int = field(default=1)
+    version: int = field(default=2)
+
+    @property
+    def files(self) -> list[DataFile]:
+        """Every file of every config and split, in order."""
+        return [f for splits in self.splits.values() for files in splits.values() for f in files]
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2) + "\n"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Self:
-        if data.get("version") != 1:
+        if data.get("version") != 2:
             raise DatasetError(f"{MANIFEST} has a version this Flock doesn't read")
         splits = {
-            split: [DataFile(f["path"], f["format"]) for f in files]
-            for split, files in data["splits"].items()
+            config: {
+                split: [DataFile(f["path"], f["format"]) for f in files]
+                for split, files in found.items()
+            }
+            for config, found in data["splits"].items()
         }
         return cls(
             repo=data["repo"],
             revision=data["revision"],
-            config=data["config"],
             configs=list(data["configs"]),
             splits=splits,
             card=data.get("card"),

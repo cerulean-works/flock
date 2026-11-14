@@ -3,7 +3,7 @@ reads (D119). Only the Hub is reached: nothing here needs Flock."""
 
 import posixpath
 import re
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable, Collection, Iterable, Mapping
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -16,6 +16,9 @@ PARQUET_REF = "refs/convert/parquet"
 CARD = "README.md"
 
 type Splits = dict[str, list[str]]
+
+type Configs = str | Collection[str] | Mapping[str, Collection[str] | None] | None
+"""The configs to import: one name, several, or each name with its own splits."""
 
 
 @cache
@@ -124,21 +127,51 @@ def repo_splits(files: Collection[str], config: dict[str, Any]) -> Splits:
     }
 
 
-def default_config(names: list[str], marked: str | None, requested: str | None) -> str:
-    """The config to import: `requested`, else the only one, the one marked default, or the one
-    called `default`."""
+def requested_configs(config: Configs) -> dict[str, list[str] | None] | None:
+    """
+    `config` as [`plan`] takes it, as each config asked for with its own splits (`None` when
+    the shared `splits` filter applies to it), or `None` for the default config.
+    """
+    if config is None:
+        return None
+    if isinstance(config, str):
+        return {config: None}
+    requested: dict[str, list[str] | None] = {}
+    if isinstance(config, Mapping):
+        for name, splits in config.items():
+            if splits is None:
+                requested[name] = None
+                continue
+            chosen = list(dict.fromkeys([splits] if isinstance(splits, str) else splits))
+            if not chosen:
+                raise DatasetError(f"No split of the config {name} is chosen.")
+            requested[name] = chosen
+    else:
+        requested = dict.fromkeys(config)
+    if not requested:
+        raise DatasetError("Choose at least one config.")
+    return requested
+
+
+def choose_configs(
+    names: list[str], marked: str | None, requested: dict[str, list[str] | None] | None
+) -> dict[str, list[str] | None]:
+    """The configs to import, in the repo's order, with the splits asked for in each:
+    `requested`, else the only one, the one marked default, or the one called `default`."""
     if requested is not None:
-        if requested not in names:
+        missing = [name for name in requested if name not in names]
+        if missing:
             raise DatasetError(
-                f"The dataset has no config {requested}. Its configs are {', '.join(names)}."
+                f"The dataset has no config {', '.join(missing)}. Its configs are "
+                f"{', '.join(names)}."
             )
-        return requested
+        return {name: requested[name] for name in names if name in requested}
     if len(names) == 1:
-        return names[0]
+        return {names[0]: None}
     if marked is not None:
-        return marked
+        return {marked: None}
     if "default" in names:
-        return "default"
+        return {"default": None}
     raise DatasetError(
         f"The dataset has several configs, so choose one with --config: {', '.join(names)}."
     )
@@ -155,17 +188,61 @@ def _readable(splits: Splits) -> dict[str, list[DataFile]] | None:
     return readable or None
 
 
-def _choose_splits(
-    found: dict[str, list[DataFile]], splits: Collection[str] | None
-) -> dict[str, list[DataFile]]:
-    if splits is None:
-        return found
-    missing = [split for split in splits if split not in found]
-    if missing:
+def choose_splits(
+    found: dict[str, dict[str, list[DataFile]]],
+    chosen: dict[str, list[str] | None],
+    splits: Collection[str] | None,
+    partial: Collection[tuple[str, str]] = (),
+) -> dict[str, dict[str, list[DataFile]]]:
+    """
+    Each chosen config's splits. A config asked for with its own splits gets exactly those.
+    The others get each of `splits` they have (all their splits when it's `None`). A split no
+    such config has is refused, and so is a config left with none, or a split the Hub only
+    partly converted (in `partial`, as `(config, split)`).
+    """
+    shared = None if splits is None else list(dict.fromkeys(splits))
+    kept: dict[str, list[str]] = {}
+    for config, own in chosen.items():
+        available = found[config]
+        if own is not None:
+            missing = [split for split in own if split not in available]
+            if missing:
+                raise DatasetError(
+                    f"The config {config} has no split {', '.join(missing)}. Its splits are "
+                    f"{', '.join(available)}."
+                )
+        wanted = own if own is not None else shared
+        kept[config] = [split for split in available if wanted is None or split in wanted]
+    sharing = [config for config, own in chosen.items() if own is None]
+    if shared is not None and sharing:
+        nowhere = [s for s in shared if not any(s in found[config] for config in sharing)]
+        if nowhere:
+            had = sorted({split for config in sharing for split in found[config]})
+            if len(sharing) == 1:
+                which = f"The config {sharing[0]}" if len(chosen) > 1 else "The config"
+                raise DatasetError(
+                    f"{which} has no split {', '.join(nowhere)}. Its splits are "
+                    f"{', '.join(found[sharing[0]])}."
+                )
+            raise DatasetError(
+                f"No config chosen has the split {', '.join(nowhere)}. Their splits are "
+                f"{', '.join(had)}."
+            )
+        empty = [config for config in sharing if not kept[config]]
+        if empty:
+            raise DatasetError(
+                f"The config {empty[0]} has none of the splits {', '.join(shared)}. Its splits "
+                f"are {', '.join(found[empty[0]])}."
+            )
+    partly = [
+        f"{c}/{s}" if len(chosen) > 1 else s for c in kept for s in kept[c] if (c, s) in partial
+    ]
+    if partly:
         raise DatasetError(
-            f"The config has no split {', '.join(missing)}. Its splits are {', '.join(found)}."
+            f"The Hub only converted part of the {', '.join(partly)} split to Parquet, so it "
+            "can't be imported in full."
         )
-    return {split: found[split] for split in found if split in splits}
+    return {config: {s: found[config][s] for s in kept[config]} for config in kept}
 
 
 def parquet_splits(files: Collection[str]) -> dict[str, Splits]:
@@ -224,23 +301,25 @@ def _hub[T](call: Callable[[], T], repo: str, revision: str | None, missing: boo
 def plan(
     repo: str,
     *,
-    config: str | None = None,
+    config: Configs = None,
     splits: Collection[str] | None = None,
     revision: str | None = None,
     token: str | bool | None = None,
     endpoint: str | None = None,
 ) -> Manifest:
     """
-    What [`download_from_hf`] would download, without downloading it: the commit, config and
+    What [`download_from_hf`] would download, without downloading it: the commit, configs and
     each split's files. Reaches the Hub's API only.
 
     Args:
         repo (`str`):
             The dataset, as `owner/name`.
-        config (`str`, *optional*):
-            The config. Defaults to the only one, the card's default, or `default`.
+        config (`str`, `Collection[str]` or `Mapping[str, Collection[str] | None]`, *optional*):
+            The configs, by name, or as a mapping from each name to its splits (`None` for those
+            `splits` picks). Defaults to the only one, the card's default, or `default`.
         splits (`Collection[str]`, *optional*):
-            The splits to download. Defaults to all.
+            The splits to download of each config that has them, for configs not given their
+            own. Defaults to all.
         revision (`str`, *optional*):
             A branch, tag or commit. Defaults to `main`.
         token (`str` or `bool`, *optional*):
@@ -253,10 +332,36 @@ def plan(
         [`~hub.datasets.Manifest`]: the manifest the download writes.
 
     Raises:
-        [`~hub.datasets.DatasetError`]: when the repo can't be reached or has nothing to import.
+        [`~hub.datasets.DatasetError`]: when the repo can't be reached or has nothing to import,
+            or a config or split doesn't exist.
     """
+    return _plan(repo, config, splits, revision, token, endpoint, every=False)
+
+
+def catalog(
+    repo: str,
+    *,
+    revision: str | None = None,
+    token: str | bool | None = None,
+    endpoint: str | None = None,
+) -> Manifest:
+    """Every config and split of `repo` that an import can take, as a [`plan`] choosing them
+    all would list them (leaving out splits the Hub only partly converted)."""
+    return _plan(repo, None, None, revision, token, endpoint, every=True)
+
+
+def _plan(
+    repo: str,
+    config: Configs,
+    splits: Collection[str] | None,
+    revision: str | None,
+    token: str | bool | None,
+    endpoint: str | None,
+    every: bool,
+) -> Manifest:
     from huggingface_hub import HfApi
 
+    requested = requested_configs(config)
     api = HfApi(endpoint=endpoint, token=token)
     info = _hub(lambda: api.dataset_info(repo, revision=revision), repo, revision)
     files = [s.rfilename for s in info.siblings or []]
@@ -272,19 +377,24 @@ def plan(
             marked = MetadataConfigs(configs).get_default_config_name()
         except ValueError as error:
             raise DatasetError(f"The dataset card's configs aren't valid: {error}") from None
-        chosen = default_config(names, marked, config)
-        found = _readable(repo_splits(files, configs[chosen]))
+        chosen = dict.fromkeys(names) if every else choose_configs(names, marked, requested)
+        found = {name: _readable(repo_splits(files, configs[name])) for name in chosen}
     else:
         names = ["default"]
-        chosen = default_config(names, None, config)
-        found = _readable(default_splits(files))
-    if found is not None:
+        default = _readable(default_splits(files))
+        if requested is not None and set(requested) != {"default"} and default is not None:
+            # Configs other than default only exist in the Hub's Parquet conversion (of a
+            # dataset with a loading script), unless the repo's own files are readable.
+            choose_configs(names, None, requested)
+        chosen = dict.fromkeys(names) if every else (requested or {"default": None})
+        found = {"default": default if set(chosen) == {"default"} else None}
+    readable = {name: splits for name, splits in found.items() if splits is not None}
+    if len(readable) == len(found):
         return Manifest(
             repo=repo,
             revision=info.sha,
-            config=chosen,
             configs=names,
-            splits=_choose_splits(found, splits),
+            splits=choose_splits(readable, chosen, splits),
             card=card,
         )
 
@@ -305,31 +415,32 @@ def plan(
             f"{repo} has no Parquet, JSON Lines, CSV or Arrow files, and the Hub hasn't "
             "converted it to Parquet, so it can't be imported."
         )
-    names = list(layout)
-    chosen = default_config(names, None, config)
-    converted_splits = layout[chosen]
-    wanted = {s.removeprefix("partial-"): s for s in converted_splits}
-    chosen_splits = list(wanted) if splits is None else list(splits)
-    missing = [s for s in chosen_splits if s not in wanted]
-    if missing:
-        raise DatasetError(
-            f"The config has no split {', '.join(missing)}. Its splits are {', '.join(wanted)}."
-        )
-    partial = [s for s in chosen_splits if wanted[s] != s]
-    if partial:
-        raise DatasetError(
-            f"The Hub only converted part of {repo}'s {', '.join(partial)} split to Parquet, "
-            "so it can't be imported in full."
-        )
     assert converted is not None and converted.sha is not None
+    names = list(layout)
+    partial = {
+        (name, split.removeprefix("partial-"))
+        for name, found_splits in layout.items()
+        for split in found_splits
+        if split.startswith("partial-")
+    }
+    converted_splits = {
+        name: {
+            split.removeprefix("partial-"): [DataFile(path, "parquet") for path in paths]
+            for split, paths in found_splits.items()
+            if not (every and split.startswith("partial-"))
+        }
+        for name, found_splits in layout.items()
+    }
+    if every:
+        chosen_splits = {name: found for name, found in converted_splits.items() if found}
+    else:
+        chosen = choose_configs(names, None, requested)
+        chosen_splits = choose_splits(converted_splits, chosen, splits, partial)
     return Manifest(
         repo=repo,
         revision=converted.sha,
-        config=chosen,
         configs=names,
-        splits={
-            s: [DataFile(path, "parquet") for path in converted_splits[s]] for s in chosen_splits
-        },
+        splits=chosen_splits,
         card=card,
         ref=PARQUET_REF,
     )
@@ -339,12 +450,12 @@ def download_from_hf(
     repo: str,
     to: str | Path,
     *,
-    config: str | None = None,
+    config: Configs = None,
     splits: Collection[str] | None = None,
     revision: str | None = None,
 ) -> Path:
     """
-    Downloads a Hugging Face dataset's files for one config to a folder that
+    Downloads a Hugging Face dataset's files for one or more configs to a folder that
     [`~hub.datasets.convert`] reads, on a machine that can reach the Hub.
 
     The repo's own Parquet, JSON Lines, CSV or Arrow files are downloaded, matched to splits by
@@ -360,10 +471,12 @@ def download_from_hf(
             The dataset, as `owner/name`.
         to (`str` or `Path`):
             The folder to download to. It's created if missing.
-        config (`str`, *optional*):
-            The config. Defaults to the only one, the card's default, or `default`.
+        config (`str`, `Collection[str]` or `Mapping[str, Collection[str] | None]`, *optional*):
+            The configs, by name, or as a mapping from each name to its splits (`None` for those
+            `splits` picks). Defaults to the only one, the card's default, or `default`.
         splits (`Collection[str]`, *optional*):
-            The splits to download. Defaults to all.
+            The splits to download of each config that has them, for configs not given their
+            own. Defaults to all.
         revision (`str`, *optional*):
             A branch, tag or commit. Defaults to `main`.
 
@@ -372,7 +485,7 @@ def download_from_hf(
 
     Raises:
         [`~hub.datasets.DatasetError`]: when the repo can't be reached, the config or a split
-            doesn't exist, or there's nothing to import.
+            doesn't exist, a config would have no splits left, or there's nothing to import.
 
     Example:
 
@@ -380,7 +493,7 @@ def download_from_hf(
     from flock.hub import datasets
 
     folder = datasets.download_from_hf(
-        "HuggingFaceFW/fineweb-edu", "/scratch/fineweb-edu", config="sample-10BT"
+        "HuggingFaceFW/fineweb-edu", "/scratch/fineweb-edu", config=["sample-10BT", "sample-100BT"]
     )
     ```
     """
@@ -389,7 +502,7 @@ def download_from_hf(
     manifest = plan(repo, config=config, splits=splits, revision=revision)
     folder = Path(to).expanduser().resolve()
     folder.mkdir(parents=True, exist_ok=True)
-    wanted = [f.path for files in manifest.splits.values() for f in files]
+    wanted = [f.path for f in manifest.files]
     _hub(
         lambda: snapshot_download(
             repo,

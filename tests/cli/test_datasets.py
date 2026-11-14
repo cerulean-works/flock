@@ -62,9 +62,11 @@ def test_convert_and_list_through_the_proxy(
 
     done = flock_cli("datasets", "convert", str(folder), "imports/words", "--workers", "2")
     assert done.exit_code == 0, done.output
-    assert "✓ imports/words/train: version 1, 500 rows" in done.output
-    assert "✓ imports/words/test: version 1, 10 rows" in done.output
-    assert "/4: data/train-0.parquet (250 rows, " in done.output  # a line per file, off a terminal
+    assert "✓ default/train at imports/words/train: version 1, 500 rows" in done.output
+    assert "✓ default/test at imports/words/test: version 1, 10 rows" in done.output
+    assert (
+        "default/train 1/4: data/train-0.parquet (250 rows, " in done.output
+    )  # a line per file, off a terminal
 
     train = lance.dataset("s3://flock-datasets/imports/words/train")
     assert train.to_table().to_pylist() == rows(0, 500)
@@ -79,7 +81,7 @@ def test_convert_and_list_through_the_proxy(
     assert "already has a dataset at imports/words/train" in again.output
     appended = flock_cli("datasets", "convert", str(folder), "imports/words", "--mode", "append")
     assert appended.exit_code == 0, appended.output
-    assert "✓ imports/words/train: version 2, 500 rows" in appended.output
+    assert "✓ default/train at imports/words/train: version 2, 500 rows" in appended.output
 
     root = flock_cli("datasets", "list")
     assert root.exit_code == 0, root.output
@@ -104,26 +106,35 @@ def test_import_downloads_to_a_temporary_folder_unless_kept(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source = tmp_path / "source"
-    write_source(source, test_split=False)
+    write_source(source, configs=("en", "fr"), chosen=("en", "fr"), test_split=False)
     downloaded: list[Path] = []
 
     def download(repo: str, to: Path, **options: Any) -> Path:
-        assert (repo, options["config"], options["splits"]) == ("acme/words", "en", ("train",))
+        assert (repo, options["config"], options["splits"]) == (
+            "acme/words",
+            ("en", "fr"),
+            ("train",),
+        )
         shutil.copytree(source, to, dirs_exist_ok=True)
         downloaded.append(Path(to))
         return Path(to)
 
     monkeypatch.setattr(datasets, "download_from_hf", download)
-    args = ["datasets", "import", "acme/words", "words", "--config", "en", "--split", "train"]
+    args = ["datasets", "import", "acme/words", "words", "--config", "en", "--config", "fr"]
+    args += ["--split", "train"]
     done = flock_cli(*args, "--workers", "1")
     assert done.exit_code == 0, done.output
-    assert "✓ words/train: version 1, 500 rows" in done.output
+    assert "✓ en/train at words/en/train: version 1, 500 rows" in done.output
+    assert "✓ fr/train at words/fr/train: version 1, 500 rows" in done.output
+    assert lance.dataset("s3://flock-datasets/words/fr/train").to_table().to_pylist() == rows(
+        10_000, 10_500
+    )
     assert not downloaded[0].exists()
 
     kept = tmp_path / "kept"
     done = flock_cli(*args, "--mode", "overwrite", "--keep", str(kept))
     assert done.exit_code == 0, done.output
-    assert "✓ words/train: version 2, 500 rows" in done.output
+    assert "✓ en/train at words/en/train: version 2, 500 rows" in done.output
     assert (kept / "flock-import.json").is_file()
 
 
@@ -140,8 +151,8 @@ def test_download_needs_no_sign_in(
     done = flock_cli("datasets", "download", "acme/words", "--to", str(to))
     assert done.exit_code == 0, done.output
     assert done.output.splitlines() == [
-        "train\t1 files, 9 B",
-        "test\t1 files, 8 B",
+        "default/train\t1 files, 9 B",
+        "default/test\t1 files, 8 B",
         f"✓ Downloaded acme/words (default) to {to}",
         f"  Convert it with: flock datasets convert {to} DEST",
     ]
@@ -150,6 +161,34 @@ def test_download_needs_no_sign_in(
     assert missing.exit_code == 1
     assert "has no split dev" in missing.output
     assert flock_cli("datasets", "download", "acme/words").exit_code == 2  # --to is required
+
+    # Several configs, each listed with its splits.
+    hub.files = ["README.md", "en/train.csv", "en/test.csv", "fr/train.csv"]
+    hub.card = {
+        "configs": [
+            {
+                "config_name": "en",
+                "data_files": [
+                    {"split": "train", "path": "en/train.csv"},
+                    {"split": "test", "path": "en/test.csv"},
+                ],
+            },
+            {"config_name": "fr", "data_files": [{"split": "train", "path": "fr/train.csv"}]},
+        ]
+    }
+    to = tmp_path / "both"
+    args = ["datasets", "download", "acme/words", "--to", str(to), "--config", "en"]
+    done = flock_cli(*args, "--config", "fr")
+    assert done.exit_code == 0, done.output
+    assert done.output.splitlines()[:4] == [
+        "en/train\t1 files, 12 B",
+        "en/test\t1 files, 11 B",
+        "fr/train\t1 files, 12 B",
+        f"✓ Downloaded acme/words (en, fr) to {to}",
+    ]
+    empty = flock_cli(*args, "--config", "fr", "--split", "test")
+    assert empty.exit_code == 1
+    assert "The config fr has none of the splits test" in empty.output
 
 
 def test_convert_refusals(flock_cli: Callable[..., Result], tmp_path: Path) -> None:

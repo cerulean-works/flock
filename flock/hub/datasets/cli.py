@@ -10,8 +10,10 @@ from flock.hub import datasets
 from flock.hub.datasets._convert import MODES, ConvertedSplit, Mode, human
 from flock.hub.s3 import S3Error
 
-CONFIG_HELP = "The config (default: the only one, or the one called default)."
-SPLIT_HELP = "A split to import (repeat for more; default: all)."
+CONFIG_HELP = (
+    "A config to import (repeat for more; default: the only one, or the one called default)."
+)
+SPLIT_HELP = "A split to import from each config that has it (repeat for more; default: all)."
 REVISION_HELP = "A branch, tag or commit of the repo (default: main)."
 WORKERS_HELP = "Processes converting files at once (default: the CPUs this job may use)."
 MODE_HELP = "create refuses an existing dataset, overwrite replaces its rows, append adds them."
@@ -29,7 +31,10 @@ def _failing() -> Generator[None]:
 
 def _report(converted: list[ConvertedSplit]) -> None:
     for split in converted:
-        click.echo(f"✓ {split.path}: version {split.version}, {split.rows:,} rows")
+        click.echo(
+            f"✓ {split.config}/{split.split} at {split.path}: version {split.version}, "
+            f"{split.rows:,} rows"
+        )
 
 
 @click.group("datasets")
@@ -40,7 +45,7 @@ def datasets_group() -> None:
 @datasets_group.command("import")
 @click.argument("repo")
 @click.argument("dest")
-@click.option("--config", help=CONFIG_HELP)
+@click.option("--config", "configs", multiple=True, help=CONFIG_HELP)
 @click.option("--split", "splits", multiple=True, help=SPLIT_HELP)
 @click.option("--revision", help=REVISION_HELP)
 @click.option("--workers", type=click.IntRange(min=1), help=WORKERS_HELP)
@@ -56,7 +61,7 @@ def datasets_group() -> None:
 def import_command(
     repo: str,
     dest: str,
-    config: str | None,
+    configs: tuple[str, ...],
     splits: tuple[str, ...],
     revision: str | None,
     workers: int | None,
@@ -66,7 +71,8 @@ def import_command(
 ) -> None:
     """Import the Hugging Face dataset REPO to DEST, a folder of flock-datasets.
 
-    Each split becomes a Lance dataset at DEST/SPLIT. This downloads and converts in one go, so
+    Each split becomes a Lance dataset at DEST/SPLIT, or at DEST/CONFIG/SPLIT when the repo
+    has several configs. This downloads and converts in one go, so
     it needs both the Hub and Flock. On a cluster whose compute nodes have no internet, run
     flock datasets download on a login node and flock datasets convert on a compute node.
     """
@@ -74,7 +80,7 @@ def import_command(
         converted = datasets.import_from_hf(
             repo,
             dest,
-            config=config,
+            config=configs or None,
             splits=splits or None,
             revision=revision,
             to=keep,
@@ -93,11 +99,11 @@ def import_command(
     required=True,
     help="The folder to download to.",
 )
-@click.option("--config", help=CONFIG_HELP)
+@click.option("--config", "configs", multiple=True, help=CONFIG_HELP)
 @click.option("--split", "splits", multiple=True, help=SPLIT_HELP)
 @click.option("--revision", help=REVISION_HELP)
 def download_command(
-    repo: str, to: Path, config: str | None, splits: tuple[str, ...], revision: str | None
+    repo: str, to: Path, configs: tuple[str, ...], splits: tuple[str, ...], revision: str | None
 ) -> None:
     """Download the Hugging Face dataset REPO's files, for flock datasets convert.
 
@@ -106,13 +112,14 @@ def download_command(
     """
     with _failing():
         folder = datasets.download_from_hf(
-            repo, to, config=config, splits=splits or None, revision=revision
+            repo, to, config=configs or None, splits=splits or None, revision=revision
         )
         manifest = datasets.Manifest.read(folder)
-    for split, files in manifest.splits.items():
-        size = sum((folder / f.path).stat().st_size for f in files)
-        click.echo(f"{split}\t{len(files)} files, {human(size)}")
-    click.echo(f"✓ Downloaded {repo} ({manifest.config}) to {folder}")
+    for config, found in manifest.splits.items():
+        for split, files in found.items():
+            size = sum((folder / f.path).stat().st_size for f in files)
+            click.echo(f"{config}/{split}\t{len(files)} files, {human(size)}")
+    click.echo(f"✓ Downloaded {repo} ({', '.join(manifest.splits)}) to {folder}")
     click.echo(f"  Convert it with: flock datasets convert {folder} DEST")
 
 

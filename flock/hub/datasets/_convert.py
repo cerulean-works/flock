@@ -40,9 +40,11 @@ MODES = ("create", "overwrite", "append")
 @dataclass(frozen=True)
 class ConvertedSplit:
     """
-    A split written to Lance by [`~hub.datasets.convert`].
+    A split of a config written to Lance by [`~hub.datasets.convert`].
 
     Attributes:
+        config (`str`):
+            The config, such as `sample-10BT`.
         split (`str`):
             The split, such as `train`.
         path (`str`):
@@ -55,6 +57,7 @@ class ConvertedSplit:
             The rows the import wrote.
     """
 
+    config: str
     split: str
     path: str
     uri: str
@@ -66,6 +69,7 @@ class ConvertedSplit:
 class Task:
     """One source file for a worker to write as Lance fragments."""
 
+    config: str
     split: str
     index: int
     path: str
@@ -80,6 +84,7 @@ class Task:
 class Written:
     """What a worker wrote for one source file."""
 
+    config: str
     split: str
     index: int
     fragments: list[FragmentMetadata]
@@ -243,14 +248,19 @@ def conform(batch: pa.RecordBatch, schema: pa.Schema) -> pa.RecordBatch:
 
 # ---------------------------------------------------------------------- workers
 
-_report: Callable[[str, int, int], None] | None = None
-"""Where a worker sends each batch's rows and bytes, when the parent shows them live."""
+_report: Callable[[str, str, int, int], None] | None = None
+"""Where a worker sends each batch's config, split, rows and bytes, when the parent shows them
+live."""
 
 
 def _init_worker(queue: Any) -> None:
     global _report
     os.environ.setdefault("LANCE_LOG", "error")
-    _report = (lambda split, rows, size: queue.put((split, rows, size))) if queue else None
+    _report = (
+        (lambda config, split, rows, size: queue.put((config, split, rows, size)))
+        if queue
+        else None
+    )
 
 
 def write_file(task: Task) -> Written:
@@ -276,7 +286,7 @@ def write_file(task: Task) -> Written:
             rows += batch.num_rows
             size += batch.nbytes
             if _report is not None:
-                _report(task.split, batch.num_rows, batch.nbytes)
+                _report(task.config, task.split, batch.num_rows, batch.nbytes)
             yield batch
 
     try:
@@ -292,7 +302,7 @@ def write_file(task: Task) -> Written:
     except (OSError, ValueError, RuntimeError, TypeError) as error:
         raise DatasetError(f"Couldn't convert {task.path}: {error}") from None
     assert isinstance(fragments, list)
-    return Written(task.split, task.index, fragments, rows, size)
+    return Written(task.config, task.split, task.index, fragments, rows, size)
 
 
 def default_workers() -> int:
@@ -315,11 +325,15 @@ def human(size: float) -> str:
     raise AssertionError
 
 
-class Progress:
-    """Rows and bytes per split on one redrawn line while `stream` is a terminal, else a line
-    per finished file (for Slurm logs)."""
+type Key = tuple[str, str]
+"""A config and one of its splits."""
 
-    def __init__(self, files: dict[str, int], stream: TextIO | None) -> None:
+
+class Progress:
+    """Rows and bytes per split of each config on one redrawn line while `stream` is a terminal,
+    else a line per finished file (for Slurm logs)."""
+
+    def __init__(self, files: dict[Key, int], stream: TextIO | None) -> None:
         self.stream = stream
         self.live = stream is not None and stream.isatty()
         self.files = files
@@ -329,24 +343,29 @@ class Progress:
         self._drawn = 0.0
         self._lock = threading.Lock()
 
-    def batch(self, split: str, rows: int, size: int) -> None:
+    @staticmethod
+    def label(key: Key) -> str:
+        """`config/split`, as progress names a split."""
+        return f"{key[0]}/{key[1]}"
+
+    def batch(self, config: str, split: str, rows: int, size: int) -> None:
         with self._lock:
-            self.rows[split] += rows
-            self.bytes[split] += size
+            self.rows[config, split] += rows
+            self.bytes[config, split] += size
             self._draw()
 
     def file(self, written: Written, path: str) -> None:
         with self._lock:
-            split = written.split
-            self.done[split] += 1
+            key = (written.config, written.split)
+            self.done[key] += 1
             if self.live:
                 self._draw(force=True)
                 return
-            self.rows[split] += written.rows
-            self.bytes[split] += written.bytes
+            self.rows[key] += written.rows
+            self.bytes[key] += written.bytes
             if self.stream is not None:
                 print(
-                    f"{split} {self.done[split]}/{self.files[split]}: {path} "
+                    f"{self.label(key)} {self.done[key]}/{self.files[key]}: {path} "
                     f"({written.rows:,} rows, {human(written.bytes)})",
                     file=self.stream,
                     flush=True,
@@ -358,9 +377,9 @@ class Progress:
             return
         self._drawn = now
         line = "  ".join(
-            f"{split}: {self.rows[split]:,} rows, {human(self.bytes[split])}, "
-            f"{self.done[split]}/{self.files[split]} files"
-            for split in self.files
+            f"{self.label(key)}: {self.rows[key]:,} rows, {human(self.bytes[key])}, "
+            f"{self.done[key]}/{self.files[key]} files"
+            for key in self.files
         )
         self.stream.write(f"\r{line}\033[K")
         self.stream.flush()
@@ -465,11 +484,15 @@ def check_dest(dest: str) -> str:
     return cleaned
 
 
-def split_paths(manifest: Manifest, dest: str) -> dict[str, str]:
-    """Where each split lands: `{dest}/{split}`, or `{dest}/{config}/{split}` when the repo
-    has several configs."""
-    base = f"{dest}/{manifest.config}" if len(manifest.configs) > 1 else dest
-    return {split: f"{base}/{split}" for split in manifest.splits}
+def split_paths(manifest: Manifest, dest: str) -> dict[Key, str]:
+    """Where each split of each config lands: `{dest}/{split}`, or `{dest}/{config}/{split}`
+    when the repo has several configs."""
+    several = len(manifest.configs) > 1
+    return {
+        (config, split): f"{dest}/{config}/{split}" if several else f"{dest}/{split}"
+        for config, splits in manifest.splits.items()
+        for split in splits
+    }
 
 
 # ---------------------------------------------------------------------- converting
@@ -479,7 +502,7 @@ def _run_pool(
     tasks: list[Task],
     workers: int,
     progress: Progress,
-    paths: dict[tuple[str, int], str],
+    paths: dict[tuple[str, str, int], str],
     worker: Callable[[Task], Written],
     on_file: Callable[[Written], None] | None = None,
 ) -> list[Written]:
@@ -490,7 +513,7 @@ def _run_pool(
         try:
             for task in tasks:
                 written = worker(task)
-                progress.file(written, paths[task.split, task.index])
+                progress.file(written, paths[task.config, task.split, task.index])
                 if on_file is not None:
                     on_file(written)
                 results.append(written)
@@ -516,7 +539,7 @@ def _run_pool(
         futures = [pool.submit(worker, task) for task in tasks]
         for future in as_completed(futures):
             written = future.result()
-            progress.file(written, paths[written.split, written.index])
+            progress.file(written, paths[written.config, written.split, written.index])
             if on_file is not None:
                 on_file(written)
             results.append(written)
@@ -557,57 +580,63 @@ def run(
     folder = Path(folder).expanduser().resolve()
     manifest = Manifest.read(folder)
     dest = check_dest(dest)
-    for files in manifest.splits.values():
-        for file in files:
-            if not (folder / file.path).is_file():
-                raise DatasetError(f"{folder} is missing {file.path}. Download it again.")
+    for file in manifest.files:
+        if not (folder / file.path).is_file():
+            raise DatasetError(f"{folder} is missing {file.path}. Download it again.")
+    sources = {
+        (config, split): files
+        for config, splits in manifest.splits.items()
+        for split, files in splits.items()
+    }
 
     # Every check happens before any worker writes: schemas, then the destinations.
-    schemas = {split: unify(folder, files) for split, files in manifest.splits.items()}
+    schemas = {key: unify(folder, files) for key, files in sources.items()}
     paths = split_paths(manifest, dest)
     options = target.storage_options
-    existing = {split: open_dataset(target.uri(path), options) for split, path in paths.items()}
-    taken = [paths[split] for split, found in existing.items() if found is not None]
+    existing = {key: open_dataset(target.uri(path), options) for key, path in paths.items()}
+    taken = [paths[key] for key, found in existing.items() if found is not None]
     if mode == "create" and taken:
         raise DatasetError(
             f"{BUCKET} already has a dataset at {', '.join(taken)}. Choose the mode overwrite "
             "or append to write to it."
         )
-    storage: dict[str, str | None] = {}
-    for split, found in existing.items():
-        storage[split] = found.data_storage_version if found is not None else None
+    storage: dict[Key, str | None] = {}
+    for key, found in existing.items():
+        storage[key] = found.data_storage_version if found is not None else None
         if mode == "append" and found is not None:
             current = found.schema
             try:
-                merged = pa.unify_schemas([current, schemas[split]], promote_options="permissive")
+                merged = pa.unify_schemas([current, schemas[key]], promote_options="permissive")
             except pa.ArrowInvalid, pa.ArrowTypeError:
                 merged = None
             if merged is None or not merged.remove_metadata().equals(current.remove_metadata()):
                 raise DatasetError(
-                    f"The files' schema doesn't match the dataset at {paths[split]}, so nothing "
+                    f"The files' schema doesn't match the dataset at {paths[key]}, so nothing "
                     "was appended."
                 )
-            schemas[split] = current
+            schemas[key] = current
 
+    # One pool for every config and split, so workers move on to the next split's files.
     tasks = [
         Task(
+            config,
             split,
             index,
             str(folder / file.path),
             file.format,
-            target.uri(paths[split]),
-            schemas[split],
-            storage[split],
+            target.uri(paths[config, split]),
+            schemas[config, split],
+            storage[config, split],
             options,
         )
-        for split, files in manifest.splits.items()
+        for (config, split), files in sources.items()
         for index, file in enumerate(files)
     ]
     count = min(workers or default_workers(), max(len(tasks), 1))
-    progress = Progress({split: len(files) for split, files in manifest.splits.items()}, stream)
+    progress = Progress({key: len(files) for key, files in sources.items()}, stream)
     names = {
-        (split, index): file.path
-        for split, files in manifest.splits.items()
+        (config, split, index): file.path
+        for (config, split), files in sources.items()
         for index, file in enumerate(files)
     }
     try:
@@ -617,32 +646,34 @@ def run(
 
     # Commit each split's fragments in the order of its files, so row i is row i upstream.
     converted = []
-    for split in manifest.splits:
-        done = sorted((w for w in results if w.split == split), key=lambda w: w.index)
+    for config, split in sources:
+        done = sorted(
+            (w for w in results if (w.config, w.split) == (config, split)), key=lambda w: w.index
+        )
         fragments = [fragment for w in done for fragment in w.fragments]
-        found = existing[split]
+        found = existing[config, split]
         source = {
             "hub": "huggingface",
             "repo": manifest.repo,
             "revision": manifest.revision,
-            "config": manifest.config,
+            "config": config,
             "split": split,
         }
         operation: lance.LanceOperation.BaseOperation
         if mode == "append" and found is not None:
             operation = lance.LanceOperation.Append(fragments)
         else:
-            operation = lance.LanceOperation.Overwrite(schemas[split], fragments)
+            operation = lance.LanceOperation.Overwrite(schemas[config, split], fragments)
         transaction = lance.Transaction(
             found.version if found is not None else 0,
             operation,
             transaction_properties={"flock.source": json.dumps(source)},
         )
-        uri = target.uri(paths[split])
+        path = paths[config, split]
+        uri = target.uri(path)
         committed = lance.LanceDataset.commit(uri, transaction, storage_options=options)
-        converted.append(
-            ConvertedSplit(split, paths[split], uri, committed.version, sum(w.rows for w in done))
-        )
+        rows = sum(w.rows for w in done)
+        converted.append(ConvertedSplit(config, split, path, uri, committed.version, rows))
 
     if manifest.card is not None and (folder / manifest.card).is_file():
         card = folder / manifest.card
@@ -662,13 +693,14 @@ def convert(
 ) -> list[ConvertedSplit]:
     """
     Converts a folder that [`~hub.datasets.download_from_hf`] filled to Lance datasets in your
-    org's `flock-datasets` bucket, one per split. Needs Flock and no Hugging Face access, so it
-    runs on a compute node without internet.
+    org's `flock-datasets` bucket, one per split of each config downloaded. Needs Flock and no
+    Hugging Face access, so it runs on a compute node without internet.
 
     Each split lands at `{dest}/{split}` (or `{dest}/{config}/{split}` when the repo has
     several configs), with the dataset card at `{dest}/README.md` and in each split's folder.
-    Worker processes write Lance fragments straight to S3, and each split is committed at once
-    when every file is written, so a split appears in full or not at all. Row `i` is row `i`
+    One pool of worker processes writes Lance fragments straight to S3 for every config and
+    split, and each split of each config is committed on its own when its files are written, so
+    it appears in full or not at all. Every destination is checked before any worker starts. Row `i` is row `i`
     of the source files, in order. Each version's Lance metadata says where it came from
     (`flock.source`).
 
@@ -687,12 +719,12 @@ def convert(
             with a new version, and `append` adds them. Old versions stay in Lance's history.
 
     Returns:
-        `list[ConvertedSplit]`: each split's path, version and rows.
+        `list[ConvertedSplit]`: each split's config, path, version and rows.
 
     Raises:
-        [`~hub.datasets.DatasetError`]: when the folder has no `flock-import.json`, its files
-            don't agree on a schema (naming the first that doesn't), the destination exists in
-            `create` mode, or a worker fails. Nothing is committed then.
+        [`~hub.datasets.DatasetError`]: when the folder has no `flock-import.json`, a split's
+            files don't agree on a schema (naming the first that doesn't), any destination
+            exists in `create` mode, or a worker fails. Nothing is committed then.
 
     Example:
 

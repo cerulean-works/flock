@@ -77,8 +77,11 @@ def hub(monkeypatch: pytest.MonkeyPatch) -> FakeHub:
     return fake
 
 
-def splits_of(manifest: Manifest) -> dict[str, list[str]]:
-    return {split: [f.path for f in files] for split, files in manifest.splits.items()}
+def splits_of(manifest: Manifest, config: str | None = None) -> dict[str, list[str]]:
+    """The files of each split of `config` (the only config downloaded by default)."""
+    if config is None:
+        (config,) = manifest.splits
+    return {split: [f.path for f in files] for split, files in manifest.splits[config].items()}
 
 
 def test_card_configs_choose_the_files(hub: FakeHub, tmp_path: Path) -> None:
@@ -108,7 +111,7 @@ def test_card_configs_choose_the_files(hub: FakeHub, tmp_path: Path) -> None:
     folder = download_from_hf("acme/words", tmp_path / "words")
 
     manifest = Manifest.read(folder)
-    assert (manifest.repo, manifest.revision, manifest.config) == ("acme/words", SHA, "en")
+    assert (manifest.repo, manifest.revision, list(manifest.splits)) == ("acme/words", SHA, ["en"])
     assert manifest.configs == ["en", "fr"]
     assert manifest.card == "README.md"
     assert splits_of(manifest) == {
@@ -128,7 +131,7 @@ def test_card_configs_choose_the_files(hub: FakeHub, tmp_path: Path) -> None:
 
     # Another config, with the files Flock can't read left out, and one split only.
     fr = Manifest.read(download_from_hf("acme/words", tmp_path / "fr", config="fr"))
-    assert (fr.config, splits_of(fr)) == ("fr", {"train": ["fr/train.jsonl"]})
+    assert splits_of(fr, "fr") == {"train": ["fr/train.jsonl"]}
     en = Manifest.read(download_from_hf("acme/words", tmp_path / "test", splits=["test"]))
     assert splits_of(en) == {"test": ["en/test.parquet"]}
 
@@ -158,7 +161,7 @@ def test_default_file_names_without_a_card(hub: FakeHub, tmp_path: Path) -> None
         "validation": ["dev.jsonl.gz"],
         "test": ["test.csv"],
     }
-    assert [f.format for f in manifest.splits["validation"]] == ["json"]
+    assert [f.format for f in manifest.splits["default"]["validation"]] == ["json"]
     assert manifest.card is None
     assert len(hub.downloads) == 1  # only the first repo had a card
 
@@ -196,6 +199,107 @@ def test_falls_back_to_the_hubs_parquet_conversion(hub: FakeHub, tmp_path: Path)
     hub.converted = None
     with pytest.raises(DatasetError, match="can't be imported"):
         download_from_hf("acme/words", tmp_path / "none")
+
+
+def test_several_configs(hub: FakeHub, tmp_path: Path) -> None:
+    hub.files = [
+        "README.md",
+        "en/train.parquet",
+        "en/test.parquet",
+        "fr/train.parquet",
+        "fr/validation.parquet",
+        "de/train.parquet",
+    ]
+    hub.card = {
+        "configs": [
+            {
+                "config_name": name,
+                "data_files": [
+                    {"split": split, "path": f"{name}/{split}.parquet"}
+                    for split in ("train", "test", "validation")
+                    if f"{name}/{split}.parquet" in hub.files
+                ],
+            }
+            for name in ("en", "fr", "de")
+        ]
+    }
+
+    # Each config's files, in one folder and one manifest, in the repo's order.
+    folder = download_from_hf("acme/words", tmp_path / "all", config=["fr", "en"])
+    manifest = Manifest.read(folder)
+    assert manifest.configs == ["en", "fr", "de"]
+    assert list(manifest.splits) == ["en", "fr"]
+    assert splits_of(manifest, "en") == {
+        "train": ["en/train.parquet"],
+        "test": ["en/test.parquet"],
+    }
+    assert splits_of(manifest, "fr") == {
+        "train": ["fr/train.parquet"],
+        "validation": ["fr/validation.parquet"],
+    }
+    assert sorted(hub.snapshots[0]["allow_patterns"]) == [
+        "en/test.parquet",
+        "en/train.parquet",
+        "fr/train.parquet",
+        "fr/validation.parquet",
+    ]
+    assert (folder / "fr/validation.parquet").is_file()
+    assert not (folder / "de").exists()
+
+    # A split is kept in every config that has it.
+    manifest = Manifest.read(
+        download_from_hf(
+            "acme/words", tmp_path / "tv", config=["en", "fr"], splits=["test", "validation"]
+        )
+    )
+    assert {c: list(s) for c, s in manifest.splits.items()} == {
+        "en": ["test"],
+        "fr": ["validation"],
+    }
+
+    # Or each config gets its own splits.
+    manifest = Manifest.read(
+        download_from_hf(
+            "acme/words", tmp_path / "own", config={"en": ["test"], "fr": None}, splits=["train"]
+        )
+    )
+    assert {c: list(s) for c, s in manifest.splits.items()} == {
+        "en": ["test"],
+        "fr": ["train"],
+    }
+
+    hub.snapshots.clear()
+    with pytest.raises(DatasetError, match="No config chosen has the split dev"):
+        download_from_hf("acme/words", tmp_path, config=["en", "fr"], splits=["train", "dev"])
+    with pytest.raises(DatasetError, match="The config de has none of the splits test"):
+        download_from_hf("acme/words", tmp_path, config=["en", "de"], splits=["test"])
+    with pytest.raises(DatasetError, match="The config fr has no split test"):
+        download_from_hf("acme/words", tmp_path, config={"en": None, "fr": ["test"]})
+    with pytest.raises(DatasetError, match="has no config it, es. Its configs are en, fr, de"):
+        download_from_hf("acme/words", tmp_path, config=["en", "it", "es"])
+    with pytest.raises(DatasetError, match="No split of the config en is chosen"):
+        download_from_hf("acme/words", tmp_path, config={"en": []})
+    with pytest.raises(DatasetError, match="Choose at least one config"):
+        download_from_hf("acme/words", tmp_path, config=[])
+    assert hub.snapshots == []
+
+
+def test_several_configs_of_the_parquet_conversion(hub: FakeHub, tmp_path: Path) -> None:
+    hub.files = ["README.md", "words.py"]
+    hub.converted = [
+        "en/train/0000.parquet",
+        "en/test/0000.parquet",
+        "fr/train/0000.parquet",
+        "fr/partial-test/0000.parquet",
+    ]
+    manifest = Manifest.read(
+        download_from_hf("acme/words", tmp_path / "a", config=["en", "fr"], splits=["train"])
+    )
+    assert manifest.ref == "refs/convert/parquet"
+    assert splits_of(manifest, "en") == {"train": ["en/train/0000.parquet"]}
+    assert splits_of(manifest, "fr") == {"train": ["fr/train/0000.parquet"]}
+    with pytest.raises(DatasetError, match="only converted part of the fr/test split"):
+        download_from_hf("acme/words", tmp_path / "b", config=["en", "fr"])
 
 
 def test_refusals(hub: FakeHub, tmp_path: Path) -> None:

@@ -34,39 +34,56 @@ def rows(start: int, stop: int) -> list[dict]:
     return [{"id": i, "text": f"row {i}"} for i in range(start, stop)]
 
 
+def write_config(
+    folder: Path, prefix: str, offset: int = 0, test_split: bool = True
+) -> dict[str, list[DataFile]]:
+    """One config's files under `prefix`: a train split in Parquet (two files, one with several
+    row groups), JSON Lines (gzipped) and CSV, in that order, and a test split. Row ids start
+    at `offset`."""
+    data = folder / prefix
+    data.mkdir(parents=True, exist_ok=True)
+
+    def ids(start: int, stop: int) -> list[dict]:
+        return rows(offset + start, offset + stop)
+
+    pq.write_table(pa.Table.from_pylist(ids(0, 250)), data / "train-0.parquet", row_group_size=40)
+    pq.write_table(pa.Table.from_pylist(ids(250, 300)), data / "train-1.parquet")
+    with gzip.open(data / "train-2.jsonl.gz", "wt") as file:
+        file.writelines(json.dumps(row) + "\n" for row in ids(300, 420))
+    lines = [f"{row['id']},{row['text']}" for row in ids(420, 500)]
+    (data / "train-3.csv").write_text("id,text\n" + "\n".join(lines) + "\n")
+    splits = {
+        "train": [
+            DataFile(f"{prefix}/train-0.parquet", "parquet"),
+            DataFile(f"{prefix}/train-1.parquet", "parquet"),
+            DataFile(f"{prefix}/train-2.jsonl.gz", "json"),
+            DataFile(f"{prefix}/train-3.csv", "csv"),
+        ]
+    }
+    if test_split:
+        pq.write_table(pa.Table.from_pylist(ids(1000, 1010)), data / "test-0.parquet")
+        splits["test"] = [DataFile(f"{prefix}/test-0.parquet", "parquet")]
+    return splits
+
+
 def write_source(
     folder: Path,
     *,
     configs: tuple[str, ...] = ("default",),
-    config: str = "default",
+    chosen: tuple[str, ...] = ("default",),
     test_split: bool = True,
 ) -> list[dict]:
-    """A downloaded folder whose train split is Parquet (two files, one with several row
-    groups), JSON Lines (gzipped) and CSV, in that order. Returns the train rows in order."""
-    data = folder / "data"
-    data.mkdir(parents=True, exist_ok=True)
-    pq.write_table(pa.Table.from_pylist(rows(0, 250)), data / "train-0.parquet", row_group_size=40)
-    pq.write_table(pa.Table.from_pylist(rows(250, 300)), data / "train-1.parquet")
-    with gzip.open(data / "train-2.jsonl.gz", "wt") as file:
-        file.writelines(json.dumps(row) + "\n" for row in rows(300, 420))
-    lines = [f"{row['id']},{row['text']}" for row in rows(420, 500)]
-    (data / "train-3.csv").write_text("id,text\n" + "\n".join(lines) + "\n")
+    """A downloaded folder with each `chosen` config's files (see `write_config`): the first
+    under `data`, the next under `data-{config}` with ids from 10,000, and so on. Returns the
+    first config's train rows in order."""
     splits = {
-        "train": [
-            DataFile("data/train-0.parquet", "parquet"),
-            DataFile("data/train-1.parquet", "parquet"),
-            DataFile("data/train-2.jsonl.gz", "json"),
-            DataFile("data/train-3.csv", "csv"),
-        ]
+        config: write_config(folder, "data" if i == 0 else f"data-{config}", 10_000 * i, test_split)
+        for i, config in enumerate(chosen)
     }
-    if test_split:
-        pq.write_table(pa.Table.from_pylist(rows(1000, 1010)), data / "test-0.parquet")
-        splits["test"] = [DataFile("data/test-0.parquet", "parquet")]
     (folder / "README.md").write_text("# A dataset\n")
     manifest = Manifest(
         repo="acme/words",
         revision="0" * 40,
-        config=config,
         configs=list(configs),
         splits=splits,
         card="README.md",
@@ -95,9 +112,9 @@ def table(target: Target, path: str, version: int | None = None) -> list[dict]:
 def test_converts_every_format_in_order(source: Path, target: Target, workers: int) -> None:
     converted = run(source, "words", target, workers=workers, stream=None)
 
-    assert [(c.split, c.path, c.version, c.rows) for c in converted] == [
-        ("train", "words/train", 1, 500),
-        ("test", "words/test", 1, 10),
+    assert [(c.config, c.split, c.path, c.version, c.rows) for c in converted] == [
+        ("default", "train", "words/train", 1, 500),
+        ("default", "test", "words/test", 1, 10),
     ]
     assert table(target, "words/train") == rows(0, 500)
     assert table(target, "words/test") == rows(1000, 1010)
@@ -126,8 +143,10 @@ def test_progress_is_a_line_per_file_off_a_terminal(
         run(source, "words", target, workers=1, stream=stream)
     lines = log.read_text().splitlines()
     assert len(lines) == 5
-    assert re.fullmatch(r"train 1/4: data/train-0\.parquet \(250 rows, [0-9.]+ kB\)", lines[0])
-    assert lines[-1].startswith("test 1/1: data/test-0.parquet (10 rows, ")
+    assert re.fullmatch(
+        r"default/train 1/4: data/train-0\.parquet \(250 rows, [0-9.]+ kB\)", lines[0]
+    )
+    assert lines[-1].startswith("default/test 1/1: data/test-0.parquet (10 rows, ")
 
 
 class Terminal(io.StringIO):
@@ -145,7 +164,9 @@ def test_progress_on_a_terminal_counts_rows_and_bytes(
     assert text.startswith("\r") and text.endswith("\x1b[K\n")
     last = text.removesuffix("\x1b[K\n").rpartition("\r")[2]
     assert re.fullmatch(
-        r"train: 500 rows, [0-9.]+ kB, 4/4 files  test: 10 rows, [0-9]+ B, 1/1 files", last
+        r"default/train: 500 rows, [0-9.]+ kB, 4/4 files  "
+        r"default/test: 10 rows, [0-9]+ B, 1/1 files",
+        last,
     ), last
 
 
@@ -154,7 +175,7 @@ def test_a_schema_mismatch_is_refused_before_writing(source: Path, target: Targe
     bad = source / "data" / "train-4.jsonl"
     bad.write_text(json.dumps({"id": 1, "text": {"nested": True}}) + "\n")
     manifest = json.loads((source / "flock-import.json").read_text())
-    manifest["splits"]["train"].append({"path": "data/train-4.jsonl", "format": "json"})
+    manifest["splits"]["default"]["train"].append({"path": "data/train-4.jsonl", "format": "json"})
     (source / "flock-import.json").write_text(json.dumps(manifest))
 
     with pytest.raises(DatasetError, match=r"data/train-4\.jsonl doesn't match the schema"):
@@ -216,9 +237,8 @@ def test_modes(source: Path, target: Target) -> None:
     manifest = Manifest(
         repo="acme/labels",
         revision="1" * 40,
-        config="default",
         configs=["default"],
-        splits={"train": [DataFile("train.parquet", "parquet")]},
+        splits={"default": {"train": [DataFile("train.parquet", "parquet")]}},
     )
     (other / "flock-import.json").write_text(manifest.to_json())
     with pytest.raises(DatasetError, match="doesn't match the dataset at words/train"):
@@ -230,14 +250,78 @@ def test_modes(source: Path, target: Target) -> None:
     assert [(c.path, c.version) for c in created] == [("labels/train", 1)]
 
 
-def test_several_configs_land_in_config_folders(tmp_path: Path, target: Target) -> None:
+def test_one_config_of_several_lands_in_its_folder(tmp_path: Path, target: Target) -> None:
     folder = tmp_path / "download"
-    write_source(folder, configs=("en", "fr"), config="fr", test_split=False)
+    write_source(folder, configs=("en", "fr"), chosen=("fr",), test_split=False)
     converted = run(folder, "/words/", target, workers=2, stream=None)
     assert [c.path for c in converted] == ["words/fr/train"]
     assert table(target, "words/fr/train") == rows(0, 500)
     assert (Path(target.root) / "words/README.md").is_file()
     assert (Path(target.root) / "words/fr/train/README.md").is_file()
+
+
+def source_of(target: Target, path: str) -> dict:
+    dataset = lance.dataset(target.uri(path))
+    transaction = dataset.read_transaction(dataset.version)
+    assert transaction is not None and transaction.transaction_properties is not None
+    return json.loads(transaction.transaction_properties["flock.source"])
+
+
+@pytest.mark.parametrize("workers", [1, 4])
+def test_several_configs_convert_in_one_pool(tmp_path: Path, target: Target, workers: int) -> None:
+    folder = tmp_path / "download"
+    write_source(folder, configs=("en", "fr", "de"), chosen=("en", "fr"))
+    log = tmp_path / "log.txt"
+    with log.open("w") as stream:
+        converted = run(folder, "words", target, workers=workers, stream=stream)
+
+    assert [(c.config, c.split, c.path, c.version, c.rows) for c in converted] == [
+        ("en", "train", "words/en/train", 1, 500),
+        ("en", "test", "words/en/test", 1, 10),
+        ("fr", "train", "words/fr/train", 1, 500),
+        ("fr", "test", "words/fr/test", 1, 10),
+    ]
+    assert table(target, "words/en/train") == rows(0, 500)
+    assert table(target, "words/en/test") == rows(1000, 1010)
+    assert table(target, "words/fr/train") == rows(10_000, 10_500)
+    assert table(target, "words/fr/test") == rows(11_000, 11_010)
+    for config in ("en", "fr"):
+        for split in ("train", "test"):
+            assert source_of(target, f"words/{config}/{split}") == {
+                "hub": "huggingface",
+                "repo": "acme/words",
+                "revision": "0" * 40,
+                "config": config,
+                "split": split,
+            }
+            assert (Path(target.root) / f"words/{config}/{split}/README.md").is_file()
+    assert (Path(target.root) / "words/README.md").is_file()
+    assert not (Path(target.root) / "words/de").exists()
+    lines = log.read_text().splitlines()
+    assert len(lines) == 10
+    assert {line.partition(" ")[0] for line in lines} == {
+        "en/train",
+        "en/test",
+        "fr/train",
+        "fr/test",
+    }
+
+
+def test_several_configs_refuse_an_existing_target_before_writing(
+    tmp_path: Path, target: Target
+) -> None:
+    folder = tmp_path / "download"
+    write_source(folder, configs=("en", "fr"), chosen=("en", "fr"))
+    only_fr = tmp_path / "fr"
+    write_source(only_fr, configs=("en", "fr"), chosen=("fr",), test_split=False)
+    run(only_fr, "words", target, workers=1, stream=None)
+
+    with pytest.raises(DatasetError, match="already has a dataset at words/fr/train"):
+        run(folder, "words", target, workers=2, stream=None)
+    root = Path(target.root) / "words"
+    assert not (root / "en").exists()
+    assert not (root / "fr/test").exists()
+    assert lance.dataset(target.uri("words/fr/train")).version == 1
 
 
 def test_bad_folders_and_destinations(tmp_path: Path, source: Path, target: Target) -> None:

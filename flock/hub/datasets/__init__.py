@@ -4,9 +4,9 @@
 ```python
 from flock.hub import datasets
 
-# One step
+# One step, for one config or several
 written = datasets.import_from_hf(
-    "HuggingFaceFW/fineweb-edu", "web/fineweb-edu", config="sample-10BT"
+    "HuggingFaceFW/fineweb-edu", "web/fineweb-edu", config=["sample-10BT", "sample-100BT"]
 )
 
 # Or two, when the download and the conversion run on different machines
@@ -28,14 +28,14 @@ from typing import Any
 
 from flock.hub.datasets._common import MANIFEST, DataFile, DatasetError, Manifest
 from flock.hub.datasets._convert import BUCKET, ConvertedSplit, Mode, convert
-from flock.hub.datasets._download import download_from_hf
+from flock.hub.datasets._download import Configs, download_from_hf
 
 
 def import_from_hf(
     repo: str,
     dest: str,
     *,
-    config: str | None = None,
+    config: Configs = None,
     splits: Collection[str] | None = None,
     revision: str | None = None,
     to: str | Path | None = None,
@@ -52,10 +52,14 @@ def import_from_hf(
             The dataset, as `owner/name`.
         dest (`str`):
             The folder of `flock-datasets` to write to, such as `web/fineweb-edu`.
-        config (`str`, *optional*):
-            The config. Defaults to the only one, the card's default, or `default`.
+        config (`str`, `Collection[str]` or `Mapping[str, Collection[str] | None]`, *optional*):
+            The configs, by name, or as a mapping from each name to its splits (`None` for those
+            `splits` picks). Defaults to the only one, the card's default, or `default`. With
+            several, each split lands at `{dest}/{config}/{split}`.
         splits (`Collection[str]`, *optional*):
-            The splits to import. Defaults to all.
+            The splits to import of each config that has them, for configs not given their own.
+            Defaults to all. A split no config has is refused, and so is a config left with
+            none.
         revision (`str`, *optional*):
             A branch, tag or commit. Defaults to `main`.
         to (`str` or `Path`, *optional*):
@@ -69,7 +73,7 @@ def import_from_hf(
             `create`, `overwrite` or `append`, as [`convert`] takes.
 
     Returns:
-        `list[ConvertedSplit]`: each split's path, version and rows.
+        `list[ConvertedSplit]`: each split's config, path, version and rows.
 
     Raises:
         [`~hub.datasets.DatasetError`]: as [`download_from_hf`] and [`convert`] do.
