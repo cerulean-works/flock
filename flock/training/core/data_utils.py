@@ -84,7 +84,7 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
     """Yield deterministic index batches while skipping a saved batch prefix.
 
     Each iteration reconstructs the same permutation with a private generator.
-    `len(sampler)` reports the full pass length, including skipped batches.
+    `len(sampler)` reports the pass length, capped at `max_batches`, including skipped batches.
 
     Args:
         batch_size (`int`): Positive rows per batch.
@@ -92,6 +92,7 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
         shuffle (`bool`, *optional*, defaults to `True`): Shuffle row indices.
         seed (`int`, *optional*, defaults to `42`): Private permutation seed.
         skip_batches (`int`, *optional*, defaults to `0`): Completed batches to skip.
+        max_batches (`int`, *optional*): Stop after this many batches of the pass.
         drop_last (`bool`, *optional*, defaults to `False`): Drop the final partial batch.
     """
 
@@ -102,6 +103,7 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
         shuffle: bool = True,
         seed: int = 42,
         skip_batches: int = 0,
+        max_batches: int | None = None,
         drop_last: bool = False,
     ) -> None:
         """Store batching settings without consuming the global RNG stream."""
@@ -111,13 +113,16 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
         self.shuffle = shuffle
         self.seed = seed
         self.skip_batches = skip_batches
+        self.max_batches = max_batches
         self.drop_last = drop_last
 
     def __len__(self) -> int:
-        """Return the full number of batches before applying the skip prefix."""
+        """Return the number of batches, capped at `max_batches`, before applying the skip prefix."""
         if self.drop_last:
-            return self.dataset_size // self.batch_size
-        return ceil(self.dataset_size / self.batch_size)
+            batches = self.dataset_size // self.batch_size
+        else:
+            batches = ceil(self.dataset_size / self.batch_size)
+        return batches if self.max_batches is None else min(batches, self.max_batches)
 
     def __iter__(self) -> Iterator[list[int]]:
         """Yield row-index lists after the configured number of skipped batches."""

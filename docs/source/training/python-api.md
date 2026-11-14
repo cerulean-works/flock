@@ -26,6 +26,7 @@ evaluation task names. With zero workers, set `dataloader_prefetch_factor=None`.
 | `run_name` | Required | Default checkpoint folder name and evaluation label. Does not set the W&B run name. |
 | `input_column` | Required | Text column in each dataset row. |
 | `batch_size` | Required | Positive rows per optimizer update. |
+| `max_steps` | `None` | Positive cap on optimizer updates; schedules plan over the capped run. `None` trains the full pass. |
 | `optimizer_config` | Required | `AdamWConfig`; Muon is not implemented. |
 | `lr_scheduler_config` | Required | `CosineConfig` or `WSDConfig`. |
 | `wandb_project` | Required | Tracking project started during trainer construction. |

@@ -197,6 +197,7 @@ def test_step_cap_ends_the_run_and_its_schedule_at_the_cap(
     first_two = list(uncapped._get_training_dataloader())[:2]
 
     assert trainer.total_steps == trainer.lr_scheduler.total_steps == 2
+    assert len(trainer._get_training_dataloader()) == 2
     assert trainer.lr_scheduler.completed_steps == 2
     # The decay ends at the cap, not at the end of the full pass.
     assert trainer.lr_scheduler.get_last_lr() == pytest.approx([0.001])
@@ -205,46 +206,14 @@ def test_step_cap_ends_the_run_and_its_schedule_at_the_cap(
     assert_nested_equal(seen_batches, [batch["input_ids"] for batch in first_two])
 
 
-def test_step_cap_resumes_to_the_same_update_and_rejects_a_changed_cap(
-    trainer_factory: TrainerFactory, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    def make(output_dir: Path, max_steps: int = 2) -> TrainerBundle:
-        return trainer_factory(
-            num_workers=0,
-            prefetch_factor=None,
-            output_dir=str(output_dir),
-            save_steps=1,
-            max_steps=max_steps,
-        )
-
-    reference, reference_run, _ = make(tmp_path / "reference")
-    reference.train()
-
-    interrupted, first_run, _ = make(tmp_path / "resumed")
-    save = interrupted.save_model
-
-    def save_and_interrupt() -> None:
-        save()
-        raise InterruptedError("simulate process exit after the first checkpoint")
-
-    monkeypatch.setattr(interrupted, "save_model", save_and_interrupt)
-    with pytest.raises(InterruptedError):
-        interrupted.train()
-
-    changed, _, _ = make(interrupted.output_dir, max_steps=3)
-    with pytest.raises(ValueError, match="progress do not match this run"):
+def test_step_cap_change_rejects_resume(trainer_factory: TrainerFactory) -> None:
+    capped, _, _ = trainer_factory(num_workers=0, prefetch_factor=None, save_steps=1, max_steps=2)
+    capped.train()
+    changed, _, _ = trainer_factory(
+        num_workers=0, prefetch_factor=None, output_dir=str(capped.output_dir), max_steps=3
+    )
+    with pytest.raises(ValueError, match="plans 2 updates, but this run plans 3"):
         changed.train(resume_from_checkpoint=True)
-
-    resumed, resumed_run, _ = make(interrupted.output_dir)
-    resumed.train(resume_from_checkpoint=True)
-    assert int(resumed.state.step.item()) == 2
-    assert first_run.metrics + resumed_run.metrics == reference_run.metrics
-    assert_nested_equal(resumed.model.state_dict(), reference.model.state_dict())
-    assert_nested_equal(resumed.get_trainer_state(), reference.get_trainer_state())
-    # Resuming at the cap performs no further updates or saves.
-    resumed.train(resume_from_checkpoint=True)
-    assert resumed.lr_scheduler.completed_steps == 2
-    assert first_run.metrics + resumed_run.metrics == reference_run.metrics
 
 
 @pytest.fixture
@@ -761,7 +730,10 @@ def simulated_cuda_rng(monkeypatch: pytest.MonkeyPatch) -> Callable[[int], list[
 
 
 @pytest.mark.parametrize("resume_latest", [True, False])
-@pytest.mark.parametrize("split_step", [0, 1, 2, 3])
+@pytest.mark.parametrize(
+    ("split_step", "max_steps"),
+    [(0, None), (1, None), (2, None), (3, None), (0, 2), (1, 2), (2, 2)],
+)
 @pytest.mark.parametrize(
     "schedule",
     [
@@ -776,6 +748,7 @@ def test_checkpoint_resume_matches_uninterrupted_training(
     tmp_path: Path,
     resume_latest: bool,
     split_step: int,
+    max_steps: int | None,
     schedule: LRSchedulerConfig,
 ) -> None:
     def make(output_dir: Path, **overrides: Any) -> TrainerBundle:
@@ -786,6 +759,7 @@ def test_checkpoint_resume_matches_uninterrupted_training(
             output_dir=str(output_dir),
             save_steps=1,
             lr_scheduler_config=schedule,
+            max_steps=max_steps,
             **overrides,
         )
         forward = trainer.model._forward
@@ -838,13 +812,14 @@ def test_checkpoint_resume_matches_uninterrupted_training(
     assert random.random() == expected_random[0]
     torch.testing.assert_close(torch.rand(4), expected_random[1], atol=0, rtol=0)
     expected_steps = list(range(1, split_step + 1)) if split_step else [0]
-    expected_steps += [step for step in (2, 3) if step > split_step]
+    total_steps = reference.total_steps
+    expected_steps += [step for step in range(2, total_steps + 1) if step > split_step]
     assert [path.name for path in resumed._checkpoints()] == [
         f"checkpoint-{step}" for step in expected_steps
     ]
     # Resuming an already completed run must perform no further updates or saves.
     resumed.train(resume_from_checkpoint=True)
-    assert resumed.lr_scheduler.completed_steps == 3
+    assert resumed.lr_scheduler.completed_steps == total_steps
     assert first_run.metrics + resumed_run.metrics == expected_run.metrics
 
 

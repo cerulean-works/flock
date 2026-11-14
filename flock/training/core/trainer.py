@@ -7,7 +7,6 @@ import random
 import shutil
 import tempfile
 from dataclasses import asdict
-from itertools import islice
 from json import JSONDecodeError
 from pathlib import Path
 from typing import Any, Literal, Self, cast, overload
@@ -37,7 +36,7 @@ from flock.training.core.optimization import AdamWConfig, MuonConfig, OptimizerC
 
 
 class TrainerConfig(PydanticBaseModel):
-    """Configure one shuffled training pass and its tracking, evaluation and saves.
+    """Configure one shuffled training pass, or its first `max_steps` updates, and its tracking, evaluation and saves.
 
     Fields are frozen after validation; nested lists are still mutable. Unknown
     fields are rejected. Positive intervals count optimizer updates, not tokens.
@@ -50,7 +49,8 @@ class TrainerConfig(PydanticBaseModel):
         batch_size (`int`): Positive number of dataset rows per optimizer update.
         max_steps (`int`, *optional*):
             Positive cap on optimizer updates. The run and its learning-rate schedule
-            end at the cap, or at the end of the pass if that comes first.
+            end at the cap, or at the end of the pass if that comes first. Warmup and
+            decay lengths must fit the capped run.
         optimizer_config (`OptimizerConfig`):
             Optimizer settings. Only `AdamWConfig` is currently implemented.
         lr_scheduler_config (`LRSchedulerConfig`): Cosine or warmup-stable-decay settings.
@@ -256,7 +256,7 @@ class TrainerState(nn.Module):
 
 
 class Trainer:
-    """Train a causal model for one shuffled pass on CUDA device 0 or CPU.
+    """Train a causal model for one shuffled pass, or `max_steps` updates, on CUDA device 0 or CPU.
 
     Construction starts a W&B run, moves the supplied model without casting its
     weights, constructs the optimizer/scheduler and creates the output directory.
@@ -352,6 +352,7 @@ class Trainer:
             shuffle=True,
             seed=self.seed,
             skip_batches=skip_batches,
+            max_batches=self.total_steps,
         )
 
         return DataLoader(
@@ -421,9 +422,7 @@ class Trainer:
 
     def _inner_training_loop(self, dataloader: DataLoader, start_step: int) -> None:
         """Update once per batch, then log, save and evaluate at configured intervals."""
-        # The loader yields the rest of the pass; a step cap stops it early.
-        batches = islice(dataloader, self.total_steps - start_step)
-        for step, batch in enumerate(batches, start=start_step + 1):
+        for step, batch in enumerate(dataloader, start=start_step + 1):
             self.optimizer.zero_grad()
 
             batch = cast(Batch, batch)

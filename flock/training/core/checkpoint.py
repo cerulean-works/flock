@@ -115,5 +115,9 @@ class TrainerCheckpoint(CheckpointSchema):
                     "Checkpoint dataset size, batch size, seed or input column changed"
                 )
             if schedule.total_steps != info.context["total_steps"]:
-                raise ValueError("Checkpoint trainer and scheduler progress do not match this run")
+                raise ValueError(
+                    f"Checkpoint plans {schedule.total_steps} updates, but this run plans "
+                    f"{info.context['total_steps']}. The count follows the dataset size, "
+                    "batch size and max_steps."
+                )
         return self
