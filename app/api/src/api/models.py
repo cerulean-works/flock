@@ -75,6 +75,12 @@ class TagBody(VersionBody):
     move: bool = Field(False, description="move the tag if it's on another version")
 
 
+class RenameBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=100, description="the new name")
+
+
 def models(store: Store) -> Models:
     store.s3.require()
     return store.models
@@ -155,6 +161,18 @@ async def list_models(org: OrgDep, store: StoreDep) -> Response:
 async def get_model(org: OrgDep, name: str, store: StoreDep) -> Response:
     """A model: its primary version (and who made it primary), its latest and its tags."""
     return JSONResponse(await with_user(store, await models(store).model_info(org, name)))
+
+
+@router.patch("/{name}")
+async def rename_model(org: OrgDep, name: str, body: RenameBody, store: StoreDep) -> Response:
+    """Rename a model. Only the name changes: its files stay in its folder (``prefix``), and
+    the old name stops resolving. 409 with ``taken`` when a model has the name, live or
+    deleted, and 409 while an upload to the model is open."""
+    try:
+        info = await models(store).rename(org, name, body.name)
+    except Taken as e:
+        raise APIError(409, e.message, taken=True) from None
+    return JSONResponse(await with_user(store, info))
 
 
 @router.delete("/{name}")

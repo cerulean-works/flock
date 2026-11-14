@@ -45,16 +45,28 @@ Renaming a private dataset keeps it private at its new path, and renaming any da
 
 ## Changing[[changing]]
 
-Members and admins can delete, rename and tag datasets.
+Members and admins can delete, rename, move and tag datasets. Delete, rename and move also take a folder, such as `eval`, which acts on everything under it as one item, datasets and loose files alike.
 
 | Endpoint | Meaning |
 |---|---|
-| `POST delete` | Moves `{"path"}` to the trash, where admins can restore it for 14 days. Answers with its trash entry. |
-| `POST rename` | Moves `{"path", "to"}`, with all its versions, tags and indices. `to` is made of segments of letters, digits, `.`, `-` and `_`, joined by `/`, at most 512 characters. A `to` where something exists answers 409 with `"taken": true`. A `to` inside the dataset or inside another dataset answers 422. A write that lands during the copy answers 409, and the copy is removed. |
+| `POST delete` | Moves datasets and folders to the trash, where admins can restore them for 14 days. A folder is one trash entry. The body has `path` or `paths`, not both. With `{"path"}`, it answers with that trash entry. With `{"paths": [...]}` (up to 1,000), see [Many items](#many-items). |
+| `POST rename` | Moves `{"path", "to"}`, a dataset with all its versions, tags and indices, or a folder with everything in it. `to` is made of segments of letters, digits, `.`, `-` and `_`, joined by `/`, at most 512 characters. A `to` where something exists answers 409 with `"taken": true`. A `to` inside the item or inside another dataset answers 422. A write that lands during the copy answers 409, and the copy is removed. For a folder, a write to any dataset in it does the same, and nothing moves. |
+| `POST move` | Moves `{"paths", "to"}` into the folder `to`, each keeping its last name. `eval/mmlu` moved to `archive` becomes `archive/mmlu`. `to` is `""` for the top of the bucket. Each item moves as `rename` would. See [Many items](#many-items). |
 | `PUT tags/{tag}` | Puts the tag on `{"path", "version"}`. If the tag is on another version, it answers 409 with that `version`, unless the body has `"move": true`. Tag names are up to 100 ASCII letters, digits, `.`, `-` and `_`, starting with a letter or digit, and not only digits. |
 | `DELETE tags/{tag}?path` | Removes the tag. Answers 204. |
 
-Deleting and renaming copy every object on the S3 server, in the request. Datasets of more than 10,000 objects or 100 GiB answer 409 with a `command` for the AWS CLI to run instead, before anything is touched.
+Deleting, renaming and moving copy every object on the S3 server, in the request. More than 10,000 objects or 100 GiB answer 409 with a `command` for the AWS CLI to run instead, before anything is touched. With `paths`, the limits count every item together, and `command` has one line per path.
+
+### Many items[[many-items]]
+
+`POST move` and `POST delete` with `paths` handle each item in turn. One that fails doesn't stop the rest, and the answer is 200 with `{"results": [...]}`, one per path, in order:
+
+| Route | Each result |
+|---|---|
+| `POST move` | `path`, `to` (its new path), `moved`, `error` (the reason, or `null`) and `taken` (`true` when something already exists at `to`) |
+| `POST delete` | `path`, `deleted`, `error` (the reason, or `null`) and `entry` (its trash entry, or `null`) |
+
+An item fails when nothing exists at its path, when its new path is taken, when it would move into itself or stay where it is, or when it's written to during the copy.
 
 ## The trash[[trash]]
 
@@ -62,6 +74,6 @@ Only organization admins can use these. Members get 403.
 
 | Endpoint | Meaning |
 |---|---|
-| `GET trash` | `{"entries": [...]}`, newest first. An entry has `id`, `path`, `deleted_by`, `deleted_at`, `moved_at` (`null` while the move is unfinished), `expires_at`, `latest_version`, `objects` and `bytes`. |
-| `POST trash/{id}/restore` | Copies the dataset back to its path, or to `{"to"}`. Something now at the path answers 409 with `"taken": true`. |
-| `DELETE trash/{id}` | Deletes the dataset for good. Answers 204. |
+| `GET trash` | `{"entries": [...]}`, newest first. An entry has `id`, `kind` (`dataset` or `folder`), `path`, `deleted_by`, `deleted_at`, `moved_at` (`null` while the move is unfinished), `expires_at`, `latest_version` (`null` for a folder), `objects` and `bytes`. |
+| `POST trash/{id}/restore` | Copies the dataset or folder back to its path, or to `{"to"}`. A folder comes back as a whole. Something now at the path answers 409 with `"taken": true`. |
+| `DELETE trash/{id}` | Deletes the dataset or folder for good. Answers 204. |

@@ -58,7 +58,7 @@ manifest.json                         every file's path, size and sha256, writte
 | Registry (PostgreSQL) | The authoritative version number, file list, digest, run link, step, and JSON supplied as `metadata=` (up to 256 KiB). The registry also tracks tags and the primary version. The run link resolves only when the named run exists in the model's organization. |
 | `manifest.json` | A registry-generated copy of the version's identity, digest, custom metadata, and file list. Flock writes it to the bucket after commit and can regenerate it from PostgreSQL. Downloads get the file list from the registry. |
 
-Model files live under `flock-models/{name}/u/{ulid}/`, where the ULID identifies the upload attempt. On commit, the registry assigns a version number that points to this prefix. The files stay at the same object keys.
+Model files live under `flock-models/{prefix}/u/{ulid}/`, where the ULID identifies the upload attempt. `prefix` is the model's folder, named after the model when it was created. It stays the same when the model is [renamed](../app/browse-models#rename-a-model). On commit, the registry assigns a version number that points to this prefix. The files stay at the same object keys.
 
 Each file has its own SHA-256. The version digest is the SHA-256 of the file list, encoded as one `path<TAB>size<TAB>sha256<LF>` line per file in path order. The digest identifies the bytes in a version and names its local cache directory. Registry-only metadata and tags are outside that digest.
 

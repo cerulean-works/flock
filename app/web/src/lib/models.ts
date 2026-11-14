@@ -87,7 +87,18 @@ export async function readText(org: string, key: string): Promise<string> {
 }
 
 // ----------------------------------------------------------------------------------------------
-// Tags (D98, D107)
+// Names (014, section 6) and tags (D98, D107)
+
+const NAME = /^[a-z0-9][a-z0-9._-]*$/;
+
+/** Why a model can't be renamed to `name` (one segment, D134), or null. */
+export function modelNameError(name: string): string | null {
+	if (!name) return 'Enter a name';
+	if (name.length > 100) return 'Use at most 100 characters';
+	if (!NAME.test(name))
+		return 'Use lowercase letters, digits, dots, hyphens and underscores, starting with a letter or digit';
+	return null;
+}
 
 const CHECKPOINT = /^checkpoint-(\d+)$/;
 

@@ -10,9 +10,11 @@
 		/** The button's name, e.g. "Copy ID". */
 		label?: string;
 		class?: ClassValue;
+		/** Once the text is on the clipboard. */
+		oncopied?: () => void;
 	}
 
-	let { text, label = 'Copy', class: className }: Props = $props();
+	let { text, label = 'Copy', class: className, oncopied }: Props = $props();
 
 	let copied = $state(false);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -22,6 +24,7 @@
 		copied = true;
 		clearTimeout(timer);
 		timer = setTimeout(() => (copied = false), 1500);
+		oncopied?.();
 	}
 </script>
 

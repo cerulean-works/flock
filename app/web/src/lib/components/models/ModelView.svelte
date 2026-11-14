@@ -1,6 +1,7 @@
 <script lang="ts">
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
@@ -14,6 +15,7 @@
 	import FilesTab from './FilesTab.svelte';
 	import LoadDialog from './LoadDialog.svelte';
 	import OverviewTab from './OverviewTab.svelte';
+	import RenameModelDialog from './RenameModelDialog.svelte';
 	import VersionPicker from './VersionPicker.svelte';
 	import VersionsTab from './VersionsTab.svelte';
 
@@ -64,6 +66,7 @@
 	}
 
 	let loading = $state(false);
+	let renaming = $state(false);
 	let deleting = $state(false);
 </script>
 
@@ -115,6 +118,14 @@
 		<Button
 			variant="ghost"
 			size="sm"
+			class="text-muted-foreground"
+			onclick={() => (renaming = true)}
+		>
+			<PencilIcon /> Rename
+		</Button>
+		<Button
+			variant="ghost"
+			size="sm"
 			class="text-muted-foreground hover:text-destructive"
 			onclick={() => (deleting = true)}
 		>
@@ -149,4 +160,5 @@
 {#if version}
 	<LoadDialog bind:open={loading} {org} name={info.name} number={version.number} />
 {/if}
+<RenameModelDialog bind:open={renaming} {org} name={info.name} />
 <DeleteModelDialog bind:open={deleting} {org} {info} />

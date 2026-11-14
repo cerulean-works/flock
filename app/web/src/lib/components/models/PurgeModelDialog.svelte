@@ -3,11 +3,10 @@
 	import { invalidateAll } from '$app/navigation';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { Input } from '#lib/components/ui/input/index.js';
-	import { Label } from '#lib/components/ui/label/index.js';
 	import { modelCall, modelsApi } from '#lib/models.ts';
 	import type { ModelTrashEntry } from '#lib/types.ts';
 	import FormError from '../FormError.svelte';
+	import ConfirmField from '../ConfirmField.svelte';
 
 	let {
 		open = $bindable(),
@@ -67,12 +66,7 @@
 				if (typed === label) void purge();
 			}}
 		>
-			<div class="grid gap-2">
-				<Label for="purge-model-name">
-					Type <span class="font-mono text-[12.5px]">{label}</span> to confirm
-				</Label>
-				<Input id="purge-model-name" bind:value={typed} autocomplete="off" spellcheck="false" />
-			</div>
+			<ConfirmField id="purge-model-name" text={label} bind:value={typed} />
 			<FormError {error} />
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>

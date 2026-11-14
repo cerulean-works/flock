@@ -77,7 +77,8 @@
 				{#if taken}
 					Something already exists at {entry?.path}. Restore it to another path.
 				{:else}
-					It goes back to {entry?.path} with all its versions.
+					It goes back to {entry?.path}
+					{entry?.kind === 'folder' ? 'with everything in it' : 'with all its versions'}.
 				{/if}
 			</Dialog.Description>
 		</Dialog.Header>

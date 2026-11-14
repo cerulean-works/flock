@@ -3,11 +3,10 @@
 	import { invalidateAll } from '$app/navigation';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { Input } from '#lib/components/ui/input/index.js';
-	import { Label } from '#lib/components/ui/label/index.js';
 	import { datasetCall, datasetsApi } from '#lib/datasets.ts';
 	import type { TrashEntry } from '#lib/types.ts';
 	import FormError from '../FormError.svelte';
+	import ConfirmField from '../ConfirmField.svelte';
 
 	let {
 		open = $bindable(),
@@ -50,7 +49,9 @@
 		<AlertDialog.Header>
 			<AlertDialog.Title>Delete {entry?.path} for good?</AlertDialog.Title>
 			<AlertDialog.Description>
-				It’s removed from the trash with all its versions. There is no undo.
+				It’s removed from the trash with {entry?.kind === 'folder'
+					? 'everything in it'
+					: 'all its versions'}. There is no undo.
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<form
@@ -60,12 +61,7 @@
 				if (typed === entry?.path) void purge();
 			}}
 		>
-			<div class="grid gap-2">
-				<Label for="purge-dataset-path">
-					Type <span class="font-mono text-[12.5px]">{entry?.path}</span> to confirm
-				</Label>
-				<Input id="purge-dataset-path" bind:value={typed} autocomplete="off" spellcheck="false" />
-			</div>
+			<ConfirmField id="purge-dataset-path" text={entry?.path ?? ''} bind:value={typed} />
 			<FormError {error} />
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel>Cancel</AlertDialog.Cancel>

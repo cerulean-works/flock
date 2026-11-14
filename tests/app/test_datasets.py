@@ -1103,3 +1103,324 @@ def test_orgs_from_before_keep_their_datasets_private(flock: S3Flock, writer: Wr
     assert get(anon, f"{DATASETS}/info", path="new").status == 200
     assert make_public(api, "old").status == 200
     assert get(anon, f"{DATASETS}/info", path="old").status == 200
+
+
+# ---------------------------------------------------------------------- moving and deleting many (019)
+
+
+def versions_last(keys: list[str]) -> bool:
+    """Whether every ``_versions/`` key comes after every other one."""
+    first = next((i for i, k in enumerate(keys) if "/_versions/" in k), len(keys))
+    return all("/_versions/" in k for k in keys[first:])
+
+
+def test_move_several_when_one_fails(flock: S3Flock, writer: Writer) -> None:
+    writer.write("eval/mmlu", table(0, 3))
+    writer.write("eval/arc", table(0, 2))
+    writer.write("archive/arc", table(0, 1))
+    put(flock, "eval/notes/x.txt", b"x")
+    api = flock.client()
+
+    moved = api.post(
+        f"{DATASETS}/move",
+        {"paths": ["eval/mmlu", "eval/arc", "eval/notes", "eval/nope"], "to": "archive"},
+    )
+    assert moved.status == 200, moved.body
+    assert moved.json() == {
+        "results": [
+            {
+                "path": "eval/mmlu",
+                "to": "archive/mmlu",
+                "moved": True,
+                "error": None,
+                "taken": False,
+            },
+            {
+                "path": "eval/arc",
+                "to": "archive/arc",
+                "moved": False,
+                "error": "Something already exists at archive/arc.",
+                "taken": True,
+            },
+            {
+                "path": "eval/notes",
+                "to": "archive/notes",
+                "moved": True,
+                "error": None,
+                "taken": False,
+            },
+            {
+                "path": "eval/nope",
+                "to": "archive/nope",
+                "moved": False,
+                "error": "Nothing exists at eval/nope.",
+                "taken": False,
+            },
+        ]
+    }
+    assert get(api, f"{DATASETS}/info", path="archive/mmlu").json()["rows"] == 3
+    assert get(api, f"{DATASETS}/info", path="eval/arc").json()["rows"] == 2
+    assert get(api, f"{DATASETS}/info", path="archive/arc").json()["rows"] == 1
+    bucket = upstream_name(flock)
+    assert keys(flock, bucket, "archive/notes/") == ["archive/notes/x.txt"]
+    assert keys(flock, bucket, "eval/mmlu/") == keys(flock, bucket, "eval/notes/") == []
+
+    # To the top, and the request's own checks.
+    top = api.post(f"{DATASETS}/move", {"paths": ["archive/mmlu"], "to": ""})
+    assert top.json()["results"][0]["moved"] is True
+    assert get(api, f"{DATASETS}/info", path="mmlu").json()["rows"] == 3
+    for body in (
+        {"paths": [], "to": "x"},
+        {"paths": ["mmlu"]},
+        {"paths": ["mmlu"], "to": "bad path"},
+        {"paths": ["mmlu"], "to": "x", "path": "mmlu"},
+    ):
+        assert api.post(f"{DATASETS}/move", body).status == 422, body
+
+
+def test_move_a_folder_with_its_loose_files(
+    flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    writer.write("scratch/a", table(0, 3))
+    writer.write("scratch/a", table(3, 3), mode="append")
+    writer.write("scratch/deep/b", table(0, 2))
+    put(flock, "scratch/notes.txt", b"notes")
+    put(flock, "scratch/deep/README.md", b"# deep")
+    api = flock.client()
+    assert make_private(api, "scratch/a").status == 204
+    bucket = upstream_name(flock)
+    before = keys(flock, bucket, "scratch/")
+    copies = wrap(monkeypatch, flock, "copy_object", lambda *a: None)
+    deletes = wrap(monkeypatch, flock, "delete_keys", lambda *a: None)
+
+    moved = api.post(f"{DATASETS}/move", {"paths": ["scratch"], "to": "eval"})
+    assert moved.status == 200, moved.body
+    assert moved.json()["results"] == [
+        {"path": "scratch", "to": "eval/scratch", "moved": True, "error": None, "taken": False}
+    ]
+    assert keys(flock, bucket, "scratch/") == []
+    assert keys(flock, bucket, "eval/scratch/") == ["eval/" + k for k in before]
+    # Every dataset's _versions/ copied last and deleted first, so none is ever broken.
+    assert versions_last([args[1] for args in copies])
+    assert all("/_versions/" in k for k in deletes[0][1])
+    assert {k for args in deletes for k in args[1] if "/_versions/" in k} == {
+        k for k in before if "/_versions/" in k
+    }
+    assert get(api, f"{DATASETS}/info", path="eval/scratch/a").json()["rows"] == 6
+    assert get(api, f"{DATASETS}/info", path="eval/scratch/deep/b").json()["rows"] == 2
+    assert private_paths(flock) == ["eval/scratch/a"]
+
+    # Renaming a folder is the same move, to any path.
+    renamed = api.post(f"{DATASETS}/rename", {"path": "eval/scratch", "to": "done"})
+    assert renamed.status == 200, renamed.body
+    assert renamed.json() == {"path": "done"}
+    assert keys(flock, bucket, "done/") == ["done/" + k.removeprefix("scratch/") for k in before]
+    assert get(api, f"{DATASETS}/info", path="done/deep/b").json()["rows"] == 2
+    listing = get(api, f"{DATASETS}/at", path="done").json()
+    assert [d["name"] for d in listing["datasets"]] == ["a"]
+    assert [f["name"] for f in listing["folders"]] == ["deep"]
+    assert [f["name"] for f in listing["files"]] == ["notes.txt"]
+
+
+def test_folder_moves_refused(
+    flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    writer.write("f/a", table(0, 3))
+    writer.write("g", table(0, 1))
+    put(flock, "f/x.txt", b"x")
+    api = flock.client()
+
+    def rename(path: str, to: str) -> Any:
+        return api.post(f"{DATASETS}/rename", {"path": path, "to": to})
+
+    inside = rename("f", "f/sub")
+    assert inside.status == 422
+    assert inside.json()["error"] == "The new path can't be inside the folder."
+    assert rename("f", "g").status == 409
+    assert rename("f", "g/inner").status == 422  # inside a dataset
+    assert rename("g/_versions", "h").status == 404  # inside a dataset isn't a folder
+
+    moved = api.post(f"{DATASETS}/move", {"paths": ["f", "f/a", "g"], "to": "f/sub"})
+    assert moved.status == 200, moved.body
+    assert [(r["moved"], r["error"]) for r in moved.json()["results"]] == [
+        (False, "f can't move into itself."),
+        (True, None),
+        (True, None),
+    ]
+    again = api.post(f"{DATASETS}/move", {"paths": ["f/sub"], "to": "f"})
+    assert again.json()["results"][0]["error"] == "f/sub is already in f."
+
+    # A dataset in the folder written to during the copy stops the whole folder.
+    wrote = []
+
+    async def append(*args: Any) -> None:
+        if not wrote:
+            wrote.append(True)
+            await asyncio.to_thread(writer.write, "f/sub/a", table(3, 3), "append")
+
+    wrap(monkeypatch, flock, "copy_object", append)
+    changed = rename("f", "h")
+    assert changed.status == 409
+    assert changed.json()["error"] == (
+        "A dataset in the folder changed while it was being moved. Try again."
+    )
+    assert keys(flock, upstream_name(flock), "h/") == []
+    assert get(api, f"{DATASETS}/info", path="f/sub/a").json()["rows"] == 6
+
+
+def test_limits_count_the_whole_request(
+    flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    writer.write("a", table(0, 3))
+    writer.write("b", table(0, 3))
+    bucket = upstream_name(flock)
+    before = keys(flock, bucket)
+    # Each fits on its own, the two together don't.
+    tune(monkeypatch, flock, MOVE_OBJECTS=len(keys(flock, bucket, "a/")))
+    api = flock.client()
+
+    moved = api.post(f"{DATASETS}/move", {"paths": ["a", "b"], "to": "x"})
+    assert moved.status == 409
+    assert moved.json()["command"] == (
+        "aws s3 mv --recursive s3://flock-datasets/a/ s3://flock-datasets/x/a/ --profile flock\n"
+        "aws s3 mv --recursive s3://flock-datasets/b/ s3://flock-datasets/x/b/ --profile flock"
+    )
+    deleted = api.post(f"{DATASETS}/delete", {"paths": ["a", "b"]})
+    assert deleted.status == 409
+    assert deleted.json()["command"] == (
+        "aws s3 rm --recursive s3://flock-datasets/a/ --profile flock\n"
+        "aws s3 rm --recursive s3://flock-datasets/b/ --profile flock"
+    )
+    assert keys(flock, bucket) == before
+    assert get(api, f"{DATASETS}/trash").json()["entries"] == []
+
+    # A folder's own limits are D95's: the folder holding both is too large.
+    put(flock, "f/x.txt", b"x")
+    assert api.post(f"{DATASETS}/move", {"paths": ["a"], "to": "f"}).status == 200
+    assert api.post(f"{DATASETS}/move", {"paths": ["b"], "to": "f"}).status == 200
+    refused = api.post(f"{DATASETS}/rename", {"path": "f", "to": "g"})
+    assert refused.status == 409
+    assert refused.json()["command"] == (
+        "aws s3 mv --recursive s3://flock-datasets/f/ s3://flock-datasets/g/ --profile flock"
+    )
+    assert api.post(f"{DATASETS}/delete", {"path": "f"}).status == 409
+    assert keys(flock, bucket, "g/") == []
+
+
+def test_delete_a_folder_and_restore_it(
+    flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    writer.write("f/a", table(0, 3))
+    writer.write("f/b/c", table(0, 2))
+    put(flock, "f/x.txt", b"x")
+    bucket = upstream_name(flock)
+    before = keys(flock, bucket, "f/")
+    copies = wrap(monkeypatch, flock, "copy_object", lambda *a: None)
+    api = flock.client()
+
+    deleted = api.post(f"{DATASETS}/delete", {"path": "f"})
+    assert deleted.status == 200, deleted.body
+    entry = deleted.json()
+    assert entry["kind"] == "folder" and entry["path"] == "f"
+    assert entry["latest_version"] is None and entry["objects"] == len(before)
+    assert entry["deleted_by"]["email"] == flock.ADMIN_EMAIL
+    assert versions_last([args[1] for args in copies])
+    assert keys(flock, bucket, "f/") == []
+    trash = datasets(flock).trash
+    prefix = f"{flock.call(flock.store.org('flock')).pk:05d}/{entry['id']}/"
+    assert keys(flock, trash, prefix) == [prefix + k.removeprefix("f/") for k in before]
+    (listed,) = get(api, f"{DATASETS}/trash").json()["entries"]
+    assert listed == entry
+
+    # Restored as a whole, to another path when its own is taken.
+    put(flock, "f/new.txt", b"new")
+    taken = api.post(f"{DATASETS}/trash/{entry['id']}/restore", {})
+    assert taken.status == 409 and taken.json()["taken"] is True
+    restored = api.post(f"{DATASETS}/trash/{entry['id']}/restore", {"to": "g"})
+    assert restored.status == 200, restored.body
+    assert restored.json() == {"path": "g"}
+    assert keys(flock, bucket, "g/") == ["g/" + k.removeprefix("f/") for k in before]
+    assert get(api, f"{DATASETS}/info", path="g/b/c").json()["rows"] == 2
+    assert keys(flock, trash, prefix) == []
+
+    # And deleted for good.
+    gone = api.post(f"{DATASETS}/delete", {"path": "g"}).json()
+    assert api.delete(f"{DATASETS}/trash/{gone['id']}").status == 204
+    assert get(api, f"{DATASETS}/trash").json()["entries"] == []
+
+
+def test_delete_several(flock: S3Flock, writer: Writer) -> None:
+    writer.write("a", table(0, 3))
+    writer.write("f/b", table(0, 2))
+    writer.write("solo", table(0, 1))
+    api = flock.client()
+
+    deleted = api.post(f"{DATASETS}/delete", {"paths": ["a", "f", "nope"]})
+    assert deleted.status == 200, deleted.body
+    results = deleted.json()["results"]
+    assert [(r["path"], r["deleted"], r["error"]) for r in results] == [
+        ("a", True, None),
+        ("f", True, None),
+        ("nope", False, "Nothing exists at nope."),
+    ]
+    assert results[0]["entry"]["kind"] == "dataset" and results[0]["entry"]["latest_version"] == 1
+    assert results[1]["entry"]["kind"] == "folder"
+    assert results[0]["entry"]["deleted_by"]["email"] == flock.ADMIN_EMAIL
+    assert results[2]["entry"] is None
+    entries = get(api, f"{DATASETS}/trash").json()["entries"]
+    assert sorted(e["path"] for e in entries) == ["a", "f"]
+    assert keys(flock, upstream_name(flock), "a/") == keys(flock, upstream_name(flock), "f/") == []
+
+    # One path still answers its entry.
+    solo = api.post(f"{DATASETS}/delete", {"path": "solo"})
+    assert solo.status == 200, solo.body
+    assert solo.json()["kind"] == "dataset" and solo.json()["path"] == "solo"
+    assert api.post(f"{DATASETS}/delete", {"path": "nope"}).status == 404
+    for body in ({}, {"path": "a", "paths": ["a"]}, {"paths": []}):
+        assert api.post(f"{DATASETS}/delete", body).status == 422, body
+
+
+def test_sweep_settles_stuck_folder_moves(
+    flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    org = flock.call(flock.store.org("flock")).pk
+    bucket = upstream_name(flock)
+    trash = datasets(flock).trash
+    flock.call(datasets(flock)._ensure_trash())
+    client = flock.s3.client()
+
+    def stuck(path: str, copied: int) -> int:
+        """A folder's move whose request died after copying ``copied`` objects."""
+        objects = keys(flock, bucket, f"{path}/")
+        (row,) = sql(
+            flock,
+            "INSERT INTO dataset_trash (org_pk, path, deleted_at, objects, bytes, kind) "
+            "VALUES ($1, $2, now(), $3, 0, 'folder') RETURNING pk",
+            org,
+            path,
+            len(objects),
+        )
+        for key in objects[:copied]:
+            client.copy_object(
+                Bucket=trash,
+                Key=f"{org:05d}/{row['pk']}/{key.removeprefix(path + '/')}",
+                CopySource={"Bucket": bucket, "Key": key},
+            )
+        return row["pk"]
+
+    writer.write("kept/a", table(0, 3))
+    kept = stuck("kept", 1)  # its copy is incomplete: undone
+    writer.write("gone/a", table(0, 3))
+    gone = stuck("gone", 100)  # its copy is complete: finished
+    tune(monkeypatch, flock, STUCK_AFTER=0)
+
+    done = flock.call(datasets(flock).sweep())
+    assert done["settled"] == 2
+    assert keys(flock, trash, f"{org:05d}/{kept}/") == []
+    assert get(flock.client(), f"{DATASETS}/info", path="kept/a").json()["rows"] == 3
+    assert keys(flock, bucket, "gone/") == []
+    assert keys(flock, trash, f"{org:05d}/{gone}/") != []
+    entries = get(flock.client(), f"{DATASETS}/trash").json()["entries"]
+    assert [(e["id"], e["kind"], e["moved_at"] is not None) for e in entries] == [
+        (gone, "folder", True)
+    ]

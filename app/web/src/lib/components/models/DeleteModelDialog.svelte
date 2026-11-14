@@ -3,20 +3,22 @@
 	import { goto } from '$app/navigation';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { Input } from '#lib/components/ui/input/index.js';
-	import { Label } from '#lib/components/ui/label/index.js';
 	import { TRASH_DAYS, modelApi, modelCall, modelsHref } from '#lib/models.ts';
 	import type { ModelInfo } from '#lib/types.ts';
 	import { count } from '#lib/utils.ts';
 	import FormError from '../FormError.svelte';
+	import ConfirmField from '../ConfirmField.svelte';
 
 	interface Props {
 		open: boolean;
 		org: string;
-		info: ModelInfo;
+		/** The model, as its page or the list has it. */
+		info: Pick<ModelInfo, 'name' | 'model' | 'versions'>;
+		/** Once deleted, in place of going to the list (the list's row menu). */
+		ondeleted?: () => void | Promise<void>;
 	}
 
-	let { open = $bindable(), org, info }: Props = $props();
+	let { open = $bindable(), org, info, ondeleted }: Props = $props();
 
 	// Typing the name is the confirmation. Reset once the dialog has closed, so its text stays
 	// put while it animates closed.
@@ -31,7 +33,8 @@
 			await modelCall(modelApi(org, info.name), { method: 'DELETE' });
 			toast.success(`Deleted ${info.model}`);
 			open = false;
-			await goto(modelsHref(org), { replace: true });
+			if (ondeleted) await ondeleted();
+			else await goto(modelsHref(org), { replace: true });
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
@@ -67,18 +70,12 @@
 				if (typed === info.model) void remove();
 			}}
 		>
-			<div class="grid gap-2">
-				<Label for="delete-model-name">
-					Type <span class="font-mono text-[12.5px]">{info.model}</span> to confirm
-				</Label>
-				<Input
-					id="delete-model-name"
-					bind:value={typed}
-					autocomplete="off"
-					spellcheck="false"
-					disabled={pending}
-				/>
-			</div>
+			<ConfirmField
+				id="delete-model-name"
+				text={info.model}
+				bind:value={typed}
+				disabled={pending}
+			/>
 			<FormError {error} />
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel disabled={pending}>Cancel</AlertDialog.Cancel>

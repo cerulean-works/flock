@@ -12,11 +12,15 @@
 	interface Props {
 		open: boolean;
 		org: string;
-		/** The dataset's path now. */
+		/** The dataset's or folder's path now. */
 		path: string;
+		/** A folder, renamed with everything in it (D133). */
+		folder?: boolean;
+		/** Once renamed, in place of opening the new path (the listing's row menu). */
+		onrenamed?: (to: string) => void | Promise<void>;
 	}
 
-	let { open = $bindable(), org, path }: Props = $props();
+	let { open = $bindable(), org, path, folder = false, onrenamed }: Props = $props();
 
 	// Starts as the current path, a rename being a move too. Reset once the dialog has closed,
 	// so its text stays put while it animates closed.
@@ -40,7 +44,8 @@
 			});
 			toast.success(`Renamed to ${target}`);
 			open = false;
-			await goto(datasetsHref(org, target), { replace: true });
+			if (onrenamed) await onrenamed(target);
+			else await goto(datasetsHref(org, target), { replace: true });
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
@@ -65,8 +70,9 @@
 		interactOutsideBehavior={pending ? 'ignore' : 'close'}
 	>
 		<Dialog.Header>
-			<Dialog.Title>Rename {path}</Dialog.Title>
+			<Dialog.Title class="break-all">Rename {path}{folder ? '/' : ''}</Dialog.Title>
 			<Dialog.Description>
+				{#if folder}Everything in it moves with it.{/if}
 				Anything still writing to the old path will create a new dataset there.
 			</Dialog.Description>
 		</Dialog.Header>

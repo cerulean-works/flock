@@ -19,4 +19,5 @@ const relay: RequestHandler = async ({ params, request }) => {
 export const GET = relay;
 export const POST = relay;
 export const PUT = relay;
+export const PATCH = relay;
 export const DELETE = relay;

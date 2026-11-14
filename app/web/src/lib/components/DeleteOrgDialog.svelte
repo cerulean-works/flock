@@ -3,12 +3,12 @@
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
-	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
 	import type { OrgInfo } from '#lib/types.ts';
 	import { count } from '#lib/utils.ts';
 	import FormError from './FormError.svelte';
+	import ConfirmField from './ConfirmField.svelte';
 
 	let { open = $bindable(), org }: { open: boolean; org: OrgInfo } = $props();
 
@@ -43,12 +43,13 @@
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<form method="POST" action="?/delete" class="grid gap-4" use:enhance={mutation.enhance}>
-			<div class="grid gap-2">
-				<Label for="delete-org-name">
-					Type its ID, <span class="font-mono text-[12.5px]">{org.name}</span>, to confirm
-				</Label>
-				<Input id="delete-org-name" bind:value={typed} autocomplete="off" spellcheck="false" />
-			</div>
+			<ConfirmField
+				id="delete-org-name"
+				text={org.name}
+				bind:value={typed}
+				before="Type its ID,"
+				after=", to confirm"
+			/>
 			{#if active}
 				<div class="flex items-start gap-2.5">
 					<Checkbox id="delete-org-force" name="force" bind:checked={force} class="mt-0.5" />

@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | proposed |
+| Status | applied |
 | Date | 2026-11-14 |
 | Builds on | [013](013-datasets-tab.md), [014](014-model-registry.md), [017](017-hf-compat.md) |
 | Amends | D93 (folders go to the trash too), D95 (folders are renamed too), D99 (a model's name and its folder can differ), D108 (the models list gets the same selection) |
@@ -172,9 +172,53 @@ merges.
 
 ---
 
-## 4. Open for review
+## 4. Settled before review
 
-1. **Model renames keep the old folder** (D134), or copy the files so the folder matches?
-2. **No Move for models** (D134), or should Move send models to another org?
-3. **Loose files can't be selected** (D130), or should they move and delete with the rest?
-4. **A deleted folder is one trash entry** (D132), or one entry per dataset in it?
+The user asked for the doc as written, so each open question took the proposal:
+
+1. **Model renames keep the old folder** (D134).
+2. **No Move for models** (D134).
+3. **Loose files can't be selected** (D130).
+4. **A deleted folder is one trash entry** (D132).
+
+## 5. How it was actually built
+
+One PR on `feat/bulk-actions`, in the two parts of section 3. It was cut from `feat/hf-compat`
+before #105 merged, and retargeted to `main` once it did. Where the code differs from section 2:
+
+### 5.1. API
+
+- **A folder moves all or nothing.** If a dataset in it is written to during the copy, the copy
+  is removed and the folder fails as one item.
+- **A folder delete cut short** is undone by the trash sweep if its trash copy is incomplete,
+  and finished otherwise. Nothing leaves the folder until the copy is complete.
+- **Private flags** at a folder's path and under it follow it on a rename, move and restore, as
+  a dataset's do.
+- **Over the limits, `command` holds one `aws s3` line per path,** joined with newlines.
+- **A rename is also refused while a Hugging Face import into the model runs** (017), whose job
+  holds the old name too.
+- **A new model can take a renamed model's old name.** It shares that folder, with its own
+  `u/{ulid}/` uploads. The stray sweep matches upload folders by ULID, so neither model's files
+  are at risk.
+- **`prefix` ends in a slash** in the model JSON, ready for a Storage link.
+- **A missing path now reads "Nothing exists at X."** in place of "dataset X not found". Status
+  codes are unchanged.
+
+### 5.2. Web
+
+- **The runs table's delete has no type-to-confirm prompt,** so `DeleteRunsDialog` didn't get
+  `ConfirmField`. Deleting many datasets or models asks for the count as D132 says.
+- **Deleting many models is one `DELETE` per model,** in turn, since there's no bulk route.
+  Failures are listed per model. One model uses D109's dialog, and stays on the list page.
+- **The Move dialog's folder picker reads listings with `details=0`,** which skips reading each
+  dataset's info. It reads up to 5 pages and hides the folders being moved.
+- **After a move or rename,** the listing reloads only if something landed in the folder shown.
+  Otherwise the moved rows leave the list, so a folder that's now empty isn't read again.
+- **One folder is deleted by typing its path** without the trailing slash.
+- **The model Rename dialog checks D98's rules** before sending. From the model page it opens
+  the new URL, and from the list it renames the row in place.
+
+### 5.3. Known gaps found while building
+
+- **The manual pass on the local stack** (section 3) wasn't run. The API tests run against
+  Postgres and S3, and the web specs mock the API.

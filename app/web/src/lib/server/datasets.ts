@@ -53,7 +53,8 @@ export async function relayAnswer(
 ): Promise<Response> {
 	const url = new URL(request.url);
 	const method = request.method;
-	const body = method === 'POST' || method === 'PUT' ? await request.text() : undefined;
+	const body =
+		method === 'POST' || method === 'PUT' || method === 'PATCH' ? await request.text() : undefined;
 	const sent: Record<string, string> =
 		body === undefined ? {} : { 'content-type': 'application/json' };
 	for (const name of forward) {

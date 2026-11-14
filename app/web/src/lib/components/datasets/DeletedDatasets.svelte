@@ -1,4 +1,6 @@
 <script lang="ts">
+	import DatabaseIcon from '@lucide/svelte/icons/database';
+	import FolderIcon from '@lucide/svelte/icons/folder';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { DialogSubject } from '#lib/data/dialog-subject.svelte.ts';
 	import { TRASH_DAYS, daysLeft } from '#lib/datasets.ts';
@@ -7,7 +9,7 @@
 	import PurgeDatasetDialog from './PurgeDatasetDialog.svelte';
 	import RestoreDatasetDialog from './RestoreDatasetDialog.svelte';
 
-	/** Admins only: datasets deleted from their page, waiting in the trash (D93). */
+	/** Admins only: datasets and folders deleted, waiting in the trash (D93, D132). */
 	let { org, entries, now }: { org: string; entries: TrashEntry[]; now: number } = $props();
 
 	const restoring = new DialogSubject<TrashEntry>();
@@ -20,15 +22,23 @@
 </script>
 
 <p class="mt-2 max-w-[62ch] text-muted-foreground">
-	Datasets deleted from the Datasets tab stay here for {TRASH_DAYS} days, then they’re removed for good.
+	Datasets and folders deleted from the Datasets tab stay here for {TRASH_DAYS} days, then they’re removed
+	for good.
 </p>
 
 {#if entries.length}
 	<ul class="mt-4 border-t border-divider">
 		{#each entries as entry (entry.id)}
 			<li class="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-1 border-b border-divider py-2">
+				{#if entry.kind === 'folder'}
+					<FolderIcon class="size-4 flex-none text-muted-foreground" aria-label="Folder" />
+				{:else}
+					<DatabaseIcon class="size-4 flex-none text-muted-foreground" aria-label="Dataset" />
+				{/if}
 				<div class="min-w-0 flex-1">
-					<p class="truncate font-mono text-[13px]" title={entry.path}>{entry.path}</p>
+					<p class="truncate font-mono text-[13px]" title={entry.path}>
+						{entry.path}{entry.kind === 'folder' ? '/' : ''}
+					</p>
 					<p class="truncate text-[13px] text-muted-foreground">
 						{bytes(entry.bytes)} · deleted {dateTime(entry.deleted_at)}{entry.deleted_by
 							? ` by ${entry.deleted_by.name}`

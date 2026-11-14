@@ -100,6 +100,7 @@ const info: ModelInfo = {
 	primary: 12,
 	primary_set_by: bob,
 	primary_set_at: NOW - 7200,
+	prefix: 'olmo2-1b/',
 	tags: [
 		{ name: 'release', version: 13, moved_by: alice, moved_at: NOW },
 		{ name: 'checkpoint-12000', version: 14, moved_by: alice, moved_at: NOW },
@@ -177,6 +178,7 @@ describe('ModelView', () => {
 		expect(screen.getByRole('link', { name: 'Browse files' }).element().getAttribute('href')).toBe(
 			'/storage/acme/flock-models/olmo2-1b/u/ULID12/'
 		);
+		await expect.element(screen.getByRole('button', { name: 'Rename' })).toBeVisible();
 		await expect.element(screen.getByRole('button', { name: 'Delete' })).toBeVisible();
 	});
 

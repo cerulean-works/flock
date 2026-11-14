@@ -54,6 +54,22 @@ export const parentOf = (path: string) => path.slice(0, Math.max(0, path.lastInd
 /** The last part of a path. */
 export const nameOf = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 
+/** Whether `path` is `folder` or under it (the root holds everything). */
+export const within = (path: string, folder: string) =>
+	folder === '' || path === folder || path.startsWith(`${folder}/`);
+
+/** A dataset or folder checked in a listing (D130), for the Move and Delete dialogs. */
+export interface DatasetItem {
+	path: string;
+	folder: boolean;
+}
+
+/** An item's path as the dialogs show it, folders ending in `/`. */
+export const itemPath = (item: DatasetItem) => `${item.path}${item.folder ? '/' : ''}`;
+
+/** An item's name as the dialogs show it, folders ending in `/`. */
+export const itemName = (item: DatasetItem) => `${nameOf(item.path)}${item.folder ? '/' : ''}`;
+
 // ----------------------------------------------------------------------------------------------
 // The dashboard's endpoints (`src/routes/api/datasets`), which call Flock as the signed-in user.
 
@@ -87,7 +103,11 @@ export function datasetsApi(
 /** A call to one of the dashboard's dataset endpoints; refusals throw a `DatasetError`. */
 export async function datasetCall<T>(
 	url: string,
-	init: { method?: 'GET' | 'POST' | 'PUT' | 'DELETE'; body?: unknown; signal?: AbortSignal } = {}
+	init: {
+		method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+		body?: unknown;
+		signal?: AbortSignal;
+	} = {}
 ): Promise<T> {
 	const res = await fetch(url, {
 		method: init.method ?? 'GET',
