@@ -244,12 +244,12 @@ Migrations stay numbered SQL files in one sequence. A file is one of two kinds:
 A change that breaks old code takes two releases. For example, renaming `projects.name` to
 `display_name`:
 
-1. Release A ships `0020_project_display_name.sql`, which adds `display_name`, copies `name`
+1. Release A ships `0021_project_display_name.sql`, which adds `display_name`, copies `name`
    into it, and adds a trigger that keeps both in step on write. Release A's code reads and writes
    `display_name`. Release before A, still running during the deploy, keeps using `name`, and the
    trigger keeps `display_name` current for it.
 2. Release B (or A itself, if nothing still needs `name` for writes) ships
-   `0021_drop_project_name.contract.sql`, which drops the trigger and `name`.
+   `0022_drop_project_name.contract.sql`, which drops the trigger and `name`.
 
 Data copies too slow for one transaction go in the backfill (`db/backfill.py`), which is already
 batched and resumable, rather than in the expand file.
@@ -293,7 +293,7 @@ A release starting against a database with an applied contract numbered above it
 migration exits with a clear error, instead of serving errors on whatever the contract dropped:
 
 ```text
-database has contract migrations this release doesn't know (0021_drop_project_name): deploy a release from 0021 or later
+database has contract migrations this release doesn't know (0022_drop_project_name): deploy a release from 0022 or later
 ```
 
 Expand migrations it doesn't know don't stop it, since they're compatible by D146. This is what
@@ -328,7 +328,7 @@ Rejected for now: running the previous release's test suite against the new sche
 the stronger check, but it means building and running two releases per PR. Worth adding if the
 text check lets something through.
 
-Existing files `0001` to `0018` are all treated as expand files, already applied everywhere, and
+Existing files `0001` to `0019` are all treated as expand files, already applied everywhere, and
 the check only looks at files new on the branch.
 
 ## 5. Plan
@@ -409,11 +409,11 @@ Where the build differs from the sections above:
   it is starting.
 - **The S3 proxy refuses an unknown contract too (D148).** Its workers register like API
   processes, and registering runs the same check. A proxy that starts before the API has
-  applied `0019_instances` fails and is restarted, as D145 expects.
+  applied `0020_instances` fails and is restarted, as D145 expects.
 - **`migrate --contract` only applies contracts.** It stops at an expand file not applied yet.
   With `FLOCK_MIGRATE_ON_STARTUP` off, API processes don't apply contracts, so the operator runs
   it from time to time.
-- **The expand-file check (D150) needs no git.** It checks every expand file numbered `0019` and
+- **The expand-file check (D150) needs no git.** It checks every expand file numbered `0020` and
   above, in `tests/app/test_expand_files.py`.
 - **The deploy step goes through Dokploy's API, not its webhook (D141).** The webhook takes no
   environment, so the workflow reads the stack's env with `compose.one`, replaces the
