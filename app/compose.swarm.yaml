@@ -35,16 +35,13 @@ services:
       <<: *start-first
       # Swarm reads labels for Traefik here, not on the container. lbswarm routes to the
       # service's virtual IP, which Swarm switches to the new task once it's healthy (D140).
-      # Traefik v3's swarm provider reads traefik.swarm.*. The traefik.docker.* twins are for a
-      # Traefik v2 docker provider in swarm mode, and either is ignored where it doesn't apply.
+      # Only traefik.swarm.* labels: Traefik v3 skips a service that also has traefik.docker.*.
       # Each domain gets a plain HTTP route and an HTTPS one, as Dokploy's own domains do with
       # HTTPS on. A domain behind a proxy that ends TLS, such as Cloudflare, arrives on the first.
       labels:
         - traefik.enable=true
         - traefik.swarm.lbswarm=true
-        - traefik.docker.lbswarm=true
         - traefik.swarm.network=dokploy-network
-        - traefik.docker.network=dokploy-network
         - traefik.http.routers.flock-ui.rule=Host(`${FLOCK_WEB_HOST:?set FLOCK_WEB_HOST to the dashboard domain}`)
         - traefik.http.routers.flock-ui.entrypoints=${FLOCK_TRAEFIK_HTTP_ENTRYPOINT:-web}
         - traefik.http.routers.flock-ui.service=flock-ui
@@ -115,9 +112,7 @@ services:
       labels:
         - traefik.enable=true
         - traefik.swarm.lbswarm=true
-        - traefik.docker.lbswarm=true
         - traefik.swarm.network=dokploy-network
-        - traefik.docker.network=dokploy-network
         - traefik.http.routers.flock-api.rule=Host(`${FLOCK_API_HOST:?set FLOCK_API_HOST to the API domain}`)
         - traefik.http.routers.flock-api.entrypoints=${FLOCK_TRAEFIK_HTTP_ENTRYPOINT:-web}
         - traefik.http.routers.flock-api.service=flock-api
@@ -164,9 +159,7 @@ services:
       labels:
         - traefik.enable=true
         - traefik.swarm.lbswarm=true
-        - traefik.docker.lbswarm=true
         - traefik.swarm.network=dokploy-network
-        - traefik.docker.network=dokploy-network
         - traefik.http.routers.flock-s3.rule=Host(`${FLOCK_S3_HOST:?set FLOCK_S3_HOST to the S3 proxy domain}`)
         - traefik.http.routers.flock-s3.entrypoints=${FLOCK_TRAEFIK_HTTP_ENTRYPOINT:-web}
         - traefik.http.routers.flock-s3.service=flock-s3
