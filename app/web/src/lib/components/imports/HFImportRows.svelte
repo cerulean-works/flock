@@ -85,7 +85,8 @@
 				{:else}
 					<div class="flex items-start gap-3">
 						<div class="grid min-w-0 flex-1 gap-1.5">
-							<p>
+							<!-- One line as tall as the Hide button, so they sit centered on each other. -->
+							<p class="leading-7">
 								{endedText(job)}
 								{#if job.state === 'finished'}
 									<a class="text-link underline-offset-3 hover:underline" href={resultHref(job)}
