@@ -35,11 +35,11 @@ waiting, only when nothing else uses the database.
 
 Renaming `projects.name` to `display_name` takes two files, usually in two releases.
 
-1. `0019_project_display_name.sql` adds `display_name`, copies `name` into it, and adds a
+1. `0020_project_display_name.sql` adds `display_name`, copies `name` into it, and adds a
    trigger that keeps both in step on write. The code of this release reads and writes
    `display_name`. The release before keeps using `name`, and the trigger keeps
    `display_name` current for it.
-2. `0020_drop_project_name.contract.sql` drops the trigger and `name`. It can ship in the same
+2. `0021_drop_project_name.contract.sql` drops the trigger and `name`. It can ship in the same
    release if nothing still writes `name`, since it waits for the old release to go anyway.
 
 Data copies too slow for one transaction go in the backfill (`db/backfill.py`) instead.

@@ -136,7 +136,7 @@ With `--contract --force`, it applies every pending contract now, without waitin
 A release refuses to start on a database where a contract newer than the release has been applied, rather than serve errors on what the contract dropped:
 
 ```text
-database has contract migrations this release doesn't know (0019_drop_project_name): deploy a release from 0019 or later
+database has contract migrations this release doesn't know (0021_drop_project_name): deploy a release from 0021 or later
 ```
 
 Expand migrations a release doesn't know don't stop it, since they only add. This is what makes a rollback past the contract delay fail, and Swarm then keeps the newer release running.
