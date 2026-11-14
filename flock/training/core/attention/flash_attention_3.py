@@ -38,6 +38,7 @@ def flash_attention_3(
     k: torch.Tensor,
     v: torch.Tensor,
     *,
+    # Prepared int64 [batch, 2] padding spans must stay on CPU, even when Q/K/V are on CUDA.
     attention_mask: torch.Tensor | None = None,
     is_causal: bool = False,
 ) -> torch.Tensor:
@@ -58,10 +59,7 @@ def flash_attention_3(
             Values with the same shape as `k`.
         attention_mask (`torch.Tensor`, *optional*):
             Prepared CPU int64 padding spans with shape `(batch_size, 2)`, as
-            returned by `prepare_flash_attention_mask`. These spans must stay
-            on the CPU even though Q/K/V are on CUDA, so reading slice indices
-            does not synchronize with CUDA in each layer. The preparer accepts
-            the original padding mask on either CPU or CUDA.
+            returned by `prepare_flash_attention_mask`.
         is_causal (`bool`, *optional*, defaults to `False`):
             Whether to prevent attention to future tokens.
 

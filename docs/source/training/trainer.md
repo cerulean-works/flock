@@ -278,13 +278,6 @@ The model validates padding and copies token spans to a CPU int64 tensor once pe
 forward. All decoder layers reuse those spans without repeating contiguity
 validation or host transfers.
 
-`Trainer` moves every collator tensor, including the original
-`Batch["attention_mask"]`, to the training device. This padding mask can stay on
-that device: `prepare_flash_attention_mask` creates the CPU spans during the
-model's forward pass. Keep the prepared spans on CPU when passing them to FA3,
-even though Q/K/V are on CUDA, so each layer can read slice indices without
-synchronizing with CUDA.
-
 FA3 activation affects PyTorch's Flash backend throughout the process. Keep it
 active until all pending backward passes finish.
 

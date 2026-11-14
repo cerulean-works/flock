@@ -413,8 +413,6 @@ class Trainer:
             self.optimizer.zero_grad()
 
             batch = cast(Batch, batch)
-            # Move the collator's raw padding mask with the batch. For FA3, the model
-            # prepares CPU token spans afterward and keeps them on CPU across layers.
             batch = {k: v.to(self.device, non_blocking=True) for k, v in batch.items()}
 
             with torch.autocast(self.device.type, dtype=self.model_dtype):

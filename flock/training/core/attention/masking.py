@@ -37,11 +37,6 @@ def prepare_flash_attention_mask(
 ) -> torch.Tensor | None:
     """Return validated `[batch, 2]` start/stop spans as a CPU int64 tensor.
 
-    The input boolean `[batch, sequence]` padding mask may be on CPU or CUDA,
-    including after `Trainer` moves the collator's batch to its device. This
-    function copies the prepared spans to CPU; keep them there when passing
-    them to `flash_attention_3` to avoid CUDA synchronization in each layer.
-
     Stops are exclusive. Prepare once per model forward and reuse across layers.
     Return `None` when there is no padding; causality stays in `is_causal`.
     """
