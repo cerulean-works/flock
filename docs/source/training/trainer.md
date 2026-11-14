@@ -272,11 +272,25 @@ config = replace(OLMO2_1B_CONFIG, attn_implementation="flash_attention_3")
 
 Unsupported inputs raise an error; there is no fallback. FA3 supports full-sequence
 self-attention with padding at either end and empty rows. Masks with holes,
-dense masks and unequal Q/K sequence lengths are unsupported. Padded batches
-run attention per row, avoiding a dense mask but adding kernel-launch overhead.
-The model validates padding and copies token spans to a CPU int64 tensor once per
-forward. All decoder layers reuse those spans without repeating contiguity
-validation or host transfers.
+dense masks and unequal Q/K sequence lengths are unsupported. For padded batches,
+each layer packs real-token Q/K/V and calls PyTorch's
+`torch.nn.attention.varlen.varlen_attn` once using the registered FA3 kernels.
+The model validates padding and copies token spans to a
+CPU int64 tensor once per forward. All decoder layers reuse those spans. Each
+attention call builds packing indices and cumulative sequence lengths on CPU,
+copies those tensors to CUDA, and restores the packed output to the batch shape.
+Unpadded batches use one batched SDPA call per layer.
+
+The padded path uses a single split (`num_splits=1`) and casts packed Q/K/V to
+the CUDA autocast dtype when autocast is enabled. PyTorch's FA3 integration
+honors its deterministic-algorithm setting during backward.
+
+FA3 attention outputs are zero at padding query positions. Final model logits at
+those positions can differ from SDPA because residual connections still process
+padding tokens. Compare real-token outputs and ignore padding in the loss; the
+trainer's collator already excludes targets involving padding. Empty rows are
+omitted from the packed batch. An entirely padded batch skips the attention
+kernels while retaining zero gradients.
 
 FA3 activation affects PyTorch's Flash backend throughout the process. Keep it
 active until all pending backward passes finish.
@@ -308,8 +322,9 @@ prepares the mask once per forward and shares it across decoder layers.
 For FA3, `prepare_flash_attention_mask` returns a CPU int64 tensor shaped
 `[batch, 2]`. Each row contains the start and exclusive stop of the valid token
 span. Direct callers of `flash_attention_3` must prepare their padding mask first
-and pass these spans. Each attention call reads slice indices from the CPU tensor
-without waiting for CUDA. Unpadded inputs use `None` and one batched attention call.
+and pass these spans on CPU, even though Q/K/V are on CUDA. Each attention call
+derives its packing tensors from the spans, so scalar reads stay on CPU.
+Unpadded inputs use `None` and one batched attention call.
 
 ## Check the run
 

@@ -24,11 +24,36 @@ fa3_module = importlib.import_module("flock.training.core.attention.flash_attent
 
 @pytest.fixture
 def math_kernel(monkeypatch):
-    # Only substitute device/backend selection. Exercise the real padding adapter.
+    # Substitute GPU kernels; exercise the real span packing and restoration.
     monkeypatch.setattr(
         fa3_module,
         "_fa3_context",
         lambda device: attention.sdpa_kernel(attention.SDPBackend.MATH),
+    )
+    compute = Mock(wraps=math_varlen)
+    monkeypatch.setattr(fa3_module, "varlen_attn", compute)
+    return compute
+
+
+def math_varlen(q, k, v, cu_q, cu_k, max_q, max_k, *, window_size, enable_gqa, num_splits):
+    # Independent dense block attention detects incorrect sequence boundaries.
+    q_batch = torch.repeat_interleave(torch.arange(cu_q.numel() - 1), cu_q.diff())
+    k_batch = torch.repeat_interleave(torch.arange(cu_k.numel() - 1), cu_k.diff())
+    visible = q_batch[:, None] == k_batch[None, :]
+    if window_size == (-1, 0):
+        visible &= torch.arange(q.shape[0])[:, None] >= torch.arange(k.shape[0])[None, :]
+    else:
+        assert window_size[0] >= max_q - 1 and window_size[1] >= max_k - 1
+    return (
+        F.scaled_dot_product_attention(
+            q.transpose(0, 1)[None],
+            k.transpose(0, 1)[None],
+            v.transpose(0, 1)[None],
+            attn_mask=visible,
+            enable_gqa=enable_gqa,
+        )
+        .squeeze(0)
+        .transpose(0, 1)
     )
 
 
@@ -58,7 +83,9 @@ def test_padding_adapter_outputs_and_gradients(math_kernel, kv_heads, is_causal,
     actual = flash_attention_3(*inputs, attention_mask=attention_mask, is_causal=is_causal)
     with attention.sdpa_kernel(attention.SDPBackend.MATH):
         expected = sdpa_attention(*reference_inputs, attention_mask=dense_mask)
+    expected = expected.masked_fill(~mask[:, None, :, None], 0)
     torch.testing.assert_close(actual, expected)
+    assert math_kernel.call_count == (1 if padding == "mixed" else 0)
     upstream = torch.randn_like(actual)
     actual.backward(upstream)
     expected.backward(upstream)
@@ -79,7 +106,7 @@ def test_model_huggingface_training_parity(math_kernel, config, kv_heads, paddin
 
 
 @pytest.mark.parametrize("kv_heads", [4, 2, 1])
-def test_model_preserves_padding_logits_and_gradients(math_kernel, config, kv_heads):
+def test_model_preserves_real_token_logits_and_gradients(math_kernel, config, kv_heads):
     model = Olmo2(
         replace(config, attn_implementation="flash_attention_3", num_key_value_heads=kv_heads)
     )
@@ -89,8 +116,9 @@ def test_model_preserves_padding_logits_and_gradients(math_kernel, config, kv_he
         torch.tensor([[0, 0, 0, 0], [0, 1, 1, 0], [1, 1, 0, 0], [0, 1, 0, 0]]),
     )
     actual, expected = model(batch), reference(batch)
-    torch.testing.assert_close(actual, expected)
-    upstream = torch.randn_like(actual)
+    valid = batch["attention_mask"].bool()
+    torch.testing.assert_close(actual[valid], expected[valid])
+    upstream = torch.randn_like(actual).masked_fill(~valid[:, :, None], 0)
     actual.backward(upstream)
     expected.backward(upstream)
     for name, parameter in model.named_parameters():
@@ -131,7 +159,7 @@ def test_unpadded_model_uses_one_batched_fa3_call_per_layer(math_kernel, config,
 
 
 @pytest.mark.parametrize("num_layers", [2, 4])
-def test_model_prepares_padding_before_layers_once_per_forward(
+def test_model_prepares_spans_before_layers_once_per_forward(
     math_kernel, config, monkeypatch, num_layers
 ):
     config = replace(config, num_hidden_layers=num_layers)
@@ -159,7 +187,7 @@ def test_model_prepares_padding_before_layers_once_per_forward(
         return original_item(tensor)
 
     def record_padding(module, args):
-        # Validation and transfer must finish before the first decoder layer.
+        # Original mask validation and its CPU copy precede the decoder loop.
         assert host_reads == ["item", "equal", "cpu"]
         received.append(args[-1])
 
@@ -189,7 +217,24 @@ def test_model_prepares_padding_before_layers_once_per_forward(
         torch.testing.assert_close(prepared, torch.tensor(expected_spans))
         assert prepared is not previous
         previous = prepared
-        torch.testing.assert_close(actual, reference(batch))
+        torch.testing.assert_close(actual[mask], reference(batch)[mask])
+
+
+def test_padded_model_uses_one_varlen_call_per_layer(math_kernel, config, monkeypatch):
+    dense = Mock(side_effect=AssertionError("padded input reached SDPA"))
+    monkeypatch.setattr(fa3_module, "sdpa_attention", dense)
+    model = Olmo2(replace(config, attn_implementation="flash_attention_3"))
+    ids = torch.tensor([[0, 2, 3, 0], [4, 5, 6, 7], [0, 0, 0, 0]])
+    model(make_batch(ids, ids != 0))
+    assert math_kernel.call_count == config.num_hidden_layers
+    for call in math_kernel.call_args_list:
+        q, k, v, cu_q, cu_k, max_q, max_k = call.args
+        assert q.shape == k.shape == v.shape == (6, config.num_attention_heads, 8)
+        assert cu_q is cu_k
+        torch.testing.assert_close(cu_q, torch.tensor([0, 2, 6], dtype=torch.int32))
+        assert max_q == max_k == 4
+        assert call.kwargs["num_splits"] == 1
+    dense.assert_not_called()
 
 
 def test_model_rejects_noncontiguous_padding_before_decoder_layers(config, monkeypatch):
@@ -318,6 +363,36 @@ def test_mixed_dtypes_require_enabled_cuda_autocast(fake_cuda, mock_activation, 
         pytest.raises(RuntimeError, match="same dtype"),
     ):
         flash_attention_3(q, q, v)
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+@pytest.mark.parametrize("value_dtype", [torch.float32, torch.float16, torch.bfloat16])
+@pytest.mark.parametrize("empty", [False, True])
+def test_varlen_applies_cuda_autocast(math_kernel, monkeypatch, dtype, value_dtype, empty):
+    # Real CPU spans exercise packing; emulate the CUDA autocast state and kernel.
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda: True)
+    compute = Mock(side_effect=lambda q, *args, **kwargs: q.clone())
+    monkeypatch.setattr(fa3_module, "varlen_attn", compute)
+    q = torch.randn(2, 4, 3, 8, requires_grad=True)
+    k = torch.randn(2, 2, 3, 8, requires_grad=True)
+    v = torch.randn(2, 2, 3, 8, dtype=value_dtype, requires_grad=True)
+    spans = torch.tensor([[0, 0], [3, 3]] if empty else [[1, 3], [0, 1]])
+    with torch.autocast("cuda", dtype=dtype):
+        output = flash_attention_3(q, k, v, attention_mask=spans, is_causal=True)
+    assert output.shape == q.shape
+    assert output.dtype == dtype
+    if empty:
+        compute.assert_not_called()
+        output.sum().backward()
+        for tensor in (q, k, v):
+            assert tensor.grad is not None
+            torch.testing.assert_close(tensor.grad, torch.zeros_like(tensor))
+    else:
+        compute.assert_called_once()
+        assert all(tensor.dtype == dtype for tensor in compute.call_args.args[:3])
+        assert compute.call_args.kwargs["enable_gqa"] is True
+        assert compute.call_args.kwargs["window_size"] == (-1, 0)
 
 
 def test_activation_survives_forward_and_only_runs_once(mock_activation):
