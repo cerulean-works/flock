@@ -141,7 +141,7 @@
 </script>
 
 <Dialog.Root bind:open onOpenChangeComplete={(o) => !o && reset()}>
-	<Dialog.Content class="sm:max-w-lg">
+	<Dialog.Content class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
 		<Dialog.Header>
 			<Dialog.Title>Import a dataset from Hugging Face</Dialog.Title>
 			<Dialog.Description>Each split becomes a Lance dataset in flock-datasets.</Dialog.Description>
@@ -191,38 +191,40 @@
 					<legend class="mb-2 text-sm font-medium"
 						>{several ? 'Configs and splits' : 'Splits'}</legend
 					>
-					{#each configs as config (config.name)}
-						{#if several}
-							<div class="flex items-center gap-2.5">
-								<Checkbox
-									id="hf-config-{config.name}"
-									checked={whole(config)}
-									indeterminate={config.name in choice && !whole(config)}
-									onCheckedChange={(on) => setConfig(config, on)}
-								/>
-								<Label for="hf-config-{config.name}" class="flex-1">{config.name}</Label>
-								<span class="text-[12.5px] text-muted-foreground tabular-nums">
-									{config.size ? bytes(config.size) : ''}
-								</span>
-							</div>
-						{/if}
-						{#each config.splits ?? [] as split (split.name)}
-							<div class={['flex items-center gap-2.5', several && 'pl-6.5']}>
-								<Checkbox
-									id="hf-split-{config.name}-{split.name}"
-									aria-label={several ? `${split.name} of ${config.name}` : undefined}
-									checked={picked(config).includes(split.name)}
-									onCheckedChange={(on) => setSplit(config, split.name, on)}
-								/>
-								<Label for="hf-split-{config.name}-{split.name}" class="flex-1 font-normal">
-									{split.name}
-								</Label>
-								<span class="text-[12.5px] text-muted-foreground tabular-nums">
-									{split.size === null ? '' : bytes(split.size)}
-								</span>
-							</div>
+					<div class="-mr-2 grid max-h-72 gap-2 overflow-y-auto overscroll-contain pr-2">
+						{#each configs as config (config.name)}
+							{#if several}
+								<div class="flex items-center gap-2.5">
+									<Checkbox
+										id="hf-config-{config.name}"
+										checked={whole(config)}
+										indeterminate={config.name in choice && !whole(config)}
+										onCheckedChange={(on) => setConfig(config, on)}
+									/>
+									<Label for="hf-config-{config.name}" class="flex-1">{config.name}</Label>
+									<span class="text-[12.5px] text-muted-foreground tabular-nums">
+										{config.size ? bytes(config.size) : ''}
+									</span>
+								</div>
+							{/if}
+							{#each config.splits ?? [] as split (split.name)}
+								<div class={['flex items-center gap-2.5', several && 'pl-6.5']}>
+									<Checkbox
+										id="hf-split-{config.name}-{split.name}"
+										aria-label={several ? `${split.name} of ${config.name}` : undefined}
+										checked={picked(config).includes(split.name)}
+										onCheckedChange={(on) => setSplit(config, split.name, on)}
+									/>
+									<Label for="hf-split-{config.name}-{split.name}" class="flex-1 font-normal">
+										{split.name}
+									</Label>
+									<span class="text-[12.5px] text-muted-foreground tabular-nums">
+										{split.size === null ? '' : bytes(split.size)}
+									</span>
+								</div>
+							{/each}
 						{/each}
-					{/each}
+					</div>
 				</fieldset>
 				<div class="grid gap-2">
 					<Label for="hf-dataset-dest">Folder</Label>
