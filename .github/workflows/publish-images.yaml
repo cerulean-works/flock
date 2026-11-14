@@ -1,9 +1,9 @@
 name: Publish images
 
-# Builds flock-api and flock-ui on every push to main, pushes them to GHCR tagged with the commit
-# SHA and `main`, then deploys that SHA to the Dokploy stack (D141). The stack pulls images by
-# FLOCK_VERSION, never by `main`, so Swarm sees each deploy as a change and a rollback points at
-# the image it ran before.
+# Builds flock-api and flock-ui from the latest commit on main, pushes them to GHCR tagged with
+# the commit SHA, moves the `main` tag to them, then calls Dokploy's deploy webhook (D141). The
+# stack pulls `main`, and `docker stack deploy` resolves it to a digest on every deploy, so a
+# moved tag is an update and a rollback returns to the digest that ran before.
 
 on:
   push:
@@ -14,10 +14,11 @@ permissions:
   contents: read
   packages: write
 
-# One run at a time, in push order, so an older SHA never deploys over a newer one.
+# Only the latest commit is built: a push cancels the run still building an older one, which
+# then never moves `main` or deploys.
 concurrency:
   group: publish-images
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   publish:
@@ -53,9 +54,7 @@ jobs:
           context: .
           file: app/api/Dockerfile
           push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/flock-api:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/flock-api:main
+          tags: ghcr.io/${{ github.repository_owner }}/flock-api:${{ github.sha }}
           cache-from: type=gha,scope=flock-api
           cache-to: type=gha,mode=max,scope=flock-api
 
@@ -67,68 +66,42 @@ jobs:
           # The dashboard's public origin is baked into the image.
           build-args: |
             FLOCK_WEB_URL=${{ vars.FLOCK_WEB_URL }}
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/flock-ui:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/flock-ui:main
+          tags: ghcr.io/${{ github.repository_owner }}/flock-ui:${{ github.sha }}
           cache-from: type=gha,scope=flock-ui
           cache-to: type=gha,mode=max,scope=flock-ui
 
-      # Dokploy's deploy webhook takes no environment, so this goes through its API instead. The
-      # API replaces the whole env text on update, so the step reads it, swaps the FLOCK_VERSION
-      # line (or adds one) and writes it back, then deploys. Skipped until the secrets are set.
+      # `main` moves only once both images are pushed, so the stack never pulls an API and a
+      # dashboard from different commits.
+      - name: Move the main tag
+        env:
+          IMAGES: ghcr.io/${{ github.repository_owner }}
+        run: |
+          for image in flock-api flock-ui; do
+            docker buildx imagetools create -t "$IMAGES/$image:main" "$IMAGES/$image:$GITHUB_SHA"
+          done
+
+      # Dokploy checks the branch of a GitHub-sourced service against the push it's sent, so the
+      # call looks like one. Skipped until the secret is set.
       - name: Deploy to Dokploy
         env:
-          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
-          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
-          DOKPLOY_COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
-          FLOCK_VERSION: ${{ github.sha }}
+          DOKPLOY_WEBHOOK_URL: ${{ secrets.DOKPLOY_WEBHOOK_URL }}
+          MESSAGE: ${{ github.event.head_commit.message || 'Publish images' }}
         run: |
-          if [ -z "$DOKPLOY_URL" ] || [ -z "$DOKPLOY_API_KEY" ] || [ -z "$DOKPLOY_COMPOSE_ID" ]; then
-            echo "DOKPLOY_URL, DOKPLOY_API_KEY or DOKPLOY_COMPOSE_ID isn't set, so nothing is deployed."
+          if [ -z "$DOKPLOY_WEBHOOK_URL" ]; then
+            echo "DOKPLOY_WEBHOOK_URL isn't set, so nothing is deployed."
             exit 0
           fi
           set -euo pipefail
-          echo "::add-mask::$DOKPLOY_COMPOSE_ID"
-          api="${DOKPLOY_URL%/}/api"
-          compose=$(mktemp)
           body=$(mktemp)
-          trap 'rm -f "$compose" "$body"' EXIT
-
-          # The env holds the stack's secrets, so it only ever lives in these files, never in the log.
-          curl --fail --silent --show-error --get \
-            -H "x-api-key: $DOKPLOY_API_KEY" \
-            --data-urlencode "composeId=$DOKPLOY_COMPOSE_ID" \
-            "$api/compose.one" -o "$compose"
-
-          jq -e '.env | type == "string"' "$compose" > /dev/null || {
-            echo "Dokploy's compose.one answered without an env, so the deploy stops rather than clear it." >&2
+          trap 'rm -f "$body"' EXIT
+          # Dokploy refuses with a 301 status (not a redirect) when the branch doesn't match.
+          status=$(jq -n --arg sha "$GITHUB_SHA" --arg message "$MESSAGE" \
+            '{ref: "refs/heads/main", head_commit: {id: $sha, message: ($message | split("\n")[0])}}' |
+            curl --silent --show-error --output "$body" --write-out '%{http_code}' \
+              -H "x-github-event: push" -H "Content-Type: application/json" \
+              --data @- "$DOKPLOY_WEBHOOK_URL")
+          if [ "$status" != 200 ]; then
+            echo "Dokploy answered $status: $(cat "$body")" >&2
             exit 1
-          }
-          # Every other line, comments and blank lines included, stays as it was.
-          jq --arg id "$DOKPLOY_COMPOSE_ID" --arg version "$FLOCK_VERSION" '
-            def pin: "FLOCK_VERSION=" + $version;
-            def is_pin: test("^\\s*(export\\s+)?FLOCK_VERSION\\s*=");
-            .env as $env
-            | ($env | split("\n")) as $lines
-            | {
-                composeId: $id,
-                env: (
-                  if any($lines[]; is_pin) then $lines | map(if is_pin then pin else . end) | join("\n")
-                  elif ($env | test("^\\s*$")) then pin
-                  else ($env | sub("\\n+$"; "")) + "\n" + pin
-                  end
-                )
-              }
-          ' "$compose" > "$body"
-
-          curl --fail --silent --show-error -o /dev/null \
-            -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" \
-            --data @"$body" "$api/compose.update"
-
-          jq -n --arg id "$DOKPLOY_COMPOSE_ID" --arg version "$FLOCK_VERSION" \
-            '{composeId: $id, title: ("Deploy " + $version[0:7])}' |
-            curl --fail --silent --show-error -o /dev/null \
-              -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" \
-              --data @- "$api/compose.deploy"
-
-          echo "Deploying $FLOCK_VERSION."
+          fi
+          echo "Deploying $GITHUB_SHA."

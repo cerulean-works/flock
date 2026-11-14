@@ -1,11 +1,12 @@
 # Flock as a Docker Swarm stack (D138), deployed with `docker stack deploy` or as a Dokploy
 # "Stack". compose.yaml stays the file for local runs and for Compose deployments.
 #
-# Differences from compose.yaml: images come from the registry at FLOCK_VERSION (D141), Traefik
-# labels sit under `deploy` (D140), each app service starts its new task before the old one stops
-# (D139), and there is no `build`, `depends_on` or `profiles`, which Swarm ignores (D145).
+# Differences from compose.yaml: images come from the registry, at the `main` tag CI moves
+# (D141), Traefik labels sit under `deploy` (D140), each app service starts its new task before
+# the old one stops (D139), and there is no `build`, `depends_on` or `profiles`, which Swarm
+# ignores (D145).
 #
-#   FLOCK_VERSION=<sha> docker stack deploy --with-registry-auth -c compose.swarm.yaml flock
+#   docker stack deploy --with-registry-auth -c compose.swarm.yaml flock
 
 # The same update for every app service: start the new task, wait until it's healthy, watch it
 # for 30 seconds, and only then stop the old one. A task that fails in that time rolls back.
@@ -23,7 +24,7 @@ x-start-first: &start-first
 
 services:
   ui:
-    image: ${FLOCK_IMAGE_PREFIX:-ghcr.io/cerulean-works}/flock-ui:${FLOCK_VERSION:?set FLOCK_VERSION to the commit SHA to deploy}
+    image: ${FLOCK_IMAGE_PREFIX:-ghcr.io/cerulean-works}/flock-ui:${FLOCK_VERSION:-main}
     environment:
       FLOCK_API_URL: ${FLOCK_API_URL:-http://flock-api:8080}
       FLOCK_API_PUBLIC_URL: ${FLOCK_API_PUBLIC_URL:-http://localhost:8080}
@@ -49,7 +50,7 @@ services:
         - traefik.http.services.flock-ui.loadbalancer.server.port=3000
 
   api:
-    image: ${FLOCK_IMAGE_PREFIX:-ghcr.io/cerulean-works}/flock-api:${FLOCK_VERSION:?set FLOCK_VERSION to the commit SHA to deploy}
+    image: ${FLOCK_IMAGE_PREFIX:-ghcr.io/cerulean-works}/flock-api:${FLOCK_VERSION:-main}
     networks:
       dokploy-network:
       internal:
@@ -123,7 +124,7 @@ services:
   # FLOCK_S3_POOL_SIZE connections (D143). It fails its health check until the API has applied
   # the migrations it reads, and Swarm restarts it until then (D145).
   flock-s3:
-    image: ${FLOCK_IMAGE_PREFIX:-ghcr.io/cerulean-works}/flock-api:${FLOCK_VERSION:?set FLOCK_VERSION to the commit SHA to deploy}
+    image: ${FLOCK_IMAGE_PREFIX:-ghcr.io/cerulean-works}/flock-api:${FLOCK_VERSION:-main}
     command: ["uvicorn", "app.api.src.s3_proxy.app:app", "--host", "0.0.0.0", "--port", "8090", "--workers", "${FLOCK_S3_WORKERS:-4}"]
     networks:
       - dokploy-network
