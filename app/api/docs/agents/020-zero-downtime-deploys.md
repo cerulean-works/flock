@@ -415,10 +415,14 @@ Where the build differs from the sections above:
   it from time to time.
 - **The expand-file check (D150) needs no git.** It checks every expand file numbered `0020` and
   above, in `tests/app/test_expand_files.py`.
-- **The deploy step goes through Dokploy's API, not its webhook (D141).** The webhook takes no
-  environment, so the workflow reads the stack's env with `compose.one`, replaces the
-  `FLOCK_VERSION` line, writes it back with `compose.update`, and calls `compose.deploy`. It's
-  skipped until the `DOKPLOY_URL`, `DOKPLOY_API_KEY` and `DOKPLOY_COMPOSE_ID` secrets are set.
+- **Only the latest commit is deployed, by Dokploy's webhook (D141).** A push cancels the run
+  still building an older commit. The workflow pushes images tagged with the SHA, moves `main`
+  to them once both are pushed, and calls the service's deploy webhook, which takes no
+  environment. So the stack pulls `main` (`FLOCK_VERSION` defaults to it) rather than a SHA.
+  That's safe for Swarm: Dokploy runs `docker stack deploy --with-registry-auth`, which resolves
+  the tag to a digest on every deploy, so a moved tag is an update and a rollback returns to the
+  digest before. For migrations, a skipped release is the one risk, so the step between an
+  expand and its contract keeps the old and new columns in step with a trigger, not in code.
 - **Both Traefik label families (D140).** The stack sets `traefik.swarm.*` (Traefik v3's Swarm
   provider) and `traefik.docker.*` (a v2 Docker provider in Swarm mode). Whichever doesn't apply
   is ignored.

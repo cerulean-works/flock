@@ -123,7 +123,7 @@ On a [Swarm stack](deploy#deploy-on-docker-swarm), the new API applies its migra
 
 Every API process and S3 proxy worker records which release it runs, and refreshes the record every 15 seconds. A record not refreshed for 60 seconds counts as gone. A contract numbered `NNNN` is due once every live process knows `NNNN`, and has been for `FLOCK_CONTRACT_DELAY` seconds (`1800`, 30 minutes, by default). The delay leaves time to roll a bad release back to the previous one while that release still works on the schema. Every API process checks every minute and applies due contracts under the migration lock, so only one applies each. The S3 proxy applies no migrations.
 
-A change that breaks old code, such as renaming a column, takes two releases. The first ships an expand that adds the new column, copies the data and keeps both columns in step with a trigger. A later one ships the contract that drops the trigger and the old column.
+A change that breaks old code, such as renaming a column, takes two releases. The first ships an expand that adds the new column, copies the data and keeps both columns in step with a trigger. A later one ships the contract that drops the trigger and the old column. Keep the columns in step in the database, not in a release's code: a deployment that only runs the latest release may skip the one in between.
 
 With `FLOCK_MIGRATE_ON_STARTUP=false`, nothing applies contracts by itself. Apply the due ones from your migration job, after the new replicas are up:
 

@@ -42,6 +42,9 @@ Renaming `projects.name` to `display_name` takes two files, usually in two relea
 2. `0022_drop_project_name.contract.sql` drops the trigger and `name`. It can ship in the same
    release if nothing still writes `name`, since it waits for the old release to go anyway.
 
+Keep the two columns in step in the database (a trigger), not in the code of a release in
+between. Only the latest commit on `main` is deployed, so a release in between may never run.
+
 Data copies too slow for one transaction go in the backfill (`db/backfill.py`) instead.
 
 ## Locks
