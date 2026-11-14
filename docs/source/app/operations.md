@@ -1,6 +1,6 @@
 # Deployment and operation reference
 
-Use [Deploy with Compose](deploy#deploy-with-compose), [Deploy on Docker Swarm](deploy#deploy-on-docker-swarm), [Upgrade Flock](operate#upgrade-flock) and [Back up and restore Flock](operate#back-up-and-restore) for step-by-step procedures. This page describes deployment constraints and runtime behavior.
+Use [Deploy with Compose](deploy#deploy-with-compose), [Deploy on Dokploy with Docker Swarm](deploy-dokploy), [Upgrade Flock](operate#upgrade-flock) and [Back up and restore Flock](operate#back-up-and-restore) for step-by-step procedures. This page describes deployment constraints and runtime behavior.
 
 ## What you deploy
 
@@ -114,7 +114,7 @@ A migration file whose first line is `-- flock: no-transaction` runs outside a t
 
 ### Expand and contract migrations
 
-On a [Swarm stack](deploy#deploy-on-docker-swarm), the new API applies its migrations while the old release still serves, for a minute or more. So a migration must not remove anything the old release reads. Migrations come in two kinds, in one numbered sequence:
+On a [Swarm stack](deploy-dokploy), the new API applies its migrations while the old release still serves, for a minute or more. So a migration must not remove anything the old release reads. Migrations come in two kinds, in one numbered sequence:
 
 | Kind | File | What it does | When Flock applies it |
 |---|---|---|---|
@@ -208,7 +208,7 @@ Each process keeps a pool of connections. It opens them as requests need them, u
 | Each API replica | `FLOCK_POOL_SIZE` (16) | 16 + 1 = 17 |
 | Each S3 proxy worker | `FLOCK_S3_POOL_SIZE` (4) | 4 + 1 = 5 |
 
-The default stack, one API replica and `FLOCK_S3_WORKERS` (4) proxy workers, uses at most 17 + 4 × 5 = 37 connections. During a [Swarm redeploy](deploy#deploy-on-docker-swarm) the old and new release run side by side, which doubles it to 74. That fits under PostgreSQL's default `max_connections` of 100, with room for a backup or a `psql` session. If you raise worker counts, replicas or pool sizes, count the overlap too, and raise `max_connections` if needed.
+The default stack, one API replica and `FLOCK_S3_WORKERS` (4) proxy workers, uses at most 17 + 4 × 5 = 37 connections. During a [Swarm redeploy](deploy-dokploy) the old and new release run side by side, which doubles it to 74. That fits under PostgreSQL's default `max_connections` of 100, with room for a backup or a `psql` session. If you raise worker counts, replicas or pool sizes, count the overlap too, and raise `max_connections` if needed.
 
 With a pooler such as PgBouncer in transaction mode, which drops `LISTEN`, point `FLOCK_LISTEN_DATABASE_URL` at PostgreSQL directly.
 

@@ -2,6 +2,8 @@
 
 Start an API, PostgreSQL and dashboard to develop Flock locally. To use the existing Cerulean service, [sign in](../cli/sign-in) instead.
 
+Local development uses Docker Compose. For production, [deploy a Docker Swarm stack](deploy-dokploy) instead, so redeploys don't interrupt running experiments.
+
 ## Before you start
 
 You need a repository checkout, Docker with Compose v2, Python 3.14, uv and pnpm. Run the API commands from the repository root. This setup publishes development ports on your machine.
