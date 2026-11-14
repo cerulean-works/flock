@@ -111,6 +111,78 @@ Use `flock-s3`, rather than the generic service name `s3`, as the reverse proxy 
 
 [Settings](configuration#s3-settings) covers regions, prefixes and trash storage. [S3 behavior](s3-behavior) explains key limits and supported operations. The upstream administrative key is for the server; users receive Flock-scoped keys.
 
+## Deploy on Docker Swarm
+
+Run Flock as a Swarm stack so a redeploy never leaves the API or the S3 proxy without a healthy task behind Traefik.
+
+With Compose, a redeploy stops the old API container before the new one is healthy, and Traefik answers 404 in between. The wandb SDK doesn't retry a 404, so runs logging at that moment crash. A stack starts each new task first, waits until its health check passes and watches it for 30 seconds. Only then does it stop the old one. If the new task never becomes healthy, Swarm rolls the service back and the old task keeps serving.
+
+`app/compose.swarm.yaml` is the stack. It runs `ui`, `api`, `flock-s3` and `postgres`, and differs from `app/compose.yaml` in these ways:
+- **Images come from a registry.** A stack can't build, so it pulls `flock-api` and `flock-ui` tagged `FLOCK_VERSION`, a commit SHA. CI publishes them on every push to `main`.
+- **Traefik routes are in the file.** Each app service has Traefik labels for its domain, so you don't add domains in Dokploy.
+- **The S3 proxy always runs.** There is no `s3` profile, so set the [S3 settings](configuration#s3-settings) and an S3 domain.
+- **The volumes already exist.** The stack mounts the PostgreSQL and run files volumes your Compose deployment created, by name.
+
+You need Dokploy (it runs Docker in Swarm mode), its Traefik with the Swarm provider enabled, and three domains: the dashboard, the API and the S3 proxy. The file assumes one Swarm node. With more, use the `s3` [files backend](operations#run-files), since the `files` volume is local to one node.
+
+### Publish the images
+
+The `Publish images` workflow (`.github/workflows/publish-images.yaml`) builds both images on every push to `main` and pushes them to GHCR as `ghcr.io/<owner>/flock-api` and `ghcr.io/<owner>/flock-ui`, tagged with the commit SHA and `main`. It then deploys that SHA to Dokploy. Set these in the repository's **Settings**, under **Secrets and variables** then **Actions**:
+
+| Name | Kind | Value |
+|---|---|---|
+| `FLOCK_WEB_URL` | variable | The dashboard's public origin, such as `https://flock.example.com`. It's built into the dashboard image. |
+| `DOKPLOY_URL` | secret | Dokploy's address, such as `https://dokploy.example.com`. |
+| `DOKPLOY_API_KEY` | secret | A Dokploy API key, from **Settings** then **Profile** in Dokploy. |
+| `DOKPLOY_COMPOSE_ID` | secret | The ID of Flock's Stack service in Dokploy, from its URL. |
+
+Without the three secrets, the workflow publishes the images and deploys nothing. With them, it sets `FLOCK_VERSION` in the service's environment to the new SHA, leaves every other line as it was, and starts a deploy. The stack pins a SHA rather than `main` so that Swarm sees each release as a change and a rollback returns to the image that ran before.
+
+Dokploy needs to pull the images. If the packages are private, add GHCR under **Registry** in Dokploy with a GitHub token that has `read:packages`.
+
+### Set the environment
+
+The stack reads the same variables as Compose (see [Environment variables](operations#environment-variables)), plus these:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `FLOCK_VERSION` | required | Commit SHA of the images to run. The workflow updates it on every deploy. |
+| `FLOCK_IMAGE_PREFIX` | `ghcr.io/cerulean-works` | Registry and owner the images are pulled from. |
+| `FLOCK_WEB_HOST` | required | Dashboard domain, such as `flock.example.com`. |
+| `FLOCK_API_HOST` | required | API domain, such as `api.flock.example.com`. |
+| `FLOCK_S3_HOST` | required | S3 proxy domain, such as `s3.flock.example.com`. |
+| `FLOCK_POSTGRES_VOLUME` | required | Name of the existing PostgreSQL volume, such as `flock-app_postgres-data`. |
+| `FLOCK_FILES_VOLUME` | required | Name of the existing run files volume, such as `flock-app_files`. |
+| `FLOCK_TRAEFIK_ENTRYPOINT` | `websecure` | Traefik entrypoint for HTTPS. |
+| `FLOCK_TRAEFIK_CERTRESOLVER` | `letsencrypt` | Traefik certificate resolver. |
+
+Check the entrypoint and resolver names in Dokploy's Traefik configuration, `/etc/dokploy/traefik/traefik.yml`. A stack prefixes volume names with its own name, which isn't the Compose project's, so the volumes are external and named in full. Find their names with `docker volume ls`.
+
+### Move from Compose to a stack
+
+The move itself has one short outage, because the Compose service and the stack can't both use the same domains and the same PostgreSQL volume. Pick a quiet time and tell your users.
+
+1. Note the Compose project's volume names:
+
+   ```bash
+   docker volume ls --filter name=flock-app
+   ```
+
+2. [Back up](operate#back-up-and-restore) the database and the run files.
+3. In Dokploy, stop the Compose service and remove its domains.
+4. Create a Compose service of type **Stack** (or switch the existing one), with `app/compose.swarm.yaml` as its file. Give it the same environment plus the variables above, with `FLOCK_VERSION` set to the SHA of the commit you run now. Deploy it.
+5. Check the API and the S3 proxy:
+
+   ```bash
+   curl --fail https://api.flock.example.com/readyz
+   curl --fail https://s3.flock.example.com/healthz
+   ```
+
+6. Sign in to the dashboard, log a test run and list a bucket.
+7. Redeploy once with no change, and once with a new SHA while a test run logs, to check that the run survives.
+
+During a redeploy, the old and new release share the database for a minute or more. [Expand and contract migrations](operations#expand-and-contract-migrations) keep the old release working on the new schema.
+
 ## Enable Google sign-in
 
 Let invited users sign in with their Google accounts.

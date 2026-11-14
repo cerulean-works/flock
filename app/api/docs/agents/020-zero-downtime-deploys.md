@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | draft |
+| Status | built, not yet deployed (section 6 is still to check on the server) |
 | Date | 2026-11-14 |
 | Builds on | [009](009-s3-proxy.md), [012](012-postgres-only.md) |
 | Amends | D83 (migrations gain a contract step, applied once no old replica is left) |
@@ -396,3 +396,29 @@ These aren't documented by Dokploy, so I'd confirm them on our server first:
 - One replica of each service still means a crash of the API (not a deploy) gives a gap until
   Swarm restarts it. Going to two replicas is a one-line change, and the connection count in D143
   leaves room for it, but it isn't part of this stage.
+
+## 8. How it was actually built
+
+Where the build differs from the sections above:
+
+- **When the contract delay starts (D147).** A second table, `flock_contract_waits`, keeps since
+  when every live instance has known each contract. A check that finds an instance which doesn't
+  know it removes the row, and so does such an instance when it registers, so one that comes and
+  goes between two checks still restarts the delay. Registering and applying a contract take a
+  second advisory lock (`LOCK + 1`), so a contract never runs while a server that doesn't know
+  it is starting.
+- **The S3 proxy refuses an unknown contract too (D148).** Its workers register like API
+  processes, and registering runs the same check. A proxy that starts before the API has
+  applied `0018_instances` fails and is restarted, as D145 expects.
+- **`migrate --contract` only applies contracts.** It stops at an expand file not applied yet.
+  With `FLOCK_MIGRATE_ON_STARTUP` off, API processes don't apply contracts, so the operator runs
+  it from time to time.
+- **The expand-file check (D150) needs no git.** It checks every expand file numbered `0018` and
+  above, in `tests/app/test_expand_files.py`.
+- **The deploy step goes through Dokploy's API, not its webhook (D141).** The webhook takes no
+  environment, so the workflow reads the stack's env with `compose.one`, replaces the
+  `FLOCK_VERSION` line, writes it back with `compose.update`, and calls `compose.deploy`. It's
+  skipped until the `DOKPLOY_URL`, `DOKPLOY_API_KEY` and `DOKPLOY_COMPOSE_ID` secrets are set.
+- **Both Traefik label families (D140).** The stack sets `traefik.swarm.*` (Traefik v3's Swarm
+  provider) and `traefik.docker.*` (a v2 Docker provider in Swarm mode). Whichever doesn't apply
+  is ignored.

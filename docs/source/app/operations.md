@@ -1,6 +1,6 @@
 # Deployment and operation reference
 
-Use [Deploy with Compose](deploy#deploy-with-compose), [Upgrade Flock](operate#upgrade-flock) and [Back up and restore Flock](operate#back-up-and-restore) for step-by-step procedures. This page describes deployment constraints and runtime behavior.
+Use [Deploy with Compose](deploy#deploy-with-compose), [Deploy on Docker Swarm](deploy#deploy-on-docker-swarm), [Upgrade Flock](operate#upgrade-flock) and [Back up and restore Flock](operate#back-up-and-restore) for step-by-step procedures. This page describes deployment constraints and runtime behavior.
 
 ## What you deploy
 
@@ -36,7 +36,7 @@ The SDK needs the API's wandb routes, including `/graphql`, `/files/...` and `/s
 |---|---|---|
 | `POSTGRES_PASSWORD` | `flock` | Password of the Compose database user. Compose uses it for PostgreSQL and constructs the API's `FLOCK_DATABASE_URL` from it. Change it before first deployment. On an existing volume, changing this variable alone does not rotate the stored database password. |
 | `FLOCK_VERSION` | `latest` | Shared image tag for `flock-api` and `flock-ui`; both images come from the same release. |
-| `FLOCK_S3_WORKERS` | `4` | Worker processes in the `flock-s3` service. Each one uses at most one CPU core, so raise it for heavy upload or download traffic. Each worker also opens up to `FLOCK_POOL_SIZE` database connections plus one, so keep the total under PostgreSQL's `max_connections`. |
+| `FLOCK_S3_WORKERS` | `4` | Worker processes in the `flock-s3` service. Each one uses at most one CPU core, so raise it for heavy upload or download traffic. Each worker also opens up to `FLOCK_S3_POOL_SIZE` database connections plus one, so keep the total under PostgreSQL's `max_connections` (see [Database connections](#database-connections)). |
 | `POSTGRES_SHARED_BUFFERS` | `1GB` | PostgreSQL's shared buffer allocation. |
 | `POSTGRES_EFFECTIVE_CACHE_SIZE` | `3GB` | PostgreSQL's estimate of memory available for caching; it does not allocate that amount. |
 
@@ -89,7 +89,7 @@ Some migrations leave work to Python that SQL can't do, such as reading wandb's 
 backfilling the run table and series of 10000 runs
 ```
 
-Concurrent replicas starting at once are safe: they take turns on a migration lock, and the second finds nothing left to do. To upgrade, back up the database and the files, update your checkout, and rebuild:
+Concurrent replicas starting at once are safe: they take turns on a migration lock, and the second finds nothing left to do. Each migration waits at most 5 seconds for a table lock (`lock_timeout`). If the lock isn't free by then, for example behind a long query, Flock waits a few seconds and tries again, up to 10 times, and then fails to start. Without the timeout, a migration waiting for its lock would hold up every query behind it. To upgrade, back up the database and the files, update your checkout, and rebuild:
 
 ```bash
 git pull
@@ -108,7 +108,47 @@ This is what a Kubernetes migration Job runs (see [On Kubernetes](#on-kubernetes
 database has unapplied migrations (0004_orgs_and_users) and FLOCK_MIGRATE_ON_STARTUP is off
 ```
 
+A migration file whose first line is `-- flock: no-transaction` runs outside a transaction, for statements that can't run in one, such as `CREATE INDEX CONCURRENTLY`. Such a file holds one statement, written so it can run again (`IF NOT EXISTS`), because a failure partway can't be rolled back.
+
 **Upgrading a database from before accounts existed** (before migration `0004_orgs_and_users`): every entity becomes an organization, and existing runs have no owner, so only admins can change them. The first account to sign up becomes an admin of every organization.
+
+### Expand and contract migrations
+
+On a [Swarm stack](deploy#deploy-on-docker-swarm), the new API applies its migrations while the old release still serves, for a minute or more. So a migration must not remove anything the old release reads. Migrations come in two kinds, in one numbered sequence:
+
+| Kind | File | What it does | When Flock applies it |
+|---|---|---|---|
+| Expand | `NNNN_name.sql` | Only adds: tables, nullable columns or columns with a default, indexes, functions, data copied into new columns. The previous release keeps working on the schema it leaves. | On startup, as above. |
+| Contract | `NNNN_name.contract.sql` | Removes what an earlier expand replaced: drops a column, table or sync trigger, or adds `NOT NULL` once every row is filled. | Once no running replica predates it, and that has been true for `FLOCK_CONTRACT_DELAY`. |
+
+Every API process and S3 proxy worker records which release it runs, and refreshes the record every 15 seconds. A record not refreshed for 60 seconds counts as gone. A contract numbered `NNNN` is due once every live process knows `NNNN`, and has been for `FLOCK_CONTRACT_DELAY` seconds (`1800`, 30 minutes, by default). The delay leaves time to roll a bad release back to the previous one while that release still works on the schema. Every API process checks every minute and applies due contracts under the migration lock, so only one applies each. The S3 proxy applies no migrations.
+
+A change that breaks old code, such as renaming a column, takes two releases. The first ships an expand that adds the new column, copies the data and keeps both columns in step with a trigger. A later one ships the contract that drops the trigger and the old column.
+
+With `FLOCK_MIGRATE_ON_STARTUP=false`, nothing applies contracts by itself. Apply the due ones from your migration job, after the new replicas are up:
+
+```bash
+uv run --package flock-app-api python -m app.api.src.db.migrate --contract
+```
+
+With `--contract --force`, it applies every pending contract now, without waiting for old replicas or the delay. Use it only on a database nothing else is using.
+
+A release refuses to start on a database where a contract newer than the release has been applied, rather than serve errors on what the contract dropped:
+
+```text
+database has contract migrations this release doesn't know (0019_drop_project_name): deploy a release from 0019 or later
+```
+
+Expand migrations a release doesn't know don't stop it, since they only add. This is what makes a rollback past the contract delay fail, and Swarm then keeps the newer release running.
+
+CI checks every expand file new on a branch for statements that break the previous release: `DROP TABLE`, `DROP COLUMN`, `RENAME`, `ALTER COLUMN ... TYPE`, `SET NOT NULL`, and `ADD COLUMN ... NOT NULL` without a default. Those belong in a contract file. A statement that must run at expand time, such as dropping a column no release ever read, passes with a comment on the line above it:
+
+```sql
+-- flock: allow-breaking the column was never read
+ALTER TABLE projects DROP COLUMN legacy_note;
+```
+
+Say in the pull request that the deploy has a short window in which the old release can see errors.
 
 ### Updating an existing installation
 
@@ -154,10 +194,23 @@ Back up both together. A database backup without the run files loses them, and t
 
 - **Replicas hold little memory**: their open event streams and a cache of credentials. Startup takes a second or less, whatever the data, because nothing is loaded.
 - **PostgreSQL's buffer cache does the caching.** Give it memory for the hot run tables and curves. Compose gives PostgreSQL 1 GB of `shared_buffers` (`POSTGRES_SHARED_BUFFERS`) and an `effective_cache_size` of 3 GB (`POSTGRES_EFFECTIVE_CACHE_SIZE`).
-- **Database connections:** each replica opens up to `FLOCK_POOL_SIZE` (16) connections, plus one that listens for notifications. With a pooler such as PgBouncer in transaction mode, which drops `LISTEN`, point `FLOCK_LISTEN_DATABASE_URL` at PostgreSQL directly.
+- **Database connections:** see [Database connections](#database-connections).
 - **After a bulk load**, such as thousands of new runs, Flock vacuums and analyzes the run table itself rather than wait for autovacuum, so filters keep fast plans.
 
 [Performance](architecture#performance) lists the latencies to expect.
+
+### Database connections
+
+Each process keeps a pool of connections. It opens them as requests need them, up to the pool's size, and keeps a few open when idle. Each process also keeps one more connection open, to listen for notifications.
+
+| Process | Pool size | Most connections |
+|---|---|---|
+| Each API replica | `FLOCK_POOL_SIZE` (16) | 16 + 1 = 17 |
+| Each S3 proxy worker | `FLOCK_S3_POOL_SIZE` (4) | 4 + 1 = 5 |
+
+The default stack, one API replica and `FLOCK_S3_WORKERS` (4) proxy workers, uses at most 17 + 4 × 5 = 37 connections. During a [Swarm redeploy](deploy#deploy-on-docker-swarm) the old and new release run side by side, which doubles it to 74. That fits under PostgreSQL's default `max_connections` of 100, with room for a backup or a `psql` session. If you raise worker counts, replicas or pool sizes, count the overlap too, and raise `max_connections` if needed.
+
+With a pooler such as PgBouncer in transaction mode, which drops `LISTEN`, point `FLOCK_LISTEN_DATABASE_URL` at PostgreSQL directly.
 
 
 ## Crash detection
@@ -176,6 +229,7 @@ Every replica checks every `FLOCK_CRASH_TIMEOUT / 4` seconds, and at least every
 Flock has no Helm chart. A deployment needs:
 - **A Deployment of replicas** with `FLOCK_MIGRATE_ON_STARTUP=false`, and a Service in front of them. Any number of replicas works.
 - **A migration Job** (or init container) per release that runs `python -m app.api.src.db.migrate` with the same settings, before the new replicas start.
+- **A contract Job** that runs `python -m app.api.src.db.migrate --contract` after the old replicas are gone, such as a CronJob every few minutes. It applies only the [contracts](#expand-and-contract-migrations) that are due.
 - **Probes:** a liveness probe on `GET /healthz` and a readiness probe on `GET /readyz`.
 - **Run files** on a `ReadWriteMany` volume mounted at `/data/files` by every replica, or the `s3` files backend.
 - **`terminationGracePeriodSeconds`** of 30, so in-flight writes finish when a replica stops.
@@ -183,7 +237,14 @@ Flock has no Helm chart. A deployment needs:
 
 ## Shutting down
 
-On `SIGTERM` or `SIGINT`, a replica starts failing `/readyz`, so the load balancer stops sending it requests, and ends every open event stream, because otherwise the server would wait for them forever. Dashboards reconnect to another replica, or to this one when it's back, and replay what they missed. Requests in flight finish. Compose gives Flock 15 seconds to stop.
+On `SIGTERM` or `SIGINT`, a replica starts failing `/readyz`, so the load balancer stops sending it requests, and ends every open event stream, because otherwise the server would wait for them forever. Dashboards reconnect to another replica, or to this one when it's back, and replay what they missed. Requests in flight finish. How long a process gets before it's killed:
+
+| Deployment | API | S3 proxy |
+|---|---|---|
+| Compose | 15 seconds | 10 seconds (Docker's default) |
+| Swarm stack | 30 seconds | 120 seconds |
+
+On a stack, the API's 30 seconds cover a large `file_stream` batch or upload. The S3 proxy stops taking connections and lets open downloads run for 2 minutes. A download still running after that is cut, and the client sees a dropped connection. Clients that read in ranged chunks, such as s3fs, retry the chunk. boto3 doesn't retry a broken body by itself.
 
 
 ## Health checks and logs

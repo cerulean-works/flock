@@ -12,6 +12,7 @@ Flock reads its settings from environment variables when it starts. Each setting
 | `FLOCK_FILES_DIR` | `flock-files` | Directory for uploaded run files with the `local` backend, relative to the working directory. With `s3`, files not moved to the bucket yet are still read from it. The Docker image sets `/data/files`. |
 | `FLOCK_FILES_BUCKET` | none | Bucket for run files with the `s3` backend, on the S3 server of the [S3 settings](#s3-settings). Required with `s3`. |
 | `FLOCK_MIGRATE_ON_STARTUP` | `true` | Apply pending migrations on startup. With `false`, Flock refuses to start while migrations are pending. See [Migrations and upgrades](operations#migrations-and-upgrades). |
+| `FLOCK_CONTRACT_DELAY` | `1800` (30 minutes) | Seconds every running replica must have known a contract migration before Flock applies it. It leaves time to roll back to the previous release. See [Expand and contract migrations](operations#expand-and-contract-migrations). |
 | `FLOCK_API_PUBLIC_URL` | the address of each request | Public API base URL reached by training machines, such as `https://api.flock.example.com`. Used in signed file upload URLs. The dashboard uses the same variable in SDK instructions. |
 | `FLOCK_WEB_URL` | `FLOCK_API_PUBLIC_URL`, else the address of each request | Public dashboard origin. Setup, invitation, reset and Google sign-in links point there. The S3 proxy answers CORS for this origin only, for the Storage tab. Also the web image build argument for redirects and form origin checks. |
 | `FLOCK_JWT_SECRET` | a random key stored in the database | Key that signs access tokens and the Google sign-in cookie. Changing it makes existing access tokens invalid. |
@@ -32,7 +33,7 @@ Flock reads its settings from environment variables when it starts. Each setting
 | `FLOCK_HF_IMPORT_MAX_BYTES` | `53687091200` (50 GiB) | The largest dataset or model, in bytes, that the server imports from the dashboard. Bigger ones are refused with the `flock` command to run instead. |
 | `FLOCK_HF_IMPORT_WORKERS` | `4` | Per import, the processes converting a dataset's files, and the files downloaded or uploaded at once. |
 | `FLOCK_CRASH_TIMEOUT` | `600` | Seconds without a heartbeat before an active run is marked `crashed`. See [Crash detection](operations#crash-detection). |
-| `FLOCK_POOL_SIZE` | `16` | Maximum number of database connections. |
+| `FLOCK_POOL_SIZE` | `16` | Maximum number of database connections of each API replica. See [Database connections](operations#database-connections). |
 | `FLOCK_CORS_ORIGINS` | none | Origins allowed to call the API from browsers, comma-separated, such as `https://flock.example.com`. |
 | `FLOCK_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warning` or `error`. |
 
@@ -48,6 +49,7 @@ These turn on [S3 storage](s3-behavior), and give the `s3` files backend its ser
 | `FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY` | none | That key's secret. Required with the endpoint. |
 | `FLOCK_S3_BUCKET_PREFIX` | empty | Put in front of every bucket name on the S3 server. It shortens the names organizations can use, from 57 characters, by its length. Tests set it so they never touch other buckets. |
 | `FLOCK_S3_PUBLIC_URL` | none | The proxy's address as clients reach it, such as `https://s3.flock.example.com`. Required when S3 is on: Flock hands it out with keys. |
+| `FLOCK_S3_POOL_SIZE` | `4` | Maximum number of database connections of each S3 proxy worker. See [Database connections](operations#database-connections). |
 | `FLOCK_S3_TRASH_BUCKET` | `FLOCK_S3_BUCKET_PREFIX` then `flock-trash` | The bucket on the S3 server where datasets deleted from the Datasets tab wait for 14 days. Flock creates it at startup if it's missing. No S3 key can reach it. |
 
 Values are read like this:
@@ -58,4 +60,4 @@ Values are read like this:
 
 ## Docker Compose variables
 
-See [Environment variables](operations#environment-variables) for the deployment variables, their consumers, defaults and migration from previous names. Both Compose files forward the optional API settings above; empty entries use the API defaults. `FLOCK_DATABASE_URL` is constructed from `POSTGRES_PASSWORD`, and the image fixes `FLOCK_FILES_DIR` to the mounted `/data/files` directory.
+See [Environment variables](operations#environment-variables) for the deployment variables, their consumers, defaults and migration from previous names. Every Compose file forwards the optional API settings above; empty entries use the API defaults. `FLOCK_DATABASE_URL` is constructed from `POSTGRES_PASSWORD`, and the image fixes `FLOCK_FILES_DIR` to the mounted `/data/files` directory.
