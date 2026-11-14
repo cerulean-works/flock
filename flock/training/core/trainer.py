@@ -40,7 +40,7 @@ from flock.training.core.optimization import AdamWConfig, MuonConfig, OptimizerC
 
 
 class TrainerConfig(PydanticBaseModel):
-    """Configure one shuffled training pass, or its first `max_steps` updates, and its tracking, evaluation and saves.
+    """Configure one shuffled pass, or its first `max_steps` updates, with tracking and saves.
 
     Fields are frozen after validation; nested lists are still mutable. Unknown
     fields are rejected. Positive intervals count optimizer updates, not tokens.

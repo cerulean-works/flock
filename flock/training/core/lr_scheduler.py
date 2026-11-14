@@ -54,10 +54,10 @@ def check_schedule_fits(config: LRSchedulerConfig, total_steps: int) -> None:
         total_steps (`int`): Total planned optimizer updates.
 
     Raises:
-        `ValueError`: If cosine warmup does not end before the last update, or WSD warmup and decay do not fit the run.
+        `ValueError`: If warmup or decay does not fit the planned updates.
     """
     if config.warmup_steps < 0:
-        raise ValueError("warmup_steps must be nonnegative")
+        raise ValueError(f"warmup_steps must be nonnegative, got {config.warmup_steps}")
     if isinstance(config, WSDConfig):
         if config.decay_steps <= 0 or config.warmup_steps + config.decay_steps > total_steps:
             raise ValueError(

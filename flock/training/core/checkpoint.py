@@ -117,6 +117,7 @@ class TrainerCheckpoint(CheckpointSchema):
             if schedule.total_steps != info.context["total_steps"]:
                 raise ValueError(
                     f"Checkpoint plans {schedule.total_steps} updates, but this run plans "
-                    f"{info.context['total_steps']}. Resume with the checkpoint's max_steps."
+                    f"{info.context['total_steps']}. Set max_steps so the run plans "
+                    f"{schedule.total_steps} updates."
                 )
         return self

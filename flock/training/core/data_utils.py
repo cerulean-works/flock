@@ -117,7 +117,7 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
         self.drop_last = drop_last
 
     def __len__(self) -> int:
-        """Return the number of batches, capped at `max_batches`, before applying the skip prefix."""
+        """Return the batch count, capped at `max_batches`, before the skip prefix."""
         if self.drop_last:
             batches = self.dataset_size // self.batch_size
         else:
