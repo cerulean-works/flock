@@ -421,7 +421,7 @@ class Trainer:
 
     def _inner_training_loop(self, dataloader: DataLoader, start_step: int) -> None:
         """Update once per batch, then log, save and evaluate at configured intervals."""
-        # The loader yields the whole pass; a step cap stops it early.
+        # The loader yields the rest of the pass; a step cap stops it early.
         batches = islice(dataloader, self.total_steps - start_step)
         for step, batch in enumerate(batches, start=start_step + 1):
             self.optimizer.zero_grad()
@@ -461,7 +461,7 @@ class Trainer:
                 self.evaluate()
 
     def train(self, resume_from_checkpoint: bool | str | Path = False) -> None:
-        """Train one pass, optionally restoring a local checkpoint before iteration.
+        """Train one pass or `max_steps` updates, optionally restoring a checkpoint first.
 
         Args:
             resume_from_checkpoint (`bool`, `str` or `Path`, *optional*, defaults to `False`):
@@ -496,7 +496,7 @@ class Trainer:
             start_step = 0
             self.logger.info("Initializing training dataloader")
             dataloader = self._get_training_dataloader()
-            self.logger.info(f"Dataloader with {len(dataloader)} steps loaded")
+            self.logger.info(f"Dataloader with {self.total_steps} steps loaded")
         else:
             self.logger.info("Resuming training from checkpoint")
             if resume_from_checkpoint is True:

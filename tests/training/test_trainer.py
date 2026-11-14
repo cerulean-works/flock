@@ -241,6 +241,10 @@ def test_step_cap_resumes_to_the_same_update_and_rejects_a_changed_cap(
     assert first_run.metrics + resumed_run.metrics == reference_run.metrics
     assert_nested_equal(resumed.model.state_dict(), reference.model.state_dict())
     assert_nested_equal(resumed.get_trainer_state(), reference.get_trainer_state())
+    # Resuming at the cap performs no further updates or saves.
+    resumed.train(resume_from_checkpoint=True)
+    assert resumed.lr_scheduler.completed_steps == 2
+    assert first_run.metrics + resumed_run.metrics == reference_run.metrics
 
 
 @pytest.fixture
