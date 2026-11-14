@@ -17,7 +17,7 @@ class CosineConfig:
         min_lr_ratio (`float`): Endpoint learning rate divided by the base rate.
 
     Choose `0 <= warmup_steps < total_steps` and `0 <= min_lr_ratio <= 1`.
-    This dataclass does not validate schedule bounds.
+    `Trainer.train` rejects warmup that does not fit the run; the ratio is not validated.
     """
 
     warmup_steps: int
@@ -34,7 +34,8 @@ class WSDConfig:
         min_lr_ratio (`float`, *optional*, defaults to `0.0`): Endpoint/base rate ratio.
 
     Choose nonnegative warmup, positive decay, `warmup_steps + decay_steps <=
-    total_steps` and a ratio between zero and one. Bounds are not validated.
+    total_steps` and a ratio between zero and one. `Trainer.train` rejects
+    warmup and decay that do not fit the run; the ratio is not validated.
     """
 
     warmup_steps: int
@@ -43,6 +44,31 @@ class WSDConfig:
 
 
 type LRSchedulerConfig = CosineConfig | WSDConfig
+
+
+def check_schedule_fits(config: LRSchedulerConfig, total_steps: int) -> None:
+    """Reject warmup and decay lengths that do not fit `total_steps` updates.
+
+    Args:
+        config (`LRSchedulerConfig`): Warmup and decay settings.
+        total_steps (`int`): Total planned optimizer updates.
+
+    Raises:
+        `ValueError`: If cosine warmup does not end before the last update, or WSD warmup and decay do not fit the run.
+    """
+    if config.warmup_steps < 0:
+        raise ValueError("warmup_steps must be nonnegative")
+    if isinstance(config, WSDConfig):
+        if config.decay_steps <= 0 or config.warmup_steps + config.decay_steps > total_steps:
+            raise ValueError(
+                f"WSD needs positive decay_steps and warmup_steps + decay_steps <= {total_steps} "
+                f"planned updates, got {config.warmup_steps} + {config.decay_steps}"
+            )
+    elif config.warmup_steps >= total_steps:
+        raise ValueError(
+            f"Cosine warmup_steps must be below the {total_steps} planned updates, "
+            f"got {config.warmup_steps}"
+        )
 
 
 def lr_multiplier(step: int, config: LRSchedulerConfig, total_steps: int) -> float:

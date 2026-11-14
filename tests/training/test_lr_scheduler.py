@@ -13,6 +13,7 @@ from flock.training.core.lr_scheduler import (
     LRSchedulerConfig,
     StepLRScheduler,
     WSDConfig,
+    check_schedule_fits,
     lr_multiplier,
 )
 
@@ -221,3 +222,22 @@ def test_scheduler_preflight_does_not_apply_saved_progress(config: LRSchedulerCo
     scheduler.validate_state_dict(saved)
     assert scheduler.state_dict() == expected
     assert scheduler.get_last_lr() == [0.0, 0.0]
+
+
+@pytest.mark.parametrize(
+    ("config", "fits"),
+    [
+        (CosineConfig(warmup_steps=3, min_lr_ratio=0.1), True),
+        (CosineConfig(warmup_steps=4, min_lr_ratio=0.1), False),
+        (CosineConfig(warmup_steps=-1, min_lr_ratio=0.1), False),
+        (WSDConfig(warmup_steps=2, decay_steps=2), True),
+        (WSDConfig(warmup_steps=2, decay_steps=3), False),
+        (WSDConfig(warmup_steps=0, decay_steps=0), False),
+    ],
+)
+def test_schedule_must_fit_the_planned_updates(config: LRSchedulerConfig, fits: bool) -> None:
+    if fits:
+        check_schedule_fits(config, total_steps=4)
+    else:
+        with pytest.raises(ValueError):
+            check_schedule_fits(config, total_steps=4)

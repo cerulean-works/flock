@@ -30,7 +30,11 @@ from flock.hub.models import PendingUpload, save_to_hub
 from flock.hub.models.files import import_path, read_training_state, weight_files, write_model
 from flock.training.core.checkpoint import TrainerCheckpoint
 from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableBatchDataSampler
-from flock.training.core.lr_scheduler import LRSchedulerConfig, StepLRScheduler
+from flock.training.core.lr_scheduler import (
+    LRSchedulerConfig,
+    StepLRScheduler,
+    check_schedule_fits,
+)
 from flock.training.core.models import BaseModel
 from flock.training.core.optimization import AdamWConfig, MuonConfig, OptimizerConfig
 
@@ -49,8 +53,8 @@ class TrainerConfig(PydanticBaseModel):
         batch_size (`int`): Positive number of dataset rows per optimizer update.
         max_steps (`int`, *optional*):
             Positive cap on optimizer updates. The run and its learning-rate schedule
-            end at the cap, or at the end of the pass if that comes first. Warmup and
-            decay lengths must fit the capped run.
+            end at the cap, or at the end of the pass if that comes first. Training
+            rejects warmup and decay lengths that do not fit the capped run.
         optimizer_config (`OptimizerConfig`):
             Optimizer settings. Only `AdamWConfig` is currently implemented.
         lr_scheduler_config (`LRSchedulerConfig`): Cosine or warmup-stable-decay settings.
@@ -469,7 +473,8 @@ class Trainer:
                 With `False`, reset counters and start from the current model weights.
 
         Raises:
-            `ValueError`: If the dataset is empty or checkpoint settings are incompatible.
+            `ValueError`: If the dataset is empty, the schedule does not fit the run or
+                checkpoint settings are incompatible.
             `RuntimeError`: If fresh training finds a nonempty output directory and
                 `overwrite_output_dir` is false, or checkpoint weights do not match.
             `FileNotFoundError`: If automatic resume finds no checkpoint.
@@ -481,6 +486,7 @@ class Trainer:
         """
         if self.total_steps == 0:
             raise ValueError("Training requires a non-empty dataset")
+        check_schedule_fits(self.lr_scheduler.config, self.total_steps)
         self.logger.info("Setting up trainer...")
         # Set random state at beginning of training to ensure reproducibility
         self._set_seed()
@@ -495,7 +501,7 @@ class Trainer:
             start_step = 0
             self.logger.info("Initializing training dataloader")
             dataloader = self._get_training_dataloader()
-            self.logger.info(f"Dataloader with {self.total_steps} steps loaded")
+            self.logger.info(f"Dataloader with {len(dataloader)} steps loaded")
         else:
             self.logger.info("Resuming training from checkpoint")
             if resume_from_checkpoint is True:

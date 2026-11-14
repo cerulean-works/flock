@@ -206,6 +206,20 @@ def test_step_cap_ends_the_run_and_its_schedule_at_the_cap(
     assert_nested_equal(seen_batches, [batch["input_ids"] for batch in first_two])
 
 
+def test_step_cap_shorter_than_the_schedule_is_rejected(
+    trainer_factory: TrainerFactory,
+) -> None:
+    trainer, _, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        max_steps=2,
+        lr_scheduler_config=WSDConfig(warmup_steps=1, decay_steps=2),
+    )
+    with pytest.raises(ValueError, match="warmup_steps \\+ decay_steps <= 2"):
+        trainer.train()
+    assert trainer.lr_scheduler.completed_steps == 0
+
+
 def test_step_cap_change_rejects_resume(trainer_factory: TrainerFactory) -> None:
     capped, _, _ = trainer_factory(num_workers=0, prefetch_factor=None, save_steps=1, max_steps=2)
     capped.train()

@@ -1,9 +1,10 @@
 # Train with Flock
 
-`Trainer` runs one shuffled pass, or its first `max_steps` updates, over a Lance text dataset on one device. Each
-batch produces one optimizer update: tokenize the text, build next-token targets,
-compute cross-entropy, backpropagate, clip gradients, update weights and advance
-the learning rate. Padding targets are ignored when computing loss.
+`Trainer` runs one shuffled pass, or its first `max_steps` updates, over a Lance
+text dataset on one device. Each batch produces one optimizer update: tokenize the
+text, build next-token targets, compute cross-entropy, backpropagate, clip
+gradients, update weights and advance the learning rate. Padding targets are
+ignored when computing loss.
 The [Training API](python-api) lists configuration fields, defaults and public methods.
 
 ## Run the scaffold experiment
@@ -69,12 +70,12 @@ config = TrainerConfig(
 `batch_size` counts dataset rows per update. The run has
 `ceil(len(dataset) / batch_size)` updates, including a final partial batch.
 Set `max_steps` to end the run earlier: training stops after that many updates of
-the same shuffled order, and both schedules plan over the shorter run, so choose
-warmup and decay lengths that fit it. A checkpoint resumes only with the same
-effective number of updates.
+the same shuffled order, and both schedules plan over the shorter run. A checkpoint
+resumes only with the same effective number of updates.
 **WSD** means warmup, stable, decay: increase the learning rate linearly, hold it
 at the optimizer's configured rate, then decay it with a cosine curve over the
-last `decay_steps`. Choose warmup and decay lengths that fit the run. For cosine
+last `decay_steps`. Training rejects warmup and decay lengths that do not fit the
+run, capped or not. For cosine
 decay immediately after warmup, use
 `CosineConfig(warmup_steps=100, min_lr_ratio=0.1)` instead.
 
