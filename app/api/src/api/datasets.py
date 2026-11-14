@@ -4,7 +4,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.api.src.api.deps import (
     AdminOrgDep,
@@ -40,6 +40,31 @@ class PathBody(BaseModel):
 
 class RenameBody(PathBody):
     to: str = Field(min_length=1, max_length=512, description="the new path")
+
+
+ManyPaths = Annotated[
+    list[Annotated[str, Field(min_length=1, max_length=1024)]], Field(min_length=1, max_length=1000)
+]
+
+
+class DeleteBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str | None = Field(None, min_length=1, max_length=1024)
+    paths: ManyPaths | None = None
+
+    @model_validator(mode="after")
+    def check_one(self) -> DeleteBody:
+        if (self.path is None) == (self.paths is None):
+            raise ValueError("give either path or paths")
+        return self
+
+
+class MoveBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    paths: ManyPaths
+    to: str = Field(max_length=512, description='the folder to move them into, "" for the top')
 
 
 class RestoreBody(BaseModel):
@@ -170,13 +195,25 @@ async def make_private(
 
 
 @router.post("/delete")
-async def delete(org: OrgDep, body: PathBody, user: UserDep, store: StoreDep) -> Response:
-    """Move a dataset to the trash, where org admins can restore it for 14 days."""
+async def delete(org: OrgDep, body: DeleteBody, user: UserDep, store: StoreDep) -> Response:
+    """Move datasets or folders to the trash, where org admins can restore them for 14 days. A
+    folder is one entry, with everything in it. With ``path``, answers its trash entry. With
+    ``paths``, each goes in turn, and one that fails doesn't stop the rest: ``results`` says,
+    for each, whether it was ``deleted`` and its trash ``entry``, or the ``error``. 409 with
+    ``command`` (one line per path) when they're over the limits together, before anything
+    moves."""
     try:
-        entry = await datasets(store).delete(org, body.path, user)
+        if body.path is not None:
+            entry = await datasets(store).delete(org, body.path, user)
+            return JSONResponse(await entry_info(store, entry))
+        assert body.paths is not None
+        results = await datasets(store).delete_many(org, body.paths, user)
     except TooLarge as e:
         raise APIError(409, e.message, command=e.command) from None
-    return JSONResponse(await entry_info(store, entry))
+    for result in results:
+        if result["entry"] is not None:
+            result["entry"] = await entry_info(store, result["entry"])
+    return JSONResponse({"results": results})
 
 
 @router.get("/trash")
@@ -205,11 +242,26 @@ async def delete_now(org: AdminOrgDep, pk: int, store: StoreDep) -> Response:
 
 @router.post("/rename")
 async def rename(org: OrgDep, body: RenameBody, store: StoreDep) -> Response:
-    """Move a dataset to the path ``to``, with all its versions and tags."""
+    """Move a dataset to the path ``to``, with all its versions and tags, or a folder with
+    everything in it."""
     try:
         return JSONResponse(await datasets(store).rename(org, body.path, body.to))
     except Taken as e:
         raise APIError(409, e.message, taken=True) from None
+    except TooLarge as e:
+        raise APIError(409, e.message, command=e.command) from None
+
+
+@router.post("/move")
+async def move(org: OrgDep, body: MoveBody, store: StoreDep) -> Response:
+    """Move datasets and folders into the folder ``to``, each keeping its last name:
+    ``eval/mmlu`` moved to ``archive`` becomes ``archive/mmlu``. Each moves in turn, and one
+    that fails doesn't stop the rest: ``results`` says, for each, where it goes (``to``),
+    whether it ``moved``, and if not the ``error`` (``taken`` when something already exists
+    there). 409 with ``command`` (one line per path) when they're over the limits together,
+    before anything moves."""
+    try:
+        return JSONResponse({"results": await datasets(store).move(org, body.paths, body.to)})
     except TooLarge as e:
         raise APIError(409, e.message, command=e.command) from None
 

@@ -1014,3 +1014,108 @@ def test_multipart_uploads_through_the_proxy_keep_part_md5s_and_metadata(
     assert head["Metadata"]["sha256"] == sha(files["training_state/optimizer.bin"])
     committed = pusher.commit("m", upload["ulid"], files)
     assert committed.status == 200, committed.body
+
+
+# ---------------------------------------------------------------------- renaming (D134)
+
+
+def test_renaming_keeps_the_folder(flock: S3Flock, pusher: Pusher) -> None:
+    api = flock.client()
+    first = pusher.push("old", tags=["release"])
+    assert first["prefix"].startswith("old/u/")
+
+    renamed = api.patch(f"{MODELS}/old", {"name": "new"})
+    assert renamed.status == 200, renamed.body
+    info = renamed.json()
+    assert (info["name"], info["model"], info["prefix"]) == ("new", "flock/new", "old/")
+    assert info["primary"] == 1 and [t["name"] for t in info["tags"]] == ["release"]
+    assert info["created_by"]["email"] == flock.ADMIN_EMAIL
+    assert api.get(f"{MODELS}/new").json() == info
+    # The old name stops resolving, with no redirect.
+    assert api.get(f"{MODELS}/old").status == 404
+    assert api.get(f"{MODELS}/old/resolve", ref="1").status == 404
+    listed = api.get(MODELS).json()["models"]
+    assert [(m["name"], m["prefix"]) for m in listed] == [("new", "old/")]
+
+    # Uploads through the new name go to the old folder, and only there.
+    files = sharded()
+    upload = pusher.open("new", files).json()
+    assert upload["model"] == "flock/new" and upload["prefix"] == f"old/u/{upload['ulid']}/"
+    with pytest.raises(ClientError) as raised:
+        pusher.s3.put_object(
+            Bucket="flock-models", Key=f"new/u/{upload['ulid']}/config.json", Body=b"{}"
+        )
+    assert code(raised) == "AccessDenied"
+    pusher.put(upload, files)
+    second = pusher.commit("new", upload["ulid"], files).json()
+    assert second["number"] == 2 and second["prefix"] == upload["prefix"]
+    bucket = upstream_name(flock)
+    assert keys(flock, bucket, "new/") == []
+    manifest = flock.s3.client().get_object(Bucket=bucket, Key=f"{second['prefix']}manifest.json")
+    assert json.loads(manifest["Body"].read())["model"] == "flock/new"
+
+    # Downloads through the new name read the old folder.
+    resolved = api.get(f"{MODELS}/new/resolve", ref="release").json()
+    assert resolved["number"] == 1 and resolved["prefix"] == first["prefix"]
+    got = pusher.s3.get_object(Bucket="flock-models", Key=f"{resolved['prefix']}config.json")
+    assert got["Body"].read() == single()["config.json"]
+
+
+def test_rename_refusals(flock: S3Flock, pusher: Pusher) -> None:
+    api = flock.client()
+    pusher.push("a")
+    pusher.push("b")
+    pusher.push("gone")
+    assert api.delete(f"{MODELS}/gone").status == 200
+
+    for name in ("b", "gone"):  # live, and in the trash
+        taken = api.patch(f"{MODELS}/a", {"name": name})
+        assert taken.status == 409 and taken.json()["taken"] is True, name
+    assert api.patch(f"{MODELS}/a", {"name": "Bad Name"}).status == 422
+    assert api.patch(f"{MODELS}/a", {"name": "x" * 101}).status == 422
+    assert api.patch(f"{MODELS}/nope", {"name": "c"}).status == 404
+
+    # Not while an upload to it is open: its client holds the old name.
+    upload = pusher.open("a", single()).json()
+    refused = api.patch(f"{MODELS}/a", {"name": "c"})
+    assert refused.status == 409 and "taken" not in refused.json()
+    assert api.delete(f"{MODELS}/a/uploads/{upload['ulid']}").status == 204
+    assert api.patch(f"{MODELS}/a", {"name": "c"}).status == 200
+    assert [m["name"] for m in api.get(MODELS).json()["models"]] == ["b", "c"]
+
+
+def test_the_trash_and_restores_use_the_folder(
+    flock: S3Flock, pusher: Pusher, wait_for: Callable[..., Any]
+) -> None:
+    api = flock.client()
+    first = pusher.push("old")
+    second = pusher.push("old")
+    assert api.patch(f"{MODELS}/old", {"name": "new"}).status == 200
+    bucket = upstream_name(flock)
+
+    def moved() -> bool:
+        return all(e["moved"] for e in api.get(f"{MODELS}/-/trash").json()["entries"])
+
+    # A version goes to the trash from the old folder, and comes back to it.
+    lone = api.delete(f"{MODELS}/new/versions/2").json()
+    wait_for(moved)
+    assert keys(flock, bucket, second["prefix"]) == []
+    restored = api.post(f"{MODELS}/-/trash/versions/{lone['id']}/restore", None)
+    assert restored.status == 200, restored.body
+    assert restored.json()["prefix"] == second["prefix"]
+    assert keys(flock, bucket, second["prefix"]) != []
+
+    # So does the model. A new model with its old name gets the same folder, its own uploads
+    # apart, and doesn't stop the restore.
+    deleted = api.delete(f"{MODELS}/new").json()
+    wait_for(moved)
+    assert keys(flock, bucket, "old/") == []
+    other = pusher.push("old")
+    assert other["prefix"].startswith("old/u/")
+    back = api.post(f"{MODELS}/-/trash/models/{deleted['id']}/restore", None)
+    assert back.status == 200, back.body
+    assert back.json()["name"] == "new" and back.json()["prefix"] == "old/"
+    for version in (first, second, other):
+        assert f"{version['prefix']}config.json" in keys(flock, bucket, version["prefix"])
+    assert api.get(f"{MODELS}/new/resolve", ref="1").json()["prefix"] == first["prefix"]
+    assert api.get(f"{MODELS}/old/resolve").json()["prefix"] == other["prefix"]

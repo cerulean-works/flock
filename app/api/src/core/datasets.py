@@ -2,9 +2,9 @@
 
 Nothing here keeps a table of datasets: a dataset is any folder holding a ``_versions/`` folder
 (D87), found by listing the bucket. Lance reads go straight to the S3 server with the global key
-(D94), in threads, through a small cache of opened datasets. Deleting moves a dataset to a trash
-bucket outside every org (D93), renaming copies it within the bucket (D95), and tags are Lance's
-own (D96).
+(D94), in threads, through a small cache of opened datasets. Deleting moves a dataset or a
+folder to a trash bucket outside every org (D93, D132), renaming and moving copy it within the
+bucket (D95, D131), and tags are Lance's own (D96).
 """
 
 import asyncio
@@ -109,6 +109,20 @@ def manifest_version(key: str) -> int | None:
     if m := OLD_MANIFEST.fullmatch(name):
         return int(m[1])
     return None
+
+
+def dataset_folders(keys: Iterable[str], prefix: str) -> list[str]:
+    """The folders of the datasets among ``keys`` (all under ``prefix``), relative to it and
+    ending in ``/``, or ``""`` when ``prefix`` is a dataset itself: each folder holding a
+    ``_versions/``, leaving out any inside another (D87)."""
+    found: set[str] = set()
+    for key in keys:
+        relative = key.removeprefix(prefix)
+        if relative.startswith(VERSIONS):
+            found.add("")
+        elif (at := relative.find(f"/{VERSIONS}")) >= 0:
+            found.add(relative[: at + 1])
+    return sorted(f for f in found if not any(o != f and f.startswith(o) for o in found))
 
 
 def check_path(path: str) -> None:
@@ -522,9 +536,14 @@ class Datasets:
         return ds
 
     def _forget(self, bucket: str, path: str) -> None:
-        """Drop cached versions of ``path`` (after it was deleted or renamed)."""
+        """Drop cached versions of ``path`` and of any dataset under it (after it was deleted or
+        renamed)."""
         with self._cache_lock:
-            for key in [k for k in self._cache if k[0] == bucket and k[1] == path]:
+            for key in [
+                k
+                for k in self._cache
+                if k[0] == bucket and (k[1] == path or k[1].startswith(f"{path}/"))
+            ]:
                 del self._cache[key]
 
     @staticmethod
@@ -1016,6 +1035,19 @@ class Datasets:
             to,
         )
 
+    async def _copy_private_folder(self, org: Org, path: str, to: str) -> None:
+        """``_copy_private`` for a folder moving to ``to``: the flags at ``path`` and under it
+        follow it, each to its new path."""
+        await self.store.db.execute(
+            "INSERT INTO private_datasets (org_pk, path, made_by, created_at) "
+            "SELECT org_pk, $3 || substr(path, length($2) + 1), made_by, created_at "
+            "FROM private_datasets WHERE org_pk = $1 "
+            "AND (path = $2 OR left(path, length($2) + 1) = $2 || '/') ON CONFLICT DO NOTHING",
+            org.pk,
+            path,
+            to,
+        )
+
     # ------------------------------------------------------------------ moving objects
 
     @contextlib.asynccontextmanager
@@ -1032,15 +1064,48 @@ class Datasets:
                 )
             yield conn
 
-    def _check_size(self, objects: list[ListedObject], what: str, command: str) -> None:
+    def _too_large(self, objects: list[ListedObject]) -> bool:
         total = sum(o.size for o in objects)
-        if len(objects) > self.MOVE_OBJECTS or total > self.MOVE_BYTES:
+        return len(objects) > self.MOVE_OBJECTS or total > self.MOVE_BYTES
+
+    def _check_size(
+        self, objects: list[ListedObject], what: str, command: str, kind: str = "dataset"
+    ) -> None:
+        if self._too_large(objects):
             raise TooLarge(
-                f"This dataset is too large to {what} here (more than "
+                f"This {kind} is too large to {what} here (more than "
                 f"{self.MOVE_OBJECTS:,} objects or {self.MOVE_BYTES // GIB} GiB). "
                 f"Run {command} instead.",
                 command,
             )
+
+    async def _check_sizes(
+        self, bucket: str, paths: list[str], what: str, command: Callable[[str], str]
+    ) -> None:
+        """D93's and D95's limits over a whole request (D131, D132): ``TooLarge`` before
+        anything moves, with ``command`` for each path, one per line. Paths that aren't valid
+        or hold nothing count for nothing (they fail on their own later)."""
+        found: list[ListedObject] = []
+        upstream = self._upstream()
+        for path in dict.fromkeys(paths):
+            try:
+                check_path(path)
+            except Invalid:
+                continue
+            left = self.MOVE_OBJECTS - len(found)
+            found += await self._call(upstream.list_all(bucket, f"{path}/", max(left, 0)))
+            if self._too_large(found):
+                raise TooLarge(
+                    f"Together these are too large to {what} here (more than "
+                    f"{self.MOVE_OBJECTS:,} objects or {self.MOVE_BYTES // GIB} GiB). "
+                    "Select fewer, or run the aws commands instead.",
+                    "\n".join(command(p) for p in dict.fromkeys(paths)),
+                )
+
+    @staticmethod
+    def _versions(keys: list[str], prefix: str) -> tuple[str, ...]:
+        """The ``_versions/`` folders of the datasets among ``keys`` (under ``prefix``)."""
+        return tuple(f"{prefix}{folder}{VERSIONS}" for folder in dataset_folders(keys, prefix))
 
     async def _copy_all(
         self,
@@ -1051,7 +1116,8 @@ class Datasets:
         target_prefix: str,
     ) -> None:
         """Copy ``objects`` (under ``source_prefix``) to ``target_prefix``, server side, 16 at a
-        time: ``_versions/`` last, so the copy isn't a dataset until all its files are there."""
+        time: ``_versions/`` last, so the copy isn't a dataset until all its files are there.
+        In a folder, that's every dataset's ``_versions/``, after everything else."""
         upstream = self._upstream()
         limit = asyncio.Semaphore(self.COPY_AT_ONCE)
 
@@ -1063,7 +1129,7 @@ class Datasets:
                 else:
                     await upstream.copy_object(source, o.key, target, key)
 
-        versions = source_prefix + VERSIONS
+        versions = self._versions([o.key for o in objects], source_prefix)
         rest = [o for o in objects if not o.key.startswith(versions)]
         last = [o for o in objects if o.key.startswith(versions)]
         for group in (rest, last):
@@ -1071,9 +1137,10 @@ class Datasets:
 
     async def _delete_all(self, bucket: str, keys: list[str], prefix: str) -> None:
         """Delete ``keys`` (under ``prefix``), ``_versions/`` first: once those are gone, what's
-        left is loose files, never a broken dataset."""
+        left is loose files, never a broken dataset. In a folder, every dataset's
+        ``_versions/`` goes first."""
         upstream = self._upstream()
-        versions = prefix + VERSIONS
+        versions = self._versions(keys, prefix)
         first = [k for k in keys if k.startswith(versions)]
         rest = [k for k in keys if not k.startswith(versions)]
         for group in (first, rest):
@@ -1104,17 +1171,60 @@ class Datasets:
         if await self._inside_dataset(bucket, path):
             raise Invalid("The new path can't be inside another dataset.")
 
-    # ------------------------------------------------------------------ renaming (D95)
+    # ------------------------------------------------------------------ moving (D95, D131)
+
+    def _mv_command(self, path: str, to: str) -> str:
+        return (
+            f"aws s3 mv --recursive s3://{self.store.s3.DATASETS}/{path}/ "
+            f"s3://{self.store.s3.DATASETS}/{to}/ --profile flock"
+        )
+
+    def _rm_command(self, path: str) -> str:
+        return f"aws s3 rm --recursive s3://{self.store.s3.DATASETS}/{path}/ --profile flock"
+
+    async def _kind(self, bucket: str, path: str) -> str:
+        """What's at ``path``: a ``dataset``, or a ``folder`` (anything else with objects under
+        it, outside every dataset). ``NotFound`` if there's nothing."""
+        if await self.latest(bucket, path) is not None:
+            return "dataset"
+        if await self._exists(bucket, path) and not await self._inside_dataset(bucket, path):
+            return "folder"
+        raise NotFound(f"Nothing exists at {path}.")
+
+    async def _states(self, bucket: str, paths: list[str]) -> list[Version | None]:
+        """The latest version of each dataset at ``paths`` (None for one that's gone)."""
+        limit = asyncio.Semaphore(self.DETECT_AT_ONCE)
+
+        async def state(path: str) -> Version | None:
+            async with limit:
+                try:
+                    return await self.resolve(bucket, path, None)
+                except NotFound:
+                    return None
+
+        return list(await asyncio.gather(*map(state, paths)))
 
     async def rename(self, org: Org, path: str, to: str) -> dict[str, Any]:
-        """Move the dataset at ``path`` to ``to``: copy, check nothing was written meanwhile,
-        then delete the old objects (D95)."""
+        """Move the dataset or folder at ``path`` to ``to`` (D95, D133)."""
         bucket = await self.bucket(org)
-        name = bucket.upstream_name
+        await self._rename(org, bucket.upstream_name, path, to)
+        return {"path": to}
+
+    async def _rename(self, org: Org, name: str, path: str, to: str) -> None:
         check_path(path)
         check_new_path(to)
+        kind = await self._kind(name, path)
         if to == path or to.startswith(f"{path}/"):
-            raise Invalid("The new path can't be inside the dataset.")
+            raise Invalid(f"The new path can't be inside the {kind}.")
+        if kind == "dataset":
+            await self._rename_dataset(org, name, path, to)
+        else:
+            await self._rename_folder(org, name, path, to)
+        self._forget(name, path)
+
+    async def _rename_dataset(self, org: Org, name: str, path: str, to: str) -> None:
+        """Move the dataset at ``path`` to ``to``: copy, check nothing was written meanwhile,
+        then delete the old objects (D95)."""
         async with self._locked(name, [path, to]) as conn:
             before = await self.resolve(name, path, None)
             await self._check_target(name, to)
@@ -1129,11 +1239,7 @@ class Datasets:
             objects = await self._call(
                 self._upstream().list_all(name, f"{path}/", self.MOVE_OBJECTS)
             )
-            command = (
-                f"aws s3 mv --recursive s3://{self.store.s3.DATASETS}/{path}/ "
-                f"s3://{self.store.s3.DATASETS}/{to}/ --profile flock"
-            )
-            self._check_size(objects, "rename", command)
+            self._check_size(objects, "rename", self._mv_command(path, to))
             await self._copy_all(objects, name, f"{path}/", name, f"{to}/")
             try:
                 after = await self.resolve(name, path, None)
@@ -1143,8 +1249,88 @@ class Datasets:
                 await self._remove_prefix(name, f"{to}/")
                 raise Conflict("The dataset changed while it was being renamed. Try again.")
             await self._delete_all(name, [o.key for o in objects], f"{path}/")
-        self._forget(name, path)
-        return {"path": to}
+
+    async def _rename_folder(self, org: Org, name: str, path: str, to: str) -> None:
+        """Move the folder at ``path`` to ``to``, its datasets and loose files as one prefix
+        (D131). Each dataset in it moves in D95's order (every ``_versions/`` copied last and
+        deleted first), so none is ever broken. If one is written to meanwhile, nothing moves."""
+        upstream = self._upstream()
+        prefix = f"{path}/"
+
+        def inside(objects: list[ListedObject]) -> list[str]:
+            found = dataset_folders((o.key for o in objects), prefix)
+            return [f"{prefix}{folder}".removesuffix("/") for folder in found]
+
+        # Its datasets wait for (and hold off) their own renames and deletes too.
+        seen = inside(await self._call(upstream.list_all(name, prefix, self.MOVE_OBJECTS)))
+        moved = [to + p.removeprefix(path) for p in seen]
+        async with self._locked(name, [path, to, *seen, *moved]) as conn:
+            objects = await self._call(upstream.list_all(name, prefix, self.MOVE_OBJECTS))
+            if not objects:
+                raise NotFound(f"Nothing exists at {path}.")
+            self._check_size(objects, "move", self._mv_command(path, to), "folder")
+            await self._check_target(name, to)
+            datasets = inside(objects)
+            before = await self._states(name, datasets)
+            # The flags follow, as a dataset's do (``_rename_dataset``).
+            await self._copy_private_folder(org, path, to)
+            await conn.execute(
+                "DELETE FROM private_datasets WHERE org_pk = $1 "
+                "AND (path = $2 OR left(path, length($2) + 1) = $2 || '/')",
+                org.pk,
+                path,
+            )
+            await self._copy_all(objects, name, prefix, name, f"{to}/")
+            if await self._states(name, datasets) != before:
+                await self._remove_prefix(name, f"{to}/")
+                raise Conflict(
+                    "A dataset in the folder changed while it was being moved. Try again."
+                )
+            await self._delete_all(name, [o.key for o in objects], prefix)
+
+    async def move(self, org: Org, paths: list[str], to: str) -> list[dict[str, Any]]:
+        """Move each dataset or folder of ``paths`` into the folder ``to`` (``""``: the
+        bucket's root), keeping its last name (D131). The limits count every path, and refuse
+        (``TooLarge``) before anything moves. Then each moves as a rename would, one at a time,
+        and one that fails doesn't stop the rest: the answer says, for each, where it went
+        (``to``), whether it ``moved``, and if not, the ``error`` (``taken`` when something
+        already exists there)."""
+        bucket = await self.bucket(org)
+        name = bucket.upstream_name
+        if to:
+            check_new_path(to)
+
+        def target(path: str) -> str:
+            last = path.rpartition("/")[2]
+            return f"{to}/{last}" if to else last
+
+        await self._check_sizes(
+            name, paths, "move", lambda path: self._mv_command(path, target(path))
+        )
+        results = []
+        for path in paths:
+            result: dict[str, Any] = {
+                "path": path,
+                "to": target(path),
+                "moved": False,
+                "error": None,
+                "taken": False,
+            }
+            try:
+                if to == path or to.startswith(f"{path}/"):
+                    raise Invalid(f"{path} can't move into itself.")
+                if target(path) == path:
+                    raise Invalid(f"{path} is already in {to or 'the top folder'}.")
+                await self._rename(org, name, path, target(path))
+                result["moved"] = True
+            except Taken as e:
+                result.update(error=e.message, taken=True)
+            except (Conflict, TooLarge) as e:
+                result["error"] = e.message
+            except (NotFound, Invalid, BadGateway) as e:
+                result["error"] = str(e)
+            results.append(result)
+        return results
 
     # ------------------------------------------------------------------ tags (D96)
 
@@ -1202,20 +1388,21 @@ class Datasets:
 
         await self._lance(write)
 
-    # ------------------------------------------------------------------ the trash (D93)
+    # ------------------------------------------------------------------ the trash (D93, D132)
 
     def _trash_prefix(self, org_pk: int, pk: int) -> str:
         return f"{org_pk:05d}/{pk}/"
 
     TRASH_COLUMNS: ClassVar[str] = (
         "pk, path, deleted_by, extract(epoch FROM deleted_at)::float8, "
-        "extract(epoch FROM moved_at)::float8, latest_version, objects, bytes"
+        "extract(epoch FROM moved_at)::float8, latest_version, objects, bytes, kind"
     )
 
     def _entry(self, record: Any) -> dict[str, Any]:
-        pk, path, deleted_by, deleted_at, moved_at, latest, objects, size = record
+        pk, path, deleted_by, deleted_at, moved_at, latest, objects, size, kind = record
         return {
             "id": pk,
+            "kind": kind,
             "path": path,
             "deleted_by": deleted_by,
             "deleted_at": deleted_at,
@@ -1227,11 +1414,37 @@ class Datasets:
         }
 
     async def delete(self, org: Org, path: str, user: User) -> dict[str, Any]:
-        """Move the dataset at ``path`` to the trash (D93): its row first, then the copy
-        (``_versions/`` last), then the original's deletion (``_versions/`` first)."""
+        """Move the dataset or folder at ``path`` to the trash (D93, D132): its row first, then
+        the copy (``_versions/`` last), then the original's deletion (``_versions/`` first). A
+        folder is one entry, with everything under it."""
+        bucket = await self.bucket(org)
+        return await self._delete(org, bucket.upstream_name, path, user)
+
+    async def delete_many(self, org: Org, paths: list[str], user: User) -> list[dict[str, Any]]:
+        """Move each dataset or folder of ``paths`` to the trash (D132). The limits count every
+        path, and refuse (``TooLarge``) before anything moves. Then each goes as ``delete``
+        would, one at a time, and one that fails doesn't stop the rest: the answer says, for
+        each, whether it was ``deleted`` and its trash ``entry``, or the ``error``."""
         bucket = await self.bucket(org)
         name = bucket.upstream_name
+        await self._check_sizes(name, paths, "delete", self._rm_command)
+        results = []
+        for path in paths:
+            result: dict[str, Any] = {"path": path, "deleted": False, "error": None, "entry": None}
+            try:
+                result["entry"] = await self._delete(org, name, path, user)
+                result["deleted"] = True
+            except (Conflict, TooLarge) as e:
+                result["error"] = e.message
+            except (NotFound, Invalid, BadGateway) as e:
+                result["error"] = str(e)
+            results.append(result)
+        return results
+
+    async def _delete(self, org: Org, name: str, path: str, user: User) -> dict[str, Any]:
         check_path(path)
+        if await self._kind(name, path) == "folder":
+            return await self._delete_folder(org, name, path, user)
         async with self._locked(name, [path]) as conn:
             found = await self.latest(name, path)
             if found is None:
@@ -1239,40 +1452,73 @@ class Datasets:
             objects = await self._call(
                 self._upstream().list_all(name, f"{path}/", self.MOVE_OBJECTS)
             )
-            command = f"aws s3 rm --recursive s3://{self.store.s3.DATASETS}/{path}/ --profile flock"
-            self._check_size(objects, "delete", command)
-            trash = await self._call(self._ensure_trash())
+            self._check_size(objects, "delete", self._rm_command(path))
             latest = newest(found) if found else None
             if latest is None:
                 latest = (await self.resolve(name, path, None)).number
-            # Committed at once, so the sweep sees the move even if this request dies; the row
-            # stays locked meanwhile, so the sweep leaves a running move alone.
-            pk = await self.store.db.fetchval(
-                "INSERT INTO dataset_trash (org_pk, path, deleted_by, deleted_at, latest_version, "
-                "objects, bytes) VALUES ($1, $2, $3, now(), $4, $5, $6) RETURNING pk",
-                org.pk,
-                path,
-                user.pk,
-                latest,
-                len(objects),
-                sum(o.size for o in objects),
-            )
-            await conn.execute("SELECT 1 FROM dataset_trash WHERE pk = $1 FOR UPDATE", pk)
-            # A private flag stays at ``path`` (D115): the dataset comes back private, and
-            # whatever is written there meanwhile starts private.
-            prefix = self._trash_prefix(org.pk, pk)
-            await self._copy_all(objects, name, f"{path}/", trash, prefix)
-            await self._delete_all(name, [o.key for o in objects], f"{path}/")
-            record = await conn.fetchrow(
-                f"UPDATE dataset_trash SET moved_at = now() WHERE pk = $1 "
-                f"RETURNING {self.TRASH_COLUMNS}",
-                pk,
-            )
+            record = await self._to_trash(conn, org, name, path, user, "dataset", latest, objects)
         self._forget(name, path)
         return self._entry(record)
 
+    async def _delete_folder(self, org: Org, name: str, path: str, user: User) -> dict[str, Any]:
+        """Move the folder at ``path`` to the trash as one entry (D132), its datasets each in
+        D93's order, so none is ever broken."""
+        upstream = self._upstream()
+        prefix = f"{path}/"
+        seen = await self._call(upstream.list_all(name, prefix, self.MOVE_OBJECTS))
+        inside = [
+            f"{prefix}{folder}".removesuffix("/")
+            for folder in dataset_folders((o.key for o in seen), prefix)
+        ]
+        async with self._locked(name, [path, *inside]) as conn:
+            objects = await self._call(upstream.list_all(name, prefix, self.MOVE_OBJECTS))
+            if not objects:
+                raise NotFound(f"Nothing exists at {path}.")
+            self._check_size(objects, "delete", self._rm_command(path), "folder")
+            record = await self._to_trash(conn, org, name, path, user, "folder", None, objects)
+        self._forget(name, path)
+        return self._entry(record)
+
+    async def _to_trash(
+        self,
+        conn: asyncpg.Connection,
+        org: Org,
+        name: str,
+        path: str,
+        user: User,
+        kind: str,
+        latest: int | None,
+        objects: list[ListedObject],
+    ) -> Any:
+        """With ``path``'s lock held: the trash row, the copy and the original's deletion.
+        Returns the row, moved."""
+        trash = await self._call(self._ensure_trash())
+        # Committed at once, so the sweep sees the move even if this request dies; the row
+        # stays locked meanwhile, so the sweep leaves a running move alone.
+        pk = await self.store.db.fetchval(
+            "INSERT INTO dataset_trash (org_pk, path, deleted_by, deleted_at, latest_version, "
+            "objects, bytes, kind) VALUES ($1, $2, $3, now(), $4, $5, $6, $7) RETURNING pk",
+            org.pk,
+            path,
+            user.pk,
+            latest,
+            len(objects),
+            sum(o.size for o in objects),
+            kind,
+        )
+        await conn.execute("SELECT 1 FROM dataset_trash WHERE pk = $1 FOR UPDATE", pk)
+        # A private flag stays at ``path`` (D115): the dataset comes back private, and
+        # whatever is written there meanwhile starts private.
+        prefix = self._trash_prefix(org.pk, pk)
+        await self._copy_all(objects, name, f"{path}/", trash, prefix)
+        await self._delete_all(name, [o.key for o in objects], f"{path}/")
+        return await conn.fetchrow(
+            f"UPDATE dataset_trash SET moved_at = now() WHERE pk = $1 RETURNING {self.TRASH_COLUMNS}",
+            pk,
+        )
+
     async def trash_entries(self, org: Org) -> list[dict[str, Any]]:
-        """The org's deleted datasets, newest first."""
+        """The org's deleted datasets and folders, newest first."""
         records = await self.store.db.fetch(
             f"SELECT {self.TRASH_COLUMNS} FROM dataset_trash WHERE org_pk = $1 "
             "ORDER BY deleted_at DESC, pk DESC",
@@ -1300,8 +1546,9 @@ class Datasets:
         return record
 
     async def restore(self, org: Org, pk: int, to: str | None) -> dict[str, Any]:
-        """Copy a deleted dataset back to its path, or to ``to`` (``_versions/`` last), then
-        remove it from the trash. ``Taken`` if something now exists at the path."""
+        """Copy a deleted dataset or folder back to its path, or to ``to`` (``_versions/``
+        last), then remove it from the trash. A folder comes back as a whole (D132). ``Taken``
+        if something now exists at the path."""
         bucket = await self.bucket(org)
         name = bucket.upstream_name
         if to is not None:
@@ -1309,13 +1556,21 @@ class Datasets:
         trash = await self._call(self._ensure_trash())
         async with self.store.db.pool.acquire() as conn, conn.transaction():
             record = await self._claim(conn, org, pk)
-            target = to if to is not None else record[1]
-            async with self._locked(name, [target]):
+            path, kind = record[1], record[8]
+            target = to if to is not None else path
+            prefix = self._trash_prefix(org.pk, pk)
+            objects = await self._call(self._upstream().list_all(trash, prefix))
+            inside = [
+                f"{target}/{folder}".removesuffix("/")
+                for folder in dataset_folders((o.key for o in objects), prefix)
+            ]
+            async with self._locked(name, [target, *inside]):
                 await self._check_target(name, target)
                 # Committed before any object lands at ``target`` (D115).
-                await self._copy_private(org, record[1], target)
-                prefix = self._trash_prefix(org.pk, pk)
-                objects = await self._call(self._upstream().list_all(trash, prefix))
+                if kind == "folder":
+                    await self._copy_private_folder(org, path, target)
+                else:
+                    await self._copy_private(org, path, target)
                 await self._copy_all(objects, trash, prefix, name, f"{target}/")
                 await self._delete_all(trash, [o.key for o in objects], prefix)
             await conn.execute("DELETE FROM dataset_trash WHERE pk = $1", pk)
@@ -1359,7 +1614,7 @@ class Datasets:
             async with self.store.db.pool.acquire() as conn, conn.transaction():
                 record = await conn.fetchrow(
                     "SELECT pk, org_pk, path, extract(epoch FROM deleted_at)::float8, "
-                    "moved_at IS NOT NULL FROM dataset_trash "
+                    "moved_at IS NOT NULL, kind, objects FROM dataset_trash "
                     "WHERE (moved_at IS NOT NULL AND deleted_at < now() - make_interval(days => $1)) "
                     "OR (moved_at IS NULL AND deleted_at < now() - make_interval(secs => $2)) "
                     "ORDER BY pk LIMIT 1 FOR UPDATE SKIP LOCKED",
@@ -1368,14 +1623,14 @@ class Datasets:
                 )
                 if record is None:
                     break
-                pk, org_pk, path, deleted_at, moved = record
+                pk, org_pk, *_, moved, _, _ = record
                 prefix = self._trash_prefix(org_pk, pk)
                 if moved:
                     await self._remove_prefix(trash, prefix)
                     await conn.execute("DELETE FROM dataset_trash WHERE pk = $1", pk)
                     done["expired"] += 1
                     continue
-                await self._settle(conn, pk, org_pk, path, deleted_at, trash, prefix)
+                await self._settle(conn, record, trash, prefix)
                 done["settled"] += 1
         done["orphans"] = await self._sweep_orphans(trash)
         return done
@@ -1383,15 +1638,14 @@ class Datasets:
     async def _settle(
         self,
         conn: asyncpg.Connection,
-        pk: int,
-        org_pk: int,
-        path: str,
-        deleted_at: float,
+        record: Any,
         trash: str,
         prefix: str,
     ) -> None:
         """A move to the trash whose request died: if the dataset is still at its path, undo
-        it (the copy and the row go); otherwise finish it."""
+        it (the copy and the row go); otherwise finish it. A folder's move is undone unless its
+        copy is complete, since nothing is deleted from the folder until then."""
+        pk, org_pk, path, deleted_at, _, kind, count = record
         org = await self.store.org_by_pk(org_pk)
         bucket = await self.store.s3.managed_bucket(org) if org is not None else None
         if bucket is None:
@@ -1399,7 +1653,11 @@ class Datasets:
             await conn.execute("DELETE FROM dataset_trash WHERE pk = $1", pk)
             return
         name = bucket.upstream_name
-        if await self.latest(name, path) is not None:
+        if kind == "folder":
+            undo = len(await self._call(self._upstream().list_all(trash, prefix))) < count
+        else:
+            undo = await self.latest(name, path) is not None
+        if undo:
             await self._remove_prefix(trash, prefix)
             await conn.execute("DELETE FROM dataset_trash WHERE pk = $1", pk)
             log.info("undid the unfinished delete of %s (trash %d)", path, pk)

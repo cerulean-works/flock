@@ -1,10 +1,13 @@
 """Models (014, D97-D109): numbered, immutable versions in each org's ``flock-models`` bucket.
 
 Postgres is the registry: it numbers versions, tags them and links them to runs. The bytes are
-in S3, one folder per upload attempt (``{name}/u/{ulid}/``, D99), written by the client through
+in S3, one folder per upload attempt (``{prefix}/u/{ulid}/``, D99), written by the client through
 the proxy while the upload is open and checked here when it's committed (D100). Deleting moves a
 version's folder to the trash bucket that deleted datasets wait in (D93, D109), and a sweep
 expires idle uploads, removes stray folders, empties the trash and applies retention.
+
+A model's folder is its ``prefix``: its name when it was made. Renaming a model changes only the
+name (D134), so every S3 key is built from the prefix, never the name.
 """
 
 import asyncio
@@ -122,7 +125,8 @@ class TagTaken(Conflict):
 
 
 class Taken(Conflict):
-    """A live model already has the name a deleted one would be restored to (HTTP 409)."""
+    """A model already has the name a deleted one would be restored to, or one would be renamed
+    to (HTTP 409)."""
 
 
 @dataclass(frozen=True)
@@ -138,6 +142,7 @@ class Model:
     primary_set_at: float | None
     deleted_at: float | None
     deleted_by: int | None
+    prefix: str  # its folder in flock-models (D134)
 
 
 @dataclass(frozen=True)
@@ -171,13 +176,14 @@ class Upload:
     dedupe_key: str | None
     created_at: float
     last_activity_at: float
+    prefix: str  # its model's folder (D134)
 
 
 MODEL_COLUMNS = (
     "m.pk, m.org_pk, m.name, m.created_by, extract(epoch FROM m.created_at)::float8, "
     "m.last_number, m.primary_version_pk, m.primary_set_by, "
     "extract(epoch FROM m.primary_set_at)::float8, extract(epoch FROM m.deleted_at)::float8, "
-    "m.deleted_by"
+    "m.deleted_by, m.prefix"
 )
 RUN_PATH = (
     "(SELECT o.name || '/' || p.name || '/' || r.name FROM runs r "
@@ -195,7 +201,8 @@ VERSION_FROM = "model_versions v JOIN model_uploads u ON u.pk = v.upload_pk"
 UPLOAD_COLUMNS = (
     "u.pk, u.ulid, u.model_pk, u.user_pk, u.state, u.files::text, u.metadata::text, u.tags, "
     f"u.make_primary, {RUN_PATH.format(column='u.run_pk')}, u.step, u.dedupe_key, "
-    "extract(epoch FROM u.created_at)::float8, extract(epoch FROM u.last_activity_at)::float8"
+    "extract(epoch FROM u.created_at)::float8, extract(epoch FROM u.last_activity_at)::float8, "
+    "(SELECT prefix FROM models WHERE pk = u.model_pk)"
 )
 
 
@@ -297,8 +304,9 @@ class Models:
         return await self.store.datasets._ensure_trash()
 
     @staticmethod
-    def _folder(name: str, ulid: str) -> str:
-        return f"{name}/u/{ulid}/"
+    def _folder(prefix: str, ulid: str) -> str:
+        """An upload's folder (D99), under its model's ``prefix`` (D134)."""
+        return f"{prefix}/u/{ulid}/"
 
     @staticmethod
     def _trash_prefix(org_pk: int, version_pk: int) -> str:
@@ -370,7 +378,7 @@ class Models:
             "created_by": version.created_by,
             "created_at": version.created_at,
             "bucket": "flock-models",
-            "prefix": Models._folder(model.name, version.ulid),
+            "prefix": Models._folder(model.prefix, version.ulid),
         }
 
     async def _detail(
@@ -401,7 +409,7 @@ class Models:
     async def list_models(self, org: Org) -> list[dict[str, Any]]:
         """The org's models by name: their latest and primary versions."""
         records = await self.store.db.fetch(
-            "SELECT m.name, extract(epoch FROM m.created_at)::float8, m.created_by, "
+            "SELECT m.name, m.prefix, extract(epoch FROM m.created_at)::float8, m.created_by, "
             "(SELECT count(*) FROM model_versions c WHERE c.model_pk = m.pk "
             "AND c.deleted_at IS NULL)::int, l.number, extract(epoch FROM l.created_at)::float8, "
             "p.number, p.total_bytes FROM models m "
@@ -415,6 +423,7 @@ class Models:
             {
                 "name": name,
                 "model": f"{org.name}/{name}",
+                "prefix": f"{prefix}/",
                 "created_at": created_at,
                 "created_by": created_by,
                 "versions": versions,
@@ -423,34 +432,46 @@ class Models:
                 "size": size,
                 "updated_at": updated_at if updated_at is not None else created_at,
             }
-            for name, created_at, created_by, versions, latest, updated_at, primary, size in (
-                records
-            )
+            for (
+                name,
+                prefix,
+                created_at,
+                created_by,
+                versions,
+                latest,
+                updated_at,
+                primary,
+                size,
+            ) in records
         ]
 
     async def model_info(self, org: Org, name: str) -> dict[str, Any]:
         """A model: its primary version and who set it (D107), its latest and its tags."""
         async with self.store.db.pool.acquire() as conn:
-            model = await self._model(conn, org, name)
-            primary = latest = None
-            if model.primary_version is not None:
-                primary = await conn.fetchval(
-                    "SELECT number FROM model_versions WHERE pk = $1", model.primary_version
-                )
-            latest, count = await conn.fetchrow(
-                "SELECT max(number), count(*)::int FROM model_versions "
-                "WHERE model_pk = $1 AND deleted_at IS NULL",
-                model.pk,
+            return await self._model_info(conn, org, await self._model(conn, org, name))
+
+    async def _model_info(self, conn: asyncpg.Connection, org: Org, model: Model) -> dict[str, Any]:
+        """A model's answer (``model_info``)."""
+        primary = None
+        if model.primary_version is not None:
+            primary = await conn.fetchval(
+                "SELECT number FROM model_versions WHERE pk = $1", model.primary_version
             )
-            tags = await conn.fetch(
-                "SELECT t.name, v.number, t.moved_by, extract(epoch FROM t.moved_at)::float8 "
-                "FROM model_tags t JOIN model_versions v ON v.pk = t.version_pk "
-                "WHERE t.model_pk = $1 ORDER BY t.name",
-                model.pk,
-            )
+        latest, count = await conn.fetchrow(
+            "SELECT max(number), count(*)::int FROM model_versions "
+            "WHERE model_pk = $1 AND deleted_at IS NULL",
+            model.pk,
+        )
+        tags = await conn.fetch(
+            "SELECT t.name, v.number, t.moved_by, extract(epoch FROM t.moved_at)::float8 "
+            "FROM model_tags t JOIN model_versions v ON v.pk = t.version_pk "
+            "WHERE t.model_pk = $1 ORDER BY t.name",
+            model.pk,
+        )
         return {
             "name": model.name,
             "model": f"{org.name}/{model.name}",
+            "prefix": f"{model.prefix}/",
             "created_at": model.created_at,
             "created_by": model.created_by,
             "versions": count,
@@ -570,8 +591,8 @@ class Models:
         run_pk = await self._run_pk(org, run)
         async with self.store.db.pool.acquire() as conn, conn.transaction():
             await conn.execute(
-                "INSERT INTO models (org_pk, name, created_by, created_at) "
-                "VALUES ($1, $2, $3, now()) ON CONFLICT (org_pk, name) WHERE deleted_at IS NULL "
+                "INSERT INTO models (org_pk, name, prefix, created_by, created_at) "
+                "VALUES ($1, $2, $2, $3, now()) ON CONFLICT (org_pk, name) WHERE deleted_at IS NULL "
                 "DO NOTHING",
                 org.pk,
                 name,
@@ -622,7 +643,7 @@ class Models:
             "state": upload.state,
             "user": upload.user,
             "bucket": "flock-models",
-            "prefix": self._folder(name, upload.ulid),
+            "prefix": self._folder(upload.prefix, upload.ulid),
             "part_size": self.PART_SIZE,
             "files": orjson.loads(upload.files),
             "metadata": orjson.loads(upload.metadata),
@@ -708,7 +729,7 @@ class Models:
                 raise Invalid(
                     f"The commit's files aren't the declared ones. {' '.join(said)}".strip()
                 )
-            prefix = self._folder(name, ulid)
+            prefix = self._folder(upload.prefix, ulid)
             await self._check_objects(bucket, prefix, sizes)
             await self._check_weights(bucket, prefix, sizes)
             await self._check_hashes(bucket, prefix, hashes)
@@ -972,7 +993,7 @@ class Models:
         try:
             async with self.store.db.pool.acquire() as conn:
                 record = await conn.fetchrow(
-                    "SELECT o.name, m.name, v.number, v.digest, v.metadata::text, u.ulid "
+                    "SELECT o.name, m.name, m.prefix, v.number, v.digest, v.metadata::text, u.ulid "
                     "FROM model_versions v JOIN models m ON m.pk = v.model_pk "
                     "JOIN orgs o ON o.pk = m.org_pk JOIN model_uploads u ON u.pk = v.upload_pk "
                     "WHERE v.pk = $1",
@@ -984,7 +1005,7 @@ class Models:
                     pk,
                 )
             assert record is not None
-            org, name, number, version_digest, metadata, ulid = record
+            org, name, prefix, number, version_digest, metadata, ulid = record
             manifest = {
                 "format": 1,
                 "model": f"{org}/{name}",
@@ -995,7 +1016,7 @@ class Models:
             }
             await self._upstream().put_object(
                 bucket,
-                self._folder(name, ulid) + MANIFEST,
+                self._folder(prefix, ulid) + MANIFEST,
                 orjson.dumps(manifest, option=orjson.OPT_INDENT_2),
                 "application/json",
             )
@@ -1035,7 +1056,7 @@ class Models:
                 "UPDATE model_uploads SET state = 'aborted' WHERE pk = $1", upload.pk
             )
         try:
-            await self._clean(bucket, self._folder(name, ulid))
+            await self._clean(bucket, self._folder(upload.prefix, ulid))
         except Exception:
             log.exception("could not clean up the aborted upload %s", ulid)
 
@@ -1117,6 +1138,53 @@ class Models:
         if deleted is None:
             raise NotFound(f"tag {tag} of {org.name}/{name} not found")
 
+    # ------------------------------------------------------------------ renaming (D134)
+
+    async def rename(self, org: Org, name: str, to: str) -> dict[str, Any]:
+        """Rename a model (D134). Only the name changes, in the registry, so it's instant: the
+        files stay in the model's folder (``prefix``). ``Taken`` if a model has the name, live
+        or deleted; ``Conflict`` while an upload to the model is open or an import into it is
+        running, since its client holds the old name. The old name doesn't resolve after."""
+        check_name(to)
+        async with self.store.db.pool.acquire() as conn, conn.transaction():
+            model = await self._model(conn, org, name, lock=True)
+            if to == model.name:
+                return await self._model_info(conn, org, model)
+            deleted = await conn.fetchval(
+                "SELECT deleted_at IS NOT NULL FROM models WHERE org_pk = $1 AND name = $2 "
+                "ORDER BY deleted_at IS NOT NULL LIMIT 1",
+                org.pk,
+                to,
+            )
+            if deleted is not None:
+                raise Taken(
+                    f"A deleted model is named {to}. Delete it for good first, or pick another name."
+                    if deleted
+                    else f"A model named {to} exists already."
+                )
+            if await conn.fetchval(
+                "SELECT 1 FROM model_uploads WHERE model_pk = $1 AND state = 'open'", model.pk
+            ):
+                raise Conflict(
+                    f"{org.name}/{name} has an upload open. Rename it once the upload is "
+                    "committed or aborted."
+                )
+            if await conn.fetchval(
+                "SELECT 1 FROM hf_imports WHERE org_pk = $1 AND kind = 'model' AND dest = $2 "
+                "AND state = 'running'",
+                org.pk,
+                name,
+            ):
+                raise Conflict(f"An import into {org.name}/{name} is running. Rename it after.")
+            # The unique index on live names catches a model made with ``to`` meanwhile.
+            try:
+                await conn.execute("UPDATE models SET name = $2 WHERE pk = $1", model.pk, to)
+            except Exception as e:  # asyncpg's UniqueViolationError
+                if type(e).__name__ == "UniqueViolationError":
+                    raise Taken(f"A model named {to} exists already.") from None
+                raise
+            return await self._model_info(conn, org, dataclasses.replace(model, name=to))
+
     # ------------------------------------------------------------------ deleting (D109)
 
     @staticmethod
@@ -1190,7 +1258,7 @@ class Models:
             for (ulid,) in ulids:
                 if bucket is not None:
                     with contextlib.suppress(Exception):
-                        await self._clean(bucket, self._folder(name, ulid))
+                        await self._clean(bucket, self._folder(model.prefix, ulid))
             for (pk,) in pks:
                 await self._move_quietly(pk)
 
@@ -1241,7 +1309,7 @@ class Models:
         trash = await self._ensure_trash()
         async with self.store.db.pool.acquire() as conn, conn.transaction():
             record = await conn.fetchrow(
-                "SELECT m.org_pk, m.name, u.ulid FROM model_versions v "
+                "SELECT m.org_pk, m.prefix, u.ulid FROM model_versions v "
                 "JOIN models m ON m.pk = v.model_pk JOIN model_uploads u ON u.pk = v.upload_pk "
                 "WHERE v.pk = $1 AND v.deleted_at IS NOT NULL AND v.trashed_at IS NULL "
                 "FOR UPDATE OF v SKIP LOCKED",
@@ -1249,10 +1317,10 @@ class Models:
             )
             if record is None:
                 return False
-            org_pk, name, ulid = record
+            org_pk, prefix, ulid = record
             bucket = await self._bucket_of(org_pk)
             if bucket is not None:  # else the org's deletion purges the bucket
-                source = self._folder(name, ulid)
+                source = self._folder(prefix, ulid)
                 objects = await self._call(self._upstream().list_all(bucket, source))
                 await self._copy_all(objects, bucket, source, trash, self._trash_prefix(org_pk, pk))
                 await self._remove(bucket, source)
@@ -1340,14 +1408,15 @@ class Models:
             raise
 
     async def _restore_files(
-        self, org_pk: int, bucket: str, trash: str, name: str, versions: list[tuple[int, str]]
+        self, org_pk: int, bucket: str, trash: str, prefix: str, versions: list[tuple[int, str]]
     ) -> None:
-        """Copy deleted versions' files from the trash back to their folders."""
+        """Copy deleted versions' files from the trash back to their folders, under their
+        model's ``prefix``."""
         upstream = self._upstream()
         for pk, ulid in versions:
-            prefix = self._trash_prefix(org_pk, pk)
-            objects = await self._call(upstream.list_all(trash, prefix))
-            await self._copy_all(objects, trash, prefix, bucket, self._folder(name, ulid))
+            source = self._trash_prefix(org_pk, pk)
+            objects = await self._call(upstream.list_all(trash, source))
+            await self._copy_all(objects, trash, source, bucket, self._folder(prefix, ulid))
 
     async def _forget_trash(self, trash: str, org_pk: int, pks: Iterable[int]) -> None:
         """Remove restored versions' trash copies (the orphan pass is the fallback)."""
@@ -1388,7 +1457,7 @@ class Models:
             moved, tags, dedupe_key, ulid = record
             if not moved:
                 raise Conflict("This is still being moved to the trash. Try again later.")
-            await self._restore_files(org.pk, bucket, trash, model.name, [(pk, ulid)])
+            await self._restore_files(org.pk, bucket, trash, model.prefix, [(pk, ulid)])
             if dedupe_key is not None and await conn.fetchval(
                 "SELECT 1 FROM model_versions WHERE model_pk = $1 AND dedupe_key = $2 "
                 "AND deleted_at IS NULL",
@@ -1444,7 +1513,7 @@ class Models:
             if not all(moved for _, moved, _ in versions):
                 raise Conflict("This is still being moved to the trash. Try again later.")
             restored = [(v, ulid) for v, _, ulid in versions]
-            await self._restore_files(org.pk, bucket, trash, model.name, restored)
+            await self._restore_files(org.pk, bucket, trash, model.prefix, restored)
             await conn.execute(
                 "UPDATE model_versions SET deleted_at = NULL, deleted_by = NULL, "
                 "trashed_at = NULL WHERE pk = ANY($1)",
@@ -1533,7 +1602,7 @@ class Models:
         while True:
             async with self.store.db.pool.acquire() as conn, conn.transaction():
                 record = await conn.fetchrow(
-                    "SELECT u.pk, u.ulid, m.name, m.org_pk FROM model_uploads u "
+                    "SELECT u.pk, u.ulid, m.prefix, m.org_pk FROM model_uploads u "
                     "JOIN models m ON m.pk = u.model_pk WHERE u.state = 'open' "
                     "AND u.last_activity_at < now() - make_interval(days => $1) "
                     "ORDER BY u.pk LIMIT 1 FOR UPDATE OF u SKIP LOCKED",
@@ -1541,14 +1610,14 @@ class Models:
                 )
                 if record is None:
                     return expired
-                pk, ulid, name, org_pk = record
+                pk, ulid, prefix, org_pk = record
                 await conn.execute("UPDATE model_uploads SET state = 'expired' WHERE pk = $1", pk)
             # After the state commits, so the proxy stops taking writes first. A failure here
             # leaves the folder to the stray pass.
             bucket = await self._bucket_of(org_pk)
             if bucket is not None:
                 try:
-                    await self._clean(bucket, self._folder(name, ulid))
+                    await self._clean(bucket, self._folder(prefix, ulid))
                 except Exception:
                     log.exception("could not clean up the expired upload %s", ulid)
             expired += 1

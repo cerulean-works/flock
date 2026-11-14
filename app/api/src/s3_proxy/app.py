@@ -498,7 +498,7 @@ class Proxy:
         if allowed and found is not None and "x-amz-copy-source" not in call.headers:
             upload = await self.directory.open_upload(found[2])
             caller = call.caller
-            if upload is not None and (upload.user, upload.org, upload.model) != (
+            if upload is not None and (upload.user, upload.org, upload.prefix) != (
                 caller.user,
                 caller.org.pk,
                 found[1],

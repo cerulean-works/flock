@@ -35,13 +35,13 @@ class Bucket:
 
 @dataclass(frozen=True)
 class Upload:
-    """An open model upload (D100): its folder is ``{model}/u/{ulid}/`` of the org's
-    flock-models, and only ``user`` writes there."""
+    """An open model upload (D100): its folder is ``{prefix}/u/{ulid}/`` of the org's
+    flock-models, under its model's folder (D134), and only ``user`` writes there."""
 
     pk: int
     user: int | None
     org: int
-    model: str
+    prefix: str
 
 
 @dataclass(frozen=True)
@@ -220,7 +220,7 @@ class Directory:
 
     async def _load_upload(self, ulid: str) -> Upload | None:
         row = await self.pool.fetchrow(
-            "SELECT u.pk, u.user_pk, m.org_pk, m.name FROM model_uploads u "
+            "SELECT u.pk, u.user_pk, m.org_pk, m.prefix FROM model_uploads u "
             "JOIN models m ON m.pk = u.model_pk "
             "WHERE u.ulid = $1 AND u.state = 'open' AND m.deleted_at IS NULL",
             ulid,
