@@ -48,8 +48,10 @@ export interface PanelConfig {
 	showOriginal?: boolean;
 	/** Extend each run's line with a fitted power law (see #lib/chart/forecast.ts). */
 	forecast?: boolean;
-	/** The x the forecast goes to; unset is twice the longest run's last step. */
+	/** The x the forecast goes to. Takes precedence over `forecastTimes`. */
 	forecastTo?: number;
+	/** The forecast goes to this multiple of the longest run's last step; unset is 2. */
+	forecastTimes?: number;
 	/** In CSS pixels. */
 	lineWidth?: number;
 	/** Unset shows the legend when it names few enough lines. */
@@ -198,6 +200,8 @@ export function parsePanelConfig(raw: unknown): PanelConfig | null {
 	for (const k of ['ignoreOutliers', 'showOriginal', 'legend', 'log', 'forecast'] as const)
 		if (typeof raw[k] === 'boolean') out[k] = raw[k];
 	if (finite(raw.forecastTo) && raw.forecastTo > 0) out.forecastTo = raw.forecastTo;
+	else if (finite(raw.forecastTimes) && raw.forecastTimes > 1)
+		out.forecastTimes = raw.forecastTimes;
 	readSmoothing(raw, out);
 	if (finite(raw.lineWidth))
 		out.lineWidth = Math.max(LINE_WIDTH_MIN, Math.min(LINE_WIDTH_MAX, raw.lineWidth));

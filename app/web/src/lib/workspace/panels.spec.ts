@@ -149,6 +149,24 @@ describe('panel drafts', () => {
 		});
 	});
 
+	it('give a forecast end as a multiple of the longest run', () => {
+		const draft = draftOf({ forecast: true }, defaults.metrics);
+		expect(draft).toMatchObject({ forecastBy: 'times', forecastTo: '2' });
+		expect(configOf(draft, defaults).config).toEqual({ forecast: true });
+		expect(configOf({ ...draft, forecastTo: '3' }, defaults).config).toEqual({
+			forecast: true,
+			forecastTimes: 3
+		});
+		expect(configOf({ ...draft, forecastTo: '1' }, defaults).errors).toEqual({
+			forecastTo: 'Must be above 1'
+		});
+		expect(draftOf({ forecastTimes: 1.5 }, defaults.metrics)).toMatchObject({
+			forecastBy: 'times',
+			forecastTo: '1.5'
+		});
+		expect(draftOf({ forecastTo: 9000 }, defaults.metrics).forecastBy).toBe('step');
+	});
+
 	it('read an old smoothing weight as an EMA', () => {
 		expect(draftOf({ smoothing: 0.3 }, defaults.metrics).smoothing).toEqual({
 			type: 'ema',

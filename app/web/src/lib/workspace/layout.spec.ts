@@ -136,6 +136,8 @@ describe('parsePanelConfig', () => {
 		};
 		expect(parsePanelConfig(config)).toEqual(config);
 		expect(parsePanelConfig({ forecast: 'yes', forecastTo: -5 })).toBeNull();
+		expect(parsePanelConfig({ forecastTimes: 3 })).toEqual({ forecastTimes: 3 });
+		expect(parsePanelConfig({ forecastTimes: 1 })).toBeNull();
 	});
 
 	it('drops the wrong types, blank text and unknown fields', () => {

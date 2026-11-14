@@ -14,6 +14,7 @@
 	import { cancel, schedule } from '#lib/chart/scheduler.ts';
 	import { pointAt, SNAP_PX, smoothed, smooths, snapStep } from '#lib/chart/series.ts';
 	import { panelSmoothing } from '#lib/workspace/layout.ts';
+	import { FORECAST_TIMES } from '#lib/workspace/panels.ts';
 	import { scheme } from '#lib/theme.svelte.ts';
 	import { formatMetric, formatTick, sameItems } from '#lib/utils.ts';
 	import {
@@ -85,7 +86,7 @@
 		if (!forecasting) return [];
 		let last = -Infinity;
 		for (const l of series) last = Math.max(last, l.series.lastStep);
-		const to = config.forecastTo ?? 2 * last;
+		const to = config.forecastTo ?? (config.forecastTimes ?? FORECAST_TIMES) * last;
 		const out: Line[] = [];
 		for (const l of series) {
 			const f = forecastOf(l.series, to);

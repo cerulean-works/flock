@@ -116,15 +116,16 @@ in the y axis's outlier trimming.
 
 ### D136. Forecasts are a per-panel toggle with a horizon
 
-The panel editor gets **Forecast** (off by default) and **Forecast to step** (blank means twice
-the longest run's last step). The workspace's line plot settings get the same toggle, which
+The panel editor gets **Forecast** (off by default) and **Forecast to**. Forecast to is a
+choice between a multiple of the longest run's last step (2 by default, saved as
+`forecastTimes`) and a concrete step (saved as `forecastTo`), with a number beside it. The workspace's line plot settings get the same toggle, which
 panels follow unless they set their own, like smoothing. Forecasts only apply to history
 metrics, not system metrics.
 
 ### D137. The panel editor is one form
 
 The Data and Display preferences tabs are dropped. The editor shows one scrolling form with
-plain section headings: **Data** (metrics, x axis, ranges), **Smoothing**, **Forecast** and
+small uppercase section headings, divided by rules: **Data** (metrics, x axis, ranges), **Smoothing**, **Forecast** and
 **Display** (title, labels, legend, line width, log scale). The preview stays beside it.
 
 ## 3. Plan

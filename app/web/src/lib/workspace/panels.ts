@@ -56,6 +56,12 @@ export function resolvePanel(
 
 export type Tristate = 'inherit' | 'on' | 'off';
 
+/** How a forecast's end is given: as a multiple of the longest run, or as an x value. */
+export type ForecastBy = 'times' | 'step';
+
+/** The multiple of the longest run a forecast goes to, unless set. */
+export const FORECAST_TIMES = 2;
+
 export interface PanelDraft {
 	title: string;
 	metrics: string[];
@@ -72,6 +78,8 @@ export interface PanelDraft {
 	smoothing: Smoothing | null;
 	showOriginal: Tristate;
 	forecast: Tristate;
+	/** Whether `forecastTo` is a multiple of the longest run or an x value. */
+	forecastBy: ForecastBy;
 	/** Blank goes to twice the longest run's last step. */
 	forecastTo: string;
 	/** Null for the default width. */
@@ -113,7 +121,8 @@ export function draftOf(
 		smoothing: panelSmoothing(config) ?? null,
 		showOriginal: tri(config.showOriginal),
 		forecast: tri(config.forecast),
-		forecastTo: num(config.forecastTo),
+		forecastBy: config.forecastTo != null ? 'step' : 'times',
+		forecastTo: num(config.forecastTo ?? config.forecastTimes ?? FORECAST_TIMES),
 		lineWidth: config.lineWidth ?? null,
 		legend: tri(config.legend),
 		log: config.log ?? false
@@ -186,8 +195,13 @@ export function configOf(
 	if (forecast != null) config.forecast = forecast;
 	const to = bound(draft.forecastTo);
 	if (to === 'invalid') errors.forecastTo = 'Not a number';
-	else if (to !== undefined && !(to > 0)) errors.forecastTo = 'Must be above zero';
-	else if (to !== undefined) config.forecastTo = to;
+	else if (to === undefined) {
+		// Blank follows the default.
+	} else if (draft.forecastBy === 'step') {
+		if (to > 0) config.forecastTo = to;
+		else errors.forecastTo = 'Must be above zero';
+	} else if (!(to > 1)) errors.forecastTo = 'Must be above 1';
+	else if (to !== FORECAST_TIMES) config.forecastTimes = to;
 	if (draft.lineWidth != null)
 		config.lineWidth = Math.max(LINE_WIDTH_MIN, Math.min(LINE_WIDTH_MAX, draft.lineWidth));
 	const legend = untri(draft.legend);

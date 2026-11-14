@@ -14,7 +14,9 @@
 	import {
 		configOf,
 		draftOf,
+		FORECAST_TIMES,
 		resolvePanel,
+		type ForecastBy,
 		type PanelDraft,
 		type Tristate
 	} from '#lib/workspace/panels.ts';
@@ -88,6 +90,22 @@
 			? axisChoiceLabel('_runtime')
 			: axisChoiceLabel(ws.xAxis)
 	);
+
+	/** The choices of how a forecast's end is given; an x value is named after the axis. */
+	const FORECAST_BY = $derived<Record<ForecastBy, string>>({
+		times: 'Multiple of the longest run',
+		step: axis?.kind === 'step' || !axis ? 'Step' : axis.label
+	});
+
+	/** The number typed means something else now, so it starts over. */
+	function setForecastBy(by: ForecastBy) {
+		if (draft && draft.forecastBy !== by)
+			draft = {
+				...draft,
+				forecastBy: by,
+				forecastTo: by === 'times' ? String(FORECAST_TIMES) : ''
+			};
+	}
 
 	/** Another x axis, whose units the x bounds typed so far aren't in. */
 	function setAxis(v: string | null) {
@@ -259,9 +277,16 @@
 					aria-label="Settings"
 				>
 					<div class="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-6">
-						<div class="grid gap-8">
+						<div
+							class="grid gap-6 [&>section+section]:border-t [&>section+section]:border-divider [&>section+section]:pt-6"
+						>
 							<section class="grid gap-5" aria-labelledby="panel-data">
-								<h3 id="panel-data" class="font-medium">Data</h3>
+								<h3
+									id="panel-data"
+									class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+								>
+									Data
+								</h3>
 								<div class="grid gap-2">
 									<Label for="panel-add-metric">Metrics</Label>
 									<ul class="flex flex-wrap gap-1.5" aria-label="Metrics plotted">
@@ -350,7 +375,12 @@
 							</section>
 
 							<section class="grid gap-5" aria-labelledby="panel-smoothing-heading">
-								<h3 id="panel-smoothing-heading" class="font-medium">Smoothing</h3>
+								<h3
+									id="panel-smoothing-heading"
+									class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+								>
+									Smoothing
+								</h3>
 								<SmoothingPicker
 									id="panel-smoothing"
 									value={draft.smoothing}
@@ -368,7 +398,12 @@
 
 							{#if def.stream === 'history'}
 								<section class="grid gap-5" aria-labelledby="panel-forecast-heading">
-									<h3 id="panel-forecast-heading" class="font-medium">Forecast</h3>
+									<h3
+										id="panel-forecast-heading"
+										class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+									>
+										Forecast
+									</h3>
 									{@render tristate(
 										'panel-forecast',
 										'Forecast',
@@ -377,18 +412,33 @@
 										(v) => set('forecast', v)
 									)}
 									<div class="grid gap-2">
-										<Label for="panel-forecast-to">
-											Forecast to {axis.kind === 'step' ? 'step' : axis.label}
-										</Label>
-										<Input
-											id="panel-forecast-to"
-											value={draft.forecastTo}
-											placeholder="Twice the longest run"
-											inputmode="decimal"
-											autocomplete="off"
-											aria-invalid={!!errors.forecastTo}
-											oninput={(e) => set('forecastTo', e.currentTarget.value)}
-										/>
+										<Label for="panel-forecast-to">Forecast to</Label>
+										<div class="flex gap-2">
+											<Select.Root
+												type="single"
+												value={draft.forecastBy}
+												onValueChange={(v) => setForecastBy(v as ForecastBy)}
+											>
+												<Select.Trigger size="sm" class="min-w-0 flex-1" aria-label="Forecast end">
+													{FORECAST_BY[draft.forecastBy]}
+												</Select.Trigger>
+												<Select.Content>
+													<Select.Item value="times">{FORECAST_BY.times}</Select.Item>
+													<Select.Item value="step">{FORECAST_BY.step}</Select.Item>
+												</Select.Content>
+											</Select.Root>
+											<Input
+												id="panel-forecast-to"
+												type="number"
+												class="w-28 flex-none"
+												value={draft.forecastTo}
+												min={draft.forecastBy === 'times' ? 1 : 0}
+												step={draft.forecastBy === 'times' ? 0.5 : 'any'}
+												autocomplete="off"
+												aria-invalid={!!errors.forecastTo}
+												oninput={(e) => set('forecastTo', e.currentTarget.value)}
+											/>
+										</div>
 										{#if errors.forecastTo}
 											<p class="text-xs text-destructive">{errors.forecastTo}</p>
 										{/if}
@@ -397,7 +447,12 @@
 							{/if}
 
 							<section class="grid gap-5" aria-labelledby="panel-display">
-								<h3 id="panel-display" class="font-medium">Display</h3>
+								<h3
+									id="panel-display"
+									class="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+								>
+									Display
+								</h3>
 								<div class="grid gap-2">
 									<Label for="panel-title">Chart title</Label>
 									<Input
