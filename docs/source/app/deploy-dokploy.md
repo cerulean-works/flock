@@ -22,7 +22,7 @@ sudo grep -nE '^\s*(swarm|docker):|websecure|certificatesResolvers' -A2 /etc/dok
 ```
 
 - Under `providers`, there must be a `swarm:` entry. Without it, Traefik never sees the stack and every domain answers 404.
-- The HTTPS entrypoint is usually `websecure` and the resolver `letsencrypt`, which are the stack's defaults. If yours differ, set `FLOCK_TRAEFIK_ENTRYPOINT` and `FLOCK_TRAEFIK_CERTRESOLVER` in [step 4](#4-set-the-environment).
+- Each domain gets two routes: plain HTTP on the `web` entrypoint, and HTTPS on `websecure` with a certificate from the `letsencrypt` resolver. Those are Dokploy's usual names and the stack's defaults. If yours differ, set `FLOCK_TRAEFIK_HTTP_ENTRYPOINT`, `FLOCK_TRAEFIK_ENTRYPOINT` and `FLOCK_TRAEFIK_CERTRESOLVER` in [step 4](#4-set-the-environment).
 
 Check that Dokploy's network is an overlay network that services can join:
 
@@ -100,6 +100,7 @@ FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY=replace-with-upstream-secret
 | `FLOCK_FILES_VOLUME` | required | Name of the run files volume. |
 | `FLOCK_VERSION` | `main` | Image tag to run. Set a commit SHA to hold a release while `main` moves on. |
 | `FLOCK_IMAGE_PREFIX` | `ghcr.io/cerulean-works` | Registry and owner the images are pulled from. Change it if you publish from a fork. |
+| `FLOCK_TRAEFIK_HTTP_ENTRYPOINT` | `web` | Traefik's HTTP entrypoint. A domain behind a proxy that ends TLS, such as Cloudflare, reaches Flock through it. |
 | `FLOCK_TRAEFIK_ENTRYPOINT` | `websecure` | Traefik's HTTPS entrypoint. |
 | `FLOCK_TRAEFIK_CERTRESOLVER` | `letsencrypt` | Traefik's certificate resolver. |
 

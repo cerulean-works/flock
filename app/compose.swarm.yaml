@@ -37,6 +37,8 @@ services:
       # service's virtual IP, which Swarm switches to the new task once it's healthy (D140).
       # Traefik v3's swarm provider reads traefik.swarm.*. The traefik.docker.* twins are for a
       # Traefik v2 docker provider in swarm mode, and either is ignored where it doesn't apply.
+      # Each domain gets a plain HTTP route and an HTTPS one, as Dokploy's own domains do with
+      # HTTPS on. A domain behind a proxy that ends TLS, such as Cloudflare, arrives on the first.
       labels:
         - traefik.enable=true
         - traefik.swarm.lbswarm=true
@@ -44,9 +46,12 @@ services:
         - traefik.swarm.network=dokploy-network
         - traefik.docker.network=dokploy-network
         - traefik.http.routers.flock-ui.rule=Host(`${FLOCK_WEB_HOST:?set FLOCK_WEB_HOST to the dashboard domain}`)
-        - traefik.http.routers.flock-ui.entrypoints=${FLOCK_TRAEFIK_ENTRYPOINT:-websecure}
-        - traefik.http.routers.flock-ui.tls.certresolver=${FLOCK_TRAEFIK_CERTRESOLVER:-letsencrypt}
+        - traefik.http.routers.flock-ui.entrypoints=${FLOCK_TRAEFIK_HTTP_ENTRYPOINT:-web}
         - traefik.http.routers.flock-ui.service=flock-ui
+        - traefik.http.routers.flock-ui-secure.rule=Host(`${FLOCK_WEB_HOST:?set FLOCK_WEB_HOST to the dashboard domain}`)
+        - traefik.http.routers.flock-ui-secure.entrypoints=${FLOCK_TRAEFIK_ENTRYPOINT:-websecure}
+        - traefik.http.routers.flock-ui-secure.tls.certresolver=${FLOCK_TRAEFIK_CERTRESOLVER:-letsencrypt}
+        - traefik.http.routers.flock-ui-secure.service=flock-ui
         - traefik.http.services.flock-ui.loadbalancer.server.port=3000
 
   api:
@@ -114,9 +119,12 @@ services:
         - traefik.swarm.network=dokploy-network
         - traefik.docker.network=dokploy-network
         - traefik.http.routers.flock-api.rule=Host(`${FLOCK_API_HOST:?set FLOCK_API_HOST to the API domain}`)
-        - traefik.http.routers.flock-api.entrypoints=${FLOCK_TRAEFIK_ENTRYPOINT:-websecure}
-        - traefik.http.routers.flock-api.tls.certresolver=${FLOCK_TRAEFIK_CERTRESOLVER:-letsencrypt}
+        - traefik.http.routers.flock-api.entrypoints=${FLOCK_TRAEFIK_HTTP_ENTRYPOINT:-web}
         - traefik.http.routers.flock-api.service=flock-api
+        - traefik.http.routers.flock-api-secure.rule=Host(`${FLOCK_API_HOST:?set FLOCK_API_HOST to the API domain}`)
+        - traefik.http.routers.flock-api-secure.entrypoints=${FLOCK_TRAEFIK_ENTRYPOINT:-websecure}
+        - traefik.http.routers.flock-api-secure.tls.certresolver=${FLOCK_TRAEFIK_CERTRESOLVER:-letsencrypt}
+        - traefik.http.routers.flock-api-secure.service=flock-api
         - traefik.http.services.flock-api.loadbalancer.server.port=8080
 
   # The S3 proxy (D61). It keeps no state and takes no lock. Each worker is one event loop on one
@@ -160,9 +168,12 @@ services:
         - traefik.swarm.network=dokploy-network
         - traefik.docker.network=dokploy-network
         - traefik.http.routers.flock-s3.rule=Host(`${FLOCK_S3_HOST:?set FLOCK_S3_HOST to the S3 proxy domain}`)
-        - traefik.http.routers.flock-s3.entrypoints=${FLOCK_TRAEFIK_ENTRYPOINT:-websecure}
-        - traefik.http.routers.flock-s3.tls.certresolver=${FLOCK_TRAEFIK_CERTRESOLVER:-letsencrypt}
+        - traefik.http.routers.flock-s3.entrypoints=${FLOCK_TRAEFIK_HTTP_ENTRYPOINT:-web}
         - traefik.http.routers.flock-s3.service=flock-s3
+        - traefik.http.routers.flock-s3-secure.rule=Host(`${FLOCK_S3_HOST:?set FLOCK_S3_HOST to the S3 proxy domain}`)
+        - traefik.http.routers.flock-s3-secure.entrypoints=${FLOCK_TRAEFIK_ENTRYPOINT:-websecure}
+        - traefik.http.routers.flock-s3-secure.tls.certresolver=${FLOCK_TRAEFIK_CERTRESOLVER:-letsencrypt}
+        - traefik.http.routers.flock-s3-secure.service=flock-s3
         - traefik.http.services.flock-s3.loadbalancer.server.port=8090
 
   # One replica, stopped before a new one starts, since two PostgreSQL processes must never share
