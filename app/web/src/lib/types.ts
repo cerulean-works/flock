@@ -330,6 +330,8 @@ export interface VersionsPage {
 /** A deleted dataset in the trash (`GET …/datasets/trash`), for org admins. */
 export interface TrashEntry {
 	id: number;
+	/** A dataset, or a folder deleted with everything in it (D132). */
+	kind: 'dataset' | 'folder';
 	path: string;
 	deleted_by: Person | null;
 	deleted_at: number;
@@ -340,6 +342,24 @@ export interface TrashEntry {
 	latest_version: number | null;
 	objects: number;
 	bytes: number;
+}
+
+/** One item of `POST …/datasets/move` (D131). */
+export interface MoveResult {
+	path: string;
+	to: string;
+	moved: boolean;
+	error: string | null;
+	/** Something already exists at `to`. */
+	taken: boolean;
+}
+
+/** One item of `POST …/datasets/delete` with `paths` (D132). */
+export interface DeleteResult {
+	path: string;
+	deleted: boolean;
+	error: string | null;
+	entry: TrashEntry | null;
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -383,6 +403,8 @@ export interface ModelInfo {
 	primary_set_by: Person | null;
 	primary_set_at: number | null;
 	tags: ModelTag[];
+	/** Its folder in flock-models, ending in `/`, which keeps its old name after a rename (D134). */
+	prefix: string;
 }
 
 /** A version as the listings show it (`GET …/models/{name}/versions`). */

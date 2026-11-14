@@ -5,7 +5,7 @@ import type { RequestHandler } from './$types';
 
 /** The dataset routes the browser may reach through here (D94). */
 const ROUTES =
-	/^(at|info|rows|cell|versions|readme|public|delete|rename|trash|trash\/\d+(\/restore)?|tags\/[^/]+)$/;
+	/^(at|info|rows|cell|versions|readme|public|delete|move|rename|trash|trash\/\d+(\/restore)?|tags\/[^/]+)$/;
 
 /**
  * The org's dataset routes, for the dataset page's tabs and dialogs and the org page's trash:
@@ -15,8 +15,10 @@ const relay: RequestHandler = async ({ params, request }) => {
 	if (!ROUTES.test(params.op)) error(404, 'Not found');
 	const op = params.op.split('/').map(encodeURIComponent).join('/');
 	const res = await relayDatasets(params.org, op, request);
-	// A folder's later pages get the sizes and versions its first page had.
-	if (op !== 'at' || request.method !== 'GET' || !res.ok) return res;
+	// A folder's later pages get the sizes and versions its first page had, unless only its
+	// folders are wanted (`details=0`, the Move dialog's folder picker).
+	const details = new URL(request.url).searchParams.get('details') !== '0';
+	if (op !== 'at' || request.method !== 'GET' || !res.ok || !details) return res;
 	const at = (await res.json()) as DatasetFolder | { kind: 'dataset' };
 	if (at.kind !== 'folder') return Response.json(at, { headers: res.headers });
 	return Response.json(await withDetails(params.org, at), { headers: res.headers });

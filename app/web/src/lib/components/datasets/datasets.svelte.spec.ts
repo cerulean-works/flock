@@ -767,8 +767,15 @@ describe('the dialogs', () => {
 
 describe('DeletedDatasets', () => {
 	const now = 1_790_000_000;
-	const entry = (id: number, path: string, days: number, moved = true): TrashEntry => ({
+	const entry = (
+		id: number,
+		path: string,
+		days: number,
+		moved = true,
+		kind: TrashEntry['kind'] = 'dataset'
+	): TrashEntry => ({
 		id,
+		kind,
 		path,
 		deleted_by: { id: 2, name: 'Alice', email: 'alice@acme.test', avatar_url: null },
 		deleted_at: now - (14 - days) * 86_400,

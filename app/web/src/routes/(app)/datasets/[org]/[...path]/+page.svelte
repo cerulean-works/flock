@@ -1,5 +1,9 @@
 <script lang="ts">
+	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
+	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import SelectionBar from '#lib/components/SelectionBar.svelte';
 	import Breadcrumbs from '#lib/components/storage/Breadcrumbs.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import DatasetView from '#lib/components/datasets/DatasetView.svelte';
 	import FolderView from '#lib/components/datasets/FolderView.svelte';
 	import NewFolderButton from '#lib/components/datasets/NewFolderButton.svelte';
@@ -8,6 +12,7 @@
 	import { crumbs, nameOf } from '#lib/datasets.ts';
 	import { HFImportList } from '#lib/hf.svelte.ts';
 	import Page from '#lib/components/Page.svelte';
+	import { Selection } from '#lib/selection.svelte.ts';
 	import type { PageProps } from './$types';
 
 	let { data, params }: PageProps = $props();
@@ -23,6 +28,12 @@
 	const writer = $derived(data.shell.access === 'admin' || data.shell.access === 'member');
 	const imports = $derived(new HFImportList(params.org));
 	$effect(() => (writer && data.kind === 'folder' ? imports.watch() : undefined));
+	// Datasets and folders checked here (D130), cleared when the folder or org changes.
+	const selection = $derived.by(() => {
+		void params.org;
+		void data.path;
+		return writer ? new Selection() : undefined;
+	});
 </script>
 
 <svelte:head>
@@ -38,14 +49,36 @@
 			<h1 class="min-w-0 flex-1 truncate text-[34px] leading-[1.15] tracking-[-0.025em]" {title}>
 				{title}
 			</h1>
-			{#if writer}
-				<HFImportButton org={params.org} kind="dataset" list={imports} folder={data.path} />
+			{#if selection?.size}
+				<SelectionBar {selection}>
+					<Button variant="outline" size="sm" onclick={() => selection.act('move')}>
+						<FolderInputIcon /> Move
+					</Button>
+					<Button
+						variant="outline"
+						size="sm"
+						class="text-destructive"
+						onclick={() => selection.act('delete')}
+					>
+						<Trash2Icon /> Delete
+					</Button>
+				</SelectionBar>
+			{:else}
+				{#if writer}
+					<HFImportButton org={params.org} kind="dataset" list={imports} folder={data.path} />
+				{/if}
+				<NewFolderButton org={params.org} path={data.path} />
 			{/if}
-			<NewFolderButton org={params.org} path={data.path} />
 		</div>
 		<HFImportRows org={params.org} list={imports} kind="dataset" folder={data.path} />
 		{#key data.path}
-			<FolderView org={params.org} path={data.path} folder={data.folder} now={data.now} />
+			<FolderView
+				org={params.org}
+				path={data.path}
+				folder={data.folder}
+				now={data.now}
+				{selection}
+			/>
 		{/key}
 	{:else}
 		{#if !trail.length}<div class="pt-5"></div>{/if}

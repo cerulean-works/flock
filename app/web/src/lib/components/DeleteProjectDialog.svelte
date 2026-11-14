@@ -3,12 +3,12 @@
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
-	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
 	import type { ProjectInfo } from '#lib/types.ts';
 	import { entityHref } from '#lib/workspace/url.ts';
 	import FormError from './FormError.svelte';
+	import ConfirmField from './ConfirmField.svelte';
 
 	interface Props {
 		open: boolean;
@@ -59,12 +59,7 @@
 		>
 			<input type="hidden" name="project" value={project.name} />
 			<input type="hidden" name="from" value={from} />
-			<div class="grid gap-2">
-				<Label for="delete-project-name">
-					Type <span class="font-mono text-[12.5px]">{project.name}</span> to confirm
-				</Label>
-				<Input id="delete-project-name" bind:value={typed} autocomplete="off" spellcheck="false" />
-			</div>
+			<ConfirmField id="delete-project-name" text={project.name} bind:value={typed} />
 			{#if active}
 				<div class="flex items-start gap-2.5">
 					<Checkbox id="delete-project-force" name="force" bind:checked={force} class="mt-0.5" />
