@@ -183,8 +183,8 @@ The user asked for the doc as written, so each open question took the proposal:
 
 ## 5. How it was actually built
 
-One PR on `feat/bulk-actions`, stacked on `feat/hf-compat` until #105 merges, in the two parts of section 3. Where the code differs from
-section 2:
+One PR on `feat/bulk-actions`, in the two parts of section 3. It was cut from `feat/hf-compat`
+before #105 merged, and retargeted to `main` once it did. Where the code differs from section 2:
 
 ### 5.1. API
 
