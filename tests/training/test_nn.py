@@ -26,10 +26,19 @@ if TYPE_CHECKING:
 
 
 @pytest.mark.parametrize("mask_type", ["causal", "padding", "additive"])
-def test_selected_kernel_preserves_layout_masks_and_gradients(monkeypatch, mask_type):
+def test_selected_kernel_preserves_layout_masks_and_gradients(
+    monkeypatch: pytest.MonkeyPatch, mask_type: str
+) -> None:
     calls = []
 
-    def doubled_attention(q, k, v, *, attention_mask=None, is_causal=False):
+    def doubled_attention(
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        *,
+        attention_mask: torch.Tensor | None = None,
+        is_causal: bool = False,
+    ) -> torch.Tensor:
         calls.append((q.shape, k.shape, v.shape, attention_mask, is_causal))
         return 2 * sdpa_attention(q, k, v, attention_mask=attention_mask, is_causal=is_causal)
 
@@ -69,7 +78,7 @@ def test_selected_kernel_preserves_layout_masks_and_gradients(monkeypatch, mask_
         torch.testing.assert_close(parameter.grad, reference.get_parameter(name).grad)
 
 
-def test_unknown_attn_implementation_is_rejected():
+def test_unknown_attn_implementation_is_rejected() -> None:
     with pytest.raises(ValueError, match="Unknown attention implementation 'missing'"):
         GroupedAttentionWithRoPE(
             hidden_size=16, num_attention_heads=4, attn_implementation="missing"
@@ -78,7 +87,9 @@ def test_unknown_attn_implementation_is_rejected():
         AttentionInterface.get_mask_preparer("missing")
 
 
-def test_registration_requires_an_explicit_preparer_even_when_replacing(monkeypatch):
+def test_registration_requires_an_explicit_preparer_even_when_replacing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         AttentionInterface, "_global_mapping", AttentionInterface._global_mapping.copy()
     )

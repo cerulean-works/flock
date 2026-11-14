@@ -13,7 +13,7 @@ from flock.training.core.attention import (
     prepare_sdpa_mask,
     sdpa_attention,
 )
-from flock.training.core.models.olmo2 import Olmo2
+from flock.training.core.models.olmo2 import Olmo2, Olmo2Config
 from flock.training.core.trainer import Trainer
 from tests.training._reference import assert_parity, olmo2_training_parity, token_batch
 
@@ -24,8 +24,12 @@ pytestmark = [pytest.mark.gpu, pytest.mark.fa3]
 @pytest.mark.parametrize("kv_heads", [4, 2, 1], ids=["mha", "gqa", "mqa"])
 @pytest.mark.parametrize("is_causal", [False, True])
 def test_varlen_mixed_padding_outputs_and_gradients(
-    cuda_device, dtype, kv_heads, is_causal, monkeypatch
-):
+    cuda_device: torch.device,
+    dtype: torch.dtype,
+    kv_heads: int,
+    is_causal: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Lengths >128 also exercise inputs eligible for PyTorch 2.14's cuDNN path.
     mask = torch.zeros(5, 160, dtype=torch.bool, device=cuda_device)
     mask[0, :140] = True
@@ -67,7 +71,9 @@ def test_varlen_mixed_padding_outputs_and_gradients(
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("kv_heads", [4, 2, 1], ids=["mha", "gqa", "mqa"])
 @pytest.mark.parametrize("padding", ["none", "left", "right"])
-def test_fa3_huggingface_training_parity(config, cuda_device, dtype, kv_heads, padding):
+def test_fa3_huggingface_training_parity(
+    config: Olmo2Config, cuda_device: torch.device, dtype: torch.dtype, kv_heads: int, padding: str
+) -> None:
     previous = attention.current_flash_attention_impl()
     assert previous in (None, "FA3"), "run FA3 checks without another custom flash implementation"
     try:
@@ -93,7 +99,9 @@ def test_fa3_huggingface_training_parity(config, cuda_device, dtype, kv_heads, p
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("kv_heads", [4, 2, 1], ids=["mha", "gqa", "mqa"])
 @pytest.mark.parametrize("padding", ["none", "left", "right"])
-def test_fa3_fp32_weights_with_cuda_autocast(config, cuda_device, dtype, kv_heads, padding):
+def test_fa3_fp32_weights_with_cuda_autocast(
+    config: Olmo2Config, cuda_device: torch.device, dtype: torch.dtype, kv_heads: int, padding: str
+) -> None:
     config = replace(config, hidden_size=256, intermediate_size=384, num_key_value_heads=kv_heads)
     # Match the trainer: master weights stay FP32; only forward runs under autocast.
     model = Olmo2(replace(config, attn_implementation="flash_attention_3")).to(cuda_device)

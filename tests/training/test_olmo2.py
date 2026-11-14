@@ -17,7 +17,7 @@ from tests.training._reference import olmo2_training_parity
 
 if TYPE_CHECKING:
     from pathlib import Path
-    from typing import Any
+    from typing import Any, NoReturn
 
     from transformers import TokenizersBackend
 
@@ -59,11 +59,18 @@ def test_causality_and_padding_invariance(config: Olmo2Config) -> None:
 
 
 def test_attn_implementation_survives_config_round_trip_and_reaches_every_layer(
-    config, monkeypatch
-):
+    config: Olmo2Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
     calls = []
 
-    def recording_attention(q, k, v, *, attention_mask=None, is_causal=False):
+    def recording_attention(
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        *,
+        attention_mask: torch.Tensor | None = None,
+        is_causal: bool = False,
+    ) -> torch.Tensor:
         calls.append(attention_mask)
         return sdpa_attention(q, k, v, attention_mask=attention_mask, is_causal=is_causal)
 
@@ -82,7 +89,7 @@ def test_attn_implementation_survives_config_round_trip_and_reaches_every_layer(
     assert len(calls) == config.num_hidden_layers
 
 
-def test_config_without_attn_implementation_defaults_to_sdpa(config):
+def test_config_without_attn_implementation_defaults_to_sdpa(config: Olmo2Config) -> None:
     saved = asdict(config)
     del saved["attn_implementation"]
     restored = type(config)(**saved)
@@ -93,25 +100,33 @@ def test_config_without_attn_implementation_defaults_to_sdpa(config):
 
 
 def test_model_resolves_mask_preparer_at_construction_and_prepares_once_per_forward(
-    config, monkeypatch
-):
+    config: Olmo2Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
     preparations = []
     calls = []
 
-    def prepare(padding_mask, *, is_causal):
+    def prepare(padding_mask: torch.Tensor | None, *, is_causal: bool) -> torch.Tensor | None:
+        assert padding_mask is not None
         assert padding_mask.ndim == 2 and padding_mask.dtype == torch.bool
         assert is_causal is True
         result = prepare_sdpa_mask(padding_mask, is_causal=is_causal)
         preparations.append(result)
         return result
 
-    def compute(q, k, v, *, attention_mask=None, is_causal=False):
+    def compute(
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        *,
+        attention_mask: torch.Tensor | None = None,
+        is_causal: bool = False,
+    ) -> torch.Tensor:
         assert attention_mask is preparations[-1]
         assert is_causal is True
         calls.append((attention_mask, is_causal))
         return sdpa_attention(q, k, v, attention_mask=attention_mask, is_causal=is_causal)
 
-    def replacement(*args, **kwargs):
+    def replacement(*args: Any, **kwargs: Any) -> NoReturn:
         pytest.fail("an existing model looked up a replaced backend")
 
     monkeypatch.setattr(

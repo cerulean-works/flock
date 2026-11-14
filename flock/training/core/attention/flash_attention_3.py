@@ -78,16 +78,15 @@ def flash_attention_3(
         q.ndim != 4
         or k.ndim != 4
         or v.shape != k.shape
-        # batch size and head dimension are the same.
+        # Q and K/V must have the same batch size.
         or q.shape[0] != k.shape[0]
-        # shape[2:] is sequence dimension.
+        # Match both sequence length and features per head.
         or q.shape[2:] != k.shape[2:]
-        # sequence length is non-zero.
+        # All Q dimensions must be nonzero.
         or min(q.shape) == 0
-        # shape[1] is head dimension.
+        # K/V must have at least one head.
         or k.shape[1] == 0
-        # so basically we make sure the head dimension is a multiple of the query head dimension
-        # since the head dimension is a multiple of the key head dimension
+        # The number of Q heads must be a multiple of the number of K/V heads.
         or q.shape[1] % k.shape[1]
     ):
         raise ValueError(
@@ -122,8 +121,8 @@ def flash_attention_3(
         valid: Tensor = (positions >= starts[:, None]) & (positions < stops[:, None])
         indices = valid.flatten().nonzero().flatten().to(q.device, non_blocking=True)
 
-        # from [batch, sequence, heads, features] to [batch * heads, sequence, features]
-        # and it also remove the padding from the sequence dimension.
+        # Transpose to [batch, sequence, heads, features], then pack valid tokens.
+        # The packed shape is [total_valid_tokens, heads, features].
         packed_tensors: list[Tensor] = []
         for tensor in (q, k, v):
             packed_tensor = tensor.transpose(1, 2).flatten(0, 1).index_select(0, indices)
@@ -140,26 +139,27 @@ def flash_attention_3(
                 packed_tensors.append(tensor)
             query, key, value = packed_tensors
 
-        # if there is no valid indices, return the sum of the query, key, and value tensors.
+        # Keep the empty output connected to Q/K/V so backward produces zero gradients.
         if indices.numel() == 0:
             output = query + key.sum() + value.sum()
         else:
-            # remove the zero length sequences from the sequence dimension
+            # Build packed boundaries using only nonempty sequence lengths.
             nonempty_lengths = lengths[lengths > 0].to(torch.int32)
-            
+
             cu_seqlens: Tensor = torch.cat(
                 (nonempty_lengths.new_zeros(1), nonempty_lengths.cumsum(0, dtype=torch.int32))
             ).to(q.device, non_blocking=True)
             maximum = int(nonempty_lengths.max())
 
-            # window is the maximum sequence length for each batch
+            # The window is (left, right); -1 means unlimited on that side.
+            # A full-span finite window avoids PyTorch's cuDNN varlen dispatch.
             window = (-1, 0) if is_causal else (maximum, maximum)
 
             output = varlen_attn(
                 query,
                 key,
                 value,
-                # cu_seq lens is the boundary of each sequence in the batch
+                # Sequence boundaries for Q and K/V in the packed batch.
                 cu_seqlens,
                 cu_seqlens,
                 maximum,
@@ -171,7 +171,7 @@ def flash_attention_3(
             output = cast(Tensor, output)
 
         padded = output.new_zeros((batch * sequence, heads, features))
-        # back to the original shape which is [batch * heads(with padding), sequence, features]
+        # Scatter results back to [batch * sequence, heads, features]; padding stays zero.
         padded.index_copy_(0, indices, output)
-        # [batch * heads(with padding), sequence, features] -> [batch, sequence, heads, features]
+        # Reshape to [batch, sequence, heads, features], then restore the original head axis.
         return padded.view(batch, sequence, heads, features).transpose(1, 2)

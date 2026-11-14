@@ -33,6 +33,8 @@ class Olmo2Config:
             Positive normal-initialization standard deviation.
         init_seed (`int`, *optional*, defaults to `42`): Model weight initialization seed.
         hf_repo (`str`, *optional*): Tokenizer repository or directory, never pretrained weights.
+        attn_implementation (`str`, *optional*, defaults to `"sdpa"`):
+            Registered attention implementation to use.
 
     Raises:
         `ValueError`: If dimensions, head divisibility or positive scales are invalid.
@@ -137,8 +139,8 @@ class Olmo2DecoderLayer(nn.Module):
             x (`torch.Tensor`): Hidden states shaped `[batch, sequence, hidden]`.
             cos (`torch.Tensor`): RoPE cosines broadcastable to attention heads.
             sin (`torch.Tensor`): RoPE sines with the same shape as `cos`.
-            attention_mask (`torch.Tensor` or `None`): Complete SDPA attention mask.
-                With `None`, use SDPA's causal mode.
+            attention_mask (`torch.Tensor` or `None`):
+                Mask prepared for the selected attention implementation.
 
         Returns:
             `torch.Tensor`: Hidden states shaped `[batch, sequence, hidden]`.
