@@ -130,9 +130,9 @@ Added at the user's request while this doc was written.
 
 ## 3. Plan
 
-One branch, `feat/bulk-select`, cut from `feat/hf-compat` because the list pages it changes
-are the ones 017 changed. One PR, based on `feat/hf-compat`, retargeted to `main` once
-cerulean-works/flock#105 merges.
+This doc ships in cerulean-works/flock#105, ahead of the code, since the list pages it changes
+are the ones 017 changed. The code goes on its own branch and PR, cut from `main` once #105
+merges.
 
 ### Part 1. API
 
@@ -178,5 +178,3 @@ cerulean-works/flock#105 merges.
 2. **No Move for models** (D134), or should Move send models to another org?
 3. **Loose files can't be selected** (D130), or should they move and delete with the rest?
 4. **A deleted folder is one trash entry** (D132), or one entry per dataset in it?
-5. **Stacked on `feat/hf-compat`** (section 3), or wait for cerulean-works/flock#105 and branch
-   from `main`?
