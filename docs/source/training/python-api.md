@@ -117,6 +117,14 @@ fresh weights; their `hf_repo` values identify tokenizers.
 
 The `Olmo2` forward and tokenizer methods follow the `BaseModel` contract above.
 
+[[autodoc]] training.core.models.HFCompatibleConfig
+
+[[autodoc]] training.core.models.HFCompatibleModel
+    - from_hf
+
+`HFCompatibleModel` follows the same contract. See
+[Train a Hugging Face architecture](trainer#train-a-hugging-face-architecture).
+
 ### Neural network layers
 
 [[autodoc]] training.core.nn.GroupedAttentionWithRoPE

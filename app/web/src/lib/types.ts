@@ -901,3 +901,61 @@ export interface RunFile {
 	size: number;
 	updated_at: number;
 }
+
+/** A Hugging Face import the API runs (D124), as `GET /orgs/{org}/imports/hf` lists it. */
+export interface HFImport {
+	id: number;
+	kind: 'dataset' | 'model';
+	repo: string;
+	revision: string;
+	/** The commit, once the Hub was asked. */
+	sha: string | null;
+	/** The dataset folder, or the model's name. */
+	dest: string;
+	/** A dataset's configs, each with the splits imported. */
+	configs?: Record<string, string[]>;
+	/** A model version's tags, and whether it becomes primary. */
+	tags?: string[];
+	primary?: boolean;
+	state: 'running' | 'finished' | 'failed' | 'cancelled' | 'interrupted';
+	phase: 'downloading' | 'converting' | 'uploading' | 'committing' | null;
+	bytes_total: number;
+	bytes_done: number;
+	files_total: number;
+	files_done: number;
+	rows_done: number;
+	/** From 0 to 1. */
+	progress: number;
+	/** Each config's and split's dataset, or the model's version. */
+	result: {
+		datasets?: { config: string; split: string; path: string; version: number; rows: number }[];
+		model?: string;
+		version?: number;
+		existing?: boolean;
+	} | null;
+	error: string | null;
+	/** The `flock` command that does the same import. */
+	command: string;
+	started_by: Person | null;
+	started_at: number;
+	finished_at: number | null;
+}
+
+/** A split of a Hugging Face dataset, with its size when the Hub knows it. */
+export interface HFSplit {
+	name: string;
+	size: number | null;
+	rows: number | null;
+}
+
+/** What the dataset import dialog shows of a repository. */
+export interface HFDatasetPreview {
+	kind: 'dataset';
+	repo: string;
+	revision: string;
+	/** Each config with its splits (null when only an import would find them). */
+	configs: { name: string; size: number | null; splits: HFSplit[] | null }[];
+	default_config: string | null;
+	/** The largest import the server runs. */
+	max_bytes: number;
+}

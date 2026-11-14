@@ -27,6 +27,10 @@ Flock reads its settings from environment variables when it starts. Each setting
 | `FLOCK_GRAVATAR` | `true` | Fetch each new account's avatar from Gravatar. The request sends Gravatar the SHA-256 hash of the account's email. See [Avatars](authentication#avatars). |
 | `FLOCK_GRAVATAR_URL` | `https://gravatar.com/avatar/` | Where avatars are fetched from: the URL that the email's hash is appended to. A Libravatar-compatible server works too. |
 | `FLOCK_WANDB_BASE_URL` | `https://api.wandb.ai` | The W&B server that [imports](import-behavior) read from, when an import doesn't name one. Set it for W&B Dedicated Cloud or a self-managed W&B server. |
+| `FLOCK_HF_ENDPOINT` | `https://huggingface.co` | The Hugging Face Hub that [imports from the dashboard](import-hf) read from. |
+| `FLOCK_HF_DATASETS_SERVER` | `https://datasets-server.huggingface.co` | The Hub's dataset viewer API, which lists a dataset's configs, splits and sizes in the import dialog. |
+| `FLOCK_HF_IMPORT_MAX_BYTES` | `53687091200` (50 GiB) | The largest dataset or model, in bytes, that the server imports from the dashboard. Bigger ones are refused with the `flock` command to run instead. |
+| `FLOCK_HF_IMPORT_WORKERS` | `4` | Per import, the processes converting a dataset's files, and the files downloaded or uploaded at once. |
 | `FLOCK_CRASH_TIMEOUT` | `600` | Seconds without a heartbeat before an active run is marked `crashed`. See [Crash detection](operations#crash-detection). |
 | `FLOCK_POOL_SIZE` | `16` | Maximum number of database connections. |
 | `FLOCK_CORS_ORIGINS` | none | Origins allowed to call the API from browsers, comma-separated, such as `https://flock.example.com`. |

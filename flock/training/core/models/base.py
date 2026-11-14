@@ -138,18 +138,19 @@ class BaseModel(nn.Module, ABC):
             tokenizer.pad_token_id = tokenizer.bos_token_id
         return tokenizer
 
-    def forward(self, batch: Batch) -> torch.Tensor:  # ty: ignore[invalid-mutable-override]
-        """Return full-sequence logits for a collated batch.
+    def _check_batch(self, batch: Batch) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Validate a collated batch and derive its boolean mask and position IDs.
 
-        Labels in a batch are ignored: the trainer owns target alignment and loss.
-        Position IDs are contiguous over each row's real tokens.
+        Position IDs are contiguous over each row's real tokens, so left padding
+        does not shift them.
 
         Args:
             batch (`Batch`): Token IDs and a matching mask shaped `[batch, sequence]`.
                 Mask values `True` or `1` identify real tokens.
 
         Returns:
-            `torch.Tensor`: Logits shaped `[batch, sequence, vocabulary]`.
+            `tuple[torch.Tensor, torch.Tensor, torch.Tensor]`: The token IDs, the mask
+            as booleans on the IDs' device, and position IDs, all `[batch, sequence]`.
 
         Raises:
             `ValueError`: If IDs are not rank two, length is outside the configured
@@ -170,6 +171,27 @@ class BaseModel(nn.Module, ABC):
 
         attention_mask = attention_mask.to(device=input_ids.device, dtype=torch.bool)
         position_ids = (attention_mask.long().cumsum(-1) - 1).clamp_min(0)
+        return input_ids, attention_mask, position_ids
+
+    def forward(self, batch: Batch) -> torch.Tensor:  # ty: ignore[invalid-mutable-override]
+        """Return full-sequence logits for a collated batch.
+
+        Labels in a batch are ignored: the trainer owns target alignment and loss.
+        Position IDs are contiguous over each row's real tokens.
+
+        Args:
+            batch (`Batch`): Token IDs and a matching mask shaped `[batch, sequence]`.
+                Mask values `True` or `1` identify real tokens.
+
+        Returns:
+            `torch.Tensor`: Logits shaped `[batch, sequence, vocabulary]`.
+
+        Raises:
+            `ValueError`: If IDs are not rank two, length is outside the configured
+                range, or the attention mask shape differs from the IDs.
+        """
+        input_ids, attention_mask, position_ids = self._check_batch(batch)
+        seq_len = input_ids.shape[1]
         causal = torch.ones(seq_len, seq_len, dtype=torch.bool, device=input_ids.device).tril()
         # casual[None, None] makes [T, T] -> [1, 1, T, T]
         causal_mask = causal[None, None] & attention_mask[:, None, None, :]

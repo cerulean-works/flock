@@ -98,5 +98,7 @@ All paths are relative to `/api/v1`. In paths, `{entity}` is an organization's I
 | `PUT .../models/{name}/primary`, `PUT .../models/{name}/tags/{tag}`, `DELETE ...` | The primary version and tags. | [Models](models#tags-and-primary) |
 | `POST .../models/{name}/uploads`, `POST .../uploads/{ulid}/commit` and the rest | Upload sessions. | [Models](models#uploads) |
 | `GET /orgs/{org}/models/-/trash` and the rest | Deleted models and versions. Org admins only. | [Models](models#trash) |
+| `POST /orgs/{org}/imports/hf`, `GET ...`, `DELETE .../{id}` | Hugging Face imports run by the server. | [Hugging Face imports](hf-imports) |
+| `GET /orgs/{org}/imports/hf/preview` | A Hub repository, as the import dialogs show it. | [Hugging Face imports](hf-imports#previews) |
 
 `.../` stands for `/projects/{entity}/{project}/`, and `.../models/` for `/orgs/{org}/models/`. `GET /healthz`, outside `/api/v1`, answers `{"ok":true}` without credentials.

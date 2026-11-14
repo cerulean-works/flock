@@ -310,10 +310,16 @@ def build(folder: Path, device: Any, dtype: Any) -> BaseModel:
     state: dict[str, Any] = {}
     for path in weight_files(folder):
         state.update(load_file(str(path), device=str(device)))
+    if dtype is not None:
+        state = {k: v.to(dtype) if v.is_floating_point() else v for k, v in state.items()}
+    assign_weights(model, state)
+    return model.to(device)
+
+
+def assign_weights(model: BaseModel, state: dict[str, Any]) -> None:
+    """Give a model built on the meta device the tensors in `state`, filling in tied aliases
+    that a checkpoint stores once."""
     for alias, name in _tied_weight_names(model).items():
         if alias not in state and name in state:
             state[alias] = state[name]
-    if dtype is not None:
-        state = {k: v.to(dtype) if v.is_floating_point() else v for k, v in state.items()}
     model.load_state_dict(state, assign=True, strict=True)
-    return model.to(device)

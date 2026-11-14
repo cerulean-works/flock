@@ -103,6 +103,58 @@ when either the input or target position is padding. Loss is summed cross-entrop
 over valid targets divided by their count; an all-ignored batch has zero loss.
 Supply text that produces at least two tokens per row for useful training.
 
+## Train a Hugging Face architecture
+
+`HFCompatibleModel` wraps a causal language model from `transformers`, such as Qwen 3,
+Llama or OLMo 2, so the trainer, `save_to_hub` and `load_from_hub` handle it like
+`Olmo2`. Only the architecture comes from `transformers`: construction runs no code
+from the repository and loads no weights unless you ask for them.
+
+```python
+from flock.training.core.models import HFCompatibleModel
+
+fresh = HFCompatibleModel.from_hf("Qwen/Qwen3-0.6B")
+smaller = HFCompatibleModel.from_hf("Qwen/Qwen3-0.6B", num_hidden_layers=8, init_seed=7)
+tuned = HFCompatibleModel.from_hf("Qwen/Qwen3-0.6B", pretrained=True)
+tokenizer = fresh.get_hf_tokenizer()
+```
+
+`from_hf` reads the repository's `config.json` and sets `hf_repo` to the repository,
+so `get_hf_tokenizer()` loads its tokenizer. Keyword arguments that name
+`HFCompatibleConfig` fields, such as `init_seed` or `attn_implementation`, set those
+fields. Any other keyword replaces that key of `config.json`, which is how you change
+the architecture. `repo` can also be a local folder.
+
+- **Fresh weights** use Flock's seeded initialization, like `Olmo2`: the same
+  `init_seed` gives the same weights. Linear and embedding weights are drawn with the
+  config's `initializer_range` (the repository's value by default, then `0.02`).
+  Norms keep the ones `transformers` gives them.
+- **`pretrained=True`** builds the model on the meta device and loads the repository's
+  safetensors weights, renamed as an [import](../hub/import-from-hf) renames them.
+  Repositories with only `.bin` weights are refused.
+- **Attention** uses `attn_implementation`, which defaults to `"sdpa"`.
+  `"flash_attention_2"` works when it's installed. The setting is part of the config,
+  so a resumed checkpoint keeps it.
+
+To build one from a config you already have, pass an `HFCompatibleConfig`:
+
+```python
+from flock.training.core.models import HFCompatibleConfig, HFCompatibleModel
+
+config = HFCompatibleConfig(hf_config=qwen_config_json, max_position_embeddings=2048)
+model = HFCompatibleModel(config)
+```
+
+`hf_config` is the `transformers` `config.json` as a dict, and must name a causal
+language model that the installed `transformers` ships. `max_position_embeddings`
+limits the input length the trainer accepts, without changing the architecture.
+
+The model's state-dict names are the Hugging Face names with `model.` in front, such
+as `model.lm_head.weight`, because it holds the `transformers` model as `self.model`.
+The forward pass gives `transformers` the 2-D attention mask and position IDs that
+skip left padding, and returns logits. The trainer computes the loss as it does for
+`Olmo2`.
+
 ## Try a local run
 
 This complete example trains a tiny model on three local rows, saves two

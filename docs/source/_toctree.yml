@@ -20,8 +20,12 @@ guide:
   sections:
   - local: hub/use-datasets
     title: Use datasets
+  - local: hub/import-datasets-from-hf
+    title: Import datasets from Hugging Face
   - local: hub/store-models
     title: Store and load models
+  - local: hub/import-from-hf
+    title: Import models from Hugging Face
 - title: Training
   sections:
   - local: training/trainer
@@ -58,6 +62,8 @@ guide:
       title: Browse and manage models
     - local: app/share-publicly
       title: Share projects and datasets publicly
+    - local: app/import-hf
+      title: Import from Hugging Face
     - local: app/import-wandb
       title: Import W&B runs
     - local: app/configure-budgets
@@ -163,3 +169,5 @@ reference:
       title: Datasets
     - local: app/api/models
       title: Models
+    - local: app/api/hf-imports
+      title: Hugging Face imports

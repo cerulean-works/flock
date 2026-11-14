@@ -3,7 +3,10 @@
 	import DatasetView from '#lib/components/datasets/DatasetView.svelte';
 	import FolderView from '#lib/components/datasets/FolderView.svelte';
 	import NewFolderButton from '#lib/components/datasets/NewFolderButton.svelte';
+	import HFImportButton from '#lib/components/imports/HFImportButton.svelte';
+	import HFImportRows from '#lib/components/imports/HFImportRows.svelte';
 	import { crumbs, nameOf } from '#lib/datasets.ts';
+	import { HFImportList } from '#lib/hf.svelte.ts';
 	import Page from '#lib/components/Page.svelte';
 	import type { PageProps } from './$types';
 
@@ -16,6 +19,10 @@
 			? []
 			: crumbs(params.org, data.shell.orgName ?? params.org, data.path)
 	);
+	// Members and admins import from Hugging Face (D124); the imports show in their folder.
+	const writer = $derived(data.shell.access === 'admin' || data.shell.access === 'member');
+	const imports = $derived(new HFImportList(params.org));
+	$effect(() => (writer && data.kind === 'folder' ? imports.watch() : undefined));
 </script>
 
 <svelte:head>
@@ -31,8 +38,12 @@
 			<h1 class="min-w-0 flex-1 truncate text-[34px] leading-[1.15] tracking-[-0.025em]" {title}>
 				{title}
 			</h1>
+			{#if writer}
+				<HFImportButton org={params.org} kind="dataset" list={imports} folder={data.path} />
+			{/if}
 			<NewFolderButton org={params.org} path={data.path} />
 		</div>
+		<HFImportRows org={params.org} list={imports} kind="dataset" folder={data.path} />
 		{#key data.path}
 			<FolderView org={params.org} path={data.path} folder={data.folder} now={data.now} />
 		{/key}
