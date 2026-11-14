@@ -120,6 +120,13 @@ class Settings:
         doc="the bucket on the S3 server deleted datasets wait in (default: <prefix>flock-trash)",
     )
     pool_size: int = field(default=16, doc="maximum number of database connections")
+    s3_pool_size: int = field(
+        default=4, doc="maximum number of database connections of each S3 proxy worker"
+    )
+    contract_delay: float = field(
+        default=1800.0,
+        doc="seconds every running server must know a contract migration before it is applied",
+    )
     cors_origins: list[str] = field(
         default_factory=list, doc="origins allowed to call the API from browsers, comma separated"
     )

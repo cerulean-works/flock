@@ -27,6 +27,7 @@ from starlette.responses import Response, StreamingResponse
 from starlette.routing import Route
 
 from app.api.src.core.bus import Bus
+from app.api.src.db.instances import Instance
 from app.api.src.s3_proxy import chunked, s3xml, sigv4
 from app.api.src.s3_proxy.auth import Bucket, Caller, Directory
 from app.api.src.s3_proxy.sigv4 import SigV4Error
@@ -147,6 +148,7 @@ class Proxy:
         self.upstream = Upstream(settings, max_connections=512)
         self._pool: asyncpg.Pool | None = None
         self._directory: Directory | None = None
+        self.instance: Instance | None = None
         self.bus = Bus(settings.listen_database_url or settings.database_url)
         web = urlsplit(settings.web_url or "")
         self.web_origin = f"{web.scheme}://{web.netloc}" if web.scheme and web.netloc else None
@@ -158,8 +160,11 @@ class Proxy:
 
     async def start(self) -> None:
         self._pool = await asyncpg.create_pool(
-            self.settings.database_url, min_size=1, max_size=self.settings.pool_size
+            self.settings.database_url, min_size=1, max_size=self.settings.s3_pool_size
         )
+        # Each worker says which release it runs, which contract migrations wait for (D147).
+        self.instance = Instance(self._pool, "s3")
+        await self.instance.start()
         self._directory = Directory(self._pool, self.bus)
         await self._directory.start()
         # Serve as soon as the bus listens (or failed to; the directory is uncached until then).
@@ -170,6 +175,8 @@ class Proxy:
         await self.bus.close()
         if self._directory is not None:
             await self._directory.close()
+        if self.instance is not None:
+            await self.instance.close()
         if self._pool is not None:
             await self._pool.close()
 

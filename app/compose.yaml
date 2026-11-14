@@ -32,6 +32,7 @@ services:
       FLOCK_WEB_URL: ${FLOCK_WEB_URL:-http://localhost:3000}
       FLOCK_API_PUBLIC_URL: ${FLOCK_API_PUBLIC_URL:-http://localhost:8080}
       FLOCK_MIGRATE_ON_STARTUP: ${FLOCK_MIGRATE_ON_STARTUP:-}
+      FLOCK_CONTRACT_DELAY: ${FLOCK_CONTRACT_DELAY:-}
       FLOCK_JWT_SECRET: ${FLOCK_JWT_SECRET:-}
       FLOCK_ACCESS_TOKEN_TTL: ${FLOCK_ACCESS_TOKEN_TTL:-}
       FLOCK_REFRESH_TOKEN_TTL: ${FLOCK_REFRESH_TOKEN_TTL:-}
@@ -92,6 +93,7 @@ services:
       FLOCK_S3_TRASH_BUCKET: ${FLOCK_S3_TRASH_BUCKET:-}
       FLOCK_WEB_URL: ${FLOCK_WEB_URL:-http://localhost:3000}
       FLOCK_POOL_SIZE: ${FLOCK_POOL_SIZE:-}
+      FLOCK_S3_POOL_SIZE: ${FLOCK_S3_POOL_SIZE:-}
       FLOCK_LOG_LEVEL: ${FLOCK_LOG_LEVEL:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=2)"]
