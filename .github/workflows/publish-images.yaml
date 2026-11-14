@@ -1,0 +1,134 @@
+name: Publish images
+
+# Builds flock-api and flock-ui on every push to main, pushes them to GHCR tagged with the commit
+# SHA and `main`, then deploys that SHA to the Dokploy stack (D141). The stack pulls images by
+# FLOCK_VERSION, never by `main`, so Swarm sees each deploy as a change and a rollback points at
+# the image it ran before.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+# One run at a time, in push order, so an older SHA never deploys over a newer one.
+concurrency:
+  group: publish-images
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build, push and deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # An empty build argument would bake an empty dashboard origin into flock-ui.
+      - name: Check the dashboard origin is set
+        env:
+          FLOCK_WEB_URL: ${{ vars.FLOCK_WEB_URL }}
+        run: |
+          if [ -z "$FLOCK_WEB_URL" ]; then
+            echo "Set the repository variable FLOCK_WEB_URL to the dashboard's public origin." >&2
+            exit 1
+          fi
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3.11.1
+
+      - name: Sign in to GHCR
+        uses: docker/login-action@v3.5.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push flock-api
+        uses: docker/build-push-action@v6.18.0
+        with:
+          context: .
+          file: app/api/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/flock-api:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/flock-api:main
+          cache-from: type=gha,scope=flock-api
+          cache-to: type=gha,mode=max,scope=flock-api
+
+      - name: Build and push flock-ui
+        uses: docker/build-push-action@v6.18.0
+        with:
+          context: app/web
+          push: true
+          # The dashboard's public origin is baked into the image.
+          build-args: |
+            FLOCK_WEB_URL=${{ vars.FLOCK_WEB_URL }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/flock-ui:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/flock-ui:main
+          cache-from: type=gha,scope=flock-ui
+          cache-to: type=gha,mode=max,scope=flock-ui
+
+      # Dokploy's deploy webhook takes no environment, so this goes through its API instead. The
+      # API replaces the whole env text on update, so the step reads it, swaps the FLOCK_VERSION
+      # line (or adds one) and writes it back, then deploys. Skipped until the secrets are set.
+      - name: Deploy to Dokploy
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          DOKPLOY_COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+          FLOCK_VERSION: ${{ github.sha }}
+        run: |
+          if [ -z "$DOKPLOY_URL" ] || [ -z "$DOKPLOY_API_KEY" ] || [ -z "$DOKPLOY_COMPOSE_ID" ]; then
+            echo "DOKPLOY_URL, DOKPLOY_API_KEY or DOKPLOY_COMPOSE_ID isn't set, so nothing is deployed."
+            exit 0
+          fi
+          set -euo pipefail
+          echo "::add-mask::$DOKPLOY_COMPOSE_ID"
+          api="${DOKPLOY_URL%/}/api"
+          compose=$(mktemp)
+          body=$(mktemp)
+          trap 'rm -f "$compose" "$body"' EXIT
+
+          # The env holds the stack's secrets, so it only ever lives in these files, never in the log.
+          curl --fail --silent --show-error --get \
+            -H "x-api-key: $DOKPLOY_API_KEY" \
+            --data-urlencode "composeId=$DOKPLOY_COMPOSE_ID" \
+            "$api/compose.one" -o "$compose"
+
+          jq -e '.env | type == "string"' "$compose" > /dev/null || {
+            echo "Dokploy's compose.one answered without an env, so the deploy stops rather than clear it." >&2
+            exit 1
+          }
+          # Every other line, comments and blank lines included, stays as it was.
+          jq --arg id "$DOKPLOY_COMPOSE_ID" --arg version "$FLOCK_VERSION" '
+            def pin: "FLOCK_VERSION=" + $version;
+            def is_pin: test("^\\s*(export\\s+)?FLOCK_VERSION\\s*=");
+            .env as $env
+            | ($env | split("\n")) as $lines
+            | {
+                composeId: $id,
+                env: (
+                  if any($lines[]; is_pin) then $lines | map(if is_pin then pin else . end) | join("\n")
+                  elif ($env | test("^\\s*$")) then pin
+                  else ($env | sub("\\n+$"; "")) + "\n" + pin
+                  end
+                )
+              }
+          ' "$compose" > "$body"
+
+          curl --fail --silent --show-error -o /dev/null \
+            -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" \
+            --data @"$body" "$api/compose.update"
+
+          jq -n --arg id "$DOKPLOY_COMPOSE_ID" --arg version "$FLOCK_VERSION" \
+            '{composeId: $id, title: ("Deploy " + $version[0:7])}' |
+            curl --fail --silent --show-error -o /dev/null \
+              -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" \
+              --data @- "$api/compose.deploy"
+
+          echo "Deploying $FLOCK_VERSION."
