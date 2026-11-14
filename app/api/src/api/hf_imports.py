@@ -46,11 +46,18 @@ class HFImportBody(BaseModel):
     token: Annotated[str, Field(min_length=1, max_length=512)] | None = Field(
         None, description="a Hugging Face access token, used for this import only"
     )
-    # A dataset's config (default: the only one, or default), splits (default: all) and folder.
-    config: Annotated[str, Field(min_length=1, max_length=256)] | None = None
-    splits: (
+    # A dataset's configs, each with its splits or null for all (default: the only config, or
+    # the one called default), and its folder.
+    configs: (
         Annotated[
-            list[Annotated[str, Field(min_length=1, max_length=256)]],
+            dict[
+                Annotated[str, Field(min_length=1, max_length=256)],
+                Annotated[
+                    list[Annotated[str, Field(min_length=1, max_length=256)]],
+                    Field(min_length=1, max_length=1000),
+                ]
+                | None,
+            ],
             Field(min_length=1, max_length=1000),
         ]
         | None
@@ -120,8 +127,8 @@ async def list_imports(org: OrgDep, store: StoreDep) -> Response:
 async def start_import(org: OrgDep, body: HFImportBody, user: UserDep, store: StoreDep) -> Response:
     """Start importing a Hugging Face dataset or model, in the background.
 
-    A dataset becomes one Lance dataset per split in the org's flock-datasets, under ``dest``
-    (D121). A model becomes a new version of ``name`` in its flock-models (D123). The Hub is
+    A dataset becomes one Lance dataset per split of each config in ``configs`` in the org's
+    flock-datasets, under ``dest`` (D121, D129). A model becomes a new version of ``name`` in its flock-models (D123). The Hub is
     asked first: a missing, gated or unsupported repository is refused now, and one larger than
     the server's limit answers 409 with ``too_large`` and the ``command`` to run instead. The
     token is used by this import only, and never stored. Follow it with ``GET {id}``.
@@ -149,8 +156,7 @@ async def start_import(org: OrgDep, body: HFImportBody, user: UserDep, store: St
                 user,
                 body.repo,
                 body.revision,
-                body.config,
-                body.splits,
+                body.configs,
                 body.dest,
                 body.token,
             )
@@ -162,7 +168,7 @@ async def start_import(org: OrgDep, body: HFImportBody, user: UserDep, store: St
 @router.get("/{pk}")
 async def get_import(org: OrgDep, pk: int, store: StoreDep) -> Response:
     """An import's state and progress: ``progress`` from 0 to 1, ``result`` once it finished
-    (each split's dataset, or the model's version), ``error`` once it failed."""
+    (each split's dataset with its config, or the model's version), ``error`` once it failed."""
     job = await store.hf_imports.get(org, pk)
     return JSONResponse((await with_users(store, [job]))[0])
 

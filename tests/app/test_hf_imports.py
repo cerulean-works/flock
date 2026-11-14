@@ -236,6 +236,33 @@ def dataset_repo() -> Repo:
     )
 
 
+def two_config_repo() -> Repo:
+    """A dataset with the configs en (train and test) and fr (train only)."""
+    return Repo(
+        {
+            "README.md": b"# words\n",
+            "en/train.parquet": parquet([{"text": f"en {i}"} for i in range(5)]),
+            "en/test.parquet": parquet([{"text": "en held out"}]),
+            "fr/train.parquet": parquet([{"text": f"fr {i}"} for i in range(3)]),
+        },
+        card={
+            "configs": [
+                {
+                    "config_name": "en",
+                    "data_files": [
+                        {"split": "train", "path": "en/train.parquet"},
+                        {"split": "test", "path": "en/test.parquet"},
+                    ],
+                },
+                {
+                    "config_name": "fr",
+                    "data_files": [{"split": "train", "path": "fr/train.parquet"}],
+                },
+            ]
+        },
+    )
+
+
 def finished(api: Client, pk: int, wait_for: Callable[..., Any], timeout: float = 120) -> dict:
     def ended() -> dict | None:
         job = api.get(f"{IMPORTS}/{pk}").json()
@@ -440,7 +467,13 @@ def test_the_size_limit_refuses_with_the_command_to_run(
     big = parquet([{"text": "x" * 2000}])
     hub.datasets["acme/data"].files["data/train-00000-of-00001.parquet"] = big
     refused = api.post(
-        IMPORTS, {"kind": "dataset", "repo": "acme/data", "dest": "hf/data", "splits": ["train"]}
+        IMPORTS,
+        {
+            "kind": "dataset",
+            "repo": "acme/data",
+            "dest": "hf/data",
+            "configs": {"default": ["train"]},
+        },
     )
     assert refused.status == 409
     assert refused.json()["command"] == (
@@ -539,7 +572,7 @@ def test_a_dataset_import_writes_lance_datasets(
     assert started.json()["files_total"] == 2
     job = finished(api, started.json()["id"], wait_for, timeout=180)
     assert job["state"] == "finished", job["error"]
-    assert job["config"] == "default" and job["splits"] == ["train", "test"]
+    assert job["configs"] == {"default": ["train", "test"]}
     assert job["rows_done"] == 6 and job["files_done"] == 2 and job["progress"] == 1.0
     datasets = sorted(job["result"]["datasets"], key=lambda d: d["split"])
     assert [(d["path"], d["rows"]) for d in datasets] == [("hf/data/test", 1), ("hf/data/train", 5)]
@@ -561,6 +594,66 @@ def test_a_dataset_import_writes_lance_datasets(
     assert "already a dataset" in again.json()["error"]
 
 
+def test_the_size_limit_counts_every_config(make_s3: Callable[..., S3Flock], hub: FakeHub) -> None:
+    repo = two_config_repo()
+    hub.datasets["acme/words"] = repo
+    en = len(repo.files["en/train.parquet"]) + len(repo.files["en/test.parquet"])
+    fr = len(repo.files["fr/train.parquet"])
+    flock = make_s3(hf_import_max_bytes=max(en, fr) + 1)
+    api = flock.client()
+    body = {"kind": "dataset", "repo": "acme/words", "dest": "hf/words"}
+    refused = api.post(IMPORTS, {**body, "configs": {"en": None, "fr": None}})
+    assert refused.status == 409
+    assert refused.json()["size"] == en + fr
+    assert refused.json()["command"] == (
+        "flock datasets import acme/words hf/words --config en --config fr --org flock"
+    )
+    # Configs with different splits need a command each.
+    refused = api.post(IMPORTS, {**body, "configs": {"fr": None, "en": ["test", "train"]}})
+    assert refused.status == 409
+    assert refused.json()["command"] == (
+        "flock datasets import acme/words hf/words --config en --split test --split train "
+        "--org flock\n"
+        "flock datasets import acme/words hf/words --config fr --org flock"
+    )
+    assert api.post(IMPORTS, {**body, "configs": {}}).status == 422
+    assert api.post(IMPORTS, {**body, "configs": {"en": []}}).status == 422
+    unknown = api.post(IMPORTS, {**body, "configs": {"en": None, "de": None}})
+    assert unknown.status == 422
+    assert "no config de" in unknown.json()["error"]
+    assert sql(flock, "SELECT count(*) FROM hf_imports")[0][0] == 0
+
+
+def test_a_dataset_import_of_several_configs(
+    flock: S3Flock, hub: FakeHub, wait_for: Callable[..., Any]
+) -> None:
+    hub.datasets["acme/words"] = two_config_repo()
+    api = flock.client()
+    started = api.post(
+        IMPORTS,
+        {
+            "kind": "dataset",
+            "repo": "acme/words",
+            "dest": "hf/words",
+            "configs": {"en": ["test"], "fr": None},
+        },
+    )
+    assert started.status == 202, started.body
+    assert started.json()["files_total"] == 2
+    assert started.json()["configs"] == {"en": ["test"], "fr": ["train"]}
+    job = finished(api, started.json()["id"], wait_for, timeout=180)
+    assert job["state"] == "finished", job["error"]
+    assert job["rows_done"] == 4
+    made = sorted(
+        (d["config"], d["split"], d["path"], d["rows"]) for d in job["result"]["datasets"]
+    )
+    assert made == [("en", "test", "hf/words/en/test", 1), ("fr", "train", "hf/words/fr/train", 3)]
+
+    found = api.request("GET", "/api/v1/orgs/flock/datasets/rows", {"path": "hf/words/fr/train"})
+    assert found.status == 200, found.body
+    assert "fr 2" in json.dumps(found.json())
+
+
 def test_dataset_previews_list_configs_and_splits(flock: S3Flock, hub: FakeHub) -> None:
     hub.datasets["acme/data"] = dataset_repo()
     api = flock.client()
@@ -571,6 +664,29 @@ def test_dataset_previews_list_configs_and_splits(flock: S3Flock, hub: FakeHub) 
     assert config["name"] == "default"
     assert [s["name"] for s in config["splits"]] == ["train", "test"]
     assert all(s["size"] > 0 for s in config["splits"])
+
+    # Every config's splits, when the dataset has several.
+    words = two_config_repo()
+    hub.datasets["acme/words"] = words
+    preview = api.get(f"{IMPORTS}/preview", kind="dataset", repo="acme/words").json()
+    assert [
+        (c["name"], [(s["name"], s["size"]) for s in c["splits"]], c["size"])
+        for c in preview["configs"]
+    ] == [
+        (
+            "en",
+            [
+                ("train", len(words.files["en/train.parquet"])),
+                ("test", len(words.files["en/test.parquet"])),
+            ],
+            len(words.files["en/train.parquet"]) + len(words.files["en/test.parquet"]),
+        ),
+        (
+            "fr",
+            [("train", len(words.files["fr/train.parquet"]))],
+            len(words.files["fr/train.parquet"]),
+        ),
+    ]
 
     hub.viewer["acme/data"] = {
         "splits": {

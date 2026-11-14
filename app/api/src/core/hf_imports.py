@@ -95,18 +95,26 @@ def human(size: int) -> str:
 
 
 def dataset_command(
-    org: str, repo: str, dest: str, revision: str, config: str | None, splits: list[str] | None
+    org: str, repo: str, dest: str, revision: str, configs: dict[str, list[str] | None]
 ) -> str:
-    """The ``flock datasets import`` command doing what the dialog asked."""
-    parts = ["flock", "datasets", "import", repo, dest]
-    if config:
-        parts += ["--config", config]
-    for split in splits or ():
-        parts += ["--split", split]
-    if revision != "main":
-        parts += ["--revision", revision]
-    parts += ["--org", org]
-    return shlex.join(parts)
+    """The ``flock datasets import`` command doing what the dialog asked: each config with its
+    splits (``None`` for all). Configs whose splits differ need a command each, one per line,
+    since ``--split`` applies to every config of a command."""
+    groups: dict[tuple[str, ...] | None, list[str]] = {}
+    for config, splits in configs.items():
+        groups.setdefault(tuple(splits) if splits is not None else None, []).append(config)
+    lines = []
+    for splits, names in groups.items():
+        parts = ["flock", "datasets", "import", repo, dest]
+        for config in names:
+            parts += ["--config", config]
+        for split in splits or ():
+            parts += ["--split", split]
+        if revision != "main":
+            parts += ["--revision", revision]
+        parts += ["--org", org]
+        lines.append(shlex.join(parts))
+    return "\n".join(lines)
 
 
 def model_command(
@@ -304,11 +312,11 @@ class ModelPlan:
 @dataclass
 class DatasetPlan:
     """What a dataset import downloads: the manifest ``flock datasets download`` would write,
-    each file's size, and where each split lands."""
+    each file's size, and where each split of each config lands."""
 
     manifest: Manifest
     sizes: dict[str, int]
-    paths: dict[str, str]
+    paths: dict[tuple[str, str], str]
     card_revision: str
 
     @property
@@ -504,7 +512,7 @@ class HFImports:
 
     async def preview_dataset(self, org: Org, repo: str, revision: str, token: str | None) -> dict:
         """What the dataset dialog shows: each config's splits with their sizes, from the dataset
-        viewer API, else from the files a download would take (for the default config only)."""
+        viewer API, else from the files a download of every config would take."""
         async with self.hub(token) as hub:
             await hub.info("dataset", repo, revision)  # a missing or gated repo, said plainly
             splits = await hub.viewer("splits", repo) if revision == "main" else None
@@ -537,25 +545,24 @@ class HFImports:
                     for name, found_splits in configs.items()
                 ]
             else:
-                plan = await self._dataset_plan(hub, repo, revision, None, None, None, token)
-                manifest = plan.manifest
-                listed = [
-                    {
-                        "name": name,
-                        "splits": [
-                            {
-                                "name": split,
-                                "size": sum(plan.sizes.get(f.path, 0) for f in files),
-                                "rows": None,
-                            }
-                            for split, files in manifest.splits.items()
-                        ]
-                        if name == manifest.config
-                        else None,
-                        "size": plan.size if name == manifest.config else None,
-                    }
-                    for name in manifest.configs
-                ]
+                plan = await self._dataset_plan(hub, repo, revision, None, None, token, every=True)
+                listed = []
+                for name, found_splits in plan.manifest.splits.items():
+                    sized = [
+                        {
+                            "name": split,
+                            "size": sum(plan.sizes.get(f.path, 0) for f in files),
+                            "rows": None,
+                        }
+                        for split, files in found_splits.items()
+                    ]
+                    listed.append(
+                        {
+                            "name": name,
+                            "splits": sized,
+                            "size": sum(int(s["size"] or 0) for s in sized),
+                        }
+                    )
         names = [c["name"] for c in listed]
         default = "default" if len(names) > 1 and "default" in names else next(iter(names), None)
         return {
@@ -621,32 +628,33 @@ class HFImports:
         hub: Hub,
         repo: str,
         revision: str,
-        config: str | None,
-        splits: list[str] | None,
+        configs: dict[str, list[str] | None] | None,
         dest: str | None,
         token: str | None,
+        every: bool = False,
     ) -> DatasetPlan:
-        """The files ``flock datasets download`` would take, with their sizes, and where each
-        split lands under ``dest``."""
+        """The files ``flock datasets download`` would take for ``configs`` (each with its
+        splits, ``None`` for all), or for every config with ``every``, with their sizes, and
+        where each split lands under ``dest``."""
         from flock.hub.datasets import DatasetError
         from flock.hub.datasets._convert import split_paths
-        from flock.hub.datasets._download import plan
+        from flock.hub.datasets._download import catalog, plan
 
+        sent, endpoint = token or False, self.settings.hf_endpoint
         try:
-            manifest = await asyncio.to_thread(
-                plan,
-                repo,
-                config=config,
-                splits=splits,
-                revision=revision,
-                token=token or False,
-                endpoint=self.settings.hf_endpoint,
-            )
+            if every:
+                manifest = await asyncio.to_thread(
+                    catalog, repo, revision=revision, token=sent, endpoint=endpoint
+                )
+            else:
+                manifest = await asyncio.to_thread(
+                    plan, repo, config=configs, revision=revision, token=sent, endpoint=endpoint
+                )
         except DatasetError as e:
             raise HubError(str(e)) from None
         info = await hub.info("dataset", repo, manifest.revision)
         files = siblings(info)
-        wanted = [f.path for split in manifest.splits.values() for f in split]
+        wanted = [f.path for f in manifest.files]
         sizes = {path: files.get(path, 0) for path in wanted}
         card_revision = revision if manifest.ref is not None else manifest.revision
         paths = split_paths(manifest, dest) if dest is not None else {}
@@ -711,14 +719,15 @@ class HFImports:
         user: User,
         repo: str,
         revision: str,
-        config: str | None,
-        splits: list[str] | None,
+        configs: dict[str, list[str] | None] | None,
         dest: str,
         token: str | None,
     ) -> HFImport:
-        """Check the dataset and start importing it to ``dest``. Raises ``HubError`` when the
-        Hub refuses or the dataset can't be imported, ``TooLarge`` past the size limit, and
-        ``Conflict`` when a dataset is already at a split's path."""
+        """Check the dataset and start importing ``configs`` (each with its splits, ``None`` for
+        all; the default config when not given) to ``dest``. Raises ``HubError`` when the Hub
+        refuses or the dataset can't be imported, ``TooLarge`` when every config's files
+        together pass the size limit, and ``Conflict`` when a dataset is already at a split's
+        path."""
         dest = dest.strip("/")
         check_new_path(dest)
         if await self._running_at(org, "dataset", dest):
@@ -727,21 +736,20 @@ class HFImports:
         hub = self.hub(token)
         try:
             await hub.info("dataset", repo, revision)
-            plan = await self._dataset_plan(hub, repo, revision, config, splits, dest, token)
+            plan = await self._dataset_plan(hub, repo, revision, configs, dest, token)
             manifest = plan.manifest
-            command = dataset_command(
-                org.name, repo, dest, revision, manifest.config, splits and list(splits)
-            )
+            asked = {c: (configs or {}).get(c) for c in manifest.splits}
+            command = dataset_command(org.name, repo, dest, revision, asked)
             self._check_size(plan.size, "dataset", command)
             await self._check_free(bucket, dest, plan.paths)
-            options = {"config": manifest.config, "splits": list(manifest.splits)}
+            options = {"configs": {c: list(found) for c, found in manifest.splits.items()}}
             job = await self._insert(org, user, "dataset", repo, revision, dest, options, command)
         except BaseException:
             await hub.close()
             raise
         job.sha = manifest.revision
         job.bytes_total = plan.size
-        job.files_total = sum(len(f) for f in manifest.splits.values())
+        job.files_total = len(manifest.files)
         job.task = asyncio.get_running_loop().create_task(
             self._run(job, self._dataset(job, org, hub, plan, bucket), hub)
         )
@@ -757,7 +765,7 @@ class HFImports:
                 size,
             )
 
-    async def _check_free(self, bucket: str, dest: str, paths: dict[str, str]) -> None:
+    async def _check_free(self, bucket: str, dest: str, paths: dict[Any, str]) -> None:
         datasets = self.store.datasets
         taken = [p for p in paths.values() if await datasets.latest(bucket, p) is not None]
         if taken:
@@ -1121,9 +1129,8 @@ class HFImports:
                                 await self._save(job)
 
             async with asyncio.TaskGroup() as group:
-                for files in manifest.splits.values():
-                    for file in files:
-                        group.create_task(fetch(file.path, manifest.revision))
+                for file in manifest.files:
+                    group.create_task(fetch(file.path, manifest.revision))
                 if manifest.card is not None:
                     group.create_task(fetch(CARD, plan.card_revision))
             await asyncio.to_thread((folder / MANIFEST).write_text, manifest.to_json())
