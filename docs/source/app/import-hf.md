@@ -13,11 +13,11 @@ Bring a dataset or a model from the Hugging Face Hub into your organization from
 1. Open the **Datasets** tab, at the root or in the folder you want the dataset in.
 2. Click **Import from Hugging Face**.
 3. Enter the repository, such as `HuggingFaceFW/fineweb-edu`, and an access token if it needs one. Click **Continue**.
-4. Choose the config, if the dataset has several, and the splits. Each split shows its size from the Hub's dataset viewer.
+4. Choose the splits. When the dataset has several configs, each config has a checkbox with its splits under it, and the default config starts checked with all its splits. You can check splits of several configs, and different splits in each. Each split shows its size from the Hub's dataset viewer.
 5. Check the **Folder**. It defaults to the repository's name in the current folder.
 6. Click **Import**.
 
-Each split becomes a Lance dataset at `{folder}/{split}`, with the dataset card as its README, as described in [Where the data lands](../hub/import-datasets-from-hf#where-the-data-lands). A folder that already holds a dataset is refused, so choose a new one to import again.
+Each split becomes a Lance dataset at `{folder}/{split}`, or `{folder}/{config}/{split}` when the dataset has several configs, with the dataset card as its README, as described in [Where the data lands](../hub/import-datasets-from-hf#where-the-data-lands). A folder that already holds a dataset is refused, so choose a new one to import again. The size limit counts every split you chose, across configs. When the import finishes, **Open** goes to the new dataset, or to the folder when it made several.
 
 ## Import a model
 

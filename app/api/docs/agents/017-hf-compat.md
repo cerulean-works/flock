@@ -290,21 +290,40 @@ class HFCompatibleModel(BaseModel):
 
 Added after the first review, at the user's request.
 
-- **`config` takes several.** `download_from_hf`, `import_from_hf`, `flock datasets download` and
-  `flock datasets import` take a list of configs (`--config` repeated). One name still works as
-  before.
+- **`config` takes several.** `download_from_hf`, `import_from_hf` and `plan` take one name, a
+  list of names, or a mapping from each name to its own splits (`None` for those `splits=`
+  picks). `flock datasets download` and `flock datasets import` take `--config` repeated. One
+  name still works as before, and none keeps the default-config rule.
 - **One folder, one conversion.** The download puts every chosen config's files in one folder.
-  `flock-import.json` lists each config's splits and files. `convert` writes them all with one
-  pool of workers, and commits each split of each config on its own, so each one still appears
-  in full or not at all.
+  `flock-import.json` (now version 2) has `configs` (every config of the repo) and `splits`, each
+  chosen config's splits and their files in order. `convert` writes them all with one pool of
+  workers, unifies schemas per split of each config, checks every destination before any worker
+  starts, and commits each split of each config on its own, in file order, so each one still
+  appears in full or not at all. `ConvertedSplit` has the `config`, and progress and the CLI's
+  report name each split as `config/split`.
 - **Where they land.** `{dest}/{config}/{split}` whenever the repo has several configs, as D121
-  says. The dataset card goes to `{dest}/README.md` and to each split's folder.
+  says. The dataset card goes to `{dest}/README.md` and to each split's folder. `flock.source`
+  has each split's own config.
 - **Splits across configs.** `--split` keeps a split in every chosen config that has it. A split
-  that no chosen config has is refused. A config left with no splits is refused too.
-- **The web app.** The dataset dialog shows each config with a checkbox and its splits under it.
-  The default config is checked. The API takes `configs` (a list) in place of `config`, and the
-  size limit counts every chosen config. One import makes every dataset, and its result lists
-  them all.
+  that no chosen config has is refused. A config left with no splits is refused too. A config
+  given its own splits (the mapping) gets exactly those, and a missing one is refused.
+- **Parquet fallback.** When any chosen config's own files aren't readable, every chosen config
+  comes from the Hub's Parquet conversion, as one config did. Named configs of a repo without a
+  card configs block (a loading script) are looked up in the conversion rather than refused.
+- **The web app.** The dataset dialog shows each config with a checkbox (checked, unchecked or
+  partly checked) and its splits as checkboxes with sizes under it. The default config is checked
+  with all its splits. Import stays disabled until a split is chosen. With one config, only its
+  splits show.
+- **The API.** The body takes `configs: {name: [splits] | null}` in place of `config` and
+  `splits`, since a flat split list can't say "test of en, all of fr". `null` means every split
+  of that config, and leaving `configs` out means the default config. The dialog sends `null` for
+  a config with every split checked. The size limit sums every chosen config's files. The job's
+  `configs` holds each config's imported splits, and its result lists every dataset with its
+  config. The filled-in command repeats `--config`. Configs whose splits differ get one command
+  each, one per line, all into the same `dest` (their targets don't overlap).
+- **The preview's fallback.** Without the dataset viewer, the preview lists every config's splits
+  and sizes from `catalog`, a `plan` of every config (splits the Hub only partly converted left
+  out). It reads only the Hub's API, as `plan` does.
 
 ---
 
