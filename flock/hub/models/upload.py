@@ -14,7 +14,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 from flock.hub.models._common import (
     PART_SIZE,
@@ -96,6 +96,63 @@ def _run_path(run: Any) -> tuple[str | None, str | None]:
     if isinstance(run, str):
         return run, run.rsplit("/", 1)[-1]
     return f"{run.entity}/{run.project}/{run.id}", run.id
+
+
+@overload
+def save_to_hub(
+    model: ModelOrFolder,
+    name: str,
+    *,
+    tags: Sequence[str] = (),
+    primary: bool = False,
+    metadata: Mapping[str, Any] | None = None,
+    run: RunOrPath = None,
+    step: int | None = None,
+    dedupe_key: str | None = None,
+    training_state: Mapping[str, Any] | None = None,
+    shard_size: int = 5 * 2**30,
+    blocking: Literal[True] = True,
+    resume: bool = True,
+    keep_local: bool = False,
+) -> ModelVersion: ...
+
+
+@overload
+def save_to_hub(
+    model: ModelOrFolder,
+    name: str,
+    *,
+    tags: Sequence[str] = (),
+    primary: bool = False,
+    metadata: Mapping[str, Any] | None = None,
+    run: RunOrPath = None,
+    step: int | None = None,
+    dedupe_key: str | None = None,
+    training_state: Mapping[str, Any] | None = None,
+    shard_size: int = 5 * 2**30,
+    blocking: Literal[False],
+    resume: bool = True,
+    keep_local: bool = False,
+) -> PendingUpload: ...
+
+
+@overload
+def save_to_hub(
+    model: ModelOrFolder,
+    name: str,
+    *,
+    tags: Sequence[str] = (),
+    primary: bool = False,
+    metadata: Mapping[str, Any] | None = None,
+    run: RunOrPath = None,
+    step: int | None = None,
+    dedupe_key: str | None = None,
+    training_state: Mapping[str, Any] | None = None,
+    shard_size: int = 5 * 2**30,
+    blocking: bool,
+    resume: bool = True,
+    keep_local: bool = False,
+) -> ModelVersion | PendingUpload: ...
 
 
 def save_to_hub(
