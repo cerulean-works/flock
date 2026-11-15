@@ -3,7 +3,8 @@
 `Trainer` runs one shuffled pass, or its first `max_steps` updates, over a Lance
 text dataset on one device. Each batch produces one optimizer update: tokenize the
 text, build next-token targets, compute cross-entropy, backpropagate, clip
-gradients, update weights and advance the learning rate. Padding targets are ignored when computing loss.
+gradients, update weights and advance the learning rate. Padding targets are
+ignored when computing loss.
 The [Training API](python-api) lists configuration fields, defaults and public methods.
 
 ## Run the scaffold experiment

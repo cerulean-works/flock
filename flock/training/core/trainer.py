@@ -370,7 +370,7 @@ class TrainerState(nn.Module):
 
 
 class Trainer:
-    """Train a causal model for one shuffled pass, or `max_steps` updates, on CUDA or CPU.
+    """Train a causal model for one pass or `max_steps` updates on CUDA device 0 or CPU.
 
     Construction starts a W&B run, moves the supplied model without casting its
     weights, constructs the optimizer/scheduler and creates the output directory.
@@ -389,6 +389,7 @@ class Trainer:
 
     Raises:
         `NotImplementedError`: If the optimizer configuration selects Muon.
+        `ValueError`: If the learning-rate schedule does not fit the planned updates.
 
     There is no gradient accumulation, distributed training or automatic dtype
     conversion. Use a main-module guard when starting spawned loader workers.
