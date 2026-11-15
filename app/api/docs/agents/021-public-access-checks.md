@@ -31,7 +31,9 @@ Close every project stream in the organization through the existing transactiona
 Remaining members reconnect and replay normally. This supersedes stage 003's documented
 exception for streams opened before removal. Recheck membership after subscribing to cover
 a removal that committed while the connection opened. Stop initial replay if the subscription
-closed while its data was being read. Per-user subscription tracking is outside this change.
+closed while its data was being read. Hold the existing exclusive organization lock through
+removal, so project creation cannot escape the snapshot of streams to close. Per-user
+subscription tracking is outside this change.
 
 ## Plan
 

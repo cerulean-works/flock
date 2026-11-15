@@ -885,6 +885,8 @@ class Accounts:
 
     async def remove_member(self, user: User, org: Org) -> None:
         async with self.store.db.pool.acquire() as conn, conn.transaction():
+            # Serialize the project snapshot with creation, so no new stream escapes closure.
+            await self.store._lock_org(conn, org, update=True)
             await self._lock_members(conn, org)
             if org.pk not in user.roles:
                 raise NotFound(f"{user.email} is not a member of {org.name}")

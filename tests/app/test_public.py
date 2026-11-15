@@ -3,6 +3,7 @@ made public."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import TYPE_CHECKING
 
@@ -317,3 +318,42 @@ def test_removed_creator_cannot_change_visibility_or_keep_private_stream(
         remaining.next_of("history")
     reconnected = events("mine", "live:0", client=api)
     assert reconnected.next_of("history")["series"]["loss"]["y"] == [2.0]
+
+
+def test_member_removal_serializes_new_projects(
+    flock: FlockServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.src.core import accounts
+
+    member = flock.add_user("removed@x.io")
+    user_id = member.api.get("/api/v1/me").json()["id"]
+
+    async def check() -> None:
+        reached = asyncio.Event()
+        release = asyncio.Event()
+        original = accounts.publish
+
+        async def paused_publish(conn: Any, messages: Any) -> None:
+            reached.set()
+            await release.wait()
+            await original(conn, messages)
+
+        monkeypatch.setattr(accounts, "publish", paused_publish)
+        store = flock.store
+        org = await store.org("flock")
+        user = await store.accounts.user(user_id)
+        assert user is not None
+        removal = asyncio.create_task(store.accounts.remove_member(user, org))
+        await asyncio.wait_for(reached.wait(), 5)
+        creation = asyncio.create_task(store.create_project("flock", "concurrent"))
+        try:
+            # Project creation must wait until the removal's project snapshot is committed.
+            with pytest.raises(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(creation), 0.2)
+        finally:
+            release.set()
+            await removal
+            await creation
+        assert store.accounts.role(await store.accounts.user(user_id), org) is None
+
+    flock.call(check())
