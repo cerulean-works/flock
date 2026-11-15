@@ -14,7 +14,7 @@ from transformers import AutoModelForCausalLM, LlamaConfig, Olmo2Config, Qwen3Co
 from flock.hub.models.files import build, write_model
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRScheduleSegment
 from flock.training.core.models import HFCompatibleConfig, HFCompatibleModel, registry
-from flock.training.core.optimization import AdamWConfig
+from flock.training.core.optimizers import AdamWConfig
 from flock.training.core.trainer import Trainer, TrainerConfig
 
 if TYPE_CHECKING:

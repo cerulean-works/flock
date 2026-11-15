@@ -8,7 +8,7 @@ configurations here. Model implementations and presets live in
 from .core.data_utils import DatasetConfig, get_dataset
 from .core.lr_scheduler import LRSchedulerConfig, LRScheduleSegment
 from .core.models import Olmo2Config
-from .core.optimization import AdamWConfig, MuonConfig, OptimizerConfig
+from .core.optimizers import AdamWConfig, MuonConfig, OptimizerConfig
 from .core.trainer import Trainer, TrainerConfig
 
 __all__ = [

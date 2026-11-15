@@ -1,7 +1,6 @@
 import logging
 
 from flock.training import (
-    AdamWConfig,
     DatasetConfig,
     LRSchedulerConfig,
     LRScheduleSegment,
@@ -10,6 +9,7 @@ from flock.training import (
     get_dataset,
 )
 from flock.training.core.models import OLMO2_1B_CONFIG, Olmo2
+from flock.training.core.optimizers.adamw import AdamWConfig
 
 if __name__ == "__main__":
     logging.basicConfig(

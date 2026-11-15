@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from flock.eval.tasks import TASKS
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRScheduleSegment
-from flock.training.core.optimization import AdamWConfig
+from flock.training.core.optimizers import AdamWConfig
 from flock.training.core.trainer import TrainerConfig
 
 if TYPE_CHECKING:

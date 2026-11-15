@@ -2,9 +2,8 @@ import logging
 import math
 import random
 from collections.abc import Mapping
-from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Literal, Self, cast, overload
+from typing import Any, Literal, Self, cast
 
 import torch
 import torch.nn.functional as F
@@ -14,7 +13,6 @@ from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict, Field, ValidationInfo, field_validator, model_validator
 from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
-from torch.optim import AdamW, Muon, Optimizer
 from torch.utils.data import DataLoader
 from transformers import TokenizersBackend
 
@@ -25,7 +23,7 @@ from flock.training.core.checkpoint import CheckpointManager
 from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableBatchDataSampler
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState, StepLRScheduler
 from flock.training.core.models import BaseModel
-from flock.training.core.optimization import AdamWConfig, MuonConfig, OptimizerConfig
+from flock.training.core.optimizers import BaseOptimizer, OptimizerConfig, OptimizerInterface
 
 
 class TrainerConfig(PydanticBaseModel):
@@ -423,7 +421,10 @@ class Trainer:
         self.logging_steps = config.logging_steps
 
         self.total_steps = math.ceil(len(self.dataset) / self.batch_size)
-        self.optimizer = self._get_optimizer(config.optimizer_config)
+        optimizer_factory = OptimizerInterface.get_interface(type(config.optimizer_config))
+        self.optimizer: BaseOptimizer = optimizer_factory(
+            config.optimizer_config, self.model.parameters()
+        )
         self.lr_scheduler = StepLRScheduler(
             self.optimizer, config.lr_scheduler_config, self.total_steps
         )
@@ -473,23 +474,6 @@ class Trainer:
             persistent_workers=self.dataloader_num_workers > 0,
             # Starting a resumed iterator must not consume the model's RNG stream.
             generator=torch.Generator().manual_seed(self.seed),
-        )
-
-    @overload
-    def _get_optimizer(self: Trainer, config: AdamWConfig) -> AdamW: ...
-
-    @overload
-    def _get_optimizer(self: Trainer, config: MuonConfig) -> Muon: ...
-
-    def _get_optimizer(self, config: OptimizerConfig) -> Optimizer:
-        """Construct AdamW from all model parameters; reject unimplemented optimizers."""
-        if isinstance(config, AdamWConfig):
-            return AdamW(self.model.parameters(), **asdict(config))
-        if isinstance(config, MuonConfig):
-            raise NotImplementedError("Muon supported is not added yet")
-            return Muon(self.model.parameters(), **asdict(config))
-        raise TypeError(
-            f"Unsupported OptimizerConfig type {type(OptimizerConfig)}, supported types are: {OptimizerConfig.evaluate_value()}"
         )
 
     def _calc_batch_loss(

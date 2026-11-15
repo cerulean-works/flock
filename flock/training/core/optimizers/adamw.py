@@ -1,4 +1,8 @@
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass
+
+from torch import Tensor
+from torch.optim import AdamW
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -17,19 +21,6 @@ class AdamWConfig:
     betas: tuple[float, float]
 
 
-@dataclass(frozen=True, kw_only=True)
-class MuonConfig:
-    """Describe Muon settings reserved for a future trainer implementation.
-
-    Args:
-        lr (`float`): Base learning rate.
-        momentum (`float`): Momentum coefficient.
-
-    Constructing a `Trainer` with this configuration raises `NotImplementedError`.
-    """
-
-    lr: float
-    momentum: float
-
-
-type OptimizerConfig = AdamWConfig | MuonConfig
+def adamw(config: AdamWConfig, params: Iterable[Tensor]) -> AdamW:
+    """Construct PyTorch AdamW with one parameter group and configured settings."""
+    return AdamW(params, **asdict(config))
