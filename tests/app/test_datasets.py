@@ -1647,7 +1647,9 @@ def test_nested_visibility_survives_moves_and_restores(
     if restore:
         deleted = member.post(f"{DATASETS}/delete", {"path": "source"})
         assert deleted.status == 200, deleted.body
-        response = member.post(f"{DATASETS}/trash/{deleted.json()['id']}/restore", {"to": "dest"})
+        route = f"{DATASETS}/trash/{deleted.json()['id']}/restore"
+        assert member.post(route, {"to": "dest"}).status == 403
+        response = api.post(route, {"to": "dest"})
     else:
         response = member.post(f"{DATASETS}/rename", {"path": "source", "to": "dest"})
     assert response.status == 200, response.body
