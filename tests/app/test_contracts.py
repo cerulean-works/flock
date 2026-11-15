@@ -378,3 +378,36 @@ def test_a_no_transaction_migration(postgres: Any, tmp_path: Path) -> None:
         assert "0003_index" in await versions(pool)
 
     run(url, scenario)
+
+
+def test_dataset_grant_cutover_waits_for_old_workers_and_prevents_rollback(
+    postgres: Any, tmp_path: Path
+) -> None:
+    url = postgres.create(migrated=False)
+    current = Migrations()
+    old_directory = tmp_path / "before-grants"
+    old_directory.mkdir()
+    for path in current.files():
+        if int(path.name[:4]) <= 20:
+            shutil.copy(path, old_directory / path.name)
+    old_release = Migrations(old_directory)
+    asyncio.run(current.apply(url))
+
+    async def scenario(pool: asyncpg.Pool) -> None:
+        old = Instance(pool, "s3", old_release)
+        await old.start()
+        try:
+            assert await current.apply_contracts(url, delay=0) == []
+            assert not await pool.fetchval(
+                "SELECT EXISTS (SELECT FROM meta WHERE key = 'dataset_public_grants')"
+            )
+        finally:
+            await old.close()
+        assert await current.apply_contracts(url, delay=0) == ["0022_dataset_grants.contract"]
+        assert (
+            await pool.fetchval("SELECT value FROM meta WHERE key = 'dataset_public_grants'") == "1"
+        )
+        with pytest.raises(SchemaError, match="doesn't know"):
+            await Instance(pool, "api", old_release).register()
+
+    run(url, scenario)

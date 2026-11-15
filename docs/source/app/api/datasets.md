@@ -34,7 +34,7 @@ A cell is an object whose `k` says its kind:
 
 ## Public datasets[[public]]
 
-Datasets are public unless an org admin makes them private, by exact path. Anyone can call `info`, `rows`, `cell`, `versions` and `readme` on a public dataset, at any version or tag, without credentials. `at`, the trash and every change stay members-only, so outsiders can't list datasets, and the bucket's objects stay out of reach without an S3 key. Private paths answer outsiders 404, as missing datasets do.
+After the [visibility upgrade](../operate#dataset-visibility-upgrade), new dataset paths are private until an org admin grants public access to the exact path. Existing public paths retain their grants. Anyone can call `info`, `rows`, `cell`, `versions` and `readme` on a public dataset, at any version or tag, without credentials. `at`, the trash and every change stay members-only, so outsiders can't list datasets, and the bucket's objects stay out of reach without an S3 key. Private paths answer outsiders 404, as missing datasets do.
 
 | Endpoint | Who | Meaning |
 |---|---|---|

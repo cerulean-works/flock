@@ -927,8 +927,32 @@ def test_a_non_member_gets_404(flock: S3Flock, pusher: Pusher) -> None:
     api = flock.client()
     assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
     olga = flock.add_user("olga@lab.test", org="lab")
-    for path in (f"{MODELS}", f"{MODELS}/m", f"{MODELS}/m/resolve", f"{MODELS}/-/trash"):
-        assert olga.api.get(path).status == 404
+    for suffix in (
+        "",
+        "/m",
+        "/m/resolve",
+        "/m/versions",
+        "/m/versions/1",
+        "/m/uploads",
+        "/-/trash",
+    ):
+        path = MODELS + suffix
+        assert api.get(path).status == 200, path
+        assert olga.api.get(path).status == 404, path
+        assert flock.anonymous().get(path).status == 401, path
+    for method, suffix, body in (
+        ("PATCH", "/m", {"name": "renamed"}),
+        ("DELETE", "/m", None),
+        ("DELETE", "/m/versions/1", None),
+        ("PUT", "/m/primary", {"version": 1}),
+        ("PUT", "/m/tags/test", {"version": 1}),
+        ("DELETE", "/m/tags/test", None),
+        ("POST", "/m/uploads", {"files": [{"path": "config.json", "size": 2}]}),
+    ):
+        for client, expected in ((olga.api, 404), (flock.anonymous(), 401)):
+            response = client.request(method, MODELS + suffix, body=body)
+            assert response.status == expected, (method, suffix, response.body)
+    assert api.get(f"{MODELS}/m/versions/1").status == 200
     # Her own org's models are her own.
     assert olga.api.get("/api/v1/orgs/lab/models").json()["models"] == []
 

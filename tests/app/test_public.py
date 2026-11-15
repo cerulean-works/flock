@@ -357,3 +357,141 @@ def test_member_removal_serializes_new_projects(
         assert store.accounts.role(await store.accounts.user(user_id), org) is None
 
     flock.call(check())
+
+
+def test_project_content_and_refusals_are_not_cached(
+    setup: tuple[Client, Client, Client, Client],
+) -> None:
+    api, member, outsider, anon = setup
+    for visibility in ("private", "public", "private"):
+        publish(api, visibility=visibility)
+        for client in (api, member, outsider, anon):
+            for method, path, body in READABLE:
+                response = call(client, method, path, body)
+                expected = 200 if client in (api, member) or visibility == "public" else 404
+                assert response.status == expected
+                assert response.headers["cache-control"] == "private, no-store"
+
+
+def test_public_projects_do_not_open_org_administration_or_imports(
+    setup: tuple[Client, Client, Client, Client],
+) -> None:
+    api, _, outsider, anon = setup
+    publish(api)
+    base = "/api/v1/orgs/flock"
+    for suffix in (
+        "/members",
+        "/invites",
+        "/billing",
+        "/budget",
+        "/budget/warnings",
+        "/budget/deleted-projects",
+        "/imports/hf",
+    ):
+        assert api.get(base + suffix).status == 200, suffix
+        assert outsider.get(base + suffix).status == 404, suffix
+        assert anon.get(base + suffix).status == 401, suffix
+    for method, suffix, body in (
+        ("GET", "/import", None),
+        ("GET", "/imports/hf/preview?kind=dataset&repo=org/data", None),
+        ("POST", "/imports/hf", {"kind": "dataset", "repo": "org/data", "dest": "private"}),
+        ("GET", "/imports/hf/1", None),
+        ("DELETE", "/imports/hf/1", None),
+        ("PATCH", "", {"display_name": "changed"}),
+        ("POST", "/invites", {"email": "stranger@example.test", "role": "member"}),
+    ):
+        for client, expected in ((outsider, 404), (anon, 401)):
+            response = client.request(method, base + suffix, body=body)
+            assert response.status == expected, (method, suffix, response.body)
+    assert api.get(base).json()["name"] == "flock"
+
+
+# Frozen route inventory: additions need a deliberate authorization expectation.
+ORG_SCOPED_ROUTES = [
+    ("DELETE", "/api/v1/orgs/flock"),
+    ("DELETE", "/api/v1/orgs/flock/avatar"),
+    ("DELETE", "/api/v1/orgs/flock/buckets/private"),
+    ("DELETE", "/api/v1/orgs/flock/budget/warnings/1/dismissal"),
+    ("DELETE", "/api/v1/orgs/flock/datasets/public"),
+    ("DELETE", "/api/v1/orgs/flock/datasets/tags/private"),
+    ("DELETE", "/api/v1/orgs/flock/datasets/trash/1"),
+    ("DELETE", "/api/v1/orgs/flock/import"),
+    ("DELETE", "/api/v1/orgs/flock/imports/hf/1"),
+    ("DELETE", "/api/v1/orgs/flock/invites/private"),
+    ("DELETE", "/api/v1/orgs/flock/members/1"),
+    ("DELETE", "/api/v1/orgs/flock/models/-/trash/models/1"),
+    ("DELETE", "/api/v1/orgs/flock/models/-/trash/versions/1"),
+    ("DELETE", "/api/v1/orgs/flock/models/private"),
+    ("DELETE", "/api/v1/orgs/flock/models/private/tags/private"),
+    ("DELETE", "/api/v1/orgs/flock/models/private/uploads/private"),
+    ("DELETE", "/api/v1/orgs/flock/models/private/versions/1"),
+    ("GET", "/api/v1/orgs/flock/billing"),
+    ("GET", "/api/v1/orgs/flock/buckets"),
+    ("GET", "/api/v1/orgs/flock/buckets/private"),
+    ("GET", "/api/v1/orgs/flock/buckets/private/object"),
+    ("GET", "/api/v1/orgs/flock/buckets/private/objects"),
+    ("GET", "/api/v1/orgs/flock/budget"),
+    ("GET", "/api/v1/orgs/flock/budget/deleted-projects"),
+    ("GET", "/api/v1/orgs/flock/budget/warnings"),
+    ("GET", "/api/v1/orgs/flock/datasets/at"),
+    ("GET", "/api/v1/orgs/flock/datasets/trash"),
+    ("GET", "/api/v1/orgs/flock/import"),
+    ("GET", "/api/v1/orgs/flock/imports/hf"),
+    ("GET", "/api/v1/orgs/flock/imports/hf/1"),
+    ("GET", "/api/v1/orgs/flock/imports/hf/preview"),
+    ("GET", "/api/v1/orgs/flock/invites"),
+    ("GET", "/api/v1/orgs/flock/members"),
+    ("GET", "/api/v1/orgs/flock/models"),
+    ("GET", "/api/v1/orgs/flock/models/-/trash"),
+    ("GET", "/api/v1/orgs/flock/models/private"),
+    ("GET", "/api/v1/orgs/flock/models/private/resolve"),
+    ("GET", "/api/v1/orgs/flock/models/private/uploads"),
+    ("GET", "/api/v1/orgs/flock/models/private/uploads/private"),
+    ("GET", "/api/v1/orgs/flock/models/private/versions"),
+    ("GET", "/api/v1/orgs/flock/models/private/versions/1"),
+    ("PATCH", "/api/v1/orgs/flock"),
+    ("PATCH", "/api/v1/orgs/flock/billing"),
+    ("PATCH", "/api/v1/orgs/flock/budget/deleted-projects/1"),
+    ("PATCH", "/api/v1/orgs/flock/members/1"),
+    ("PATCH", "/api/v1/orgs/flock/models/private"),
+    ("POST", "/api/v1/orgs/flock/buckets"),
+    ("POST", "/api/v1/orgs/flock/buckets/private/folders"),
+    ("POST", "/api/v1/orgs/flock/buckets/private/objects/delete"),
+    ("POST", "/api/v1/orgs/flock/buckets/private/presign"),
+    ("POST", "/api/v1/orgs/flock/datasets/delete"),
+    ("POST", "/api/v1/orgs/flock/datasets/move"),
+    ("POST", "/api/v1/orgs/flock/datasets/rename"),
+    ("POST", "/api/v1/orgs/flock/datasets/trash/1/restore"),
+    ("POST", "/api/v1/orgs/flock/import"),
+    ("POST", "/api/v1/orgs/flock/imports/hf"),
+    ("POST", "/api/v1/orgs/flock/invites"),
+    ("POST", "/api/v1/orgs/flock/models/-/trash/models/1/restore"),
+    ("POST", "/api/v1/orgs/flock/models/-/trash/versions/1/restore"),
+    ("POST", "/api/v1/orgs/flock/models/private/uploads"),
+    ("POST", "/api/v1/orgs/flock/models/private/uploads/private/commit"),
+    ("PUT", "/api/v1/orgs/flock/avatar"),
+    ("PUT", "/api/v1/orgs/flock/budget/warnings/1/dismissal"),
+    ("PUT", "/api/v1/orgs/flock/datasets/public"),
+    ("PUT", "/api/v1/orgs/flock/datasets/tags/private"),
+    ("PUT", "/api/v1/orgs/flock/models/private/primary"),
+    ("PUT", "/api/v1/orgs/flock/models/private/tags/private"),
+]
+
+
+def test_org_scoped_route_boundaries_refuse_outsiders(
+    setup: tuple[Client, Client, Client, Client],
+) -> None:
+    api, _, outsider, anon = setup
+    publish(api)
+    for method, path in ORG_SCOPED_ROUTES:
+        for client, expected in ((anon, (401,)), (outsider, (403, 404))):
+            response = client.request(
+                method, path, body={} if method in ("POST", "PATCH", "PUT") else None
+            )
+            assert response.status in expected, (method, path, response.status, response.body)
+            if response.status == 404:
+                assert response.json()["error"] == "organization flock not found", (
+                    method,
+                    path,
+                    response.body,
+                )

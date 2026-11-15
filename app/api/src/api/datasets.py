@@ -91,7 +91,7 @@ def datasets(store: Store) -> Datasets:
 
 
 async def get_readable_org(org: str, path: DatasetPath, store: StoreDep, viewer: ViewerDep) -> Org:
-    """The org, for reading the dataset at ``path``: any of its members, and anyone unless that exact dataset is private (D115). Others get the same 404 as for a missing dataset."""
+    """The org, for reading the dataset at ``path``: any of its members, and outsiders only when that exact path is public. Others get the same 404 as for a missing dataset."""
     found = await store.find_org(org)
     if found is not None and store.accounts.role(viewer, found):
         return found
@@ -178,7 +178,7 @@ async def readme(org: ReadableOrgDep, store: StoreDep, path: DatasetPath) -> Res
 async def make_public(
     org: AdminOrgDep, path: DatasetPath, user: UserDep, store: StoreDep
 ) -> Response:
-    """Make the dataset at ``path`` public again (admins), after it was made private: anyone with its URL can read its page, at any version (D115). Its folder and the bucket's objects stay members-only."""
+    """Grant public access to exactly ``path`` (admins): anyone with its URL can read its page, at any version (D115). Its folder and the bucket's objects stay members-only."""
     await datasets(store).set_public(org, path, True, user)
     return JSONResponse({"path": path, "public": True})
 

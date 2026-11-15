@@ -14,6 +14,7 @@ import asyncpg
 import pytest
 
 from app.api.src.core.datasets import Datasets
+from app.api.src.db.migrate import Migrations
 from tests.app.conftest import Client, Flocks, S3Flock
 from tests.conftest import S3Server
 
@@ -1470,3 +1471,126 @@ def test_private_dataset_refusal_does_not_reveal_its_organization(
         missing = get(client, "/api/v1/orgs/missing/datasets/info", path="private")
         assert hidden.status == missing.status == 404
         assert hidden.body == missing.body
+
+
+def test_new_paths_are_private_after_the_visibility_cutover(flock: S3Flock, writer: Writer) -> None:
+    writer.write("existing/public", table(0, 2))
+    writer.write("existing/private", table(0, 2))
+    api = flock.client()
+    assert make_private(api, "existing/private").status == 204
+    asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
+    flock.call(datasets(flock).close_existing())
+
+    anon = flock.anonymous()
+    assert get(anon, f"{DATASETS}/info", path="existing/public").status == 200
+    assert get(anon, f"{DATASETS}/info", path="existing/private").status == 404
+    writer.write("new", table(0, 2))
+    put(flock, "new/README.md", b"# private")
+    assert get(api, f"{DATASETS}/info", path="new").json()["public"] is False
+    for route, params in (
+        ("info", {}),
+        ("info", {"version": "1"}),
+        ("rows", {}),
+        ("cell", {"row": 0, "column": "text"}),
+        ("versions", {}),
+        ("readme", {}),
+    ):
+        assert get(anon, f"{DATASETS}/{route}", path="new", **params).status == 404
+    assert make_public(api, "new").status == 200
+    assert get(anon, f"{DATASETS}/info", path="new").status == 200
+    assert make_private(api, "new").status == 204
+    assert get(anon, f"{DATASETS}/info", path="new").status == 404
+
+
+def test_visibility_inventory_fails_closed_and_retries_atomically(
+    flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    writer.write("old", table(0, 2))
+    api = flock.client()
+    anon = flock.anonymous()
+    service = datasets(flock)
+    inventory = service._all_datasets
+    asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
+
+    async def unavailable(bucket: str) -> list[str]:
+        raise OSError("synthetic inventory failure")
+
+    monkeypatch.setattr(service, "_all_datasets", unavailable)
+    with pytest.raises(OSError, match="synthetic inventory failure"):
+        flock.call(service.close_existing())
+    assert sql(flock, "SELECT path FROM public_datasets") == []
+    assert get(anon, f"{DATASETS}/info", path="old").status == 404
+    assert get(api, f"{DATASETS}/info", path="old").status == 409
+    assert make_public(api, "old").status == 409
+    assert api.post(f"{DATASETS}/rename", {"path": "old", "to": "other"}).status == 409
+    # A real signed proxy write is refused before touching the upstream during inventory.
+    import boto3
+    from botocore.config import Config
+    from botocore.exceptions import ClientError
+
+    creds = flock.credentials()
+    client = boto3.client(
+        "s3",
+        endpoint_url=flock.proxy.url,
+        region_name="us-east-1",
+        aws_access_key_id=creds["access_key_id"],
+        aws_secret_access_key=creds["secret_access_key"],
+        config=Config(retries={"max_attempts": 0}),
+    )
+    with pytest.raises(ClientError) as failed:
+        client.put_object(Bucket="flock-datasets", Key="new/data", Body=b"private")
+    assert failed.value.response["ResponseMetadata"]["HTTPStatusCode"] == 503
+    monkeypatch.setattr(service, "_all_datasets", inventory)
+    assert flock.call(service.close_existing()) == 1
+    assert flock.call(service.close_existing()) == 0
+    assert get(anon, f"{DATASETS}/info", path="old").status == 200
+
+
+def test_explicit_grants_follow_moves_without_opening_private_targets(
+    flock: S3Flock, writer: Writer
+) -> None:
+    api = flock.client()
+    anon = flock.anonymous()
+    asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
+    flock.call(datasets(flock).close_existing())
+    writer.write("folder/public", table(0, 2))
+    writer.write("folder/private", table(0, 2))
+    assert make_public(api, "folder/public").status == 200
+    moved = api.post(f"{DATASETS}/rename", {"path": "folder", "to": "moved"})
+    assert moved.status == 200, moved.body
+    assert get(anon, f"{DATASETS}/info", path="moved/public").status == 200
+    assert get(anon, f"{DATASETS}/info", path="moved/private").status == 404
+    writer.write("folder/public", table(0, 1))
+    assert get(anon, f"{DATASETS}/info", path="folder/public").status == 404
+
+    assert make_private(api, "blocked").status == 204
+    assert api.post(f"{DATASETS}/rename", {"path": "moved/public", "to": "blocked"}).status == 200
+    assert get(anon, f"{DATASETS}/info", path="blocked").status == 404
+    # A stale destination grant must not expose an implicitly private source.
+    assert make_public(api, "destination").status == 200
+    writer.write("implicit", table(0, 2))
+    assert api.post(f"{DATASETS}/rename", {"path": "implicit", "to": "destination"}).status == 200
+    assert get(anon, f"{DATASETS}/info", path="destination").status == 404
+    assert make_public(api, "destination").status == 200
+    deleted = api.post(f"{DATASETS}/delete", {"path": "destination"})
+    assert deleted.status == 200
+    restored = api.post(f"{DATASETS}/trash/{deleted.json()['id']}/restore", {"to": "restored"})
+    assert restored.status == 200, restored.body
+    assert get(anon, f"{DATASETS}/info", path="restored").status == 200
+
+
+def test_new_orgs_and_closed_legacy_orgs_do_not_get_implicit_grants(
+    flock: S3Flock, writer: Writer
+) -> None:
+    writer.write("closed", table(0, 1))
+    sql(flock, "UPDATE orgs SET open_datasets = false WHERE name = 'flock'")
+    asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
+    flock.call(datasets(flock).close_existing())
+    api = flock.client()
+    assert get(flock.anonymous(), f"{DATASETS}/info", path="closed").status == 404
+    assert make_public(api, "closed").status == 200
+    assert api.post("/api/v1/orgs", {"name": "neworg"}).status == 201
+    assert sql(flock, "SELECT dataset_grants_ready FROM orgs WHERE name = 'neworg'")[0][0]
+    other = Writer(flock, org="neworg")
+    other.write("new", table(0, 1))
+    assert get(flock.anonymous(), "/api/v1/orgs/neworg/datasets/info", path="new").status == 404

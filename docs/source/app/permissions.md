@@ -37,7 +37,7 @@ A project's creator is the user who created it, in the dashboard, with the API o
 
 ## Public projects and datasets
 
-An org admin, or the member who created it, can make a project public. An org admin can make a single dataset private, since datasets start public ([Share projects and datasets publicly](share-publicly)). Anyone outside the organization, signed out or signed in, has read-only access to public projects and datasets:
+An org admin, or the member who created it, can make a project public. An org admin can make a single dataset public; new dataset paths start private ([Share projects and datasets publicly](share-publicly)). Anyone outside the organization, signed out or signed in, has read-only access to public projects and datasets:
 
 | Action | Outsider |
 |---|---|
@@ -70,3 +70,5 @@ Private projects and datasets answer 404 to outsiders, the same as ones that don
 - **Org admins can't reset a super admin's password.** That would let them take over the server.
 
 Roles are checked on every request. Removing a member closes the organization's open [live streams](api/dashboard#the-live-stream). Remaining members can reconnect; the removed member can read only public projects.
+
+Permission-sensitive API responses and dashboard pages use `Cache-Control: private, no-store`. Changing visibility cannot recall content somebody already downloaded.

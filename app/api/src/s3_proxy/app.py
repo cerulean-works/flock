@@ -246,6 +246,19 @@ class Proxy:
             bucket = caller.org.buckets.get(bucket_name)
             if bucket is None:
                 raise S3Error("NoSuchBucket", "The specified bucket does not exist", 404)
+            if bucket.managed == "datasets" and method not in ("GET", "HEAD"):
+                ready = await self.directory.pool.fetchval(
+                    "SELECT dataset_grants_ready OR NOT EXISTS "
+                    "(SELECT FROM meta WHERE key = 'dataset_public_grants') "
+                    "FROM orgs WHERE pk = $1",
+                    caller.org.pk,
+                )
+                if not ready:
+                    raise S3Error(
+                        "ServiceUnavailable",
+                        "Dataset visibility is being migrated; retry later",
+                        503,
+                    )
             call = Call(
                 request, method, bucket, key, params, request.headers, caller,
                 signed.payload_hash, path,

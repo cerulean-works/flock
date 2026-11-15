@@ -2,14 +2,15 @@
 
 | | |
 | --- | --- |
-| Status | built, independently reviewed |
+| Status | extending dataset defaults, review pending |
 | Builds on | 015 public projects, 016 project creators, 019 bulk select |
 | Keeps | D110 to D118, D130 to D135 |
 
 ## Goal
 
 Keep private dataset rows and private run metadata fields behind their existing access rules.
-Public dataset defaults and project publishing rights stay as specified in 015 and 016.
+Project publishing rights stay as specified in 015 and 016. New dataset paths become private
+after the visibility migration; existing public paths retain their access.
 
 ## Design decisions
 
@@ -40,6 +41,28 @@ subscription tracking is outside this change.
 An outsider probing a dataset must not distinguish an unknown organization from a private
 path by its error message. Both answer the existing dataset-not-found response. Actual org
 members keep their read access and normal dataset errors.
+
+### D155. Public datasets require exact grants after a staged cutover
+
+An additive migration adds public grants and an org inventory marker. Until the contract
+migration runs, both releases retain D115's behavior. The contract waits for older API and
+proxy instances to drain, then makes future orgs ready for explicit grants. The existing
+contract check prevents an older binary from restarting after this point.
+
+Existing orgs temporarily refuse anonymous dataset reads and dataset operations while their
+inventory is pending. The inventory grants only existing dataset paths in previously open
+orgs, excluding exact private flags, then marks the org ready in the same transaction. Failed
+inventories publish no partial result and are retried. New paths and HF imports are private.
+Writes begun before cutover may finish under their original policy; the launch criterion is
+that the contract has applied and every org's inventory has completed. Upstream direct writers
+must pause for the cutover, since the proxy cannot govern credentials issued outside Flock.
+
+### D156. Moves preserve public grants without broadening private destinations
+
+Private destination flags take precedence. Move and restore grant a public source's destination
+only after object copying succeeds. An implicit-private source makes a destination private
+before any object lands there, even if a public grant remains at that destination. Permissions
+remain attached to exact paths across versions and deletes; a rename removes source grants.
 
 ## Plan
 

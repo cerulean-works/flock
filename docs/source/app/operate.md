@@ -34,6 +34,46 @@ uv run --package flock-app-api python -m app.api.src.db.migrate
 
 The job needs the same database and storage configuration as the deployment. See [Migration reference](operations#migrations-and-upgrades) for locking, backfills and startup refusal conditions.
 
+### Dataset visibility upgrade
+
+The private-default release uses two migrations. The additive migration keeps the previous
+policy during the rolling deploy. Contract `0022_dataset_grants` waits for every old API and
+S3 worker to drain and for the configured contract delay (30 minutes by default). Until that
+cutover, the old public-unless-flagged policy still applies. Keep marking sensitive new paths
+private until the verification below passes.
+
+At cutover, new organizations start private. Existing organizations temporarily refuse dataset
+operations while an atomic inventory preserves their existing public paths as exact grants.
+Private paths stay private. In-flight writes begun before cutover can complete under the old
+policy; pause any writers using upstream credentials directly during this inventory. New proxy
+writes and dataset imports for a pending organization are refused with a retryable response.
+An upstream listing failure leaves the organization closed and retries the inventory. No
+partial grant list is published.
+
+With automatic migrations enabled, the API completes the contract and inventory itself. With
+`FLOCK_MIGRATE_ON_STARTUP=false`, run the contract job after upgrading all workers:
+
+```bash
+uv run --package flock-app-api python -m app.api.src.db.migrate --contract
+```
+
+The inventory runs at API startup and on its dataset sweep. Restart a current API replica after
+the contract job to start the inventory immediately. Do not use `--force` while old workers run.
+An old release refuses to start after the contract; roll forward with a compatible release.
+
+Before opening public projects, verify these read-only queries against the deployment database:
+
+```sql
+SELECT version FROM schema_migrations WHERE version = '0022_dataset_grants.contract';
+SELECT count(*) AS pending_orgs FROM orgs WHERE NOT dataset_grants_ready;
+```
+
+The first query must return its row and `pending_orgs` must be zero. Verify a known public
+and private dataset anonymously, then confirm a newly written synthetic dataset is private.
+Check the deployed API and web responses retain `Cache-Control: private, no-store`, the edge
+redirects HTTP to HTTPS, and the upstream bucket refuses unsigned reads. A successful local
+build does not establish the configuration of an external proxy or storage account.
+
 ### Update old Compose routing
 
 - Replace a dashboard `FLOCK_API_URL=http://api:8080` override with `http://flock-api:8080`, then recreate `api` and `ui` so the network alias and consumer agree.

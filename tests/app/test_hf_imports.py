@@ -28,6 +28,7 @@ from huggingface_hub.utils import _http
 from app.api.src.core.causal_lms import CAUSAL_LMS
 from app.api.src.core.hf_imports import HFImports
 from app.api.src.core.models import Models
+from app.api.src.db.migrate import Migrations
 from tests.app.conftest import Client, Flocks, S3Flock
 from tests.conftest import S3Server
 
@@ -562,9 +563,13 @@ def test_a_failed_import_says_why(
 # ---------------------------------------------------------------------- datasets
 
 
+@pytest.mark.parametrize("private_default", [False, True])
 def test_a_dataset_import_writes_lance_datasets(
-    flock: S3Flock, hub: FakeHub, wait_for: Callable[..., Any]
+    flock: S3Flock, hub: FakeHub, wait_for: Callable[..., Any], private_default: bool
 ) -> None:
+    if private_default:
+        asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
+        flock.call(flock.store.datasets.close_existing())
     hub.datasets["acme/data"] = dataset_repo()
     api = flock.client()
     started = api.post(IMPORTS, {"kind": "dataset", "repo": "acme/data", "dest": "hf/data"})
@@ -587,6 +592,11 @@ def test_a_dataset_import_writes_lance_datasets(
     assert read("info")["rows"] == 5
     assert "row 4" in json.dumps(read("rows"))
     assert "tiny data" in json.dumps(read("readme"))
+    for path in ("hf/data/train", "hf/data/test"):
+        response = flock.anonymous().request(
+            "GET", "/api/v1/orgs/flock/datasets/info", {"path": path}
+        )
+        assert response.status == (404 if private_default else 200)
 
     # The same folder again is refused before anything starts.
     again = api.post(IMPORTS, {"kind": "dataset", "repo": "acme/data", "dest": "hf/data"})

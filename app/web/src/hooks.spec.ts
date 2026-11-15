@@ -79,3 +79,16 @@ describe('signed-in users', () => {
 		expect(res.status).toBe(404);
 	});
 });
+
+
+describe('permission-sensitive responses', () => {
+	it.each([null, 'member-token', 'nonmember-token'])(
+		'prevents caching for session %s',
+		async (token) => {
+			for (const path of ['/acme/bert', '/api/datasets/acme/rows']) {
+				const { res } = await request(path, { token });
+				expect(res.headers.get('cache-control')).toBe('private, no-store');
+			}
+		}
+	);
+});
