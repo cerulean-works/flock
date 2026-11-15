@@ -1,6 +1,6 @@
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import cast
+from typing import Annotated, cast
 
 import torch
 from torch._tensor import Tensor
@@ -41,8 +41,7 @@ def flash_attention_3(
     k: torch.Tensor,
     v: torch.Tensor,
     *,
-    # Prepared int64 [batch, 2] padding spans must stay on CPU, even when Q/K/V are on CUDA.
-    attention_mask: torch.Tensor | None = None,
+    attention_mask: Annotated[torch.Tensor, "CPU int64 [batch, 2] padding spans"] | None = None,
     is_causal: bool = False,
 ) -> torch.Tensor:
     """Run full-sequence self-attention through PyTorch's FA3 implementation.
