@@ -8,11 +8,10 @@
 [[autodoc]] training.Trainer
     - train
     - evaluate
-    - save_model
-    - load_checkpoint
     - data_config
-    - get_trainer_state
-    - load_trainer_state
+    - state_dict
+    - validate_state_dict
+    - load_state_dict
 
 ## Configuration
 
@@ -27,7 +26,7 @@ evaluation task names. With zero workers, set `dataloader_prefetch_factor=None`.
 | `input_column` | Required | Text column in each dataset row. |
 | `batch_size` | Required | Positive rows per optimizer update. |
 | `optimizer_config` | Required | `AdamWConfig`; Muon is not implemented. |
-| `lr_scheduler_config` | Required | `CosineConfig` or `WSDConfig`. |
+| `lr_scheduler_config` | Required | `LRSchedulerConfig` containing learning-rate segments. |
 | `wandb_project` | Required | Tracking project started during trainer construction. |
 | `wandb_mode` | `"online"` | `"online"`, `"offline"`, `"disabled"` or `"shared"`. |
 | `dataloader_num_workers` | `4` | Nonnegative number of spawned workers. |
@@ -53,6 +52,21 @@ evaluation task names. With zero workers, set `dataloader_prefetch_factor=None`.
 
 ### Optimizers
 
+Optimizer configs and factories live in `training.core.optimizers.adamw` and
+`training.core.optimizers.muon`. In
+`training.core.optimizers.registry`, `OptimizerInterface` maps config types to
+optimizer factories. `register(config_type, factory)` registers or replaces a
+factory; `get_interface(config_type)` returns it. Each factory accepts the config
+and model parameters and returns a `BaseOptimizer`. After moving the model to its
+device, the trainer calls `OptimizerInterface.get_interface(type(config))` and
+constructs the optimizer with the returned factory.
+Registration affects future optimizer construction. `TrainerConfig` still
+accepts the config types in `OptimizerConfig`.
+`BaseOptimizer` describes the PyTorch interface shared by the trainer, scheduler
+and checkpoints: `zero_grad()`, `step()`, `param_groups`, `state_dict()` and
+`load_state_dict()`. Native PyTorch optimizers satisfy this protocol directly.
+The trainer runs backpropagation and gradient clipping before `optimizer.step()`.
+
 [[autodoc]] training.AdamWConfig
 
 [[autodoc]] training.MuonConfig
@@ -61,20 +75,44 @@ evaluation task names. With zero workers, set `dataloader_prefetch_factor=None`.
 
 The scheduler uses completed optimizer updates as its index. It applies the
 step-zero rate during construction, then advances after each optimizer update.
-Warmup therefore starts with a zero learning rate. Choose schedule lengths that
-fit the pass; the scheduler dataclasses do not validate their bounds.
+The optimizer config supplies each parameter group's base learning rate.
 
-| Configuration | Required fields | Optional fields and defaults |
-|---|---|---|
-| `CosineConfig` | `warmup_steps`, `min_lr_ratio` | None |
-| `WSDConfig` | `warmup_steps`, `decay_steps` | `min_lr_ratio=0.0` |
+| Configuration | Field | Default | Meaning |
+|---|---|---|---|
+| `LRSchedulerConfig` | `schedule` | Required | Nonempty sequence of `LRScheduleSegment` values, stored as an immutable tuple. |
+| `LRScheduleSegment` | `start` | Required | Nonnegative integer update count or float fraction in `[0, 1]`. |
+| `LRScheduleSegment` | `end` | Required | Integer update count or float fraction in `[0, 1]`, after `start`. |
+| `LRScheduleSegment` | `start_ratio` | Required | Initial ratio of the optimizer group's base rate, in `[0, 1]`. |
+| `LRScheduleSegment` | `end_ratio` | Required | Final ratio of the optimizer group's base rate, in `[0, 1]`. |
+| `LRScheduleSegment` | `interpolation` | `"linear"` | `"linear"` or `"cosine"`, for increases or decreases. |
+
+`1` means update one; `1.0` means the run endpoint. Fractional times resolve to
+`floor(fraction * total_steps)`. Construction rejects nonpositive run lengths,
+overlaps, gaps between segments, reversed timeframes, endpoints beyond the run,
+and segments that become empty after rounding. Configuration fields are frozen and reject extras.
+
+Adjacent segments must share a time boundary. Gaps in matching units are rejected
+by `LRSchedulerConfig`; mixed units are checked after resolving the run length.
+Before the first segment, the scheduler holds its starting ratio. After the last
+segment, it holds that segment's ending ratio. At a shared boundary the later segment takes precedence.
+Use equal starting and ending ratios for a constant segment. See the
+[run configuration example](trainer#configure-a-run) for warmup, a stable phase
+and cosine decay.
+
+Checkpoint state contains the segment config, planned update count, base rates
+and completed updates. Resume requires matching settings, including integer
+versus fractional times. Checkpoints from the former `CosineConfig`/`WSDConfig`
+API are incompatible with this format.
 
 `OptimizerConfig` is the type alias `AdamWConfig | MuonConfig`.
-`LRSchedulerConfig` is the type alias `CosineConfig | WSDConfig`.
 
-[[autodoc]] training.CosineConfig
+[[autodoc]] training.LRSchedulerConfig
+    - none
 
-[[autodoc]] training.WSDConfig
+[[autodoc]] training.LRScheduleSegment
+    - none
+
+[[autodoc]] training.core.lr_scheduler.normalize_training_schedule
 
 [[autodoc]] training.core.lr_scheduler.StepLRScheduler
 
@@ -135,7 +173,7 @@ The `Olmo2` forward and tokenizer methods follow the `BaseModel` contract above.
 
 ## Checkpoint state
 
-`save_model` persists weights and configuration alongside separate safetensors
+`trainer.checkpoint_manager.save_model()` persists weights and configuration alongside separate safetensors
 files for each top-level training-state entry. See the
 [Hub model format](../hub/model-storage#what-a-version-holds) for file metadata.
 These schemas and metric buffers are implementation-level APIs under
@@ -143,17 +181,29 @@ These schemas and metric buffers are implementation-level APIs under
 
 [[autodoc]] training.core.trainer.TrainerState
 
-[[autodoc]] training.core.checkpoint.CheckpointSchema
+[[autodoc]] training.core.trainer.CheckpointDataConfig
     - none
 
-[[autodoc]] training.core.checkpoint.CheckpointDataConfig
+[[autodoc]] training.core.trainer.CheckpointTrainerState
     - none
 
-[[autodoc]] training.core.checkpoint.CheckpointTrainerState
+[[autodoc]] training.core.lr_scheduler.LRSchedulerState
     - none
 
-[[autodoc]] training.core.checkpoint.CheckpointSchedulerState
+[[autodoc]] training.core.trainer.TrainerCheckpoint
     - none
 
-[[autodoc]] training.core.checkpoint.TrainerCheckpoint
-    - none
+## Checkpoint persistence
+
+Use `trainer.checkpoint_manager.save_model()` for manual saves and
+`trainer.checkpoint_manager.load_checkpoint(path)` to restore a local checkpoint.
+The `CheckpointManager` stages local writes, tracks pending uploads,
+selects the latest checkpoint and applies retention. The trainer, metric buffers
+and scheduler validate their saved state before restoration. Optimizer group
+compatibility checks remain in the trainer.
+
+[[autodoc]] training.core.checkpoint.CheckpointManager
+    - save_model
+    - load_checkpoint
+    - checkpoints
+    - latest_checkpoint

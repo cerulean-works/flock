@@ -1,14 +1,15 @@
 import logging
 
 from flock.training import (
-    AdamWConfig,
     DatasetConfig,
+    LRSchedulerConfig,
+    LRScheduleSegment,
     Trainer,
     TrainerConfig,
-    WSDConfig,
     get_dataset,
 )
 from flock.training.core.models import OLMO2_1B_CONFIG, Olmo2
+from flock.training.core.optimizers.adamw import AdamWConfig
 
 if __name__ == "__main__":
     logging.basicConfig(
@@ -24,7 +25,15 @@ if __name__ == "__main__":
     assert tokenizer is not None
 
     optim_conf = AdamWConfig(lr=1e-3, betas=(0.95, 0.99))
-    lr_sched_conf = WSDConfig(warmup_steps=100, decay_steps=100)
+    lr_sched_conf = LRSchedulerConfig(
+        schedule=[
+            LRScheduleSegment(start=0, end=0.1, start_ratio=0, end_ratio=1),
+            LRScheduleSegment(start=0.1, end=0.9, start_ratio=1, end_ratio=1),
+            LRScheduleSegment(
+                start=0.9, end=1.0, start_ratio=1, end_ratio=0, interpolation="cosine"
+            ),
+        ]
+    )
 
     trainer_conf = TrainerConfig(
         run_name="olmo2_dolma3",

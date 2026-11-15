@@ -6,8 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from flock.eval.tasks import TASKS
-from flock.training.core.lr_scheduler import CosineConfig
-from flock.training.core.optimization import AdamWConfig
+from flock.training.core.lr_scheduler import LRSchedulerConfig, LRScheduleSegment
+from flock.training.core.optimizers import AdamWConfig
 from flock.training.core.trainer import TrainerConfig
 
 if TYPE_CHECKING:
@@ -21,7 +21,13 @@ def config_values() -> dict[str, Any]:
         "input_column": "text",
         "batch_size": 2,
         "optimizer_config": AdamWConfig(lr=0.01, betas=(0.9, 0.95)),
-        "lr_scheduler_config": CosineConfig(warmup_steps=0, min_lr_ratio=0.1),
+        "lr_scheduler_config": LRSchedulerConfig(
+            schedule=[
+                LRScheduleSegment(
+                    start=0, end=1.0, start_ratio=1.0, end_ratio=0.1, interpolation="cosine"
+                )
+            ]
+        ),
         "wandb_project": "test",
     }
 
