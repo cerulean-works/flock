@@ -164,6 +164,20 @@ def test_outsiders_get_run_metadata_without_who_ran_it(
         assert call(client, "GET", path).status == 404
 
 
+@pytest.mark.parametrize("name", ["%2e/wandb-metadata.json", ".//wandb-metadata.json"])
+def test_metadata_aliases_do_not_expose_private_fields(
+    setup: tuple[Client, Client, Client, Client], name: str
+) -> None:
+    api, member, outsider, anon = setup
+    metadata = {"email": "fixture@example.test", "username": "fixture", "host": "n1"}
+    api.upload("p", "r1", "wandb-metadata.json", json.dumps(metadata).encode())
+    publish(api)
+    for client in (outsider, anon):
+        response = call(client, "GET", f"/p/runs/r1/files/{name}")
+        assert response.status == 404 or response.json() == {"host": "n1"}
+    assert call(member, "GET", "/p/runs/r1/files/wandb-metadata.json").json() == metadata
+
+
 def test_admins_change_visibility_of_projects_they_didnt_create(
     setup: tuple[Client, Client, Client, Client], flock: FlockServer
 ) -> None:

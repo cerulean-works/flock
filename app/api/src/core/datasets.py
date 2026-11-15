@@ -131,6 +131,8 @@ def check_path(path: str) -> None:
         raise Invalid("dataset paths are 1 to 1024 bytes")
     if path.startswith("/") or path.endswith("/") or "//" in path:
         raise Invalid("dataset paths don't start or end with /")
+    if any(segment in (".", "..") for segment in path.split("/")):
+        raise Invalid("dataset paths cannot contain . or .. segments")
     if any(ord(c) < 32 or ord(c) == 127 for c in path):
         raise Invalid("dataset paths can't hold control characters")
 

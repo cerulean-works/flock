@@ -1424,3 +1424,34 @@ def test_sweep_settles_stuck_folder_moves(
     assert [(e["id"], e["kind"], e["moved_at"] is not None) for e in entries] == [
         (gone, "folder", True)
     ]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "eval/private/",
+        "eval/Private",
+        "eval/%70rivate",
+        "eval/x/../private",
+        "eval/./private",
+        "eval/private2",
+        "eval",
+        "eval/private/child",
+    ],
+)
+def test_private_dataset_path_variants_do_not_read_its_rows(
+    flock: S3Flock, writer: Writer, path: str
+) -> None:
+    writer.write("eval/private", table(0, 1))
+    api = flock.client()
+    assert make_private(api, "eval/private").status == 204
+    assert api.post("/api/v1/orgs", {"name": "other"}).status == 201
+    outsider = flock.add_user("outsider@x.io", org="other").api
+    for client in (flock.anonymous(), outsider):
+        for version in (None, "1"):
+            params = {"path": path, "limit": 1}
+            if version is not None:
+                params["version"] = version
+            response = get(client, f"{DATASETS}/rows", **params)
+            assert response.status in (400, 404, 422), response.body
+    assert get(api, f"{DATASETS}/rows", path="eval/private").status == 200
