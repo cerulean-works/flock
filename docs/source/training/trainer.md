@@ -122,6 +122,30 @@ when either the input or target position is padding. Loss is summed cross-entrop
 over valid targets divided by their count; an all-ignored batch has zero loss.
 Supply text that produces at least two tokens per row for useful training.
 
+## Compile the model and loss
+
+Set `torch_compile=True` in `TrainerConfig` to compile the model and batch loss.
+Compilation is disabled by default. The trainer sets it up after restoring any
+checkpoint and before the first training batch. The first calls compile lazily;
+new input shapes or switching to evaluation can require additional compilation.
+Measure performance after warmup on your model and batch lengths.
+
+`torch_compile_mode` defaults to `"default"`. Use `"reduce-overhead"` to request
+CUDA graphs for eligible regions. This can reduce launch overhead but can use
+more memory. The trainer marks each training iteration for CUDA graph reuse.
+The [configuration reference](python-api#configuration) lists all supported modes.
+
+The compiled loss includes the logits' FP32 conversion and token normalization.
+Captured model and loss regions also get compiled backward computation. The
+trainer keeps optimizer updates, the learning-rate scheduler and loop management
+in eager execution. It configures compiled backward for execution outside
+autocast, matching the existing training loop.
+
+Compilation preserves the model's class and checkpoint parameter names, so you
+can resume checkpoints with compilation enabled or disabled. Evaluation uses
+the same compiled model. Graph breaks remain allowed: the current FA3 padding
+checks and CPU metadata preparation do not become a single compiled graph.
+
 ## Train a Hugging Face architecture
 
 `HFCompatibleModel` wraps a causal language model from `transformers`, such as Qwen 3,

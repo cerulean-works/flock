@@ -41,6 +41,8 @@ evaluation task names. With zero workers, set `dataloader_prefetch_factor=None`.
 | `save_to_hub_repo` | `None` | Optional `org/model` upload destination. |
 | `overwrite_output_dir` | `False` | Permit fresh training in a nonempty directory and replacement of a step's checkpoint. |
 | `model_dtype` | `torch.bfloat16` | Autocast dtype; model weights are not cast by the trainer. |
+| `torch_compile` | `False` | Compile the model and batch loss after checkpoint restoration. See [Compile the model and loss](trainer#compile-the-model-and-loss). |
+| `torch_compile_mode` | `"default"` | PyTorch mode: `"default"`, `"reduce-overhead"`, `"max-autotune"` or `"max-autotune-no-cudagraphs"`. Used when `torch_compile=True`. |
 | `max_norm` | `1.0` | Finite, nonnegative gradient clipping threshold; zero clips gradients to zero. |
 | `logging_steps` | `10` | Positive logging interval; also logs at the final update. |
 | `seed` | `42` | Training RNG and sampler seed; model initialization has its own seed. |

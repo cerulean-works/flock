@@ -1,11 +1,13 @@
 import logging
 import math
 import random
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Literal, Self, cast
 
 import torch
+import torch._functorch.config as functorch_config
 import torch.nn.functional as F
 import wandb
 from lance.torch.data import SafeLanceDataset
@@ -74,6 +76,12 @@ class TrainerConfig(PydanticBaseModel):
         model_dtype (`torch.dtype`, *optional*, defaults to `torch.bfloat16`):
             Autocast dtype. The trainer moves the model without changing its weight
             dtype; supply FP32 weights to retain FP32 master parameters.
+        torch_compile (`bool`, *optional*, defaults to `False`):
+            Compile the model and batch loss when training starts, after checkpoint
+            restoration. Optimizer, scheduler and loop management remain eager.
+        torch_compile_mode (`str`, *optional*, defaults to `"default"`):
+            PyTorch compilation mode: `"default"`, `"reduce-overhead"`,
+            `"max-autotune"` or `"max-autotune-no-cudagraphs"`.
         max_norm (`float`, *optional*, defaults to `1.0`):
             Finite, nonnegative gradient clipping threshold. Zero clips gradients to zero.
         logging_steps (`int`, *optional*, defaults to `10`):
@@ -115,6 +123,11 @@ class TrainerConfig(PydanticBaseModel):
 
     # Master weights are always stored in FP32, but the model can be trained in BF16.
     model_dtype: torch.dtype = torch.bfloat16
+    torch_compile: bool = False
+    # This four mode can be find in the https://docs.pytorch.org/docs/2.15/generated/torch.compile.html
+    torch_compile_mode: Literal[
+        "default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"
+    ] = "default"
     max_norm: float = Field(default=1.0, ge=0, allow_inf_nan=False)
     logging_steps: int = Field(default=10, gt=0)
     seed: int = 42
@@ -417,6 +430,11 @@ class Trainer:
         self.dataloader_num_workers = config.dataloader_num_workers
 
         self.model_dtype = config.model_dtype
+        self.torch_compile = config.torch_compile
+        self.torch_compile_mode = config.torch_compile_mode
+        self._compiled_loss: (
+            Callable[[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]] | None
+        ) = None
         self.max_norm = config.max_norm
         self.logging_steps = config.logging_steps
 
@@ -506,7 +524,10 @@ class Trainer:
 
     def _inner_training_loop(self, dataloader: DataLoader, start_step: int) -> None:
         """Update once per batch, then log, save and evaluate at configured intervals."""
+        loss_fn = self._compiled_loss or self._calc_batch_loss
         for step, batch in enumerate(dataloader, start=start_step + 1):
+            if self._compiled_loss is not None:
+                torch.compiler.cudagraph_mark_step_begin()
             self.optimizer.zero_grad()
 
             batch = cast(Batch, batch)
@@ -514,7 +535,7 @@ class Trainer:
 
             with torch.autocast(self.device.type, dtype=self.model_dtype):
                 output: torch.Tensor = self.model(batch)
-                loss, num_tokens = self._calc_batch_loss(output, batch["labels"])
+                loss, num_tokens = loss_fn(output, batch["labels"])
 
             loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(
@@ -595,8 +616,19 @@ class Trainer:
 
         try:
             self.model.train()
+            if self.torch_compile and self._compiled_loss is None:
+                self.model.compile(mode=self.torch_compile_mode, fullgraph=False)
+                self._compiled_loss = torch.compile(
+                    self._calc_batch_loss, mode=self.torch_compile_mode, fullgraph=False
+                )
             self.logger.info("Starting training")
-            self._inner_training_loop(dataloader, start_step)
+            # We use autocast off for backward pass since the trainer also do not use autocast for the backward pass.
+            with (
+                functorch_config.patch(backward_pass_autocast="off")
+                if self.torch_compile
+                else nullcontext()
+            ):
+                self._inner_training_loop(dataloader, start_step)
         finally:
             if self.checkpoint_manager.pending_uploads or (
                 self.save_steps and self.state.step % self.save_steps != 0
