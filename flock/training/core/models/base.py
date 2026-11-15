@@ -178,6 +178,7 @@ class BaseModel(nn.Module, ABC):
 
         Labels in a batch are ignored: the trainer owns target alignment and loss.
         Position IDs are contiguous over each row's real tokens.
+        Subclasses prepare the backend's mask and causal flag in `_forward`.
 
         Args:
             batch (`Batch`): Token IDs and a matching mask shaped `[batch, sequence]`.
@@ -191,11 +192,7 @@ class BaseModel(nn.Module, ABC):
                 range, or the attention mask shape differs from the IDs.
         """
         input_ids, attention_mask, position_ids = self._check_batch(batch)
-        seq_len = input_ids.shape[1]
-        causal = torch.ones(seq_len, seq_len, dtype=torch.bool, device=input_ids.device).tril()
-        # casual[None, None] makes [T, T] -> [1, 1, T, T]
-        causal_mask = causal[None, None] & attention_mask[:, None, None, :]
-        return self._forward(input_ids, causal_mask, position_ids)
+        return self._forward(input_ids, attention_mask, position_ids)
 
     @abstractmethod
     def _forward(
@@ -204,5 +201,8 @@ class BaseModel(nn.Module, ABC):
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,
     ) -> torch.Tensor:
-        """Run the model with validated inputs and a complete causal mask."""
+        """Run validated inputs with a 2D boolean padding mask and position IDs.
+
+        The subclass owns causal attention and backend-specific mask preparation.
+        """
         raise NotImplementedError

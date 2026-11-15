@@ -7,8 +7,9 @@ from transformers import Olmo2Config as HFConfig
 from transformers import Olmo2ForCausalLM
 from transformers.models.olmo2.modeling_olmo2 import Olmo2MLP
 
+from flock.training.core.attention import GroupedAttentionWithRoPE
 from flock.training.core.models.olmo2 import Olmo2, Olmo2Config
-from flock.training.core.nn import GroupedAttentionWithRoPE, SwiGLU
+from flock.training.core.nn import SwiGLU
 from flock.training.core.trainer import Trainer
 
 

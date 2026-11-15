@@ -63,6 +63,7 @@ testpaths = ["tests"]
 markers = [
     "latency: tests that measure app response latency",
     "gpu: CUDA training parity tests (run explicitly on a GPU machine)",
+    "fa3: FlashAttention-3 tests requiring Hopper and compatible FA3 kernels",
 ]
 addopts = ["--import-mode=importlib", "--strict-markers", "-m", "not latency and not gpu", "-n", "auto", "--dist=loadgroup"]
 

@@ -25,15 +25,9 @@ def test_base_model_prepares_collated_batch() -> None:
     }
     assert model(batch) is batch["input_ids"]
     assert model.received_positions.tolist() == [[0, 0, 1]]
-    assert model.received_mask.tolist() == [
-        [
-            [
-                [False, False, False],
-                [False, True, False],
-                [False, True, True],
-            ]
-        ]
-    ]
+    assert model.received_mask.dtype == torch.bool
+    assert model.received_mask.device == batch["input_ids"].device
+    assert model.received_mask.tolist() == [[False, True, True]]
 
 
 def test_base_model_prepares_unpadded_batch() -> None:
@@ -45,11 +39,7 @@ def test_base_model_prepares_unpadded_batch() -> None:
     }
     model(batch)
     assert model.received_positions.tolist() == [[0, 1, 2]]
-    assert model.received_mask[0, 0].tolist() == [
-        [True, False, False],
-        [True, True, False],
-        [True, True, True],
-    ]
+    assert model.received_mask is batch["attention_mask"]
 
 
 def test_base_model_rejects_overlong_input_before_forward() -> None:
