@@ -34,7 +34,7 @@ from flock.training.core.lr_scheduler import CosineConfig, WSDConfig
 from flock.training.core.models import BaseModel
 from flock.training.core.models.olmo2 import Olmo2
 from flock.training.core.optimization import AdamWConfig, MuonConfig
-from flock.training.core.trainer import Trainer, TrainerConfig
+from flock.training.core.trainer import Trainer, TrainerConfig, TrainerState
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
@@ -1771,6 +1771,8 @@ def test_all_ignored_logging_windows_remain_finite(
             "train/loss_window_max": 0.0,
             "train/grad_norm_mean": 0.0,
             "train/grad_norm_window_max": 0.0,
+            "train/tokens": 0,
+            "train/total_tokens": 0,
         }
 
 
@@ -1844,13 +1846,30 @@ def test_training_updates_and_token_weighted_logging(
                 "train/loss_window_max": max(loss for loss, _, _ in window),
                 "train/grad_norm_mean": sum(norm for _, _, norm in window) / len(window),
                 "train/grad_norm_window_max": max(norm for _, _, norm in window),
+                "train/tokens": sum(tokens for _, tokens, _ in window),
+                "train/total_tokens": sum(
+                    tokens for _, tokens, _ in records[: start + len(window)]
+                ),
             }
         )
+    # Hand count: left-padded rows of 4 and 2 words give 3 + 1 targets, 3 and 3 give 2 + 2,
+    # and the final partial batch of one 2-word row gives 1.
+    assert [tokens for _, tokens, _ in records] == [4, 4, 1]
     # Incomplete windows must use this trainer's run just like full windows.
     assert module_logs == [], "tail metrics must be sent to trainer.run.log"
     assert len(run.metrics) == len(expected_logs)
     for actual, expected in zip(run.metrics, expected_logs, strict=True):
         assert actual == pytest.approx(expected, abs=2e-5, rel=2e-5)
+
+
+def test_token_counts_stay_exact_beyond_fp32_integers() -> None:
+    state = TrainerState()
+    one = torch.tensor(1.0)
+    state.update(add_step=1, loss=one, grad_norm=one, tokens=torch.tensor(2**24 + 1))
+    state.reset_window()
+    state.update(add_step=1, loss=one, grad_norm=one, tokens=torch.tensor(2**24 + 1))
+    metrics = state.get_logging_metrics()
+    assert (metrics["train/tokens"], metrics["train/total_tokens"]) == (2**24 + 1, 2**25 + 2)
 
 
 def test_training_loader_supports_zero_workers(

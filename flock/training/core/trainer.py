@@ -202,7 +202,7 @@ class TrainerState(nn.Module):
         self.window_steps.add_(1)
 
     def get_logging_metrics(self) -> dict[str, int | float]:
-        """Return global step and window means/maxima as host values.
+        """Return global step, window means/maxima and valid-target counts as host values.
 
         Call after at least one update: the gradient mean divides by window steps.
         Converting the stacked tensors to a list synchronizes accelerator work.
@@ -216,6 +216,8 @@ class TrainerState(nn.Module):
                 self.grad_norm_max,
             )
         ).tolist()
+        # Stacking with the FP32 means would make counts above 2**24 inexact; keep them int64.
+        window_tokens, total_tokens = torch.stack((self.window_tokens, self.total_tokens)).tolist()
 
         return {
             "global_step": step,
@@ -223,6 +225,8 @@ class TrainerState(nn.Module):
             "train/loss_window_max": max_loss,
             "train/grad_norm_mean": mean_grad,
             "train/grad_norm_window_max": max_grad,
+            "train/tokens": window_tokens,
+            "train/total_tokens": total_tokens,
         }
 
     @torch.no_grad()
