@@ -6,7 +6,11 @@ import pytest
 import torch
 
 from flock.training.core import data_utils
-from flock.training.core.data_utils import DatasetConfig, LanceBatchCollator
+from flock.training.core.data_utils import (
+    DatasetConfig,
+    LanceBatchCollator,
+    ResumableBatchDataSampler,
+)
 
 if TYPE_CHECKING:
     from typing import Any
@@ -110,3 +114,18 @@ def test_dataset_factory_propagates_process_setup_failure(monkeypatch: pytest.Mo
     monkeypatch.setattr(data_utils.s3, "get_process", get_process)
     with pytest.raises(RuntimeError, match="credential process setup failed"):
         data_utils.get_dataset(DatasetConfig(uri="s3://offline-bucket/text", version=1))
+
+
+@pytest.mark.parametrize(
+    ("skip_batches", "max_batches", "expected"),
+    [(0, None, [0, 1, 2]), (0, 2, [0, 1]), (1, 2, [1]), (2, 2, []), (0, 10, [0, 1, 2])],
+)
+def test_sampler_cap_keeps_the_seeded_order(
+    skip_batches: int, max_batches: int | None, expected: list[int]
+) -> None:
+    full = list(ResumableBatchDataSampler(batch_size=2, dataset_size=5))
+    sampler = ResumableBatchDataSampler(
+        batch_size=2, dataset_size=5, skip_batches=skip_batches, max_batches=max_batches
+    )
+    assert len(sampler) == (3 if max_batches is None else min(3, max_batches))
+    assert list(sampler) == [full[index] for index in expected]

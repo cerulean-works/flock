@@ -1,9 +1,9 @@
 # Train with Flock
 
-`Trainer` runs one shuffled pass over a Lance text dataset on one device. Each
-batch produces one optimizer update: tokenize the text, build next-token targets,
-compute cross-entropy, backpropagate, clip gradients, update weights and advance
-the learning rate. Padding targets are ignored when computing loss.
+`Trainer` runs one shuffled pass, or its first `max_steps` updates, over a Lance
+text dataset on one device. Each batch produces one optimizer update: tokenize the
+text, build next-token targets, compute cross-entropy, backpropagate, clip
+gradients, update weights and advance the learning rate. Padding targets are ignored when computing loss.
 The [Training API](python-api) lists configuration fields, defaults and public methods.
 
 ## Run the scaffold experiment
@@ -76,6 +76,9 @@ config = TrainerConfig(
 
 `batch_size` counts dataset rows per update. The run has
 `ceil(len(dataset) / batch_size)` updates, including a final partial batch.
+Set `max_steps` to end the run earlier: training stops after that many updates of
+the same shuffled order, and fractional schedule times become fractions of the
+shorter run. A checkpoint resumes only with the same effective number of updates.
 The example warms up linearly over the first 10% of updates, holds the
 optimizer's base rate through 90%, then decays to zero with a cosine curve.
 To decay immediately after warmup, remove the constant segment and change the
