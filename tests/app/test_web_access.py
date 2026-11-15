@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 import os
 import socket
 import subprocess
@@ -82,14 +84,19 @@ def test_built_web_enforces_caller_identity_across_pages_data_and_relays(
     assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
     member = flock.add_user("member@web.test")
     outsider = flock.add_user("outsider@web.test", org="lab")
+    sessions = [
+        {
+            "flock_access": user.signup["access_token"],
+            "flock_user": base64.urlsafe_b64encode(json.dumps(user.signup["user"]).encode())
+            .decode()
+            .rstrip("="),
+        }
+        for user in (member, outsider)
+    ]
     with (
         httpx.Client(base_url=web) as anon,
-        httpx.Client(
-            base_url=web, cookies={"flock_access": member.signup["access_token"]}
-        ) as inside,
-        httpx.Client(
-            base_url=web, cookies={"flock_access": outsider.signup["access_token"]}
-        ) as outside,
+        httpx.Client(base_url=web, cookies=sessions[0]) as inside,
+        httpx.Client(base_url=web, cookies=sessions[1]) as outside,
     ):
         for path in (
             "/api/projects/flock/p/runs",
@@ -115,7 +122,11 @@ def test_built_web_enforces_caller_identity_across_pages_data_and_relays(
                 response = client.get(path + "/__data.json")
                 assert response.status_code == 200, response.text
                 payload = response.json()
-                if client is anon:
+                if path == "/flock/p":
+                    # Project content loads in the universal loader through the run relay.
+                    # __data.json carries only the server layouts, not that private run data.
+                    assert payload["type"] == "data", payload
+                elif client is anon:
                     assert payload["type"] == "redirect", payload
                     assert payload["location"].startswith("/login"), payload
                 else:
