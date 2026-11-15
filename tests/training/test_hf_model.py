@@ -12,9 +12,9 @@ import torch
 from transformers import AutoModelForCausalLM, LlamaConfig, Olmo2Config, Qwen3Config
 
 from flock.hub.models.files import build, write_model
-from flock.training.core.lr_scheduler import CosineConfig
+from flock.training.core.lr_scheduler import LRSchedulerConfig, LRScheduleSegment
 from flock.training.core.models import HFCompatibleConfig, HFCompatibleModel, registry
-from flock.training.core.optimization import AdamWConfig
+from flock.training.core.optimizers import AdamWConfig
 from flock.training.core.trainer import Trainer, TrainerConfig
 
 if TYPE_CHECKING:
@@ -224,7 +224,13 @@ def make_trainer(
                 "input_column": "text",
                 "batch_size": 2,
                 "optimizer_config": AdamWConfig(lr=0.01, betas=(0.8, 0.9)),
-                "lr_scheduler_config": CosineConfig(warmup_steps=0, min_lr_ratio=0.1),
+                "lr_scheduler_config": LRSchedulerConfig(
+                    schedule=[
+                        LRScheduleSegment(
+                            start=0, end=1.0, start_ratio=1.0, end_ratio=0.1, interpolation="cosine"
+                        )
+                    ]
+                ),
                 "dataloader_num_workers": 0,
                 "dataloader_prefetch_factor": None,
                 "wandb_project": "offline-test",
@@ -257,14 +263,14 @@ def test_training_and_resuming_from_a_checkpoint(
     interrupted = make_trainer(
         HFCompatibleModel(start.config), tokenizer, tmp_path / "resumed", monkeypatch
     )
-    save = interrupted.save_model
+    save = interrupted.checkpoint_manager.save_model
 
     def save_and_stop(blocking: bool = False) -> None:
         save(blocking)
         if interrupted.state.step.item() == 1:
             raise InterruptedError("stop after the first checkpoint")
 
-    monkeypatch.setattr(interrupted, "save_model", save_and_stop)
+    monkeypatch.setattr(interrupted.checkpoint_manager, "save_model", save_and_stop)
     with pytest.raises(InterruptedError):
         interrupted.train()
 

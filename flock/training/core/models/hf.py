@@ -1,5 +1,3 @@
-"""Train `transformers` causal LM architectures as Flock models (D125 to D128)."""
-
 import dataclasses
 import json
 from dataclasses import dataclass

@@ -1,5 +1,3 @@
-"""Load pinned Lance datasets and collate resumable next-token training batches."""
-
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from math import ceil

@@ -1,5 +1,3 @@
-"""Implement full-sequence OLMo 2 models and fresh-initialization presets."""
-
 from dataclasses import dataclass
 from typing import Any
 

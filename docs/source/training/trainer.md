@@ -50,14 +50,22 @@ Edit the recipe's configuration, or import the public classes from
 `flock.training` in your own experiment:
 
 ```python
-from flock.training import AdamWConfig, CosineConfig, TrainerConfig, WSDConfig
+from flock.training import AdamWConfig, LRSchedulerConfig, LRScheduleSegment, TrainerConfig
 
 config = TrainerConfig(
     run_name="olmo2_dolma3",
     input_column="text",
     batch_size=2,
     optimizer_config=AdamWConfig(lr=1e-3, betas=(0.95, 0.99)),
-    lr_scheduler_config=WSDConfig(warmup_steps=100, decay_steps=100),
+    lr_scheduler_config=LRSchedulerConfig(
+        schedule=[
+            LRScheduleSegment(start=0, end=0.1, start_ratio=0, end_ratio=1),
+            LRScheduleSegment(start=0.1, end=0.9, start_ratio=1, end_ratio=1),
+            LRScheduleSegment(
+                start=0.9, end=1.0, start_ratio=1, end_ratio=0, interpolation="cosine"
+            ),
+        ]
+    ),
     dataloader_num_workers=2,
     dataloader_prefetch_factor=1,
     wandb_project="test",
@@ -68,11 +76,22 @@ config = TrainerConfig(
 
 `batch_size` counts dataset rows per update. The run has
 `ceil(len(dataset) / batch_size)` updates, including a final partial batch.
-**WSD** means warmup, stable, decay: increase the learning rate linearly, hold it
-at the optimizer's configured rate, then decay it with a cosine curve over the
-last `decay_steps`. Choose warmup and decay lengths that fit the run. For cosine
-decay immediately after warmup, use
-`CosineConfig(warmup_steps=100, min_lr_ratio=0.1)` instead.
+The example warms up linearly over the first 10% of updates, holds the
+optimizer's base rate through 90%, then decays to zero with a cosine curve.
+To decay immediately after warmup, remove the constant segment and change the
+decay segment's `start` to `0.1`.
+
+Each segment names its timeframe, starting and ending LR ratios, and
+`"linear"` or `"cosine"` interpolation. Integer times count completed optimizer
+updates; floating-point times are fractions of the run, rounded down to whole
+updates. Use `100` for step 100 and `1.0` for the run endpoint.
+Adjacent segments must share a time boundary; gaps are rejected. Use equal
+starting and ending ratios for an explicit stable phase. After the last segment,
+the scheduler holds its ending ratio. Before the first segment, it holds that
+segment's starting ratio.
+The later segment takes precedence at a shared boundary. Timeframes must be
+ordered, non-overlapping and nonempty after rounding, and fit the run.
+The optimizer config supplies the base rates; ratios scale each parameter group.
 
 Use `dataloader_num_workers=0` and `dataloader_prefetch_factor=None` to load in
 the training process. With workers, use a positive prefetch count or `None` for
@@ -173,7 +192,7 @@ import torch
 from tokenizers import Tokenizer, models, pre_tokenizers
 from transformers import TokenizersBackend
 
-from flock.training import AdamWConfig, CosineConfig, Trainer, TrainerConfig
+from flock.training import AdamWConfig, LRSchedulerConfig, LRScheduleSegment, Trainer, TrainerConfig
 from flock.training import DatasetConfig, Olmo2Config, get_dataset
 from flock.training.core.models import Olmo2
 
@@ -209,7 +228,17 @@ def main() -> None:
             input_column="text",
             batch_size=2,
             optimizer_config=AdamWConfig(lr=1e-3, betas=(0.9, 0.95)),
-            lr_scheduler_config=CosineConfig(warmup_steps=0, min_lr_ratio=0.1),
+            lr_scheduler_config=LRSchedulerConfig(
+                schedule=[
+                    LRScheduleSegment(
+                        start=0,
+                        end=1.0,
+                        start_ratio=1,
+                        end_ratio=0.1,
+                        interpolation="cosine",
+                    ),
+                ]
+            ),
             dataloader_num_workers=0,
             dataloader_prefetch_factor=None,
             wandb_project="local-example",
@@ -424,12 +453,24 @@ checkpoint = models.download(
 trainer.train(resume_from_checkpoint=checkpoint)
 ```
 
-For manual saves, call `trainer.save_model()`. Set `save_to_hub_repo="org/model"`
+Use `trainer.state_dict()` to capture training state without model weights.
+`trainer.validate_state_dict(state)` checks the run contract and optimizer group
+compatibility, and asks the metric buffers and scheduler to validate their state
+without changing them.
+`trainer.load_state_dict(state)` performs these checks before restoring any
+training state. Tensors can share storage with live objects, so serialize the
+result immediately or deep-copy it for an in-memory snapshot.
+
+For manual saves, call `trainer.checkpoint_manager.save_model()`. Set `save_to_hub_repo="org/model"`
 to start an asynchronous upload of each new checkpoint with a `checkpoint-<step>`
-tag. `trainer.save_model(blocking=True)` waits for pending uploads; it reuses an
+tag. `trainer.checkpoint_manager.save_model(blocking=True)` waits for pending uploads; it reuses an
 existing current-step checkpoint without rewriting it or starting another upload.
 Upload failures are logged and leave the local checkpoint available. Local
-retention does not delete Hub versions.
+retention does not delete Hub versions. Use
+`trainer.checkpoint_manager.load_checkpoint(path)` to restore a local checkpoint
+without starting training. Pending uploads and saved checkpoint folders are
+available through `trainer.checkpoint_manager.pending_uploads` and
+`trainer.checkpoint_manager.checkpoints()` respectively.
 
 After entering the training loop, cleanup waits for pending uploads and, when
 automatic saving is enabled, saves the current step if it falls between save
