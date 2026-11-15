@@ -35,6 +35,12 @@ closed while its data was being read. Hold the existing exclusive organization l
 removal, so project creation cannot escape the snapshot of streams to close. Per-user
 subscription tracking is outside this change.
 
+### D154. Missing orgs and private datasets have the same refusal
+
+An outsider probing a dataset must not distinguish an unknown organization from a private
+path by its error message. Both answer the existing dataset-not-found response. Actual org
+members keep their read access and normal dataset errors.
+
 ## Plan
 
 Reproduce both cases through the HTTP API using synthetic data, fix the boundary checks, and

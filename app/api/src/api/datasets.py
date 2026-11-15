@@ -95,9 +95,7 @@ async def get_readable_org(org: str, path: DatasetPath, store: StoreDep, viewer:
     found = await store.find_org(org)
     if found is not None and store.accounts.role(viewer, found):
         return found
-    if found is None:
-        raise APIError(404, f"organization {org} not found")
-    if not await store.datasets.is_public(found, path):
+    if found is None or not await store.datasets.is_public(found, path):
         raise APIError(404, f"dataset {path} not found")
     return found
 

@@ -1455,3 +1455,18 @@ def test_private_dataset_path_variants_do_not_read_its_rows(
             response = get(client, f"{DATASETS}/rows", **params)
             assert response.status in (400, 404, 422), response.body
     assert get(api, f"{DATASETS}/rows", path="eval/private").status == 200
+
+
+def test_private_dataset_refusal_does_not_reveal_its_organization(
+    flock: S3Flock, writer: Writer
+) -> None:
+    writer.write("private", table(0, 1))
+    api = flock.client()
+    assert make_private(api, "private").status == 204
+    assert api.post("/api/v1/orgs", {"name": "other"}).status == 201
+    outsider = flock.add_user("outside@x.io", org="other").api
+    for client in (flock.anonymous(), outsider):
+        hidden = get(client, f"{DATASETS}/info", path="private")
+        missing = get(client, "/api/v1/orgs/missing/datasets/info", path="private")
+        assert hidden.status == missing.status == 404
+        assert hidden.body == missing.body
