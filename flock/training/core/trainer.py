@@ -141,31 +141,7 @@ class TrainerConfig(PydanticBaseModel):
         return self
 
 
-class _TrainerStateSchema(PydanticBaseModel):
-    """Validate checkpoint fields strictly, allowing tensors and rejecting extras."""
-
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True, strict=True, extra="forbid", revalidate_instances="always"
-    )
-
-
-class CheckpointDataConfig(_TrainerStateSchema):
-    """Record the data settings compared before restoring training state.
-
-    Attributes:
-        dataset_size (`int`): Nonnegative row count; dataset contents are not hashed.
-        batch_size (`int`): Positive rows per optimizer update.
-        seed (`int`): Shuffle and training seed.
-        input_column (`str`): Text field read by the collator.
-    """
-
-    dataset_size: int = Field(ge=0)
-    batch_size: int = Field(gt=0)
-    seed: int
-    input_column: str
-
-
-class CheckpointTrainerState(_TrainerStateSchema):
+class CheckpointTrainerState(PydanticBaseModel):
     """Validate metric buffers and nonnegative scalar int64 training counters.
 
     Attributes:
@@ -178,6 +154,10 @@ class CheckpointTrainerState(_TrainerStateSchema):
         window_tokens (`torch.Tensor`): Valid targets processed in the window.
         window_steps (`torch.Tensor`): Updates accumulated in the window.
     """
+
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True, strict=True, extra="forbid", revalidate_instances="always"
+    )
 
     loss_sum: torch.Tensor
     loss_max: torch.Tensor
@@ -205,7 +185,7 @@ class CheckpointTrainerState(_TrainerStateSchema):
         return value
 
 
-class TrainerCheckpoint(_TrainerStateSchema):
+class TrainerCheckpoint(PydanticBaseModel):
     """Validate resumable training state stored alongside model weights.
 
     Attributes:
@@ -215,12 +195,16 @@ class TrainerCheckpoint(_TrainerStateSchema):
         cpu_rng_state (`torch.Tensor`): PyTorch CPU RNG state.
         cuda_rng_state (`list[torch.Tensor]` or `None`): Per-device CUDA RNG states.
         python_rng_state (`tuple`): Python `random` state.
-        data_config (`CheckpointDataConfig`): Settings defining the sampler contract.
+        config (`dict[str, int | str]`): Settings defining the sampler contract.
 
     Model validation checks that trainer and scheduler progress agree. With a
-    validation context containing `data_config` and `total_steps`, it also checks
+    validation context containing `config` and `total_steps`, it also checks
     compatibility with the receiving run before state restoration.
     """
+
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True, strict=True, extra="forbid", revalidate_instances="always"
+    )
 
     trainer_state_dict: CheckpointTrainerState
     optimizer_state_dict: dict[str, Any]
@@ -228,7 +212,7 @@ class TrainerCheckpoint(_TrainerStateSchema):
     cpu_rng_state: torch.Tensor
     cuda_rng_state: list[torch.Tensor] | None
     python_rng_state: tuple[int, tuple[int, ...], float | None]
-    data_config: CheckpointDataConfig
+    config: dict[str, int | str]
 
     @model_validator(mode="after")
     def validate_run(self, info: ValidationInfo) -> Self:
@@ -239,7 +223,7 @@ class TrainerCheckpoint(_TrainerStateSchema):
             raise ValueError("Checkpoint trainer and scheduler progress do not match")
 
         if info.context is not None:
-            if self.data_config.model_dump() != info.context["data_config"]:
+            if self.config != info.context["config"]:
                 raise ValueError(
                     "Checkpoint dataset size, batch size, seed or input column changed"
                 )
@@ -401,9 +385,9 @@ class Trainer:
         self.run_name = config.run_name
         self.seed = config.seed
 
-        self.state = TrainerState().to(self.device)
         self.runtime = runtime if runtime is not None else DistributedRuntime.from_env()
         self.device = self.runtime.device
+        self.state = TrainerState().to(self.device)
 
         if self.runtime.enabled and not dist.is_initialized():
             raise RuntimeError(
@@ -672,16 +656,6 @@ class Trainer:
 
         self.run.log(log_dict)
 
-    @property
-    def data_config(self) -> dict[str, Any]:
-        """Return dataset size, batch size, seed and input column used for resume checks."""
-        return {
-            "dataset_size": len(self.dataset),
-            "batch_size": self.batch_size,
-            "seed": self.seed,
-            "input_column": self.ds_input_column,
-        }
-
     def state_dict(self) -> dict[str, Any]:
         """Return optimizer, schedule, metric, RNG and data state for persistence.
 
@@ -696,7 +670,12 @@ class Trainer:
             "cpu_rng_state": torch.get_rng_state(),
             "cuda_rng_state": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
             "python_rng_state": random.getstate(),
-            "data_config": self.data_config,
+            "config": {
+                "dataset_size": len(self.dataset),
+                "batch_size": self.batch_size,
+                "seed": self.seed,
+                "input_column": self.ds_input_column,
+            },
         }
 
     def validate_state_dict(
@@ -715,7 +694,15 @@ class Trainer:
         """
         checkpoint = TrainerCheckpoint.model_validate(
             state,
-            context={"data_config": self.data_config, "total_steps": self.total_steps},
+            context={
+                "config": {
+                    "dataset_size": len(self.dataset),
+                    "batch_size": self.batch_size,
+                    "seed": self.seed,
+                    "input_column": self.ds_input_column,
+                },
+                "total_steps": self.total_steps,
+            },
         )
         self.lr_scheduler.validate_state_dict(checkpoint.lr_scheduler_state_dict.model_dump())
 

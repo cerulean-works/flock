@@ -454,6 +454,8 @@ trainer.train(resume_from_checkpoint=checkpoint)
 ```
 
 Use `trainer.state_dict()` to capture training state without model weights.
+Its `config` dictionary records dataset size, batch size, seed and input column
+for resume compatibility checks.
 `trainer.validate_state_dict(state)` checks the run contract and optimizer group
 compatibility, and asks the metric buffers and scheduler to validate their state
 without changing them.

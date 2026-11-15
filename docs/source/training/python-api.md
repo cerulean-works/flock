@@ -8,7 +8,6 @@
 [[autodoc]] training.Trainer
     - train
     - evaluate
-    - data_config
     - state_dict
     - validate_state_dict
     - load_state_dict
@@ -180,9 +179,6 @@ These schemas and metric buffers are implementation-level APIs under
 `flock.training.core`.
 
 [[autodoc]] training.core.trainer.TrainerState
-
-[[autodoc]] training.core.trainer.CheckpointDataConfig
-    - none
 
 [[autodoc]] training.core.trainer.CheckpointTrainerState
     - none

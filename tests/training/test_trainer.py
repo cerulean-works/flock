@@ -881,7 +881,7 @@ def test_existing_output_requires_resume_or_overwrite(
 @pytest.mark.parametrize(
     "section, field, value",
     [
-        ("data_config", "batch_size", "2"),
+        ("config", "batch_size", "2"),
         ("trainer_state_dict", "step", torch.tensor(0.5)),
         ("trainer_state_dict", "step", torch.tensor([0])),
         ("trainer_state_dict", "step", torch.tensor(-1)),
