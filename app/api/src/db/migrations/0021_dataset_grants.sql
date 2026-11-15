@@ -7,3 +7,4 @@ CREATE TABLE public_datasets (
     PRIMARY KEY (org_pk, path)
 );
 ALTER TABLE orgs ADD COLUMN dataset_grants_ready boolean NOT NULL DEFAULT false;
+ALTER TABLE orgs ADD COLUMN dataset_legacy_public boolean NOT NULL DEFAULT false;

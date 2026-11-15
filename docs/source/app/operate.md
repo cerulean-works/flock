@@ -38,7 +38,11 @@ The job needs the same database and storage configuration as the deployment. See
 
 The private-default release uses two migrations. The additive migration keeps the previous
 policy during the rolling deploy. Contract `0022_dataset_grants` waits for every old API and
-S3 worker to drain and for the configured contract delay (30 minutes by default). Until that
+S3 worker to retire cleanly and for the configured contract delay (30 minutes by default).
+Expired heartbeats alone do not retire an older worker for this migration. If a crashed worker
+blocks the transition, verify in the deployment host that the process is stopped and cannot
+resume before removing its exact stale row from `flock_instances`. Never remove a row merely
+because its heartbeat is old. Until that
 cutover, the old public-unless-flagged policy still applies. Keep marking sensitive new paths
 private until the verification below passes.
 
@@ -60,6 +64,8 @@ uv run --package flock-app-api python -m app.api.src.db.migrate --contract
 The inventory runs at API startup and on its dataset sweep. Restart a current API replica after
 the contract job to start the inventory immediately. Do not use `--force` while old workers run.
 An old release refuses to start after the contract; roll forward with a compatible release.
+The database also forces the old public flag closed, so an unexpectedly resumed old API cannot
+read datasets anonymously. Existing public access is served by the upgraded API through grants.
 
 Before opening public projects, verify these read-only queries against the deployment database:
 

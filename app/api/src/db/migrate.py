@@ -10,6 +10,7 @@ log = logging.getLogger(__name__)
 
 # The first line of a migration that runs outside a transaction (D149).
 NO_TRANSACTION = "-- flock: no-transaction"
+CLEAN_DRAIN = "-- flock: clean-drain"
 
 
 class SchemaError(RuntimeError):
@@ -38,6 +39,11 @@ class Migration:
 
     def sql(self) -> str:
         return self.path.read_text()
+
+    @property
+    def clean_drain(self) -> bool:
+        """Whether older workers must explicitly retire, even after missing heartbeats."""
+        return CLEAN_DRAIN in self.sql().splitlines()
 
     @property
     def transaction(self) -> bool:
@@ -186,9 +192,18 @@ class Migrations:
         the delay. The clock starts at the first check after the last old instance went away,
         up to a check interval late, which only makes the wait a little longer."""
         async with conn.transaction():
+            # A pending privacy cutover must retain even paused old workers. Preserve these
+            # rows while checking earlier contracts too; otherwise their cleanup loses evidence.
+            applied = await self.applied(conn)
+            clean = max(
+                (m.number for m in self.migrations() if m.clean_drain and m.version not in applied),
+                default=0,
+            )
             await conn.execute(
-                "DELETE FROM flock_instances WHERE seen_at < now() - make_interval(secs => $1)",
+                "DELETE FROM flock_instances WHERE seen_at < now() - make_interval(secs => $1) "
+                "AND knows::int >= $2",
                 self.GONE,
+                clean,
             )
             if await conn.fetchval(
                 "SELECT EXISTS (SELECT FROM flock_instances WHERE knows::int < $1)", number

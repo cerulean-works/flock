@@ -46,8 +46,12 @@ members keep their read access and normal dataset errors.
 
 An additive migration adds public grants and an org inventory marker. Until the contract
 migration runs, both releases retain D115's behavior. The contract waits for older API and
-proxy instances to drain, then makes future orgs ready for explicit grants. The existing
-contract check prevents an older binary from restarting after this point.
+proxy instances to retire cleanly, including ones whose heartbeats have expired. A crashed
+worker requires operator confirmation that it cannot resume before its row is removed. The
+contract captures the legacy policy for inventory, then constrains the legacy public flag to
+false. Even an unexpectedly resumed old reader therefore fails closed, and its old sweep
+cannot reopen the flag. Future orgs are ready for explicit grants; the existing contract check
+also prevents an older binary from restarting.
 
 Existing orgs temporarily refuse anonymous dataset reads and dataset operations while their
 inventory is pending. The inventory grants only existing dataset paths in previously open
@@ -61,8 +65,8 @@ must pause for the cutover, since the proxy cannot govern credentials issued out
 
 Private destination flags take precedence. Move and restore grant a public source's destination
 only after object copying succeeds. An implicit-private source makes a destination private
-before any object lands there, even if a public grant remains at that destination. Permissions
-remain attached to exact paths across versions and deletes; a rename removes source grants.
+before any object lands there, even if a public grant remains at that destination. Every nested dataset is handled independently, including children of datasets and
+restored trees. Permissions remain attached to exact paths across versions and deletes; a rename removes source grants.
 
 ### D157. Permission-sensitive responses cannot be cached
 

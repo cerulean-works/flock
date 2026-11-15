@@ -1526,6 +1526,12 @@ def test_visibility_inventory_fails_closed_and_retries_atomically(
     storage = f"{BUCKETS}/flock-datasets"
     assert member.api.post(f"{storage}/folders", {"prefix": "new/_versions/"}).status == 409
     assert member.api.post(f"{storage}/objects/delete", {"keys": ["old/README.md"]}).status == 409
+    for method in ("put", "multipart", "parts", "complete", "abort"):
+        response = member.api.post(
+            f"{storage}/presign",
+            {"method": method, "key": "new/data", "size": 1, "upload_id": "unused", "parts": [1]},
+        )
+        assert response.status == 409, (method, response.body)
     assert api.post(f"{DATASETS}/rename", {"path": "old", "to": "other"}).status == 409
     # A real signed proxy write is refused before touching the upstream during inventory.
     import boto3
@@ -1610,3 +1616,53 @@ def test_visibility_inventory_preserves_nested_public_datasets(
     assert flock.call(datasets(flock).close_existing()) == 2
     for path in ("outer", "outer/child"):
         assert get(flock.anonymous(), f"{DATASETS}/info", path=path).status == 200
+
+
+@pytest.mark.parametrize("folder", [False, True])
+@pytest.mark.parametrize("restore", [False, True])
+@pytest.mark.parametrize("public_child", [False, True])
+def test_nested_visibility_survives_moves_and_restores(
+    flock: S3Flock, writer: Writer, folder: bool, restore: bool, public_child: bool
+) -> None:
+    asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
+    flock.call(datasets(flock).close_existing())
+    parent = "source/outer" if folder else "source"
+    target = "dest/outer" if folder else "dest"
+    writer.write(parent, table(0, 1))
+    writer.write(f"{parent}/child", table(1, 1))
+    api = flock.client()
+    anon = flock.anonymous()
+    assert make_public(api, f"{parent}/child" if public_child else parent).status == 200
+    # Stale destination grants must never publish a private source or private descendant.
+    for path in (target, f"{target}/child"):
+        assert make_public(api, path).status == 200
+    member = flock.add_user("nested@member.test").api
+    if restore:
+        deleted = member.post(f"{DATASETS}/delete", {"path": "source"})
+        assert deleted.status == 200, deleted.body
+        response = member.post(f"{DATASETS}/trash/{deleted.json()['id']}/restore", {"to": "dest"})
+    else:
+        response = member.post(f"{DATASETS}/rename", {"path": "source", "to": "dest"})
+    assert response.status == 200, response.body
+    for path, public in ((target, not public_child), (f"{target}/child", public_child)):
+        assert get(member, f"{DATASETS}/rows", path=path).status == 200
+        assert get(anon, f"{DATASETS}/rows", path=path).status == (200 if public else 404)
+
+
+def test_obsolete_read_predicate_stays_closed_after_cutover(flock: S3Flock, writer: Writer) -> None:
+    writer.write("existing", table(0, 1))
+    asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
+    flock.call(datasets(flock).close_existing())
+    writer.write("new", table(1, 1))
+    # An already running old binary still executes this predicate before its next heartbeat.
+    for path in ("existing", "new"):
+        assert sql(
+            flock,
+            "SELECT open_datasets AND NOT EXISTS (SELECT FROM private_datasets "
+            "WHERE org_pk = orgs.pk AND path = $1) FROM orgs WHERE name = 'flock'",
+            path,
+        ) == [(False,)]
+    with pytest.raises(asyncpg.CheckViolationError):
+        sql(flock, "UPDATE orgs SET open_datasets = true WHERE name = 'flock'")
+    assert get(flock.anonymous(), f"{DATASETS}/rows", path="existing").status == 200
+    assert get(flock.anonymous(), f"{DATASETS}/rows", path="new").status == 404

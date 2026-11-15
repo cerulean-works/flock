@@ -401,6 +401,16 @@ def test_dataset_grant_cutover_waits_for_old_workers_and_prevents_rollback(
             assert not await pool.fetchval(
                 "SELECT EXISTS (SELECT FROM meta WHERE key = 'dataset_public_grants')"
             )
+            await pool.execute(
+                "UPDATE flock_instances SET seen_at = now() - interval '1 hour' WHERE id = $1",
+                old.id,
+            )
+            assert await current.apply_contracts(url, delay=0) == []
+            assert await pool.fetchval(
+                "SELECT EXISTS (SELECT FROM flock_instances WHERE id = $1)", old.id
+            )
+            await old.beat()
+            assert await current.apply_contracts(url, delay=0) == []
         finally:
             await old.close()
         assert await current.apply_contracts(url, delay=0) == ["0022_dataset_grants.contract"]

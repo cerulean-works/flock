@@ -820,6 +820,8 @@ class S3:
         method, object_key = body["method"], body["key"]
         self.check_key(object_key)
         bucket = await self.bucket(org, name)
+        if bucket.managed == "datasets" and method != "get":
+            await self._check_writable(org, bucket)
         if method == "abort":
             await self._call(
                 upstream.abort_upload(bucket.upstream_name, object_key, body["upload_id"])
