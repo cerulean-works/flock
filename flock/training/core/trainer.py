@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Literal, Self, cast
 
 import torch
+import torch.distributed as dist
 import torch.nn.functional as F
 import wandb
 from lance.torch.data import SafeLanceDataset
@@ -21,6 +22,7 @@ from flock.eval.run import PreparedTask, prepare_task, score_prepared
 from flock.eval.tasks import TASKS
 from flock.training.core.checkpoint import CheckpointManager
 from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableBatchDataSampler
+from flock.training.core.distributed import DistributedRuntime
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState, StepLRScheduler
 from flock.training.core.models import BaseModel
 from flock.training.core.optimizers import BaseOptimizer, OptimizerConfig, OptimizerInterface
@@ -376,6 +378,8 @@ class Trainer:
             Tokenizer configured with a padding token, padding side and maximum
             length. The collator applies padding, truncation and target shifting.
         dataset (`SafeLanceDataset`): Finite, indexable dataset of text rows.
+        runtime ([`training.core.distributed.DistributedRuntime`] or `None`, *optional*):
+            Distributed runtime. If `None`, the trainer runs on a single device.
 
     Raises:
         `NotImplementedError`: If the optimizer configuration selects Muon.
@@ -391,13 +395,20 @@ class Trainer:
         model: BaseModel,
         tokenizer: TokenizersBackend,
         dataset: SafeLanceDataset,
+        runtime: DistributedRuntime | None = None,
     ) -> None:
         """Initialize tracking, device placement, optimization and checkpoint storage."""
         self.run_name = config.run_name
         self.seed = config.seed
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         self.state = TrainerState().to(self.device)
+        self.runtime = runtime if runtime is not None else DistributedRuntime.from_env()
+        self.device = self.runtime.device
+
+        if self.runtime.enabled and not dist.is_initialized():
+            raise RuntimeError(
+                "Distributed runtime is not initialized. Use `distributed_run` context manager."
+            )
 
         self.logger = logging.getLogger(__name__)
         self.run = wandb.init(
