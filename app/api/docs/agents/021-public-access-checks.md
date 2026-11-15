@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | extending dataset defaults, review pending |
+| Status | implemented and independently reviewed |
 | Builds on | 015 public projects, 016 project creators, 019 bulk select |
 | Keeps | D110 to D118, D130 to D135 |
 

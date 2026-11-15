@@ -131,9 +131,10 @@ def test_built_web_enforces_caller_identity_across_pages_data_and_relays(
                     assert payload["location"].startswith("/login"), payload
                 else:
                     assert payload["type"] == "data", payload
-                    assert any(node and node.get("status") == 404 for node in payload["nodes"]), (
-                        payload
-                    )
+                    assert any(
+                        node and node.get("error", {}).get("status") == 404
+                        for node in payload["nodes"]
+                    ), payload
                 assert "private-run-146" not in response.text
                 assert "row 1946" not in response.text
         for path in (
