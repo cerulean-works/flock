@@ -112,16 +112,13 @@ def manifest_version(key: str) -> int | None:
 
 
 def dataset_folders(keys: Iterable[str], prefix: str) -> list[str]:
-    """The folders of the datasets among ``keys`` (all under ``prefix``), relative to it and
-    ending in ``/``, or ``""`` when ``prefix`` is a dataset itself: each folder holding a
-    ``_versions/``, including nested datasets (D87, D156)."""
+    """Every dataset folder relative to ``prefix``, including nested datasets (D156)."""
     found: set[str] = set()
     for key in keys:
-        relative = key.removeprefix(prefix)
-        if relative.startswith(VERSIONS):
-            found.add("")
-        elif (at := relative.find(f"/{VERSIONS}")) >= 0:
-            found.add(relative[: at + 1])
+        parts = key.removeprefix(prefix).split("/")
+        for at, part in enumerate(parts[:-1]):
+            if part == VERSIONS.removesuffix("/"):
+                found.add("/".join(parts[:at]) + "/" if at else "")
     return sorted(found)
 
 
@@ -1068,7 +1065,7 @@ class Datasets:
         return granted
 
     async def _all_datasets(self, bucket: str) -> list[str]:
-        """The path of every dataset in ``bucket``: each folder holding a ``_versions/`` (D87), including datasets nested beneath other datasets."""
+        """Every dataset path in ``bucket``, including nested datasets (D87, D155)."""
         upstream = self._upstream()
         found: list[str] = []
         folders = [""]
@@ -1084,8 +1081,8 @@ class Datasets:
                     break
             if f"{folder}{VERSIONS}" in subfolders:
                 found.append(folder.removesuffix("/"))
-            # Raw S3 writers can place a dataset beneath another dataset. Inventory both.
-            folders += [p for p in subfolders if p != f"{folder}{VERSIONS}"]
+            # Raw S3 writers can nest datasets under any folder, including _versions itself.
+            folders += subfolders
         return sorted(found)
 
     async def _copy_private(self, org: Org, path: str, to: str) -> None:
@@ -1301,9 +1298,7 @@ class Datasets:
         self._forget(name, path)
 
     async def _rename_tree(self, org: Org, name: str, path: str, to: str, kind: str) -> None:
-        """Move the folder at ``path`` to ``to``, its datasets and loose files as one prefix
-        (D131). Each dataset in it moves in D95's order (every ``_versions/`` copied last and
-        deleted first), so none is ever broken. If one is written to meanwhile, nothing moves."""
+        """Move a dataset or folder tree, preserving each exact path's visibility."""
         upstream = self._upstream()
         prefix = f"{path}/"
 

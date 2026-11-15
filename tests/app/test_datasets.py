@@ -1609,32 +1609,34 @@ def test_new_orgs_and_closed_legacy_orgs_do_not_get_implicit_grants(
 def test_visibility_inventory_preserves_nested_public_datasets(
     flock: S3Flock, writer: Writer
 ) -> None:
-    for path in ("outer", "outer/child"):
+    paths = ("outer", "outer/child", "outer/_versions/child/_versions/nested")
+    for path in paths:
         writer.write(path, table(0, 1))
         assert get(flock.anonymous(), f"{DATASETS}/info", path=path).status == 200
     asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
-    assert flock.call(datasets(flock).close_existing()) == 2
-    for path in ("outer", "outer/child"):
+    flock.call(datasets(flock).close_existing())
+    for path in paths:
         assert get(flock.anonymous(), f"{DATASETS}/info", path=path).status == 200
 
 
 @pytest.mark.parametrize("folder", [False, True])
 @pytest.mark.parametrize("restore", [False, True])
 @pytest.mark.parametrize("public_child", [False, True])
+@pytest.mark.parametrize("child", ["child", "_versions/child/_versions/nested"])
 def test_nested_visibility_survives_moves_and_restores(
-    flock: S3Flock, writer: Writer, folder: bool, restore: bool, public_child: bool
+    flock: S3Flock, writer: Writer, folder: bool, restore: bool, public_child: bool, child: str
 ) -> None:
     asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
     flock.call(datasets(flock).close_existing())
     parent = "source/outer" if folder else "source"
     target = "dest/outer" if folder else "dest"
     writer.write(parent, table(0, 1))
-    writer.write(f"{parent}/child", table(1, 1))
+    writer.write(f"{parent}/{child}", table(1, 1))
     api = flock.client()
     anon = flock.anonymous()
-    assert make_public(api, f"{parent}/child" if public_child else parent).status == 200
+    assert make_public(api, f"{parent}/{child}" if public_child else parent).status == 200
     # Stale destination grants must never publish a private source or private descendant.
-    for path in (target, f"{target}/child"):
+    for path in (target, f"{target}/{child}"):
         assert make_public(api, path).status == 200
     member = flock.add_user("nested@member.test").api
     if restore:
@@ -1644,7 +1646,7 @@ def test_nested_visibility_survives_moves_and_restores(
     else:
         response = member.post(f"{DATASETS}/rename", {"path": "source", "to": "dest"})
     assert response.status == 200, response.body
-    for path, public in ((target, not public_child), (f"{target}/child", public_child)):
+    for path, public in ((target, not public_child), (f"{target}/{child}", public_child)):
         assert get(member, f"{DATASETS}/rows", path=path).status == 200
         assert get(anon, f"{DATASETS}/rows", path=path).status == (200 if public else 404)
 

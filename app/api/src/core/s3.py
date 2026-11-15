@@ -683,9 +683,7 @@ class S3:
         }
 
     async def _check_writable(self, org: Org, bucket: Bucket) -> None:
-        """flock-models is written only through upload sessions and emptied only through the
-        model routes (D97, D109), so the dashboard's own writes are refused there, as the proxy
-        refuses every other client's."""
+        """Refuse generic model writes and dataset writes during visibility inventory."""
         if bucket.managed == "datasets" and not await self.store.db.fetchval(
             "SELECT dataset_grants_ready OR NOT EXISTS "
             "(SELECT FROM meta WHERE key = 'dataset_public_grants') FROM orgs WHERE pk = $1",
