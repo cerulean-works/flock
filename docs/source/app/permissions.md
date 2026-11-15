@@ -69,4 +69,4 @@ Private projects and datasets answer 404 to outsiders, the same as ones that don
 - **Invitations are tied to an email.** Only the account with the invited email can accept one.
 - **Org admins can't reset a super admin's password.** That would let them take over the server.
 
-Roles are checked on every request, so changes apply at once. One exception: an open [live stream](api/dashboard#the-live-stream) was authorized when it opened, and keeps running after its user loses access.
+Roles are checked on every request. Removing a member closes the organization's open [live streams](api/dashboard#the-live-stream). Remaining members can reconnect; the removed member can read only public projects.

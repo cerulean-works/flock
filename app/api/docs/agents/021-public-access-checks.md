@@ -25,6 +25,14 @@ The local file backend resolves `./wandb-metadata.json` to the same file as the 
 Apply the public-field filter when the validated path components name that file, including
 encoded dot and repeated-slash spellings. Members still read the original uploaded content.
 
+### D153. Removing membership closes the organization's project streams
+
+Close every project stream in the organization through the existing transactional event bus.
+Remaining members reconnect and replay normally. This supersedes stage 003's documented
+exception for streams opened before removal. Recheck membership after subscribing to cover
+a removal that committed while the connection opened. Stop initial replay if the subscription
+closed while its data was being read. Per-user subscription tracking is outside this change.
+
 ## Plan
 
 Reproduce both cases through the HTTP API using synthetic data, fix the boundary checks, and

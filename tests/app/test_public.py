@@ -296,3 +296,24 @@ def test_runs_moved_into_a_public_project_become_readable(
     assert moved.status == 200, moved.body
     assert call(anon, "GET", "/p/runs/r2").status == 200
     assert anon.runs("p")["total"] == 2
+
+
+def test_removed_creator_cannot_change_visibility_or_keep_private_stream(
+    setup: tuple[Client, Client, Client, Client], events: Callable[..., EventStream]
+) -> None:
+    api, member, _, _ = setup
+    member.create_run("mine", "live")
+    stream = events("mine", "live:0", client=member)
+    remaining = events("mine", "live:0", client=api)
+    assert remaining.next_of("hello")["runs"]["live"]["lines"] == 0
+    assert stream.next_of("hello")["runs"]["live"]["lines"] == 0
+    user_id = member.get("/api/v1/me").json()["id"]
+    assert api.delete(f"/api/v1/orgs/flock/members/{user_id}").status == 204
+    assert member.patch(f"{P}/mine", {"visibility": "public"}).status == 404
+    api.stream("mine", "live", history=[{"_step": 0, "loss": 2.0}])
+    with pytest.raises(AssertionError, match="stream ended"):
+        stream.next_of("history")
+    with pytest.raises(AssertionError, match="stream ended"):
+        remaining.next_of("history")
+    reconnected = events("mine", "live:0", client=api)
+    assert reconnected.next_of("history")["series"]["loss"]["y"] == [2.0]

@@ -2,7 +2,7 @@
 
 Endpoints for the Lance datasets in an organization's `flock-datasets` bucket, which the dashboard's Datasets tab uses. Paths are relative to `/api/v1/orgs/{org}/datasets`. Every endpoint checks that you belong to the organization, and answers 404 otherwise, as it does when the server has no S3. The exception is [public datasets](#public), whose reads answer anyone. For how datasets work, see [Datasets](../s3-behavior#datasets).
 
-A dataset's `path` is its folder in `flock-datasets`, such as `eval/mmlu`, without slashes at either end. A path that isn't a dataset answers 404 everywhere except `GET at`. When Lance can't read a dataset (a corrupt manifest, a missing data file), the answer is 502 with Lance's message in `error`.
+A dataset's `path` is its folder in `flock-datasets`, such as `eval/mmlu`, without slashes at either end or `.` and `..` path segments. A path that isn't a dataset answers 404 everywhere except `GET at`. When Lance can't read a dataset (a corrupt manifest, a missing data file), the answer is 502 with Lance's message in `error`.
 
 ## Reading[[reading]]
 

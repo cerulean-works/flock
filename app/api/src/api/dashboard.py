@@ -323,19 +323,23 @@ async def stream(
     # have by line number.
     outsider = store.accounts.access(viewer, project) == "public"
     sub = store.live.subscribe(project.pk, cursors, system, outsider)
-    if outsider:
-        # Made private after the project was read but before this subscribed: its close
-        # message went to no one, so look again now that any later one would reach us.
-        now = await store.project(project.entity, project.name)
-        if now is None or not now.public:
-            store.live.unsubscribe(project.pk, sub)
-            raise APIError(404, f"project {project.entity}/{project.name} not found")
+    # A membership or visibility change before subscribing reached no subscriber. Recheck
+    # both now; later changes close this subscription through the live event bus.
+    current_viewer = await store.accounts.user(viewer.pk) if viewer is not None else None
+    now = await store.project(project.entity, project.name)
+    access = store.accounts.access(current_viewer, now) if now is not None else None
+    if access is None:
+        store.live.unsubscribe(project.pk, sub)
+        raise APIError(404, f"project {project.entity}/{project.name} not found")
+    sub.outsider = access == "public"
 
     async def events() -> AsyncIterator[bytes]:
         try:
             found = await store.project_runs(project, cursors)
             watched = [found[n] for n in cursors if n in found]
             total, active = await store.run_counts(project)
+            if sub.closed:
+                return
             yield Hub.event(
                 "hello",
                 {
@@ -359,6 +363,8 @@ async def stream(
                     if since is None or since >= run.lines(series_stream):
                         continue
                     (hist,) = await store.histories([run], None, series_stream)
+                    if sub.closed:
+                        return
                     points = hist.delta(since, x_key)
                     if points:
                         yield Hub.points_event(
