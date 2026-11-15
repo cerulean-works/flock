@@ -32,7 +32,7 @@ from flock.training.core.lr_scheduler import LRSchedulerConfig, LRScheduleSegmen
 from flock.training.core.models import BaseModel
 from flock.training.core.models.olmo2 import Olmo2
 from flock.training.core.optimizers import AdamWConfig, OptimizerInterface
-from flock.training.core.trainer import Trainer, TrainerCheckpoint, TrainerConfig
+from flock.training.core.trainer import Trainer, TrainerCheckpoint, TrainerConfig, TrainerState
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
