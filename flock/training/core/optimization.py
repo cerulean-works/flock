@@ -1,5 +1,3 @@
-"""Define immutable optimizer settings accepted by the training configuration."""
-
 from dataclasses import dataclass
 
 

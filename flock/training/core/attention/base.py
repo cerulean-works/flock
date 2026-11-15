@@ -1,5 +1,3 @@
-"""Provide grouped self-attention with optional rotary position embeddings."""
-
 import torch
 from torch import nn
 

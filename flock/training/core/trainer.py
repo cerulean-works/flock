@@ -1,5 +1,3 @@
-"""Train causal language models with evaluation and resumable local checkpoints."""
-
 import logging
 import math
 import random

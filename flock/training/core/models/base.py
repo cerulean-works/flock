@@ -1,5 +1,3 @@
-"""Share seeded initialization, tokenizer loading and causal input preparation."""
-
 from abc import ABC, abstractmethod
 from collections.abc import Generator
 from contextlib import contextmanager

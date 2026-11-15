@@ -1,5 +1,3 @@
-"""Persist model checkpoints and manage local retention and asynchronous uploads."""
-
 from __future__ import annotations
 
 import json
