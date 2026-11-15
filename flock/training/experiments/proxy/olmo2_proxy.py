@@ -37,8 +37,8 @@ class ProxySize:
 # Table 1), the sizes are 76,308,864 and 190,354,176 parameters.
 PROXY_SIZES = {
     # DataDecide's 60M width, depth and heads (arXiv 2504.11393, Table 2), with the 190M's MLP
-    # rule. Its peak LR extends the ladder's log-log line through 190M and 370M below 190M; no
-    # published value exists at this size.
+    # rule. Its peak LR extends the ladder's log-log line through its 190M and 370M points down
+    # to this size, where no published value exists.
     "76m": ProxySize(
         model=Olmo2Config(
             vocab_size=100352,
@@ -155,6 +155,9 @@ if __name__ == "__main__":
     parser.add_argument("--validation-steps", type=int, help="Evaluation interval in updates.")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--resume", action="store_true", help="Continue from the latest checkpoint in --output-dir."
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -176,6 +179,6 @@ if __name__ == "__main__":
         seed=args.seed,
     )
     try:
-        trainer.train()
+        trainer.train(resume_from_checkpoint=args.resume)
     finally:
         trainer.run.finish()
