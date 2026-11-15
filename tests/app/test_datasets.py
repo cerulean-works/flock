@@ -1482,6 +1482,9 @@ def test_new_paths_are_private_after_the_visibility_cutover(flock: S3Flock, writ
     flock.call(datasets(flock).close_existing())
 
     anon = flock.anonymous()
+    assert api.post("/api/v1/orgs", {"name": "outsiders"}).status == 201
+    outsider = flock.add_user("outside@default.test", org="outsiders").api
+    assert get(outsider, f"{DATASETS}/info", path="existing/public").status == 200
     assert get(anon, f"{DATASETS}/info", path="existing/public").status == 200
     assert get(anon, f"{DATASETS}/info", path="existing/private").status == 404
     writer.write("new", table(0, 2))
@@ -1495,8 +1498,10 @@ def test_new_paths_are_private_after_the_visibility_cutover(flock: S3Flock, writ
         ("versions", {}),
         ("readme", {}),
     ):
-        assert get(anon, f"{DATASETS}/{route}", path="new", **params).status == 404
+        for client in (anon, outsider):
+            assert get(client, f"{DATASETS}/{route}", path="new", **params).status == 404
     assert make_public(api, "new").status == 200
+    assert get(outsider, f"{DATASETS}/info", path="new").status == 200
     assert get(anon, f"{DATASETS}/info", path="new").status == 200
     assert make_private(api, "new").status == 204
     assert get(anon, f"{DATASETS}/info", path="new").status == 404

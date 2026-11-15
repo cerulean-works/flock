@@ -99,11 +99,14 @@ def test_built_web_enforces_caller_identity_across_pages_data_and_relays(
             for client in (anon, outside):
                 response = client.get(path)
                 assert response.status_code == 404, (path, response.text)
+                assert response.headers["cache-control"] == "private, no-store"
                 assert "row 1946" not in response.text
                 assert "private-run-146" not in response.text
         for path in ("/flock/p", "/datasets/flock/private"):
             assert inside.get(path).status_code == 200, path
-            assert anon.get(path).status_code == 303, path
+            redirect = anon.get(path)
+            assert redirect.status_code in (303, 307), (path, redirect.text)
+            assert redirect.headers["location"].startswith("/login"), redirect.headers
             assert outside.get(path).status_code == 404, path
             data = inside.get(path + "/__data.json")
             assert data.status_code == 200
@@ -146,3 +149,16 @@ def test_built_web_enforces_caller_identity_across_pages_data_and_relays(
         refused = anon.post("/api/datasets/flock/rename", json={"path": "private", "to": "leaked"})
         assert refused.status_code == 401
         assert inside.get("/api/datasets/flock/rows?path=private").status_code == 200
+        assert (
+            api.request("PUT", "/api/v1/orgs/flock/datasets/public", {"path": "private"}).status
+            == 200
+        )
+        for client in (anon, outside):
+            for path in ("/datasets/flock/private", "/api/datasets/flock/rows?path=private"):
+                response = client.get(path)
+                assert response.status_code == 200, (path, response.text)
+                assert response.headers["cache-control"] == "private, no-store"
+            response = client.get("/datasets/flock/private/__data.json")
+            assert response.status_code == 200
+            assert response.json()["type"] == "data"
+            assert response.headers["cache-control"] == "private, no-store"
