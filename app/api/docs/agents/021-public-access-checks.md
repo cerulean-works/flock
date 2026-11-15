@@ -51,8 +51,8 @@ contract check prevents an older binary from restarting after this point.
 
 Existing orgs temporarily refuse anonymous dataset reads and dataset operations while their
 inventory is pending. The inventory grants only existing dataset paths in previously open
-orgs, excluding exact private flags, then marks the org ready in the same transaction. Failed
-inventories publish no partial result and are retried. New paths and HF imports are private.
+orgs, excluding exact private flags, then marks the org ready in the same transaction. The Storage tab and proxy also refuse new writes while inventory is pending. Nested datasets
+are inventoried beneath their parents. Failed inventories publish no partial result and are retried. New paths and HF imports are private.
 Writes begun before cutover may finish under their original policy; the launch criterion is
 that the contract has applied and every org's inventory has completed. Upstream direct writers
 must pause for the cutover, since the proxy cannot govern credentials issued outside Flock.
@@ -63,6 +63,12 @@ Private destination flags take precedence. Move and restore grant a public sourc
 only after object copying succeeds. An implicit-private source makes a destination private
 before any object lands there, even if a public grant remains at that destination. Permissions
 remain attached to exact paths across versions and deletes; a rename removes source grants.
+
+### D157. Permission-sensitive responses cannot be cached
+
+API content and dashboard HTML/data responses send `Cache-Control: private, no-store` so a
+previous public response is not reused after a permission change. Digest-addressed avatars
+retain their immutable caching. This cannot remove copies already downloaded by a reader.
 
 ## Plan
 

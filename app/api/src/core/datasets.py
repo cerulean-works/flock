@@ -1080,8 +1080,8 @@ class Datasets:
                     break
             if f"{folder}{VERSIONS}" in subfolders:
                 found.append(folder.removesuffix("/"))
-            else:
-                folders += subfolders
+            # Raw S3 writers can place a dataset beneath another dataset. Inventory both.
+            folders += [p for p in subfolders if p != f"{folder}{VERSIONS}"]
         return sorted(found)
 
     async def _copy_private(self, org: Org, path: str, to: str) -> None:

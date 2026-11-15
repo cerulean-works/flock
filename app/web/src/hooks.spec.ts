@@ -13,10 +13,12 @@ vi.mock('#lib/server/session.ts', async (original) => ({
 /** A request for `path`, signed in or not, that the app answers with `status`. */
 async function request(
 	path: string,
-	{ token = null as string | null, status = 200, method = 'GET' } = {}
+	{ token = null as string | null, status = 200, method = 'GET', cacheControl = '' } = {}
 ) {
 	vi.mocked(resolveSession).mockResolvedValue({ token, user: null });
-	const resolve = vi.fn(async () => new Response('page', { status }));
+	const resolve = vi.fn(
+		async () => new Response('page', { status, headers: { 'cache-control': cacheControl } })
+	);
 	const event = {
 		url: new URL(`https://flock.test${path}`),
 		cookies: { get: () => undefined },
@@ -80,7 +82,6 @@ describe('signed-in users', () => {
 	});
 });
 
-
 describe('permission-sensitive responses', () => {
 	it.each([null, 'member-token', 'nonmember-token'])(
 		'prevents caching for session %s',
@@ -91,4 +92,10 @@ describe('permission-sensitive responses', () => {
 			}
 		}
 	);
+});
+
+it('keeps digest avatar caching', async () => {
+	const policy = 'public, max-age=31536000, immutable';
+	const { res } = await request('/api/v1/avatars/digest', { cacheControl: policy });
+	expect(res.headers.get('cache-control')).toBe(policy);
 });

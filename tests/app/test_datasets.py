@@ -1522,6 +1522,10 @@ def test_visibility_inventory_fails_closed_and_retries_atomically(
     assert get(anon, f"{DATASETS}/info", path="old").status == 404
     assert get(api, f"{DATASETS}/info", path="old").status == 409
     assert make_public(api, "old").status == 409
+    member = flock.add_user("pending@member.test")
+    storage = f"{BUCKETS}/flock-datasets"
+    assert member.api.post(f"{storage}/folders", {"prefix": "new/_versions/"}).status == 409
+    assert member.api.post(f"{storage}/objects/delete", {"keys": ["old/README.md"]}).status == 409
     assert api.post(f"{DATASETS}/rename", {"path": "old", "to": "other"}).status == 409
     # A real signed proxy write is refused before touching the upstream during inventory.
     import boto3
@@ -1594,3 +1598,15 @@ def test_new_orgs_and_closed_legacy_orgs_do_not_get_implicit_grants(
     other = Writer(flock, org="neworg")
     other.write("new", table(0, 1))
     assert get(flock.anonymous(), "/api/v1/orgs/neworg/datasets/info", path="new").status == 404
+
+
+def test_visibility_inventory_preserves_nested_public_datasets(
+    flock: S3Flock, writer: Writer
+) -> None:
+    for path in ("outer", "outer/child"):
+        writer.write(path, table(0, 1))
+        assert get(flock.anonymous(), f"{DATASETS}/info", path=path).status == 200
+    asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
+    assert flock.call(datasets(flock).close_existing()) == 2
+    for path in ("outer", "outer/child"):
+        assert get(flock.anonymous(), f"{DATASETS}/info", path=path).status == 200
