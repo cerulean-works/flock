@@ -26,6 +26,7 @@ from flock.eval.tasks import TASKS, Choice, Dataset, MCDoc, MultipleChoiceTask, 
 from flock.eval.tasks.perplexity import _docs_by_domain
 from flock.hub.models import upload as hub_upload
 from flock.hub.models.files import write_training_state
+from flock.training import TokenChunkDataset
 from flock.training.core import trainer as trainer_module
 from flock.training.core.data_utils import LanceBatchCollator
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRScheduleSegment, StepLRScheduler
@@ -82,7 +83,7 @@ def trainer_factory(
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
 
     def make(
-        dataset: list[dict[str, str]] | SafeLanceDataset | None = None,
+        dataset: list[dict[str, str]] | SafeLanceDataset | TokenChunkDataset | None = None,
         logging_steps: int = 1,
         num_workers: int = 1,
         prefetch_factor: int | None = 1,
@@ -2093,3 +2094,71 @@ def test_checkpoint_manager_preserves_step_listing_and_selects_by_save_time(
         "checkpoint-2",
     ]
     assert trainer.checkpoint_manager.latest_checkpoint() == trainer.output_dir / "checkpoint-1"
+
+
+def test_chunk_training_resumes_weights_targets_and_sampler(
+    trainer_factory: TrainerFactory,
+    tokenizer: TokenizersBackend,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "chunk-source.lance"
+    texts = ["a b c d " * 6, "b c d " * 5, "a b"]
+    lance.write_dataset(pa.table({"text": texts}), str(source))
+    chunks = TokenChunkDataset.prepare(
+        dataset=SafeLanceDataset(str(source), dataset_options={"version": 1}),
+        tokenizer=tokenizer,
+        input_column="text",
+        cache_dir=tmp_path / "tokens",
+        chunk_length=4,
+    )
+    reference, _, _ = trainer_factory(
+        dataset=chunks,
+        batch_size=8,
+        num_workers=0,
+        prefetch_factor=None,
+        output_dir=str(tmp_path / "reference"),
+    )
+    reference.train()
+    assert reference.total_steps == math.ceil(len(chunks) / 8)
+    assert int(reference.state.total_tokens) == sum(
+        len(ids) - 1 for ids in tokenizer(texts, truncation=False)["input_ids"]
+    )
+    interrupted, _, _ = trainer_factory(
+        dataset=chunks,
+        batch_size=8,
+        num_workers=0,
+        prefetch_factor=None,
+        output_dir=str(tmp_path / "interrupted"),
+        save_steps=1,
+    )
+    save = interrupted.checkpoint_manager.save_model
+
+    def save_and_interrupt() -> None:
+        save()
+        if int(interrupted.state.step) == 1:
+            raise InterruptedError("completed first chunk batch")
+
+    monkeypatch.setattr(interrupted.checkpoint_manager, "save_model", save_and_interrupt)
+    with pytest.raises(InterruptedError):
+        interrupted.train()
+    resumed, _, _ = trainer_factory(
+        dataset=TokenChunkDataset(cache_dir=tmp_path / "tokens", chunk_length=4),
+        batch_size=8,
+        num_workers=0,
+        prefetch_factor=None,
+        output_dir=str(interrupted.output_dir),
+    )
+    resumed.train(resume_from_checkpoint=True)
+    assert_nested_equal(resumed.model.state_dict(), reference.model.state_dict())
+    assert_nested_equal(resumed.state_dict(), reference.state_dict())
+    # Length alone cannot detect a changed context when both runs have the same batches.
+    changed, _, _ = trainer_factory(
+        dataset=TokenChunkDataset(cache_dir=tmp_path / "tokens", chunk_length=5),
+        batch_size=8,
+        num_workers=0,
+        prefetch_factor=None,
+        output_dir=str(tmp_path / "changed"),
+    )
+    with pytest.raises(ValueError, match="data"):
+        changed.validate_state_dict(resumed.state_dict())

@@ -122,6 +122,52 @@ when either the input or target position is padding. Loss is summed cross-entrop
 over valid targets divided by their count; an all-ignored batch has zero loss.
 Supply text that produces at least two tokens per row for useful training.
 
+## Keep long documents as chunks
+
+Prepare a local token cache before constructing the model or trainer. The cache keeps
+source columns and tokenizes each document once without truncation. Your tokenizer's
+special-token policy applies once per document; no BOS or EOS is inserted at chunk
+boundaries. Configure the tokenizer to add EOS at document ends if your corpus needs it.
+
+```python
+from flock.training import TokenChunkDataset
+
+chunks = TokenChunkDataset.prepare(
+    dataset=dataset,
+    tokenizer=tokenizer,
+    input_column="text",
+    cache_dir=".training-cache/documents",
+    chunk_length=4096,
+)
+trainer = Trainer(config=config, model=model, tokenizer=tokenizer, dataset=chunks)
+```
+
+Here `batch_size=8` means eight chunks. The sampler shuffles chunks independently,
+including chunks from the same document. The schedule counts chunk batches, so
+retaining long documents increases the number of updates in a complete pass.
+Choose the learning-rate schedule for that new count.
+
+Each item holds at most 4096 token IDs, yielding at most 4095 next-token targets.
+Adjacent chunks overlap by one context token. Every original next-token target appears
+exactly once, including a final tail with only one target. Documents with fewer than two
+tokens produce no items. Short documents remain separate; there is no packing.
+Apply document exclusions and deduplication before preparing the cache. Each chunk
+keeps its document metadata and adds its document index and chunk index.
+
+Keep this cache private like its source: it contains the source text and tokens.
+Preparation refuses an existing path. Reopen the completed cache to resume, or use a
+different chunk length without tokenizing again:
+
+```python
+chunks = TokenChunkDataset(cache_dir=".training-cache/documents", chunk_length=4096)
+```
+
+The cache pins its first Lance version. Do not modify it. Resume checks its source URI
+and version, tokenizer rules and chunk length in addition to the normal sampler settings.
+Changing any of those requires a fresh training run. The trainer also checks the cache's
+text column and tokenizer against the supplied configuration. Chunk length must not
+exceed the tokenizer's model limit.
+
 ## Train a Hugging Face architecture
 
 `HFCompatibleModel` wraps a causal language model from `transformers`, such as Qwen 3,
@@ -438,7 +484,7 @@ number of batches in the seeded shuffle. Logging and saving keep their original
 step numbers. Resume rejects a changed model architecture/configuration, dataset
 size, batch size, seed, input column, optimizer group settings or scheduler
 configuration/base rates. Keep the dataset contents and tokenizer unchanged;
-the checkpoint does not verify their identity. Resume initializes a new tracking
+ordinary text-dataset checkpoints do not verify their identity. Token-cache checkpoints also verify the cache identity described above. Resume initializes a new tracking
 run and records the restored global steps there.
 
 To resume a checkpoint stored in the Hub, download its training state too, then

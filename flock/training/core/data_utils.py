@@ -37,10 +37,13 @@ class LanceBatchCollator:
         input_column (`str`): Text field in each dataset row.
     """
 
-    def __init__(self, tokenizer: TokenizersBackend, input_column: str) -> None:
+    def __init__(
+        self, tokenizer: TokenizersBackend, input_column: str, *, token_chunks: bool = False
+    ) -> None:
         """Store the tokenizer and source text column for worker-side collation."""
         self.tokenizer = tokenizer
         self.input_column = input_column
+        self.token_chunks = token_chunks
 
     def collate_fn(self, batch: list[dict[str, Any]]) -> Batch:
         """Pad and truncate rows, then align inputs with next-token labels.
@@ -56,12 +59,20 @@ class LanceBatchCollator:
             `KeyError`: If a row lacks the configured input column.
         """
         # It is up to the model to set max length, padding side and padding token
-        tokenized: dict[str, torch.Tensor] = self.tokenizer(
-            [row[self.input_column] for row in batch],
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-        )
+        if self.token_chunks:
+            tokenized = self.tokenizer.pad(
+                {"input_ids": [row["_flock_chunk_ids"] for row in batch]},
+                return_tensors="pt",
+                padding=True,
+                return_attention_mask=True,
+            )
+        else:
+            tokenized = self.tokenizer(
+                [row[self.input_column] for row in batch],
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+            )
         input_ids = tokenized["input_ids"]
         mask = tokenized["attention_mask"].bool()
 
