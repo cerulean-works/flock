@@ -20,6 +20,7 @@ from flock.eval.model import DEFAULT_BATCH_TOKENS, FlockCausalLM, ScoringModel
 from flock.eval.run import PreparedTask, prepare_task, score_prepared
 from flock.eval.tasks import TASKS
 from flock.training.core.checkpoint import CheckpointManager
+from flock.training.core.chunks import TokenChunkDataset
 from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableBatchDataSampler
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState, StepLRScheduler
 from flock.training.core.models import BaseModel
@@ -37,7 +38,7 @@ class TrainerConfig(PydanticBaseModel):
             Name used for the default checkpoint directory and evaluation labels.
             This is not passed to `wandb.init` as the tracking run's name.
         input_column (`str`): Text column read from each Lance row.
-        batch_size (`int`): Positive number of dataset rows per optimizer update.
+        batch_size (`int`): Positive number of dataset items per optimizer update; chunks when using a token cache.
         max_steps (`int`, *optional*):
             Positive cap on optimizer updates. The run ends at the cap, or at the end of
             the pass if that comes first. Fractional schedule times are fractions of the
@@ -157,12 +158,14 @@ class CheckpointDataConfig(_TrainerStateSchema):
     """Record the data settings compared before restoring training state.
 
     Attributes:
-        dataset_size (`int`): Nonnegative row count; dataset contents are not hashed.
+        dataset_size (`int`): Nonnegative number of sampled items.
+        chunk_fingerprint (`str`, *optional*): Cached source, tokenizer and chunk-layout identity.
         batch_size (`int`): Positive rows per optimizer update.
         seed (`int`): Shuffle and training seed.
         input_column (`str`): Text field read by the collator.
     """
 
+    chunk_fingerprint: str | None = None
     dataset_size: int = Field(ge=0)
     batch_size: int = Field(gt=0)
     seed: int
@@ -385,7 +388,7 @@ class Trainer:
         tokenizer (`TokenizersBackend`):
             Tokenizer configured with a padding token, padding side and maximum
             length. The collator applies padding, truncation and target shifting.
-        dataset (`SafeLanceDataset`): Finite, indexable dataset of text rows.
+        dataset (`SafeLanceDataset` or `TokenChunkDataset`): Finite, indexable text rows or cached token chunks.
 
     Raises:
         `NotImplementedError`: If the optimizer configuration selects Muon.
@@ -401,9 +404,17 @@ class Trainer:
         config: TrainerConfig,
         model: BaseModel,
         tokenizer: TokenizersBackend,
-        dataset: SafeLanceDataset,
+        dataset: SafeLanceDataset | TokenChunkDataset,
     ) -> None:
         """Initialize tracking, device placement, optimization and checkpoint storage."""
+        if isinstance(dataset, TokenChunkDataset):
+            if dataset.chunk_length > tokenizer.model_max_length:
+                raise ValueError("chunk_length exceeds tokenizer model_max_length")
+            if dataset.manifest["input_column"] != config.input_column:
+                raise ValueError("Chunk cache input column does not match Trainer config")
+            digest = TokenChunkDataset.tokenizer_fingerprint(tokenizer)
+            if dataset.manifest["tokenizer"] != digest:
+                raise ValueError("Chunk cache tokenizer does not match Trainer tokenizer")
         self.run_name = config.run_name
         self.seed = config.seed
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -465,7 +476,11 @@ class Trainer:
 
     def _get_training_dataloader(self, skip_batches: int = 0) -> DataLoader:
         """Build a seeded, resumable loader with spawned workers and CUDA pinning."""
-        collator = LanceBatchCollator(self.tokenizer, self.ds_input_column)
+        collator = LanceBatchCollator(
+            self.tokenizer,
+            self.ds_input_column,
+            token_chunks=isinstance(self.dataset, TokenChunkDataset),
+        )
         sampler = ResumableBatchDataSampler(
             batch_size=self.batch_size,
             dataset_size=len(self.dataset),
@@ -680,6 +695,9 @@ class Trainer:
     def data_config(self) -> dict[str, Any]:
         """Return dataset size, batch size, seed and input column used for resume checks."""
         return {
+            "chunk_fingerprint": (
+                self.dataset.fingerprint if isinstance(self.dataset, TokenChunkDataset) else None
+            ),
             "dataset_size": len(self.dataset),
             "batch_size": self.batch_size,
             "seed": self.seed,

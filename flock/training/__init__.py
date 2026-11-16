@@ -5,6 +5,7 @@ configurations here. Model implementations and presets live in
 `flock.training.core.models`. Standalone experiments are separate entry points.
 """
 
+from .core.chunks import TokenChunkDataset
 from .core.data_utils import DatasetConfig, get_dataset
 from .core.lr_scheduler import LRSchedulerConfig, LRScheduleSegment
 from .core.models import Olmo2Config
@@ -19,6 +20,7 @@ __all__ = [
     "MuonConfig",
     "Olmo2Config",
     "OptimizerConfig",
+    "TokenChunkDataset",
     "Trainer",
     "TrainerConfig",
     "get_dataset",

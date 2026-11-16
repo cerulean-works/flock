@@ -208,3 +208,8 @@ compatibility checks remain in the trainer.
     - load_checkpoint
     - checkpoints
     - latest_checkpoint
+
+## Token chunks
+
+[[autodoc]] training.TokenChunkDataset
+    - prepare
