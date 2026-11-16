@@ -671,8 +671,8 @@ class Trainer:
                         scorer, TASKS[task], limit=self.validation_limit
                     )
             # We make sure the model is evaluated eagerly so validation batches cannot extend that graph path.
-            # For more detail please chedck https://github.com/cerulean-works/flock/pull/112
-            # NOTE: If we are doing a really big training run, we may still use torch.compile for validation for better performance.
+            # For more details, please check https://github.com/cerulean-works/flock/pull/112
+            # NOTE: If we are doing a really large training run, we may still use torch.compile for validation to improve performance.
             with (
                 torch.compiler.set_stance("force_eager")
                 if self.torch_compile
