@@ -34,6 +34,7 @@ class TokenChunkDataset(Dataset):
         self.lengths = cached.to_table(columns=["_flock_token_count"])[
             "_flock_token_count"
         ].to_numpy()
+        # Each chunk contributes at most chunk_length - 1 new next-token targets.
         counts = (np.maximum(self.lengths - 1, 0) + chunk_length - 2) // (chunk_length - 1)
         self.ends = np.cumsum(counts, dtype=np.int64)
         self.fingerprint = hashlib.sha256(
@@ -46,7 +47,8 @@ class TokenChunkDataset(Dataset):
         backend = json.loads(tokenizer.backend_tokenizer.to_str())
         backend.pop("padding", None)
         backend.pop("truncation", None)
-        return hashlib.sha256(json.dumps(backend, sort_keys=True).encode()).hexdigest()
+        rules = {"backend": backend, "split_special_tokens": tokenizer.split_special_tokens}
+        return hashlib.sha256(json.dumps(rules, sort_keys=True).encode()).hexdigest()
 
     @classmethod
     def prepare(
@@ -120,6 +122,7 @@ class TokenChunkDataset(Dataset):
         result = []
         for index, document in zip(indices, documents):
             chunk_index = index - (int(self.ends[document - 1]) if document else 0)
+            # Reuse the preceding chunk's final token as context for the next target.
             start = chunk_index * (self.chunk_length - 1)
             row = dict(rows[document])
             row["_flock_chunk_ids"] = row["_flock_chunk_ids"][start : start + self.chunk_length]

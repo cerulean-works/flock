@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | implementation, validation pending |
+| Status | implemented and smoke-tested |
 | Builds on | the modular Trainer and its resumable batch sampler |
 | Keeps | existing text-dataset behavior, model interfaces and shifted labels |
 
@@ -42,6 +42,9 @@ check exact targets, bounded batches and resumed weights before a GPU smoke.
 The existing sampler and optimizer loop are reused unchanged. The collator pads cached
 IDs without re-tokenizing or truncating. Tests compare every adjacent input-target pair
 with each original document and compare interrupted training with uninterrupted training.
+A full source replay retained every target at both tested context lengths; the GPU smoke
+matched its independently counted targets. Review added special-token splitting to the
+cache fingerprint so a changed tokenizer policy cannot silently reuse a checkpoint.
 
 ## Known gaps
 

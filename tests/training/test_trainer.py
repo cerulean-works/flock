@@ -2162,3 +2162,41 @@ def test_chunk_training_resumes_weights_targets_and_sampler(
     )
     with pytest.raises(ValueError, match="data"):
         changed.validate_state_dict(resumed.state_dict())
+
+
+def test_chunk_cache_rejects_changed_special_token_policy(
+    trainer_factory: TrainerFactory,
+    tokenizer: TokenizersBackend,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "special-source.lance"
+    lance.write_dataset(pa.table({"text": ["a [EOS]"]}), str(source))
+    chunks = TokenChunkDataset.prepare(
+        dataset=SafeLanceDataset(str(source), dataset_options={"version": 1}),
+        tokenizer=tokenizer,
+        input_column="text",
+        cache_dir=tmp_path / "original",
+        chunk_length=8,
+    )
+    reference, _, _ = trainer_factory(dataset=chunks)
+    checkpoint = reference.state_dict()
+    digest = chunks.manifest["tokenizer"]
+    tokenizer(["a", "a b c d"], padding=True, truncation=True, max_length=3)
+    assert TokenChunkDataset.tokenizer_fingerprint(tokenizer) == digest
+
+    tokenizer.split_special_tokens = True
+    with pytest.raises(ValueError, match="tokenizer"):
+        trainer_factory(dataset=chunks)
+    changed = TokenChunkDataset.prepare(
+        dataset=SafeLanceDataset(str(source), dataset_options={"version": 1}),
+        tokenizer=tokenizer,
+        input_column="text",
+        cache_dir=tmp_path / "changed",
+        chunk_length=8,
+    )
+    assert len(changed) == len(chunks)
+    assert changed[0]["_flock_chunk_ids"] != chunks[0]["_flock_chunk_ids"]
+    assert changed.fingerprint != chunks.fingerprint
+    resumed, _, _ = trainer_factory(dataset=changed)
+    with pytest.raises(ValueError, match="data"):
+        resumed.validate_state_dict(checkpoint)
