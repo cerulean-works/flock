@@ -427,3 +427,8 @@ Where the build differs from the sections above:
   `traefik.docker.*`, expecting Traefik to ignore whichever didn't apply. Traefik v3 instead
   skips a service that has both ("both Docker and Swarm labels are defined"), which left every
   domain answering 404 on the first deploy. The stack now sets only `traefik.swarm.*`.
+- **Domains come from Dokploy (D140).** The stack file first held each service's Traefik routes,
+  with the hosts in `FLOCK_*_HOST` settings. Dokploy's Domains tab can write those routes for a
+  Stack (under `deploy.labels`, with `traefik.swarm.network`), so the file now keeps only
+  `traefik.enable`, `traefik.swarm.network` and `traefik.swarm.lbswarm`. Dokploy never sets
+  `lbswarm`, and it applies to every route of the service, so it stays in the file.
