@@ -28,7 +28,7 @@ from flock.training.core.optimizers import BaseOptimizer, OptimizerConfig, Optim
 
 
 class TrainerConfig(PydanticBaseModel):
-    """Configure one shuffled training pass and its tracking, evaluation and saves.
+    """Configure one shuffled pass, or its first `max_steps` updates, with tracking and saves.
 
     Fields are frozen after validation; nested lists are still mutable. Unknown
     fields are rejected. Positive intervals count optimizer updates, not tokens.
@@ -39,6 +39,11 @@ class TrainerConfig(PydanticBaseModel):
             This is not passed to `wandb.init` as the tracking run's name.
         input_column (`str`): Text column read from each Lance row.
         batch_size (`int`): Positive number of dataset items per optimizer update; chunks when using a token cache.
+        max_steps (`int`, *optional*):
+            Positive cap on optimizer updates. The run ends at the cap, or at the end of
+            the pass if that comes first. Fractional schedule times are fractions of the
+            capped run; a schedule whose update counts exceed it is rejected when the
+            trainer is built.
         optimizer_config (`OptimizerConfig`):
             Optimizer settings. Only `AdamWConfig` is currently implemented.
         lr_scheduler_config (`LRSchedulerConfig`): Learning-rate timeframes and interpolation.
@@ -93,6 +98,7 @@ class TrainerConfig(PydanticBaseModel):
 
     input_column: str
     batch_size: int = Field(gt=0)
+    max_steps: int | None = Field(default=None, gt=0)
 
     optimizer_config: OptimizerConfig
     lr_scheduler_config: LRSchedulerConfig
@@ -245,7 +251,11 @@ class TrainerCheckpoint(_TrainerStateSchema):
                     "Checkpoint dataset size, batch size, seed or input column changed"
                 )
             if schedule.total_steps != info.context["total_steps"]:
-                raise ValueError("Checkpoint trainer and scheduler progress do not match this run")
+                raise ValueError(
+                    f"Checkpoint plans {schedule.total_steps} updates, but this run plans "
+                    f"{info.context['total_steps']}. Set max_steps so the run plans "
+                    f"{schedule.total_steps} updates."
+                )
         return self
 
 
@@ -363,7 +373,7 @@ class TrainerState(nn.Module):
 
 
 class Trainer:
-    """Train a causal model for one shuffled pass on CUDA device 0 or CPU.
+    """Train a causal model for one pass or `max_steps` updates on CUDA device 0 or CPU.
 
     Construction starts a W&B run, moves the supplied model without casting its
     weights, constructs the optimizer/scheduler and creates the output directory.
@@ -382,6 +392,7 @@ class Trainer:
 
     Raises:
         `NotImplementedError`: If the optimizer configuration selects Muon.
+        `ValueError`: If the learning-rate schedule does not fit the planned updates.
 
     There is no gradient accumulation, distributed training or automatic dtype
     conversion. Use a main-module guard when starting spawned loader workers.
@@ -432,6 +443,9 @@ class Trainer:
         self.logging_steps = config.logging_steps
 
         self.total_steps = math.ceil(len(self.dataset) / self.batch_size)
+        if config.max_steps is not None:
+            # The schedule and the checkpoint check plan over the capped run.
+            self.total_steps = min(self.total_steps, config.max_steps)
         optimizer_factory = OptimizerInterface.get_interface(type(config.optimizer_config))
         self.optimizer: BaseOptimizer = optimizer_factory(
             config.optimizer_config, self.model.parameters()
@@ -473,6 +487,7 @@ class Trainer:
             shuffle=True,
             seed=self.seed,
             skip_batches=skip_batches,
+            max_batches=self.total_steps,
         )
 
         return DataLoader(
@@ -559,7 +574,7 @@ class Trainer:
                 self.evaluate()
 
     def train(self, resume_from_checkpoint: bool | str | Path = False) -> None:
-        """Train one pass, optionally restoring a local checkpoint before iteration.
+        """Train one pass or `max_steps` updates, optionally restoring a checkpoint first.
 
         Args:
             resume_from_checkpoint (`bool`, `str` or `Path`, *optional*, defaults to `False`):

@@ -155,6 +155,100 @@ def test_trainer_initializes_schedule_and_metric_step(
     ]
 
 
+@pytest.mark.parametrize("max_steps", [3, 100])
+def test_step_cap_at_or_past_the_pass_changes_nothing(
+    trainer_factory: TrainerFactory, max_steps: int
+) -> None:
+    default, default_run, _ = trainer_factory(num_workers=0, prefetch_factor=None)
+    default.train()
+    capped, capped_run, _ = trainer_factory(
+        num_workers=0, prefetch_factor=None, max_steps=max_steps
+    )
+    capped.train()
+    assert capped.total_steps == capped.lr_scheduler.total_steps == 3
+    assert capped_run.metrics == default_run.metrics
+    assert_nested_equal(capped.model.state_dict(), default.model.state_dict())
+    assert_nested_equal(capped.state_dict(), default.state_dict())
+
+
+@pytest.mark.parametrize(
+    "schedule",
+    [
+        LRSchedulerConfig(
+            schedule=[
+                LRScheduleSegment(
+                    start=0, end=1.0, start_ratio=1.0, end_ratio=0.1, interpolation="cosine"
+                )
+            ]
+        ),
+        LRSchedulerConfig(
+            schedule=[
+                LRScheduleSegment(start=0, end=1, start_ratio=1.0, end_ratio=1.0),
+                LRScheduleSegment(
+                    start=1, end=1.0, start_ratio=1.0, end_ratio=0.1, interpolation="cosine"
+                ),
+            ]
+        ),
+    ],
+    ids=["cosine", "wsd"],
+)
+def test_step_cap_ends_the_run_and_its_schedule_at_the_cap(
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    schedule: LRSchedulerConfig,
+) -> None:
+    trainer, run, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        logging_steps=5,
+        save_steps=5,
+        max_steps=2,
+        lr_scheduler_config=schedule,
+    )
+    seen_batches = []
+    forward = trainer.model._forward
+
+    def recording_forward(*args: Any) -> torch.Tensor:
+        seen_batches.append(args[0].detach().clone())
+        return forward(*args)
+
+    monkeypatch.setattr(trainer.model, "_forward", recording_forward)
+    trainer.train()
+    uncapped, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
+    first_two = list(uncapped._get_training_dataloader())[:2]
+
+    assert trainer.total_steps == trainer.lr_scheduler.total_steps == 2
+    assert len(trainer._get_training_dataloader()) == 2
+    assert trainer.lr_scheduler.completed_steps == 2
+    # The decay ends at the cap, not at the end of the full pass.
+    assert trainer.lr_scheduler.get_last_lr() == pytest.approx([0.001])
+    assert [metrics["global_step"] for metrics in run.metrics] == [2]
+    assert [path.name for path in trainer.checkpoint_manager.checkpoints()] == ["checkpoint-2"]
+    assert_nested_equal(seen_batches, [batch["input_ids"] for batch in first_two])
+
+
+def test_step_cap_shorter_than_the_schedule_is_rejected(
+    trainer_factory: TrainerFactory,
+) -> None:
+    schedule = LRSchedulerConfig(
+        schedule=[LRScheduleSegment(start=0, end=3, start_ratio=0.0, end_ratio=1.0)]
+    )
+    with pytest.raises(ValueError, match="Schedule endpoint exceeds total_steps"):
+        trainer_factory(
+            num_workers=0, prefetch_factor=None, max_steps=2, lr_scheduler_config=schedule
+        )
+
+
+def test_step_cap_change_rejects_resume(trainer_factory: TrainerFactory) -> None:
+    capped, _, _ = trainer_factory(num_workers=0, prefetch_factor=None, save_steps=1, max_steps=2)
+    capped.train()
+    changed, _, _ = trainer_factory(
+        num_workers=0, prefetch_factor=None, output_dir=str(capped.output_dir), max_steps=3
+    )
+    with pytest.raises(ValueError, match="plans 2 updates, but this run plans 3"):
+        changed.train(resume_from_checkpoint=True)
+
+
 @pytest.fixture
 def validation_tasks(monkeypatch: pytest.MonkeyPatch) -> list[PerplexityTask | MultipleChoiceTask]:
     """Real task/scorer paths with local rows and the training fixture's tokenizer."""
@@ -669,7 +763,10 @@ def simulated_cuda_rng(monkeypatch: pytest.MonkeyPatch) -> Callable[[int], list[
 
 
 @pytest.mark.parametrize("resume_latest", [True, False])
-@pytest.mark.parametrize("split_step", [0, 1, 2, 3])
+@pytest.mark.parametrize(
+    ("split_step", "max_steps"),
+    [(0, None), (1, None), (2, None), (3, None), (4, None), (0, 3), (1, 3), (2, 3), (3, 3)],
+)
 @pytest.mark.parametrize(
     "schedule",
     [
@@ -699,16 +796,22 @@ def test_checkpoint_resume_matches_uninterrupted_training(
     tmp_path: Path,
     resume_latest: bool,
     split_step: int,
+    max_steps: int | None,
     schedule: LRSchedulerConfig,
 ) -> None:
     def make(output_dir: Path, **overrides: Any) -> TrainerBundle:
         trainer, run, _ = trainer_factory(
+            # Seven rows make four updates, so a cap of three ends the run early.
+            dataset=[
+                {"text": text} for text in ("a b c d", "b c", "c d a", "a b c", "d a", "b", "c")
+            ],
             num_workers=0,
             prefetch_factor=None,
             logging_steps=2,
             output_dir=str(output_dir),
             save_steps=1,
             lr_scheduler_config=schedule,
+            max_steps=max_steps,
             **overrides,
         )
         forward = trainer.model._forward
@@ -761,13 +864,19 @@ def test_checkpoint_resume_matches_uninterrupted_training(
     assert random.random() == expected_random[0]
     torch.testing.assert_close(torch.rand(4), expected_random[1], atol=0, rtol=0)
     expected_steps = list(range(1, split_step + 1)) if split_step else [0]
-    expected_steps += [step for step in (2, 3) if step > split_step]
+    # After the restart, saves fall on even steps and at the final update.
+    total_steps = reference.total_steps
+    expected_steps += [
+        step
+        for step in range(2, total_steps + 1)
+        if step > split_step and (step % 2 == 0 or step == total_steps)
+    ]
     assert [path.name for path in resumed.checkpoint_manager.checkpoints()] == [
         f"checkpoint-{step}" for step in expected_steps
     ]
     # Resuming an already completed run must perform no further updates or saves.
     resumed.train(resume_from_checkpoint=True)
-    assert resumed.lr_scheduler.completed_steps == 3
+    assert resumed.lr_scheduler.completed_steps == total_steps
     assert first_run.metrics + resumed_run.metrics == expected_run.metrics
 
 
