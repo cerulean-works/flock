@@ -652,6 +652,66 @@ def test_compiled_training_resumes_and_preserves_checkpoint_format(
         torch.compiler.reset()
 
 
+@pytest.mark.parametrize("error", [None, KeyError, RuntimeError])
+@pytest.mark.parametrize(
+    "mode", ["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"]
+)
+def test_evaluation_compilation_policy_and_restoration(
+    trainer_factory: TrainerFactory,
+    validation_tasks: list[PerplexityTask | MultipleChoiceTask],
+    monkeypatch: pytest.MonkeyPatch,
+    error: type[Exception] | None,
+    mode: str,
+) -> None:
+    trainer, _, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        torch_compile=True,
+        torch_compile_mode=mode,
+        validation_tasks=[task.name for task in validation_tasks],
+        validation_batch_tokens=4,
+    )
+    executions = []
+
+    def backend(graph: torch.fx.GraphModule, inputs: list[torch.Tensor]) -> Callable:
+        def run(*args: torch.Tensor) -> Any:
+            executions.append(None)
+            return graph.forward(*args)
+
+        return run
+
+    probe = torch.compile(torch.sin, backend=backend, fullgraph=True)
+    value = torch.ones(2)
+    score = trainer_module.score_prepared
+    bypass = mode in ("reduce-overhead", "max-autotune")
+
+    def check_score(scorer: ScoringModel, prepared: PreparedTask) -> TaskResult:
+        # A cached graph must also be bypassed, not just new compilations.
+        before = len(executions)
+        torch.testing.assert_close(probe(value), value.sin())
+        assert len(executions) == before + (0 if bypass else 1)
+        if error is not None:
+            raise error("scoring failed")
+        return score(scorer, prepared)
+
+    monkeypatch.setattr(trainer_module, "score_prepared", check_score)
+    try:
+        with torch.no_grad(), torch.autocast("cpu", dtype=trainer.model_dtype):
+            probe(value)
+            assert len(executions) == 1
+            if error is RuntimeError:
+                with pytest.raises(RuntimeError, match="scoring failed"):
+                    trainer.evaluate()
+            else:
+                trainer.evaluate()
+            before = len(executions)
+            probe(value)
+            assert len(executions) == before + 1
+        assert trainer.model.training
+    finally:
+        torch.compiler.reset()
+
+
 def test_compile_autocast_setting_is_restored_after_training_failure(
     trainer_factory: TrainerFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:

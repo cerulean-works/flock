@@ -643,7 +643,8 @@ class Trainer:
         autocast dtype, disabling autocast for FP32 evaluation. Restore every
         module's previous training mode even on failure. Return without logging
         if no tasks are configured. Log and skip `KeyError` or `FileExistsError`
-        raised during preparation/scoring; propagate other errors.
+        raised during preparation/scoring; propagate other errors. Evaluation
+        runs eagerly when training uses a compilation mode with CUDA graphs.
 
         Metrics use `eval/<task>/<metric>` keys. No scores are returned.
         """
@@ -669,11 +670,19 @@ class Trainer:
                     self._prepared_validation_tasks[task] = prepare_task(
                         scorer, TASKS[task], limit=self.validation_limit
                     )
-            # Match training precision without casting or copying the FP32 master weights.
-            with torch.autocast(
-                self.device.type,
-                dtype=self.model_dtype,
-                enabled=self.model_dtype != torch.float32,
+            # We make sure the model is evaluated eagerly so validation batches cannot extend that graph path.
+            # For more detail please chedck https://github.com/cerulean-works/flock/pull/112
+            # NOTE: If we are doing a really big training run, we may still use torch.compile for validation for better performance.
+            with (
+                torch.compiler.set_stance("force_eager")
+                if self.torch_compile
+                and self.torch_compile_mode in ("reduce-overhead", "max-autotune")
+                else nullcontext(),
+                torch.autocast(
+                    self.device.type,
+                    dtype=self.model_dtype,
+                    enabled=self.model_dtype != torch.float32,
+                ),
             ):
                 results = {
                     task: score_prepared(scorer, self._prepared_validation_tasks[task])

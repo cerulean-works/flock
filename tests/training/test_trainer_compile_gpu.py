@@ -10,6 +10,7 @@ import pytest
 import torch
 from torch.nn import attention
 
+from flock.eval.model import ScoringModel
 from flock.eval.tasks import TASKS, Dataset, PerplexityTask
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRScheduleSegment
 from flock.training.core.models.olmo2 import Olmo2
@@ -18,6 +19,7 @@ from flock.training.core.trainer import Trainer, TrainerConfig
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from typing import Any
 
     from lance.torch.data import SafeLanceDataset
     from transformers import TokenizersBackend
@@ -27,7 +29,7 @@ if TYPE_CHECKING:
 pytestmark = [pytest.mark.gpu, pytest.mark.fa3]
 
 
-@pytest.mark.parametrize("mode", ["default", "reduce-overhead"])
+@pytest.mark.parametrize("mode", ["default", "reduce-overhead", "max-autotune"])
 def test_compiled_trainer_fa3_resume_and_evaluate(
     config: Olmo2Config,
     tokenizer: TokenizersBackend,
@@ -51,11 +53,12 @@ def test_compiled_trainer_fa3_resume_and_evaluate(
         {"id": str(index), "text": text}
         for index, text in enumerate(["a b c d", "b c", "c d a", "a b c", "d a"] * 3)
     ]
+    validation_rows = [{"id": str(index), "text": "a b c d"} for index in range(64)]
     task = PerplexityTask(
         "test_compile_text", Dataset("offline/compile", "0" * 40, None, "text"), window=8
     )
     monkeypatch.setitem(TASKS, task.name, task)
-    monkeypatch.setattr(Dataset, "load", lambda self: rows)
+    monkeypatch.setattr(Dataset, "load", lambda self: validation_rows)
     monkeypatch.setattr(
         "flock.training.core.trainer.wandb.init",
         lambda **kwargs: Mock(entity="flock", project="offline-test", id="compile"),
@@ -89,6 +92,7 @@ def test_compiled_trainer_fa3_resume_and_evaluate(
                     "save_steps": 1,
                     "validation_tasks": [task.name],
                     "validation_steps": 1,
+                    "validation_batch_tokens": 8,
                     "torch_compile": compiled,
                     "torch_compile_mode": mode,
                 }
@@ -103,7 +107,47 @@ def test_compiled_trainer_fa3_resume_and_evaluate(
         assert eager.device == cuda_device
         eager.train()
         compiled = make("compiled", compiled=True)
+        captures, replays, scored_batches = [], [], []
+        capture_begin = torch.cuda.CUDAGraph.capture_begin
+        replay = torch.cuda.CUDAGraph.replay
+        score = ScoringModel._score
+
+        def record_capture(graph: torch.cuda.CUDAGraph, *args: Any, **kwargs: Any) -> None:
+            captures.append(None)
+            capture_begin(graph, *args, **kwargs)
+
+        def record_replay(graph: torch.cuda.CUDAGraph) -> None:
+            replays.append(None)
+            replay(graph)
+
+        def record_score(scorer: ScoringModel, *args: Any, **kwargs: Any) -> Any:
+            scored_batches.append(None)
+            return score(scorer, *args, **kwargs)
+
+        monkeypatch.setattr(torch.cuda.CUDAGraph, "capture_begin", record_capture)
+        monkeypatch.setattr(torch.cuda.CUDAGraph, "replay", record_replay)
+        monkeypatch.setattr(ScoringModel, "_score", record_score)
+        evaluate = compiled.evaluate
+
+        def check_evaluation() -> None:
+            before = (len(captures), len(replays))
+            batches_before = len(scored_batches)
+            gradients = []
+            for parameter in compiled.model.parameters():
+                assert parameter.grad is not None
+                gradients.append(parameter.grad.clone())
+            evaluate()
+            assert len(scored_batches) - batches_before >= 32
+            assert (len(captures), len(replays)) == before, (
+                "validation must not record or replay training CUDA graphs"
+            )
+            for parameter, gradient in zip(compiled.model.parameters(), gradients, strict=True):
+                torch.testing.assert_close(parameter.grad, gradient, atol=0, rtol=0)
+
+        monkeypatch.setattr(compiled, "evaluate", check_evaluation)
         compiled.train(resume_from_checkpoint=eager.output_dir / "checkpoint-1")
+        if mode != "default":
+            assert captures and replays, "training must still capture and reuse CUDA graphs"
         assert compiled._compiled_loss is not None
         assert compiled.state.step.item() == compiled.lr_scheduler.completed_steps == 8
         assert compiled.model.training

@@ -130,7 +130,9 @@ enabled or disabled.
 
 `torch_compile_mode` defaults to `"default"`. Use `"reduce-overhead"` to request
 CUDA graphs for eligible regions, which can reduce launch overhead but use more
-memory. Compilation happens lazily and may repeat when input shapes change, so
+memory. With `"reduce-overhead"` or `"max-autotune"`, evaluation runs eagerly to
+avoid accumulating CUDA graphs across validation batches.
+Compilation happens lazily and may repeat when input shapes change, so
 measure performance after warmup. See the
 [configuration reference](python-api#configuration) for all modes.
 
