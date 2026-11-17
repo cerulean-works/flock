@@ -441,14 +441,6 @@ class Datasets:
         except Exception:
             log.exception("could not create the trash bucket %s", self.trash)
         await self.store.s3.ensure_all_managed()
-        await self._close_existing()
-
-    async def _close_existing(self) -> None:
-        try:
-            if closed := await self.close_existing():
-                log.info("migrated visibility for %d existing datasets", closed)
-        except Exception:
-            log.exception("dataset visibility migration failed: pending orgs stay closed")
 
     async def _ensure_trash(self) -> str:
         upstream = self._upstream()
@@ -480,12 +472,6 @@ class Datasets:
         heals a failed creation, D85)."""
         s3 = self.store.s3
         s3.require()
-        if not await self.store.db.fetchval(
-            "SELECT dataset_grants_ready OR NOT EXISTS "
-            "(SELECT FROM meta WHERE key = 'dataset_public_grants') FROM orgs WHERE pk = $1",
-            org.pk,
-        ):
-            raise Conflict("Dataset visibility is being migrated. Try again in a few minutes.")
         found = await s3.managed_bucket(org)
         if found is None and ensure:
             try:
@@ -943,11 +929,8 @@ class Datasets:
     async def is_public(self, org: Org, path: str) -> bool:
         """Whether this exact path is public under the active visibility policy."""
         return await self.store.db.fetchval(
-            "SELECT CASE WHEN EXISTS (SELECT FROM meta WHERE key = 'dataset_public_grants') "
-            "THEN dataset_grants_ready AND EXISTS (SELECT FROM public_datasets "
-            "WHERE org_pk = $1 AND path = $2) ELSE open_datasets END "
-            "AND NOT EXISTS (SELECT FROM private_datasets WHERE org_pk = $1 AND path = $2) "
-            "FROM orgs WHERE pk = $1",
+            "SELECT EXISTS (SELECT FROM public_datasets WHERE org_pk = $1 AND path = $2) "
+            "AND NOT EXISTS (SELECT FROM private_datasets WHERE org_pk = $1 AND path = $2)",
             org.pk,
             path,
         )
@@ -957,15 +940,6 @@ class Datasets:
         bucket = await self.bucket(org)
         check_path(path)
         async with self._locked(bucket.upstream_name, [path]) as conn:
-            if not await conn.fetchval(
-                "SELECT open_datasets OR (dataset_grants_ready AND EXISTS "
-                "(SELECT FROM meta WHERE key = 'dataset_public_grants')) FROM orgs WHERE pk = $1",
-                org.pk,
-            ):
-                raise Conflict(
-                    "This organization's datasets are still being marked private. "
-                    "Try again in a few minutes."
-                )
             was_public = await self.is_public(org, path)
             if public:
                 await conn.execute(
@@ -1004,65 +978,6 @@ class Datasets:
                     new,
                     user.pk,
                 )
-
-    async def close_existing(self) -> int:
-        """Flag private every dataset of the orgs that aren't open yet, then open them (D115): orgs made before datasets became public by default keep what they wrote private until an admin makes it public. Returns how many datasets were flagged. Safe on several replicas at once."""
-        if await self.store.db.fetchval(
-            "SELECT EXISTS (SELECT FROM meta WHERE key = 'dataset_public_grants')"
-        ):
-            return await self.grant_existing()
-        closed = 0
-        pks = await self.store.db.fetch("SELECT pk FROM orgs WHERE NOT open_datasets")
-        for org in await self.store.orgs([pk for (pk,) in pks]):
-            bucket = await self.store.s3.managed_bucket(org)
-            paths = await self._all_datasets(bucket.upstream_name) if bucket else []
-            async with self.store.db.pool.acquire() as conn, conn.transaction():
-                if await conn.fetchval(
-                    "SELECT open_datasets FROM orgs WHERE pk = $1 FOR UPDATE", org.pk
-                ):
-                    continue
-                closed += len(
-                    await conn.fetch(
-                        "INSERT INTO private_datasets (org_pk, path) SELECT $1, unnest($2::text[]) "
-                        "ON CONFLICT DO NOTHING RETURNING path",
-                        org.pk,
-                        paths,
-                    )
-                )
-                await conn.execute("UPDATE orgs SET open_datasets = true WHERE pk = $1", org.pk)
-        return closed
-
-    async def grant_existing(self) -> int:
-        """Preserve legacy public paths atomically, then enable private defaults for each org."""
-        granted = 0
-        pks = await self.store.db.fetch("SELECT pk FROM orgs WHERE NOT dataset_grants_ready")
-        for org in await self.store.orgs([pk for (pk,) in pks]):
-            async with self.store.db.pool.acquire() as conn, conn.transaction():
-                row = await conn.fetchrow(
-                    "SELECT dataset_grants_ready, dataset_legacy_public FROM orgs "
-                    "WHERE pk = $1 FOR UPDATE",
-                    org.pk,
-                )
-                if row is None or row[0]:
-                    continue
-                # New writes are refused until this transaction publishes the complete inventory.
-                bucket = await self.store.s3.managed_bucket(org)
-                paths = await self._all_datasets(bucket.upstream_name) if bucket and row[1] else []
-                granted += len(
-                    await conn.fetch(
-                        "INSERT INTO public_datasets (org_pk, path) "
-                        "SELECT $1, path FROM unnest($2::text[]) AS existing(path) WHERE NOT EXISTS "
-                        "(SELECT FROM private_datasets p WHERE p.org_pk = $1 AND p.path = existing.path) "
-                        "ON CONFLICT DO NOTHING RETURNING path",
-                        org.pk,
-                        paths,
-                    )
-                )
-                await conn.execute(
-                    "UPDATE orgs SET dataset_grants_ready = true WHERE pk = $1",
-                    org.pk,
-                )
-        return granted
 
     async def _all_datasets(self, bucket: str) -> list[str]:
         """Every dataset path in ``bucket``, including nested datasets (D87, D155)."""
@@ -1754,7 +1669,6 @@ class Datasets:
     async def _sweep_loop(self) -> None:
         while True:
             await asyncio.sleep(self.SWEEP_INTERVAL)
-            await self._close_existing()
             try:
                 done = await self.sweep()
                 if any(done.values()):

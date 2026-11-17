@@ -36,49 +36,37 @@ The job needs the same database and storage configuration as the deployment. See
 
 ### Dataset visibility upgrade
 
-The private-default release uses two migrations. The additive migration keeps the previous
-policy during the rolling deploy. Contract `0022_dataset_grants` waits for every old API and
-S3 worker to retire cleanly and for the configured contract delay (30 minutes by default).
-Expired heartbeats alone do not retire an older worker for this migration. If a crashed worker
-blocks the transition, verify in the deployment host that the process is stopped and cannot
-resume before removing its exact stale row from `flock_instances`. Never remove a row merely
-because its heartbeat is old. Until that
-cutover, the old public-unless-flagged policy still applies. Keep marking sensitive new paths
-private until the verification below passes.
+Migration `0021_dataset_grants` makes every dataset private, including datasets that were
+public before the upgrade. It runs in one database transaction at startup, or through the
+migration command above. Existing private flags remain intact. No inventory, contract job or
+old-worker drain is needed for this visibility change.
 
-At cutover, new organizations start private. Existing organizations temporarily refuse dataset
-operations while an atomic inventory preserves their existing public paths as exact grants.
-Private paths stay private. In-flight writes begun before cutover can complete under the old
-policy; pause any writers using upstream credentials directly during this inventory. New proxy
-writes and dataset imports for a pending organization are refused with a retryable response.
-An upstream listing failure leaves the organization closed and retries the inventory. No
-partial grant list is published.
+After deploying, an organization admin chooses **Make public** for each exact dataset path
+that should be shared again. The equivalent API call is
+`PUT /api/v1/orgs/{org}/datasets/public?path=...`. New dataset paths and imports stay private
+until granted. Re-grant paths after all replicas have upgraded: an old replica always refuses
+outsider dataset reads, including paths granted by the new release.
 
-With automatic migrations enabled, the API completes the contract and inventory itself. With
-`FLOCK_MIGRATE_ON_STARTUP=false`, run the contract job after upgrading all workers:
-
-```bash
-uv run --package flock-app-api python -m app.api.src.db.migrate --contract
-```
-
-The inventory runs at API startup and on its dataset sweep. Restart a current API replica after
-the contract job to start the inventory immediately. Do not use `--force` while old workers run.
-An old release refuses to start after the contract; roll forward with a compatible release.
-The database also forces the old public flag closed, so an unexpectedly resumed old API cannot
-read datasets anonymously. Existing public access is served by the upgraded API through grants.
+The previous release can start against this schema during a rollback. Its background dataset
+sweep logs an error when it tries to reopen the old public flag; the database constraint keeps
+that flag false. Member dataset access continues, but public dataset reads and visibility
+changes are unavailable on the old release. Rollback does not restore the previous public
+links. Upgrade again to serve the explicit grants.
 
 Before opening public projects, verify these read-only queries against the deployment database:
 
 ```sql
-SELECT version FROM schema_migrations WHERE version = '0022_dataset_grants.contract';
-SELECT count(*) AS pending_orgs FROM orgs WHERE NOT dataset_grants_ready;
+SELECT version FROM schema_migrations WHERE version = '0021_dataset_grants';
+SELECT count(*) AS open_orgs FROM orgs WHERE open_datasets;
+SELECT org_pk, path FROM public_datasets ORDER BY org_pk, path;
 ```
 
-The first query must return its row and `pending_orgs` must be zero. Verify a known public
-and private dataset anonymously, then confirm a newly written synthetic dataset is private.
-Check the deployed API and web responses retain `Cache-Control: private, no-store`, the edge
-redirects HTTP to HTTPS, and the upstream bucket refuses unsigned reads. A successful local
-build does not establish the configuration of an external proxy or storage account.
+The first query must return its row and `open_orgs` must be zero. The grants table starts empty.
+Verify an existing dataset returns 404 anonymously and remains readable by a member. After
+re-granting an intended public path, verify it anonymously too. Check that API and web responses
+retain `Cache-Control: private, no-store`, the edge redirects HTTP to HTTPS, and the upstream
+bucket refuses unsigned reads. A successful local build does not establish the configuration
+of an external proxy or storage account.
 
 ### Update old Compose routing
 

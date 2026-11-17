@@ -1,6 +1,6 @@
 # Share projects and datasets publicly
 
-Anyone with a public project's or dataset's link can read it, signed in or not, without being invited into your organization. Public access is read-only, like a public Hugging Face repository. Projects and new dataset paths start private. You choose which ones to make public. Existing public datasets retain their access when the visibility migration completes.
+Anyone with a public project's or dataset's link can read it, signed in or not, without being invited into your organization. Public access is read-only, like a public Hugging Face repository. Projects and new dataset paths start private. You choose which ones to make public. The visibility upgrade also makes existing datasets private; an admin must re-grant the paths intended for public access.
 
 ## What you need
 
@@ -42,7 +42,7 @@ Only that exact path becomes private. Datasets inside its folder, or beside it, 
 
 A private dataset stays private when you rename it, and a dataset renamed onto a private path becomes private. Deleting a private dataset keeps its path private: if an admin restores it from the trash, to its path or another, it comes back private, and so does a new dataset written at its path.
 
-The upgrade preserves existing public dataset paths as explicit grants, without publishing private datasets. During its inventory, dataset operations briefly ask you to retry. See [the visibility upgrade](operate#dataset-visibility-upgrade) for the cutover and verification. Public access is attached to an exact path across versions and deletion; writing new data to an already public path retains that grant. Revoke it before reusing the path for private content.
+The upgrade makes every dataset private. See [the visibility upgrade](operate#dataset-visibility-upgrade) for re-granting public paths and verifying access. Public access is attached to an exact path across versions and deletion; writing new data to an already public path retains that grant. Revoke it before reusing the path for private content.
 
 ## What outsiders see
 

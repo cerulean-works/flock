@@ -10,7 +10,7 @@
 
 Keep private dataset rows and private run metadata fields behind their existing access rules.
 Project publishing rights stay as specified in 015 and 016. New dataset paths become private
-after the visibility migration; existing public paths retain their access.
+after the visibility migration; existing public paths also become private.
 
 ## Design decisions
 
@@ -42,24 +42,19 @@ An outsider probing a dataset must not distinguish an unknown organization from 
 path by its error message. Both answer the existing dataset-not-found response. Actual org
 members keep their read access and normal dataset errors.
 
-### D155. Public datasets require exact grants after a staged cutover
+### D155. Every dataset becomes private at deployment
 
-An additive migration adds public grants and an org inventory marker. Until the contract
-migration runs, both releases retain D115's behavior. The contract waits for older API and
-proxy instances to retire cleanly, including ones whose heartbeats have expired. A crashed
-worker requires operator confirmation that it cannot resume before its row is removed. The
-contract captures the legacy policy for inventory, then constrains the legacy public flag to
-false. Even an unexpectedly resumed old reader therefore fails closed, and its old sweep
-cannot reopen the flag. Future orgs are ready for explicit grants; the existing contract check
-also prevents an older binary from restarting.
+One transactional migration creates exact-path public grants, sets every organization's old
+public flag to false and defaults it to false. A database check keeps that flag false, including
+when an old release tries to reopen it. Existing private-path flags and their rows stay intact.
+No public grants are seeded: an admin must explicitly re-grant each path intended for outsiders.
+New paths and Hugging Face imports are private. There is no inventory or contract migration.
 
-Existing orgs temporarily refuse anonymous dataset reads and dataset operations while their
-inventory is pending. The inventory grants only existing dataset paths in previously open
-orgs, excluding exact private flags, then marks the org ready in the same transaction. The Storage tab and proxy also refuse new writes while inventory is pending. Nested datasets
-are inventoried beneath their parents. Failed inventories publish no partial result and are retried. New paths and HF imports are private.
-Writes begun before cutover may finish under their original policy; the launch criterion is
-that the contract has applied and every org's inventory has completed. Upstream direct writers
-must pause for the cutover, since the proxy cannot govern credentials issued outside Flock.
+The previous release accepts the additive schema and can start against it. Its dataset sweep
+attempts to reopen the old flag, but the constraint rolls back that transaction and the sweep
+logs the error. Its public dataset predicate stays false, including for paths granted by the
+new release. Dataset visibility changes are unavailable on the old release; member reads and
+writes keep their existing authorization. Rollback does not restore public dataset access.
 
 ### D156. Moves preserve public grants without broadening private destinations
 

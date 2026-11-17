@@ -14,7 +14,6 @@ import asyncpg
 import pytest
 
 from app.api.src.core.datasets import Datasets
-from app.api.src.db.migrate import Migrations
 from tests.app.conftest import Client, Flocks, S3Flock
 from tests.conftest import S3Server
 
@@ -975,13 +974,16 @@ def private_paths(flock: S3Flock) -> list[str]:
     return [r["path"] for r in sql(flock, "SELECT path FROM private_datasets ORDER BY path")]
 
 
-def test_datasets_are_public_unless_made_private(flock: S3Flock, writer: Writer) -> None:
+def test_only_explicitly_granted_datasets_are_public(flock: S3Flock, writer: Writer) -> None:
     path = "eval/mmlu"
     writer.write(path, table(0, 10))
     writer.write(path, table(10, 10), mode="append")
     writer.write("eval/sibling", table(0, 1))
     put(flock, f"{path}/README.md", b"# card")
     api = flock.client()
+    assert get(api, f"{DATASETS}/info", path=path).json()["public"] is False
+    assert make_public(api, path).status == 200
+    assert make_public(api, "eval/sibling").status == 200
     tagged = api.request("PUT", f"{DATASETS}/tags/v1.0", body={"path": path, "version": 1})
     assert tagged.status == 200, tagged.body
     member = flock.add_user("m@x.io")
@@ -1038,6 +1040,8 @@ def test_datasets_are_public_unless_made_private(flock: S3Flock, writer: Writer)
         "SELECT kind, path, from_visibility, to_visibility FROM visibility_events ORDER BY pk",
     )
     assert [tuple(e) for e in events] == [
+        ("dataset_visibility", path, "private", "public"),
+        ("dataset_visibility", "eval/sibling", "private", "public"),
         ("dataset_visibility", path, "public", "private"),
         ("dataset_visibility", path, "private", "public"),
     ]
@@ -1058,6 +1062,7 @@ def test_private_follows_renames_and_outlives_deletes(flock: S3Flock, writer: Wr
     writer.write("a", table(0, 3))
     writer.write("open", table(0, 3))
     api = flock.client()
+    assert make_public(api, "open").status == 200
     anon = flock.anonymous()
     assert make_private(api, "a").status == 204
     renamed = api.post(f"{DATASETS}/rename", {"path": "a", "to": "b/c"})
@@ -1081,32 +1086,6 @@ def test_private_follows_renames_and_outlives_deletes(flock: S3Flock, writer: Wr
     assert renamed.status == 200, renamed.body
     assert get(anon, f"{DATASETS}/info", path="e").status == 404
     assert private_paths(flock) == ["b/c", "d", "e"]
-
-
-def test_orgs_from_before_keep_their_datasets_private(flock: S3Flock, writer: Writer) -> None:
-    # Orgs made before datasets became public by default (migration 0016) start closed: every
-    # dataset they hold is flagged private before any is public.
-    for path in ("old", "eval/mmlu", "eval/deep/set"):
-        writer.write(path, table(0, 2))
-    put(flock, "eval/notes.txt", b"not a dataset")
-    sql(flock, "UPDATE orgs SET open_datasets = false WHERE name = 'flock'")
-    api = flock.client()
-    anon = flock.anonymous()
-    assert get(anon, f"{DATASETS}/info", path="old").status == 404
-    assert make_public(api, "old").status == 409
-
-    assert flock.call(datasets(flock).close_existing()) == 3
-    assert private_paths(flock) == ["eval/deep/set", "eval/mmlu", "old"]
-    assert flock.call(datasets(flock).close_existing()) == 0
-    for path in ("old", "eval/mmlu", "eval/deep/set"):
-        assert get(anon, f"{DATASETS}/info", path=path).status == 404, path
-    writer.write("new", table(0, 2))
-    assert get(anon, f"{DATASETS}/info", path="new").status == 200
-    assert make_public(api, "old").status == 200
-    assert get(anon, f"{DATASETS}/info", path="old").status == 200
-
-
-# ---------------------------------------------------------------------- moving and deleting many (019)
 
 
 def versions_last(keys: list[str]) -> bool:
@@ -1478,14 +1457,12 @@ def test_new_paths_are_private_after_the_visibility_cutover(flock: S3Flock, writ
     writer.write("existing/private", table(0, 2))
     api = flock.client()
     assert make_private(api, "existing/private").status == 204
-    asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
-    flock.call(datasets(flock).close_existing())
 
     anon = flock.anonymous()
     assert api.post("/api/v1/orgs", {"name": "outsiders"}).status == 201
     outsider = flock.add_user("outside@default.test", org="outsiders").api
-    assert get(outsider, f"{DATASETS}/info", path="existing/public").status == 200
-    assert get(anon, f"{DATASETS}/info", path="existing/public").status == 200
+    assert get(outsider, f"{DATASETS}/info", path="existing/public").status == 404
+    assert get(anon, f"{DATASETS}/info", path="existing/public").status == 404
     assert get(anon, f"{DATASETS}/info", path="existing/private").status == 404
     writer.write("new", table(0, 2))
     put(flock, "new/README.md", b"# private")
@@ -1507,67 +1484,11 @@ def test_new_paths_are_private_after_the_visibility_cutover(flock: S3Flock, writ
     assert get(anon, f"{DATASETS}/info", path="new").status == 404
 
 
-def test_visibility_inventory_fails_closed_and_retries_atomically(
-    flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    writer.write("old", table(0, 2))
-    api = flock.client()
-    anon = flock.anonymous()
-    service = datasets(flock)
-    inventory = service._all_datasets
-    asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
-
-    async def unavailable(bucket: str) -> list[str]:
-        raise OSError("synthetic inventory failure")
-
-    monkeypatch.setattr(service, "_all_datasets", unavailable)
-    with pytest.raises(OSError, match="synthetic inventory failure"):
-        flock.call(service.close_existing())
-    assert sql(flock, "SELECT path FROM public_datasets") == []
-    assert get(anon, f"{DATASETS}/info", path="old").status == 404
-    assert get(api, f"{DATASETS}/info", path="old").status == 409
-    assert make_public(api, "old").status == 409
-    member = flock.add_user("pending@member.test")
-    storage = f"{BUCKETS}/flock-datasets"
-    assert member.api.post(f"{storage}/folders", {"prefix": "new/_versions/"}).status == 409
-    assert member.api.post(f"{storage}/objects/delete", {"keys": ["old/README.md"]}).status == 409
-    for method in ("put", "multipart", "parts", "complete", "abort"):
-        response = member.api.post(
-            f"{storage}/presign",
-            {"method": method, "key": "new/data", "size": 1, "upload_id": "unused", "parts": [1]},
-        )
-        assert response.status == 409, (method, response.body)
-    assert api.post(f"{DATASETS}/rename", {"path": "old", "to": "other"}).status == 409
-    # A real signed proxy write is refused before touching the upstream during inventory.
-    import boto3
-    from botocore.config import Config
-    from botocore.exceptions import ClientError
-
-    creds = flock.credentials()
-    client = boto3.client(
-        "s3",
-        endpoint_url=flock.proxy.url,
-        region_name="us-east-1",
-        aws_access_key_id=creds["access_key_id"],
-        aws_secret_access_key=creds["secret_access_key"],
-        config=Config(retries={"max_attempts": 0}),
-    )
-    with pytest.raises(ClientError) as failed:
-        client.put_object(Bucket="flock-datasets", Key="new/data", Body=b"private")
-    assert failed.value.response["ResponseMetadata"]["HTTPStatusCode"] == 503
-    monkeypatch.setattr(service, "_all_datasets", inventory)
-    assert flock.call(service.close_existing()) == 1
-    assert flock.call(service.close_existing()) == 0
-    assert get(anon, f"{DATASETS}/info", path="old").status == 200
-
-
 def test_explicit_grants_follow_moves_without_opening_private_targets(
     flock: S3Flock, writer: Writer
 ) -> None:
     api = flock.client()
     anon = flock.anonymous()
-    asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
-    flock.call(datasets(flock).close_existing())
     writer.write("folder/public", table(0, 2))
     writer.write("folder/private", table(0, 2))
     assert make_public(api, "folder/public").status == 200
@@ -1599,29 +1520,14 @@ def test_new_orgs_and_closed_legacy_orgs_do_not_get_implicit_grants(
 ) -> None:
     writer.write("closed", table(0, 1))
     sql(flock, "UPDATE orgs SET open_datasets = false WHERE name = 'flock'")
-    asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
-    flock.call(datasets(flock).close_existing())
     api = flock.client()
     assert get(flock.anonymous(), f"{DATASETS}/info", path="closed").status == 404
     assert make_public(api, "closed").status == 200
     assert api.post("/api/v1/orgs", {"name": "neworg"}).status == 201
-    assert sql(flock, "SELECT dataset_grants_ready FROM orgs WHERE name = 'neworg'")[0][0]
+    assert sql(flock, "SELECT open_datasets FROM orgs WHERE name = 'neworg'") == [(False,)]
     other = Writer(flock, org="neworg")
     other.write("new", table(0, 1))
     assert get(flock.anonymous(), "/api/v1/orgs/neworg/datasets/info", path="new").status == 404
-
-
-def test_visibility_inventory_preserves_nested_public_datasets(
-    flock: S3Flock, writer: Writer
-) -> None:
-    paths = ("outer", "outer/child", "outer/_versions/child/_versions/nested")
-    for path in paths:
-        writer.write(path, table(0, 1))
-        assert get(flock.anonymous(), f"{DATASETS}/info", path=path).status == 200
-    asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
-    flock.call(datasets(flock).close_existing())
-    for path in paths:
-        assert get(flock.anonymous(), f"{DATASETS}/info", path=path).status == 200
 
 
 @pytest.mark.parametrize("folder", [False, True])
@@ -1631,8 +1537,6 @@ def test_visibility_inventory_preserves_nested_public_datasets(
 def test_nested_visibility_survives_moves_and_restores(
     flock: S3Flock, writer: Writer, folder: bool, restore: bool, public_child: bool, child: str
 ) -> None:
-    asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
-    flock.call(datasets(flock).close_existing())
     parent = "source/outer" if folder else "source"
     target = "dest/outer" if folder else "dest"
     writer.write(parent, table(0, 1))
@@ -1660,8 +1564,6 @@ def test_nested_visibility_survives_moves_and_restores(
 
 def test_obsolete_read_predicate_stays_closed_after_cutover(flock: S3Flock, writer: Writer) -> None:
     writer.write("existing", table(0, 1))
-    asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
-    flock.call(datasets(flock).close_existing())
     writer.write("new", table(1, 1))
     # An already running old binary still executes this predicate before its next heartbeat.
     for path in ("existing", "new"):
@@ -1673,5 +1575,5 @@ def test_obsolete_read_predicate_stays_closed_after_cutover(flock: S3Flock, writ
         ) == [(False,)]
     with pytest.raises(asyncpg.CheckViolationError):
         sql(flock, "UPDATE orgs SET open_datasets = true WHERE name = 'flock'")
-    assert get(flock.anonymous(), f"{DATASETS}/rows", path="existing").status == 200
+    assert get(flock.anonymous(), f"{DATASETS}/rows", path="existing").status == 404
     assert get(flock.anonymous(), f"{DATASETS}/rows", path="new").status == 404

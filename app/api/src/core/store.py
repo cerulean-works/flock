@@ -486,8 +486,6 @@ class Store:
                 await self.migrations.apply_contracts(
                     self.settings.database_url, self.settings.contract_delay, wait=False
                 )
-                if self.s3.upstream is not None:
-                    await self.datasets.close_existing()
             except Exception:
                 log.exception("applying contract migrations failed")
 

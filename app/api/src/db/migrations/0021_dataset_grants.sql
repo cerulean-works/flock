@@ -1,4 +1,4 @@
--- Explicit public grants (021, D155): retain legacy behavior until the contract cutover.
+-- Every dataset starts private; admins grant exact paths after deployment (021, D155).
 CREATE TABLE public_datasets (
     org_pk bigint NOT NULL REFERENCES orgs ON DELETE CASCADE,
     path text NOT NULL,
@@ -6,5 +6,6 @@ CREATE TABLE public_datasets (
     created_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (org_pk, path)
 );
-ALTER TABLE orgs ADD COLUMN dataset_grants_ready boolean NOT NULL DEFAULT false;
-ALTER TABLE orgs ADD COLUMN dataset_legacy_public boolean NOT NULL DEFAULT false;
+UPDATE orgs SET open_datasets = false;
+ALTER TABLE orgs ALTER COLUMN open_datasets SET DEFAULT false;
+ALTER TABLE orgs ADD CONSTRAINT dataset_legacy_reads_closed CHECK (NOT open_datasets);

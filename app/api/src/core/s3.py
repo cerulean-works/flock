@@ -682,14 +682,11 @@ class S3:
             },
         }
 
-    async def _check_writable(self, org: Org, bucket: Bucket) -> None:
-        """Refuse generic model writes and dataset writes during visibility inventory."""
-        if bucket.managed == "datasets" and not await self.store.db.fetchval(
-            "SELECT dataset_grants_ready OR NOT EXISTS "
-            "(SELECT FROM meta WHERE key = 'dataset_public_grants') FROM orgs WHERE pk = $1",
-            org.pk,
-        ):
-            raise Conflict("Dataset visibility is being migrated. Try again in a few minutes.")
+    @staticmethod
+    def _check_writable(bucket: Bucket) -> None:
+        """flock-models is written only through upload sessions and emptied only through the
+        model routes (D97, D109), so the dashboard's own writes are refused there, as the proxy
+        refuses every other client's."""
         if bucket.managed == "models":
             raise Forbidden(
                 "Files in flock-models change only through flock models push and the Models tab."
@@ -700,7 +697,7 @@ class S3:
         upstream = self.require()
         self.check_key(prefix, folder=True)
         bucket = await self.bucket(org, name)
-        await self._check_writable(org, bucket)
+        self._check_writable(bucket)
         await self._call(upstream.put_empty(bucket.upstream_name, prefix))
 
     async def delete_objects(
@@ -715,7 +712,7 @@ class S3:
         for prefix in prefixes:
             self.check_key(prefix, folder=True)
         bucket = await self.bucket(org, name)
-        await self._check_writable(org, bucket)
+        self._check_writable(bucket)
         limit = self.FOLDER_DELETE_LIMIT
         doomed = dict.fromkeys(keys)
         for prefix in prefixes:
@@ -818,8 +815,6 @@ class S3:
         method, object_key = body["method"], body["key"]
         self.check_key(object_key)
         bucket = await self.bucket(org, name)
-        if bucket.managed == "datasets" and method != "get":
-            await self._check_writable(org, bucket)
         if method == "abort":
             await self._call(
                 upstream.abort_upload(bucket.upstream_name, object_key, body["upload_id"])
