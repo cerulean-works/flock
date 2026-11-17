@@ -463,16 +463,40 @@ without changing them.
 training state. Tensors can share storage with live objects, so serialize the
 result immediately or deep-copy it for an in-memory snapshot.
 
-For manual saves, call `trainer.checkpoint_manager.save_model()`. Set `save_to_hub_repo="org/model"`
-to start an asynchronous upload of each new checkpoint with a `checkpoint-<step>`
-tag. `trainer.checkpoint_manager.save_model(blocking=True)` waits for pending uploads; it reuses an
-existing current-step checkpoint without rewriting it or starting another upload.
+For a manual save, pass the current step, model and resumable state explicitly:
+
+```python
+manager = trainer.checkpoint_manager
+manager.save_model(
+    int(trainer.state.step.item()), trainer.model, training_state=trainer.state_dict()
+)
+manager.finish_checkpointing()
+```
+
+The manager writes weights, buffers and training state to local files before
+`save_model` returns. Later training updates cannot change those files. The Hub
+handles background uploads. `finish_checkpointing()` waits for uploads and
+applies retention. Ordinary saves do not collect earlier uploads or prune files.
+
+Set `save_to_hub_repo="org/model"` to upload each checkpoint with a
+`checkpoint-<step>` tag. Passing `blocking=True` to `save_model` waits for all
+uploads, reusing an existing step without rewriting it.
 Upload failures are logged and leave the local checkpoint available. Local
-retention does not delete Hub versions. Use
-`trainer.checkpoint_manager.load_checkpoint(path)` to restore a local checkpoint
-without starting training. Pending uploads and saved checkpoint folders are
-available through `trainer.checkpoint_manager.pending_uploads` and
-`trainer.checkpoint_manager.checkpoints()` respectively.
+retention does not delete Hub versions. The manager takes persistence settings
+at construction, independently of the trainer.
+
+To restore a local checkpoint without starting training, validate the training
+state before any weights change, then apply the returned state:
+
+```python
+state = manager.load_checkpoint(path, trainer.model, validate_state=trainer.validate_state_dict)
+trainer.load_state_dict(state)
+```
+
+Pending uploads and published checkpoint folders are available through
+`manager.pending_uploads` and `manager.checkpoints()` respectively. Retention
+runs after the final `finish_checkpointing()` or blocking save finishes all
+uploads. Until then, local checkpoint folders can exceed `save_total_limit`.
 
 After entering the training loop, cleanup waits for pending uploads and, when
 automatic saving is enabled, saves the current step if it falls between save

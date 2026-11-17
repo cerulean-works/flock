@@ -561,7 +561,7 @@ def test_checkpoint_is_saved_before_validation(
         with pytest.raises(RuntimeError, match="validation failed after save"):
             trainer.train()
         assert calls == [2]
-        trainer.checkpoint_manager.load_checkpoint(trainer.output_dir / "checkpoint-2")
+        load_checkpoint(trainer, trainer.output_dir / "checkpoint-2")
         assert trainer.state.step.item() == trainer.lr_scheduler.completed_steps == 2
     else:
         trainer.train()
@@ -573,7 +573,7 @@ def test_local_checkpoint_records_run_identity(
 ) -> None:
     trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
     trainer.train()
-    trainer.checkpoint_manager.save_model()
+    save_checkpoint(trainer)
     metadata = json.loads((trainer.output_dir / "checkpoint-3" / "flock.json").read_text())
     assert metadata["run"] == "flock/pretrain/run123"
     assert metadata["step"] == trainer.state.step.item() == 3
@@ -595,12 +595,35 @@ def assert_nested_equal(actual: Any, expected: Any) -> None:
         assert actual == expected
 
 
+def save_checkpoint(trainer: Trainer, *, blocking: bool = False) -> None:
+    manager = trainer.checkpoint_manager
+    assert manager is not None
+    manager.save_model(
+        int(trainer.state.step.item()),
+        trainer.model,
+        training_state=trainer.state_dict(),
+        blocking=blocking,
+    )
+
+
+def load_checkpoint(trainer: Trainer, checkpoint: Path) -> None:
+    manager = trainer.checkpoint_manager
+    assert manager is not None
+    trainer.load_state_dict(
+        manager.load_checkpoint(
+            checkpoint,
+            trainer.model,
+            validate_state=trainer.validate_state_dict,
+        )
+    )
+
+
 def restore_checkpoint_state(
     trainer: Trainer, checkpoint: Path, state: dict[str, Any], load_via: str
 ) -> None:
     if load_via == "checkpoint":
         write_training_state(state, checkpoint)
-        trainer.checkpoint_manager.load_checkpoint(checkpoint)
+        load_checkpoint(trainer, checkpoint)
     else:
         if load_via == "validated-state":
             trainer.load_state_dict(TrainerCheckpoint.model_validate(state))
@@ -730,17 +753,18 @@ def test_checkpoint_resume_matches_uninterrupted_training(
     interrupted, first_run, first_batches = make(tmp_path / "resumed")
     save = interrupted.checkpoint_manager.save_model
 
-    def save_and_interrupt() -> None:
-        save()
+    def save_and_interrupt(*args: Any, **kwargs: Any) -> None:
+        save(*args, **kwargs)
         if interrupted.state.step.item() == split_step:
-            raise InterruptedError("simulate process exit after a completed checkpoint")
+            # A process interruption must bypass nonfatal checkpoint-write handling.
+            raise KeyboardInterrupt("simulate process exit after a completed checkpoint")
 
     if split_step == 0:
         interrupted._set_seed()
-        interrupted.checkpoint_manager.save_model()
+        save_checkpoint(interrupted)
     else:
         monkeypatch.setattr(interrupted.checkpoint_manager, "save_model", save_and_interrupt)
-        with pytest.raises(InterruptedError):
+        with pytest.raises(KeyboardInterrupt, match="simulate process exit"):
             interrupted.train()
 
     resumed, resumed_run, resumed_batches = make(interrupted.output_dir)
@@ -810,7 +834,7 @@ def test_checkpoint_upload_uses_complete_local_folder(
         return pending
 
     monkeypatch.setattr("flock.training.core.checkpoint.save_to_hub", upload)
-    trainer.checkpoint_manager.save_model()
+    save_checkpoint(trainer)
     assert uploads == [
         (
             trainer.output_dir / "checkpoint-0",
@@ -819,30 +843,43 @@ def test_checkpoint_upload_uses_complete_local_folder(
         )
     ]
     assert uploads[0][0].is_dir()
-    trainer.checkpoint_manager.save_model(blocking=True)
+    save_checkpoint(trainer, blocking=True)
 
 
-def test_failed_checkpoint_write_does_not_publish_or_prune(
+def test_failed_checkpoint_write_logs_and_continues_without_publishing_or_pruning(
     trainer_factory: TrainerFactory,
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    trainer, _, _ = trainer_factory(
+    trainer, run, _ = trainer_factory(
         num_workers=0,
         prefetch_factor=None,
         save_steps=1,
         save_total_limit=1,
         overwrite_output_dir=True,
     )
-    trainer.checkpoint_manager.save_model()
+    save_checkpoint(trainer)
+    attempted_steps = []
 
     def fail_write(model: BaseModel, folder: Path, **kwargs: Any) -> Never:
+        attempted_steps.append(kwargs["step"])
         folder.mkdir()
         (folder / "flock.json").write_text("partial")
         raise OSError("disk full")
 
     monkeypatch.setattr("flock.training.core.checkpoint.write_model", fail_write)
-    with pytest.raises(OSError, match="disk full"):
-        trainer.train()
+    trainer.train()
+    assert attempted_steps == [1, 2, 3]
+    assert trainer.state.step.item() == trainer.lr_scheduler.completed_steps == trainer.total_steps
+    assert run.metrics[-1]["global_step"] == trainer.total_steps
+    failures = [
+        record for record in caplog.records if record.message == "Error saving model checkpoint"
+    ]
+    assert len(failures) == 3
+    for record in failures:
+        assert record.exc_info
+        assert isinstance(record.exc_info[1], OSError)
+        assert str(record.exc_info[1]) == "disk full"
     assert [path.name for path in trainer.output_dir.iterdir()] == ["checkpoint-0"]
 
 
@@ -852,30 +889,31 @@ def test_resume_rejects_missing_state_and_incompatible_data(
     trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
     with pytest.raises(FileNotFoundError, match="No checkpoints"):
         trainer.train(resume_from_checkpoint=True)
-    trainer.checkpoint_manager.save_model()
+    save_checkpoint(trainer)
     checkpoint = trainer.output_dir / "checkpoint-0"
     trainer.seed += 1
     with pytest.raises(ValueError, match="seed"):
-        trainer.checkpoint_manager.load_checkpoint(checkpoint)
+        load_checkpoint(trainer, checkpoint)
     trainer.seed -= 1
     for path in (checkpoint / "training_state").iterdir():
         path.unlink()
     with pytest.raises(ValueError, match="no training state"):
-        trainer.checkpoint_manager.load_checkpoint(checkpoint)
+        load_checkpoint(trainer, checkpoint)
 
 
 def test_existing_output_requires_resume_or_overwrite(
     trainer_factory: TrainerFactory,
 ) -> None:
     trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
-    trainer.checkpoint_manager.save_model()
+    save_checkpoint(trainer)
     with pytest.raises(RuntimeError, match="Resume"):
         trainer.train()
     with pytest.raises(FileExistsError, match="already exists"):
-        trainer.checkpoint_manager.save_model()
+        save_checkpoint(trainer)
     trainer.overwrite_output_dir = True
-    trainer.checkpoint_manager.save_model()
-    trainer.checkpoint_manager.load_checkpoint(trainer.output_dir / "checkpoint-0")
+    trainer.checkpoint_manager.overwrite_output_dir = True
+    save_checkpoint(trainer)
+    load_checkpoint(trainer, trainer.output_dir / "checkpoint-0")
 
 
 @pytest.mark.parametrize(
@@ -955,7 +993,7 @@ def test_checkpoint_preserves_tied_parameters_and_optimizer_references(
         for parameter in trainer.model.parameters():
             parameter.zero_()
     cast(torch.optim.Optimizer, trainer.optimizer).state.clear()
-    trainer.checkpoint_manager.load_checkpoint(checkpoint)
+    load_checkpoint(trainer, checkpoint)
     assert (
         cast(Olmo2, trainer.model).lm_head.weight
         is cast(Olmo2, trainer.model).model.embed_tokens.weight
@@ -983,7 +1021,7 @@ def test_sharded_checkpoint_rejects_missing_or_unexpected_weights(
         write_model(model, folder, **options)
 
     monkeypatch.setattr("flock.training.core.checkpoint.write_model", write_shards)
-    trainer.checkpoint_manager.save_model()
+    save_checkpoint(trainer)
     checkpoint = trainer.output_dir / "checkpoint-0"
     shard = weight_files(checkpoint)[0]
     tensors = load_file(shard)
@@ -995,7 +1033,7 @@ def test_sharded_checkpoint_rejects_missing_or_unexpected_weights(
         tensors[key] = torch.zeros(1)
     save_file(tensors, shard)
     with pytest.raises(RuntimeError, match=key):
-        trainer.checkpoint_manager.load_checkpoint(checkpoint)
+        load_checkpoint(trainer, checkpoint)
 
 
 def test_saved_checkpoints_remain_independent_of_later_updates(
@@ -1007,8 +1045,8 @@ def test_saved_checkpoints_remain_independent_of_later_updates(
     snapshots = {}
     save = trainer.checkpoint_manager.save_model
 
-    def save_and_record() -> None:
-        save()
+    def save_and_record(*args: Any, **kwargs: Any) -> None:
+        save(*args, **kwargs)
         snapshots[int(trainer.state.step.item())] = (
             copy.deepcopy(trainer.model.state_dict()),
             copy.deepcopy(trainer.state_dict()),
@@ -1024,7 +1062,7 @@ def test_saved_checkpoints_remain_independent_of_later_updates(
 
     restored, _, _ = trainer_factory(output_dir=str(tmp_path / "restored"))
     for step, (weights, state) in snapshots.items():
-        restored.checkpoint_manager.load_checkpoint(trainer.output_dir / f"checkpoint-{step}")
+        load_checkpoint(restored, trainer.output_dir / f"checkpoint-{step}")
         assert_nested_equal(restored.model.state_dict(), weights)
         assert_nested_equal(restored.state_dict(), state)
 
@@ -1065,7 +1103,7 @@ def test_loading_restores_progress_with_matching_settings_and_different_current_
         num_workers=0, prefetch_factor=None, lr_scheduler_config=schedule
     )
     source.train()
-    source.checkpoint_manager.save_model()
+    save_checkpoint(source)
     state = copy.deepcopy(source.state_dict())
     target, _, _ = trainer_factory(
         output_dir=str(tmp_path / "target"),
@@ -1149,7 +1187,7 @@ def test_incompatible_schedule_or_optimizer_is_rejected_before_loading(
     error: str,
 ) -> None:
     source = trained_trainer
-    source.checkpoint_manager.save_model()
+    save_checkpoint(source)
     target, _, _ = trainer_factory(output_dir=str(tmp_path / "target"), **overrides)
     # Populate optimizer buffers so a failed restore must preserve existing state too.
     for parameter in target.model.parameters():
@@ -1200,7 +1238,7 @@ def test_incompatible_optimizer_layout_or_wsd_settings_reject_before_loading(
         num_workers=0, prefetch_factor=None, lr_scheduler_config=schedule
     )
     source.train()
-    source.checkpoint_manager.save_model()
+    save_checkpoint(source)
     saved = copy.deepcopy(source.state_dict())
     groups = saved["optimizer_state_dict"]["param_groups"]
     if change == "group-count":
@@ -1233,7 +1271,7 @@ def test_checkpoint_restores_cpu_python_and_cuda_rng_streams(
 ) -> None:
     trainer = trained_trainer
     generators = simulated_cuda_rng(gpu_count)
-    trainer.checkpoint_manager.save_model()
+    save_checkpoint(trainer)
     expected_python = [random.random() for _ in range(4)]
     expected_cpu = torch.rand(5)
     expected_cuda = [torch.rand(5, generator=g) for g in generators]
@@ -1242,7 +1280,7 @@ def test_checkpoint_restores_cpu_python_and_cuda_rng_streams(
     for generator in generators:
         generator.manual_seed(555)
 
-    trainer.checkpoint_manager.load_checkpoint(trainer.output_dir / "checkpoint-3")
+    load_checkpoint(trainer, trainer.output_dir / "checkpoint-3")
     assert [random.random() for _ in range(4)] == expected_python
     torch.testing.assert_close(torch.rand(5), expected_cpu, atol=0, rtol=0)
     for generator, expected in zip(generators, expected_cuda, strict=True):
@@ -1258,8 +1296,8 @@ def test_cpu_checkpoint_never_uses_cuda_rng_apis(
     for name in ("get_rng_state_all", "set_rng_state_all"):
         monkeypatch.setattr(torch.cuda, name, unexpected_cuda_call)
     trainer = trained_trainer
-    trainer.checkpoint_manager.save_model()
-    trainer.checkpoint_manager.load_checkpoint(trainer.output_dir / "checkpoint-3")
+    save_checkpoint(trainer)
+    load_checkpoint(trainer, trainer.output_dir / "checkpoint-3")
     assert trainer.state_dict()["cuda_rng_state"] is None
 
 
@@ -1292,12 +1330,13 @@ def test_failed_overwrite_keeps_original_checkpoint(
     trained_trainer: Trainer, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     trainer = trained_trainer
-    trainer.checkpoint_manager.save_model()
+    save_checkpoint(trainer)
     checkpoint = trainer.output_dir / "checkpoint-3"
     original_files = {
         p.relative_to(checkpoint): p.read_bytes() for p in checkpoint.rglob("*") if p.is_file()
     }
     trainer.overwrite_output_dir = True
+    trainer.checkpoint_manager.overwrite_output_dir = True
     with torch.no_grad():
         for parameter in trainer.model.parameters():
             parameter.add_(1)
@@ -1309,7 +1348,7 @@ def test_failed_overwrite_keeps_original_checkpoint(
 
     monkeypatch.setattr("flock.training.core.checkpoint.write_model", fail_write)
     with pytest.raises(OSError, match="disk full"):
-        trainer.checkpoint_manager.save_model()
+        save_checkpoint(trainer)
     assert {
         p.relative_to(checkpoint): p.read_bytes() for p in checkpoint.rglob("*") if p.is_file()
     } == original_files
@@ -1344,7 +1383,7 @@ def test_failed_upload_continues_training_and_retention(
 
     monkeypatch.setattr("flock.training.core.checkpoint.save_to_hub", upload)
     trainer.train()
-    assert upload_attempts == [1, 2, 3]
+    assert sorted(upload_attempts) == [1, 2, 3]
     assert trainer.state.step.item() == trainer.total_steps == 3
     assert [p.name for p in trainer.checkpoint_manager.checkpoints()] == ["checkpoint-3"]
     assert (
@@ -1353,7 +1392,7 @@ def test_failed_upload_continues_training_and_retention(
     ) in caplog.text
     expected = copy.deepcopy(trainer.state_dict())
     restored, _, _ = trainer_factory(output_dir=str(tmp_path / "restored"))
-    restored.checkpoint_manager.load_checkpoint(trainer.output_dir / "checkpoint-3")
+    load_checkpoint(restored, trainer.output_dir / "checkpoint-3")
     assert_nested_equal(restored.model.state_dict(), trainer.model.state_dict())
     assert_nested_equal(restored.state_dict(), expected)
 
@@ -1407,7 +1446,7 @@ def test_async_uploads_overlap_training_and_keep_sources_until_finished(
     assert sorted(uploaded) == [1, 2, 3]
     assert [p.name for p in trainer.checkpoint_manager.checkpoints()] == ["checkpoint-3"]
     assert not trainer.checkpoint_manager.pending_uploads
-    trainer.checkpoint_manager.save_model(blocking=True)  # Repeated cleanup must be harmless.
+    save_checkpoint(trainer, blocking=True)  # Repeated cleanup must be harmless.
 
 
 @pytest.mark.parametrize("failed_step", [2, 3])
@@ -1440,7 +1479,7 @@ def test_async_upload_failure_is_logged_and_other_uploads_finish(
     assert str(trainer.output_dir / f"checkpoint-{failed_step}") in caplog.text
     assert not trainer.checkpoint_manager.pending_uploads
     records = len(caplog.records)
-    trainer.checkpoint_manager.save_model(blocking=True)
+    save_checkpoint(trainer, blocking=True)
     assert len(caplog.records) == records
 
 
@@ -1498,7 +1537,7 @@ def test_overwrite_waits_for_upload_to_finish_reading_original_checkpoint(
         return result
 
     monkeypatch.setattr("flock.training.core.checkpoint.save_to_hub", upload)
-    trainer.checkpoint_manager.save_model()
+    save_checkpoint(trainer)
     checkpoint = trainer.output_dir / "checkpoint-0/model.safetensors"
     original = checkpoint.read_bytes()
     with torch.no_grad():
@@ -1512,7 +1551,7 @@ def test_overwrite_waits_for_upload_to_finish_reading_original_checkpoint(
 
     monkeypatch.setattr(pending[0], "result", wait_for_original)
     with ThreadPoolExecutor(max_workers=1) as executor:
-        overwrite = executor.submit(trainer.checkpoint_manager.save_model)
+        overwrite = executor.submit(save_checkpoint, trainer)
         try:
             assert waiting.wait(10), "overwrite did not wait for the existing upload"
             assert not overwrite.done()
@@ -1520,7 +1559,7 @@ def test_overwrite_waits_for_upload_to_finish_reading_original_checkpoint(
         finally:
             release.set()
             overwrite.result(timeout=10)
-            trainer.checkpoint_manager.save_model(blocking=True)
+            save_checkpoint(trainer, blocking=True)
 
     assert snapshots == [original, checkpoint.read_bytes()]
     assert snapshots[0] != snapshots[1]
@@ -1528,7 +1567,7 @@ def test_overwrite_waits_for_upload_to_finish_reading_original_checkpoint(
 
 
 @pytest.mark.parametrize("failed", [False, True], ids=["success", "failure"])
-def test_completed_uploads_are_reaped_on_the_next_save(
+def test_completed_uploads_and_retention_are_deferred_until_final_wait(
     trainer_factory: TrainerFactory,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
@@ -1543,22 +1582,31 @@ def test_completed_uploads_are_reaped_on_the_next_save(
         return pending
 
     monkeypatch.setattr("flock.training.core.checkpoint.save_to_hub", upload)
-    trainer.checkpoint_manager.save_model()
+    save_checkpoint(trainer)
     if failed:
         uploads[0].set_exception(OSError("completed upload failed"))
     else:
         uploads[0].set_result(None)
     trainer.state.step.fill_(1)
-    trainer.checkpoint_manager.save_model()
+    save_checkpoint(trainer)
+    assert [p.name for p in trainer.checkpoint_manager.checkpoints()] == [
+        "checkpoint-0",
+        "checkpoint-1",
+    ]
+    assert list(trainer.checkpoint_manager.pending_uploads) == [
+        trainer.output_dir / "checkpoint-0",
+        trainer.output_dir / "checkpoint-1",
+    ]
+    assert "completed upload failed" not in caplog.text
+    uploads[1].set_result(None)
+    trainer.checkpoint_manager.finish_checkpoint_uploads()
     assert [p.name for p in trainer.checkpoint_manager.checkpoints()] == ["checkpoint-1"]
-    assert list(trainer.checkpoint_manager.pending_uploads) == [trainer.output_dir / "checkpoint-1"]
+    assert not trainer.checkpoint_manager.pending_uploads
     assert ("completed upload failed" in caplog.text) == failed
     if failed:
         assert str(trainer.output_dir / "checkpoint-0") in caplog.text
     records = len(caplog.records)
-    uploads[1].set_result(None)
-    trainer.checkpoint_manager.save_model(blocking=True)
-    assert not trainer.checkpoint_manager.pending_uploads
+    trainer.checkpoint_manager.finish_checkpoint_uploads()
     assert len(caplog.records) == records
 
 
@@ -1587,10 +1635,10 @@ def test_blocking_save_finishes_all_uploads_before_pruning(
         return pending
 
     monkeypatch.setattr("flock.training.core.checkpoint.save_to_hub", upload)
-    trainer.checkpoint_manager.save_model()
+    save_checkpoint(trainer)
     trainer.state.step.fill_(1)
     with ThreadPoolExecutor(max_workers=1) as executor:
-        saving = executor.submit(trainer.checkpoint_manager.save_model, blocking=True)
+        saving = executor.submit(save_checkpoint, trainer, blocking=True)
         try:
             assert waiting[0].wait(10), "blocking save did not wait for the older upload"
             assert [p.name for p in trainer.checkpoint_manager.checkpoints()] == [
@@ -1629,15 +1677,15 @@ def test_failed_submission_keeps_latest_checkpoint_while_old_upload_is_pending(
         return pending
 
     monkeypatch.setattr("flock.training.core.checkpoint.save_to_hub", upload)
-    trainer.checkpoint_manager.save_model()
+    save_checkpoint(trainer)
     trainer.state.step.fill_(1)
-    trainer.checkpoint_manager.save_model()
+    save_checkpoint(trainer)
     assert [p.name for p in trainer.checkpoint_manager.checkpoints()] == [
         "checkpoint-0",
         "checkpoint-1",
     ]
     pending.set_result(None)
-    trainer.checkpoint_manager.save_model(blocking=True)
+    save_checkpoint(trainer, blocking=True)
     assert [p.name for p in trainer.checkpoint_manager.checkpoints()] == ["checkpoint-1"]
     assert not trainer.checkpoint_manager.pending_uploads
 
@@ -1650,7 +1698,7 @@ def test_incompatible_data_is_rejected_before_model_or_rng_changes(
     changed_field: str,
 ) -> None:
     source = trained_trainer
-    source.checkpoint_manager.save_model()
+    save_checkpoint(source)
     options = {"output_dir": str(tmp_path / "target")}
     if changed_field == "dataset_size":
         options["dataset"] = [{"text": "a b c"}] * 6
@@ -1665,7 +1713,7 @@ def test_incompatible_data_is_rejected_before_model_or_rng_changes(
     weights = copy.deepcopy(target.model.state_dict())
     state = copy.deepcopy(target.state_dict())
     with pytest.raises(ValidationError):
-        target.checkpoint_manager.load_checkpoint(source.output_dir / "checkpoint-3")
+        load_checkpoint(target, source.output_dir / "checkpoint-3")
     assert_nested_equal(target.model.state_dict(), weights)
     assert_nested_equal(target.state_dict(), state)
 
@@ -1690,7 +1738,7 @@ def test_resume_rejects_changed_dataset_or_tokenizer_identity(
         prefetch_factor=None,
     )
     source.train()
-    source.checkpoint_manager.save_model()
+    save_checkpoint(source)
     target, _, _ = trainer_factory(
         dataset=SafeLanceDataset(
             str(changed_path if changed_identity == "dataset_uri" else original_path),
@@ -1704,7 +1752,7 @@ def test_resume_rejects_changed_dataset_or_tokenizer_identity(
         vocabulary["a"], vocabulary["b"] = vocabulary["b"], vocabulary["a"]
         target.tokenizer.backend_tokenizer.model = WordLevel(vocabulary, unk_token="[UNK]")
     try:
-        target.checkpoint_manager.load_checkpoint(source.output_dir / "checkpoint-3")
+        load_checkpoint(target, source.output_dir / "checkpoint-3")
     except ValueError:
         return
     raise AssertionError(f"Checkpoint accepted a changed {changed_identity}")
@@ -1725,10 +1773,10 @@ def test_resume_rejects_changed_training_settings(
     overrides: dict[str, torch.dtype] | dict[str, float],
 ) -> None:
     source = trained_trainer
-    source.checkpoint_manager.save_model()
+    save_checkpoint(source)
     target, _, _ = trainer_factory(output_dir=str(tmp_path / "target"), **overrides)
     try:
-        target.checkpoint_manager.load_checkpoint(source.output_dir / "checkpoint-3")
+        load_checkpoint(target, source.output_dir / "checkpoint-3")
     except ValueError:
         return
     raise AssertionError("Checkpoint accepted changed training settings")
@@ -1751,10 +1799,8 @@ def test_repeated_training_rejects_reuse_or_leaves_a_loadable_checkpoint(
         assert_nested_equal(trainer.model.state_dict(), weights)
         assert_nested_equal(trainer.state_dict(), state)
         return
-    trainer.checkpoint_manager.save_model()
-    trainer.checkpoint_manager.load_checkpoint(
-        trainer.output_dir / f"checkpoint-{int(trainer.state.step.item())}"
-    )
+    save_checkpoint(trainer)
+    load_checkpoint(trainer, trainer.output_dir / f"checkpoint-{int(trainer.state.step.item())}")
 
 
 @pytest.mark.xfail(
@@ -1765,12 +1811,12 @@ def test_resume_handles_cuda_topology_change_cleanly(
 ) -> None:
     trainer = trained_trainer
     generators = simulated_cuda_rng(2)
-    trainer.checkpoint_manager.save_model()
+    save_checkpoint(trainer)
     expected = torch.rand(5, generator=generators[0])
     del generators[1:]
     generators[0].manual_seed(999)
     try:
-        trainer.checkpoint_manager.load_checkpoint(trainer.output_dir / "checkpoint-3")
+        load_checkpoint(trainer, trainer.output_dir / "checkpoint-3")
     except ValueError:
         return  # Explicitly rejecting a topology change is also a supported policy.
     torch.testing.assert_close(torch.rand(5, generator=generators[0]), expected, atol=0, rtol=0)

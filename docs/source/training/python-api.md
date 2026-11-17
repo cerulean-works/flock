@@ -172,8 +172,9 @@ The `Olmo2` forward and tokenizer methods follow the `BaseModel` contract above.
 
 ## Checkpoint state
 
-`trainer.checkpoint_manager.save_model()` persists weights and configuration alongside separate safetensors
-files for each top-level training-state entry. See the
+`CheckpointManager.save_model(step, model, training_state=state)` persists weights
+and configuration alongside separate safetensors files for each top-level
+training-state entry. See the
 [Hub model format](../hub/model-storage#what-a-version-holds) for file metadata.
 These schemas and metric buffers are implementation-level APIs under
 `flock.training.core`.
@@ -191,15 +192,36 @@ These schemas and metric buffers are implementation-level APIs under
 
 ## Checkpoint persistence
 
-Use `trainer.checkpoint_manager.save_model()` for manual saves and
-`trainer.checkpoint_manager.load_checkpoint(path)` to restore a local checkpoint.
-The `CheckpointManager` stages local writes, tracks pending uploads,
-selects the latest checkpoint and applies retention. The trainer, metric buffers
-and scheduler validate their saved state before restoration. Optimizer group
-compatibility checks remain in the trainer.
+Construct a manager with persistence settings and pass the step and module at
+each save. It has no trainer dependency:
+
+```python
+from flock.training.core.checkpoint import CheckpointManager
+
+manager = CheckpointManager(
+    "checkpoints", save_to_hub_repo="cerulean-labs/olmo2-dolma3", save_total_limit=3
+)
+manager.save_model(step, model, training_state=state)
+manager.finish_checkpointing()
+```
+
+Local serialization always finishes before `save_model` returns. With
+`blocking=False`, the Hub uploads the completed checkpoint in the background.
+Later model or training-state updates cannot change the saved files.
+`finish_checkpointing()` finishes uploads and applies retention. Local write
+errors propagate immediately; upload errors are logged. Ordinary saves do not
+collect earlier uploads or prune files.
+
+`load_checkpoint(path, model)` restores weights and returns training state.
+Pass `validate_state=trainer.validate_state_dict` to validate the run before
+weights change, then call `trainer.load_state_dict(state)` with the result.
+Optimizer group compatibility checks remain in the trainer. Modules without a
+config can be saved and restored into an existing matching module; construction
+through the Hub requires a supported Flock model and frozen config dataclass.
 
 [[autodoc]] training.core.checkpoint.CheckpointManager
     - save_model
+    - finish_checkpointing
     - load_checkpoint
     - checkpoints
     - latest_checkpoint

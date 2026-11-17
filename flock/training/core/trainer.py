@@ -16,13 +16,14 @@ from torch import nn
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.utils.data import DataLoader
 from transformers import TokenizersBackend
+from wandb import Run
 
 from flock.eval.model import DEFAULT_BATCH_TOKENS, FlockCausalLM, ScoringModel
 from flock.eval.run import PreparedTask, prepare_task, score_prepared
 from flock.eval.tasks import TASKS
 from flock.training.core.checkpoint import CheckpointManager
 from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableBatchDataSampler
-from flock.training.core.distributed import DistributedRuntime
+from flock.training.core.distributed import DistributedRuntime, master_broadcast, master_only
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState, StepLRScheduler
 from flock.training.core.models import BaseModel
 from flock.training.core.optimizers import BaseOptimizer, OptimizerConfig, OptimizerInterface
@@ -66,7 +67,7 @@ class TrainerConfig(PydanticBaseModel):
             loop cleanup when the current step is between intervals.
         save_total_limit (`int`, *optional*):
             Positive local retention limit, ordered by `flock.json`'s `saved_at`.
-            Older checkpoints with pending uploads are temporarily retained.
+            Applied during final cleanup after all writes and uploads finish.
         save_to_hub_repo (`str`, *optional*):
             Hub destination `org/model`. Each new checkpoint starts an asynchronous
             upload tagged `checkpoint-<step>`.
@@ -394,13 +395,9 @@ class Trainer:
                 "Distributed runtime is not initialized. Use `distributed_run` context manager."
             )
 
-        self.logger = logging.getLogger(__name__)
-        self.run = wandb.init(
-            project=config.wandb_project, mode=config.wandb_mode, config=config.model_dump()
-        )
-        self.run.define_metric("global_step")
-        self.run.define_metric("train/*", step_metric="global_step")
-        self.run.define_metric("eval/*", step_metric="global_step")
+        self.logger = logging.getLogger(f"{__name__}:{self.runtime.rank}")
+        self.run: Run | None = None
+        self._init_wandb_tracker(config)
 
         self.model = model.to(self.device)
         self.tokenizer = tokenizer
@@ -440,9 +437,29 @@ class Trainer:
         self.save_to_hub_repo = config.save_to_hub_repo
         self.overwrite_output_dir = config.overwrite_output_dir
 
-        self.checkpoint_manager = CheckpointManager(self)
+        self.checkpoint_manager = CheckpointManager(
+            self.output_dir,
+            save_to_hub_repo=self.save_to_hub_repo,
+            save_total_limit=self.save_total_limit,
+            overwrite_output_dir=self.overwrite_output_dir,
+            run=self.run,
+            logger=self.logger,
+        )
+        if self.runtime.is_master:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.runtime.barrier()
+        if self.runtime.is_master:
+            self.logger.info("Trainer initialized on %s", self.device)
+
+    @master_broadcast
+    def _init_wandb_tracker(self, config: TrainerConfig) -> None:
+        self.run = wandb.init(
+            project=config.wandb_project, mode=config.wandb_mode, config=config.model_dump()
+        )
+        self.run.define_metric("global_step")
+        self.run.define_metric("train/*", step_metric="global_step")
+        self.run.define_metric("eval/*", step_metric="global_step")
 
     def _get_training_dataloader(self, skip_batches: int = 0) -> DataLoader:
         """Build a seeded, resumable loader with spawned workers and CUDA pinning."""
@@ -523,15 +540,15 @@ class Trainer:
             self.state.update(add_step=1, loss=loss, grad_norm=grad_norm, tokens=num_tokens)
 
             if step % self.logging_steps == 0 or step == self.total_steps:
-                metrics_dict = self.state.get_logging_metrics()
-                self.logger.info(metrics_dict)
-                self.run.log(metrics_dict)
+                if self.runtime.is_master:
+                    metrics_dict = self.state.get_logging_metrics()
+                    self._log_metrics(metrics_dict)
                 self.state.reset_window()
 
             if self.save_steps is not None and (
                 step % self.save_steps == 0 or step == self.total_steps
             ):
-                self.checkpoint_manager.save_model()
+                self._save_model(step)
 
             if self.validation_steps and (
                 step % self.validation_steps == 0 or step == self.total_steps
@@ -565,7 +582,11 @@ class Trainer:
         self._set_seed()
 
         if not resume_from_checkpoint:
-            if any(self.output_dir.iterdir()) and not self.overwrite_output_dir:
+            if (
+                self.runtime.is_master
+                and any(self.output_dir.iterdir())
+                and not self.overwrite_output_dir
+            ):
                 raise RuntimeError(
                     f"Save directory {self.output_dir} is not empty. "
                     "Resume from a checkpoint or specify an empty directory."
@@ -581,7 +602,11 @@ class Trainer:
                 checkpoint = self.checkpoint_manager.latest_checkpoint()
             else:
                 checkpoint = Path(resume_from_checkpoint)
-            self.checkpoint_manager.load_checkpoint(checkpoint)
+            self.load_state_dict(
+                self.checkpoint_manager.load_checkpoint(
+                    checkpoint, self.model, validate_state=self.validate_state_dict
+                )
+            )
             start_step = int(self.state.step.item())
             dataloader = self._get_training_dataloader(skip_batches=start_step)
             self.logger.info(
@@ -593,11 +618,12 @@ class Trainer:
             self.logger.info("Starting training")
             self._inner_training_loop(dataloader, start_step)
         finally:
-            if self.checkpoint_manager.pending_uploads or (
-                self.save_steps and self.state.step % self.save_steps != 0
-            ):
-                self.checkpoint_manager.save_model(blocking=True)
+            if self.save_steps and self.state.step % self.save_steps != 0:
+                self._save_model(int(self.state.step.item()), blocking=True)
+            if self.runtime.is_master:
+                self.checkpoint_manager.finish_checkpoint_uploads()
 
+    @master_broadcast
     @torch.no_grad()
     def evaluate(self) -> None:
         """Score configured tasks and log metrics at the current global step.
@@ -654,7 +680,31 @@ class Trainer:
             for metric_key, score in score_dict.metrics.items():
                 log_dict[f"eval/{task_key}/{metric_key}"] = score
 
-        self.run.log(log_dict)
+        self._log_metrics(log_dict)
+
+    @master_only
+    def _log_metrics(self, metrics_dict: dict[str, int | float]) -> None:
+        """Log a message to the trainer's logger and W&B run if available."""
+        self.logger.info(metrics_dict)
+        if self.run is not None:
+            self.run.log(metrics_dict)
+
+    @master_only
+    def _save_model(self, step: int, blocking: bool = False) -> None:
+        """Save model weights and training state to a new checkpoint folder.
+
+        Args:
+            step (`int`): Global step used for the checkpoint folder name.
+        """
+        if self.checkpoint_manager is None:
+            self.logger.error("Checkpoint manager is not initialized; cannot save model.")
+            return
+        try:
+            self.checkpoint_manager.save_model(
+                step, self.model, training_state=self.state_dict(), blocking=blocking
+            )
+        except Exception:
+            self.logger.exception("Error saving model checkpoint")
 
     def state_dict(self) -> dict[str, Any]:
         """Return optimizer, schedule, metric, RNG and data state for persistence.
@@ -692,6 +742,8 @@ class Trainer:
         Raises:
             `ValueError`: If data, progress, optimizer or scheduler settings differ.
         """
+        if not state:
+            raise ValueError("Checkpoint has no training state")
         checkpoint = TrainerCheckpoint.model_validate(
             state,
             context={
