@@ -3,6 +3,7 @@ made public."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import TYPE_CHECKING
 
@@ -164,6 +165,20 @@ def test_outsiders_get_run_metadata_without_who_ran_it(
         assert call(client, "GET", path).status == 404
 
 
+@pytest.mark.parametrize("name", ["%2e/wandb-metadata.json", ".//wandb-metadata.json"])
+def test_metadata_aliases_do_not_expose_private_fields(
+    setup: tuple[Client, Client, Client, Client], name: str
+) -> None:
+    api, member, outsider, anon = setup
+    metadata = {"email": "fixture@example.test", "username": "fixture", "host": "n1"}
+    api.upload("p", "r1", "wandb-metadata.json", json.dumps(metadata).encode())
+    publish(api)
+    for client in (outsider, anon):
+        response = call(client, "GET", f"/p/runs/r1/files/{name}")
+        assert response.status == 404 or response.json() == {"host": "n1"}
+    assert call(member, "GET", "/p/runs/r1/files/wandb-metadata.json").json() == metadata
+
+
 def test_admins_change_visibility_of_projects_they_didnt_create(
     setup: tuple[Client, Client, Client, Client], flock: FlockServer
 ) -> None:
@@ -282,3 +297,201 @@ def test_runs_moved_into_a_public_project_become_readable(
     assert moved.status == 200, moved.body
     assert call(anon, "GET", "/p/runs/r2").status == 200
     assert anon.runs("p")["total"] == 2
+
+
+def test_removed_creator_cannot_change_visibility_or_keep_private_stream(
+    setup: tuple[Client, Client, Client, Client], events: Callable[..., EventStream]
+) -> None:
+    api, member, _, _ = setup
+    member.create_run("mine", "live")
+    stream = events("mine", "live:0", client=member)
+    remaining = events("mine", "live:0", client=api)
+    assert remaining.next_of("hello")["runs"]["live"]["lines"] == 0
+    assert stream.next_of("hello")["runs"]["live"]["lines"] == 0
+    user_id = member.get("/api/v1/me").json()["id"]
+    assert api.delete(f"/api/v1/orgs/flock/members/{user_id}").status == 204
+    assert member.patch(f"{P}/mine", {"visibility": "public"}).status == 404
+    api.stream("mine", "live", history=[{"_step": 0, "loss": 2.0}])
+    with pytest.raises(AssertionError, match="stream ended"):
+        stream.next_of("history")
+    with pytest.raises(AssertionError, match="stream ended"):
+        remaining.next_of("history")
+    reconnected = events("mine", "live:0", client=api)
+    assert reconnected.next_of("history")["series"]["loss"]["y"] == [2.0]
+
+
+def test_member_removal_serializes_new_projects(
+    flock: FlockServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.src.core import accounts
+
+    member = flock.add_user("removed@x.io")
+    user_id = member.api.get("/api/v1/me").json()["id"]
+
+    async def check() -> None:
+        reached = asyncio.Event()
+        release = asyncio.Event()
+        original = accounts.publish
+
+        async def paused_publish(conn: Any, messages: Any) -> None:
+            reached.set()
+            await release.wait()
+            await original(conn, messages)
+
+        monkeypatch.setattr(accounts, "publish", paused_publish)
+        store = flock.store
+        org = await store.org("flock")
+        user = await store.accounts.user(user_id)
+        assert user is not None
+        removal = asyncio.create_task(store.accounts.remove_member(user, org))
+        await asyncio.wait_for(reached.wait(), 5)
+        creation = asyncio.create_task(store.create_project("flock", "concurrent"))
+        try:
+            # Project creation must wait until the removal's project snapshot is committed.
+            with pytest.raises(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(creation), 0.2)
+        finally:
+            release.set()
+            await removal
+            await creation
+        assert store.accounts.role(await store.accounts.user(user_id), org) is None
+
+    flock.call(check())
+
+
+def test_project_content_and_refusals_are_not_cached(
+    setup: tuple[Client, Client, Client, Client],
+) -> None:
+    api, member, outsider, anon = setup
+    for visibility in ("private", "public", "private"):
+        publish(api, visibility=visibility)
+        for client in (api, member, outsider, anon):
+            for method, path, body in READABLE:
+                response = call(client, method, path, body)
+                expected = 200 if client in (api, member) or visibility == "public" else 404
+                assert response.status == expected
+                assert response.headers["cache-control"] == "private, no-store"
+
+
+def test_public_projects_do_not_open_org_administration_or_imports(
+    setup: tuple[Client, Client, Client, Client],
+) -> None:
+    api, _, outsider, anon = setup
+    publish(api)
+    base = "/api/v1/orgs/flock"
+    for suffix in (
+        "/members",
+        "/invites",
+        "/billing",
+        "/budget",
+        "/budget/warnings",
+        "/budget/deleted-projects",
+        "/imports/hf",
+    ):
+        assert api.get(base + suffix).status == 200, suffix
+        assert outsider.get(base + suffix).status == 404, suffix
+        assert anon.get(base + suffix).status == 401, suffix
+    for method, suffix, body in (
+        ("GET", "/import", None),
+        ("GET", "/imports/hf/preview?kind=dataset&repo=org/data", None),
+        ("POST", "/imports/hf", {"kind": "dataset", "repo": "org/data", "dest": "private"}),
+        ("GET", "/imports/hf/1", None),
+        ("DELETE", "/imports/hf/1", None),
+        ("PATCH", "", {"display_name": "changed"}),
+        ("POST", "/invites", {"email": "stranger@example.test", "role": "member"}),
+    ):
+        for client, expected in ((outsider, 404), (anon, 401)):
+            response = client.request(method, base + suffix, body=body)
+            assert response.status == expected, (method, suffix, response.body)
+    assert api.get(base).json()["name"] == "flock"
+
+
+# Frozen route inventory: additions need a deliberate authorization expectation.
+ORG_SCOPED_ROUTES = [
+    ("DELETE", "/api/v1/orgs/flock"),
+    ("DELETE", "/api/v1/orgs/flock/avatar"),
+    ("DELETE", "/api/v1/orgs/flock/buckets/private"),
+    ("DELETE", "/api/v1/orgs/flock/budget/warnings/1/dismissal"),
+    ("DELETE", "/api/v1/orgs/flock/datasets/public"),
+    ("DELETE", "/api/v1/orgs/flock/datasets/tags/private"),
+    ("DELETE", "/api/v1/orgs/flock/datasets/trash/1"),
+    ("DELETE", "/api/v1/orgs/flock/import"),
+    ("DELETE", "/api/v1/orgs/flock/imports/hf/1"),
+    ("DELETE", "/api/v1/orgs/flock/invites/private"),
+    ("DELETE", "/api/v1/orgs/flock/members/1"),
+    ("DELETE", "/api/v1/orgs/flock/models/-/trash/models/1"),
+    ("DELETE", "/api/v1/orgs/flock/models/-/trash/versions/1"),
+    ("DELETE", "/api/v1/orgs/flock/models/private"),
+    ("DELETE", "/api/v1/orgs/flock/models/private/tags/private"),
+    ("DELETE", "/api/v1/orgs/flock/models/private/uploads/private"),
+    ("DELETE", "/api/v1/orgs/flock/models/private/versions/1"),
+    ("GET", "/api/v1/orgs/flock/billing"),
+    ("GET", "/api/v1/orgs/flock/buckets"),
+    ("GET", "/api/v1/orgs/flock/buckets/private"),
+    ("GET", "/api/v1/orgs/flock/buckets/private/object"),
+    ("GET", "/api/v1/orgs/flock/buckets/private/objects"),
+    ("GET", "/api/v1/orgs/flock/budget"),
+    ("GET", "/api/v1/orgs/flock/budget/deleted-projects"),
+    ("GET", "/api/v1/orgs/flock/budget/warnings"),
+    ("GET", "/api/v1/orgs/flock/datasets/at"),
+    ("GET", "/api/v1/orgs/flock/datasets/trash"),
+    ("GET", "/api/v1/orgs/flock/import"),
+    ("GET", "/api/v1/orgs/flock/imports/hf"),
+    ("GET", "/api/v1/orgs/flock/imports/hf/1"),
+    ("GET", "/api/v1/orgs/flock/imports/hf/preview"),
+    ("GET", "/api/v1/orgs/flock/invites"),
+    ("GET", "/api/v1/orgs/flock/members"),
+    ("GET", "/api/v1/orgs/flock/models"),
+    ("GET", "/api/v1/orgs/flock/models/-/trash"),
+    ("GET", "/api/v1/orgs/flock/models/private"),
+    ("GET", "/api/v1/orgs/flock/models/private/resolve"),
+    ("GET", "/api/v1/orgs/flock/models/private/uploads"),
+    ("GET", "/api/v1/orgs/flock/models/private/uploads/private"),
+    ("GET", "/api/v1/orgs/flock/models/private/versions"),
+    ("GET", "/api/v1/orgs/flock/models/private/versions/1"),
+    ("PATCH", "/api/v1/orgs/flock"),
+    ("PATCH", "/api/v1/orgs/flock/billing"),
+    ("PATCH", "/api/v1/orgs/flock/budget/deleted-projects/1"),
+    ("PATCH", "/api/v1/orgs/flock/members/1"),
+    ("PATCH", "/api/v1/orgs/flock/models/private"),
+    ("POST", "/api/v1/orgs/flock/buckets"),
+    ("POST", "/api/v1/orgs/flock/buckets/private/folders"),
+    ("POST", "/api/v1/orgs/flock/buckets/private/objects/delete"),
+    ("POST", "/api/v1/orgs/flock/buckets/private/presign"),
+    ("POST", "/api/v1/orgs/flock/datasets/delete"),
+    ("POST", "/api/v1/orgs/flock/datasets/move"),
+    ("POST", "/api/v1/orgs/flock/datasets/rename"),
+    ("POST", "/api/v1/orgs/flock/datasets/trash/1/restore"),
+    ("POST", "/api/v1/orgs/flock/import"),
+    ("POST", "/api/v1/orgs/flock/imports/hf"),
+    ("POST", "/api/v1/orgs/flock/invites"),
+    ("POST", "/api/v1/orgs/flock/models/-/trash/models/1/restore"),
+    ("POST", "/api/v1/orgs/flock/models/-/trash/versions/1/restore"),
+    ("POST", "/api/v1/orgs/flock/models/private/uploads"),
+    ("POST", "/api/v1/orgs/flock/models/private/uploads/private/commit"),
+    ("PUT", "/api/v1/orgs/flock/avatar"),
+    ("PUT", "/api/v1/orgs/flock/budget/warnings/1/dismissal"),
+    ("PUT", "/api/v1/orgs/flock/datasets/public"),
+    ("PUT", "/api/v1/orgs/flock/datasets/tags/private"),
+    ("PUT", "/api/v1/orgs/flock/models/private/primary"),
+    ("PUT", "/api/v1/orgs/flock/models/private/tags/private"),
+]
+
+
+def test_org_scoped_route_boundaries_refuse_outsiders(
+    setup: tuple[Client, Client, Client, Client],
+) -> None:
+    api, _, outsider, anon = setup
+    publish(api)
+    for method, path in ORG_SCOPED_ROUTES:
+        for client, expected in ((anon, (401,)), (outsider, (403, 404))):
+            response = client.request(
+                method, path, body={} if method in ("POST", "PATCH", "PUT") else None
+            )
+            assert response.status in expected, (method, path, response.status, response.body)
+            if response.status == 404:
+                assert response.json()["error"] == "organization flock not found", (
+                    method,
+                    path,
+                    response.body,
+                )

@@ -587,7 +587,18 @@ def test_a_dataset_import_writes_lance_datasets(
     assert read("info")["rows"] == 5
     assert "row 4" in json.dumps(read("rows"))
     assert "tiny data" in json.dumps(read("readme"))
+    for path in ("hf/data/train", "hf/data/test"):
+        response = flock.anonymous().request(
+            "GET", "/api/v1/orgs/flock/datasets/info", {"path": path}
+        )
+        assert response.status == 404
 
+    # The API sees in-memory completion before the final database save used by admission.
+    wait_for(
+        lambda: (
+            sql(flock, "SELECT state FROM hf_imports WHERE pk = $1", job["id"])[0][0] == "finished"
+        )
+    )
     # The same folder again is refused before anything starts.
     again = api.post(IMPORTS, {"kind": "dataset", "repo": "acme/data", "dest": "hf/data"})
     assert again.status == 409

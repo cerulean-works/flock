@@ -532,7 +532,10 @@ async def get_run_file(
     run: ReadableRunDep, name: str, store: StoreDep, viewer: ViewerDep
 ) -> Response:
     """A file the run uploaded. Outsiders reading a public project get ``wandb-metadata.json`` without ``email`` and ``username``, and 404 if it isn't a JSON object."""
-    if name == Store.METADATA_FILE and store.accounts.access(viewer, run.project) == "public":
+    if (
+        store.file_parts(name) == (Store.METADATA_FILE,)
+        and store.accounts.access(viewer, run.project) == "public"
+    ):
         data = await store.read_file(run, name)
         try:
             metadata = orjson.loads(data) if data is not None else None

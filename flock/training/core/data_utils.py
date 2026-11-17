@@ -37,10 +37,13 @@ class LanceBatchCollator:
         input_column (`str`): Text field in each dataset row.
     """
 
-    def __init__(self, tokenizer: TokenizersBackend, input_column: str) -> None:
+    def __init__(
+        self, tokenizer: TokenizersBackend, input_column: str, *, token_chunks: bool = False
+    ) -> None:
         """Store the tokenizer and source text column for worker-side collation."""
         self.tokenizer = tokenizer
         self.input_column = input_column
+        self.token_chunks = token_chunks
 
     def collate_fn(self, batch: list[dict[str, Any]]) -> Batch:
         """Pad and truncate rows, then align inputs with next-token labels.
@@ -64,12 +67,20 @@ class LanceBatchCollator:
             }
 
         # It is up to the model to set max length, padding side and padding token
-        tokenized: dict[str, torch.Tensor] = self.tokenizer(
-            [row[self.input_column] for row in batch],
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-        )
+        if self.token_chunks:
+            tokenized = self.tokenizer.pad(
+                {"input_ids": [row["_flock_chunk_ids"] for row in batch]},
+                return_tensors="pt",
+                padding=True,
+                return_attention_mask=True,
+            )
+        else:
+            tokenized = self.tokenizer(
+                [row[self.input_column] for row in batch],
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+            )
         input_ids = tokenized["input_ids"]
         mask = tokenized["attention_mask"].bool()
 
@@ -90,16 +101,18 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
     """Yield deterministic index batches while skipping a saved batch prefix.
 
     Each iteration reconstructs the same permutation with a private generator.
-    `len(sampler)` reports the full pass length, including skipped batches.
+    `len(sampler)` reports the pass length, capped at `max_batches`, including skipped batches.
 
     Args:
         batch_size (`int`): Positive rows per batch.
         dataset_size (`int`): Nonnegative number of rows.
         shuffle (`bool`, *optional*, defaults to `True`): Shuffle row indices.
         seed (`int`, *optional*, defaults to `42`): Private permutation seed.
-        skip_batches (`int`, *optional*, defaults to `0`): Completed batches to skip.
+        batch_cursor (`int`, *optional*, defaults to `0`): Completed global batches to skip.
         rank (`int`, *optional*, defaults to `0`): Worker rank in `[0, world_size)`.
         world_size (`int`, *optional*, defaults to `1`): Total number of workers
+        max_batches (`int`, *optional*): Stop after this many batches of the pass.
+        drop_last (`bool`, *optional*, defaults to `False`): Drop the final partial batch.
     """
 
     def __init__(
@@ -112,6 +125,8 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
         rank: int = 0,
         world_size: int = 1,
         yield_empty_last_batch: bool | None = None,
+        max_batches: int | None = None,
+        drop_last: bool = False,
     ) -> None:
         """Store batching settings without consuming the global RNG stream.
 
@@ -120,10 +135,13 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
             dataset_size (`int`): Nonnegative number of rows.
             shuffle (`bool`, *optional*, defaults to `True`): Shuffle row indices.
             seed (`int`, *optional*, defaults to `42`): Private permutation seed.
-            batch_cursor (`int`, *optional*, defaults to `0`): Completed batches to skip
+            batch_cursor (`int`, *optional*, defaults to `0`): Completed global batches to skip.
             rank (`int`, *optional*, defaults to `0`): Worker rank in `[0, world_size)`.
             world_size (`int`, *optional*, defaults to `1`): Total number of workers
-            yield_empty_last_batch (`bool`, *optional*, defaults to `True`): Whether to yield an empty batch if other ranks still have data to yield.
+            yield_empty_last_batch (`bool`, *optional*, defaults to `True`):
+                Yield an empty batch if other ranks still have data to yield.
+            max_batches (`int`, *optional*): Cap the number of global updates.
+            drop_last (`bool`, *optional*, defaults to `False`): Drop the final partial global batch.
         """
         super().__init__()
         self.dataset_size = dataset_size
@@ -149,13 +167,18 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
                 "yield_empty_last_batch is set but world_size is 1. This setting has no effect in single-worker mode."
             )
 
+        self.max_batches = max_batches
+        self.drop_last = drop_last
+
     def __len__(self) -> int:
-        """Return the full number of batches before applying the skip prefix."""
+        """Return the capped per-rank batch count before applying the cursor."""
         full_batches, remainder = divmod(self.dataset_size, self.batch_size * self.world_size)
-        return full_batches + int(
-            remainder > 0
+        batches = full_batches + int(
+            not self.drop_last
+            and remainder > 0
             and (self.yield_empty_last_batch or self.batch_size * self.rank < remainder)
         )
+        return batches if self.max_batches is None else min(batches, self.max_batches)
 
     def __iter__(self) -> Iterator[list[int]]:
         """Yield row-index lists after the configured number of skipped batches."""

@@ -15,14 +15,14 @@ The stack assumes one Swarm node. With more nodes, use the `s3` [files backend](
 
 ## 1. Check Dokploy's Traefik
 
-The stack routes its domains with labels that Traefik's Swarm provider reads. Check that Dokploy's Traefik has it, and note its entrypoint and certificate resolver names:
+Dokploy routes the stack's domains with labels that Traefik's Swarm provider reads. Check that Dokploy's Traefik has it:
 
 ```bash
 sudo grep -nE '^\s*(swarm|docker):|websecure|certificatesResolvers' -A2 /etc/dokploy/traefik/traefik.yml
 ```
 
 - Under `providers`, there must be a `swarm:` entry. Without it, Traefik never sees the stack and every domain answers 404.
-- Each domain gets two routes: plain HTTP on the `web` entrypoint, and HTTPS on `websecure` with a certificate from the `letsencrypt` resolver. Those are Dokploy's usual names and the stack's defaults. If yours differ, set `FLOCK_TRAEFIK_HTTP_ENTRYPOINT`, `FLOCK_TRAEFIK_ENTRYPOINT` and `FLOCK_TRAEFIK_CERTRESOLVER` in [step 4](#4-set-the-environment).
+- A `letsencrypt` entry under `certificatesResolvers` gives HTTPS domains their certificates.
 
 Check that Dokploy's network is an overlay network that services can join:
 
@@ -69,10 +69,7 @@ In Dokploy, create a **Compose** service in your project, and set its type to **
 Under **Environment**, add the settings. Dokploy passes them to the stack file, which forwards them to each service:
 
 ```dotenv
-# Domains and volumes of this stack.
-FLOCK_WEB_HOST=flock.example.com
-FLOCK_API_HOST=api.flock.example.com
-FLOCK_S3_HOST=s3.flock.example.com
+# Volumes of this stack.
 FLOCK_POSTGRES_VOLUME=flock_postgres-data
 FLOCK_FILES_VOLUME=flock_files
 
@@ -93,18 +90,26 @@ FLOCK_S3_UPSTREAM_SECRET_ACCESS_KEY=replace-with-upstream-secret
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `FLOCK_WEB_HOST` | required | Dashboard domain. |
-| `FLOCK_API_HOST` | required | API domain. |
-| `FLOCK_S3_HOST` | required | S3 proxy domain. |
 | `FLOCK_POSTGRES_VOLUME` | required | Name of the PostgreSQL volume. |
 | `FLOCK_FILES_VOLUME` | required | Name of the run files volume. |
 | `FLOCK_VERSION` | `main` | Image tag to run. Set a commit SHA to hold a release while `main` moves on. |
 | `FLOCK_IMAGE_PREFIX` | `ghcr.io/cerulean-works` | Registry and owner the images are pulled from. Change it if you publish from a fork. |
-| `FLOCK_TRAEFIK_HTTP_ENTRYPOINT` | `web` | Traefik's HTTP entrypoint. A domain behind a proxy that ends TLS, such as Cloudflare, reaches Flock through it. |
-| `FLOCK_TRAEFIK_ENTRYPOINT` | `websecure` | Traefik's HTTPS entrypoint. |
-| `FLOCK_TRAEFIK_CERTRESOLVER` | `letsencrypt` | Traefik's certificate resolver. |
 
-Every other setting in [Settings](configuration), such as Google sign-in or `FLOCK_S3_WORKERS`, works as with Compose. Don't add domains under the service's **Domains** tab: the stack file already routes them, and two routes for one domain conflict.
+Every other setting in [Settings](configuration), such as Google sign-in or `FLOCK_S3_WORKERS`, works as with Compose.
+
+### Add the domains
+
+Under the service's **Domains** tab, add one domain per service. Dokploy adds their Traefik routes to the stack file when it deploys:
+
+| Service | Host | Port | HTTPS |
+|---|---|---|---|
+| `ui` | `flock.example.com` | `3000` | on, with the `letsencrypt` certificate |
+| `api` | `api.flock.example.com` | `8080` | on, with the `letsencrypt` certificate |
+| `flock-s3` | `s3.flock.example.com` | `8090` | on, with the `letsencrypt` certificate |
+
+With HTTPS on, Dokploy also redirects plain HTTP on that domain to HTTPS. If a domain sits behind a proxy that ends TLS and reaches the server over plain HTTP, such as Cloudflare with its Flexible mode, turn HTTPS off for it instead, so the request isn't redirected back and forth.
+
+The stack file keeps one routing label of its own, `traefik.swarm.lbswarm=true`, which Dokploy doesn't set. It makes Traefik send requests to Swarm's own load balancer, which switches to a new task only once it's healthy and drops an old one before stopping it. Without it, Traefik keeps sending requests to a stopping task for up to 15 seconds after a deploy.
 
 ## 5. Deploy and check it
 
@@ -162,8 +167,8 @@ If Flock already runs as a Dokploy Compose service, the move has one short outag
    ```
 
 2. [Back up](operate#back-up-and-restore) the database and the run files.
-3. In Dokploy, stop the Compose service and remove its domains.
-4. Follow steps [1](#1-check-dokploys-traefik), [2](#2-publish-the-images), [4](#4-set-the-environment), [5](#5-deploy-and-check-it) and [6](#6-turn-on-deploys-from-github), skipping [step 3](#3-create-the-volumes). Set `FLOCK_POSTGRES_VOLUME` and `FLOCK_FILES_VOLUME` to the names you noted, such as `flock-app_postgres-data` and `flock-app_files`, so the stack keeps the existing data. Keep the Compose service's other settings.
+3. In Dokploy, note the Compose service's domains, then stop it and remove them.
+4. Follow steps [1](#1-check-dokploys-traefik), [2](#2-publish-the-images), [4](#4-set-the-environment), [5](#5-deploy-and-check-it) and [6](#6-turn-on-deploys-from-github), skipping [step 3](#3-create-the-volumes). Set `FLOCK_POSTGRES_VOLUME` and `FLOCK_FILES_VOLUME` to the names you noted, such as `flock-app_postgres-data` and `flock-app_files`, so the stack keeps the existing data. Add the domains you noted to the stack, and keep the Compose service's other settings.
 5. Once the stack works, delete the Compose service in Dokploy. Don't delete its volumes with it, since the stack uses them now.
 
 ## Migrations during a redeploy
@@ -174,8 +179,8 @@ The old and new release share the database for a minute or more while the new on
 
 | Symptom | Cause and fix |
 |---|---|
-| Every domain answers 404 | Traefik doesn't read the stack. Check for the `swarm` provider ([step 1](#1-check-dokploys-traefik)), and that the stack's services are on `dokploy-network`. |
-| The browser warns about the certificate | `FLOCK_TRAEFIK_CERTRESOLVER` doesn't match a resolver in Traefik's configuration. |
+| Every domain answers 404 | Traefik doesn't read the stack. Check for the `swarm` provider ([step 1](#1-check-dokploys-traefik)), that each service has its domain under **Domains**, and that you redeployed after adding them. |
+| The browser warns about the certificate | The domain has HTTPS on, but Traefik has no `letsencrypt` resolver, or Let's Encrypt couldn't reach the domain on port 80 to issue the certificate. |
 | A service stays at `0/1` with `No such image` or `denied` | The server can't pull from GHCR. Add the registry in Dokploy ([step 2](#2-publish-the-images)), and check that the workflow published the images. |
 | A deploy fails with `volume ... not found` | The volume names don't exist. Create them ([step 3](#3-create-the-volumes)) or fix the names. |
 | The API task keeps restarting during a deploy | The new release fails its health check, and Swarm rolls back to the old one, which keeps serving. Read the failed task's logs with `docker service logs`, as in [step 5](#5-deploy-and-check-it). |

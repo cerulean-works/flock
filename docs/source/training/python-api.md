@@ -24,6 +24,7 @@ evaluation task names. With zero workers, set `dataloader_prefetch_factor=None`.
 | `run_name` | Required | Default checkpoint folder name and evaluation label. Does not set the W&B run name. |
 | `input_column` | Required | Text column in each dataset row. |
 | `batch_size` | Required | Positive rows per optimizer update. |
+| `max_steps` | `None` | Positive cap on optimizer updates; schedules plan over the capped run. `None` trains the full pass. |
 | `optimizer_config` | Required | `AdamWConfig`; Muon is not implemented. |
 | `lr_scheduler_config` | Required | `LRSchedulerConfig` containing learning-rate segments. |
 | `wandb_project` | Required | Tracking project started during trainer construction. |
@@ -228,3 +229,8 @@ through the Hub requires a supported Flock model and frozen config dataclass.
     - load_checkpoint
     - checkpoints
     - latest_checkpoint
+
+## Token chunks
+
+[[autodoc]] training.TokenChunkDataset
+    - prepare

@@ -7,7 +7,7 @@ import random
 from datetime import timedelta
 from itertools import islice
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -175,7 +175,11 @@ def test_distributed_metrics_and_updates_match_global_batch(
 
 
 def _check_distributed_step_budget(
-    rank: int, directory: Path, config: Olmo2Config, tokenizer: TokenizersBackend
+    rank: int,
+    directory: Path,
+    config: Olmo2Config,
+    tokenizer: TokenizersBackend,
+    max_steps: int | None,
 ) -> None:
     torch.set_num_threads(1)
     dist.init_process_group(
@@ -188,12 +192,16 @@ def _check_distributed_step_budget(
     try:
         # Include empty-rank tails, including a dataset smaller than the world.
         for dataset_size, expected_steps in [(1, 1), (4, 1), (5, 2), (6, 2), (7, 2), (8, 2)]:
+            if max_steps is not None:
+                expected_steps = min(expected_steps, max_steps)
+            expected_tokens = min(dataset_size, expected_steps * 4) * 2
             with patch("flock.training.core.trainer.wandb.init") as init_run:
                 trainer = Trainer(
                     config=TrainerConfig(
                         run_name="step-budget",
                         input_column="text",
                         batch_size=2,
+                        max_steps=max_steps,
                         optimizer_config=AdamWConfig(lr=0.01, betas=(0.8, 0.9)),
                         lr_scheduler_config=LRSchedulerConfig(
                             schedule=[
@@ -257,25 +265,26 @@ def _check_distributed_step_budget(
                 assert trainer.state.step.item() == expected_steps
                 assert trainer.lr_scheduler.completed_steps == expected_steps
                 assert trainer.lr_scheduler.get_last_lr() == pytest.approx([0.001])
-                assert trainer.state.total_tokens.item() == dataset_size * 2
+                assert trainer.state.total_tokens.item() == expected_tokens
                 assert trainer.state.window_steps.item() == 0
                 if rank == 0:
                     calls = init_run.return_value.log.call_args_list
                     assert len(calls) == 1
                     assert calls[0].args[0]["global_step"] == expected_steps
-                    assert calls[0].args[0]["train/tokens"] == dataset_size * 2
+                    assert calls[0].args[0]["train/tokens"] == expected_tokens
                 else:
                     init_run.assert_not_called()
     finally:
         dist.destroy_process_group()
 
 
+@pytest.mark.parametrize("max_steps", [None, 1, 100])
 def test_distributed_trainer_step_budget_and_final_log(
-    tmp_path: Path, config: Olmo2Config, tokenizer: TokenizersBackend
+    tmp_path: Path, config: Olmo2Config, tokenizer: TokenizersBackend, max_steps: int | None
 ) -> None:
     mp.spawn(
         _check_distributed_step_budget,
-        args=(tmp_path, config, tokenizer),
+        args=(tmp_path, config, tokenizer, max_steps),
         nprocs=2,
         join=True,
     )
@@ -375,7 +384,7 @@ def _check_distributed_resume(
         manager = resumed.checkpoint_manager
         read = manager.load_checkpoint
 
-        def direct_read(*args: object, **kwargs: object) -> object:
+        def direct_read(*args: Any, **kwargs: Any) -> Any:
             with (
                 patch.object(
                     dist, "broadcast_object_list", side_effect=AssertionError("load broadcast")

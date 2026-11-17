@@ -1,9 +1,9 @@
 import logging
 import math
 import random
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Literal, Self, cast
+from typing import Any, Literal, Self
 
 import torch
 import torch.distributed as dist
@@ -22,6 +22,7 @@ from flock.eval.model import DEFAULT_BATCH_TOKENS, FlockCausalLM, ScoringModel
 from flock.eval.run import PreparedTask, prepare_task, score_prepared
 from flock.eval.tasks import TASKS
 from flock.training.core.checkpoint import CheckpointManager
+from flock.training.core.chunks import TokenChunkDataset
 from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableBatchDataSampler
 from flock.training.core.distributed import DistributedRuntime, master_broadcast, master_only
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState, StepLRScheduler
@@ -30,7 +31,7 @@ from flock.training.core.optimizers import BaseOptimizer, OptimizerConfig, Optim
 
 
 class TrainerConfig(PydanticBaseModel):
-    """Configure one shuffled training pass and its tracking, evaluation and saves.
+    """Configure one shuffled pass, or its first `max_steps` updates, with tracking and saves.
 
     Fields are frozen after validation; nested lists are still mutable. Unknown
     fields are rejected. Positive intervals count optimizer updates, not tokens.
@@ -40,7 +41,12 @@ class TrainerConfig(PydanticBaseModel):
             Name used for the default checkpoint directory and evaluation labels.
             This is not passed to `wandb.init` as the tracking run's name.
         input_column (`str`): Text column read from each Lance row.
-        batch_size (`int`): Positive number of dataset rows per optimizer update.
+        batch_size (`int`): Positive number of dataset items per rank per optimizer update; chunks when using a token cache.
+        max_steps (`int`, *optional*):
+            Positive cap on optimizer updates. The run ends at the cap, or at the end of
+            the pass if that comes first. Fractional schedule times are fractions of the
+            capped run; a schedule whose update counts exceed it is rejected when the
+            trainer is built.
         optimizer_config (`OptimizerConfig`):
             Optimizer settings. Only `AdamWConfig` is currently implemented.
         lr_scheduler_config (`LRSchedulerConfig`): Learning-rate timeframes and interpolation.
@@ -95,6 +101,7 @@ class TrainerConfig(PydanticBaseModel):
 
     input_column: str
     batch_size: int = Field(gt=0)
+    max_steps: int | None = Field(default=None, gt=0)
 
     optimizer_config: OptimizerConfig
     lr_scheduler_config: LRSchedulerConfig
@@ -244,7 +251,7 @@ class TrainerCheckpoint(PydanticBaseModel):
         optimizer_state_dict (`dict[str, Any]`): Optimizer groups and parameter state.
         lr_scheduler_state_dict (`LRSchedulerState`): Schedule and progress.
         rank_states (`dict[int, CheckpointRankState]`): Per-rank RNG and data state.
-        config (`dict[str, int | str]`): Settings defining the sampler contract.
+        config (`dict[str, int | str | None]`): Settings defining the sampler contract.
 
     Model validation checks that trainer and scheduler progress agree. With a
     validation context containing `config` and `total_steps`, it also checks
@@ -259,7 +266,7 @@ class TrainerCheckpoint(PydanticBaseModel):
     optimizer_state_dict: dict[str, Any]
     lr_scheduler_state_dict: LRSchedulerState
     rank_states: dict[int, CheckpointRankState]
-    config: dict[str, int | str]
+    config: dict[str, int | str | None]
 
     @model_validator(mode="after")
     def validate_run(self, info: ValidationInfo) -> Self:
@@ -281,10 +288,14 @@ class TrainerCheckpoint(PydanticBaseModel):
         if info.context is not None:
             if self.config != info.context["config"]:
                 raise ValueError(
-                    "Checkpoint dataset size, batch size, seed, input column or world size changed"
+                    "Checkpoint dataset size, chunk cache, batch size, seed, input column or world size changed"
                 )
             if schedule.total_steps != info.context["total_steps"]:
-                raise ValueError("Checkpoint trainer and scheduler progress do not match this run")
+                raise ValueError(
+                    f"Checkpoint plans {schedule.total_steps} updates, but this run plans "
+                    f"{info.context['total_steps']}. Set max_steps so the run plans "
+                    f"{schedule.total_steps} updates."
+                )
             if info.context["rank"] not in self.rank_states:
                 raise ValueError("Checkpoint has no state for this rank")
         return self
@@ -412,7 +423,7 @@ class TrainerState(nn.Module):
 
 
 class Trainer:
-    """Train a causal model for one shuffled pass on CPU or distributed devices.
+    """Train a causal model for one pass or `max_steps` updates on CPU or distributed devices.
 
     Construction starts a W&B run, moves the supplied model without casting its
     weights, constructs the optimizer/scheduler and creates the output directory.
@@ -427,12 +438,13 @@ class Trainer:
         tokenizer (`TokenizersBackend`):
             Tokenizer configured with a padding token, padding side and maximum
             length. The collator applies padding, truncation and target shifting.
-        dataset (`SafeLanceDataset`): Finite, indexable dataset of text rows.
+        dataset (`SafeLanceDataset` or `TokenChunkDataset`): Finite, indexable text rows or cached token chunks.
         runtime ([`training.core.distributed.DistributedRuntime`] or `None`, *optional*):
             Distributed runtime. If `None`, detect ranks and device from the environment.
 
     Raises:
         `NotImplementedError`: If the optimizer configuration selects Muon.
+        `ValueError`: If the learning-rate schedule does not fit the planned updates.
 
     There is no gradient accumulation or automatic dtype
     conversion. Use a main-module guard when starting spawned loader workers.
@@ -444,10 +456,18 @@ class Trainer:
         config: TrainerConfig,
         model: BaseModel,
         tokenizer: TokenizersBackend,
-        dataset: SafeLanceDataset,
+        dataset: SafeLanceDataset | TokenChunkDataset,
         runtime: DistributedRuntime | None = None,
     ) -> None:
         """Initialize tracking, device placement, optimization and checkpoint storage."""
+        if isinstance(dataset, TokenChunkDataset):
+            if dataset.chunk_length > tokenizer.model_max_length:
+                raise ValueError("chunk_length exceeds tokenizer model_max_length")
+            if dataset.manifest["input_column"] != config.input_column:
+                raise ValueError("Chunk cache input column does not match Trainer config")
+            digest = TokenChunkDataset.tokenizer_fingerprint(tokenizer)
+            if dataset.manifest["tokenizer"] != digest:
+                raise ValueError("Chunk cache tokenizer does not match Trainer tokenizer")
         self.run_name = config.run_name
         self.seed = config.seed
 
@@ -488,6 +508,9 @@ class Trainer:
         self.total_steps = math.ceil(
             len(self.dataset) / (self.batch_size * self.runtime.world_size)
         )
+        if config.max_steps is not None:
+            # The schedule and the checkpoint check plan over the capped run.
+            self.total_steps = min(self.total_steps, config.max_steps)
         optimizer_factory = OptimizerInterface.get_interface(type(config.optimizer_config))
         self.optimizer: BaseOptimizer = optimizer_factory(
             config.optimizer_config, self.model.parameters()
@@ -538,7 +561,11 @@ class Trainer:
 
     def _get_training_dataloader(self, skip_batches: int = 0) -> DataLoader:
         """Build a seeded, resumable loader with spawned workers and CUDA pinning."""
-        collator = LanceBatchCollator(self.tokenizer, self.ds_input_column)
+        collator = LanceBatchCollator(
+            self.tokenizer,
+            self.ds_input_column,
+            token_chunks=isinstance(self.dataset, TokenChunkDataset),
+        )
         sampler = ResumableBatchDataSampler(
             batch_size=self.batch_size,
             dataset_size=len(self.dataset),
@@ -548,6 +575,7 @@ class Trainer:
             rank=self.runtime.rank,
             world_size=self.runtime.world_size,
             yield_empty_last_batch=True if self.runtime.enabled else None,
+            max_batches=self.total_steps,
         )
 
         return DataLoader(
@@ -610,12 +638,11 @@ class Trainer:
         random.seed(self.seed + self.runtime.rank)
         torch.manual_seed(self.seed + self.runtime.rank)
 
-    def _inner_training_loop(self, dataloader: DataLoader, start_step: int) -> None:
+    def _inner_training_loop(self, dataloader: Iterable[Batch], start_step: int) -> None:
         """Update once per batch, then log, save and evaluate at configured intervals."""
         for step, batch in enumerate(dataloader, start=start_step + 1):
             self.optimizer.zero_grad()
 
-            batch = cast(Batch, batch)
             batch = {k: v.to(self.device, non_blocking=True) for k, v in batch.items()}
 
             with torch.autocast(self.device.type, dtype=self.model_dtype):
@@ -650,7 +677,7 @@ class Trainer:
                 self.evaluate()
 
     def train(self, resume_from_checkpoint: bool | str | Path = False) -> None:
-        """Train one pass, optionally restoring a local checkpoint before iteration.
+        """Train one pass or `max_steps` updates, optionally restoring a checkpoint first.
 
         Args:
             resume_from_checkpoint (`bool`, `str` or `Path`, *optional*, defaults to `False`):
@@ -838,6 +865,11 @@ class Trainer:
                 }
             },
             "config": {
+                "chunk_fingerprint": (
+                    self.dataset.fingerprint
+                    if isinstance(self.dataset, TokenChunkDataset)
+                    else None
+                ),
                 "dataset_size": len(self.dataset),
                 "batch_size": self.batch_size,
                 "seed": self.seed,
@@ -866,6 +898,11 @@ class Trainer:
             state,
             context={
                 "config": {
+                    "chunk_fingerprint": (
+                        self.dataset.fingerprint
+                        if isinstance(self.dataset, TokenChunkDataset)
+                        else None
+                    ),
                     "dataset_size": len(self.dataset),
                     "batch_size": self.batch_size,
                     "seed": self.seed,

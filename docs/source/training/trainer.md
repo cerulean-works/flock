@@ -1,10 +1,10 @@
 # Train with Flock
 
-`Trainer` runs one shuffled pass over a Lance text dataset on one device or across
-distributed workers. Each
-batch produces one optimizer update: tokenize the text, build next-token targets,
-compute cross-entropy, backpropagate, clip gradients, update weights and advance
-the learning rate. Padding targets are ignored when computing loss.
+`Trainer` runs one shuffled pass, or its first `max_steps` updates, over a Lance
+text dataset on one device or across distributed workers. Each batch produces one
+optimizer update: tokenize the text, build next-token targets, compute
+cross-entropy, backpropagate, clip gradients, update weights and advance the
+learning rate. Padding targets are ignored when computing loss.
 The [Training API](python-api) lists configuration fields, defaults and public methods.
 
 ## Run the scaffold experiment
@@ -78,6 +78,9 @@ config = TrainerConfig(
 `batch_size` counts dataset rows per rank per update. The run has
 `ceil(len(dataset) / (batch_size * world_size))` updates, including a final partial
 batch. For a single-device run, `world_size` is `1`.
+Set `max_steps` to end the run earlier: training stops after that many updates of
+the same shuffled order, and fractional schedule times become fractions of the
+shorter run. A checkpoint resumes only with the same effective number of updates.
 The example warms up linearly over the first 10% of updates, holds the
 optimizer's base rate through 90%, then decays to zero with a cosine curve.
 To decay immediately after warmup, remove the constant segment and change the
@@ -124,6 +127,52 @@ when either the input or target position is padding. Loss is summed cross-entrop
 over valid targets divided by their count; an all-ignored batch has zero loss.
 Supply text that produces at least two tokens per row for useful training.
 
+## Keep long documents as chunks
+
+Prepare a local token cache before constructing the model or trainer. The cache keeps
+source columns and tokenizes each document once without truncation. Your tokenizer's
+special-token policy applies once per document; no BOS or EOS is inserted at chunk
+boundaries. Configure the tokenizer to add EOS at document ends if your corpus needs it.
+
+```python
+from flock.training import TokenChunkDataset
+
+chunks = TokenChunkDataset.prepare(
+    dataset=dataset,
+    tokenizer=tokenizer,
+    input_column="text",
+    cache_dir=".training-cache/documents",
+    chunk_length=4096,
+)
+trainer = Trainer(config=config, model=model, tokenizer=tokenizer, dataset=chunks)
+```
+
+Here `batch_size=8` means eight chunks per rank per update. The sampler shuffles chunks independently,
+including chunks from the same document. The schedule counts chunk batches, so
+retaining long documents increases the number of updates in a complete pass.
+Choose the learning-rate schedule for that new count.
+
+Each item holds at most 4096 token IDs, yielding at most 4095 next-token targets.
+Adjacent chunks overlap by one context token. Every original next-token target appears
+exactly once, including a final tail with only one target. Documents with fewer than two
+tokens produce no items. Short documents remain separate; there is no packing.
+Apply document exclusions and deduplication before preparing the cache. Each chunk
+keeps its document metadata and adds its document index and chunk index.
+
+Keep this cache private like its source: it contains the source text and tokens.
+Preparation refuses an existing path. Reopen the completed cache to resume, or use a
+different chunk length without tokenizing again:
+
+```python
+chunks = TokenChunkDataset(cache_dir=".training-cache/documents", chunk_length=4096)
+```
+
+The cache pins its first Lance version. Do not modify it. Resume checks its source URI
+and version, tokenizer rules and chunk length in addition to the normal sampler settings.
+Changing any of those requires a fresh training run. The trainer also checks the cache's
+text column and tokenizer against the supplied configuration. Chunk length must not
+exceed the tokenizer's model limit.
+
 ## Launch distributed training
 
 Use `torchrun` to start one process per GPU. Each process keeps a full copy of
@@ -139,8 +188,13 @@ and access to the model's tokenizer.
 import logging
 
 from flock.training import (
-    AdamWConfig, DatasetConfig, LRSchedulerConfig, LRScheduleSegment,
-    Trainer, TrainerConfig, get_dataset,
+    AdamWConfig,
+    DatasetConfig,
+    LRSchedulerConfig,
+    LRScheduleSegment,
+    Trainer,
+    TrainerConfig,
+    get_dataset,
 )
 from flock.training.core.distributed import distributed_run
 from flock.training.core.models import OLMO2_1B_CONFIG, Olmo2
@@ -546,7 +600,7 @@ number of batches in the seeded shuffle. Logging and saving keep their original
 step numbers. Resume rejects a changed model architecture/configuration, dataset
 size, batch size, seed, input column, world size, optimizer group settings or scheduler
 configuration/base rates. Keep the dataset contents and tokenizer unchanged;
-the checkpoint does not verify their identity. Resume initializes a new tracking
+ordinary text-dataset checkpoints do not verify their identity. Token-cache checkpoints also verify the cache identity described above. Resume initializes a new tracking
 run and records the restored global steps there.
 
 Every rank reads weights and training state directly from the checkpoint folder
