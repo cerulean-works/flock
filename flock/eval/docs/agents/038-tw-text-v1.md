@@ -32,7 +32,7 @@ As 026.D6 and 029.D1 require, the table lists every distinct `subdomain` of each
 
 ### 038.D4. The time caveats carry over unchanged
 
-`v1` re-parses `v0`'s fetched pages and adds none, except theses, which were listed again from a newer release of the repository's index (harvest 006.D13: 320 in the window against 305). So 029.D4 holds for it as written: `judicial` covers 2026-04-01 to 2026-08-31, because the September and October bundles did not exist at either build, and `theses` is not held out in time, since a thesis carries only its academic year. A later judgment month is a new revision of the dataset, and so a new suite under 038.D1.
+`v1` re-parses `v0`'s fetched pages and adds none, except theses, which were listed again from version 3 of the `ndltd-pdfs` dataset instead of version 2 (harvest 006.D13: 320 in the window against 305). So 029.D4 holds for it as written: `judicial` covers 2026-04-01 to 2026-08-31, because the September and October bundles did not exist at either build, and `theses` is not held out in time, since a thesis carries only its academic year. A later judgment month is a new revision of the dataset, and so a new suite under 038.D1.
 
 ### 038.D5. What training-data exclusion takes from `v1`, stated but not built
 

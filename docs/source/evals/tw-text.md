@@ -40,7 +40,7 @@ Two sources differ from the rest in time, in both versions:
 
 ### How `v1` differs from `v0`
 
-`v1` re-parses the pages fetched for `v0` with newer extraction code and samples them again. It adds no news, forum, record or wiki page that `v0` didn't fetch. Theses are the exception: they were listed again from a newer release of the thesis repository's index, which adds a school. Each change is a versioned step of the build:
+`v1` re-parses the pages fetched for `v0` with newer extraction code and samples them again. It adds no document of any other source that `v0` didn't fetch. Theses are the exception: they were listed again from version 3 of the team's `ndltd-pdfs` thesis dataset (`v0` read version 2), which adds a school. Each change is a versioned step of the build:
 
 - **Domains from each source's own metadata.** A news page's section, a judgment's court and case type, a thesis's department mapped to one of seven fields of study. `v0` had one domain for most sources.
 - **Equal sampling across domains.** Each source gets about 2 million OLMo 2 tokens, split evenly over its domains, as Paloma's stratified sampling does. A domain with less than its share gives the rest to the others. `v0` drew uniformly from each source, so its largest domains filled most of their source.
@@ -90,7 +90,7 @@ Each domain is one [`~eval.tasks.PerplexityTask`]. It scores every document whol
 
 Read the results per source, as for Paloma:
 
-- `tw_text_v1:<source>` is the unweighted mean of its domains' `bits_per_byte`, as `paloma:<source>` is. Each domain counts once, whatever its size, so a small domain (LTN's 國際, 136,693 OLMo 2 tokens) moves its source's number as much as a large one (LTN's `other`, 521,544). Equal sampling narrows these gaps at `v1` but doesn't close them: a domain with less than its share keeps all it has, and the others share the rest.
+- `tw_text_v1:<source>` is the unweighted mean of its domains' `bits_per_byte`, as `paloma:<source>` is. Each domain counts once, whatever its size, so a small domain (LTN's 國際, 136,693 OLMo 2 tokens) moves its source's number as much as a large one (LTN's `other`, 521,544). Equal sampling narrows these gaps at `v1` but doesn't close them: the sample draws whole documents, a domain with less than its share keeps all it has, and an `other` pools many small sections.
 - `tw_text_v1` is the unweighted mean of the 11 sources, and `tw_text` likewise. Paloma has no score over its sources, but these sets were built for one comparison, so they have one. Each source counts once, so read the sources before the mean.
 
 Compare models on `bits_per_byte`, which divides by UTF-8 bytes rather than tokens and so works across tokenizers. `loss_per_token` and `perplexity` compare only models that share a tokenizer.
