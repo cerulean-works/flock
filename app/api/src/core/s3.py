@@ -684,9 +684,7 @@ class S3:
 
     @staticmethod
     def _check_writable(bucket: Bucket) -> None:
-        """flock-models is written only through upload sessions and emptied only through the
-        model routes (D97, D109), so the dashboard's own writes are refused there, as the proxy
-        refuses every other client's."""
+        """Refuse generic writes to the managed model bucket (D97, D109)."""
         if bucket.managed == "models":
             raise Forbidden(
                 "Files in flock-models change only through flock models push and the Models tab."

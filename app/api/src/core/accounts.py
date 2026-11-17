@@ -14,6 +14,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 
 from app.api.src.core.errors import Conflict, Forbidden, NotFound, TooManyAttempts
+from app.api.src.core.live import close_message, publish
 
 if TYPE_CHECKING:
     import asyncpg
@@ -884,6 +885,8 @@ class Accounts:
 
     async def remove_member(self, user: User, org: Org) -> None:
         async with self.store.db.pool.acquire() as conn, conn.transaction():
+            # Serialize the project snapshot with creation, so no new stream escapes closure.
+            await self.store._lock_org(conn, org, update=True)
             await self._lock_members(conn, org)
             if org.pk not in user.roles:
                 raise NotFound(f"{user.email} is not a member of {org.name}")
@@ -891,6 +894,9 @@ class Accounts:
             await conn.execute(
                 "DELETE FROM memberships WHERE user_pk = $1 AND org_pk = $2", user.pk, org.pk
             )
+            # Existing streams must reconnect through the new membership rules on every replica.
+            projects = await conn.fetch("SELECT pk FROM projects WHERE org_pk = $1", org.pk)
+            await publish(conn, [close_message(pk) for (pk,) in projects])
         del user.roles[org.pk]
 
     # ------------------------------------------------------------------ invites

@@ -13,10 +13,7 @@ log = logging.getLogger(__name__)
 
 
 class Instance:
-    """An API process or S3 proxy worker, and the highest migration its release ships. It
-    registers on start, updates ``seen_at`` every ``heartbeat`` seconds and deletes its row on
-    close. A process killed outright stops updating it and counts as gone after
-    ``Migrations.GONE`` seconds."""
+    """Track this worker's release and liveness for contract migrations (D147)."""
 
     HEARTBEAT = 15.0
 

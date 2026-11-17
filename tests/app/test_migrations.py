@@ -35,7 +35,9 @@ def test_migration_files_are_numbered_in_sequence() -> None:
 def test_migrate_applies_everything_once(postgres: Any) -> None:
     url = postgres.create(migrated=False)
     migrations = Migrations()
-    expected = [path.stem for path in migrations.files()]
+    expected = [
+        migration.version for migration in migrations.migrations() if not migration.contract
+    ]
     assert asyncio.run(migrations.apply(url)) == expected
     assert asyncio.run(migrations.apply(url)) == []
 
@@ -148,6 +150,7 @@ def test_0002_upgrades_existing_data(postgres: Any, make_flock: Flocks, tmp_path
         "0018_hf_imports",
         "0019_bulk_select",
         "0020_instances",
+        "0021_dataset_grants",
     ]
 
     server = make_flock(database_url=url)  # the backfill rebuilds system metrics' chunks
@@ -237,6 +240,7 @@ def test_0003_creates_projects_from_runs(postgres: Any, make_flock: Flocks, tmp_
         "0018_hf_imports",
         "0019_bulk_select",
         "0020_instances",
+        "0021_dataset_grants",
     ]
 
     api = make_flock(database_url=url).client()
@@ -292,6 +296,7 @@ def test_0004_creates_orgs_from_entities(postgres: Any, make_flock: Flocks, tmp_
         "0018_hf_imports",
         "0019_bulk_select",
         "0020_instances",
+        "0021_dataset_grants",
     ]
 
     async def rows() -> list:
@@ -375,6 +380,7 @@ def test_0005_fills_the_usage_ledger_and_reads_uploaded_gpus(
         "0018_hf_imports",
         "0019_bulk_select",
         "0020_instances",
+        "0021_dataset_grants",
     ]
     # Flock's first files directory (see ``Flocks``) already holds the upload.
     metadata = tmp_path / "flock-files-0" / str(run_pk) / "wandb-metadata.json"
@@ -429,6 +435,7 @@ def test_0008_shows_existing_orgs_by_their_name(
         "0018_hf_imports",
         "0019_bulk_select",
         "0020_instances",
+        "0021_dataset_grants",
     ]
 
     async def nullable() -> str:
@@ -497,6 +504,7 @@ def test_0009_keeps_the_spend_of_projects_deleted_before_it(
         "0018_hf_imports",
         "0019_bulk_select",
         "0020_instances",
+        "0021_dataset_grants",
     ]
     api = make_flock(database_url=url).client()
     (deleted,) = api.get("/api/v1/orgs/flock/budget/deleted-projects").json()["deleted_projects"]
@@ -544,6 +552,7 @@ def test_0012_refuses_an_org_named_storage(postgres: Any, tmp_path: Path) -> Non
         "0018_hf_imports",
         "0019_bulk_select",
         "0020_instances",
+        "0021_dataset_grants",
     ]
 
 
@@ -617,6 +626,7 @@ def test_0013_moves_runs_into_the_run_table_and_series_chunks(
         "0018_hf_imports",
         "0019_bulk_select",
         "0020_instances",
+        "0021_dataset_grants",
     ]
 
     reports = []
@@ -732,6 +742,7 @@ def test_0014_refuses_an_org_named_datasets(postgres: Any, tmp_path: Path) -> No
         "0018_hf_imports",
         "0019_bulk_select",
         "0020_instances",
+        "0021_dataset_grants",
     ]
 
 
@@ -767,6 +778,7 @@ def test_0015_refuses_an_org_named_models(postgres: Any, tmp_path: Path) -> None
         "0018_hf_imports",
         "0019_bulk_select",
         "0020_instances",
+        "0021_dataset_grants",
     ]
 
 
@@ -799,11 +811,12 @@ def test_0016_leaves_existing_projects_and_datasets_private(postgres: Any, tmp_p
         "0018_hf_imports",
         "0019_bulk_select",
         "0020_instances",
+        "0021_dataset_grants",
     ]
     rows = asyncio.run(run("SELECT name, visibility FROM projects ORDER BY name"))
     assert [tuple(row) for row in rows] == [("a", "private"), ("b", "private")]
     assert asyncio.run(run("SELECT * FROM private_datasets")) == []
-    # Existing orgs are closed until their datasets are flagged private; new ones start open.
+    # The private-default migration closes both existing and future orgs.
     asyncio.run(
         run(
             "INSERT INTO orgs (name, display_name, created_at, updated_at) "
@@ -811,7 +824,7 @@ def test_0016_leaves_existing_projects_and_datasets_private(postgres: Any, tmp_p
         )
     )
     rows = asyncio.run(run("SELECT name, open_datasets FROM orgs ORDER BY name"))
-    assert [tuple(row) for row in rows] == [("lab", False), ("new", True)]
+    assert [tuple(row) for row in rows] == [("lab", False), ("new", False)]
 
 
 def test_0017_credits_each_project_to_its_earliest_runs_owner(
@@ -860,6 +873,7 @@ def test_0017_credits_each_project_to_its_earliest_runs_owner(
         "0018_hf_imports",
         "0019_bulk_select",
         "0020_instances",
+        "0021_dataset_grants",
     ]
     rows = asyncio.run(
         run(
@@ -868,3 +882,63 @@ def test_0017_credits_each_project_to_its_earliest_runs_owner(
         )
     )
     assert [tuple(row) for row in rows] == [("a", "ann"), ("b", None), ("c", None)]
+
+
+def test_dataset_grants_close_all_orgs_and_keep_old_workers_compatible(
+    postgres: Any, tmp_path: Path
+) -> None:
+    url = postgres.create(migrated=False)
+    before = tmp_path / "before-grants"
+    before.mkdir()
+    for path in Migrations().files():
+        if int(path.name[:4]) <= 20:
+            shutil.copy(path, before / path.name)
+    old = Migrations(before)
+    asyncio.run(old.apply(url))
+
+    async def scenario() -> None:
+        from app.api.src.db.instances import Instance
+
+        conn = await asyncpg.connect(url)
+        try:
+            await conn.execute(
+                "INSERT INTO orgs (name, display_name, created_at, updated_at, open_datasets) "
+                "VALUES ('open', 'Open', now(), now(), true), "
+                "('closed', 'Closed', now(), now(), false)"
+            )
+            await conn.execute(
+                "INSERT INTO private_datasets (org_pk, path) "
+                "SELECT pk, 'exam' FROM orgs WHERE name = 'open'"
+            )
+            flags = await conn.fetch("SELECT * FROM private_datasets")
+            assert await Migrations().apply(url) == ["0021_dataset_grants"]
+            assert await Migrations().apply(url) == []
+            assert await conn.fetch("SELECT * FROM private_datasets") == flags
+            assert await conn.fetch("SELECT * FROM public_datasets") == []
+            assert not await conn.fetchval("SELECT bool_or(open_datasets) FROM orgs")
+            await old.check(conn)
+            assert await old.apply(url) == []
+            # The old sweep cannot reopen the flag; its transaction's private flags roll back.
+            with pytest.raises(asyncpg.CheckViolationError):
+                async with conn.transaction():
+                    await conn.execute(
+                        "INSERT INTO private_datasets (org_pk, path) "
+                        "SELECT pk, 'old-sweep' FROM orgs WHERE name = 'open'"
+                    )
+                    await conn.execute("UPDATE orgs SET open_datasets = true")
+            assert await conn.fetch("SELECT * FROM private_datasets") == flags
+            await conn.execute(
+                "INSERT INTO orgs (name, display_name, created_at, updated_at) "
+                "VALUES ('new', 'New', now(), now())"
+            )
+            assert not await conn.fetchval("SELECT open_datasets FROM orgs WHERE name = 'new'")
+        finally:
+            await conn.close()
+        async with asyncpg.create_pool(url) as pool:
+            for kind in ("api", "s3"):
+                instance = Instance(pool, kind, old)
+                await instance.start()
+                await instance.beat()
+                await instance.close()
+
+    asyncio.run(scenario())

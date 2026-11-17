@@ -2,7 +2,7 @@
 
 Endpoints for the Lance datasets in an organization's `flock-datasets` bucket, which the dashboard's Datasets tab uses. Paths are relative to `/api/v1/orgs/{org}/datasets`. Every endpoint checks that you belong to the organization, and answers 404 otherwise, as it does when the server has no S3. The exception is [public datasets](#public), whose reads answer anyone. For how datasets work, see [Datasets](../s3-behavior#datasets).
 
-A dataset's `path` is its folder in `flock-datasets`, such as `eval/mmlu`, without slashes at either end. A path that isn't a dataset answers 404 everywhere except `GET at`. When Lance can't read a dataset (a corrupt manifest, a missing data file), the answer is 502 with Lance's message in `error`.
+A dataset's `path` is its folder in `flock-datasets`, such as `eval/mmlu`, without slashes at either end or `.` and `..` path segments. A path that isn't a dataset answers 404 everywhere except `GET at`. When Lance can't read a dataset (a corrupt manifest, a missing data file), the answer is 502 with Lance's message in `error`.
 
 ## Reading[[reading]]
 
@@ -34,7 +34,7 @@ A cell is an object whose `k` says its kind:
 
 ## Public datasets[[public]]
 
-Datasets are public unless an org admin makes them private, by exact path. Anyone can call `info`, `rows`, `cell`, `versions` and `readme` on a public dataset, at any version or tag, without credentials. `at`, the trash and every change stay members-only, so outsiders can't list datasets, and the bucket's objects stay out of reach without an S3 key. Private paths answer outsiders 404, as missing datasets do.
+After the [visibility upgrade](../operate#dataset-visibility-upgrade), new dataset paths are private until an org admin grants public access to the exact path. Existing public paths retain their grants. Anyone can call `info`, `rows`, `cell`, `versions` and `readme` on a public dataset, at any version or tag, without credentials. `at`, the trash and every change stay members-only, so outsiders can't list datasets, and the bucket's objects stay out of reach without an S3 key. Private paths answer outsiders 404, as missing datasets do.
 
 | Endpoint | Who | Meaning |
 |---|---|---|

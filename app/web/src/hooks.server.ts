@@ -104,5 +104,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 		!isPublic(path)
 	)
 		return new Response(null, { status: 303, headers: { location: loginHref(event.url) } });
+	// Pages and data responses can contain member-only content, or become private later.
+	if (!path.startsWith('/api/v1/avatars/'))
+		response.headers.set('cache-control', 'private, no-store');
 	return response;
 };
