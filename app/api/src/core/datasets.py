@@ -979,27 +979,6 @@ class Datasets:
                     user.pk,
                 )
 
-    async def _all_datasets(self, bucket: str) -> list[str]:
-        """Every dataset path in ``bucket``, including nested datasets (D87, D155)."""
-        upstream = self._upstream()
-        found: list[str] = []
-        folders = [""]
-        while folders:
-            folder = folders.pop()
-            token = None
-            subfolders: list[str] = []
-            while True:
-                page = await self._call(upstream.list_objects(bucket, folder, "/", token))
-                subfolders += page.prefixes
-                token = page.cursor
-                if token is None:
-                    break
-            if f"{folder}{VERSIONS}" in subfolders:
-                found.append(folder.removesuffix("/"))
-            # Raw S3 writers can nest datasets under any folder, including _versions itself.
-            folders += subfolders
-        return sorted(found)
-
     async def _copy_private(self, org: Org, path: str, to: str) -> None:
         """Keep a private source private at its destination before copying any objects."""
         if not await self.is_public(org, path):
