@@ -828,7 +828,7 @@ def test_checkpoint_upload_uses_complete_local_folder(
 
     def upload(folder: Path, name: str, **options: Any) -> Future[Any]:
         assert (folder / "model.safetensors").is_file()
-        assert (folder / "training_state/python_rng_state.safetensors").is_file()
+        assert (folder / "training_state/rank_states.safetensors").is_file()
         uploads.append((folder, name, options))
         pending = Future()
         pending.set_result(None)
@@ -1299,7 +1299,7 @@ def test_cpu_checkpoint_never_uses_cuda_rng_apis(
     trainer = trained_trainer
     save_checkpoint(trainer)
     load_checkpoint(trainer, trainer.output_dir / "checkpoint-3")
-    assert trainer.state_dict()["cuda_rng_state"] is None
+    assert trainer.state_dict()["rank_states"][0]["cuda_rng_state"] is None
 
 
 def test_resume_latest_uses_step_not_mtime_and_ignores_staging(
@@ -1804,9 +1804,6 @@ def test_repeated_training_rejects_reuse_or_leaves_a_loadable_checkpoint(
     load_checkpoint(trainer, trainer.output_dir / f"checkpoint-{int(trainer.state.step.item())}")
 
 
-@pytest.mark.xfail(
-    strict=True, raises=IndexError, reason="CUDA RNG restore assumes unchanged visible device count"
-)
 def test_resume_handles_cuda_topology_change_cleanly(
     trained_trainer: Trainer, simulated_cuda_rng: Callable[[int], list[torch.Generator]]
 ) -> None:
@@ -1821,6 +1818,29 @@ def test_resume_handles_cuda_topology_change_cleanly(
     except ValueError:
         return  # Explicitly rejecting a topology change is also a supported policy.
     torch.testing.assert_close(torch.rand(5, generator=generators[0]), expected, atol=0, rtol=0)
+
+
+@pytest.mark.parametrize("corruption", ["rank", "cursor", "cpu_rng", "python_rng", "world_size"])
+def test_rank_resume_state_is_validated_before_restoration(
+    trainer_factory: TrainerFactory,
+    forbid_checkpoint_loads: Callable[[Trainer], AbstractContextManager[None]],
+    corruption: str,
+) -> None:
+    trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
+    saved = copy.deepcopy(trainer.state_dict())
+    local = saved["rank_states"][0]
+    if corruption == "rank":
+        saved["rank_states"] = {1: local}
+    elif corruption == "cursor":
+        local["data_state"]["batch_cursor"] = 1
+    elif corruption == "cpu_rng":
+        local["cpu_rng_state"] = torch.zeros(1, dtype=torch.uint8)
+    elif corruption == "python_rng":
+        local["python_rng_state"] = (3, (0,), None)
+    else:
+        saved["config"]["world_size"] = 2
+    with forbid_checkpoint_loads(trainer), pytest.raises(ValueError):
+        trainer.load_state_dict(saved)
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16, torch.bfloat16])

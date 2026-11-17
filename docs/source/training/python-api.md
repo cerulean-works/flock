@@ -184,6 +184,9 @@ These schemas and metric buffers are implementation-level APIs under
 [[autodoc]] training.core.trainer.CheckpointTrainerState
     - none
 
+[[autodoc]] training.core.trainer.CheckpointRankState
+    - none
+
 [[autodoc]] training.core.lr_scheduler.LRSchedulerState
     - none
 
@@ -202,13 +205,13 @@ manager = CheckpointManager(
     "checkpoints", save_to_hub_repo="cerulean-labs/olmo2-dolma3", save_total_limit=3
 )
 manager.save_model(step, model, training_state=state)
-manager.finish_checkpointing()
+manager.finish_checkpoint_uploads()
 ```
 
 Local serialization always finishes before `save_model` returns. With
 `blocking=False`, the Hub uploads the completed checkpoint in the background.
 Later model or training-state updates cannot change the saved files.
-`finish_checkpointing()` finishes uploads and applies retention. Local write
+`finish_checkpoint_uploads()` finishes uploads and applies retention. Local write
 errors propagate immediately; upload errors are logged. Ordinary saves do not
 collect earlier uploads or prune files.
 
@@ -221,7 +224,7 @@ through the Hub requires a supported Flock model and frozen config dataclass.
 
 [[autodoc]] training.core.checkpoint.CheckpointManager
     - save_model
-    - finish_checkpointing
+    - finish_checkpoint_uploads
     - load_checkpoint
     - checkpoints
     - latest_checkpoint

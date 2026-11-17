@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import copy
+import random
 from datetime import timedelta
+from itertools import islice
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
@@ -274,6 +276,175 @@ def test_distributed_trainer_step_budget_and_final_log(
     mp.spawn(
         _check_distributed_step_budget,
         args=(tmp_path, config, tokenizer),
+        nprocs=2,
+        join=True,
+    )
+
+
+class _StochasticOlmo2(Olmo2):
+    def _forward(
+        self, input_ids: torch.Tensor, attention_mask: torch.Tensor, position_ids: torch.Tensor
+    ) -> torch.Tensor:
+        logits = super()._forward(input_ids, attention_mask, position_ids)
+        return F.dropout(logits, p=0.2, training=self.training) * (1 + random.random())
+
+
+def _check_distributed_resume(
+    rank: int,
+    directory: Path,
+    config: Olmo2Config,
+    tokenizer: TokenizersBackend,
+    num_workers: int,
+) -> None:
+    torch.set_num_threads(1)
+    dist.init_process_group(
+        "gloo",
+        init_method=(directory / "rendezvous").as_uri(),
+        rank=rank,
+        world_size=2,
+        timeout=timedelta(seconds=60),
+    )
+    try:
+        rows = [
+            {"text": text} for text in ["a b c", "b c", "c d a b", "a b", "d a", "a c d", "b d"]
+        ]
+
+        def make(name: str, save_steps: int | None = None) -> tuple[Trainer, list]:
+            with patch("flock.training.core.trainer.wandb.init"):
+                trainer = Trainer(
+                    config=TrainerConfig(
+                        run_name="rank-resume",
+                        input_column="text",
+                        batch_size=2,
+                        optimizer_config=AdamWConfig(lr=0.01, betas=(0.8, 0.9)),
+                        lr_scheduler_config=LRSchedulerConfig(
+                            schedule=[
+                                LRScheduleSegment(start=0, end=1.0, start_ratio=1.0, end_ratio=0.1)
+                            ]
+                        ),
+                        dataloader_num_workers=num_workers,
+                        dataloader_prefetch_factor=1 if num_workers else None,
+                        output_dir=str(directory / name),
+                        wandb_project="offline-test",
+                        wandb_mode="disabled",
+                        logging_steps=3,
+                        save_steps=save_steps,
+                        seed=17,
+                    ),
+                    model=_StochasticOlmo2(config),
+                    tokenizer=tokenizer,
+                    dataset=cast("SafeLanceDataset", rows),
+                    runtime=DistributedRuntime(rank, rank, 2, torch.device("cpu")),
+                )
+            batches = []
+            trainer.model.register_forward_pre_hook(
+                lambda model, args: batches.append(
+                    {key: value.clone() for key, value in args[0].items()}
+                )
+            )
+            return trainer, batches
+
+        reference, expected_batches = make("reference")
+        reference.train()
+        expected_weights = copy.deepcopy(reference.model.state_dict())
+        expected_state = copy.deepcopy(reference.state_dict())
+        expected_python, expected_cpu = random.random(), torch.rand(5)
+
+        interrupted, first_batches = make("resumed", save_steps=1)
+        loop = interrupted._inner_training_loop
+        with (
+            patch.object(
+                interrupted,
+                "_inner_training_loop",
+                lambda loader, start: loop(islice(loader, 1), start),
+            ),
+            patch.object(
+                interrupted.checkpoint_manager,
+                "save_model",
+                wraps=interrupted.checkpoint_manager.save_model,
+                side_effect=AssertionError("only rank zero may write") if rank else None,
+            ) as writes,
+        ):
+            interrupted.train()
+        assert writes.call_count == (1 if rank == 0 else 0)
+        checkpoint = interrupted.output_dir / "checkpoint-1"
+        assert checkpoint.is_dir(), "save must finish before any rank returns"
+        local_state = copy.deepcopy(interrupted.state_dict())
+
+        resumed, later_batches = make("resumed", save_steps=1)
+        manager = resumed.checkpoint_manager
+        read = manager.load_checkpoint
+
+        def direct_read(*args: object, **kwargs: object) -> object:
+            with (
+                patch.object(
+                    dist, "broadcast_object_list", side_effect=AssertionError("load broadcast")
+                ),
+                patch.object(dist, "gather_object", side_effect=AssertionError("load gather")),
+                patch.object(dist, "all_gather", side_effect=AssertionError("load gather")),
+            ):
+                return read(*args, **kwargs)
+
+        saved = direct_read(checkpoint, resumed.model, validate_state=resumed.validate_state_dict)
+        assert set(saved.rank_states) == {0, 1}
+        assert not torch.equal(
+            saved.rank_states[0].cpu_rng_state, saved.rank_states[1].cpu_rng_state
+        )
+        resumed.load_state_dict(saved)
+        from tests.training.test_trainer import assert_nested_equal
+
+        assert_nested_equal(resumed.state_dict(), local_state)
+
+        # Both world sizes have two updates here: the partition itself must be checked.
+        with (
+            patch.object(
+                resumed, "runtime", DistributedRuntime(rank, rank, 3, torch.device("cpu"))
+            ),
+            patch(
+                "flock.training.core.checkpoint.load_model",
+                side_effect=AssertionError("weights changed"),
+            ),
+            pytest.raises(ValueError, match="world size"),
+        ):
+            read(checkpoint, resumed.model, validate_state=resumed.validate_state_dict)
+
+        with patch.object(manager, "load_checkpoint", side_effect=direct_read) as reads:
+            resumed.train(resume_from_checkpoint=True)
+        assert reads.call_count == 1
+        assert_nested_equal(resumed.model.state_dict(), expected_weights)
+        assert_nested_equal(resumed.state_dict(), expected_state)
+        assert_nested_equal(first_batches + later_batches, expected_batches)
+        assert random.random() == expected_python
+        torch.testing.assert_close(torch.rand(5), expected_cpu, atol=0, rtol=0)
+
+        if num_workers == 0:
+            failed, _ = make("failed-capture", save_steps=1)
+            capture = failed.state_dict
+            calls = 0
+
+            def capture_once() -> dict:
+                nonlocal calls
+                calls += 1
+                if rank == 1 and calls == 1:
+                    raise RuntimeError("rank-local capture failed")
+                return capture()
+
+            with patch.object(failed, "state_dict", side_effect=capture_once):
+                failed.train()
+            assert not (failed.output_dir / "checkpoint-1").exists()
+            assert (failed.output_dir / "checkpoint-2").is_dir()
+            assert failed.state.step.item() == 2
+    finally:
+        dist.destroy_process_group()
+
+
+@pytest.mark.parametrize("num_workers", [0, 1])
+def test_distributed_checkpoint_restores_each_rank_directly(
+    tmp_path: Path, config: Olmo2Config, tokenizer: TokenizersBackend, num_workers: int
+) -> None:
+    mp.spawn(
+        _check_distributed_resume,
+        args=(tmp_path, config, tokenizer, num_workers),
         nprocs=2,
         join=True,
     )

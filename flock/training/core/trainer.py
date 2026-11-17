@@ -186,6 +186,56 @@ class CheckpointTrainerState(PydanticBaseModel):
         return value
 
 
+class CheckpointRankState(PydanticBaseModel):
+    """Store one rank's RNG streams and deterministic sampler cursor.
+
+    Attributes:
+        cpu_rng_state (`torch.Tensor`): PyTorch CPU RNG state.
+        cuda_rng_state (`list[torch.Tensor]` or `None`): This process's CUDA RNG states.
+        python_rng_state (`tuple`): Python `random` state.
+        data_state (`dict[str, int]`): Completed global batches in `batch_cursor`.
+    """
+
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True, strict=True, extra="forbid", revalidate_instances="always"
+    )
+
+    cpu_rng_state: torch.Tensor
+    cuda_rng_state: list[torch.Tensor] | None
+    python_rng_state: tuple[int, tuple[int, ...], float | None]
+    data_state: dict[str, int]
+
+    @field_validator("cpu_rng_state")
+    @classmethod
+    def validate_cpu_rng(cls, value: torch.Tensor) -> torch.Tensor:
+        """Check RNG bytes on a private generator before changing live state."""
+        try:
+            torch.Generator().set_state(value)
+        except (RuntimeError, TypeError) as error:
+            raise ValueError("Invalid CPU RNG state") from error
+        return value
+
+    @field_validator("python_rng_state")
+    @classmethod
+    def validate_python_rng(
+        cls, value: tuple[int, tuple[int, ...], float | None]
+    ) -> tuple[int, tuple[int, ...], float | None]:
+        """Check Python RNG state without consuming the process's RNG stream."""
+        random.Random(0).setstate(value)
+        return value
+
+    @field_validator("cuda_rng_state")
+    @classmethod
+    def validate_cuda_rng(cls, value: list[torch.Tensor] | None) -> list[torch.Tensor] | None:
+        """Require CUDA RNG snapshots to contain CPU byte vectors."""
+        if value is not None and any(
+            item.device.type != "cpu" or item.dtype != torch.uint8 or item.ndim != 1
+            for item in value
+        ):
+            raise ValueError("Invalid CUDA RNG state")
+        return value
+
+
 class TrainerCheckpoint(PydanticBaseModel):
     """Validate resumable training state stored alongside model weights.
 
@@ -193,9 +243,7 @@ class TrainerCheckpoint(PydanticBaseModel):
         trainer_state_dict (`CheckpointTrainerState`): Metric buffers and counters.
         optimizer_state_dict (`dict[str, Any]`): Optimizer groups and parameter state.
         lr_scheduler_state_dict (`LRSchedulerState`): Schedule and progress.
-        cpu_rng_state (`torch.Tensor`): PyTorch CPU RNG state.
-        cuda_rng_state (`list[torch.Tensor]` or `None`): Per-device CUDA RNG states.
-        python_rng_state (`tuple`): Python `random` state.
+        rank_states (`dict[int, CheckpointRankState]`): Per-rank RNG and data state.
         config (`dict[str, int | str]`): Settings defining the sampler contract.
 
     Model validation checks that trainer and scheduler progress agree. With a
@@ -210,9 +258,7 @@ class TrainerCheckpoint(PydanticBaseModel):
     trainer_state_dict: CheckpointTrainerState
     optimizer_state_dict: dict[str, Any]
     lr_scheduler_state_dict: LRSchedulerState
-    cpu_rng_state: torch.Tensor
-    cuda_rng_state: list[torch.Tensor] | None
-    python_rng_state: tuple[int, tuple[int, ...], float | None]
+    rank_states: dict[int, CheckpointRankState]
     config: dict[str, int | str]
 
     @model_validator(mode="after")
@@ -223,13 +269,24 @@ class TrainerCheckpoint(PydanticBaseModel):
         if step > schedule.total_steps or schedule.completed_steps != step:
             raise ValueError("Checkpoint trainer and scheduler progress do not match")
 
+        world_size = self.config.get("world_size")
+        if type(world_size) is not int or world_size < 1:
+            raise ValueError("Checkpoint world size must be a positive integer")
+        if not self.rank_states or any(rank < 0 or rank >= world_size for rank in self.rank_states):
+            raise ValueError("Checkpoint contains invalid rank states")
+        for rank_state in self.rank_states.values():
+            if rank_state.data_state != {"batch_cursor": step}:
+                raise ValueError("Checkpoint sampler cursor and trainer progress do not match")
+
         if info.context is not None:
             if self.config != info.context["config"]:
                 raise ValueError(
-                    "Checkpoint dataset size, batch size, seed or input column changed"
+                    "Checkpoint dataset size, batch size, seed, input column or world size changed"
                 )
             if schedule.total_steps != info.context["total_steps"]:
                 raise ValueError("Checkpoint trainer and scheduler progress do not match this run")
+            if info.context["rank"] not in self.rank_states:
+                raise ValueError("Checkpoint has no state for this rank")
         return self
 
 
@@ -355,7 +412,7 @@ class TrainerState(nn.Module):
 
 
 class Trainer:
-    """Train a causal model for one shuffled pass on CUDA device 0 or CPU.
+    """Train a causal model for one shuffled pass on CPU or distributed devices.
 
     Construction starts a W&B run, moves the supplied model without casting its
     weights, constructs the optimizer/scheduler and creates the output directory.
@@ -372,12 +429,12 @@ class Trainer:
             length. The collator applies padding, truncation and target shifting.
         dataset (`SafeLanceDataset`): Finite, indexable dataset of text rows.
         runtime ([`training.core.distributed.DistributedRuntime`] or `None`, *optional*):
-            Distributed runtime. If `None`, the trainer runs on a single device.
+            Distributed runtime. If `None`, detect ranks and device from the environment.
 
     Raises:
         `NotImplementedError`: If the optimizer configuration selects Muon.
 
-    There is no gradient accumulation, distributed training or automatic dtype
+    There is no gradient accumulation or automatic dtype
     conversion. Use a main-module guard when starting spawned loader workers.
     """
 
@@ -396,6 +453,8 @@ class Trainer:
 
         self.runtime = runtime if runtime is not None else DistributedRuntime.from_env()
         self.device = self.runtime.device
+        if self.device.type == "cuda":
+            torch.cuda.set_device(self.device)
         self.state = TrainerState().to(self.device)
 
         if self.runtime.enabled and not dist.is_initialized():
@@ -724,42 +783,66 @@ class Trainer:
         if self.run is not None:
             self.run.log(metrics_dict)
 
-    @master_only
     def _save_model(self, step: int, blocking: bool = False) -> None:
-        """Save model weights and training state to a new checkpoint folder.
+        """Gather rank-local resume state, then save the checkpoint on rank zero.
+
+        Every rank must call at the same step. Only RNG and sampler state cross
+        the process group; replicated weights and optimizer state are saved once.
 
         Args:
             step (`int`): Global step used for the checkpoint folder name.
         """
-        if self.checkpoint_manager is None:
-            self.logger.error("Checkpoint manager is not initialized; cannot save model.")
-            return
+        state = None
         try:
-            self.checkpoint_manager.save_model(
-                step, self.model, training_state=self.state_dict(), blocking=blocking
-            )
+            state = self.state_dict()
         except Exception:
-            self.logger.exception("Error saving model checkpoint")
+            self.logger.exception("Error capturing checkpoint state")
+        rank_state = state["rank_states"][self.runtime.rank] if state is not None else None
+        rank_states = [rank_state]
+        if self.runtime.enabled:
+            rank_states = [None] * self.runtime.world_size if self.runtime.is_master else None
+            dist.gather_object(rank_state, rank_states, dst=0)
+        if self.runtime.is_master:
+            if state is None or rank_states is None or any(value is None for value in rank_states):
+                self.logger.error("Skipping checkpoint: a rank could not capture its resume state")
+            else:
+                state["rank_states"] = dict(enumerate(rank_states))
+                try:
+                    self.checkpoint_manager.save_model(
+                        step, self.model, training_state=state, blocking=blocking
+                    )
+                except Exception:
+                    self.logger.exception("Error saving model checkpoint")
+        self.runtime.barrier()
 
     def state_dict(self) -> dict[str, Any]:
-        """Return optimizer, schedule, metric, RNG and data state for persistence.
+        """Return shared training state and this rank's RNG and sampler state.
 
         Model weights are saved separately. State tensors can share storage
         with live objects; serialize immediately rather than keeping this as an
-        immutable in-memory snapshot.
+        immutable in-memory snapshot. This method performs no communication.
+        Scheduled saves gather the rank-local records before rank zero writes.
         """
         return {
             "trainer_state_dict": self.state.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "lr_scheduler_state_dict": self.lr_scheduler.state_dict(),
-            "cpu_rng_state": torch.get_rng_state(),
-            "cuda_rng_state": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
-            "python_rng_state": random.getstate(),
+            "rank_states": {
+                self.runtime.rank: {
+                    "cpu_rng_state": torch.get_rng_state(),
+                    "cuda_rng_state": (
+                        torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+                    ),
+                    "python_rng_state": random.getstate(),
+                    "data_state": {"batch_cursor": int(self.state.step.item())},
+                }
+            },
             "config": {
                 "dataset_size": len(self.dataset),
                 "batch_size": self.batch_size,
                 "seed": self.seed,
                 "input_column": self.ds_input_column,
+                "world_size": self.runtime.world_size,
             },
         }
 
@@ -787,10 +870,19 @@ class Trainer:
                     "batch_size": self.batch_size,
                     "seed": self.seed,
                     "input_column": self.ds_input_column,
+                    "world_size": self.runtime.world_size,
                 },
                 "total_steps": self.total_steps,
+                "rank": self.runtime.rank,
             },
         )
+        cuda_rng = checkpoint.rank_states[self.runtime.rank].cuda_rng_state
+        if (
+            torch.cuda.is_available()
+            and cuda_rng is not None
+            and len(cuda_rng) != torch.cuda.device_count()
+        ):
+            raise ValueError("Checkpoint CUDA RNG device count changed for this rank")
         self.lr_scheduler.validate_state_dict(checkpoint.lr_scheduler_state_dict.model_dump())
 
         self.state.validate_state_dict(checkpoint.trainer_state_dict.model_dump())
@@ -826,7 +918,8 @@ class Trainer:
         Raises:
             `ValueError`: If progress, data, optimizer or scheduler settings differ.
 
-        Restores Python, CPU and saved CUDA RNG states. Logs a warning when CUDA
+        Selects this rank's sampler and RNG record from a shared checkpoint.
+        Loading performs no communication. Logs a warning when CUDA
         is available but the checkpoint has no CUDA RNG state.
         """
         checkpoint = self.validate_state_dict(state)
@@ -835,11 +928,12 @@ class Trainer:
         self.optimizer.load_state_dict(checkpoint.optimizer_state_dict)
         self.lr_scheduler.load_state_dict(checkpoint.lr_scheduler_state_dict.model_dump())
 
-        torch.set_rng_state(checkpoint.cpu_rng_state)
-        random.setstate(checkpoint.python_rng_state)
+        rank_state = checkpoint.rank_states[self.runtime.rank]
+        torch.set_rng_state(rank_state.cpu_rng_state)
+        random.setstate(rank_state.python_rng_state)
         if torch.cuda.is_available():
-            if checkpoint.cuda_rng_state is not None:
-                torch.cuda.set_rng_state_all(checkpoint.cuda_rng_state)
+            if rank_state.cuda_rng_state is not None:
+                torch.cuda.set_rng_state_all(rank_state.cuda_rng_state)
             else:
                 self.logger.warning(
                     "CUDA is available but no CUDA RNG state was found in the loaded trainer state."

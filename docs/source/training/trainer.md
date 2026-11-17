@@ -408,6 +408,12 @@ Each checkpoint holds model weights, model configuration, optimizer and schedule
 state, training counters, the unfinished logging window, and Python and PyTorch
 RNG states. Checkpoints use the [Hub model format](../hub/model-storage#what-a-version-holds).
 
+In distributed training, every rank contributes its Python, CPU and CUDA RNG
+states and completed-batch cursor. Rank zero writes these records alongside one
+copy of the model, optimizer, scheduler and global metrics. All ranks wait for
+the local save attempt to finish. A capture failure on any rank skips that save;
+write failures are logged and training continues.
+
 Set `output_dir` for a checkpoint root, or use the default
 `.training-checkpoints/<run_name>`. Fresh training requires an empty directory
 unless `overwrite_output_dir=True`. `save_total_limit` retains the most recently
@@ -416,7 +422,7 @@ while their uploads are pending. The limit can temporarily be exceeded.
 
 A checkpoint appears as `output_dir/checkpoint-<step>` only after all of its files
 have been written. Construct a new trainer with the same model configuration,
-tokenizer, pinned dataset, batch size and seed, then resume the checkpoint with
+tokenizer, pinned dataset, batch size, seed and world size, then resume the checkpoint with
 the latest `saved_at` timestamp:
 
 ```python
@@ -436,10 +442,18 @@ trainer.train(resume_from_checkpoint=".training-checkpoints/olmo2_dolma3/checkpo
 The trainer restores weights into the existing model and resumes after the saved
 number of batches in the seeded shuffle. Logging and saving keep their original
 step numbers. Resume rejects a changed model architecture/configuration, dataset
-size, batch size, seed, input column, optimizer group settings or scheduler
+size, batch size, seed, input column, world size, optimizer group settings or scheduler
 configuration/base rates. Keep the dataset contents and tokenizer unchanged;
 the checkpoint does not verify their identity. Resume initializes a new tracking
 run and records the restored global steps there.
+
+Every rank reads weights and training state directly from the checkpoint folder
+and restores the RNG streams and sampler cursor saved under its global rank.
+The folder must be readable by every rank. Resume does not broadcast checkpoint
+contents from rank zero or repartition data across a changed world size.
+Each rank must retain its visible CUDA device count. Checkpoints without
+`rank_states` and `world_size` are rejected rather than reusing rank zero's RNG
+state on every worker.
 
 To resume a checkpoint stored in the Hub, download its training state too, then
 pass the downloaded folder:
@@ -453,8 +467,10 @@ checkpoint = models.download(
 trainer.train(resume_from_checkpoint=checkpoint)
 ```
 
-Use `trainer.state_dict()` to capture training state without model weights.
-Its `config` dictionary records dataset size, batch size, seed and input column
+Use `trainer.state_dict()` to capture shared training state and the calling
+rank's local record without model weights or communication. Scheduled saves
+gather all local records into `rank_states` before writing. Its `config`
+dictionary records dataset size, batch size, seed, input column and world size
 for resume compatibility checks.
 `trainer.validate_state_dict(state)` checks the run contract and optimizer group
 compatibility, and asks the metric buffers and scheduler to validate their state
@@ -463,19 +479,20 @@ without changing them.
 training state. Tensors can share storage with live objects, so serialize the
 result immediately or deep-copy it for an in-memory snapshot.
 
-For a manual save, pass the current step, model and resumable state explicitly:
+For a manual save in a single-process run, pass the current step, model and
+resumable state explicitly:
 
 ```python
 manager = trainer.checkpoint_manager
 manager.save_model(
     int(trainer.state.step.item()), trainer.model, training_state=trainer.state_dict()
 )
-manager.finish_checkpointing()
+manager.finish_checkpoint_uploads()
 ```
 
 The manager writes weights, buffers and training state to local files before
 `save_model` returns. Later training updates cannot change those files. The Hub
-handles background uploads. `finish_checkpointing()` waits for uploads and
+handles background uploads. `finish_checkpoint_uploads()` waits for uploads and
 applies retention. Ordinary saves do not collect earlier uploads or prune files.
 
 Set `save_to_hub_repo="org/model"` to upload each checkpoint with a
@@ -495,7 +512,7 @@ trainer.load_state_dict(state)
 
 Pending uploads and published checkpoint folders are available through
 `manager.pending_uploads` and `manager.checkpoints()` respectively. Retention
-runs after the final `finish_checkpointing()` or blocking save finishes all
+runs after the final `finish_checkpoint_uploads()` or blocking save finishes all
 uploads. Until then, local checkpoint folders can exceed `save_total_limit`.
 
 After entering the training loop, cleanup waits for pending uploads and, when
