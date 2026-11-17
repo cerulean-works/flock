@@ -8,6 +8,8 @@ import contextlib
 import threading
 from typing import TYPE_CHECKING, Any
 
+import asyncpg
+
 from app.api.src.core.imports import Imports
 from tests.app.conftest import Client, Flocks
 from tests.app.test_device import CLIENT, START, TOKEN
@@ -251,3 +253,20 @@ def _quietly(call: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
     # The replica dies under this request: no answer comes.
     with contextlib.suppress(Exception):
         call(*args, **kwargs)
+
+
+def test_killing_a_replica_leaves_other_databases_connected(make_flock: Flocks) -> None:
+    first = make_flock.replicas(1)[0]
+    other = make_flock.replicas(1)[0]
+
+    async def scenario() -> None:
+        # Parallel tests reuse replica names on the same PostgreSQL server.
+        conn = await asyncpg.connect(other.database_url)
+        try:
+            assert await conn.fetchval("SELECT 1") == 1
+            await asyncio.to_thread(first.kill)
+            assert await conn.fetchval("SELECT 1") == 1
+        finally:
+            await conn.close()
+
+    asyncio.run(scenario())
