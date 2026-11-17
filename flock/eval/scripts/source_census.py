@@ -4,6 +4,7 @@ Run from the repository root, with read access to the dataset (Paloma's terms ac
 
     uv run python flock/eval/scripts/source_census.py paloma paloma-census.json
     uv run python flock/eval/scripts/source_census.py tw_text tw-text-census.json
+    uv run python flock/eval/scripts/source_census.py tw_text_v1 tw-text-v1-census.json
 
 It exits with status 1 if a source the suite lists has a domain in the split that the suite doesn't list, which no task would score and nothing at run time reports, or lists a domain the split doesn't have. A source the suite leaves out is reported but allowed, as Paloma leaves out 7 of its 16.
 

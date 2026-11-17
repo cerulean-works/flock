@@ -40,7 +40,7 @@ Two sources differ from the rest in time, in both versions:
 
 ### How `v1` differs from `v0`
 
-`v1` re-parses the pages fetched for `v0` with newer extraction code, adds no page that `v0` didn't fetch, and samples them again. Each change is a versioned step of the build:
+`v1` re-parses the pages fetched for `v0` with newer extraction code and samples them again. It adds no news, forum, record or wiki page that `v0` didn't fetch. Theses are the exception: they were listed again from a newer release of the thesis repository's index, which adds a school. Each change is a versioned step of the build:
 
 - **Domains from each source's own metadata.** A news page's section, a judgment's court and case type, a thesis's department mapped to one of seven fields of study. `v0` had one domain for most sources.
 - **Equal sampling across domains.** Each source gets about 2 million OLMo 2 tokens, split evenly over its domains, as Paloma's stratified sampling does. A domain with less than its share gives the rest to the others. `v0` drew uniformly from each source, so its largest domains filled most of their source.
@@ -49,7 +49,7 @@ Two sources differ from the rest in time, in both versions:
 - **Withdrawn judgments leave the set.** A judgment the judiciary withdraws is removed from every copy before publishing. None of `v0`'s sampled judgments was on the withdrawal list.
 - **Privacy.** A thesis with an e-mail address or phone number in its text is quarantined and never sampled.
 
-The floors are the same in both versions. Inside a source's sample, a domain under 100,000 OLMo 2 tokens, Paloma's per-domain size, merges into `other`, and an `other` still under that size leaves the sample. At `v0` every merged `other` fell under the floor, so no `v0` domain is named `other`. At `v1` several `other` domains clear it, and each is scored as a domain like any other: for example, `tw_text_v1_ltn__other` holds LTN's 24 smaller sections. The Reporter's podcast descriptions formed a domain under the floor at `v1` (38 documents, 26,940 tokens), so they left the sample.
+The floors are the same in both versions. Inside a source's sample, a domain under 100,000 OLMo 2 tokens, Paloma's per-domain size, merges into `other`, and an `other` still under that size leaves the sample. At `v0` every merged `other` fell under the floor, so no `v0` domain is named `other`, and `tw_text` holds no administrative or supreme court judgments and no interpellation records: their documents left the `v0` sample this way. At `v1` several `other` domains clear it, and each is scored as a domain like any other: for example, `tw_text_v1_ltn__other` holds LTN's 24 smaller sections. The Reporter's podcast descriptions formed a domain under the floor at `v1` (38 documents, 26,940 tokens), so they left the sample.
 
 | Source | `v0` documents | `v1` documents | `v1` OLMo 2 tokens |
 |---|---|---|---|
@@ -90,7 +90,7 @@ Each domain is one [`~eval.tasks.PerplexityTask`]. It scores every document whol
 
 Read the results per source, as for Paloma:
 
-- `tw_text_v1:<source>` is the unweighted mean of its domains' `bits_per_byte`, as `paloma:<source>` is. Each domain counts once, whatever its size, so a small domain (2 theses in 教育) moves its source's number as much as a large one (8 in 理學). At `v1` the domains of a source hold similar numbers of tokens, since they were sampled equally, so this weighting is close to the sample's own.
+- `tw_text_v1:<source>` is the unweighted mean of its domains' `bits_per_byte`, as `paloma:<source>` is. Each domain counts once, whatever its size, so a small domain (LTN's 國際, 136,693 OLMo 2 tokens) moves its source's number as much as a large one (LTN's `other`, 521,544). Equal sampling narrows these gaps at `v1` but doesn't close them: a domain with less than its share keeps all it has, and the others share the rest.
 - `tw_text_v1` is the unweighted mean of the 11 sources, and `tw_text` likewise. Paloma has no score over its sources, but these sets were built for one comparison, so they have one. Each source counts once, so read the sources before the mean.
 
 Compare models on `bits_per_byte`, which divides by UTF-8 bytes rather than tokens and so works across tokenizers. `loss_per_token` and `perplexity` compare only models that share a tokenizer.
@@ -99,7 +99,7 @@ Compare models on `bits_per_byte`, which divides by UTF-8 bytes rather than toke
 
 Training data must hold out every document of both versions. An exclusion index takes them as whole documents, never as scoring windows:
 
-- **Scored rows.** Every row of all 11 configurations of each pinned revision, split `test`: its configuration, `id`, `url` and `subdomain`, and the SHA-256 of its UTF-8 `text`, which is the whole document. `v0`'s rows count as well as `v1`'s, since `v1`'s repairs change the text of documents both versions hold, and both are scored.
+- **Scored rows.** Every row of all 11 configurations of each pinned revision, split `test`: its configuration, `id`, `url`, `subdomain` and `source`, and the SHA-256 of its UTF-8 `text`, which is the whole document, with the SHA-256 of each configuration's file. `v0`'s rows count as well as `v1`'s, since `v1`'s repairs change the text of documents both versions hold, and both are scored.
 - **Identities beyond the sample.** Training drops the whole window, so a document left out of the sample is still held out. The crawl's own records name every document fetched in the window by its URL, judgment id, wiki page id, PTT post id or thesis id, and the index takes those identities too.
 - **Withdrawals.** A withdrawn judgment's text leaves the index. Only its id stays, as a tombstone.
 

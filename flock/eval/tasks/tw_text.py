@@ -32,10 +32,11 @@ SOURCES: dict[str, tuple[str, ...]] = {
     "theses": ("NYCU", "NTNU"),
 }
 
-# The domains of `tw-text-v1` at its pinned revision, listed and checked as `SOURCES` are. v1 draws
-# its domains from each source's own metadata (a news section, a court and case type, a field of
-# study) and samples them equally, so an `other` that clears the floor is a domain of its own
-# (stage file 038, 038.D2).
+# The domains of `tw-text-v1` at its pinned revision: the distinct `subdomain` values of its
+# `test` rows, most documents first, then by name, as `source_census.py tw_text_v1` lists them.
+# v1 draws its domains from each source's own metadata (a news section, a court and case type, a
+# field of study) and samples them equally, so an `other` that clears the floor is a domain of
+# its own (stage file 038, 038.D2).
 SOURCES_V1: dict[str, tuple[str, ...]] = {
     "judicial": (
         "地方民事",

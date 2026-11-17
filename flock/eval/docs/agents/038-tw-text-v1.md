@@ -20,7 +20,7 @@ A second version of the Taiwan text set is frozen: `cerulean-works/tw-text-v1` a
 
 ### 038.D1. A new version is a new suite, and the old one stays
 
-A number that needs different documents is a different task with a different name. `v1` changes the documents of every source and the domains of six, so moving `tw_text`'s pin, as 029 did from an interim revision, would put two measurements under one name. `tw_text_v1` is added beside `tw_text`, with its own sources `tw_text_v1:<source>` and tasks `tw_text_v1_<source>__<domain>`. No name is shared, so a results file of one version and a bank of the other list each other's tasks as `only_new` and `only_banked` in `compare`, never as `changed`. Freezing `v0` was what made its numbers worth keeping; `tw_text` remains the suite for every comparison already banked on it.
+A number that needs different documents is a different task with a different name. `v1` changes the documents of every source and the domains of seven, so moving `tw_text`'s pin, as 029 did from an interim revision, would put two measurements under one name. `tw_text_v1` is added beside `tw_text`, with its own sources `tw_text_v1:<source>` and tasks `tw_text_v1_<source>__<domain>`. No name is shared, so a results file of one version and a bank of the other list each other's tasks as `only_new` and `only_banked` in `compare`, never as `changed`. Freezing `v0` was what made its numbers worth keeping; `tw_text` remains the suite for every comparison already banked on it.
 
 ### 038.D2. The domain table is the split's, `other` included
 
@@ -32,11 +32,11 @@ As 026.D6 and 029.D1 require, the table lists every distinct `subdomain` of each
 
 ### 038.D4. The time caveats carry over unchanged
 
-`v1` re-parses `v0`'s fetched pages and adds none (harvest 006.D13), so 029.D4 holds for it as written: `judicial` covers 2026-04-01 to 2026-08-31, because the September and October bundles did not exist at either build, and `theses` is not held out in time, since a thesis carries only its academic year. A later judgment month is a new revision of the dataset, and so a new suite under 038.D1.
+`v1` re-parses `v0`'s fetched pages and adds none, except theses, which were listed again from a newer release of the repository's index (harvest 006.D13: 320 in the window against 305). So 029.D4 holds for it as written: `judicial` covers 2026-04-01 to 2026-08-31, because the September and October bundles did not exist at either build, and `theses` is not held out in time, since a thesis carries only its academic year. A later judgment month is a new revision of the dataset, and so a new suite under 038.D1.
 
 ### 038.D5. What training-data exclusion takes from `v1`, stated but not built
 
-The user docs list the references an exclusion index takes from the set (harvest 006.D11): every row of both versions as a whole document, with its configuration, `id`, `url`, `subdomain` and the SHA-256 of its UTF-8 `text`; the identity of every document fetched in the window, sampled or not; and tombstones for withdrawn judgments. Only the first is in the dataset files. flock scores the set and builds no index, so the docs state that no training data has been checked against these references yet.
+The user docs list the references an exclusion index takes from the set (harvest 006.D11): every row of both versions as a whole document, with its configuration, `id`, `url`, `subdomain`, `source`, the SHA-256 of its UTF-8 `text` and its file's SHA-256; the identity of every document fetched in the window, sampled or not; and tombstones for withdrawn judgments. Only the first is in the dataset files. flock scores the set and builds no index, so the docs state that no training data has been checked against these references yet.
 
 ---
 
