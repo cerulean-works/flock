@@ -1695,6 +1695,152 @@
       "metric": "bits_per_byte",
       "scored": true
     },
+    "tw_text_v1": {
+      "members": [
+        "tw_text_v1:judicial",
+        "tw_text_v1:ly",
+        "tw_text_v1:gov_press",
+        "tw_text_v1:cna",
+        "tw_text_v1:pts",
+        "tw_text_v1:ltn",
+        "tw_text_v1:cnyes",
+        "tw_text_v1:twreporter",
+        "tw_text_v1:ptt",
+        "tw_text_v1:zhwiki",
+        "tw_text_v1:theses"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text_v1:cna": {
+      "members": [
+        "tw_text_v1_cna__地方",
+        "tw_text_v1_cna__other",
+        "tw_text_v1_cna__國際",
+        "tw_text_v1_cna__政治",
+        "tw_text_v1_cna__產經",
+        "tw_text_v1_cna__生活",
+        "tw_text_v1_cna__社會",
+        "tw_text_v1_cna__運動",
+        "tw_text_v1_cna__兩岸"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text_v1:cnyes": {
+      "members": [
+        "tw_text_v1_cnyes__announcement",
+        "tw_text_v1_cnyes__other",
+        "tw_text_v1_cnyes__wd_stock",
+        "tw_text_v1_cnyes__tw_stock",
+        "tw_text_v1_cnyes__bc"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text_v1:gov_press": {
+      "members": [
+        "tw_text_v1_gov_press__文化部",
+        "tw_text_v1_gov_press__行政院",
+        "tw_text_v1_gov_press__金管會",
+        "tw_text_v1_gov_press__農業部"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text_v1:judicial": {
+      "members": [
+        "tw_text_v1_judicial__地方民事",
+        "tw_text_v1_judicial__最高民事",
+        "tw_text_v1_judicial__最高家事",
+        "tw_text_v1_judicial__行政",
+        "tw_text_v1_judicial__最高刑事",
+        "tw_text_v1_judicial__other",
+        "tw_text_v1_judicial__地方刑事",
+        "tw_text_v1_judicial__高等民事",
+        "tw_text_v1_judicial__高等刑事"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text_v1:ltn": {
+      "members": [
+        "tw_text_v1_ltn__other",
+        "tw_text_v1_ltn__生活",
+        "tw_text_v1_ltn__政治",
+        "tw_text_v1_ltn__社會",
+        "tw_text_v1_ltn__最新消息",
+        "tw_text_v1_ltn__健康",
+        "tw_text_v1_ltn__國際"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text_v1:ly": {
+      "members": [
+        "tw_text_v1_ly__質詢",
+        "tw_text_v1_ly__院會紀錄",
+        "tw_text_v1_ly__委員會紀錄"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text_v1:pts": {
+      "members": [
+        "tw_text_v1_pts__生活",
+        "tw_text_v1_pts__全球",
+        "tw_text_v1_pts__社會",
+        "tw_text_v1_pts__地方",
+        "tw_text_v1_pts__政治",
+        "tw_text_v1_pts__文教科技",
+        "tw_text_v1_pts__other",
+        "tw_text_v1_pts__產經"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text_v1:ptt": {
+      "members": [
+        "tw_text_v1_ptt__WomenTalk",
+        "tw_text_v1_ptt__MobileComm",
+        "tw_text_v1_ptt__Gossiping",
+        "tw_text_v1_ptt__Tech_Job",
+        "tw_text_v1_ptt__Baseball",
+        "tw_text_v1_ptt__movie",
+        "tw_text_v1_ptt__Stock",
+        "tw_text_v1_ptt__HatePolitics"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text_v1:theses": {
+      "members": [
+        "tw_text_v1_theses__理學",
+        "tw_text_v1_theses__醫護",
+        "tw_text_v1_theses__人文社會",
+        "tw_text_v1_theses__商管",
+        "tw_text_v1_theses__工程",
+        "tw_text_v1_theses__教育",
+        "tw_text_v1_theses__藝術設計",
+        "tw_text_v1_theses__other"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text_v1:twreporter": {
+      "members": [
+        "tw_text_v1_twreporter"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
+    "tw_text_v1:zhwiki": {
+      "members": [
+        "tw_text_v1_zhwiki"
+      ],
+      "metric": "bits_per_byte",
+      "scored": true
+    },
     "zh_cn": {
       "members": [
         "ceval",
@@ -14556,6 +14702,825 @@
         "subset": "twreporter"
       },
       "domain": "twreporter",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_cna__other": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "cna"
+      },
+      "domain": "other",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_cna__兩岸": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "cna"
+      },
+      "domain": "兩岸",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_cna__國際": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "cna"
+      },
+      "domain": "國際",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_cna__地方": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "cna"
+      },
+      "domain": "地方",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_cna__政治": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "cna"
+      },
+      "domain": "政治",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_cna__生活": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "cna"
+      },
+      "domain": "生活",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_cna__產經": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "cna"
+      },
+      "domain": "產經",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_cna__社會": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "cna"
+      },
+      "domain": "社會",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_cna__運動": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "cna"
+      },
+      "domain": "運動",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_cnyes__announcement": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "cnyes"
+      },
+      "domain": "announcement",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_cnyes__bc": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "cnyes"
+      },
+      "domain": "bc",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_cnyes__other": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "cnyes"
+      },
+      "domain": "other",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_cnyes__tw_stock": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "cnyes"
+      },
+      "domain": "tw_stock",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_cnyes__wd_stock": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "cnyes"
+      },
+      "domain": "wd_stock",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_gov_press__文化部": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "gov_press"
+      },
+      "domain": "文化部",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_gov_press__行政院": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "gov_press"
+      },
+      "domain": "行政院",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_gov_press__農業部": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "gov_press"
+      },
+      "domain": "農業部",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_gov_press__金管會": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "gov_press"
+      },
+      "domain": "金管會",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_judicial__other": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "judicial"
+      },
+      "domain": "other",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_judicial__地方刑事": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "judicial"
+      },
+      "domain": "地方刑事",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_judicial__地方民事": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "judicial"
+      },
+      "domain": "地方民事",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_judicial__最高刑事": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "judicial"
+      },
+      "domain": "最高刑事",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_judicial__最高家事": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "judicial"
+      },
+      "domain": "最高家事",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_judicial__最高民事": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "judicial"
+      },
+      "domain": "最高民事",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_judicial__行政": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "judicial"
+      },
+      "domain": "行政",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_judicial__高等刑事": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "judicial"
+      },
+      "domain": "高等刑事",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_judicial__高等民事": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "judicial"
+      },
+      "domain": "高等民事",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ltn__other": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ltn"
+      },
+      "domain": "other",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ltn__健康": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ltn"
+      },
+      "domain": "健康",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ltn__國際": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ltn"
+      },
+      "domain": "國際",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ltn__政治": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ltn"
+      },
+      "domain": "政治",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ltn__最新消息": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ltn"
+      },
+      "domain": "最新消息",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ltn__生活": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ltn"
+      },
+      "domain": "生活",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ltn__社會": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ltn"
+      },
+      "domain": "社會",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ly__委員會紀錄": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ly"
+      },
+      "domain": "委員會紀錄",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ly__質詢": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ly"
+      },
+      "domain": "質詢",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ly__院會紀錄": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ly"
+      },
+      "domain": "院會紀錄",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_pts__other": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "pts"
+      },
+      "domain": "other",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_pts__全球": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "pts"
+      },
+      "domain": "全球",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_pts__地方": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "pts"
+      },
+      "domain": "地方",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_pts__政治": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "pts"
+      },
+      "domain": "政治",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_pts__文教科技": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "pts"
+      },
+      "domain": "文教科技",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_pts__生活": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "pts"
+      },
+      "domain": "生活",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_pts__產經": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "pts"
+      },
+      "domain": "產經",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_pts__社會": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "pts"
+      },
+      "domain": "社會",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ptt__Baseball": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "Baseball",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ptt__Gossiping": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "Gossiping",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ptt__HatePolitics": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "HatePolitics",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ptt__MobileComm": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "MobileComm",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ptt__Stock": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "Stock",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ptt__Tech_Job": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "Tech_Job",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ptt__WomenTalk": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "WomenTalk",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_ptt__movie": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "ptt"
+      },
+      "domain": "movie",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_theses__other": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "theses"
+      },
+      "domain": "other",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_theses__人文社會": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "theses"
+      },
+      "domain": "人文社會",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_theses__商管": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "theses"
+      },
+      "domain": "商管",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_theses__工程": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "theses"
+      },
+      "domain": "工程",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_theses__教育": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "theses"
+      },
+      "domain": "教育",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_theses__理學": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "theses"
+      },
+      "domain": "理學",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_theses__藝術設計": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "theses"
+      },
+      "domain": "藝術設計",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_theses__醫護": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "theses"
+      },
+      "domain": "醫護",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_twreporter": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "twreporter"
+      },
+      "domain": "twreporter",
+      "primary_metric": "bits_per_byte",
+      "type": "flock.eval.tasks.perplexity.PerplexityTask",
+      "window": 2048
+    },
+    "tw_text_v1_zhwiki": {
+      "dataset": {
+        "repo": "cerulean-works/tw-text-v1",
+        "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
+        "row_index": false,
+        "split": "test",
+        "subset": "zhwiki"
+      },
+      "domain": "zhwiki",
       "primary_metric": "bits_per_byte",
       "type": "flock.eval.tasks.perplexity.PerplexityTask",
       "window": 2048
