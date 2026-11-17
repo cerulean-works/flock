@@ -28,6 +28,7 @@ from flock.hub.models import upload as hub_upload
 from flock.hub.models.files import write_training_state
 from flock.training.core import trainer as trainer_module
 from flock.training.core.data_utils import LanceBatchCollator
+from flock.training.core.distributed import DistributedRuntime
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRScheduleSegment, StepLRScheduler
 from flock.training.core.models import BaseModel
 from flock.training.core.models.olmo2 import Olmo2
@@ -1835,11 +1836,15 @@ def test_loss_and_gradients_match_cross_entropy_over_valid_targets(dtype: torch.
     reference = logits.detach().clone().requires_grad_()
     labels = torch.tensor([[1, 2, -100], [-100, 4, 0]])
     valid = labels != -100
-    loss, count = Trainer._calc_batch_loss(object.__new__(Trainer), logits, labels)
+    trainer = object.__new__(Trainer)
+    trainer.runtime = DistributedRuntime(0, 0, 1, torch.device("cpu"))
+    loss, losses, count = trainer._calc_batch_loss(logits, labels)
     expected = F.cross_entropy(reference.float()[valid], labels[valid])
     assert count.item() == 4
     assert loss.dtype == torch.float32
     torch.testing.assert_close(loss, expected)
+    torch.testing.assert_close(losses, expected.detach())
+    assert not losses.requires_grad
     loss.backward()
     expected.backward()
     torch.testing.assert_close(logits.grad, reference.grad)
@@ -1851,16 +1856,47 @@ def test_loss_and_gradients_match_cross_entropy_over_valid_targets(dtype: torch.
 def test_all_ignored_targets_do_not_produce_nan_loss(dtype: torch.dtype) -> None:
     logits = torch.linspace(-2, 2, 30, dtype=dtype).reshape(2, 3, 5).requires_grad_()
     labels = torch.full((2, 3), -100, dtype=torch.long)
-    loss, count = Trainer._calc_batch_loss(object.__new__(Trainer), logits, labels)
+    trainer = object.__new__(Trainer)
+    trainer.runtime = DistributedRuntime(0, 0, 1, torch.device("cpu"))
+    loss, losses, count = trainer._calc_batch_loss(logits, labels)
     assert count.item() == 0
     assert torch.isfinite(loss), (
         "a batch with no training targets must not poison training with NaN"
     )
     assert loss.dtype == torch.float32
     assert loss.item() == 0.0
+    assert losses.item() == 0.0
+    assert not losses.requires_grad
     loss.backward()
     assert logits.grad is not None
     torch.testing.assert_close(logits.grad, torch.zeros_like(logits), atol=0, rtol=0)
+
+
+@pytest.mark.parametrize("compiled_loss", [False, True])
+def test_dummy_batch_has_zero_loss_tokens_and_model_gradients(
+    config: Olmo2Config, tokenizer: TokenizersBackend, compiled_loss: bool
+) -> None:
+    batch = LanceBatchCollator(tokenizer, "text").collate_fn([])
+    assert batch["input_ids"].tolist() == [[tokenizer.pad_token_id]]
+    assert batch["attention_mask"].tolist() == [[True]]
+    assert batch["attention_mask"].dtype == torch.bool
+    assert batch["labels"].tolist() == [[-100]]
+    model = Olmo2(config)
+    trainer = object.__new__(Trainer)
+    trainer.runtime = DistributedRuntime(0, 0, 1, torch.device("cpu"))
+    calc_loss = trainer._calc_batch_loss
+    if compiled_loss:
+        # Full-graph capture rejects graph breaks in the dummy loss path.
+        calc_loss = torch.compile(calc_loss, backend="aot_eager", fullgraph=True)
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        logits = model(batch)
+        loss, losses, tokens = calc_loss(logits, batch["labels"])
+    assert torch.isfinite(logits).all()
+    assert loss.item() == losses.item() == tokens.item() == 0
+    loss.backward()
+    for parameter in model.parameters():
+        assert parameter.grad is not None
+        torch.testing.assert_close(parameter.grad, torch.zeros_like(parameter), atol=0, rtol=0)
 
 
 @pytest.mark.parametrize("logging_steps, expected_steps", [(1, [1, 2, 3]), (2, [2, 3]), (5, [3])])
@@ -1985,6 +2021,24 @@ def test_token_counts_stay_exact_beyond_fp32_integers() -> None:
     state.update(add_step=1, loss=one, grad_norm=one, tokens=torch.tensor(2**24 + 1))
     metrics = state.get_logging_metrics()
     assert (metrics["train/tokens"], metrics["train/total_tokens"]) == (2**24 + 1, 2**25 + 2)
+
+
+def test_state_does_not_advance_when_optimizer_step_fails(
+    trainer_factory: TrainerFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
+
+    def fail() -> Never:
+        raise RuntimeError("optimizer step failed")
+
+    monkeypatch.setattr(trainer.optimizer, "step", fail)
+    with pytest.raises(RuntimeError, match="optimizer step failed"):
+        trainer.train()
+    assert trainer.state.step.item() == 0
+    assert trainer.state.total_tokens.item() == 0
+    assert trainer.state.window_steps.item() == 0
+    assert trainer.lr_scheduler.completed_steps == 0
 
 
 def test_training_loader_supports_zero_workers(

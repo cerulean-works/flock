@@ -13,7 +13,7 @@ from lance.torch.data import SafeLanceDataset
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict, Field, ValidationInfo, field_validator, model_validator
 from torch import nn
-from torch.nn.modules.module import _IncompatibleKeys
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from transformers import TokenizersBackend
 from wandb import Run
@@ -238,6 +238,8 @@ class TrainerState(nn.Module):
 
     Loss means are weighted by valid target tokens. Gradient norm means are
     weighted by updates. Window resets preserve global step and token counts.
+    The trainer supplies synchronized losses and token counts, and the norm of
+    DDP-synchronized gradients. State updates perform no communication.
     """
 
     loss_sum: torch.Tensor
@@ -269,32 +271,38 @@ class TrainerState(nn.Module):
 
     def load_state_dict(
         self, state_dict: Mapping[str, Any], strict: bool = True, assign: bool = False
-    ) -> _IncompatibleKeys:
+    ) -> None:
         """Validate all buffers before restoring them with PyTorch's loading semantics."""
         self.validate_state_dict(state_dict)
-        return super().load_state_dict(state_dict, strict=strict, assign=assign)
+        super().load_state_dict(state_dict, strict=strict, assign=assign)
 
     @torch.no_grad()
     def update(
-        self, add_step: int, loss: torch.Tensor, grad_norm: torch.Tensor, tokens: torch.Tensor
+        self,
+        add_step: int,
+        loss: torch.Tensor,
+        grad_norm: torch.Tensor,
+        tokens: torch.Tensor,
     ) -> None:
         """Record one batch's detached metrics and increment progress.
 
         Args:
             add_step (`int`): Increment added to the global optimizer-step count.
-            loss (`torch.Tensor`): Scalar mean loss over valid targets.
+            loss (`torch.Tensor`): Detached mean loss per rank, or a scalar locally.
             grad_norm (`torch.Tensor`): Scalar gradient norm before clipping.
-            tokens (`torch.Tensor`): Scalar number of valid targets in the batch.
+            tokens (`torch.Tensor`): Valid target counts matching the loss shape.
         """
-        self.loss_sum.add_(loss.detach() * tokens)
-        self.loss_max = torch.maximum(loss.detach(), self.loss_max)
+        loss, grad_norm = loss.detach(), grad_norm.detach()
+        self.loss_sum.add_((loss * tokens).sum())
+        self.loss_max.copy_(torch.maximum(loss.max(), self.loss_max))
 
-        self.grad_norm_sum.add_(grad_norm.detach())
-        self.grad_norm_max = torch.maximum(grad_norm.detach(), self.grad_norm_max)
+        self.grad_norm_sum.add_(grad_norm)
+        self.grad_norm_max.copy_(torch.maximum(grad_norm, self.grad_norm_max))
 
         self.step.add_(add_step)
-        self.total_tokens.add_(tokens)
-        self.window_tokens.add_(tokens)
+        world_tokens = tokens.sum()
+        self.total_tokens.add_(world_tokens)
+        self.window_tokens.add_(world_tokens)
         self.window_steps.add_(1)
 
     def get_logging_metrics(self) -> dict[str, int | float]:
@@ -400,6 +408,12 @@ class Trainer:
         self._init_wandb_tracker(config)
 
         self.model = model.to(self.device)
+        self.training_model = (
+            DDP(self.model, device_ids=[self.device.index] if self.device.type == "cuda" else None)
+            if self.runtime.enabled
+            else self.model
+        )
+
         self.tokenizer = tokenizer
         self.dataset = dataset
         self.ds_input_column = config.input_column
@@ -412,7 +426,9 @@ class Trainer:
         self.max_norm = config.max_norm
         self.logging_steps = config.logging_steps
 
-        self.total_steps = math.ceil(len(self.dataset) / self.batch_size)
+        self.total_steps = math.ceil(
+            len(self.dataset) / (self.batch_size * self.runtime.world_size)
+        )
         optimizer_factory = OptimizerInterface.get_interface(type(config.optimizer_config))
         self.optimizer: BaseOptimizer = optimizer_factory(
             config.optimizer_config, self.model.parameters()
@@ -469,7 +485,10 @@ class Trainer:
             dataset_size=len(self.dataset),
             shuffle=True,
             seed=self.seed,
-            skip_batches=skip_batches,
+            batch_cursor=skip_batches,
+            rank=self.runtime.rank,
+            world_size=self.runtime.world_size,
+            yield_empty_last_batch=True if self.runtime.enabled else None,
         )
 
         return DataLoader(
@@ -490,12 +509,14 @@ class Trainer:
 
     def _calc_batch_loss(
         self, output: torch.Tensor, labels: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Return FP32 token-mean cross-entropy and the nonignored target count.
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Return backward loss, detached per-rank mean losses and target counts.
 
         Logits have shape `[batch, sequence, vocabulary]`; labels have shape
         `[batch, sequence]` and are already shifted. Ignore `-100` targets and
         clamp the denominator to one so an all-ignored batch has zero loss.
+        In DDP, gather metrics once and scale the local loss so averaged gradients
+        match the global token mean. Without DDP, metrics remain scalar tensors.
         """
         # output is [B, T, V], labels is [B, T]
         num_tokens = (labels != -100).sum()
@@ -509,12 +530,26 @@ class Trainer:
 
         # Keep normalization on-device; an all-ignored batch has zero loss/gradient.
         loss = loss_sum / num_tokens.clamp_min(1)
-        return loss, num_tokens
+        losses, tokens = loss.detach(), num_tokens
+        if self.runtime.enabled:
+            # FP64 preserves batch counts through 2**53; accumulate counts as int64.
+            metrics = torch.stack((losses.double(), tokens.double()))
+            metrics_list = [torch.empty_like(metrics) for _ in range(self.runtime.world_size)]
+            dist.all_gather(metrics_list, metrics)
+
+            gathered = torch.stack(metrics_list)
+            losses, tokens = gathered[:, 0], gathered[:, 1].long()
+
+            # DDP averages gradients over ranks; weight each rank by its valid targets.
+            scale = self.runtime.world_size * num_tokens / tokens.sum().clamp_min(1)
+            loss = loss * scale.to(loss.dtype)
+
+        return loss, losses, tokens
 
     def _set_seed(self) -> None:
         """Seed Python and PyTorch before starting or restoring training."""
-        random.seed(self.seed)
-        torch.manual_seed(self.seed)
+        random.seed(self.seed + self.runtime.rank)
+        torch.manual_seed(self.seed + self.runtime.rank)
 
     def _inner_training_loop(self, dataloader: DataLoader, start_step: int) -> None:
         """Update once per batch, then log, save and evaluate at configured intervals."""
@@ -525,8 +560,8 @@ class Trainer:
             batch = {k: v.to(self.device, non_blocking=True) for k, v in batch.items()}
 
             with torch.autocast(self.device.type, dtype=self.model_dtype):
-                output: torch.Tensor = self.model(batch)
-                loss, num_tokens = self._calc_batch_loss(output, batch["labels"])
+                output: torch.Tensor = self.training_model(batch)
+                loss, losses, num_tokens = self._calc_batch_loss(output, batch["labels"])
 
             loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(
@@ -537,7 +572,7 @@ class Trainer:
             self.optimizer.step()
             self.lr_scheduler.step()
 
-            self.state.update(add_step=1, loss=loss, grad_norm=grad_norm, tokens=num_tokens)
+            self.state.update(add_step=1, loss=losses, grad_norm=grad_norm, tokens=num_tokens)
 
             if step % self.logging_steps == 0 or step == self.total_steps:
                 if self.runtime.is_master:
@@ -576,7 +611,7 @@ class Trainer:
         run remains open; call `run.finish()` in your own `finally` block.
         """
         if self.total_steps == 0:
-            raise ValueError("Training requires a non-empty dataset")
+            raise ValueError("Training requires at least one batch from the dataloader")
         self.logger.info("Setting up trainer...")
         # Set random state at beginning of training to ensure reproducibility
         self._set_seed()

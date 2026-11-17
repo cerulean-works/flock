@@ -1,6 +1,6 @@
+import logging
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from math import ceil
 from typing import Any
 
 import torch
@@ -55,6 +55,14 @@ class LanceBatchCollator:
         Raises:
             `KeyError`: If a row lacks the configured input column.
         """
+        if not batch:
+            # Run attention on a valid input, but contribute no targets or loss.
+            return {
+                "input_ids": torch.full((1, 1), self.tokenizer.pad_token_id, dtype=torch.long),
+                "attention_mask": torch.ones((1, 1), dtype=torch.bool),
+                "labels": torch.full((1, 1), -100, dtype=torch.long),
+            }
+
         # It is up to the model to set max length, padding side and padding token
         tokenized: dict[str, torch.Tensor] = self.tokenizer(
             [row[self.input_column] for row in batch],
@@ -90,7 +98,8 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
         shuffle (`bool`, *optional*, defaults to `True`): Shuffle row indices.
         seed (`int`, *optional*, defaults to `42`): Private permutation seed.
         skip_batches (`int`, *optional*, defaults to `0`): Completed batches to skip.
-        drop_last (`bool`, *optional*, defaults to `False`): Drop the final partial batch.
+        rank (`int`, *optional*, defaults to `0`): Worker rank in `[0, world_size)`.
+        world_size (`int`, *optional*, defaults to `1`): Total number of workers
     """
 
     def __init__(
@@ -99,23 +108,54 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
         dataset_size: int,
         shuffle: bool = True,
         seed: int = 42,
-        skip_batches: int = 0,
-        drop_last: bool = False,
+        batch_cursor: int = 0,
+        rank: int = 0,
+        world_size: int = 1,
+        yield_empty_last_batch: bool | None = None,
     ) -> None:
-        """Store batching settings without consuming the global RNG stream."""
+        """Store batching settings without consuming the global RNG stream.
+
+        Args:
+            batch_size (`int`): Positive rows per batch.
+            dataset_size (`int`): Nonnegative number of rows.
+            shuffle (`bool`, *optional*, defaults to `True`): Shuffle row indices.
+            seed (`int`, *optional*, defaults to `42`): Private permutation seed.
+            batch_cursor (`int`, *optional*, defaults to `0`): Completed batches to skip
+            rank (`int`, *optional*, defaults to `0`): Worker rank in `[0, world_size)`.
+            world_size (`int`, *optional*, defaults to `1`): Total number of workers
+            yield_empty_last_batch (`bool`, *optional*, defaults to `True`): Whether to yield an empty batch if other ranks still have data to yield.
+        """
         super().__init__()
         self.dataset_size = dataset_size
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.seed = seed
-        self.skip_batches = skip_batches
-        self.drop_last = drop_last
+        self.batch_cursor = batch_cursor
+        self.rank = rank
+        self.world_size = world_size
+        self.yield_empty_last_batch = (
+            yield_empty_last_batch if yield_empty_last_batch is not None else True
+        )
+
+        self.logger = logging.getLogger(__name__)
+
+        if rank < 0 or world_size < 1 or rank >= world_size:
+            raise ValueError(
+                f"Invalid rank {rank} for world size {world_size}. Rank must be in [0, world_size)."
+            )
+
+        if yield_empty_last_batch is not None and world_size == 1:
+            self.logger.warning(
+                "yield_empty_last_batch is set but world_size is 1. This setting has no effect in single-worker mode."
+            )
 
     def __len__(self) -> int:
         """Return the full number of batches before applying the skip prefix."""
-        if self.drop_last:
-            return self.dataset_size // self.batch_size
-        return ceil(self.dataset_size / self.batch_size)
+        full_batches, remainder = divmod(self.dataset_size, self.batch_size * self.world_size)
+        return full_batches + int(
+            remainder > 0
+            and (self.yield_empty_last_batch or self.batch_size * self.rank < remainder)
+        )
 
     def __iter__(self) -> Iterator[list[int]]:
         """Yield row-index lists after the configured number of skipped batches."""
@@ -128,8 +168,8 @@ class ResumableBatchDataSampler(Sampler[list[int]]):
             else range(self.dataset_size)
         )
 
-        for batch_idx in range(self.skip_batches, len(self)):
-            start = batch_idx * self.batch_size
+        for batch_idx in range(self.batch_cursor, len(self)):
+            start = self.batch_size * (batch_idx * self.world_size + self.rank)
             end = start + self.batch_size
             batch = indices[start:end]
             yield batch.tolist() if isinstance(batch, torch.Tensor) else list(batch)

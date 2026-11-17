@@ -8,6 +8,7 @@ from transformers import Olmo2ForCausalLM
 from transformers.models.olmo2.modeling_olmo2 import Olmo2MLP
 
 from flock.training.core.attention import GroupedAttentionWithRoPE
+from flock.training.core.distributed import DistributedRuntime
 from flock.training.core.models.olmo2 import Olmo2, Olmo2Config
 from flock.training.core.nn import SwiGLU
 from flock.training.core.trainer import Trainer
@@ -109,7 +110,9 @@ def olmo2_training_parity(
     assert_parity(
         actual[valid_inputs], expected.logits[:, :-1][valid_inputs], dtype, "logits", "logits"
     )
-    loss, token_count = Trainer._calc_batch_loss(object.__new__(Trainer), actual, labels)
+    trainer = object.__new__(Trainer)
+    trainer.runtime = DistributedRuntime(0, 0, 1, device)
+    loss, _, token_count = trainer._calc_batch_loss(actual, labels)
     assert token_count.item() == (labels != -100).sum().item()
     # HF computes its loss in FP32. Compare scalar values while retaining each
     # implementation's real loss precision for backward, including mixed precision.

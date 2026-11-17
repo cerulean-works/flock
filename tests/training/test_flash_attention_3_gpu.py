@@ -13,6 +13,7 @@ from flock.training.core.attention import (
     prepare_sdpa_mask,
     sdpa_attention,
 )
+from flock.training.core.distributed import DistributedRuntime
 from flock.training.core.models.olmo2 import Olmo2, Olmo2Config
 from flock.training.core.trainer import Trainer
 from tests.training._reference import assert_parity, olmo2_training_parity, token_batch
@@ -111,6 +112,8 @@ def test_fa3_fp32_weights_with_cuda_autocast(
     labels = ids[:, 1:].clone()
     labels.masked_fill_(~(mask[:, :-1] & mask[:, 1:]), -100)
     batch = {"input_ids": ids[:, :-1], "attention_mask": mask[:, :-1], "labels": labels}
+    trainer = object.__new__(Trainer)
+    trainer.runtime = DistributedRuntime(0, 0, 1, cuda_device)
 
     previous = attention.current_flash_attention_impl()
     assert previous in (None, "FA3"), "run FA3 checks without another custom flash implementation"
@@ -119,8 +122,8 @@ def test_fa3_fp32_weights_with_cuda_autocast(
             with attention.sdpa_kernel(attention.SDPBackend.MATH):
                 expected = reference(batch)
             actual = model(batch)
-            loss, _ = Trainer._calc_batch_loss(object.__new__(Trainer), actual, labels)
-            expected_loss, _ = Trainer._calc_batch_loss(object.__new__(Trainer), expected, labels)
+            loss, _, _ = trainer._calc_batch_loss(actual, labels)
+            expected_loss, _, _ = trainer._calc_batch_loss(expected, labels)
         assert actual.dtype == dtype
         valid = mask[:, :-1]
         assert_parity(actual[valid], expected[valid], dtype, "logits", "autocast logits")
