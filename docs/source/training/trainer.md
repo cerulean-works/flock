@@ -1,6 +1,7 @@
 # Train with Flock
 
-`Trainer` runs one shuffled pass over a Lance text dataset on one device. Each
+`Trainer` runs one shuffled pass over a Lance text dataset on one device or across
+distributed workers. Each
 batch produces one optimizer update: tokenize the text, build next-token targets,
 compute cross-entropy, backpropagate, clip gradients, update weights and advance
 the learning rate. Padding targets are ignored when computing loss.
@@ -74,8 +75,9 @@ config = TrainerConfig(
 )
 ```
 
-`batch_size` counts dataset rows per update. The run has
-`ceil(len(dataset) / batch_size)` updates, including a final partial batch.
+`batch_size` counts dataset rows per rank per update. The run has
+`ceil(len(dataset) / (batch_size * world_size))` updates, including a final partial
+batch. For a single-device run, `world_size` is `1`.
 The example warms up linearly over the first 10% of updates, holds the
 optimizer's base rate through 90%, then decays to zero with a cosine curve.
 To decay immediately after warmup, remove the constant segment and change the
@@ -121,6 +123,106 @@ The resulting tensors have shape `[batch, padded_length - 1]`. Targets use `-100
 when either the input or target position is padding. Loss is summed cross-entropy
 over valid targets divided by their count; an all-ignored batch has zero loss.
 Supply text that produces at least two tokens per row for useful training.
+
+## Launch distributed training
+
+Use `torchrun` to start one process per GPU. Each process keeps a full copy of
+the model and optimizer, so each GPU must have enough memory for a replica.
+`torchrun` supplies `RANK`, `LOCAL_RANK` and `WORLD_SIZE`; `distributed_run()`
+initializes NCCL and closes the process group when training finishes.
+
+Save this as `train_distributed.py`. It uses the same pinned dataset and model
+as the scaffold recipe. Each host needs the installed workspace, dataset access
+and access to the model's tokenizer.
+
+```python
+import logging
+
+from flock.training import (
+    AdamWConfig, DatasetConfig, LRSchedulerConfig, LRScheduleSegment,
+    Trainer, TrainerConfig, get_dataset,
+)
+from flock.training.core.distributed import distributed_run
+from flock.training.core.models import OLMO2_1B_CONFIG, Olmo2
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO)
+    with distributed_run() as runtime:
+        dataset = get_dataset(DatasetConfig(uri="s3://flock-datasets/finepdfs", version=1))
+        model = Olmo2(OLMO2_1B_CONFIG)
+        tokenizer = model.get_hf_tokenizer()
+        assert tokenizer is not None
+        config = TrainerConfig(
+            run_name="olmo2_dolma3",
+            input_column="text",
+            batch_size=2,
+            optimizer_config=AdamWConfig(lr=1e-3, betas=(0.95, 0.99)),
+            lr_scheduler_config=LRSchedulerConfig(
+                schedule=[LRScheduleSegment(start=0, end=1.0, start_ratio=1, end_ratio=0)]
+            ),
+            dataloader_num_workers=2,
+            dataloader_prefetch_factor=1,
+            wandb_project="test",
+            wandb_mode="offline",
+            output_dir=".training-checkpoints/olmo2_dolma3",
+            save_steps=200,
+        )
+        trainer = Trainer(
+            config=config, model=model, tokenizer=tokenizer, dataset=dataset, runtime=runtime
+        )
+        try:
+            trainer.train()
+        finally:
+            if trainer.run is not None:
+                trainer.run.finish()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+On a host with four visible GPUs, launch from the directory containing the script:
+
+```bash
+uv run torchrun --standalone --nproc-per-node=4 train_distributed.py
+```
+
+Set `--nproc-per-node` to the number of GPUs you want to use on that host. The
+trainer selects each worker's GPU from `LOCAL_RANK`, synchronizes gradients with
+DDP and partitions the shuffled dataset across ranks. With `batch_size=2` and four
+ranks, a full global update processes eight rows. You do not need to add another
+distributed sampler or wrap the model in DDP yourself.
+
+Every rank must construct a trainer and call `train()`. Keep those calls outside
+an `if runtime.is_master` branch: gradient and checkpoint collectives need every
+rank. Only rank zero owns a W&B run, which is why the cleanup checks
+`trainer.run is not None`.
+
+### Launch across hosts
+
+For two hosts with four GPUs each, run the same script and configuration on both
+hosts. Set `output_dir` to a shared filesystem path that every rank can read and
+write. Both hosts must reach the first host at the chosen address and port.
+Replace `10.0.0.10` below with that host's address.
+
+On the first host:
+
+```bash
+uv run torchrun --nnodes=2 --nproc-per-node=4 --node-rank=0 --master-addr=10.0.0.10 --master-port=29500 train_distributed.py
+```
+
+On the second host:
+
+```bash
+uv run torchrun --nnodes=2 --nproc-per-node=4 --node-rank=1 --master-addr=10.0.0.10 --master-port=29500 train_distributed.py
+```
+
+This creates eight ranks and a full global batch of sixteen rows. Use a new
+output directory for a fresh run. To resume, change the call in the script to
+`trainer.train(resume_from_checkpoint=True)` on every rank and launch with the
+same world size. See [Save and resume training](#save-and-resume-training) for
+checkpoint visibility, per-rank RNG state and compatibility checks.
 
 ## Train a Hugging Face architecture
 
