@@ -698,6 +698,7 @@ def test_delete_for_good_and_who_may(flock: S3Flock, writer: Writer) -> None:
 
     # Someone outside the org reads a public dataset, and gets 404 everywhere once it is private.
     writer.write("e", table(0, 1))
+    assert make_public(api, "e").status == 200
     assert get(olga.api, f"{DATASETS}/info", path="e").status == 200
     assert make_private(api, "e").status == 204
     for method, path, body in [
@@ -1088,6 +1089,9 @@ def test_private_follows_renames_and_outlives_deletes(flock: S3Flock, writer: Wr
     assert private_paths(flock) == ["b/c", "d", "e"]
 
 
+# ---------------------------------------------------------------------- moving and deleting many (019)
+
+
 def versions_last(keys: list[str]) -> bool:
     """Whether every ``_versions/`` key comes after every other one."""
     first = next((i for i, k in enumerate(keys) if "/_versions/" in k), len(keys))
@@ -1168,6 +1172,7 @@ def test_move_a_folder_with_its_loose_files(
     put(flock, "scratch/deep/README.md", b"# deep")
     api = flock.client()
     assert make_private(api, "scratch/a").status == 204
+    assert make_public(api, "scratch/deep/b").status == 200
     bucket = upstream_name(flock)
     before = keys(flock, bucket, "scratch/")
     copies = wrap(monkeypatch, flock, "copy_object", lambda *a: None)
