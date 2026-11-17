@@ -593,6 +593,12 @@ def test_a_dataset_import_writes_lance_datasets(
         )
         assert response.status == 404
 
+    # The API sees in-memory completion before the final database save used by admission.
+    wait_for(
+        lambda: (
+            sql(flock, "SELECT state FROM hf_imports WHERE pk = $1", job["id"])[0][0] == "finished"
+        )
+    )
     # The same folder again is refused before anything starts.
     again = api.post(IMPORTS, {"kind": "dataset", "repo": "acme/data", "dest": "hf/data"})
     assert again.status == 409
