@@ -1,5 +1,6 @@
 """Taiwanese senior-high mock exams for 學測 and 指考: ten subjects of single-answer questions, one task each, read from a private dataset."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -22,9 +23,9 @@ class Subject:
 
     Args:
         name (`str`):
-            The dataset config, which names the task `tw_mock_exams_<name>`.
+            The dataset config, which names the task `<prefix>_<name>` (`exam_task`).
         chinese_name (`str`):
-            The subject in the Chinese header. 英文 takes MMLU's English header instead.
+            The subject in the Chinese header. 英文 takes MMLU's English header and format instead.
         shots (`tuple[str, ...]`):
             The ids of the subject's 5 `dev` rows, its few-shot examples: its shortest self-contained items, 009.D4 in the stage file.
     """
@@ -97,10 +98,30 @@ def english_doc(row: dict[str, Any]) -> MCDoc:
     return exam_doc(row, question_prefix="Question: ", answer_prefix="Answer:", separator=" ")
 
 
-def subject_task(subject: Subject) -> MultipleChoiceTask:
-    """The subject's task: a header, the subject's 5 examples, then the test question. 英文 takes OLMES's MMLU header and PMI context, the others TMMLU+'s (009.D3)."""
+def exam_task(
+    subject: Subject,
+    prefix: str,
+    repo: str,
+    revision: str,
+    keep: Callable[[dict[str, Any]], bool] | None = None,
+) -> MultipleChoiceTask:
+    """
+    A subject's task in the mock exams' format: a header, the subject's 5 examples, then the test question. 英文 takes OLMES's MMLU header and PMI context, the others TMMLU+'s (009.D3)..
+
+    Args:
+        subject (`Subject`):
+            The subject, whose `name` is the dataset config.
+        prefix (`str`):
+            The set's name, which prefixes the task name.
+        repo (`str`):
+            The set's dataset repo, with one config per subject and the splits `dev` and `test`.
+        revision (`str`):
+            The repo's commit.
+        keep (`Callable[[dict], bool]`, *optional*):
+            The task's `keep`. Every row if not set.
+    """
     # The one place the format is chosen: the header, the prefixes and the PMI context together.
-    if subject.name == "english":
+    if subject.chinese_name == "英文":
         description = (
             "The following are multiple choice questions (with answers) about English.\n\n"
         )
@@ -110,21 +131,15 @@ def subject_task(subject: Subject) -> MultipleChoiceTask:
         to_doc, unconditional_context = chinese_doc, CHINESE_ANSWER_PREFIX
 
     return MultipleChoiceTask(
-        name=f"tw_mock_exams_{subject.name}",
-        # Private: only members of the Cerulean organization can run these tasks (009.D1).
-        dataset=Dataset(
-            repo="cerulean-works/tw-mock-exams",
-            revision="e62f9adf374da2e0fcd0095428f6339da980f020",
-            subset=subject.name,
-            split="test",
-        ),
+        name=f"{prefix}_{subject.name}",
+        dataset=Dataset(repo=repo, revision=revision, subset=subject.name, split="test"),
         to_doc=to_doc,
         # As TMMLU+ and OLMES's MMLU.
         primary_metric="acc_per_char",
         fewshot=Fewshot(split="dev", ids=subject.shots),
         description=description,
         unconditional_context=unconditional_context,
-        keep=scored,
+        keep=keep,
     )
 
 
@@ -242,7 +257,17 @@ SUBJECTS = (
     ),
 )
 
-TW_MOCK_EXAMS_TASKS = tuple(map(subject_task, SUBJECTS))
+# Private: only members of the Cerulean organization can run these tasks (009.D1).
+TW_MOCK_EXAMS_TASKS = tuple(
+    exam_task(
+        subject,
+        "tw_mock_exams",
+        "cerulean-works/tw-mock-exams",
+        "e62f9adf374da2e0fcd0095428f6339da980f020",
+        keep=scored,
+    )
+    for subject in SUBJECTS
+)
 
 # The subjects' unweighted mean, as OLMES averages MMLU's (009.D5).
 TW_MOCK_EXAMS = Suite("tw_mock_exams", TW_MOCK_EXAMS_TASKS)
