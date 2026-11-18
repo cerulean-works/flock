@@ -747,7 +747,7 @@ class Trainer:
                 # Ensure a crash-resumed checkpoint is not saved if no steps were completed
                 and self.state.step > start_step
             ):
-                self._save_model(int(self.state.step.item()), blocking=True)
+                self._save_model(int(self.state.step.item()))
             if self.runtime.is_master:
                 self.checkpoint_manager.finish_checkpoint_uploads()
 
