@@ -261,7 +261,10 @@ def test_optimizer_resume_prefetch_corruption_and_export(tmp_path: Path) -> None
     with pytest.raises(FileExistsError):
         restored.checkpoint(tmp_path / "interrupted")
     tokenizer = word_tokenizer()
+    # Named chat templates make the tokenizer write a subdirectory into the export.
+    tokenizer.chat_template = {"default": "a", "tool": "b"}
     restored.export(tmp_path / "export", tokenizer)
+    assert (tmp_path / "export" / "additional_chat_templates" / "tool.jinja").is_file()
     reloaded = AutoModelForCausalLM.from_pretrained(tmp_path / "export", local_files_only=True)
     reloaded.set_attn_implementation("eager")
     scorer = ScoringModel(reloaded, tokenizer, name="synthetic-export@terminal")
