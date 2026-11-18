@@ -37,7 +37,7 @@ HF export saves model/config/tokenizer. Tests reload locally, compare the identi
 uv run python -m flock.training.experiments.hf_campaign.train --size 190m \
     --dataset-uri s3://flock-datasets/corpora/provisional/mix-500m-tc25-seed0 --dataset-version 1 \
     --warmup-targets 190354176 --rows-per-update 128 --micro-rows 8 \
-    --checkpoint-every 1000 --output-dir /work/$USER/runs/proxy-190m-s0
+    --checkpoint-every 200 --output-dir /work/$USER/runs/proxy-190m-s0
 ```
 
 The mixes written by `harvest mix` carry no admission receipts, so they never enter the admitted input contract above. `ProvisionalMix` is the only way in and the only input `GpuExperiment` takes. Every record of such a run (`run-*.json`, `summary-*.json`, the export's `experiment.json`) says `provisional: true`; `log.jsonl` sits beside them in the same run directory. The admitted path's checks are unchanged.

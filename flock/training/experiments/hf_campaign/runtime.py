@@ -247,11 +247,11 @@ class CpuExperiment(Experiment):
         """Apply one exact global allocation, one block per micro-batch."""
         if tc_targets < 0 or tc_targets != en_targets or tc_targets == 0:
             raise ValueError("each synthetic update requires equal positive TC and EN targets")
+        # Producer state may have advanced through prefetch; only committed input is authoritative.
+        self.stream.load_state_dict(self.committed)
         # Checked before any block is read: an oversized allocation must not consume the stream.
         if self.targets + tc_targets + en_targets > self.total_targets:
             raise ValueError("update would overshoot the target endpoint")
-        # Producer state may have advanced through prefetch; only committed input is authoritative.
-        self.stream.load_state_dict(self.committed)
         try:
             blocks = self.stream.blocks("tc", tc_targets) + self.stream.blocks("en", en_targets)
             loss = self._step(

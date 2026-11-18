@@ -6,6 +6,7 @@ import os
 import time
 from pathlib import Path
 
+import torch
 from torch import cuda
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, PreTrainedTokenizerFast
@@ -119,6 +120,9 @@ def main() -> None:
         multiprocessing_context="spawn" if args.workers else None,
         pin_memory=True,
         prefetch_factor=4 if args.workers else None,
+        # The loader seeds its workers from this generator, not from the global RNG a resume
+        # has just restored, so a resumed run's checkpoints match an uninterrupted run's.
+        generator=torch.Generator(),
     )
     log_path = args.output_dir / "log.jsonl"
     if log_path.exists():

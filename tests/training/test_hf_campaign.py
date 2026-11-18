@@ -576,6 +576,21 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
     monkeypatch.setattr("sys.argv", [*arguments, "--max-updates=3", "--resume"])
     train.main()
 
+    # The resumed run's RNG state at update 3 is an uninterrupted run's.
+    AcceleratorState._reset_state(True)
+    straight = tmp_path / "straight"
+    monkeypatch.setattr(
+        "sys.argv",
+        [*arguments, f"--output-dir={straight}", "--max-updates=3", "--checkpoint-every=3"],
+    )
+    train.main()
+    monkeypatch.setattr("sys.argv", [*arguments, "--max-updates=3", "--resume"])
+    for checkpoint in [output, straight]:
+        assert (checkpoint / "checkpoints" / "update-000003" / "random_states_0.pkl").exists()
+    assert (output / "checkpoints" / "update-000003" / "random_states_0.pkl").read_bytes() == (
+        straight / "checkpoints" / "update-000003" / "random_states_0.pkl"
+    ).read_bytes()
+
     lines = [json.loads(line) for line in (output / "log.jsonl").read_text().splitlines()]
     assert [(line["segment"], line["update"], line["targets"]) for line in lines] == [
         (0, 1, 8),
