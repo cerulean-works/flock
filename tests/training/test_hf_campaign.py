@@ -232,7 +232,10 @@ def test_optimizer_resume_prefetch_corruption_and_export(tmp_path: Path) -> None
     experiment.stream.blocks("tc", 3)
     expected_loss, expected_blocks = experiment.update(tc_targets=3, en_targets=3)
     expected = {k: v.clone() for k, v in experiment.model.state_dict().items()}
-    restored = CpuExperiment(tiny_config(), stream(), seed=999)
+    with pytest.raises(ValueError, match="contract"):  # the seed is part of the run
+        CpuExperiment(tiny_config(), stream(), seed=999).resume(tmp_path / "checkpoint")
+    restored = CpuExperiment(tiny_config(), stream(), seed=17)
+    torch.rand(5)  # moves the global RNG, which the checkpoint must restore
     restored.resume(tmp_path / "checkpoint")
     torch.testing.assert_close(torch.rand(3), expected_random, rtol=0, atol=0)
     actual_loss, actual_blocks = restored.update(tc_targets=3, en_targets=3)
@@ -455,7 +458,9 @@ def test_gpu_runtime_resumes_to_the_same_next_update_on_cpu(
     expected_loss = experiment.update(mix[1])
     expected = {k: v.clone() for k, v in experiment.model.state_dict().items()}
 
-    restored = build(999)
+    with pytest.raises(ValueError, match="contract"):
+        build(999).resume(tmp_path / "checkpoint")
+    restored = build(17)
     restored.resume(tmp_path / "checkpoint")
     assert (restored.updates, restored.targets) == (1, 6)
     assert restored.update(mix[1]) == expected_loss

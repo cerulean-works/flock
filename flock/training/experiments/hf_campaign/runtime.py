@@ -54,6 +54,7 @@ class Experiment:
             },
             "total": total_targets,
             "warmup": warmup_targets,
+            "seed": seed,
             "source": source,
         }
         self.contract = hashlib.sha256(
