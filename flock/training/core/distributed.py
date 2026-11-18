@@ -109,7 +109,7 @@ def distributed_run(*, enable_cpu: bool = False) -> Generator[DistributedRuntime
             backend="nccl" if runtime.device.type == "cuda" else "gloo",
             init_method="env://",
             timeout=timedelta(minutes=10),
-            device_id=runtime.device,
+            device_id=runtime.device if runtime.device.type == "cuda" else None,
         )
     try:
         yield runtime
