@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from types import SimpleNamespace
+from functools import partial
 from typing import TYPE_CHECKING
 
 import lance
@@ -367,8 +367,10 @@ def sdpa_config(context: int = 32) -> Olmo2Config:
 
 
 @pytest.fixture
-def fresh_accelerator_state() -> Iterator[None]:
+def fresh_accelerator_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     # Accelerate keeps one process-wide precision; the GPU runtime asks for BF16, the CPU one FP32.
+    # The GPU runtime's tests run on the CPU even where a GPU is visible.
+    monkeypatch.setenv("ACCELERATE_USE_CPU", "1")
     AcceleratorState._reset_state(True)
     yield
     AcceleratorState._reset_state(True)
@@ -468,6 +470,7 @@ def test_gpu_runtime_resumes_to_the_same_next_update_on_cpu(
             total_targets=12,
             warmup_targets=3,
             micro_rows=1,
+            device="cpu",
         )
 
     experiment = build(17)
@@ -497,6 +500,7 @@ def test_gpu_runtime_resumes_to_the_same_next_update_on_cpu(
             total_targets=7,
             warmup_targets=1,
             micro_rows=1,
+            device="cpu",
         )
     with pytest.raises(ValueError, match="SDPA"):
         GpuExperiment(
@@ -507,6 +511,7 @@ def test_gpu_runtime_resumes_to_the_same_next_update_on_cpu(
             total_targets=6,
             warmup_targets=1,
             micro_rows=1,
+            device="cpu",
         )
 
 
@@ -517,14 +522,7 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
     config = write_mix(tmp_path / "mix.lance", ["2 3 4 5 6 7 8 9"] * 30)
     monkeypatch.setattr(train.AutoTokenizer, "from_pretrained", lambda *_, **__: word_tokenizer())
     monkeypatch.setattr(train, "proxy_config", lambda _: sdpa_config(context=4))
-    # Only the launcher's device check and summary see a device; training stays on the CPU.
-    monkeypatch.setattr(
-        train,
-        "cuda",
-        SimpleNamespace(
-            is_available=lambda: True,
-        ),
-    )
+    monkeypatch.setattr(train, "GpuExperiment", partial(GpuExperiment, device="cpu"))
     output = tmp_path / "run"
     arguments = [
         "train",
@@ -556,8 +554,10 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
     assert [line["lr"] for line in lines] == pytest.approx(
         [0.0, peak, peak * (0.1 + 0.9 * (1 + math.cos(math.pi * progress)) / 2)]
     )
-    first = json.loads((output / "run-000000.json").read_text())
-    resumed = json.loads((output / "run-000002.json").read_text())
+    first = json.loads((output / "run-000.json").read_text())
+    resumed = json.loads((output / "run-001.json").read_text())
+    assert (first["attempt"], resumed["attempt"]) == (0, 1)
+    assert first["contract"] == resumed["contract"]
     assert first["provisional"] is resumed["provisional"] is True
     assert first["total"] == 33 * 8  # one pass over the mix's whole updates
     assert resumed["resumed_at_update"] == 2
@@ -606,6 +606,8 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
         train.main()
     monkeypatch.delenv("ACCELERATE_GRADIENT_ACCUMULATION_STEPS")
 
-    monkeypatch.setattr(train.cuda, "is_available", lambda: False)
-    with pytest.raises(RuntimeError, match="no CUDA device"):
+    # The launcher itself requires the device Accelerate selected to be a GPU.
+    monkeypatch.setattr(train, "GpuExperiment", GpuExperiment)
+    AcceleratorState._reset_state(True)
+    with pytest.raises(RuntimeError, match="not cuda"):
         train.main()

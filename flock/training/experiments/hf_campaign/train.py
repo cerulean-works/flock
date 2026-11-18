@@ -39,10 +39,6 @@ def main() -> None:
         "--resume", action="store_true", help="Continue from the latest checkpoint."
     )
     args = parser.parse_args()
-    # Accelerate falls back to the CPU without a device; a proxy run there would take days.
-    if not cuda.is_available():
-        raise RuntimeError("no CUDA device: this launcher trains on one GPU")
-
     tokenizer = AutoTokenizer.from_pretrained(MODEL_REPO, revision=MODEL_REVISION)
     # The fingerprint in the mix contract needs the fast backend, which the pinned repo ships.
     assert isinstance(tokenizer, PreTrainedTokenizerFast)
@@ -84,19 +80,20 @@ def main() -> None:
         experiment.resume(latest)
     else:
         args.output_dir.mkdir(parents=True, exist_ok=False)
+    # Every attempt gets its own record; two resumed from one checkpoint share a segment.
+    attempt = len(list(args.output_dir.glob("run-*.json")))
     run = {
         "provisional": True,
+        "attempt": attempt,
         "args": {key: str(value) for key, value in vars(args).items()},
         "tokenizer_revision": MODEL_REVISION,
         "contract": experiment.contract,
         "started": started,
         "resumed_at_update": experiment.updates,
-        # Accelerate can be sent to the CPU from the environment despite a visible GPU.
         "device": str(experiment.accelerator.device),
     } | experiment.description
-    (args.output_dir / f"run-{experiment.updates:06d}.json").write_text(
-        json.dumps(run, indent=2, sort_keys=True)
-    )
+    with (args.output_dir / f"run-{attempt:03d}.json").open("x") as record:
+        record.write(json.dumps(run, indent=2, sort_keys=True))
 
     # A resumed segment logs the update it started from, so a replayed update is told apart.
     segment = experiment.updates
@@ -119,6 +116,7 @@ def main() -> None:
         for windows in loader:
             loss = experiment.update(windows)
             line = {
+                "attempt": attempt,
                 "segment": segment,
                 "update": experiment.updates,
                 "targets": experiment.targets,
@@ -143,6 +141,7 @@ def main() -> None:
         "contract": experiment.contract,
         "updates": experiment.updates,
         "targets": experiment.targets,
+        "attempt": attempt,
         "segment": segment,
         "segment_targets": experiment.targets - segment_start_targets,
         "started": started,

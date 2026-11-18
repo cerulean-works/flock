@@ -273,6 +273,7 @@ class GpuExperiment(Experiment):
         total_targets: int,
         warmup_targets: int,
         micro_rows: int,
+        device: str = "cuda",
     ) -> None:
         if config._attn_implementation != "sdpa":
             raise ValueError("the GPU runtime trains with SDPA attention only")
@@ -284,10 +285,15 @@ class GpuExperiment(Experiment):
             raise ValueError("total targets must be whole updates within one pass over the mix")
         if micro_rows < 1:
             raise ValueError("micro-batches need at least one row")
+        accelerator = Accelerator(mixed_precision="bf16")
+        # Accelerate falls back to the CPU without a GPU, or when the environment asks for it.
+        if accelerator.device.type != device:
+            raise RuntimeError(f"Accelerate selected {accelerator.device}, not {device}")
         super().__init__(
             config,
-            accelerator=Accelerator(mixed_precision="bf16"),
-            source={"provisional": True, "mix": mix.contract},
+            accelerator=accelerator,
+            # The micro-batch split sets the gradient's summation order, so a resume keeps it.
+            source={"provisional": True, "mix": mix.contract, "micro_rows": micro_rows},
             # 141's optimizer for the flock Trainer, so the two trainers differ only in packing,
             # precision and batch: the scaffold's betas (OLMo 2 states none) and PyTorch's 0.01
             # weight decay on every parameter.
