@@ -1,4 +1,4 @@
-"""Training runtimes for the standalone HF campaign: one shared update loop, a CPU contract harness and a one-GPU provisional path."""
+"""HF campaign runtimes: one shared update loop, a CPU contract harness and a GPU path."""
 
 import hashlib
 import json
@@ -18,7 +18,7 @@ from .stream import Block, TargetStream
 
 
 class Experiment:
-    """A freshly initialized OLMo 2 model trained by aligned summed CE on a token schedule, with committed checkpoints and HF export."""
+    """A fresh OLMo 2 model trained by aligned summed CE on a token schedule."""
 
     def __init__(
         self,
@@ -40,6 +40,7 @@ class Experiment:
         self.total_targets = total_targets
         self.warmup_targets = warmup_targets
         self.peak_lr = peak_lr
+        self.source = source
         self.description = {
             "model": config.to_dict(),
             "attention_backend": config._attn_implementation,
@@ -81,7 +82,7 @@ class Experiment:
         self.targets = state["targets"]
 
     def step(self, micro_batches: list[tuple[torch.Tensor, torch.Tensor]]) -> float:
-        """Apply one optimizer update over aligned `(inputs, labels)` micro-batches; return its mean loss."""
+        """Apply one update over aligned `(inputs, labels)` micro-batches; return its mean loss."""
         total = sum(labels.numel() for _, labels in micro_batches)
         if total == 0:
             raise ValueError("an update needs at least one target")
@@ -175,14 +176,19 @@ class Experiment:
         self.accelerator.unwrap_model(self.model).save_pretrained(destination)
         tokenizer.save_pretrained(destination)
         # The card says what trained these weights, including whether the data was provisional.
-        card = {"contract": self.contract, "updates": self.updates, "targets": self.targets}
+        card = {
+            "provisional": self.source.get("provisional", False),
+            "contract": self.contract,
+            "updates": self.updates,
+            "targets": self.targets,
+        }
         (destination / "experiment.json").write_text(
             json.dumps(card | self.description, indent=2, sort_keys=True)
         )
 
 
 class CpuExperiment(Experiment):
-    """Exercise aligned loss, committed stream state and HF export on admitted pools without a launch path."""
+    """Exercise loss, committed stream state and export on admitted pools, with no launch path."""
 
     def __init__(
         self,
@@ -242,7 +248,7 @@ class CpuExperiment(Experiment):
 
 
 class GpuExperiment(Experiment):
-    """Train a proxy on one device in BF16 autocast with PyTorch's flash SDPA kernel, from a provisional mix only."""
+    """Train on one device in BF16 with the flash SDPA kernel, from a provisional mix only."""
 
     def __init__(
         self,
@@ -279,7 +285,6 @@ class GpuExperiment(Experiment):
             total_targets=total_targets,
             warmup_targets=warmup_targets,
         )
-        self.mix = mix
         self.micro_rows = micro_rows
 
     def update(self, windows: torch.Tensor) -> float:

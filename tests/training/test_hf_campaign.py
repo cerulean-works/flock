@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from typing import TYPE_CHECKING
 
 import lance
@@ -512,7 +513,17 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
     train.main()
 
     lines = [json.loads(line) for line in (output / "log.jsonl").read_text().splitlines()]
-    assert [(line["update"], line["targets"]) for line in lines] == [(1, 8), (2, 16), (3, 24)]
+    assert [(line["segment"], line["update"], line["targets"]) for line in lines] == [
+        (0, 1, 8),
+        (0, 2, 16),
+        (2, 3, 24),
+    ]
+    # Rates by update-start targets: 0 before warmup's 8 targets, the peak at 8, then cosine.
+    peak = 1.31e-3  # the 76M preset's
+    progress = (16 - 8) / (33 * 8 - 8)
+    assert [line["lr"] for line in lines] == pytest.approx(
+        [0.0, peak, peak * (0.1 + 0.9 * (1 + math.cos(math.pi * progress)) / 2)]
+    )
     first = json.loads((output / "run-000000.json").read_text())
     resumed = json.loads((output / "run-000002.json").read_text())
     assert first["provisional"] is resumed["provisional"] is True
@@ -524,6 +535,15 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
         "update-000003",
     ]
     card = json.loads((output / "export-000003" / "experiment.json").read_text())
-    assert card["source"]["provisional"] is True
+    assert card["provisional"] is card["source"]["provisional"] is True
     assert card["targets"] == 24
-    assert json.loads((output / "summary-000003.json").read_text())["provisional"] is True
+    summary = json.loads((output / "summary-000003.json").read_text())
+    assert summary["provisional"] is True
+    assert (summary["segment"], summary["segment_targets"]) == (2, 8)
+
+    # A save killed partway leaves its lock, and a resume refuses to train towards it.
+    (output / "checkpoints" / "update-000004.incomplete").mkdir()
+    AcceleratorState._reset_state(True)
+    monkeypatch.setattr("sys.argv", [*arguments, "--max-updates=5", "--resume"])
+    with pytest.raises(FileExistsError, match="interrupted save"):
+        train.main()

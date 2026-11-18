@@ -18,7 +18,7 @@ from .runtime import GpuExperiment
 
 
 def main() -> None:
-    """Parse the run's settings, train to the endpoint or `--max-updates`, then checkpoint and export."""
+    """Train to the endpoint or `--max-updates`, then checkpoint and export."""
     started = time.time()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--size", choices=PROXY_SIZES, required=True)
@@ -61,8 +61,14 @@ def main() -> None:
     )
     checkpoints = args.output_dir / "checkpoints"
     if args.resume:
-        committed = [path for path in checkpoints.iterdir() if path.suffix != ".incomplete"]
-        experiment.resume(max(committed))
+        # A save killed partway leaves its lock; training on would die on reaching that update.
+        incomplete = sorted(checkpoints.glob("*.incomplete"))
+        if incomplete:
+            raise FileExistsError(f"inspect and remove the interrupted save first: {incomplete}")
+        committed = sorted(checkpoints.glob("update-*"))
+        if not committed:
+            raise FileNotFoundError(f"no committed checkpoint in {checkpoints}")
+        experiment.resume(committed[-1])
     else:
         args.output_dir.mkdir(parents=True, exist_ok=False)
     run = {
@@ -77,6 +83,8 @@ def main() -> None:
         json.dumps(run, indent=2, sort_keys=True)
     )
 
+    # A resumed segment logs the update it started from, so a replayed update is told apart.
+    segment = experiment.updates
     stop = experiment.total_targets // mix.targets_per_update
     if args.max_updates is not None:
         stop = min(stop, args.max_updates)
@@ -95,6 +103,7 @@ def main() -> None:
         for windows in loader:
             loss = experiment.update(windows)
             line = {
+                "segment": segment,
                 "update": experiment.updates,
                 "targets": experiment.targets,
                 "loss": loss,
@@ -115,6 +124,8 @@ def main() -> None:
         "contract": experiment.contract,
         "updates": experiment.updates,
         "targets": experiment.targets,
+        "segment": segment,
+        "segment_targets": experiment.targets - segment * mix.targets_per_update,
         "started": started,
         "finished": time.time(),
     }
