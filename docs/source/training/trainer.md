@@ -572,9 +572,9 @@ write failures are logged and training continues.
 
 Set `output_dir` for a checkpoint root, or use the default
 `.training-checkpoints/<run_name>`. Fresh training requires an empty directory
-unless `overwrite_output_dir=True`. `save_total_limit` retains the most recently
-saved local checkpoints by `flock.json`'s `saved_at`, protecting older folders
-while their uploads are pending. The limit can temporarily be exceeded.
+unless `overwrite_output_dir=True`. After each successful save, `save_total_limit`
+retains the newest local checkpoints by `flock.json`'s `saved_at`. Older folders
+with pending uploads can temporarily put the number of checkpoints over the limit.
 
 A checkpoint appears as `output_dir/checkpoint-<step>` only after all of its files
 have been written. Construct a new trainer with the same model configuration,
@@ -648,15 +648,17 @@ manager.finish_checkpoint_uploads()
 
 The manager writes weights, buffers and training state to local files before
 `save_model` returns. Later training updates cannot change those files. The Hub
-handles background uploads. `finish_checkpoint_uploads()` waits for uploads and
-applies retention. Ordinary saves do not collect earlier uploads or prune files.
+handles background uploads. Each save collects completed uploads before pruning
+old checkpoints. `finish_checkpoint_uploads()` waits for the remaining uploads
+and applies retention again.
 
 Set `save_to_hub_repo="org/model"` to upload each checkpoint with a
 `checkpoint-<step>` tag. Passing `blocking=True` to `save_model` waits for all
-uploads, reusing an existing step without rewriting it.
-Upload failures are logged and leave the local checkpoint available. Local
-retention does not delete Hub versions. The manager takes persistence settings
-at construction, independently of the trainer.
+uploads after saving. Replacing an existing checkpoint requires
+`overwrite_output_dir=True`.
+Upload failures are logged. Local checkpoints remain subject to the configured
+retention limit, which applies only to local folders. The manager takes
+persistence settings at construction, independently of the trainer.
 
 To restore a local checkpoint without starting training, validate the training
 state before any weights change, then apply the returned state:
@@ -667,9 +669,7 @@ trainer.load_state_dict(state)
 ```
 
 Pending uploads and published checkpoint folders are available through
-`manager.pending_uploads` and `manager.checkpoints()` respectively. Retention
-runs after the final `finish_checkpoint_uploads()` or blocking save finishes all
-uploads. Until then, local checkpoint folders can exceed `save_total_limit`.
+`manager.pending_uploads` and `manager.checkpoints()` respectively.
 
 After entering the training loop, cleanup waits for pending uploads and, when
 automatic saving is enabled, saves the current step if it falls between save

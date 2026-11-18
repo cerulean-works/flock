@@ -35,10 +35,12 @@ class CheckpointManager:
 
     Saves write weights, buffers and training state to local files before
     returning, then delegate background uploads to the Hub. Later training
-    updates cannot change those files. Call `finish_checkpoint_uploads()` at the end
-    to finish uploads and apply local retention. Local write failures propagate
-    immediately; Hub failures are logged and keep the local checkpoint.
-    Ordinary saves do not collect uploads or prune checkpoints.
+    updates cannot change those files. Each successful save collects completed
+    uploads and prunes old checkpoints according to `save_total_limit`, keeping
+    folders with uploads still in progress. Call `finish_checkpoint_uploads()`
+    at the end to wait for remaining uploads and apply retention again.
+    Local write failures propagate immediately. Hub failures are logged and the
+    local checkpoint remains subject to retention.
     """
 
     def __init__(
@@ -77,8 +79,8 @@ class CheckpointManager:
             model (`torch.nn.Module`): Module to save, including persistent buffers.
             training_state (`Mapping[str, Any]`, *optional*): Nested state to serialize.
             blocking (`bool`, *optional*, defaults to `False`): Wait for all Hub
-                uploads. Reuse an existing step without rewriting it. Local
-                serialization always completes before this method returns.
+                uploads after saving. Local serialization always completes before
+                this method returns.
 
         A supplied model config must be a frozen dataclass. Plain modules without
         a config can be restored into an existing module using `load_checkpoint`.
@@ -87,27 +89,18 @@ class CheckpointManager:
         published by rename. Staging paths are excluded from checkpoint listing.
 
         Raises:
-            `FileExistsError`: If a nonblocking save would replace a checkpoint
-                and `overwrite_output_dir` is false.
+            `FileExistsError`: If a checkpoint for this step already exists and
+                `overwrite_output_dir` is false.
             `OSError`: If a local write fails.
         """
         if step < 0:
             raise ValueError("step must be nonnegative")
         save_path = self.output_dir / f"checkpoint-{step}"
-        if save_path.exists() and not self.overwrite_output_dir and not blocking:
+        if save_path.exists() and not self.overwrite_output_dir:
             raise FileExistsError(f"Checkpoint already exists: {save_path}")
-        if blocking and save_path.exists():
-            self.finish_checkpoint_uploads()
-            return
         # A folder upload reads in place; finish it before replacing those files.
         if save_path in self.pending_uploads:
-            upload = self.pending_uploads.pop(save_path)
-            try:
-                upload.result()
-            except Exception:
-                self.logger.exception(
-                    f"Failed to upload checkpoint {save_path} to hub {self.save_to_hub_repo}"
-                )
+            self._finish_checkpoint_upload(save_path)
 
         self.logger.info(f"Saving model at step {step}")
         run = self.run
@@ -143,24 +136,36 @@ class CheckpointManager:
                 )
         if blocking:
             self.finish_checkpoint_uploads()
+            return
+        for checkpoint, upload in list(self.pending_uploads.items()):
+            if upload.done():
+                self._finish_checkpoint_upload(checkpoint)
+        self._prune_checkpoints()
 
     def finish_checkpoint_uploads(self) -> None:
         """Wait for Hub uploads, then apply local retention.
 
         Hub errors are logged. Repeated calls are harmless.
         """
-        for checkpoint, upload in list(self.pending_uploads.items()):
-            try:
-                upload.result()
-            except Exception:
-                self.logger.exception(
-                    f"Failed to upload checkpoint {checkpoint} to hub {self.save_to_hub_repo}"
-                )
-            finally:
-                del self.pending_uploads[checkpoint]
+        for checkpoint in list(self.pending_uploads):
+            self._finish_checkpoint_upload(checkpoint)
+        self._prune_checkpoints()
+
+    def _finish_checkpoint_upload(self, checkpoint: Path) -> None:
+        try:
+            self.pending_uploads[checkpoint].result()
+        except Exception:
+            self.logger.exception(
+                f"Failed to upload checkpoint {checkpoint} to hub {self.save_to_hub_repo}"
+            )
+        del self.pending_uploads[checkpoint]
+
+    def _prune_checkpoints(self) -> None:
         if self.save_total_limit is None:
             return
         for checkpoint in self._checkpoints_by_save_time()[: -self.save_total_limit]:
+            if checkpoint in self.pending_uploads:
+                continue
             self.logger.info(f"Deleting old checkpoint {checkpoint}")
             shutil.rmtree(checkpoint)
 

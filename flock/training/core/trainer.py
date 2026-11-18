@@ -666,9 +666,8 @@ class Trainer:
                     self._log_metrics(metrics_dict)
                 self.state.reset_window()
 
-            if self.save_steps is not None and (
-                step % self.save_steps == 0 or step == self.total_steps
-            ):
+            # Cleanup handles the final model save, so we only save at intervals here.
+            if self.save_steps is not None and (step % self.save_steps == 0):
                 self._save_model(step)
 
             if self.validation_steps and (
@@ -736,7 +735,6 @@ class Trainer:
 
         training_completed: bool = False
         try:
-            nonlocal training_completed
             self.model.train()
             self.logger.info("Starting training")
             self._inner_training_loop(dataloader, start_step)
@@ -746,6 +744,8 @@ class Trainer:
                 self.save_steps
                 and (not self.runtime.enabled or training_completed)
                 and self.state.step % self.save_steps != 0
+                # Ensure a crash-resumed checkpoint is not saved if no steps were completed
+                and self.state.step > start_step
             ):
                 self._save_model(int(self.state.step.item()), blocking=True)
             if self.runtime.is_master:

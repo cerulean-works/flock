@@ -37,7 +37,7 @@ evaluation task names. With zero workers, set `dataloader_prefetch_factor=None`.
 | `validation_batch_tokens` | `32768` | Positive padded-token budget for scoring. One request can exceed it. |
 | `output_dir` | `None` | Uses `.training-checkpoints/<run_name>` in the current directory when unset. |
 | `save_steps` | `None` | Positive update interval; also saves at the final update and off-interval loop cleanup. `None` disables automatic saves. |
-| `save_total_limit` | `None` | Positive local retention limit by save timestamp. Pending uploads can exceed it temporarily. `None` keeps all checkpoints. |
+| `save_total_limit` | `None` | Positive local retention limit by save timestamp, applied after each successful save. Pending uploads can temporarily put the number of checkpoints over the limit. `None` keeps all checkpoints. |
 | `save_to_hub_repo` | `None` | Optional `org/model` upload destination. |
 | `overwrite_output_dir` | `False` | Permit fresh training in a nonempty directory and replacement of a step's checkpoint. |
 | `model_dtype` | `torch.bfloat16` | Autocast dtype; model weights are not cast by the trainer. |
@@ -212,9 +212,10 @@ manager.finish_checkpoint_uploads()
 Local serialization always finishes before `save_model` returns. With
 `blocking=False`, the Hub uploads the completed checkpoint in the background.
 Later model or training-state updates cannot change the saved files.
-`finish_checkpoint_uploads()` finishes uploads and applies retention. Local write
-errors propagate immediately; upload errors are logged. Ordinary saves do not
-collect earlier uploads or prune files.
+Each successful save collects completed uploads and prunes old checkpoints,
+keeping folders with uploads still in progress. `finish_checkpoint_uploads()`
+waits for the remaining uploads and applies retention again. Local write errors
+propagate immediately. Upload errors are logged.
 
 `load_checkpoint(path, model)` restores weights and returns training state.
 Pass `validate_state=trainer.validate_state_dict` to validate the run before

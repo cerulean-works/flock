@@ -626,7 +626,7 @@ def test_disabled_validation_does_not_prepare_tasks(
 
 
 @pytest.mark.parametrize("fail_evaluation", [True, False])
-def test_checkpoint_is_saved_before_validation(
+def test_training_saves_checkpoints_with_validation(
     trainer_factory: TrainerFactory,
     validation_tasks: list[PerplexityTask | MultipleChoiceTask],
     monkeypatch: pytest.MonkeyPatch,
@@ -643,18 +643,14 @@ def test_checkpoint_is_saved_before_validation(
     evaluate = trainer.evaluate
 
     def validate() -> None:
-        step = int(trainer.state.step.item())
-        checkpoint = trainer.output_dir / f"checkpoint-{step}"
-        assert (checkpoint / "model.safetensors").is_file()
-        assert (checkpoint / "training_state/trainer_state_dict.safetensors").is_file()
-        calls.append(step)
+        calls.append(int(trainer.state.step.item()))
         if fail_evaluation:
-            raise RuntimeError("validation failed after save")
+            raise RuntimeError("validation failed")
         evaluate()
 
     monkeypatch.setattr(trainer, "evaluate", validate)
     if fail_evaluation:
-        with pytest.raises(RuntimeError, match="validation failed after save"):
+        with pytest.raises(RuntimeError, match="validation failed"):
             trainer.train()
         assert calls == [2]
         load_checkpoint(trainer, trainer.output_dir / "checkpoint-2")
@@ -662,6 +658,10 @@ def test_checkpoint_is_saved_before_validation(
     else:
         trainer.train()
         assert calls == [2, 3]
+        for step in calls:
+            checkpoint = trainer.output_dir / f"checkpoint-{step}"
+            assert (checkpoint / "model.safetensors").is_file()
+            assert (checkpoint / "training_state/trainer_state_dict.safetensors").is_file()
 
 
 def test_local_checkpoint_records_run_identity(
@@ -946,6 +946,7 @@ def test_checkpoint_upload_uses_complete_local_folder(
 
     monkeypatch.setattr("flock.training.core.checkpoint.save_to_hub", upload)
     save_checkpoint(trainer)
+    trainer.checkpoint_manager.finish_checkpoint_uploads()
     assert uploads == [
         (
             trainer.output_dir / "checkpoint-0",
@@ -954,7 +955,6 @@ def test_checkpoint_upload_uses_complete_local_folder(
         )
     ]
     assert uploads[0][0].is_dir()
-    save_checkpoint(trainer, blocking=True)
 
 
 def test_failed_checkpoint_write_does_not_publish_or_prune(
@@ -999,18 +999,19 @@ def test_resume_rejects_missing_state_and_incompatible_data(
         load_checkpoint(trainer, checkpoint)
 
 
+@pytest.mark.parametrize("blocking", [False, True])
 def test_existing_output_requires_resume_or_overwrite(
-    trainer_factory: TrainerFactory,
+    trainer_factory: TrainerFactory, blocking: bool
 ) -> None:
     trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
     save_checkpoint(trainer)
     with pytest.raises(RuntimeError, match="Resume"):
         trainer.train()
     with pytest.raises(FileExistsError, match="already exists"):
-        save_checkpoint(trainer)
+        save_checkpoint(trainer, blocking=blocking)
     trainer.overwrite_output_dir = True
     trainer.checkpoint_manager.overwrite_output_dir = True
-    save_checkpoint(trainer)
+    save_checkpoint(trainer, blocking=blocking)
     load_checkpoint(trainer, trainer.output_dir / "checkpoint-0")
 
 
@@ -1542,9 +1543,9 @@ def test_async_uploads_overlap_training_and_keep_sources_until_finished(
             training.result(timeout=10)
 
     assert sorted(uploaded) == [1, 2, 3]
+    trainer.checkpoint_manager.finish_checkpoint_uploads()  # Repeated cleanup must be harmless.
     assert [p.name for p in trainer.checkpoint_manager.checkpoints()] == ["checkpoint-3"]
     assert not trainer.checkpoint_manager.pending_uploads
-    save_checkpoint(trainer, blocking=True)  # Repeated cleanup must be harmless.
 
 
 @pytest.mark.parametrize("failed_step", [2, 3])
@@ -1577,7 +1578,7 @@ def test_async_upload_failure_is_logged_and_other_uploads_finish(
     assert str(trainer.output_dir / f"checkpoint-{failed_step}") in caplog.text
     assert not trainer.checkpoint_manager.pending_uploads
     records = len(caplog.records)
-    save_checkpoint(trainer, blocking=True)
+    trainer.checkpoint_manager.finish_checkpoint_uploads()
     assert len(caplog.records) == records
 
 
@@ -1657,7 +1658,7 @@ def test_overwrite_waits_for_upload_to_finish_reading_original_checkpoint(
         finally:
             release.set()
             overwrite.result(timeout=10)
-            save_checkpoint(trainer, blocking=True)
+            trainer.checkpoint_manager.finish_checkpoint_uploads()
 
     assert snapshots == [original, checkpoint.read_bytes()]
     assert snapshots[0] != snapshots[1]
@@ -1665,7 +1666,7 @@ def test_overwrite_waits_for_upload_to_finish_reading_original_checkpoint(
 
 
 @pytest.mark.parametrize("failed", [False, True], ids=["success", "failure"])
-def test_completed_uploads_and_retention_are_deferred_until_final_wait(
+def test_next_save_collects_completed_upload_and_prunes_its_checkpoint(
     trainer_factory: TrainerFactory,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
@@ -1687,24 +1688,15 @@ def test_completed_uploads_and_retention_are_deferred_until_final_wait(
         uploads[0].set_result(None)
     trainer.state.step.fill_(1)
     save_checkpoint(trainer)
-    assert [p.name for p in trainer.checkpoint_manager.checkpoints()] == [
-        "checkpoint-0",
-        "checkpoint-1",
-    ]
-    assert list(trainer.checkpoint_manager.pending_uploads) == [
-        trainer.output_dir / "checkpoint-0",
-        trainer.output_dir / "checkpoint-1",
-    ]
-    assert "completed upload failed" not in caplog.text
-    uploads[1].set_result(None)
-    trainer.checkpoint_manager.finish_checkpoint_uploads()
     assert [p.name for p in trainer.checkpoint_manager.checkpoints()] == ["checkpoint-1"]
-    assert not trainer.checkpoint_manager.pending_uploads
+    assert list(trainer.checkpoint_manager.pending_uploads) == [trainer.output_dir / "checkpoint-1"]
     assert ("completed upload failed" in caplog.text) == failed
     if failed:
         assert str(trainer.output_dir / "checkpoint-0") in caplog.text
     records = len(caplog.records)
+    uploads[1].set_result(None)
     trainer.checkpoint_manager.finish_checkpoint_uploads()
+    assert not trainer.checkpoint_manager.pending_uploads
     assert len(caplog.records) == records
 
 
@@ -1783,7 +1775,7 @@ def test_failed_submission_keeps_latest_checkpoint_while_old_upload_is_pending(
         "checkpoint-1",
     ]
     pending.set_result(None)
-    save_checkpoint(trainer, blocking=True)
+    trainer.checkpoint_manager.finish_checkpoint_uploads()
     assert [p.name for p in trainer.checkpoint_manager.checkpoints()] == ["checkpoint-1"]
     assert not trainer.checkpoint_manager.pending_uploads
 

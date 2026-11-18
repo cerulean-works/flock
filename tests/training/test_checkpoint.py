@@ -69,6 +69,14 @@ def test_saved_checkpoint_preserves_tied_weights(tmp_path: Path) -> None:
     torch.testing.assert_close(input_layer.weight, expected)
 
 
+def test_local_retention_runs_after_each_save(tmp_path: Path) -> None:
+    manager = CheckpointManager(tmp_path, save_total_limit=1)
+    model = nn.Linear(2, 2)
+    manager.save_model(1, model)
+    manager.save_model(2, model)
+    assert manager.checkpoints() == [tmp_path / "checkpoint-2"]
+
+
 def test_write_error_is_immediate_and_preserves_checkpoint(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
