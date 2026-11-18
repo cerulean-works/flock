@@ -202,11 +202,14 @@ class Experiment:
             json.dumps(card | self.description, indent=2, sort_keys=True)
         )
         # A resume at the stop point skips an existing export, so it must survive a node crash.
-        # A tokenizer can write subdirectories (named chat templates), so the whole tree.
+        # A tokenizer can write subdirectories (named chat templates), so every file and every
+        # directory entry in the tree; publish then syncs the root.
         for path in temporary.rglob("*"):
-            if path.is_file():
-                with path.open("rb") as handle:
-                    os.fsync(handle.fileno())
+            descriptor = os.open(path, os.O_RDONLY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
         publish(temporary, destination)
 
 
