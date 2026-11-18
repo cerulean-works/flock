@@ -10,6 +10,7 @@ import asyncpg
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+from starlette.middleware.base import RequestResponseEndpoint
 
 from app.api.src.api import (
     auth,
@@ -110,6 +111,14 @@ def create_app(store: Store) -> FastAPI:
         default_response_class=JSONResponse,
     )
     app.state.store = store
+
+    @app.middleware("http")
+    async def content_cache(request: Request, call_next: RequestResponseEndpoint) -> Response:
+        response = await call_next(request)
+        # A public response must not survive a later visibility or membership change in a cache.
+        if not request.url.path.startswith("/api/v1/avatars/"):
+            response.headers["Cache-Control"] = "private, no-store"
+        return response
 
     @app.exception_handler(APIError)
     async def api_error(request: Request, exc: APIError) -> Response:

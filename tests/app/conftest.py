@@ -540,7 +540,7 @@ class FlockServer:
             try:
                 await conn.execute(
                     "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE application_name = $1",
+                    "WHERE application_name = $1 AND datname = current_database()",
                     name,
                 )
             finally:

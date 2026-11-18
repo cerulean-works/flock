@@ -169,8 +169,15 @@ def test_members_use_objects_and_others_cant(flock: S3Flock) -> None:
         ("POST", "objects/delete", {"keys": ["a"]}),
         ("POST", "presign", {"method": "get", "key": "a"}),
     ]:
-        got = olga.api.request(method, f"{path}/{sub}", body=body)
-        assert got.status == 404, (sub, got.body)
+        for client, expected in ((olga.api, 404), (flock.anonymous(), 401)):
+            got = client.request(method, f"{path}/{sub}", body=body)
+            assert got.status == expected, (sub, got.body)
+    for client, expected in ((olga.api, 404), (flock.anonymous(), 401)):
+        assert client.get(BUCKETS).status == expected
+        assert client.get(path).status == expected
+        assert client.post(BUCKETS, {"name": "not-created"}).status == expected
+        assert client.delete(path).status == expected
+    assert alice.api.get(path).status == 200
 
 
 def test_the_browser_key_is_reused_rotated_and_ends_with_the_session(flock: S3Flock) -> None:

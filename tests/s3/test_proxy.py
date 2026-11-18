@@ -469,3 +469,14 @@ def test_lance_through_the_proxy(env: S3Env) -> None:
     assert ds.take([0, 199]).to_pydict()["id"] == [0, 99]
     upstream = env.upstream().list_objects_v2(Bucket=env.upstream_name(bucket))
     assert any(o["Key"].startswith("datasets/rows/_versions/") for o in upstream["Contents"])
+
+
+@pytest.mark.parametrize("method", ["GET", "HEAD", "PUT", "POST", "DELETE", "PATCH"])
+def test_unsigned_methods_cannot_read_or_change_private_objects(env: S3Env, method: str) -> None:
+    bucket = env.bucket()
+    client = env.s3(env.key("alice"))
+    client.put_object(Bucket=bucket, Key="private", Body=b"private content")
+    response = httpx.request(method, f"{env.proxy_url}/{bucket}/private", content=b"attempt")
+    assert response.status_code == 403
+    assert b"private content" not in response.content
+    assert client.get_object(Bucket=bucket, Key="private")["Body"].read() == b"private content"
