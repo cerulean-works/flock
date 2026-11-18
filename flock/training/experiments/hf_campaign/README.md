@@ -1,6 +1,6 @@
-# Standalone HF campaign CPU checks
+# Standalone HF campaign
 
-This experiment uses Transformers OLMo 2, Datasets and Accelerate independently of the shared trainer. The selected full architecture is freshly initialized OLMo 2 1B: 1,484,916,736 parameters including both untied matrices. The CPU harness accepts only tiny synthetic models. The full architecture is instantiated on the meta device in tests.
+This experiment uses Transformers OLMo 2, Datasets and Accelerate independently of the shared trainer. The selected full architecture is freshly initialized OLMo 2 1B: 1,484,916,736 parameters including both untied matrices. The CPU harness accepts only tiny synthetic models. The full architecture is instantiated on the meta device in tests. A one-GPU path trains the 76M and 190M proxy presets on provisional mixes (below); nothing larger runs here.
 
 From the flock checkout, create an isolated environment from the existing lockfile:
 
@@ -23,12 +23,31 @@ Explicit finite quotas control source allocation. Equal TC/EN allocations are su
 
 ## Loss, restart and export
 
-The CPU runtime requests HF logits without labels and computes external aligned summed CE divided by the update's total targets. This avoids HF's automatic label shift. Token-based warmup/cosine scheduling uses committed update-start targets. Updates cannot overshoot the declared endpoint. A terminal partial allocation preserves exact equal category totals.
+Both runtimes share one update loop. It requests HF logits without labels and computes external aligned summed CE divided by the update's total targets. This avoids HF's automatic label shift. Token-based warmup/cosine scheduling uses committed update-start targets. Updates cannot overshoot the declared endpoint. A terminal partial allocation preserves exact equal category totals.
 
 Only completed optimizer updates replace the committed data snapshot. Prefetched producer positions are discarded before the next update. Accelerate checkpoints model, optimizer and RNG; a registered custom object saves committed pack buffers, membership positions, source/EOS counts, context and schedule counters. New checkpoint directories are checksummed and fsynced before atomic rename; an existing incomplete directory is a writer lock requiring inspection. Config/tokenizer/stream/schedule mismatch or corruption fails before resume. After a failed optimizer update, terminate the attempt and restore a previously committed checkpoint; the harness does not promise in-memory model rollback.
 
 HF export saves model/config/tokenizer. Tests reload locally, compare the identical attention backend and execute a synthetic request through unchanged flock.eval ScoringModel. This verifies the adapter boundary, not parity or scores on frozen evaluation datasets. Full evaluation remains a separate process with approved instrument pins and settings.
 
+## One GPU, provisional mixes
+
+`python -m flock.training.experiments.hf_campaign.train` trains one proxy preset (`76m` or `190m`, the shapes and peak learning rates of `experiments/proxy/olmo2_proxy.py`, imported, not copied) on one GPU from a flock hub Lance mix pinned to a version:
+
+```sh
+uv run python -m flock.training.experiments.hf_campaign.train --size 190m \
+    --dataset-uri s3://flock-datasets/corpora/provisional/mix-500m-tc25-seed0 --dataset-version 1 \
+    --warmup-targets 190354176 --rows-per-update 128 --micro-rows 8 \
+    --checkpoint-every 1000 --output-dir /work/$USER/runs/proxy-190m-s0
+```
+
+The mixes written by `harvest mix` carry no admission receipts, so they never enter the admitted input contract above. `ProvisionalMix` is the only way in, it is the only input `GpuExperiment` takes, and every output of such a run (`run-*.json`, `log.jsonl`, `summary-*.json`, the export's `experiment.json`) says `provisional: true`. The admitted path's checks are unchanged.
+
+The mix is read in its stored order (it is already shuffled when written). Each document is encoded without specials and followed by one EOS, and the stream is cut into rows of 4096 targets plus one context token shared with the next row: concatenate-then-split without document masking, as OLMo 3 (sec. 3.6.3) and DataDecide pack. Every row is full, so no position is padding. Each row's token count is checked against the mix's `tokens` column (which counts the EOS), and against `text_sha256` where a mix has one. Item `u` of the mix is optimizer update `u`, so a run's position is its update count: spawned loader workers prefetch freely, and a resume restarts the sampler at the committed update.
+
+A row is 4096 targets, OLMo 2's context. `--rows-per-update` sets the batch; the OLMo ladder's 190M batch is 524,288 tokens (arXiv 2412.04403, Table 1), 128 rows here, and the 76M runs use half of it, 64 rows. `--micro-rows` sets how many rows go through the GPU at once, and the update accumulates their gradients. The loss is summed over targets and divided by the update's total, so accumulation gives the same gradient as one batch. Warmup is linear over `--warmup-targets` (N targets, as the OLMo ladder warms up for N tokens), then cosine to 10 percent of the peak at the schedule's endpoint, one pass over the mix by default. `--max-updates` stops early without moving that endpoint. AdamW matches the flock Trainer's proxy recipe: betas (0.95, 0.99), weight decay 0.01 on every parameter, clipping at 1.0, no z-loss.
+
+The model trains in BF16 autocast with FP32 weights and optimizer state, and the loss is computed on FP32 logits. Attention is PyTorch SDPA pinned to its flash kernel: packed rows need no mask, and the pin turns a silent fallback to a slower kernel into an error. The seed sets the initialization only; the data order is the mix's.
+
 ## Next gate
 
-No production launcher, corpus materializer, distributed worker plan or FA3 dispatch is released here. These remain separate validation work: full-model memory, BF16/FA3 backward and causal checks, same-node throughput, distributed global-loss normalization, crash/durability tests on cluster storage and exact rank ownership. Pin the actual FA3 implementation and environment before GPU validation. Do not transplant historical throughput or budgets into this HF stack. The full 200B campaign needs its own data, metric, storage and compute release.
+No production launcher, corpus materializer, distributed worker plan or FA3 dispatch is released here. Beyond one GPU at proxy size, corpus materializer, distributed worker plan or FA3 dispatch is released here. these remain separate validation work: full-model memory, BF16/FA3 backward and causal checks, same-node throughput, distributed global-loss normalization, crash/durability tests on cluster storage and exact rank ownership. Pin the actual FA3 implementation and environment before GPU validation. Do not transplant historical throughput or budgets into this HF stack. The full 200B campaign needs its own data, metric, storage and compute release.

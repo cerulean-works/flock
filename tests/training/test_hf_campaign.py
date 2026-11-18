@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from typing import TYPE_CHECKING
 
+import lance
+import pyarrow as pa
 import pytest
 import torch
+from accelerate import Accelerator
+from accelerate.state import AcceleratorState
 from datasets import Dataset
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
@@ -18,11 +23,19 @@ from transformers import (
 
 from flock.eval.model import ScoringModel
 from flock.eval.requests import Request
-from flock.training.experiments.hf_campaign.config import existing_config
-from flock.training.experiments.hf_campaign.runtime import CpuExperiment
+from flock.training import DatasetConfig
+from flock.training.experiments.hf_campaign import train
+from flock.training.experiments.hf_campaign.config import existing_config, proxy_config
+from flock.training.experiments.hf_campaign.provisional import ProvisionalMix
+from flock.training.experiments.hf_campaign.runtime import (
+    CpuExperiment,
+    Experiment,
+    GpuExperiment,
+)
 from flock.training.experiments.hf_campaign.stream import Pool, TargetStream
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
     from typing import Any
 
@@ -66,6 +79,21 @@ def stream(block_size: int = 4, quota: int = 32) -> TargetStream:
         exclusion_hash="fixture-exclusion-v1",
         tokenizer_hash="fixture-tokenizer-v1",
     )
+
+
+def word_tokenizer() -> PreTrainedTokenizerFast:
+    backend = Tokenizer(
+        WordLevel({"[UNK]": 0, "[EOS]": 1} | {str(i): i for i in range(2, 10)}, unk_token="[UNK]")
+    )
+    backend.pre_tokenizer = Whitespace()
+    return PreTrainedTokenizerFast(tokenizer_object=backend, unk_token="[UNK]", eos_token="[EOS]")
+
+
+def write_mix(path: Path, texts: list[str], **columns: list[Any]) -> DatasetConfig:
+    # A mix's tokens column counts each document's EOS (harvest's pool writer).
+    tokens = columns.pop("tokens", [len(text.split()) + 1 for text in texts])
+    lance.write_dataset(pa.table({"text": texts, "tokens": tokens, **columns}), path)
+    return DatasetConfig(uri=str(path), version=1)
 
 
 def tiny_config() -> Olmo2Config:
@@ -227,11 +255,7 @@ def test_optimizer_resume_prefetch_corruption_and_export(tmp_path: Path) -> None
     (tmp_path / "interrupted.incomplete").mkdir()
     with pytest.raises(FileExistsError):
         restored.checkpoint(tmp_path / "interrupted")
-    tokenizer_backend = Tokenizer(WordLevel({"[UNK]": 0, "[EOS]": 1, "2": 2}, unk_token="[UNK]"))
-    tokenizer_backend.pre_tokenizer = Whitespace()
-    tokenizer = PreTrainedTokenizerFast(
-        tokenizer_object=tokenizer_backend, unk_token="[UNK]", eos_token="[EOS]"
-    )
+    tokenizer = word_tokenizer()
     restored.export(tmp_path / "export", tokenizer)
     reloaded = AutoModelForCausalLM.from_pretrained(tmp_path / "export", local_files_only=True)
     reloaded.set_attn_implementation("eager")
@@ -325,3 +349,181 @@ def test_nullable_mixed_schema_and_missing_converted_original_quarantine() -> No
     assert sum(len(b.labels) for b in blocks) == 3
     assert encoder.calls == ["7 8", "2 3"]
     assert producer.state_dict()["rejected"] == 2
+
+
+def sdpa_config(context: int = 32) -> Olmo2Config:
+    config = tiny_config()
+    config.max_position_embeddings = context
+    config._attn_implementation = "sdpa"
+    return config
+
+
+@pytest.fixture
+def fresh_accelerator_state() -> Iterator[None]:
+    # Accelerate keeps one process-wide precision; the GPU runtime asks for BF16, the CPU one FP32.
+    AcceleratorState._reset_state(True)
+    yield
+    AcceleratorState._reset_state(True)
+
+
+@pytest.mark.parametrize(("size", "count"), [("76m", 76_308_864), ("190m", 190_354_176)])
+def test_proxy_configs_keep_the_flock_presets_parameter_counts(size: str, count: int) -> None:
+    with torch.device("meta"):
+        model = Olmo2ForCausalLM(proxy_config(size))
+    total = sum(p.numel() for p in model.parameters())
+    assert total - model.model.embed_tokens.weight.numel() == count  # the OLMo ladder's N
+    assert model.config.max_position_embeddings == 4096
+    assert model.config._attn_implementation == "sdpa"
+
+
+def test_provisional_mix_packs_documents_in_stored_order(tmp_path: Path) -> None:
+    # Stream: 2 3 4 E | 5 E | 6 7 8 9 2 3 E | 4 5 6 E, 17 tokens and 16 targets.
+    config = write_mix(tmp_path / "mix.lance", ["2 3 4", "5", "6 7 8 9 2 3", "4 5 6"])
+    mix = ProvisionalMix(config, word_tokenizer(), window=3, rows_per_update=2)
+    assert mix.targets_per_update == 6
+    assert len(mix) == 2  # 16 // 6: the partial third update is never emitted
+    assert mix[0].tolist() == [[2, 3, 4, 1], [1, 5, 1, 6]]  # rows share their boundary token
+    assert mix[1].tolist() == [[6, 7, 8, 9], [9, 2, 3, 1]]
+    with pytest.raises(IndexError):
+        mix[2]
+    assert mix.contract["provisional"] is True
+    assert mix.contract["stream_tokens"] == 17
+
+
+def test_provisional_mix_rejects_rows_its_counts_or_hashes_contradict(tmp_path: Path) -> None:
+    texts = ["2 3 4", "5 6"]
+    miscounted = write_mix(tmp_path / "miscounted.lance", texts, tokens=[4, 4])
+    mix = ProvisionalMix(miscounted, word_tokenizer(), window=2, rows_per_update=1)
+    with pytest.raises(ValueError, match="mix row 1 encodes to 3 tokens"):
+        mix[1]
+
+    digests = [hashlib.sha256(b"2 3 4").hexdigest(), hashlib.sha256(b"other").hexdigest()]
+    hashed = write_mix(tmp_path / "hashed.lance", texts, text_sha256=digests)
+    mix = ProvisionalMix(hashed, word_tokenizer(), window=2, rows_per_update=1)
+    assert mix[0].tolist() == [[2, 3, 4]]
+    with pytest.raises(ValueError, match="mix row 1 text does not match"):
+        mix[2]
+
+
+def test_micro_batches_accumulate_to_the_one_batch_gradient() -> None:
+    windows = torch.tensor([[2, 3, 4, 1, 5], [6, 7, 8, 9, 2]])
+    experiments = []
+    for micro_batches in [[windows], list(windows.split(1))]:
+        experiment = Experiment(
+            tiny_config(),
+            accelerator=Accelerator(cpu=True, mixed_precision="no"),
+            source={},
+            peak_lr=1e-3,
+            betas=(0.9, 0.999),
+            weight_decay=0.0,
+            seed=3,
+            total_targets=16,
+            warmup_targets=1,
+        )
+        experiment.step([(rows[:, :-1], rows[:, 1:]) for rows in micro_batches])
+        experiments.append(experiment)
+    whole, split = experiments
+    assert whole.targets == split.targets == 8
+    for a, b in zip(whole.model.parameters(), split.model.parameters(), strict=True):
+        torch.testing.assert_close(a.grad, b.grad, rtol=1e-5, atol=1e-7)
+
+
+def test_gpu_runtime_resumes_to_the_same_next_update_on_cpu(
+    tmp_path: Path, fresh_accelerator_state: None
+) -> None:
+    texts = ["2 3 4", "5", "6 7 8 9 2 3", "4 5 6"]
+    mix = ProvisionalMix(
+        write_mix(tmp_path / "mix.lance", texts), word_tokenizer(), window=3, rows_per_update=2
+    )
+
+    def build(seed: int) -> GpuExperiment:
+        return GpuExperiment(
+            sdpa_config(),
+            mix,
+            peak_lr=1e-3,
+            seed=seed,
+            total_targets=12,
+            warmup_targets=3,
+            micro_rows=1,
+        )
+
+    experiment = build(17)
+    assert experiment.description["precision"] == "bf16"
+    experiment.update(mix[0])
+    experiment.checkpoint(tmp_path / "checkpoint")
+    expected_loss = experiment.update(mix[1])
+    expected = {k: v.clone() for k, v in experiment.model.state_dict().items()}
+
+    restored = build(999)
+    restored.resume(tmp_path / "checkpoint")
+    assert (restored.updates, restored.targets) == (1, 6)
+    assert restored.update(mix[1]) == expected_loss
+    for key, value in restored.model.state_dict().items():
+        torch.testing.assert_close(value, expected[key], rtol=0, atol=0)
+    with pytest.raises(ValueError, match="overshoot"):
+        restored.update(mix[0])
+
+    with pytest.raises(ValueError, match="whole updates"):
+        GpuExperiment(
+            sdpa_config(),
+            mix,
+            peak_lr=1e-3,
+            seed=0,
+            total_targets=7,
+            warmup_targets=1,
+            micro_rows=1,
+        )
+    with pytest.raises(ValueError, match="SDPA"):
+        GpuExperiment(
+            tiny_config(),
+            mix,
+            peak_lr=1e-3,
+            seed=0,
+            total_targets=6,
+            warmup_targets=1,
+            micro_rows=1,
+        )
+
+
+def test_cli_trains_resumes_and_marks_every_output_provisional(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fresh_accelerator_state: None
+) -> None:
+    # 30 documents of 9 tokens: 269 targets, 33 whole updates of two 4-target rows.
+    config = write_mix(tmp_path / "mix.lance", ["2 3 4 5 6 7 8 9"] * 30)
+    monkeypatch.setattr(train.AutoTokenizer, "from_pretrained", lambda *_, **__: word_tokenizer())
+    monkeypatch.setattr(train, "proxy_config", lambda _: sdpa_config(context=4))
+    output = tmp_path / "run"
+    arguments = [
+        "train",
+        "--size=76m",
+        f"--dataset-uri={config.uri}",
+        "--dataset-version=1",
+        "--warmup-targets=8",
+        "--rows-per-update=2",
+        "--micro-rows=1",
+        f"--output-dir={output}",
+        "--checkpoint-every=1",
+        "--workers=0",
+    ]
+    monkeypatch.setattr("sys.argv", [*arguments, "--max-updates=2"])
+    train.main()
+    AcceleratorState._reset_state(True)
+    monkeypatch.setattr("sys.argv", [*arguments, "--max-updates=3", "--resume"])
+    train.main()
+
+    lines = [json.loads(line) for line in (output / "log.jsonl").read_text().splitlines()]
+    assert [(line["update"], line["targets"]) for line in lines] == [(1, 8), (2, 16), (3, 24)]
+    first = json.loads((output / "run-000000.json").read_text())
+    resumed = json.loads((output / "run-000002.json").read_text())
+    assert first["provisional"] is resumed["provisional"] is True
+    assert first["total"] == 33 * 8  # one pass over the mix's whole updates
+    assert resumed["resumed_at_update"] == 2
+    assert sorted(path.name for path in (output / "checkpoints").iterdir()) == [
+        "update-000001",
+        "update-000002",
+        "update-000003",
+    ]
+    card = json.loads((output / "export-000003" / "experiment.json").read_text())
+    assert card["source"]["provisional"] is True
+    assert card["targets"] == 24
+    assert json.loads((output / "summary-000003.json").read_text())["provisional"] is True
