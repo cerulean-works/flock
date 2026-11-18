@@ -43,19 +43,22 @@ def test_varlen_mixed_padding_outputs_and_gradients(
         for heads in (4, kv_heads, kv_heads)
     ]
     references = [tensor.detach().clone().requires_grad_() for tensor in inputs]
-    spans = prepare_flash_attention_mask(mask, is_causal=is_causal)
-    assert spans is not None and spans.device.type == "cpu"
+    prepared = prepare_flash_attention_mask(mask, is_causal=is_causal)
+    assert prepared is not None
+    assert prepared.indices.device.type == "cuda"
+    assert prepared.cu_seq_lens_q.device.type == "cuda"
+    dense_mask = prepare_sdpa_mask(mask, is_causal=is_causal)
     with attention.sdpa_kernel(attention.SDPBackend.MATH):
-        expected = sdpa_attention(
-            *references, attention_mask=prepare_sdpa_mask(mask, is_causal=is_causal)
-        ).masked_fill(~mask[:, None, :, None], 0)
+        expected = sdpa_attention(*references, attention_metadata=dense_mask).masked_fill(
+            ~mask[:, None, :, None], 0
+        )
     previous = attention.current_flash_attention_impl()
     assert previous in (None, "FA3")
     cudnn = Mock(side_effect=AssertionError("FA3 varlen must not dispatch to cuDNN"))
     monkeypatch.setattr(torch.ops.aten, "_cudnn_attention_forward", cudnn)
     monkeypatch.setattr(torch.ops.aten, "_cudnn_attention_backward", cudnn)
     try:
-        actual = flash_attention_3(*inputs, attention_mask=spans, is_causal=is_causal)
+        actual = flash_attention_3(*inputs, attention_metadata=prepared, is_causal=is_causal)
         assert_parity(actual, expected, dtype, "logits", "packed attention")
         upstream = torch.randn_like(actual)
         actual.backward(upstream)

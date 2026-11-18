@@ -15,6 +15,7 @@ from transformers.models.olmo2.modeling_olmo2 import (
 from flock.training.core.attention import (
     AttentionInterface,
     GroupedAttentionWithRoPE,
+    flash_attention_3,
     prepare_flash_attention_mask,
     prepare_sdpa_mask,
     sdpa_attention,
@@ -36,11 +37,13 @@ def test_selected_kernel_preserves_layout_masks_and_gradients(
         k: torch.Tensor,
         v: torch.Tensor,
         *,
-        attention_mask: torch.Tensor | None = None,
+        attention_metadata: torch.Tensor | None = None,
         is_causal: bool = False,
     ) -> torch.Tensor:
-        calls.append((q.shape, k.shape, v.shape, attention_mask, is_causal))
-        return 2 * sdpa_attention(q, k, v, attention_mask=attention_mask, is_causal=is_causal)
+        calls.append((q.shape, k.shape, v.shape, attention_metadata, is_causal))
+        return 2 * sdpa_attention(
+            q, k, v, attention_metadata=attention_metadata, is_causal=is_causal
+        )
 
     monkeypatch.setattr(
         AttentionInterface, "_global_mapping", AttentionInterface._global_mapping.copy()
@@ -61,9 +64,9 @@ def test_selected_kernel_preserves_layout_masks_and_gradients(
     elif mask_type == "additive":
         mask = torch.zeros(5, 5).masked_fill(torch.ones(5, 5, dtype=torch.bool).triu(1), -torch.inf)
     causal = mask_type == "causal"
-    actual = attention(x, attention_mask=mask, is_causal=causal)
+    actual = attention(x, attention_metadata=mask, is_causal=causal)
     # The output projection has no bias, so scaling the kernel scales its output.
-    expected = 2 * reference(reference_x, attention_mask=mask, is_causal=causal)
+    expected = 2 * reference(reference_x, attention_metadata=mask, is_causal=causal)
     assert len(calls) == 1
     q_shape, k_shape, v_shape, received_mask, received_causal = calls[0]
     assert q_shape == (2, 4, 5, 8)
@@ -99,7 +102,7 @@ def test_registration_requires_an_explicit_preparer_even_when_replacing(
         AttentionInterface.get_interface("custom")
 
     AttentionInterface.register(
-        "custom", sdpa_attention, mask_preparer=prepare_flash_attention_mask
+        "custom", flash_attention_3, mask_preparer=prepare_flash_attention_mask
     )
     with pytest.raises(TypeError, match="mask_preparer"):
         AttentionInterface.register("custom", sdpa_attention)  # ty: ignore[missing-argument]
@@ -148,7 +151,7 @@ def test_attention_matches_pytorch_multihead_attention(mask_type: str) -> None:
         mask = reference_mask = torch.zeros(5, 5).masked_fill(
             torch.ones(5, 5, dtype=torch.bool).triu(1), float("-inf")
         )
-    actual = attention(x, attention_mask=mask, is_causal=mask_type == "causal")
+    actual = attention(x, attention_metadata=mask, is_causal=mask_type == "causal")
     expected, _ = reference(
         reference_x,
         reference_x,
@@ -219,7 +222,7 @@ def test_flattened_qk_norm_and_rotary_attention_match_huggingface(
     positions = torch.tensor([[1, 2, 3, 4, 5], [0, 1, 2, 3, 4]])
     cos, sin = Olmo2RotaryEmbedding(reference_config)(x, positions)
     mask = torch.ones(5, 5, dtype=torch.bool).tril()[None, None]
-    actual = attention(x, attention_mask=mask, position_embeddings=(cos[:, None], sin[:, None]))
+    actual = attention(x, attention_metadata=mask, position_embeddings=(cos[:, None], sin[:, None]))
     expected, _ = reference(
         reference_x,
         position_embeddings=(cos, sin),

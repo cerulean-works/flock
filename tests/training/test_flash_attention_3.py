@@ -13,6 +13,7 @@ from torch.nn import attention
 from torch.nn import functional as F
 
 from flock.training.core.attention import (
+    VarlenMetadata,
     flash_attention_3,
     prepare_flash_attention_mask,
     sdpa_attention,
@@ -95,10 +96,10 @@ def test_padding_adapter_outputs_and_gradients(
     if is_causal:
         dense_mask = dense_mask & torch.ones(5, 5, dtype=torch.bool).tril()
 
-    attention_mask = prepare_flash_attention_mask(mask, is_causal=is_causal)
-    actual = flash_attention_3(*inputs, attention_mask=attention_mask, is_causal=is_causal)
+    attention_metadata = prepare_flash_attention_mask(mask, is_causal=is_causal)
+    actual = flash_attention_3(*inputs, attention_metadata=attention_metadata, is_causal=is_causal)
     with attention.sdpa_kernel(attention.SDPBackend.MATH):
-        expected = sdpa_attention(*reference_inputs, attention_mask=dense_mask)
+        expected = sdpa_attention(*reference_inputs, attention_metadata=dense_mask)
     expected = expected.masked_fill(~mask[:, None, :, None], 0)
     torch.testing.assert_close(actual, expected)
     assert math_kernel.call_count == (1 if padding == "mixed" else 0)
@@ -178,12 +179,12 @@ def test_unpadded_model_uses_one_batched_fa3_call_per_layer(
     assert compute.call_count == config.num_hidden_layers
     for call in compute.call_args_list:
         assert call.args[0].shape[0] == ids.shape[0]
-        assert call.kwargs.get("attention_mask") is None
+        assert call.kwargs.get("attention_metadata") is None
         assert call.kwargs["is_causal"] is True
 
 
 @pytest.mark.parametrize("num_layers", [2, 4])
-def test_model_prepares_spans_before_layers_once_per_forward(
+def test_model_prepares_packing_before_layers_once_per_forward(
     math_kernel: Mock, config: Olmo2Config, monkeypatch: pytest.MonkeyPatch, num_layers: int
 ) -> None:
     config = replace(config, num_hidden_layers=num_layers)
@@ -219,9 +220,9 @@ def test_model_prepares_spans_before_layers_once_per_forward(
         layer.register_forward_pre_hook(record_padding)
 
     previous = None
-    for rows, expected_spans in (
-        ([[0, 1, 1, 0], [0, 0, 0, 0]], ((1, 3), (4, 4))),
-        ([[1, 1, 0, 0], [0, 0, 1, 1]], ((0, 2), (2, 4))),
+    for rows, expected_indices, expected_cu_seqlens in (
+        ([[0, 1, 1, 0], [0, 0, 0, 0]], [1, 2], [0, 2]),
+        ([[1, 1, 0, 0], [0, 0, 1, 1]], [0, 1, 6, 7], [0, 2, 4]),
     ):
         # Reusing and mutating the same input mask must not reuse stale metadata.
         mask.copy_(torch.tensor(rows, dtype=torch.bool))
@@ -236,9 +237,15 @@ def test_model_prepares_spans_before_layers_once_per_forward(
         assert host_reads == ["item", "equal", "cpu"]
         assert len(received) == num_layers
         prepared = received[0]
-        assert isinstance(prepared, torch.Tensor)
-        assert all(padding is prepared for padding in received)
-        torch.testing.assert_close(prepared, torch.tensor(expected_spans))
+        assert isinstance(prepared, VarlenMetadata)
+        # Every layer reuses the same metadata instead of rebuilding it.
+        assert all(metadata is prepared for metadata in received)
+        torch.testing.assert_close(prepared.indices, torch.tensor(expected_indices))
+        torch.testing.assert_close(
+            prepared.cu_seq_lens_q, torch.tensor(expected_cu_seqlens, dtype=torch.int32)
+        )
+        assert prepared.cu_seq_lens_k is prepared.cu_seq_lens_q
+        assert prepared.max_length_q == prepared.max_length_k == 2
         assert prepared is not previous
         previous = prepared
         torch.testing.assert_close(actual[mask], reference(batch)[mask])
@@ -275,27 +282,29 @@ def test_model_rejects_noncontiguous_padding_before_decoder_layers(
     layer_forward.assert_not_called()
 
 
+def _prepared(rows: list[list[bool]]) -> VarlenMetadata:
+    prepared = prepare_flash_attention_mask(torch.tensor(rows), is_causal=True)
+    assert prepared is not None
+    return prepared
+
+
 @pytest.mark.parametrize(
-    "spans",
+    "attention_metadata",
     [
-        torch.tensor([[1, 3], [0, 0]]),
-        torch.tensor([[1, 3, 4]]),
-        torch.tensor([[1.0, 3.0]]),
+        # Raw spans and dense masks are not varlen metadata.
+        torch.tensor([[1, 3]]),
         torch.tensor([[False, True, True, False]]),
-        torch.empty(1, 2, dtype=torch.int64, device="meta"),
+        # Metadata on another device.
+        replace(
+            _prepared([[False, True, True, False]]),
+            indices=torch.empty(2, dtype=torch.int64, device="meta"),
+        ),
     ],
 )
-def test_fa3_requires_prepared_cpu_spans(spans: torch.Tensor) -> None:
+def test_fa3_requires_varlen_metadata_on_qs_device(attention_metadata: Any) -> None:
     q = torch.randn(1, 2, 4, 8)
-    with pytest.raises(ValueError, match="prepared CPU int64"):
-        flash_attention_3(q, q, q, attention_mask=spans)
-
-
-@pytest.mark.parametrize("span", [[-1, 2], [3, 2], [1, 5]])
-def test_prepared_spans_must_fit_query(math_kernel: Mock, span: list[int]) -> None:
-    q = torch.randn(1, 2, 4, 8)
-    with pytest.raises(ValueError, match="sequence length"):
-        flash_attention_3(q, q, q, attention_mask=torch.tensor([span]))
+    with pytest.raises(ValueError, match="VarlenMetadata"):
+        flash_attention_3(q, q, q, attention_metadata=attention_metadata)
 
 
 @pytest.mark.parametrize(
@@ -419,9 +428,10 @@ def test_varlen_applies_cuda_autocast(
     q = torch.randn(2, 4, 3, 8, requires_grad=True)
     k = torch.randn(2, 2, 3, 8, requires_grad=True)
     v = torch.randn(2, 2, 3, 8, dtype=value_dtype, requires_grad=True)
-    spans = torch.tensor([[0, 0], [3, 3]] if empty else [[1, 3], [0, 1]])
+    rows = [[False] * 3] * 2 if empty else [[False, True, True], [True, False, False]]
+    prepared = _prepared(rows)
     with torch.autocast("cuda", dtype=dtype):
-        output = flash_attention_3(q, k, v, attention_mask=spans, is_causal=True)
+        output = flash_attention_3(q, k, v, attention_metadata=prepared, is_causal=True)
     assert output.shape == q.shape
     assert output.dtype == dtype
     if empty:

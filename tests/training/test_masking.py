@@ -3,6 +3,7 @@ import torch
 from torch.nn import functional as F
 
 from flock.training.core.attention import (
+    VarlenMetadata,
     prepare_flash_attention_mask,
     prepare_sdpa_mask,
     sdpa_attention,
@@ -19,7 +20,7 @@ def test_unpadded_masks_use_the_causal_flag(
     prepared = prepare(mask, is_causal=is_causal)
     assert prepared is None
     q, k, v = (torch.randn(2, 2, 4, 8) for _ in range(3))
-    actual = sdpa_attention(q, k, v, attention_mask=prepared, is_causal=is_causal)
+    actual = sdpa_attention(q, k, v, attention_metadata=prepared, is_causal=is_causal)
     expected = F.scaled_dot_product_attention(q, k, v, is_causal=is_causal)
     torch.testing.assert_close(actual, expected)
 
@@ -56,7 +57,7 @@ def test_sdpa_preparation_preserves_query_visibility_and_gradients(is_causal: bo
     torch.testing.assert_close(prepared.expand(2, 1, 4, 4), expected_mask)
     inputs = [torch.randn(2, 2, 4, 8, requires_grad=True) for _ in range(3)]
     references = [tensor.detach().clone().requires_grad_() for tensor in inputs]
-    actual = sdpa_attention(*inputs, attention_mask=prepared, is_causal=is_causal)
+    actual = sdpa_attention(*inputs, attention_metadata=prepared, is_causal=is_causal)
     expected = F.scaled_dot_product_attention(*references, attn_mask=expected_mask)
     torch.testing.assert_close(actual, expected)
     upstream = torch.randn_like(actual)
@@ -68,11 +69,15 @@ def test_sdpa_preparation_preserves_query_visibility_and_gradients(is_causal: bo
 
 @pytest.mark.parametrize("is_causal", [False, True])
 @pytest.mark.parametrize("empty", [False, True])
-def test_flash_preparation_stores_host_spans(is_causal: bool, empty: bool) -> None:
+def test_flash_preparation_builds_packing_metadata(is_causal: bool, empty: bool) -> None:
     mask = torch.tensor([[False, True, True, False], [False] * 4])
     if empty:
         mask.fill_(False)
     prepared = prepare_flash_attention_mask(mask, is_causal=is_causal)
-    assert prepared is not None
-    expected = torch.tensor([[4, 4], [4, 4]] if empty else [[1, 3], [4, 4]])
-    torch.testing.assert_close(prepared, expected)
+    assert isinstance(prepared, VarlenMetadata)
+    expected_indices = torch.tensor([] if empty else [1, 2], dtype=torch.int64)
+    expected_cu_seq_lens = torch.tensor([0] if empty else [0, 2], dtype=torch.int32)
+    torch.testing.assert_close(prepared.indices, expected_indices)
+    torch.testing.assert_close(prepared.cu_seq_lens_q, expected_cu_seq_lens)
+    assert prepared.cu_seq_lens_k is prepared.cu_seq_lens_q
+    assert prepared.max_length_q == prepared.max_length_k == (0 if empty else 2)
