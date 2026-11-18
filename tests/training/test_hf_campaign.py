@@ -386,7 +386,9 @@ def test_proxy_configs_keep_the_flock_presets_parameter_counts(size: str, count:
     assert model.config._attn_implementation == "sdpa"
 
 
-def test_provisional_mix_packs_documents_in_stored_order(tmp_path: Path) -> None:
+def test_provisional_mix_packs_documents_in_stored_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # Stream: 2 3 4 E | 5 E | 6 7 8 9 2 3 E | 4 5 6 E, 17 tokens and 16 targets.
     config = write_mix(tmp_path / "mix.lance", ["2 3 4", "5", "6 7 8 9 2 3", "4 5 6"])
     mix = ProvisionalMix(config, word_tokenizer(), window=3, rows_per_update=2)
@@ -403,6 +405,18 @@ def test_provisional_mix_packs_documents_in_stored_order(tmp_path: Path) -> None
     other.backend_tokenizer.add_tokens(["10"])
     remix = ProvisionalMix(config, other, window=3, rows_per_update=2)
     assert remix.contract["tokenizer_sha256"] != mix.contract["tokenizer_sha256"]
+
+    # A tag and a relative path are pinned to the version number and an absolute path.
+    lance.dataset(config.uri).tags.create("current", 1)
+    monkeypatch.chdir(tmp_path)
+    tagged = ProvisionalMix(
+        DatasetConfig(uri="mix.lance", version="current"),
+        word_tokenizer(),
+        window=3,
+        rows_per_update=2,
+    )
+    assert (tagged.contract["uri"], tagged.contract["version"]) == (config.uri, 1)
+    assert tagged[1].tolist() == mix[1].tolist()
 
 
 def test_provisional_mix_rejects_rows_its_counts_or_hashes_contradict(tmp_path: Path) -> None:
@@ -445,7 +459,7 @@ def test_micro_batches_accumulate_to_the_one_batch_gradient() -> None:
             total_targets=16,
             warmup_targets=1,
         )
-        experiment.step([(rows[:, :-1], rows[:, 1:]) for rows in micro_batches])
+        experiment._step([(rows[:, :-1], rows[:, 1:]) for rows in micro_batches])
         experiments.append(experiment)
     whole, split = experiments
     assert whole.targets == split.targets == 8

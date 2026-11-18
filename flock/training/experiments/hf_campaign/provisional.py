@@ -1,4 +1,5 @@
 import hashlib
+from pathlib import Path
 
 import lance
 import numpy as np
@@ -7,6 +8,7 @@ from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizerFast
 
 from flock.training import DatasetConfig, get_dataset
+from flock.training.core.chunks import TokenChunkDataset
 
 
 class ProvisionalMix(Dataset[torch.Tensor]):
@@ -34,8 +36,13 @@ class ProvisionalMix(Dataset[torch.Tensor]):
         if tokenizer.eos_token_id is None:
             raise ValueError("the tokenizer has no EOS token")
         # get_dataset configures read-only S3 credentials, inherited by spawned loader workers.
-        self.rows = get_dataset(config)
-        tokens = lance.dataset(config.uri, version=config.version).to_table(columns=["tokens"])
+        get_dataset(config)
+        # Workers reopen the mix, so they get an absolute path and a version number: a relative
+        # path moves with the working directory and a tag can move between versions.
+        uri = config.uri if "://" in config.uri else str(Path(config.uri).resolve())
+        pinned = lance.dataset(uri, version=config.version)
+        self.rows = get_dataset(DatasetConfig(uri=uri, version=pinned.version))
+        tokens = pinned.to_table(columns=["tokens"])
         counts = tokens["tokens"]
         # Every document holds at least its EOS; a zero or negative count would misplace documents.
         if len(counts) == 0 or counts.null_count or (counts.to_numpy() < 1).any():
@@ -47,15 +54,13 @@ class ProvisionalMix(Dataset[torch.Tensor]):
         self.rows_per_update = rows_per_update
         self.contract = {
             "provisional": True,
-            "uri": config.uri,
-            "version": config.version,
+            "uri": uri,
+            "version": pinned.version,
             "rows": len(self.rows),
             "stream_tokens": int(self.ends[-1]),
             "tokenizer": tokenizer.name_or_path,
-            # The serialized backend pins the ids, which the name and the token counts do not.
-            "tokenizer_sha256": hashlib.sha256(
-                tokenizer.backend_tokenizer.to_str().encode()
-            ).hexdigest(),
+            # The encoding rules pin the ids, which the name and the token counts do not.
+            "tokenizer_sha256": TokenChunkDataset.tokenizer_fingerprint(tokenizer),
             "eos": tokenizer.eos_token_id,
             "window": window,
             "rows_per_update": rows_per_update,

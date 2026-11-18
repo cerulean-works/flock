@@ -152,9 +152,12 @@ def main() -> None:
         summary["device_name"] = cuda.get_device_name()
         summary["peak_allocated_bytes"] = cuda.max_memory_allocated()
         summary["peak_reserved_bytes"] = cuda.max_memory_reserved()
+    # Renamed into place, so an existing summary is a complete one.
     summary_path = args.output_dir / f"summary-{experiment.updates:06d}.json"
     if not summary_path.exists():
-        summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True))
+        temporary = summary_path.with_name(summary_path.name + ".incomplete")
+        temporary.write_text(json.dumps(summary, indent=2, sort_keys=True))
+        temporary.rename(summary_path)
 
 
 if __name__ == "__main__":

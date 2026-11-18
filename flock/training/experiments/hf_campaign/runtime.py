@@ -85,7 +85,7 @@ class Experiment:
         self.updates = state["updates"]
         self.targets = state["targets"]
 
-    def step(self, micro_batches: list[tuple[torch.Tensor, torch.Tensor]]) -> float:
+    def _step(self, micro_batches: list[tuple[torch.Tensor, torch.Tensor]]) -> float:
         """Apply one update over aligned `(inputs, labels)` micro-batches; return its mean loss."""
         total = sum(labels.numel() for _, labels in micro_batches)
         if total == 0:
@@ -252,7 +252,9 @@ class CpuExperiment(Experiment):
         self.stream.load_state_dict(self.committed)
         try:
             blocks = self.stream.blocks("tc", tc_targets) + self.stream.blocks("en", en_targets)
-            loss = self.step([(torch.tensor([b.inputs]), torch.tensor([b.labels])) for b in blocks])
+            loss = self._step(
+                [(torch.tensor([b.inputs]), torch.tensor([b.labels])) for b in blocks]
+            )
         except Exception:
             self.stream.load_state_dict(self.committed)
             raise
@@ -312,6 +314,6 @@ class GpuExperiment(Experiment):
         # Packed rows are causal with no mask, so the flash kernel applies; pinning it turns a
         # silent fallback to another kernel into an error.
         with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-            return self.step(
+            return self._step(
                 [(rows[:, :-1], rows[:, 1:]) for rows in windows.split(self.micro_rows)]
             )
