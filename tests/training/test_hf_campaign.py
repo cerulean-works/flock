@@ -523,9 +523,6 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
         "cuda",
         SimpleNamespace(
             is_available=lambda: True,
-            get_device_name=lambda: "fixture",
-            max_memory_allocated=lambda: 0,
-            max_memory_reserved=lambda: 0,
         ),
     )
     output = tmp_path / "run"
@@ -576,10 +573,12 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
     assert summary["provisional"] is True
     assert (summary["segment"], summary["segment_targets"]) == (2, 8)
 
-    # Resuming at the stop point finds the checkpoint and export written and keeps them.
+    assert (summary["device"], resumed["device"]) == ("cpu", "cpu")
+
+    # Resuming at the stop point finds the checkpoint, export and summary written and keeps them.
     AcceleratorState._reset_state(True)
     train.main()
-    assert (output / "summary-000003.json").exists()
+    assert json.loads((output / "summary-000003.json").read_text()) == summary
 
     # A save or export killed partway leaves its lock, and a resume refuses to train towards it.
     for interrupted in [
@@ -598,6 +597,14 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
     monkeypatch.setattr("sys.argv", [*arguments, "--total-targets=0", "--max-updates=1"])
     with pytest.raises(ValueError, match="endpoint"):
         train.main()
+
+    # Accelerate's own accumulation would divide the loss a second time.
+    AcceleratorState._reset_state(True)
+    monkeypatch.setattr("sys.argv", [*arguments, "--max-updates=5", "--resume"])
+    monkeypatch.setenv("ACCELERATE_GRADIENT_ACCUMULATION_STEPS", "2")
+    with pytest.raises(ValueError, match="accumulation"):
+        train.main()
+    monkeypatch.delenv("ACCELERATE_GRADIENT_ACCUMULATION_STEPS")
 
     monkeypatch.setattr(train.cuda, "is_available", lambda: False)
     with pytest.raises(RuntimeError, match="no CUDA device"):

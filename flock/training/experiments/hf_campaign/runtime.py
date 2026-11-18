@@ -37,6 +37,9 @@ class Experiment:
             raise ValueError("warmup must precede the finite target endpoint")
         if accelerator.num_processes != 1:
             raise ValueError("distributed training requires a separately approved GPU gate")
+        # The loss is already divided by the update's targets; Accelerate would divide it again.
+        if accelerator.gradient_accumulation_steps != 1:
+            raise ValueError("Accelerate's gradient accumulation must stay at 1")
         self.total_targets = total_targets
         self.warmup_targets = warmup_targets
         self.peak_lr = peak_lr

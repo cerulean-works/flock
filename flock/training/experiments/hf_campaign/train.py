@@ -91,6 +91,8 @@ def main() -> None:
         "contract": experiment.contract,
         "started": started,
         "resumed_at_update": experiment.updates,
+        # Accelerate can be sent to the CPU from the environment despite a visible GPU.
+        "device": str(experiment.accelerator.device),
     } | experiment.description
     (args.output_dir / f"run-{experiment.updates:06d}.json").write_text(
         json.dumps(run, indent=2, sort_keys=True)
@@ -129,7 +131,7 @@ def main() -> None:
             if args.checkpoint_every and experiment.updates % args.checkpoint_every == 0:
                 experiment.checkpoint(checkpoints / f"update-{experiment.updates:06d}")
 
-    # A resume at the stop point finds both already written and only rewrites the summary.
+    # A resume at the stop point finds all three written and leaves them as they are.
     final = checkpoints / f"update-{experiment.updates:06d}"
     if not final.exists():
         experiment.checkpoint(final)
@@ -145,13 +147,15 @@ def main() -> None:
         "segment_targets": experiment.targets - segment_start_targets,
         "started": started,
         "finished": time.time(),
-        "device": cuda.get_device_name(),
-        "peak_allocated_bytes": cuda.max_memory_allocated(),
-        "peak_reserved_bytes": cuda.max_memory_reserved(),
+        "device": str(experiment.accelerator.device),
     }
-    (args.output_dir / f"summary-{experiment.updates:06d}.json").write_text(
-        json.dumps(summary, indent=2, sort_keys=True)
-    )
+    if experiment.accelerator.device.type == "cuda":
+        summary["device_name"] = cuda.get_device_name()
+        summary["peak_allocated_bytes"] = cuda.max_memory_allocated()
+        summary["peak_reserved_bytes"] = cuda.max_memory_reserved()
+    summary_path = args.output_dir / f"summary-{experiment.updates:06d}.json"
+    if not summary_path.exists():
+        summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":
