@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import time
 from pathlib import Path
 
@@ -116,7 +117,12 @@ def main() -> None:
         pin_memory=True,
         prefetch_factor=4 if args.workers else None,
     )
-    with (args.output_dir / "log.jsonl").open("a") as log:
+    log_path = args.output_dir / "log.jsonl"
+    if log_path.exists():
+        # A kill mid-write leaves a partial last line for an update past the checkpoint, which
+        # this attempt replays; cutting it keeps every line JSON.
+        os.truncate(log_path, log_path.read_bytes().rfind(b"\n") + 1)
+    with log_path.open("a") as log:
         for windows in loader:
             loss = experiment.update(windows)
             line = {

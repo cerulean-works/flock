@@ -399,6 +399,7 @@ def test_provisional_mix_packs_documents_in_stored_order(
     with pytest.raises(IndexError):
         mix[2]
     assert mix.contract["provisional"] is True
+    assert mix.contract["endpoint"] is None  # a local mix has no S3 endpoint
     assert mix.contract["stream_tokens"] == 17
     # The ids, not only the tokenizer's name, are part of the contract.
     other = word_tokenizer()
@@ -568,6 +569,9 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
     AcceleratorState._reset_state(True)
     monkeypatch.setattr("sys.argv", [*arguments, "--max-updates=2"])
     train.main()
+    # A kill mid-write leaves a partial line, which the resume cuts before appending.
+    with (output / "log.jsonl").open("a") as log:
+        log.write('{"attempt": 0, "upd')
     AcceleratorState._reset_state(True)
     monkeypatch.setattr("sys.argv", [*arguments, "--max-updates=3", "--resume"])
     train.main()

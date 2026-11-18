@@ -5,10 +5,12 @@ import lance
 import numpy as np
 import pyarrow as pa
 import torch
+from lance.torch.data import SafeLanceDataset
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizerFast
 
-from flock.training import DatasetConfig, get_dataset
+from flock.hub import s3
+from flock.training import DatasetConfig
 from flock.training.core.chunks import TokenChunkDataset
 
 
@@ -36,13 +38,18 @@ class ProvisionalMix(Dataset[torch.Tensor]):
             raise ValueError("window and rows per update must be positive")
         if tokenizer.eos_token_id is None:
             raise ValueError("the tokenizer has no EOS token")
-        # get_dataset configures read-only S3 credentials, inherited by spawned loader workers.
-        get_dataset(config)
+        endpoint = None
+        if config.uri.startswith(("s3://", "s3a://", "s3n://")):
+            # Read-only credentials go into the process environment, which spawned loader
+            # workers inherit. Two hub endpoints can serve one bucket path, so the endpoint is
+            # part of the mix's identity.
+            applied = s3.get_process(org="cerulean-labs", read_only=True)
+            endpoint = applied["AWS_ENDPOINT_URL"]
         # Workers reopen the mix, so they get an absolute path and a version number: a relative
         # path moves with the working directory and a tag can move between versions.
         uri = config.uri if "://" in config.uri else str(Path(config.uri).resolve())
         pinned = lance.dataset(uri, version=config.version)
-        self.rows = get_dataset(DatasetConfig(uri=uri, version=pinned.version))
+        self.rows = SafeLanceDataset(uri=uri, dataset_options={"version": pinned.version})
         tokens = pinned.to_table(columns=["tokens"])
         counts = tokens["tokens"]
         # Every document holds at least its EOS; a zero or negative count would misplace documents.
@@ -57,6 +64,7 @@ class ProvisionalMix(Dataset[torch.Tensor]):
         self.rows_per_update = rows_per_update
         self.contract = {
             "provisional": True,
+            "endpoint": endpoint,
             "uri": uri,
             "version": pinned.version,
             "rows": len(self.rows),
