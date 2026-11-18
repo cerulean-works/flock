@@ -17,6 +17,21 @@ from .provisional import ProvisionalMix
 from .stream import Block, TargetStream
 
 
+def publish(temporary: Path, destination: Path) -> None:
+    """Rename a fully written directory into place durably: its entries, then the rename."""
+    descriptor = os.open(temporary, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    temporary.rename(destination)
+    descriptor = os.open(destination.parent, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 class Experiment:
     """A fresh OLMo 2 model trained by aligned summed CE on a token schedule."""
 
@@ -151,17 +166,7 @@ class Experiment:
         )
         with manifest.open("rb") as handle:
             os.fsync(handle.fileno())
-        descriptor = os.open(temporary, os.O_RDONLY)
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-        temporary.rename(destination)
-        descriptor = os.open(destination.parent, os.O_RDONLY)
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
+        publish(temporary, destination)
 
     def resume(self, checkpoint: Path) -> None:
         """Verify every checkpoint file before loading trusted local training state."""
@@ -196,7 +201,11 @@ class Experiment:
         (temporary / "experiment.json").write_text(
             json.dumps(card | self.description, indent=2, sort_keys=True)
         )
-        temporary.rename(destination)
+        # A resume at the stop point skips an existing export, so it must survive a node crash.
+        for path in temporary.iterdir():
+            with path.open("rb") as handle:
+                os.fsync(handle.fileno())
+        publish(temporary, destination)
 
 
 class CpuExperiment(Experiment):

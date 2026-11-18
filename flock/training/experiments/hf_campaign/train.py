@@ -25,7 +25,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--size", choices=PROXY_SIZES, required=True)
     parser.add_argument("--dataset-uri", required=True, help="Lance mix with text and tokens.")
-    parser.add_argument("--dataset-version", type=int, required=True)
+    parser.add_argument(
+        "--dataset-version",
+        type=lambda value: int(value) if value.isdigit() else value,
+        required=True,
+        help="Lance version number or tag.",
+    )
     parser.add_argument("--seed", type=int, default=0, help="Initialization seed.")
     parser.add_argument(
         "--total-targets", type=int, help="Schedule endpoint; defaults to one pass over the mix."
@@ -104,7 +109,10 @@ def main() -> None:
     # Renamed into place, so every record counted as an attempt is a complete one.
     record = args.output_dir / f"run-{attempt:03d}.json"
     temporary = record.with_name(record.name + ".incomplete")
-    temporary.write_text(json.dumps(run, indent=2, sort_keys=True))
+    with temporary.open("x") as handle:
+        handle.write(json.dumps(run, indent=2, sort_keys=True))
+        handle.flush()
+        os.fsync(handle.fileno())
     temporary.rename(record)
 
     # A resumed segment logs the update it started from, so a replayed update is told apart.
@@ -144,7 +152,11 @@ def main() -> None:
             log.write(json.dumps(line) + "\n")
             log.flush()
             if args.checkpoint_every and experiment.updates % args.checkpoint_every == 0:
+                # The lines up to a checkpoint outlive a node crash with it: a resume never
+                # replays them.
+                os.fsync(log.fileno())
                 experiment.checkpoint(checkpoints / f"update-{experiment.updates:06d}")
+        os.fsync(log.fileno())
 
     # A resume at the stop point finds all three written and leaves them as they are.
     final = checkpoints / f"update-{experiment.updates:06d}"
