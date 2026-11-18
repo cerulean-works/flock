@@ -104,11 +104,21 @@ ReadableOrgDep = Annotated[Org, Depends(get_readable_org)]
 
 
 @router.get("/at")
-async def at(org: OrgDep, store: StoreDep, path: str = "", cursor: str | None = None) -> Response:
+async def at(
+    org: OrgDep,
+    store: StoreDep,
+    path: str = "",
+    cursor: str | None = None,
+    details: Annotated[
+        bool, Query(description="also each dataset's data size, and its version in any naming")
+    ] = False,
+) -> Response:
     """A folder of flock-datasets, one level (100 entries a page): its datasets (with their
-    latest version), folders and files. ``{kind: "dataset"}`` when ``path`` is a dataset. The
+    latest version), folders and files. ``{kind: "dataset"}`` when ``path`` is a dataset. With
+    ``details``, each dataset has ``size`` (its data files' bytes, as ``info``'s ``data_size``,
+    null if it can't be read) and its version even with Lance's older manifest naming. The
     org's flock-datasets is created here if it's missing."""
-    return JSONResponse(await datasets(store).at(org, path, cursor))
+    return JSONResponse(await datasets(store).at(org, path, cursor, details))
 
 
 @public.get("/info")

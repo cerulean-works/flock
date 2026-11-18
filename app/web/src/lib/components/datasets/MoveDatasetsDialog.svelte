@@ -80,7 +80,7 @@
 		try {
 			for (let n = 0; n < PAGES; n++) {
 				const page: DatasetFolder = await datasetCall<DatasetFolder>(
-					datasetsApi(org, 'at', { path: at, cursor, details: '0' }),
+					datasetsApi(org, 'at', { path: at, cursor }),
 					{ signal }
 				);
 				if (page.kind !== 'folder') break;

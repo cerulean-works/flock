@@ -314,6 +314,58 @@ def test_listing_finds_datasets_at_any_depth(
     assert get(api, f"{DATASETS}/at", path="/eval").status == 422
 
 
+def test_listing_details_give_sizes_and_versions(
+    flock: S3Flock, writer: Writer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With ``details``, each dataset has its data size (as ``info`` has it) and a version in
+    either naming. Sizes are cached by the manifest's ETag, so a second listing opens nothing."""
+    writer.write("eval/mmlu", table(0, 5))
+    writer.write("eval/mmlu", table(5, 5), mode="append")
+    writer.write("eval/old", table(0, 3), enable_v2_manifest_paths=False)
+    writer.write("eval/broken", table(0, 3))
+    bucket = upstream_name(flock)
+    manifest = keys(flock, bucket, "eval/broken/_versions/")[-1]
+    put(flock, manifest, b"not a manifest")
+    api = flock.client()
+
+    plain = get(api, f"{DATASETS}/at", path="eval").json()
+    assert all("size" not in d for d in plain["datasets"])
+
+    def sizes() -> list[tuple]:
+        listing = get(api, f"{DATASETS}/at", path="eval", details="true")
+        assert listing.status == 200, listing.body
+        return [(d["path"], d["version"], d["size"]) for d in listing.json()["datasets"]]
+
+    def data_size(path: str) -> int:
+        return get(api, f"{DATASETS}/info", path=path).json()["data_size"]
+
+    first = sizes()
+    mmlu, old = data_size("eval/mmlu"), data_size("eval/old")
+    assert mmlu > 0 and old > 0
+    # A dataset Lance can't read keeps its listed version, with no size.
+    assert first == [("eval/broken", 1, None), ("eval/mmlu", 2, mmlu), ("eval/old", 1, old)]
+
+    opened: list[str] = []
+    original = lance.dataset
+
+    def spy(uri: str, **kwargs: Any) -> Any:
+        opened.append(uri.removeprefix(f"s3://{bucket}/"))
+        return original(uri, **kwargs)
+
+    monkeypatch.setattr(lance, "dataset", spy)
+    assert sizes() == first
+    # Only the older naming (asked of Lance for its version) and the broken one open again.
+    assert sorted(opened) == ["eval/broken", "eval/old"]
+
+    # A new version is a new manifest ETag, so its size is read again.
+    writer.write("eval/mmlu", table(0, 50), mode="overwrite")
+    opened.clear()
+    rewritten = sizes()[1]
+    assert "eval/mmlu" in opened
+    assert rewritten == ("eval/mmlu", 3, data_size("eval/mmlu"))
+    assert rewritten[2] != mmlu
+
+
 def test_the_datasets_tab_creates_folders(flock: S3Flock, writer: Writer) -> None:
     """The Datasets tab's New folder writes the folder's marker through the Storage tab's
     route, and the empty folder lists."""

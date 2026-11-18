@@ -102,7 +102,9 @@
 		loading = true;
 		failed = null;
 		try {
-			const page = await datasetCall<DatasetFolder>(datasetsApi(org, 'at', { path, cursor }));
+			const page = await datasetCall<DatasetFolder>(
+				datasetsApi(org, 'at', { path, cursor, details: 'true' })
+			);
 			datasets = [...datasets, ...page.datasets];
 			folders = [...folders, ...page.folders];
 			files = [...files, ...page.files];

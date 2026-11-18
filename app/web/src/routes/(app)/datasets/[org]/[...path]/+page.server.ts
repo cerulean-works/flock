@@ -1,13 +1,14 @@
 import { error, isHttpError } from '@sveltejs/kit';
 import { authConfig } from '#lib/server/auth.ts';
-import { datasetsPath, withDetails } from '#lib/server/datasets.ts';
+import { datasetsPath } from '#lib/server/datasets.ts';
 import { change, flock, refused } from '#lib/server/flock.ts';
 import type { DatasetAt, DatasetFolder, DatasetInfo } from '#lib/types.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
- * A folder of the org's flock-datasets (D87), its first page, the rest loaded from the browser;
- * or a dataset (D88) at `?version=` (a number or a tag), else the latest, resolved here once.
+ * A folder of the org's flock-datasets (D87), its first page with each dataset's size (Flock's
+ * `details`), the rest loaded from the browser; or a dataset (D88) at `?version=` (a number or a
+ * tag), else the latest, resolved here once.
  * The tabs read the rest from the browser at the version resolved, and keep their place in the
  * URL (`tab`, `offset`) without running this again.
  *
@@ -23,12 +24,11 @@ export const load: PageServerLoad = async ({ params, url, parent }) => {
 	const at: DatasetFolder | DatasetAt =
 		shell.access === 'public'
 			? { kind: 'dataset', path, version: null, updated_at: null }
-			: await flock(`${base}/at?${new URLSearchParams({ path })}`).then((r) => r.json());
+			: await flock(`${base}/at?${new URLSearchParams({ path, details: 'true' })}`).then((r) =>
+					r.json()
+				);
 	const now = Date.now() / 1000;
-	if (at.kind === 'folder') {
-		const folder = await withDetails(params.org, at);
-		return { kind: 'folder' as const, path, folder, now };
-	}
+	if (at.kind === 'folder') return { kind: 'folder' as const, path, folder: at, now };
 
 	const requested = url.searchParams.get('version');
 	const query = new URLSearchParams({ path, ...(requested ? { version: requested } : {}) });
