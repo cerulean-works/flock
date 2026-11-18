@@ -1,5 +1,3 @@
-import logging
-
 from flock.training import (
     DatasetConfig,
     LRSchedulerConfig,
@@ -12,11 +10,6 @@ from flock.training.core.models import OLMO2_1B_CONFIG, Olmo2
 from flock.training.core.optimizers.adamw import AdamWConfig
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-
     ds_config = DatasetConfig(uri="s3://flock-datasets/finepdfs", version=1)
     dataset = get_dataset(ds_config)
 

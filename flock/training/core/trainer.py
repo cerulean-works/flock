@@ -482,7 +482,12 @@ class Trainer:
                 "Distributed runtime is not initialized. Use `distributed_run` context manager."
             )
 
-        self.logger = logging.getLogger(f"{__name__}:{self.runtime.rank}")
+        logging.basicConfig(
+            level=logging.INFO,
+            format=f"%(asctime)s %(levelname)s %(name)s rank:{self.runtime.rank} %(message)s",
+            datefmt="%m-%d %H:%M:%S",
+        )
+        self.logger = logging.getLogger(__name__)
         self.run: Run | None = None
         self._init_wandb_tracker(config)
 
