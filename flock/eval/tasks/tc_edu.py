@@ -3,8 +3,8 @@
 from flock.eval.tasks.suite import Suite
 from flock.eval.tasks.tw_mock_exams import Subject, exam_task
 
-# Each subject's `shots` are its 5 shortest self-contained `dev` items, as the mock exams'
-# (009.D4); `dev` is the lowest 1 percent of the subject's question groups by hash (039.D3).
+# Each subject's `shots` are its 5 shortest self-contained `dev` items (039.D6); `dev` is the
+# lowest 1 percent of the subject's question groups by hash (039.D3).
 SUBJECTS = (
     Subject(
         "hs_chinese",
@@ -112,17 +112,18 @@ SUBJECTS = (
 TC_EDU_TASKS = tuple(
     exam_task(
         subject,
-        "tc_edu",
-        "cerulean-works/tc-edu-exams",
-        "66c8db07fa379e9ee88af646debd3d22aed6a49e",
+        prefix="tc_edu",
+        repo="cerulean-works/tc-edu-exams",
+        revision="66c8db07fa379e9ee88af646debd3d22aed6a49e",
     )
     for subject in SUBJECTS
 )
 
-# The subjects' unweighted mean, as the mock exams' (009.D5); `:jh` leaves out senior high.
+# The subjects' unweighted mean, as the mock exams' (009.D5), and the junior-high subjects' alone.
+JUNIOR_HIGH_TASKS = tuple(task for task in TC_EDU_TASKS if task.name.startswith("tc_edu_jh_"))
 TC_EDU = Suite("tc_edu", TC_EDU_TASKS)
-TC_EDU_JH = Suite("tc_edu:jh", TC_EDU_TASKS[1:])
+TC_EDU_JH = Suite("tc_edu:jh", JUNIOR_HIGH_TASKS)
 TC_EDU_BPB = Suite("tc_edu:bpb", TC_EDU_TASKS, metric="bpb")
-TC_EDU_JH_BPB = Suite("tc_edu:jh:bpb", TC_EDU_TASKS[1:], metric="bpb")
+TC_EDU_JH_BPB = Suite("tc_edu:jh:bpb", JUNIOR_HIGH_TASKS, metric="bpb")
 # An accuracy and a `bpb` don't average, so the group that runs both has no score.
 TC_EDU_ALL = Suite("tc_edu:all", (TC_EDU, TC_EDU_JH, TC_EDU_BPB, TC_EDU_JH_BPB), scored=False)

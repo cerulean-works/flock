@@ -86,3 +86,12 @@ def offline_rows(monkeypatch: pytest.MonkeyPatch) -> None:
 def real_load() -> Callable[..., list[dict[str, Any]]]:
     """The real `Dataset.load`, for tests of loading itself. Session scope: pytest builds it before the function-scoped `offline_rows` patches the method, and no patch outlives its test."""
     return Dataset.load
+
+
+@pytest.fixture
+def rows_by_split() -> Iterator[dict[str, list[dict[str, Any]]]]:
+    """A split-to-rows table that `Dataset.load` reads instead of the Hub while the test runs."""
+    rows: dict[str, list[dict[str, Any]]] = {}
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(Dataset, "load", lambda dataset, split=None: rows[split or dataset.split])
+        yield rows

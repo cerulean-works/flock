@@ -19,7 +19,7 @@ from flock.eval.tasks.suite import Suite
 @dataclass(frozen=True, slots=True)
 class Subject:
     """
-    One subject of the mock exams.
+    One subject of an exam set in the mock exams' format: the mock exams' own, or tc-edu's (stage 039).
 
     Args:
         name (`str`):
@@ -27,7 +27,7 @@ class Subject:
         chinese_name (`str`):
             The subject in the Chinese header. 英文 takes MMLU's English header and format instead.
         shots (`tuple[str, ...]`):
-            The ids of the subject's 5 `dev` rows, its few-shot examples: its shortest self-contained items, 009.D4 in the stage file.
+            The ids of the subject's 5 `dev` rows, its few-shot examples: its shortest self-contained items (009.D4 for the mock exams, 039.D6 for tc-edu).
     """
 
     name: str
@@ -100,13 +100,14 @@ def english_doc(row: dict[str, Any]) -> MCDoc:
 
 def exam_task(
     subject: Subject,
+    *,
     prefix: str,
     repo: str,
     revision: str,
     keep: Callable[[dict[str, Any]], bool] | None = None,
 ) -> MultipleChoiceTask:
     """
-    A subject's task in the mock exams' format: a header, the subject's 5 examples, then the test question. 英文 takes OLMES's MMLU header and PMI context, the others TMMLU+'s (009.D3)..
+    A subject's task in the mock exams' format: a header, the subject's 5 examples, then the test question. 英文 takes OLMES's MMLU header and PMI context, the others TMMLU+'s (009.D3).
 
     Args:
         subject (`Subject`):
@@ -117,7 +118,7 @@ def exam_task(
             The set's dataset repo, with one config per subject and the splits `dev` and `test`.
         revision (`str`):
             The repo's commit.
-        keep (`Callable[[dict], bool]`, *optional*):
+        keep (`Callable[[dict[str, Any]], bool]`, *optional*):
             The task's `keep`. Every row if not set.
     """
     # The one place the format is chosen: the header, the prefixes and the PMI context together.
@@ -261,9 +262,9 @@ SUBJECTS = (
 TW_MOCK_EXAMS_TASKS = tuple(
     exam_task(
         subject,
-        "tw_mock_exams",
-        "cerulean-works/tw-mock-exams",
-        "e62f9adf374da2e0fcd0095428f6339da980f020",
+        prefix="tw_mock_exams",
+        repo="cerulean-works/tw-mock-exams",
+        revision="e62f9adf374da2e0fcd0095428f6339da980f020",
         keep=scored,
     )
     for subject in SUBJECTS

@@ -43,7 +43,7 @@ A text filter still leaves about one defective item in eight (a blind read of 72
 
 ### 039.D5. One format and one constructor for both exam sets
 
-tc-edu rows have the mock exams' shape (passages, two to six options, English items), so tc-edu is scored exactly as `tw_mock_exams` (009.D3): TMMLU+'s header with the subject's Chinese name, `問題：` and `答案：`, cloze over option texts, `acc_per_char`; English takes OLMES's MMLU header and format. The mock exams' `subject_task` becomes `exam_task(subject, prefix, repo, revision, keep)`, and both sets are lists of `Subject` values. English is chosen by the subject's Chinese name, 英文, as `Subject` already documented. Every mock exams request and task hash is unchanged, and the snapshot shows only additions. tc-edu passes no `keep`: every `test` row is scored.
+tc-edu rows have the mock exams' shape (passages, two to six options, English items), so tc-edu is scored exactly as `tw_mock_exams` (009.D3): TMMLU+'s header with the subject's Chinese name, `問題：` and `答案：`, cloze over option texts, `acc_per_char`; English takes OLMES's MMLU header and format. The mock exams' `subject_task` becomes `exam_task(subject, *, prefix, repo, revision, keep)`, and both sets are lists of `Subject` values. English is chosen by the subject's Chinese name, 英文, as `Subject` already documented. Every mock exams request and task hash is unchanged, and the snapshot shows only additions. tc-edu passes no `keep`: every `test` row is scored.
 
 ### 039.D6. Shots are the five shortest self-contained `dev` items
 
@@ -72,3 +72,4 @@ As 009.D4: `dev` items with no passage and no reference to other material in the
 - The read is by language models, not people; its rubric and counts are in 039.D4. A defect the readers missed stays in `test`.
 - `UNSURE` passes, so a share of arts and health and PE keys is unconfirmed by any reader.
 - `reserve` is mostly unread; using it as test data needs the same read first.
+- This file follows 038 (`tw-text-v1`), which is not merged yet. If this stage merges first, it takes 038 and its decisions are renumbered.
