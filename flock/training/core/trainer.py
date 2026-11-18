@@ -734,12 +734,19 @@ class Trainer:
                 f"Resuming from step {start_step}, with {self.total_steps - start_step} steps remaining"
             )
 
+        training_completed: bool = False
         try:
+            nonlocal training_completed
             self.model.train()
             self.logger.info("Starting training")
             self._inner_training_loop(dataloader, start_step)
+            training_completed = True
         finally:
-            if self.save_steps and self.state.step % self.save_steps != 0:
+            if (
+                self.save_steps
+                and (not self.runtime.enabled or training_completed)
+                and self.state.step % self.save_steps != 0
+            ):
                 self._save_model(int(self.state.step.item()), blocking=True)
             if self.runtime.is_master:
                 self.checkpoint_manager.finish_checkpoint_uploads()
@@ -834,12 +841,9 @@ class Trainer:
                 self.logger.error("Skipping checkpoint: a rank could not capture its resume state")
             else:
                 state["rank_states"] = dict(enumerate(rank_states))
-                try:
-                    self.checkpoint_manager.save_model(
-                        step, self.model, training_state=state, blocking=blocking
-                    )
-                except Exception:
-                    self.logger.exception("Error saving model checkpoint")
+                self.checkpoint_manager.save_model(
+                    step, self.model, training_state=state, blocking=blocking
+                )
         self.runtime.barrier()
 
     def state_dict(self) -> dict[str, Any]:

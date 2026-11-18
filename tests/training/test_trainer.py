@@ -957,12 +957,11 @@ def test_checkpoint_upload_uses_complete_local_folder(
     save_checkpoint(trainer, blocking=True)
 
 
-def test_failed_checkpoint_write_logs_and_continues_without_publishing_or_pruning(
+def test_failed_checkpoint_write_does_not_publish_or_prune(
     trainer_factory: TrainerFactory,
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    trainer, run, _ = trainer_factory(
+    trainer, _, _ = trainer_factory(
         num_workers=0,
         prefetch_factor=None,
         save_steps=1,
@@ -970,27 +969,15 @@ def test_failed_checkpoint_write_logs_and_continues_without_publishing_or_prunin
         overwrite_output_dir=True,
     )
     save_checkpoint(trainer)
-    attempted_steps = []
 
     def fail_write(model: BaseModel, folder: Path, **kwargs: Any) -> Never:
-        attempted_steps.append(kwargs["step"])
         folder.mkdir()
         (folder / "flock.json").write_text("partial")
         raise OSError("disk full")
 
     monkeypatch.setattr("flock.training.core.checkpoint.write_model", fail_write)
-    trainer.train()
-    assert attempted_steps == [1, 2, 3]
-    assert trainer.state.step.item() == trainer.lr_scheduler.completed_steps == trainer.total_steps
-    assert run.metrics[-1]["global_step"] == trainer.total_steps
-    failures = [
-        record for record in caplog.records if record.message == "Error saving model checkpoint"
-    ]
-    assert len(failures) == 3
-    for record in failures:
-        assert record.exc_info
-        assert isinstance(record.exc_info[1], OSError)
-        assert str(record.exc_info[1]) == "disk full"
+    with pytest.raises(OSError, match="disk full"):
+        trainer.train()
     assert [path.name for path in trainer.output_dir.iterdir()] == ["checkpoint-0"]
 
 
