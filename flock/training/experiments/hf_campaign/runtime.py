@@ -18,7 +18,7 @@ from .stream import Block, TargetStream
 
 
 def publish(temporary: Path, destination: Path) -> None:
-    """Rename a fully written directory into place durably: its entries, then the rename."""
+    """Rename a fully written file or directory into place durably: its contents, then the rename."""
     descriptor = os.open(temporary, os.O_RDONLY)
     try:
         os.fsync(descriptor)

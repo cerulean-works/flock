@@ -407,17 +407,21 @@ def test_provisional_mix_packs_documents_in_stored_order(
     remix = ProvisionalMix(config, other, window=3, rows_per_update=2)
     assert remix.contract["tokenizer_sha256"] != mix.contract["tokenizer_sha256"]
 
-    # A tag and a relative path are pinned to the version number and an absolute path.
-    lance.dataset(config.uri).tags.create("current", 1)
+    # A relative path is pinned to an absolute one; a tag, which can move, is refused.
     monkeypatch.chdir(tmp_path)
-    tagged = ProvisionalMix(
-        DatasetConfig(uri="mix.lance", version="current"),
-        word_tokenizer(),
-        window=3,
-        rows_per_update=2,
+    relative = ProvisionalMix(
+        DatasetConfig(uri="mix.lance", version=1), word_tokenizer(), window=3, rows_per_update=2
     )
-    assert (tagged.contract["uri"], tagged.contract["version"]) == (config.uri, 1)
-    assert tagged[1].tolist() == mix[1].tolist()
+    assert (relative.contract["uri"], relative.contract["version"]) == (config.uri, 1)
+    assert relative[1].tolist() == mix[1].tolist()
+    lance.dataset(config.uri).tags.create("current", 1)
+    with pytest.raises(TypeError, match="not the tag 'current'"):
+        ProvisionalMix(
+            DatasetConfig(uri="mix.lance", version="current"),
+            word_tokenizer(),
+            window=3,
+            rows_per_update=2,
+        )
 
 
 def test_provisional_mix_rejects_rows_its_counts_or_hashes_contradict(tmp_path: Path) -> None:
@@ -576,20 +580,12 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
     monkeypatch.setattr("sys.argv", [*arguments, "--max-updates=3", "--resume"])
     train.main()
 
-    # The resumed run's RNG state at update 3 is an uninterrupted run's, and a version tag
-    # reaches the same contract as its number.
+    # The resumed run's RNG state at update 3 is an uninterrupted run's.
     AcceleratorState._reset_state(True)
-    lance.dataset(config.uri).tags.create("current", 1)
     straight = tmp_path / "straight"
     monkeypatch.setattr(
         "sys.argv",
-        [
-            *arguments,
-            "--dataset-version=current",
-            f"--output-dir={straight}",
-            "--max-updates=3",
-            "--checkpoint-every=3",
-        ],
+        [*arguments, f"--output-dir={straight}", "--max-updates=3", "--checkpoint-every=3"],
     )
     train.main()
     contracts = [

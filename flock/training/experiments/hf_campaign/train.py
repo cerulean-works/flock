@@ -16,7 +16,7 @@ from flock.training.experiments.proxy.olmo2_proxy import PROXY_SIZES
 
 from .config import MODEL_REPO, MODEL_REVISION, proxy_config
 from .provisional import ProvisionalMix
-from .runtime import GpuExperiment
+from .runtime import GpuExperiment, publish
 
 
 def main() -> None:
@@ -25,12 +25,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--size", choices=PROXY_SIZES, required=True)
     parser.add_argument("--dataset-uri", required=True, help="Lance mix with text and tokens.")
-    parser.add_argument(
-        "--dataset-version",
-        type=lambda value: int(value) if value.isdigit() else value,
-        required=True,
-        help="Lance version number or tag.",
-    )
+    parser.add_argument("--dataset-version", type=int, required=True)
     parser.add_argument("--seed", type=int, default=0, help="Initialization seed.")
     parser.add_argument(
         "--total-targets", type=int, help="Schedule endpoint; defaults to one pass over the mix."
@@ -109,11 +104,13 @@ def main() -> None:
     # Renamed into place, so every record counted as an attempt is a complete one.
     record = args.output_dir / f"run-{attempt:03d}.json"
     temporary = record.with_name(record.name + ".incomplete")
-    with temporary.open("x") as handle:
-        handle.write(json.dumps(run, indent=2, sort_keys=True))
-        handle.flush()
-        os.fsync(handle.fileno())
-    temporary.rename(record)
+    temporary.write_text(json.dumps(run, indent=2, sort_keys=True))
+    # The log and checkpoint directory exist first, so syncing the run directory in publish
+    # also keeps their entries: a checkpoint never outlives the record that explains its log.
+    log_path = args.output_dir / "log.jsonl"
+    log_path.touch()
+    checkpoints.mkdir(exist_ok=True)
+    publish(temporary, record)
 
     # A resumed segment logs the update it started from, so a replayed update is told apart.
     segment = experiment.updates
@@ -132,8 +129,7 @@ def main() -> None:
         # has just restored, so a resumed run's checkpoints match an uninterrupted run's.
         generator=torch.Generator(),
     )
-    log_path = args.output_dir / "log.jsonl"
-    if log_path.exists():
+    if log_path.stat().st_size:
         # A kill mid-write leaves a partial last line for an update past the checkpoint, which
         # this attempt replays; cutting it keeps every line JSON.
         os.truncate(log_path, log_path.read_bytes().rfind(b"\n") + 1)
@@ -186,7 +182,7 @@ def main() -> None:
     if not summary_path.exists():
         temporary = summary_path.with_name(summary_path.name + ".incomplete")
         temporary.write_text(json.dumps(summary, indent=2, sort_keys=True))
-        temporary.rename(summary_path)
+        publish(temporary, summary_path)
 
 
 if __name__ == "__main__":

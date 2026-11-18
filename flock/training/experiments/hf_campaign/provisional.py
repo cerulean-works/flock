@@ -38,6 +38,10 @@ class ProvisionalMix(Dataset[torch.Tensor]):
             raise ValueError("window and rows per update must be positive")
         if tokenizer.eos_token_id is None:
             raise ValueError("the tokenizer has no EOS token")
+        # A tag can move, and can name a version on another branch, where numbers mean other
+        # snapshots; workers reopen the mix, so only a number pins what they read.
+        if not isinstance(config.version, int):
+            raise TypeError(f"pin the mix by version number, not the tag {config.version!r}")
         endpoint = None
         if config.uri.startswith(("s3://", "s3a://", "s3n://")):
             # Read-only credentials go into the process environment, which spawned loader
@@ -45,11 +49,11 @@ class ProvisionalMix(Dataset[torch.Tensor]):
             # part of the mix's identity.
             applied = s3.get_process(org="cerulean-labs", read_only=True)
             endpoint = applied["AWS_ENDPOINT_URL"]
-        # Workers reopen the mix, so they get an absolute path and a version number: a relative
-        # path moves with the working directory and a tag can move between versions.
+        # Workers reopen the mix, so they get an absolute path: a relative one moves with the
+        # working directory.
         uri = config.uri if "://" in config.uri else str(Path(config.uri).resolve())
         pinned = lance.dataset(uri, version=config.version)
-        self.rows = SafeLanceDataset(uri=uri, dataset_options={"version": pinned.version})
+        self.rows = SafeLanceDataset(uri=uri, dataset_options={"version": config.version})
         tokens = pinned.to_table(columns=["tokens"])
         counts = tokens["tokens"]
         # Every document holds at least its EOS; a zero or negative count would misplace documents.
@@ -66,7 +70,7 @@ class ProvisionalMix(Dataset[torch.Tensor]):
             "provisional": True,
             "endpoint": endpoint,
             "uri": uri,
-            "version": pinned.version,
+            "version": config.version,
             "rows": len(self.rows),
             "stream_tokens": int(self.ends[-1]),
             "tokenizer": tokenizer.name_or_path,
