@@ -100,8 +100,11 @@ def main() -> None:
         "resumed_at_update": experiment.updates,
         "device": str(experiment.accelerator.device),
     } | experiment.description
-    with (args.output_dir / f"run-{attempt:03d}.json").open("x") as record:
-        record.write(json.dumps(run, indent=2, sort_keys=True))
+    # Renamed into place, so every record counted as an attempt is a complete one.
+    record = args.output_dir / f"run-{attempt:03d}.json"
+    temporary = record.with_name(record.name + ".incomplete")
+    temporary.write_text(json.dumps(run, indent=2, sort_keys=True))
+    temporary.rename(record)
 
     # A resumed segment logs the update it started from, so a replayed update is told apart.
     segment = experiment.updates

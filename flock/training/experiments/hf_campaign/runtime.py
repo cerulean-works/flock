@@ -141,8 +141,9 @@ class Experiment:
         hashes = {}
         for path in sorted(temporary.iterdir()):
             if path.is_file():
-                hashes[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+                # Streamed: the 190M optimizer state alone is about 2 GB.
                 with path.open("rb") as handle:
+                    hashes[path.name] = hashlib.file_digest(handle, "sha256").hexdigest()
                     os.fsync(handle.fileno())
         manifest = temporary / "COMMITTED.json"
         manifest.write_text(
@@ -170,8 +171,9 @@ class Experiment:
         for name, expected in manifest["files"].items():
             if Path(name).name != name:
                 raise ValueError("invalid checkpoint path")
-            if hashlib.sha256((checkpoint / name).read_bytes()).hexdigest() != expected:
-                raise ValueError("checkpoint checksum mismatch")
+            with (checkpoint / name).open("rb") as handle:
+                if hashlib.file_digest(handle, "sha256").hexdigest() != expected:
+                    raise ValueError("checkpoint checksum mismatch")
         self.accelerator.load_state(str(checkpoint))
 
     def export(self, destination: Path, tokenizer: PreTrainedTokenizerBase) -> None:
