@@ -4,7 +4,7 @@ import hashlib
 import json
 import math
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import lance
 import pyarrow as pa
@@ -37,7 +37,7 @@ from flock.training.experiments.hf_campaign.runtime import (
 from flock.training.experiments.hf_campaign.stream import Pool, TargetStream
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterable, Iterator
     from pathlib import Path
     from typing import Any
 
@@ -459,7 +459,23 @@ def test_provisional_mix_rejects_rows_its_counts_or_hashes_contradict(tmp_path: 
             )
 
 
-def test_micro_batches_accumulate_to_the_one_batch_gradient() -> None:
+def test_micro_batches_accumulate_to_the_one_batch_gradient(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Gradients are read before clipping, which would hide a wrong scale behind a unit norm.
+    unclipped = []
+    clip = torch.nn.utils.clip_grad_norm_
+
+    def record_then_clip(parameters: Iterable[torch.Tensor], *args: Any, **kwargs: Any) -> Any:
+        parameters = list(parameters)
+        gradients = []
+        for parameter in parameters:
+            assert parameter.grad is not None
+            gradients.append(parameter.grad.clone())
+        unclipped.append(gradients)
+        return clip(parameters, *args, **kwargs)
+
+    monkeypatch.setattr(torch.nn.utils, "clip_grad_norm_", record_then_clip)
     windows = torch.tensor([[2, 3, 4, 1, 5], [6, 7, 8, 9, 2]])
     experiments = []
     for micro_batches in [[windows], list(windows.split(1))]:
@@ -478,8 +494,8 @@ def test_micro_batches_accumulate_to_the_one_batch_gradient() -> None:
         experiments.append(experiment)
     whole, split = experiments
     assert whole.targets == split.targets == 8
-    for a, b in zip(whole.model.parameters(), split.model.parameters(), strict=True):
-        torch.testing.assert_close(a.grad, b.grad, rtol=1e-5, atol=1e-7)
+    for a, b in zip(*unclipped, strict=True):
+        torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-7)
 
 
 def test_gpu_runtime_resumes_to_the_same_next_update_on_cpu(
@@ -660,9 +676,10 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
 
     # A negative interval would save every update; it stops before anything is written.
     AcceleratorState._reset_state(True)
-    monkeypatch.setattr("sys.argv", [*arguments, "--checkpoint-every=-1", "--resume"])
-    with pytest.raises(SystemExit):
-        train.main()
+    for refused in ["--checkpoint-every=-1", "--workers=-1"]:
+        monkeypatch.setattr("sys.argv", [*arguments, refused, "--resume"])
+        with pytest.raises(SystemExit):
+            train.main()
 
     # An explicit zero budget is an error, not a full pass.
     AcceleratorState._reset_state(True)

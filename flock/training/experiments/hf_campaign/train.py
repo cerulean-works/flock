@@ -44,6 +44,9 @@ def main() -> None:
     # Every update number is a multiple of a negative interval: it would save at every update.
     if args.checkpoint_every is not None and args.checkpoint_every < 1:
         parser.error("--checkpoint-every must be positive")
+    # Checked here, not by the loader, which would refuse only after the run record exists.
+    if args.workers < 0:
+        parser.error("--workers must not be negative")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_REPO, revision=MODEL_REVISION)
     # The fingerprint in the mix contract needs the fast backend, which the pinned repo ships.
     assert isinstance(tokenizer, PreTrainedTokenizerFast)
@@ -177,9 +180,10 @@ def main() -> None:
         "device": str(experiment.accelerator.device),
     }
     if experiment.accelerator.device.type == "cuda":
-        summary["device_name"] = cuda.get_device_name()
-        summary["peak_allocated_bytes"] = cuda.max_memory_allocated()
-        summary["peak_reserved_bytes"] = cuda.max_memory_reserved()
+        device = experiment.accelerator.device
+        summary["device_name"] = cuda.get_device_name(device)
+        summary["peak_allocated_bytes"] = cuda.max_memory_allocated(device)
+        summary["peak_reserved_bytes"] = cuda.max_memory_reserved(device)
     # Renamed into place, so an existing summary is a complete one.
     summary_path = args.output_dir / f"summary-{experiment.updates:06d}.json"
     if not summary_path.exists():
