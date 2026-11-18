@@ -72,4 +72,3 @@ As 009.D4: `dev` items with no passage and no reference to other material in the
 - The read is by language models, not people; its rubric and counts are in 039.D4. A defect the readers missed stays in `test`.
 - `UNSURE` passes, so a share of arts and health and PE keys is unconfirmed by any reader.
 - `reserve` is mostly unread; using it as test data needs the same read first.
-- This file follows 038 (`tw-text-v1`), which is not merged yet. If this stage merges first, it takes 038 and its decisions are renumbered.
