@@ -4,7 +4,7 @@ import lance
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from transformers import PreTrainedTokenizerBase
+from transformers import PreTrainedTokenizerFast
 
 from flock.training import DatasetConfig, get_dataset
 
@@ -16,7 +16,7 @@ class ProvisionalMix(Dataset[torch.Tensor]):
 
     Args:
         config ([`training.DatasetConfig`]): The mix, pinned to a version, with `text` and `tokens` columns (`tokens` counts the document's EOS).
-        tokenizer (`PreTrainedTokenizerBase`): The tokenizer the mix's `tokens` column was counted with.
+        tokenizer (`PreTrainedTokenizerFast`): The tokenizer the mix's `tokens` column was counted with.
         window (`int`): Targets per row.
         rows_per_update (`int`): Rows per optimizer update.
     """
@@ -24,7 +24,7 @@ class ProvisionalMix(Dataset[torch.Tensor]):
     def __init__(
         self,
         config: DatasetConfig,
-        tokenizer: PreTrainedTokenizerBase,
+        tokenizer: PreTrainedTokenizerFast,
         *,
         window: int,
         rows_per_update: int,
@@ -36,8 +36,12 @@ class ProvisionalMix(Dataset[torch.Tensor]):
         # get_dataset configures read-only S3 credentials, inherited by spawned loader workers.
         self.rows = get_dataset(config)
         tokens = lance.dataset(config.uri, version=config.version).to_table(columns=["tokens"])
+        counts = tokens["tokens"]
+        # Every document holds at least its EOS; a zero or negative count would misplace documents.
+        if len(counts) == 0 or counts.null_count or (counts.to_numpy() < 1).any():
+            raise ValueError("every mix row needs a token count of at least 1 (its EOS)")
         # Stream position just past each document; the first token is context only.
-        self.ends = np.cumsum(tokens["tokens"].to_numpy())
+        self.ends = np.cumsum(counts.to_numpy())
         self.tokenizer = tokenizer
         self.window = window
         self.rows_per_update = rows_per_update
@@ -48,6 +52,10 @@ class ProvisionalMix(Dataset[torch.Tensor]):
             "rows": len(self.rows),
             "stream_tokens": int(self.ends[-1]),
             "tokenizer": tokenizer.name_or_path,
+            # The serialized backend pins the ids, which the name and the token counts do not.
+            "tokenizer_sha256": hashlib.sha256(
+                tokenizer.backend_tokenizer.to_str().encode()
+            ).hexdigest(),
             "eos": tokenizer.eos_token_id,
             "window": window,
             "rows_per_update": rows_per_update,

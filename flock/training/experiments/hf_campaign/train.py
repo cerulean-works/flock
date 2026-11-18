@@ -5,9 +5,9 @@ import json
 import time
 from pathlib import Path
 
-import torch
+from torch import cuda
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizerFast
 
 from flock.training import DatasetConfig
 from flock.training.experiments.proxy.olmo2_proxy import PROXY_SIZES
@@ -39,9 +39,13 @@ def main() -> None:
         "--resume", action="store_true", help="Continue from the latest checkpoint."
     )
     args = parser.parse_args()
+    # Accelerate falls back to the CPU without a device; a proxy run there would take days.
+    if not cuda.is_available():
+        raise RuntimeError("no CUDA device: this launcher trains on one GPU")
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_REPO, revision=MODEL_REVISION)
-    assert tokenizer is not None  # The stubs allow None; loading raises instead.
+    # The fingerprint in the mix contract needs the fast backend, which the pinned repo ships.
+    assert isinstance(tokenizer, PreTrainedTokenizerFast)
     config = proxy_config(args.size)
     mix = ProvisionalMix(
         DatasetConfig(uri=args.dataset_uri, version=args.dataset_version),
@@ -55,20 +59,29 @@ def main() -> None:
         mix,
         peak_lr=PROXY_SIZES[args.size].peak_lr,
         seed=args.seed,
-        total_targets=args.total_targets or len(mix) * mix.targets_per_update,
+        total_targets=(
+            len(mix) * mix.targets_per_update if args.total_targets is None else args.total_targets
+        ),
         warmup_targets=args.warmup_targets,
         micro_rows=args.micro_rows,
     )
     checkpoints = args.output_dir / "checkpoints"
     if args.resume:
-        # A save killed partway leaves its lock; training on would die on reaching that update.
-        incomplete = sorted(checkpoints.glob("*.incomplete"))
+        # A save or export killed partway leaves its lock; the run would die on reaching it.
+        incomplete = sorted(
+            [*checkpoints.glob("*.incomplete"), *args.output_dir.glob("*.incomplete")]
+        )
         if incomplete:
             raise FileExistsError(f"inspect and remove the interrupted save first: {incomplete}")
-        committed = sorted(checkpoints.glob("update-*"))
-        if not committed:
+        # By number: the six-digit name is a minimum width, so names stop sorting past 999,999.
+        latest = max(
+            checkpoints.glob("update-*"),
+            key=lambda path: int(path.name.removeprefix("update-")),
+            default=None,
+        )
+        if latest is None:
             raise FileNotFoundError(f"no committed checkpoint in {checkpoints}")
-        experiment.resume(committed[-1])
+        experiment.resume(latest)
     else:
         args.output_dir.mkdir(parents=True, exist_ok=False)
     run = {
@@ -85,6 +98,7 @@ def main() -> None:
 
     # A resumed segment logs the update it started from, so a replayed update is told apart.
     segment = experiment.updates
+    segment_start_targets = experiment.targets
     stop = experiment.total_targets // mix.targets_per_update
     if args.max_updates is not None:
         stop = min(stop, args.max_updates)
@@ -96,7 +110,7 @@ def main() -> None:
         sampler=range(experiment.updates, stop),
         num_workers=args.workers,
         multiprocessing_context="spawn" if args.workers else None,
-        pin_memory=torch.cuda.is_available(),
+        pin_memory=True,
         prefetch_factor=4 if args.workers else None,
     )
     with (args.output_dir / "log.jsonl").open("a") as log:
@@ -115,24 +129,26 @@ def main() -> None:
             if args.checkpoint_every and experiment.updates % args.checkpoint_every == 0:
                 experiment.checkpoint(checkpoints / f"update-{experiment.updates:06d}")
 
+    # A resume at the stop point finds both already written and only rewrites the summary.
     final = checkpoints / f"update-{experiment.updates:06d}"
     if not final.exists():
         experiment.checkpoint(final)
-    experiment.export(args.output_dir / f"export-{experiment.updates:06d}", tokenizer)
+    export = args.output_dir / f"export-{experiment.updates:06d}"
+    if not export.exists():
+        experiment.export(export, tokenizer)
     summary = {
         "provisional": True,
         "contract": experiment.contract,
         "updates": experiment.updates,
         "targets": experiment.targets,
         "segment": segment,
-        "segment_targets": experiment.targets - segment * mix.targets_per_update,
+        "segment_targets": experiment.targets - segment_start_targets,
         "started": started,
         "finished": time.time(),
+        "device": cuda.get_device_name(),
+        "peak_allocated_bytes": cuda.max_memory_allocated(),
+        "peak_reserved_bytes": cuda.max_memory_reserved(),
     }
-    if torch.cuda.is_available():
-        summary["device"] = torch.cuda.get_device_name()
-        summary["peak_allocated_bytes"] = torch.cuda.max_memory_allocated()
-        summary["peak_reserved_bytes"] = torch.cuda.max_memory_reserved()
     (args.output_dir / f"summary-{experiment.updates:06d}.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True)
     )

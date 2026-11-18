@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import lance
@@ -315,6 +316,9 @@ def test_aligned_loss_uses_every_target_and_exact_terminal_budget() -> None:
     assert experiment.targets == 10
     with pytest.raises(ValueError, match="overshoot"):
         experiment.update(tc_targets=1, en_targets=1)
+    # Past the endpoint and the source quota alike: the endpoint is checked before any read.
+    with pytest.raises(ValueError, match="overshoot"):
+        experiment.update(tc_targets=40, en_targets=40)
 
 
 def test_nullable_mixed_schema_and_missing_converted_original_quarantine() -> None:
@@ -392,6 +396,11 @@ def test_provisional_mix_packs_documents_in_stored_order(tmp_path: Path) -> None
         mix[2]
     assert mix.contract["provisional"] is True
     assert mix.contract["stream_tokens"] == 17
+    # The ids, not only the tokenizer's name, are part of the contract.
+    other = word_tokenizer()
+    other.backend_tokenizer.add_tokens(["10"])
+    remix = ProvisionalMix(config, other, window=3, rows_per_update=2)
+    assert remix.contract["tokenizer_sha256"] != mix.contract["tokenizer_sha256"]
 
 
 def test_provisional_mix_rejects_rows_its_counts_or_hashes_contradict(tmp_path: Path) -> None:
@@ -407,6 +416,16 @@ def test_provisional_mix_rejects_rows_its_counts_or_hashes_contradict(tmp_path: 
     assert mix[0].tolist() == [[2, 3, 4]]
     with pytest.raises(ValueError, match="mix row 1 text does not match"):
         mix[2]
+
+    # A leading zero count would otherwise be skipped by the offsets without being checked.
+    for counts in [[0, 3], [5, -1]]:
+        with pytest.raises(ValueError, match="at least 1"):
+            ProvisionalMix(
+                write_mix(tmp_path / f"counts{counts[1]}.lance", texts, tokens=counts),
+                word_tokenizer(),
+                window=2,
+                rows_per_update=1,
+            )
 
 
 def test_micro_batches_accumulate_to_the_one_batch_gradient() -> None:
@@ -498,6 +517,17 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
     config = write_mix(tmp_path / "mix.lance", ["2 3 4 5 6 7 8 9"] * 30)
     monkeypatch.setattr(train.AutoTokenizer, "from_pretrained", lambda *_, **__: word_tokenizer())
     monkeypatch.setattr(train, "proxy_config", lambda _: sdpa_config(context=4))
+    # Only the launcher's device check and summary see a device; training stays on the CPU.
+    monkeypatch.setattr(
+        train,
+        "cuda",
+        SimpleNamespace(
+            is_available=lambda: True,
+            get_device_name=lambda: "fixture",
+            max_memory_allocated=lambda: 0,
+            max_memory_reserved=lambda: 0,
+        ),
+    )
     output = tmp_path / "run"
     arguments = [
         "train",
@@ -546,9 +576,29 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
     assert summary["provisional"] is True
     assert (summary["segment"], summary["segment_targets"]) == (2, 8)
 
-    # A save killed partway leaves its lock, and a resume refuses to train towards it.
-    (output / "checkpoints" / "update-000004.incomplete").mkdir()
+    # Resuming at the stop point finds the checkpoint and export written and keeps them.
     AcceleratorState._reset_state(True)
-    monkeypatch.setattr("sys.argv", [*arguments, "--max-updates=5", "--resume"])
-    with pytest.raises(FileExistsError, match="interrupted save"):
+    train.main()
+    assert (output / "summary-000003.json").exists()
+
+    # A save or export killed partway leaves its lock, and a resume refuses to train towards it.
+    for interrupted in [
+        output / "checkpoints" / "update-000004.incomplete",
+        output / "x.incomplete",
+    ]:
+        interrupted.mkdir()
+        AcceleratorState._reset_state(True)
+        monkeypatch.setattr("sys.argv", [*arguments, "--max-updates=5", "--resume"])
+        with pytest.raises(FileExistsError, match="interrupted save"):
+            train.main()
+        interrupted.rmdir()
+
+    # An explicit zero budget is an error, not a full pass.
+    AcceleratorState._reset_state(True)
+    monkeypatch.setattr("sys.argv", [*arguments, "--total-targets=0", "--max-updates=1"])
+    with pytest.raises(ValueError, match="endpoint"):
+        train.main()
+
+    monkeypatch.setattr(train.cuda, "is_available", lambda: False)
+    with pytest.raises(RuntimeError, match="no CUDA device"):
         train.main()

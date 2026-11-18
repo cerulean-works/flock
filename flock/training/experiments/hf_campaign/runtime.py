@@ -173,9 +173,14 @@ class Experiment:
 
     def export(self, destination: Path, tokenizer: PreTrainedTokenizerBase) -> None:
         """Write an HF model, its tokenizer and an `experiment.json` card for evaluation."""
-        destination.mkdir(parents=True, exist_ok=False)
-        self.accelerator.unwrap_model(self.model).save_pretrained(destination)
-        tokenizer.save_pretrained(destination)
+        # Written aside and renamed, so an export directory is always complete.
+        temporary = destination.with_name(destination.name + ".incomplete")
+        temporary.mkdir(parents=True, exist_ok=False)
+        if destination.exists():
+            temporary.rmdir()
+            raise FileExistsError(destination)
+        self.accelerator.unwrap_model(self.model).save_pretrained(temporary)
+        tokenizer.save_pretrained(temporary)
         # The card says what trained these weights, including whether the data was provisional.
         card = {
             "provisional": self.source.get("provisional", False),
@@ -183,9 +188,10 @@ class Experiment:
             "updates": self.updates,
             "targets": self.targets,
         }
-        (destination / "experiment.json").write_text(
+        (temporary / "experiment.json").write_text(
             json.dumps(card | self.description, indent=2, sort_keys=True)
         )
+        temporary.rename(destination)
 
 
 class CpuExperiment(Experiment):
@@ -236,6 +242,9 @@ class CpuExperiment(Experiment):
         """Apply one exact global allocation, one block per micro-batch."""
         if tc_targets < 0 or tc_targets != en_targets or tc_targets == 0:
             raise ValueError("each synthetic update requires equal positive TC and EN targets")
+        # Checked before any block is read: an oversized allocation must not consume the stream.
+        if self.targets + tc_targets + en_targets > self.total_targets:
+            raise ValueError("update would overshoot the target endpoint")
         # Producer state may have advanced through prefetch; only committed input is authoritative.
         self.stream.load_state_dict(self.committed)
         try:
