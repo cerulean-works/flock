@@ -34,6 +34,7 @@ A task is a [`~eval.tasks.MultipleChoiceTask`] or a [`~eval.tasks.PerplexityTask
 | `mt_mbpp_<language>` | [Multilingual MBPP](https://huggingface.co/datasets/allenai/multilingual_mbpp), one of 17 languages | `test` | 500 each | 3, from `prompt` | `bpb` of the code |
 | `tmmluplus_<subject>` (66) | [TMMLU+](https://huggingface.co/datasets/ikala/tmmluplus) v1.1, in Traditional Chinese | `test` | 19646 in all, 85 to 989 per subject | the subject's dev rows in file order: 5, or 3 or 4 for twelve subjects, and one fewer for the 14 test docs that repeat a dev row's question and answer | `acc_per_char` |
 | `tw_mock_exams_<subject>` (10) | Taiwanese senior-high mock exams for 學測 and 指考 (internal, private dataset), in Traditional Chinese, and English for 英文. The set is internal because Taiwan's Copyright Act art. 9 exempts exams held under law (official and school papers) but not publisher practice tests, and quoted passages keep their own copyright. | `test`, single-answer items answerable from the text | 18912 in all, 571 to 3713 per subject | the subject's 5 `dev` rows, its shortest self-contained items | `acc_per_char` |
+| `tc_edu_<subject>` (9) | Taiwanese junior-high (8 subjects) and senior-high Chinese questions from publishers' question banks (internal, private dataset), in Traditional Chinese, and English for `jh_english`. Internal because most items are publishers' copyrighted teaching material. | `test`, 1,000 single-answer items per subject, each read and passed before the set was frozen | 9000 in all, 1000 per subject | the subject's 5 shortest self-contained `dev` items | `acc_per_char` |
 | `drcd_bpb` | [DRCD](https://huggingface.co/datasets/cerulean-works/drcd), in Traditional Chinese | `test` | 3493 | 1 from `validation`, `1172-3-2` | `bpb` of the first gold answer |
 | `ceval_<subject>` (52) | [C-Eval](https://huggingface.co/datasets/ceval/ceval-exam), in Simplified Chinese | `test` | 12341 in all, 108 to 497 per subject | the subject's 5 `dev` rows in file order, one fewer for the one test doc that repeats a dev row's question and answer | `acc_per_char` |
 | `cmmlu_<subject>` (67) | [CMMLU](https://huggingface.co/datasets/haonan-li/cmmlu) v1.0.1 (private mirror), in Simplified Chinese | `test` | 11581 in all, 105 to 411 per subject | the subject's 5 `dev` rows in file order, one fewer for the one test doc that repeats a dev row's question and answer | `acc_per_char` |
@@ -103,6 +104,10 @@ A suite's score is the unweighted mean of its members' scores, as OLMES's `macro
 | `tw_mock_exams` | the 10 `tw_mock_exams_<subject>` tasks | each task's primary metric (`acc_per_char`) | none |
 | `tw_mock_exams:bpb` | the 10 `tw_mock_exams_<subject>` tasks | `bpb` | none |
 | `tw_mock_exams:all` | `tw_mock_exams`, `tw_mock_exams:bpb` | unscored | none |
+| `tc_edu` | the 9 `tc_edu_<subject>` tasks | each task's primary metric (`acc_per_char`) | none |
+| `tc_edu:jh` | the 8 junior-high `tc_edu_jh_<subject>` tasks | each task's primary metric (`acc_per_char`) | none |
+| `tc_edu:bpb`, `tc_edu:jh:bpb` | the same tasks | `bpb` | none |
+| `tc_edu:all` | `tc_edu`, `tc_edu:jh`, `tc_edu:bpb`, `tc_edu:jh:bpb` | unscored | none |
 | `zh_tw` | `tmmluplus`, `tw_mock_exams` | each member suite's score | none |
 | `zh_tw:bpb` | `tmmluplus:bpb`, `drcd_bpb`, `tw_mock_exams:bpb` | `bpb` | none |
 | `ceval`, `cmmlu` | the benchmark's subject tasks | each task's primary metric (`acc_per_char`) | none |
