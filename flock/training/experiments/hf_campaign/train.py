@@ -41,6 +41,9 @@ def main() -> None:
         "--resume", action="store_true", help="Continue from the latest checkpoint."
     )
     args = parser.parse_args()
+    # Every update number is a multiple of a negative interval: it would save at every update.
+    if args.checkpoint_every is not None and args.checkpoint_every < 1:
+        parser.error("--checkpoint-every must be positive")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_REPO, revision=MODEL_REVISION)
     # The fingerprint in the mix contract needs the fast backend, which the pinned repo ships.
     assert isinstance(tokenizer, PreTrainedTokenizerFast)

@@ -18,12 +18,18 @@ from .stream import Block, TargetStream
 
 
 def publish(temporary: Path, destination: Path) -> None:
-    """Rename a fully written file or directory into place durably: its contents, then the rename."""
-    descriptor = os.open(temporary, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
+    """Rename a written file or directory into place durably: its whole tree, then the rename."""
+    # Every file and directory entry reaches the disk before the rename, so the final name never
+    # shows a partial tree after a node crash.
+    paths = [temporary]
+    if temporary.is_dir():
+        paths = [*temporary.rglob("*"), temporary]
+    for path in paths:
+        descriptor = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
     temporary.rename(destination)
     descriptor = os.open(destination.parent, os.O_RDONLY)
     try:
@@ -159,13 +165,10 @@ class Experiment:
                 # Streamed: the 190M optimizer state alone is about 2 GB.
                 with path.open("rb") as handle:
                     hashes[path.name] = hashlib.file_digest(handle, "sha256").hexdigest()
-                    os.fsync(handle.fileno())
         manifest = temporary / "COMMITTED.json"
         manifest.write_text(
             json.dumps({"files": hashes, "contract": self.contract}, sort_keys=True)
         )
-        with manifest.open("rb") as handle:
-            os.fsync(handle.fileno())
         publish(temporary, destination)
 
     def resume(self, checkpoint: Path) -> None:
@@ -201,15 +204,8 @@ class Experiment:
         (temporary / "experiment.json").write_text(
             json.dumps(card | self.description, indent=2, sort_keys=True)
         )
-        # A resume at the stop point skips an existing export, so it must survive a node crash.
-        # A tokenizer can write subdirectories (named chat templates), so every file and every
-        # directory entry in the tree; publish then syncs the root.
-        for path in temporary.rglob("*"):
-            descriptor = os.open(path, os.O_RDONLY)
-            try:
-                os.fsync(descriptor)
-            finally:
-                os.close(descriptor)
+        # A resume at the stop point skips an existing export, so it must survive a node crash;
+        # publish syncs the whole tree, including a tokenizer's subdirectories.
         publish(temporary, destination)
 
 

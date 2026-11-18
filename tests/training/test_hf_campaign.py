@@ -658,6 +658,12 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
     with pytest.raises(ValueError, match="precedes the committed update 3"):
         train.main()
 
+    # A negative interval would save every update; it stops before anything is written.
+    AcceleratorState._reset_state(True)
+    monkeypatch.setattr("sys.argv", [*arguments, "--checkpoint-every=-1", "--resume"])
+    with pytest.raises(SystemExit):
+        train.main()
+
     # An explicit zero budget is an error, not a full pass.
     AcceleratorState._reset_state(True)
     monkeypatch.setattr("sys.argv", [*arguments, "--total-targets=0", "--max-updates=1"])
