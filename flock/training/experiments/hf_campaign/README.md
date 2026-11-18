@@ -48,7 +48,7 @@ A row is 4096 targets, OLMo 2's context. `--rows-per-update` sets the batch; the
 
 The model trains in BF16 autocast with FP32 weights and optimizer state, and the loss is computed on FP32 logits. Attention is PyTorch SDPA pinned to its flash kernel: packed rows need no mask, and the pin turns a silent fallback to a slower kernel into an error. The seed sets the initialization only; the data order is the mix's. The seed is part of the run's contract, so a resume must pass the same `--seed`. The launcher refuses to start without a CUDA device rather than train on the CPU, and the run record and summary name the device Accelerate selected (`ACCELERATE_USE_CPU` would send it to the CPU even with a GPU visible). Accelerate's own gradient accumulation must stay at 1, since the loss is already divided by the update's targets.
 
-Checkpoints and the export are written beside their final name with an `.incomplete` suffix and renamed when complete. A resume refuses to start while any `.incomplete` directory is left, since a killed write needs inspection; a resume at the stop point finds the final checkpoint and export already written and summary already written and leaves them as they are.
+Checkpoints and the export are written beside their final name with an `.incomplete` suffix and renamed when complete. A resume refuses to start while any `.incomplete` directory is left, since a killed write needs inspection; a resume at the stop point finds the final checkpoint, export and summary already written and leaves them as they are.
 
 ## Next gate
 
