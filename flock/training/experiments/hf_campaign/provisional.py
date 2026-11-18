@@ -3,6 +3,7 @@ from pathlib import Path
 
 import lance
 import numpy as np
+import pyarrow as pa
 import torch
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizerFast
@@ -45,10 +46,12 @@ class ProvisionalMix(Dataset[torch.Tensor]):
         tokens = pinned.to_table(columns=["tokens"])
         counts = tokens["tokens"]
         # Every document holds at least its EOS; a zero or negative count would misplace documents.
+        if not pa.types.is_integer(counts.type):
+            raise ValueError(f"the mix's tokens column is {counts.type}, not integers")
         if len(counts) == 0 or counts.null_count or (counts.to_numpy() < 1).any():
             raise ValueError("every mix row needs a token count of at least 1 (its EOS)")
         # Stream position just past each document; the first token is context only.
-        self.ends = np.cumsum(counts.to_numpy())
+        self.ends = np.cumsum(counts.to_numpy(), dtype=np.int64)
         self.tokenizer = tokenizer
         self.window = window
         self.rows_per_update = rows_per_update

@@ -307,9 +307,15 @@ class GpuExperiment(Experiment):
             warmup_targets=warmup_targets,
         )
         self.micro_rows = micro_rows
+        self.update_shape = (mix.rows_per_update, mix.window + 1)
 
     def update(self, windows: torch.Tensor) -> float:
         """Apply the mix's update `self.updates` from its `[rows, window + 1]` token ids."""
+        # The update count is the data cursor, so an update is always one whole mix item.
+        if tuple(windows.shape) != self.update_shape:
+            raise ValueError(
+                f"an update is {self.update_shape} token ids, got {tuple(windows.shape)}"
+            )
         windows = windows.to(self.accelerator.device, non_blocking=True)
         # Packed rows are causal with no mask, so the flash kernel applies; pinning it turns a
         # silent fallback to another kernel into an error.

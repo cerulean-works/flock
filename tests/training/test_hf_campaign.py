@@ -434,6 +434,13 @@ def test_provisional_mix_rejects_rows_its_counts_or_hashes_contradict(tmp_path: 
         mix[2]
 
     # A leading zero count would otherwise be skipped by the offsets without being checked.
+    with pytest.raises(ValueError, match="not integers"):
+        ProvisionalMix(
+            write_mix(tmp_path / "float.lance", texts, tokens=[4.0, 3.0]),
+            word_tokenizer(),
+            window=2,
+            rows_per_update=1,
+        )
     for counts in [[0, 3], [5, -1]]:
         with pytest.raises(ValueError, match="at least 1"):
             ProvisionalMix(
@@ -504,6 +511,9 @@ def test_gpu_runtime_resumes_to_the_same_next_update_on_cpu(
         torch.testing.assert_close(value, expected[key], rtol=0, atol=0)
     with pytest.raises(ValueError, match="overshoot"):
         restored.update(mix[0])
+    # Part of an item would leave the update count, the data cursor, past rows never trained.
+    with pytest.raises(ValueError, match="an update is"):
+        build(17).update(mix[0][:1])
 
     with pytest.raises(ValueError, match="whole updates"):
         GpuExperiment(
@@ -550,6 +560,12 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
         "--checkpoint-every=1",
         "--workers=0",
     ]
+    # A negative cap would otherwise export untrained weights as a finished run.
+    monkeypatch.setattr("sys.argv", [*arguments, "--max-updates=-1"])
+    with pytest.raises(ValueError, match="precedes the committed update 0"):
+        train.main()
+    assert not output.exists()
+    AcceleratorState._reset_state(True)
     monkeypatch.setattr("sys.argv", [*arguments, "--max-updates=2"])
     train.main()
     AcceleratorState._reset_state(True)
@@ -605,6 +621,12 @@ def test_cli_trains_resumes_and_marks_every_output_provisional(
         with pytest.raises(FileExistsError, match="interrupted save"):
             train.main()
         interrupted.rmdir()
+
+    # A stop before the committed update is an error, not a report of success.
+    AcceleratorState._reset_state(True)
+    monkeypatch.setattr("sys.argv", [*arguments, "--max-updates=2", "--resume"])
+    with pytest.raises(ValueError, match="precedes the committed update 3"):
+        train.main()
 
     # An explicit zero budget is an error, not a full pass.
     AcceleratorState._reset_state(True)

@@ -78,7 +78,14 @@ def main() -> None:
         if latest is None:
             raise FileNotFoundError(f"no committed checkpoint in {checkpoints}")
         experiment.resume(latest)
-    else:
+    stop = experiment.total_targets // mix.targets_per_update
+    if args.max_updates is not None:
+        stop = min(stop, args.max_updates)
+    if stop < experiment.updates:
+        raise ValueError(
+            f"stop at update {stop} precedes the committed update {experiment.updates}"
+        )
+    if not args.resume:
         args.output_dir.mkdir(parents=True, exist_ok=False)
     # Every attempt gets its own record; two resumed from one checkpoint share a segment.
     attempt = len(list(args.output_dir.glob("run-*.json")))
@@ -98,9 +105,6 @@ def main() -> None:
     # A resumed segment logs the update it started from, so a replayed update is told apart.
     segment = experiment.updates
     segment_start_targets = experiment.targets
-    stop = experiment.total_targets // mix.targets_per_update
-    if args.max_updates is not None:
-        stop = min(stop, args.max_updates)
     # Item u of the mix is update u, so the sampler starts at the committed update and spawned
     # workers can prefetch without any producer state to roll back.
     loader = DataLoader(
