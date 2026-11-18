@@ -50,6 +50,8 @@ The model trains in BF16 autocast with FP32 weights and optimizer state, and the
 
 Checkpoints and the export are written beside their final name with an `.incomplete` suffix and renamed when complete. A run directory has one writer at a time: nothing locks it, since `flock()` locks are not shared between nodes on the cluster's file system and a lock directory would outlive every crash. A resume refuses to start while any `.incomplete` file or directory is left, since a killed write needs inspection; a resume at the stop point finds the final checkpoint, export and summary already written and leaves them as they are.
 
+To score an export, name it by its run: `flock eval run --model <export dir>@<first 40 hex of the contract in its experiment.json>`. `flock.eval` takes a 40-hex revision as pinned, and the contract (model, optimizer, schedule, seed, mix and its version) identifies the run. This naming is for provisional runs only, whose every record says `provisional: true`; before an admitted or reported run relies on a local export, `flock.eval` must identify it by a digest of its weights.
+
 ## Next gate
 
 No production launcher, corpus materializer, distributed worker plan or FA3 dispatch is released here. Beyond one GPU at proxy size, these remain separate validation work: full-model memory, BF16/FA3 backward and causal checks, same-node throughput, distributed global-loss normalization, crash/durability tests on cluster storage and exact rank ownership. Pin the actual FA3 implementation and environment before GPU validation. Do not transplant historical throughput or budgets into this HF stack. The full 200B campaign needs its own data, metric, storage and compute release.
