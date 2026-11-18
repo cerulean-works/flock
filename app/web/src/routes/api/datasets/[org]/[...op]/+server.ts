@@ -1,6 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { relayDatasets, withDetails } from '#lib/server/datasets.ts';
-import type { DatasetFolder } from '#lib/types.ts';
+import { relayDatasets } from '#lib/server/datasets.ts';
 import type { RequestHandler } from './$types';
 
 /** The dataset routes the browser may reach through here (D94). */
@@ -14,14 +13,7 @@ const ROUTES =
 const relay: RequestHandler = async ({ params, request }) => {
 	if (!ROUTES.test(params.op)) error(404, 'Not found');
 	const op = params.op.split('/').map(encodeURIComponent).join('/');
-	const res = await relayDatasets(params.org, op, request);
-	// A folder's later pages get the sizes and versions its first page had, unless only its
-	// folders are wanted (`details=0`, the Move dialog's folder picker).
-	const details = new URL(request.url).searchParams.get('details') !== '0';
-	if (op !== 'at' || request.method !== 'GET' || !res.ok || !details) return res;
-	const at = (await res.json()) as DatasetFolder | { kind: 'dataset' };
-	if (at.kind !== 'folder') return Response.json(at, { headers: res.headers });
-	return Response.json(await withDetails(params.org, at), { headers: res.headers });
+	return relayDatasets(params.org, op, request);
 };
 
 export const GET = relay;

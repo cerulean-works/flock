@@ -111,6 +111,20 @@ def manifest_version(key: str) -> int | None:
     return None
 
 
+def listed_version(found: tuple[ListedObject] | tuple[()] | None) -> Version | None:
+    """The version of a ``Datasets.latest`` answer's newest manifest, with its ETag and time,
+    when it uses Lance's default naming (None for the older one)."""
+    number = newest(found)
+    if not found or number is None:
+        return None
+    return Version(number, found[0].etag.strip('"'), found[0].last_modified)
+
+
+def data_size(fragments: Iterable[Any]) -> int:
+    """Bytes of a version's data files (deletion files and indices aren't counted)."""
+    return sum(f.file_size_bytes or 0 for fragment in fragments for f in fragment.metadata.files)
+
+
 def dataset_folders(keys: Iterable[str], prefix: str) -> list[str]:
     """Every dataset folder relative to ``prefix``, including nested datasets (D156)."""
     found: set[str] = set()
@@ -383,6 +397,7 @@ class Datasets:
     VERSION_PAGE: ClassVar[int] = 50
     README_BYTES: ClassVar[int] = MIB
     CACHE: ClassVar[int] = 32  # opened datasets (D94)
+    SIZES: ClassVar[int] = 4096  # data sizes for folder listings, by manifest ETag (D87)
     COPY_AT_ONCE: ClassVar[int] = 16
     MOVE_OBJECTS: ClassVar[int] = 10_000  # a delete's or rename's limits (D93, D95)
     MOVE_BYTES: ClassVar[int] = 100 * GIB
@@ -398,6 +413,7 @@ class Datasets:
         self.settings = store.settings
         self._cache: OrderedDict[tuple[str, str, int, str], Any] = OrderedDict()
         self._cache_lock = threading.Lock()
+        self._sizes: OrderedDict[tuple[str, str, int, str], int] = OrderedDict()
         self._trash_ready = False
         self._tasks: set[asyncio.Task] = set()
 
@@ -425,6 +441,7 @@ class Datasets:
         self._tasks.clear()
         with self._cache_lock:
             self._cache.clear()
+            self._sizes.clear()
 
     def _spawn(self, coro: Awaitable[Any]) -> None:
         async def run() -> None:
@@ -530,12 +547,13 @@ class Datasets:
         """Drop cached versions of ``path`` and of any dataset under it (after it was deleted or
         renamed)."""
         with self._cache_lock:
-            for key in [
-                k
-                for k in self._cache
-                if k[0] == bucket and (k[1] == path or k[1].startswith(f"{path}/"))
-            ]:
-                del self._cache[key]
+            for cache in (self._cache, self._sizes):
+                for key in [
+                    k
+                    for k in cache
+                    if k[0] == bucket and (k[1] == path or k[1].startswith(f"{path}/"))
+                ]:
+                    del cache[key]
 
     @staticmethod
     async def _lance[T](call: Callable[[], T]) -> T:
@@ -586,11 +604,8 @@ class Datasets:
             found = await self.latest(bucket, path)
             if found is None:
                 raise NotFound(f"dataset {path} not found")
-            if found and V2_MANIFEST.fullmatch(found[0].key.rpartition("/")[2]):
-                first = found[0]
-                return Version(
-                    manifest_version(first.key) or 0, first.etag.strip('"'), first.last_modified
-                )
+            if listed := listed_version(found):
+                return listed
             # The older naming: ask Lance which version is the latest.
             import lance
 
@@ -624,8 +639,57 @@ class Datasets:
 
     # ------------------------------------------------------------------ folders (D87)
 
-    async def at(self, org: Org, path: str, cursor: str | None) -> dict[str, Any]:
-        """A folder's listing, one level, or ``{kind: "dataset"}`` when ``path`` is one."""
+    async def _size(self, bucket: str, path: str, version: Version) -> int:
+        """The data size of ``path`` at ``version``, cached by the manifest's ETag, so it never
+        goes stale. A miss opens the dataset outside ``_open``'s cache, which folder listings
+        would otherwise churn through."""
+        key = (bucket, path, version.number, version.etag)
+        with self._cache_lock:
+            if key in self._sizes:
+                self._sizes.move_to_end(key)
+                return self._sizes[key]
+        import lance
+
+        uri, options = self.uri(bucket, path), self.storage_options()
+        size = await self._lance(
+            lambda: data_size(
+                lance.dataset(uri, version=version.number, storage_options=options).get_fragments()
+            )
+        )
+        with self._cache_lock:
+            self._sizes[key] = size
+            while len(self._sizes) > self.SIZES:
+                self._sizes.popitem(last=False)
+        return size
+
+    async def _details(
+        self, bucket: str, datasets: list[tuple[dict[str, Any], tuple[ListedObject] | tuple[()]]]
+    ) -> None:
+        """Each dataset's ``size``, and its ``version`` when the listing can't tell it (the
+        older naming), filled in place. One that can't be read keeps ``size: None``."""
+        limit = asyncio.Semaphore(self.DETECT_AT_ONCE)
+
+        async def fill(entry: dict[str, Any], found: tuple[ListedObject] | tuple[()]) -> None:
+            entry["size"] = None
+            async with limit:
+                try:
+                    version = listed_version(found) or await self.resolve(
+                        bucket, entry["path"], None
+                    )
+                    entry["version"] = version.number
+                    entry["size"] = await self._size(bucket, entry["path"], version)
+                except NotFound, BadGateway, Invalid, Conflict:
+                    log.warning(
+                        "no size for dataset %s in %s", entry["path"], bucket, exc_info=True
+                    )
+
+        await asyncio.gather(*(fill(entry, found) for entry, found in datasets))
+
+    async def at(
+        self, org: Org, path: str, cursor: str | None, details: bool = False
+    ) -> dict[str, Any]:
+        """A folder's listing, one level, or ``{kind: "dataset"}`` when ``path`` is one. With
+        ``details``, each dataset also has its data size and always its version."""
         bucket = await self.bucket(org, ensure=True)
         name = bucket.upstream_name
         if path:
@@ -656,20 +720,24 @@ class Datasets:
                 return await self.latest(name, folder.removesuffix("/"))
 
         detected = await asyncio.gather(*(detect(f) for f in listing.prefixes))
-        datasets, folders = [], []
+        datasets: list[dict[str, Any]] = []
+        folders: list[dict[str, Any]] = []
+        manifests: list[tuple[dict[str, Any], tuple[ListedObject] | tuple[()]]] = []
         for folder, found in zip(listing.prefixes, detected, strict=True):
             sub = folder.removesuffix("/")
             entry = {"name": sub.rpartition("/")[2], "path": sub}
             if found is None:
                 folders.append(entry)
                 continue
-            datasets.append(
-                {
-                    **entry,
-                    "version": newest(found),
-                    "updated_at": found[0].last_modified if found else None,
-                }
-            )
+            dataset = {
+                **entry,
+                "version": newest(found),
+                "updated_at": found[0].last_modified if found else None,
+            }
+            datasets.append(dataset)
+            manifests.append((dataset, found))
+        if details:
+            await self._details(name, manifests)
         files = [
             {
                 "name": o.key.rpartition("/")[2],
@@ -706,9 +774,6 @@ class Datasets:
             ds = self._open(name, path, resolved)
             schema = ds.schema
             fragments = ds.get_fragments()
-            size = sum(
-                f.file_size_bytes or 0 for fragment in fragments for f in fragment.metadata.files
-            )
             tags = sorted(
                 ({"name": tag, "version": info["version"]} for tag, info in ds.tags.list().items()),
                 key=lambda t: (-t["version"], t["name"]),
@@ -722,7 +787,7 @@ class Datasets:
                 "rows": ds.count_rows(),
                 "columns": len(schema),
                 "fragments": len(fragments),
-                "data_size": size,
+                "data_size": data_size(fragments),
                 "schema": [field_tree(field) for field in schema],
                 "metadata": decoded(schema.metadata),
                 "binary": any(has_binary(f.type) and not is_blob(f) for f in schema),

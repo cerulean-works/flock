@@ -200,7 +200,7 @@ describe('MoveDatasetsDialog', () => {
 			}
 		];
 		const calls = serve({
-			'/api/datasets/acme/at?path=eval&': () => ({
+			'/api/datasets/acme/at?path=eval': () => ({
 				...folder(),
 				folders: [
 					{ name: 'deep', path: 'eval/deep' },
@@ -221,7 +221,7 @@ describe('MoveDatasetsDialog', () => {
 		const picker = screen.getByRole('group', { name: 'Folders' });
 		await expect.element(picker.getByRole('button', { name: 'old/' })).toBeVisible();
 		await expect.element(picker.getByRole('button', { name: 'deep/' })).not.toBeInTheDocument();
-		expect(calls[0].url).toBe('/api/datasets/acme/at?path=eval&details=0');
+		expect(calls[0].url).toBe('/api/datasets/acme/at?path=eval');
 		await picker.getByRole('button', { name: 'old/' }).click();
 		await expect.element(to).toHaveValue('eval/old');
 		await expect.element(picker.getByText('No folders here.')).toBeVisible();

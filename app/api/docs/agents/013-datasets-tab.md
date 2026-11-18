@@ -116,6 +116,11 @@ folder's path is the dataset's name, such as `eval/mmlu`. Folders nest to any de
   paths, `u64::MAX - version`) sorts newest first, so that one key gives the latest version
   and its time with no extra call. A dataset written with the older naming (`{version}.manifest`)
   still counts as a dataset, but the listing shows its version as unknown.
+- **Sizes.** With `details`, which the Datasets tab asks for, each dataset also has `size`, its
+  data size as the dataset page shows it, and its version in either naming. The sizes are
+  cached by the manifest's ETag (up to 4,096), so they never go stale and a folder seen before
+  costs no more calls. A miss opens the dataset at its latest version. One that can't be read
+  keeps a null size, and the listing still loads.
 - **Paging.** 100 entries per page with "Load more", driven by S3's continuation token, so one
   page costs at most 101 LIST calls.
 - **Inside a dataset** the browser doesn't descend. Its `data/`, `_versions/` and other internal
@@ -282,7 +287,7 @@ its delete is removed.
 
   | Route | Does |
   | --- | --- |
-  | `GET at?path&cursor` | a folder's listing (D87), or `{kind: "dataset", …}` when the path is a dataset |
+  | `GET at?path&cursor&details` | a folder's listing (D87), with each dataset's size when `details`, or `{kind: "dataset", …}` when the path is a dataset |
   | `GET info?path&version` | the header numbers, schema and details (D88, D91), with the resolved version |
   | `GET rows?path&version&offset&limit&columns` | one page of rendered cells (D90) |
   | `GET cell?path&version&row&column` | one full cell for an opened row, up to 1 MiB |
@@ -455,7 +460,8 @@ files and `docs/source/configuration.md`.
 - **Deletes outside the dataset page** (Storage, S3 clients) skip the trash (D93).
 - **Writers aren't told about renames.** A job writing to the old path makes a new dataset
   there (D95).
-- **No dataset sizes in the listing,** only in the dataset's header, for the same reason as D66.
+- **Dataset sizes in the listing** come with `details` (D87), cached by manifest ETag. A
+  folder seen for the first time opens each of its datasets once, and later visits hit the cache.
 
 ## 5. Settled before review
 

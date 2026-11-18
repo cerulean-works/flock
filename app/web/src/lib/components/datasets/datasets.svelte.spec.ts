@@ -94,7 +94,7 @@ describe('FolderView', () => {
 		);
 		await screen.getByRole('button', { name: 'Load more' }).click();
 		await vi.waitFor(() => expect(names()).toEqual(['mmlu', 'old', 'deep/', 'notes.md']));
-		expect(calls[0].url).toBe('/api/datasets/acme/at?path=eval&cursor=next');
+		expect(calls[0].url).toBe('/api/datasets/acme/at?path=eval&cursor=next&details=true');
 		await expect.element(screen.getByText('Unknown')).toBeInTheDocument();
 		await expect.element(screen.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 		// A folder isn't a dataset: no S3 path to copy, and no file browser link.
