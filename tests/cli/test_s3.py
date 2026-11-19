@@ -50,8 +50,21 @@ def signed_in(flock: S3Flock, alice: User) -> str:
     return token
 
 
+# How long the native Lance profiles' keys live. Short so their expiry is quick to exercise,
+# but with room for a loaded CI runner between minting a key and the proxy checking it.
+NATIVE_TTL = 15
+
+
 def keys_of(flock: S3Flock, alice: User) -> list[dict]:
     return alice.api.get("/api/v1/me/s3-keys").json()["keys"]
+
+
+def sleep_past_short_keys(flock: S3Flock, alice: User) -> list[dict]:
+    """Wait until every read-only key alice has now has expired, and return those keys."""
+    short = [key for key in keys_of(flock, alice) if key["read_only"]]
+    assert short
+    time.sleep(max(max(key["expires_at"] for key in short) - time.time() + 0.05, 0))
+    return short
 
 
 @pytest.fixture(params=["cli", "python"])
@@ -83,7 +96,7 @@ def native_lance_profile(
                     "ALLOW_HTTP": "false",
                 }
             )
-            s3.get_process(org="flock", host=flock.url, token=signed_in, ttl=3, read_only=True)
+            s3.get_process(org="flock", host=flock.url, token=signed_in, ttl=NATIVE_TTL, read_only=True)
         else:
             _configure_native_lance_profile(flock, flock_cli, tmp_path, monkeypatch)
         yield
@@ -123,7 +136,7 @@ def _configure_native_lance_profile(
     # Shorten only this test profile's keys so the real expiry path is quick to exercise.
     config.write_text(
         "\n".join(
-            f"{line} --ttl 3s" if line.startswith("credential_process = ") else line
+            f"{line} --ttl {NATIVE_TTL}s" if line.startswith("credential_process = ") else line
             for line in config.read_text().splitlines()
         )
         + "\n"
@@ -432,11 +445,8 @@ def test_lance_native_profile_renews_after_expiry(
     )
     dataset = lance.dataset(uri, version=2)
     assert dataset.take([0]).to_pylist() == [{"text": "first"}]
-    before_keys = keys_of(flock, alice)
-    before = {key["access_key_id"] for key in before_keys}
-    short = [key for key in before_keys if key["read_only"]]
-    assert short
-    time.sleep(max(key["expires_at"] for key in short) - time.time() + 0.05)
+    before = {key["access_key_id"] for key in keys_of(flock, alice)}
+    short = sleep_past_short_keys(flock, alice)
 
     # Read another fragment through the same open dataset, after the proxy key expires.
     assert dataset.take([1]).to_pylist() == [{"text": "second"}]
@@ -476,7 +486,7 @@ def test_spawned_lance_worker_renews_native_profile_between_epochs(
         assert [text for batch in iterator for text in batch["text"]] == ["first", "second"]
         before = {key["access_key_id"] for key in keys_of(flock, alice)}
         # Only the writer's long-lived key survives this delay.
-        time.sleep(3.05)
+        sleep_past_short_keys(flock, alice)
         assert [text for batch in loader for text in batch["text"]] == ["first", "second"]
         after = {key["access_key_id"] for key in keys_of(flock, alice)}
         assert after - before
