@@ -50,4 +50,6 @@ A Hugging Face id whose repo is an existing folder is refused, with the `local:`
 
 - Hashing reads every file twice more, before and after loading. One hash of a 190M export (1.07 GB) took under 30 seconds on a login node, imports included; the second mostly reads from the page cache.
 - An export kept on another disk through a link must be copied into a real folder to be scored.
+- The digest guards an export against accidental change, not against a folder built to mislead it. Transformers has more ways for a hand-written config to name a file outside the folder than the two checked here: a differently named weights index chosen by `transformers_weights`, or a tokenizer's `gguf_file`. `save_pretrained` writes neither, and neither is checked.
+- The folder is read three times: hashed, loaded, hashed again. A file swapped out during the load and restored before the second hash would be scored unnoticed. Loading from a private copy verified against the digest would close it, at the cost of copying every export.
 - Results written before this stage with a folder as `repo@revision` keep that id and a `null` digest. They compare with neither a rerun under the new id nor each other's folders unless the paths match.
