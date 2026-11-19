@@ -4,14 +4,14 @@ from torch.nn import functional as F
 
 from flock.training.core.attention import (
     VarlenMetadata,
-    prepare_flash_attention_mask,
     prepare_sdpa_mask,
+    prepare_varlen_metadata,
     sdpa_attention,
 )
 from flock.training.core.attention.registry import _MaskPreparationFunction
 
 
-@pytest.mark.parametrize("prepare", [prepare_sdpa_mask, prepare_flash_attention_mask])
+@pytest.mark.parametrize("prepare", [prepare_sdpa_mask, prepare_varlen_metadata])
 @pytest.mark.parametrize("is_causal", [False, True])
 @pytest.mark.parametrize("mask", [None, torch.ones(2, 4, dtype=torch.bool)])
 def test_unpadded_masks_use_the_causal_flag(
@@ -25,7 +25,7 @@ def test_unpadded_masks_use_the_causal_flag(
     torch.testing.assert_close(actual, expected)
 
 
-@pytest.mark.parametrize("prepare", [prepare_sdpa_mask, prepare_flash_attention_mask])
+@pytest.mark.parametrize("prepare", [prepare_sdpa_mask, prepare_varlen_metadata])
 @pytest.mark.parametrize(
     "mask",
     [torch.ones(2, 4), torch.ones(2, 1, 4, 4, dtype=torch.bool), torch.ones(4, dtype=torch.bool)],
@@ -69,11 +69,11 @@ def test_sdpa_preparation_preserves_query_visibility_and_gradients(is_causal: bo
 
 @pytest.mark.parametrize("is_causal", [False, True])
 @pytest.mark.parametrize("empty", [False, True])
-def test_flash_preparation_builds_packing_metadata(is_causal: bool, empty: bool) -> None:
+def test_varlen_preparation_builds_packing_metadata(is_causal: bool, empty: bool) -> None:
     mask = torch.tensor([[False, True, True, False], [False] * 4])
     if empty:
         mask.fill_(False)
-    prepared = prepare_flash_attention_mask(mask, is_causal=is_causal)
+    prepared = prepare_varlen_metadata(mask, is_causal=is_causal)
     assert isinstance(prepared, VarlenMetadata)
     expected_indices = torch.tensor([] if empty else [1, 2], dtype=torch.int64)
     expected_cu_seq_lens = torch.tensor([0] if empty else [0, 2], dtype=torch.int32)

@@ -15,7 +15,7 @@ from torch.nn import functional as F
 from flock.training.core.attention import (
     VarlenMetadata,
     flash_attention_3,
-    prepare_flash_attention_mask,
+    prepare_varlen_metadata,
     sdpa_attention,
 )
 from flock.training.core.models.olmo2 import Olmo2, Olmo2Config
@@ -96,7 +96,7 @@ def test_padding_adapter_outputs_and_gradients(
     if is_causal:
         dense_mask = dense_mask & torch.ones(5, 5, dtype=torch.bool).tril()
 
-    attention_metadata = prepare_flash_attention_mask(mask, is_causal=is_causal)
+    attention_metadata = prepare_varlen_metadata(mask, is_causal=is_causal)
     actual = flash_attention_3(*inputs, attention_metadata=attention_metadata, is_causal=is_causal)
     with attention.sdpa_kernel(attention.SDPBackend.MATH):
         expected = sdpa_attention(*reference_inputs, attention_metadata=dense_mask)
@@ -283,7 +283,7 @@ def test_model_rejects_noncontiguous_padding_before_decoder_layers(
 
 
 def _prepared(rows: list[list[bool]]) -> VarlenMetadata:
-    prepared = prepare_flash_attention_mask(torch.tensor(rows), is_causal=True)
+    prepared = prepare_varlen_metadata(torch.tensor(rows), is_causal=True)
     assert prepared is not None
     return prepared
 
@@ -332,7 +332,7 @@ def test_fa3_requires_metadata_on_qs_device(field: str) -> None:
 )
 def test_preparer_rejects_unsupported_padding(mask: torch.Tensor, message: str) -> None:
     with pytest.raises(ValueError, match=message):
-        prepare_flash_attention_mask(mask, is_causal=True)
+        prepare_varlen_metadata(mask, is_causal=True)
 
 
 def test_rejects_non_square_attention() -> None:

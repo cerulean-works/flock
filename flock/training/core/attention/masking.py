@@ -35,10 +35,10 @@ def prepare_sdpa_mask(padding_mask: torch.Tensor | None, *, is_causal: bool) -> 
     return mask
 
 
-def prepare_flash_attention_mask(
+def prepare_varlen_metadata(
     padding_mask: torch.Tensor | None, *, is_causal: bool
 ) -> VarlenMetadata | None:
-    """Return FA3's varlen metadata on the padding mask's device.
+    """Return `VarlenMetadata` for varlen backends such as FA3, on the padding mask's device.
 
     Prepare once per model forward and pass it to every layer. Return `None`
     when there is no padding; causality always stays in `is_causal`.
@@ -54,7 +54,7 @@ def prepare_flash_attention_mask(
 
     span_mask = (positions >= starts[:, None]) & (positions < stops[:, None])
     if not torch.equal(padding_mask, span_mask):
-        raise ValueError("FA3 padding masks must contain one contiguous token span per row")
+        raise ValueError("Varlen padding masks must contain one contiguous token span per row")
 
     # Build the metadata on CPU from the exclusive-stop spans, then copy it once.
     starts, stops = torch.stack((starts, stops), dim=-1).cpu().unbind(dim=1)

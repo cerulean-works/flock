@@ -401,7 +401,7 @@ calls it once per forward and passes the result to every layer unchanged.
 | Kind | Preparer | Read by |
 |---|---|---|
 | Dense mask (`torch.Tensor`) | `prepare_sdpa_mask` | `sdpa_attention` |
-| `VarlenMetadata` | `prepare_flash_attention_mask` | `flash_attention_3` |
+| `VarlenMetadata` | `prepare_varlen_metadata` | `flash_attention_3` |
 
 `None` means no padding. To support a new kind, add its type to
 `AttentionMetadata`; model code does not change.
@@ -409,7 +409,7 @@ calls it once per forward and passes the result to every layer unchanged.
 Direct callers of `flash_attention_3` prepare the padding mask first:
 
 ```python
-metadata = prepare_flash_attention_mask(padding_mask, is_causal=True)
+metadata = prepare_varlen_metadata(padding_mask, is_causal=True)
 output = flash_attention_3(q, k, v, attention_metadata=metadata, is_causal=True)
 ```
 

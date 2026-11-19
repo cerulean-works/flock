@@ -16,8 +16,8 @@ from flock.training.core.attention import (
     AttentionInterface,
     GroupedAttentionWithRoPE,
     flash_attention_3,
-    prepare_flash_attention_mask,
     prepare_sdpa_mask,
+    prepare_varlen_metadata,
     sdpa_attention,
 )
 from tests.training._reference import check_gqa_parity, check_swiglu_parity, hf_config
@@ -101,12 +101,10 @@ def test_registration_requires_an_explicit_preparer_even_when_replacing(
     with pytest.raises(ValueError, match="Unknown attention implementation 'custom'"):
         AttentionInterface.get_interface("custom")
 
-    AttentionInterface.register(
-        "custom", flash_attention_3, mask_preparer=prepare_flash_attention_mask
-    )
+    AttentionInterface.register("custom", flash_attention_3, mask_preparer=prepare_varlen_metadata)
     with pytest.raises(TypeError, match="mask_preparer"):
         AttentionInterface.register("custom", sdpa_attention)  # ty: ignore[missing-argument]
-    assert AttentionInterface.get_mask_preparer("custom") is prepare_flash_attention_mask
+    assert AttentionInterface.get_mask_preparer("custom") is prepare_varlen_metadata
     AttentionInterface.register("custom", sdpa_attention, mask_preparer=prepare_sdpa_mask)
     assert AttentionInterface.get_interface("custom") is sdpa_attention
     assert AttentionInterface.get_mask_preparer("custom") is prepare_sdpa_mask

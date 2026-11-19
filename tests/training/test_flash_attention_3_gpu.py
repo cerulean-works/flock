@@ -9,8 +9,8 @@ from torch.nn import attention
 
 from flock.training.core.attention import (
     flash_attention_3,
-    prepare_flash_attention_mask,
     prepare_sdpa_mask,
+    prepare_varlen_metadata,
     sdpa_attention,
 )
 from flock.training.core.models.olmo2 import Olmo2, Olmo2Config
@@ -43,7 +43,7 @@ def test_varlen_mixed_padding_outputs_and_gradients(
         for heads in (4, kv_heads, kv_heads)
     ]
     references = [tensor.detach().clone().requires_grad_() for tensor in inputs]
-    prepared = prepare_flash_attention_mask(mask, is_causal=is_causal)
+    prepared = prepare_varlen_metadata(mask, is_causal=is_causal)
     assert prepared is not None
     assert prepared.indices.device.type == "cuda"
     assert prepared.cu_seq_lens_q.device.type == "cuda"

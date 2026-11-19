@@ -62,7 +62,7 @@ def flash_attention_3(
         v (`torch.Tensor`):
             Values with the same shape as `k`.
         attention_metadata (`VarlenMetadata`, *optional*):
-            From `prepare_flash_attention_mask`, on Q's device. `None` means no padding.
+            From `prepare_varlen_metadata`, on Q's device. `None` means no padding.
         is_causal (`bool`, *optional*, defaults to `False`):
             Whether to prevent attention to future tokens.
 
@@ -103,7 +103,7 @@ def flash_attention_3(
     ):
         raise ValueError(
             "FA3 expects VarlenMetadata matching Q's batch size, sequence length and device; "
-            "call prepare_flash_attention_mask first"
+            "call prepare_varlen_metadata first"
         )
 
     with _fa3_context(q.device):
