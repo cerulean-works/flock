@@ -4,6 +4,8 @@ import hashlib
 import json
 import math
 import os
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +19,18 @@ from .provisional import ProvisionalMix
 from .stream import Block, TargetStream
 
 
-def publish(temporary: Path, destination: Path) -> None:
-    """Rename a written file or directory into place durably: its whole tree, then the rename."""
+@contextmanager
+def staged(destination: Path, *, directory: bool = False) -> Generator[Path]:
+    """Yield a name to write `destination` under, then rename it into place durably."""
+    temporary = destination.with_name(destination.name + ".incomplete")
+    if directory:
+        # mkdir is the single-writer lock. Incomplete saves require explicit inspection.
+        temporary.mkdir(parents=True, exist_ok=False)
+        if destination.exists():
+            temporary.rmdir()
+            raise FileExistsError(destination)
+    # A failed write leaves the `.incomplete` name, which a resume refuses until inspected.
+    yield temporary
     # Every file and directory entry reaches the disk before the rename, so the final name never
     # shows a partial tree after a node crash.
     paths = [temporary]
@@ -152,24 +164,18 @@ class Experiment:
 
     def checkpoint(self, destination: Path) -> None:
         """Commit a checksummed Accelerate checkpoint in a new immutable directory."""
-        temporary = destination.with_name(destination.name + ".incomplete")
-        # mkdir is the single-writer lock. Incomplete saves require explicit inspection.
-        temporary.mkdir(parents=True, exist_ok=False)
-        if destination.exists():
-            temporary.rmdir()
-            raise FileExistsError(destination)
-        self.accelerator.save_state(str(temporary))
-        hashes = {}
-        for path in sorted(temporary.iterdir()):
-            if path.is_file():
-                # Streamed: the 190M optimizer state alone is about 2 GB.
-                with path.open("rb") as handle:
-                    hashes[path.name] = hashlib.file_digest(handle, "sha256").hexdigest()
-        manifest = temporary / "COMMITTED.json"
-        manifest.write_text(
-            json.dumps({"files": hashes, "contract": self.contract}, sort_keys=True)
-        )
-        publish(temporary, destination)
+        with staged(destination, directory=True) as temporary:
+            self.accelerator.save_state(str(temporary))
+            hashes = {}
+            for path in sorted(temporary.iterdir()):
+                if path.is_file():
+                    # Streamed: the 190M optimizer state alone is about 2 GB.
+                    with path.open("rb") as handle:
+                        hashes[path.name] = hashlib.file_digest(handle, "sha256").hexdigest()
+            manifest = temporary / "COMMITTED.json"
+            manifest.write_text(
+                json.dumps({"files": hashes, "contract": self.contract}, sort_keys=True)
+            )
 
     def resume(self, checkpoint: Path) -> None:
         """Verify every checkpoint file before loading trusted local training state."""
@@ -186,27 +192,23 @@ class Experiment:
 
     def export(self, destination: Path, tokenizer: PreTrainedTokenizerBase) -> None:
         """Write an HF model, its tokenizer and an `experiment.json` card for evaluation."""
-        # Written aside and renamed, so an export directory is always complete.
-        temporary = destination.with_name(destination.name + ".incomplete")
-        temporary.mkdir(parents=True, exist_ok=False)
-        if destination.exists():
-            temporary.rmdir()
-            raise FileExistsError(destination)
-        self.accelerator.unwrap_model(self.model).save_pretrained(temporary)
-        tokenizer.save_pretrained(temporary)
-        # The card says what trained these weights, including whether the data was provisional.
-        card = {
-            "provisional": self.source.get("provisional", False),
-            "contract": self.contract,
-            "updates": self.updates,
-            "targets": self.targets,
-        }
-        (temporary / "experiment.json").write_text(
-            json.dumps(card | self.description, indent=2, sort_keys=True)
-        )
-        # A resume at the stop point skips an existing export, so it must survive a node crash;
-        # publish syncs the whole tree, including a tokenizer's subdirectories.
-        publish(temporary, destination)
+        # Written aside and renamed, so an export directory is always complete. A resume at the
+        # stop point skips an existing export, so it must survive a node crash: the whole tree is
+        # synced, including a tokenizer's subdirectories.
+        with staged(destination, directory=True) as temporary:
+            self.accelerator.unwrap_model(self.model).save_pretrained(temporary)
+            tokenizer.save_pretrained(temporary)
+            # The card says what trained these weights, including whether the data was
+            # provisional.
+            card = {
+                "provisional": self.source.get("provisional", False),
+                "contract": self.contract,
+                "updates": self.updates,
+                "targets": self.targets,
+            }
+            (temporary / "experiment.json").write_text(
+                json.dumps(card | self.description, indent=2, sort_keys=True)
+            )
 
 
 class CpuExperiment(Experiment):

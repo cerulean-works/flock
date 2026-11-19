@@ -16,7 +16,7 @@ from flock.training.experiments.proxy.olmo2_proxy import PROXY_SIZES
 
 from .config import MODEL_REPO, MODEL_REVISION, proxy_config
 from .provisional import ProvisionalMix
-from .runtime import GpuExperiment, publish
+from .runtime import GpuExperiment, staged
 
 
 def main() -> None:
@@ -108,15 +108,13 @@ def main() -> None:
         "device": str(experiment.accelerator.device),
     } | experiment.description
     # Renamed into place, so every record counted as an attempt is a complete one.
-    record = args.output_dir / f"run-{attempt:03d}.json"
-    temporary = record.with_name(record.name + ".incomplete")
-    temporary.write_text(json.dumps(run, indent=2, sort_keys=True))
-    # The log and checkpoint directory exist first, so syncing the run directory in publish
-    # also keeps their entries: a checkpoint never outlives the record that explains its log.
-    log_path = args.output_dir / "log.jsonl"
-    log_path.touch()
-    checkpoints.mkdir(exist_ok=True)
-    publish(temporary, record)
+    with staged(args.output_dir / f"run-{attempt:03d}.json") as temporary:
+        temporary.write_text(json.dumps(run, indent=2, sort_keys=True))
+        # The log and checkpoint directory exist first, so syncing the run directory on publishing
+        # also keeps their entries: a checkpoint never outlives the record that explains its log.
+        log_path = args.output_dir / "log.jsonl"
+        log_path.touch()
+        checkpoints.mkdir(exist_ok=True)
 
     # A resumed segment logs the update it started from, so a replayed update is told apart.
     segment = experiment.updates
@@ -187,9 +185,8 @@ def main() -> None:
     # Renamed into place, so an existing summary is a complete one.
     summary_path = args.output_dir / f"summary-{experiment.updates:06d}.json"
     if not summary_path.exists():
-        temporary = summary_path.with_name(summary_path.name + ".incomplete")
-        temporary.write_text(json.dumps(summary, indent=2, sort_keys=True))
-        publish(temporary, summary_path)
+        with staged(summary_path) as temporary:
+            temporary.write_text(json.dumps(summary, indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":
