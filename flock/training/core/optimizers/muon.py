@@ -1,7 +1,6 @@
-from collections.abc import Iterable
 from dataclasses import dataclass
 
-from torch import Tensor
+from torch import nn
 
 from .base import BaseOptimizer
 
@@ -15,12 +14,14 @@ class MuonConfig:
         momentum (`float`): Momentum coefficient.
 
     Constructing a `Trainer` with this configuration raises `NotImplementedError`.
+    Muon alone cannot update embeddings or normalization weights; use
+    `MuonAdamWConfig` to train with Muon.
     """
 
     lr: float
     momentum: float
 
 
-def muon(config: MuonConfig, params: Iterable[Tensor]) -> BaseOptimizer:
+def muon(config: MuonConfig, model: nn.Module) -> BaseOptimizer:
     """Reject Muon construction until its training implementation is available."""
     raise NotImplementedError("Muon support is not added yet")

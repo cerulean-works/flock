@@ -101,7 +101,22 @@ The optimizer config supplies the base rates; ratios scale each parameter group.
 Use `dataloader_num_workers=0` and `dataloader_prefetch_factor=None` to load in
 the training process. With workers, use a positive prefetch count or `None` for
 PyTorch's default. `TrainerConfig` rejects unknown fields and invalid intervals.
-AdamW is implemented; selecting `MuonConfig` raises `NotImplementedError`.
+AdamW and MuonAdamW are implemented. Selecting `MuonConfig` raises `NotImplementedError`.
+
+`MuonAdamWConfig` trains the weights of the network's inner linear layers with
+Muon and every other parameter with AdamW. Embeddings, the output projection,
+normalization weights and biases stay on AdamW, because Muon only updates
+matrices that are not embedding tables. Each optimizer has its own base rate, and
+the learning-rate schedule scales both by the same ratio.
+
+```python
+from flock.training import MuonAdamWConfig
+
+optimizer_config = MuonAdamWConfig(lr=3e-3, betas=(0.9, 0.95), muon_lr=0.02)
+```
+
+Set `muon_adjust_lr_fn="match_rms_adamw"` to scale Muon's updates to AdamW's
+typical size, which lets one learning rate suit both optimizers.
 See [Configuration](python-api#configuration) for all fields and defaults.
 
 With the recipe's `model`, `tokenizer` and `dataset` already constructed, run:

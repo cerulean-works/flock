@@ -34,7 +34,7 @@ from flock.training.core.distributed import DistributedRuntime
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRScheduleSegment, StepLRScheduler
 from flock.training.core.models import BaseModel
 from flock.training.core.models.olmo2 import Olmo2
-from flock.training.core.optimizers import AdamWConfig, OptimizerInterface
+from flock.training.core.optimizers import AdamWConfig, MuonAdamWConfig, OptimizerInterface
 from flock.training.core.trainer import Trainer, TrainerCheckpoint, TrainerConfig, TrainerState
 
 if TYPE_CHECKING:
@@ -1221,7 +1221,7 @@ def test_checkpoint_preserves_tied_parameters_and_optimizer_references(
     trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None, save_steps=3)
     cast(Olmo2, trainer.model).lm_head.weight = cast(Olmo2, trainer.model).model.embed_tokens.weight
     trainer.optimizer = OptimizerInterface.get_interface(AdamWConfig)(
-        AdamWConfig(lr=0.01, betas=(0.8, 0.9)), trainer.model.parameters()
+        AdamWConfig(lr=0.01, betas=(0.8, 0.9)), trainer.model
     )
     trainer.lr_scheduler = StepLRScheduler(
         trainer.optimizer,
@@ -2649,3 +2649,31 @@ def test_config_requires_exactly_one_batching_mode(batching: dict[str, int]) -> 
                 **batching,
             }
         )
+
+
+def test_muon_adamw_training_resumes_from_a_checkpoint(
+    trainer_factory: TrainerFactory, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    options: dict[str, Any] = {
+        "optimizer_config": MuonAdamWConfig(lr=0.01, betas=(0.8, 0.9), muon_lr=0.02),
+        "num_workers": 0,
+        "prefetch_factor": None,
+    }
+    reference, _, _ = trainer_factory(**options, output_dir=str(tmp_path / "reference"))
+    reference.train()
+    interrupted, _, _ = trainer_factory(
+        **options, output_dir=str(tmp_path / "interrupted"), save_steps=1
+    )
+    save = interrupted.checkpoint_manager.save_model
+
+    def save_and_interrupt(*args: Any, **kwargs: Any) -> None:
+        save(*args, **kwargs)
+        raise KeyboardInterrupt("completed one update")
+
+    monkeypatch.setattr(interrupted.checkpoint_manager, "save_model", save_and_interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        interrupted.train()
+    resumed, _, _ = trainer_factory(**options, output_dir=str(interrupted.output_dir))
+    resumed.train(resume_from_checkpoint=True)
+    assert_nested_equal(resumed.model.state_dict(), reference.model.state_dict())
+    assert_nested_equal(resumed.state_dict(), reference.state_dict())

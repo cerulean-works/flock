@@ -1,7 +1,6 @@
-from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 
-from torch import Tensor
+from torch import nn
 from torch.optim import AdamW
 
 
@@ -21,6 +20,6 @@ class AdamWConfig:
     betas: tuple[float, float]
 
 
-def adamw(config: AdamWConfig, params: Iterable[Tensor]) -> AdamW:
-    """Construct PyTorch AdamW with one parameter group and configured settings."""
-    return AdamW(params, **asdict(config))
+def adamw(config: AdamWConfig, model: nn.Module) -> AdamW:
+    """Construct PyTorch AdamW over all model parameters in one group."""
+    return AdamW(model.parameters(), **asdict(config))

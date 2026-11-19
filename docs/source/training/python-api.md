@@ -26,7 +26,7 @@ evaluation task names. With zero workers, set `dataloader_prefetch_factor=None`.
 | `batch_size` | `None` | Positive rows per rank per optimizer update. Set this or `batch_tokens`. |
 | `batch_tokens` | `None` | Positive packed input tokens per rank per update. Needs a `TokenChunkDataset`. Set this or `batch_size`. See [Pack chunks to a token budget](trainer#pack-chunks-to-a-token-budget). |
 | `max_steps` | `None` | Positive cap on optimizer updates; schedules plan over the capped run. `None` trains the full pass. |
-| `optimizer_config` | Required | `AdamWConfig`; Muon is not implemented. |
+| `optimizer_config` | Required | `AdamWConfig` or `MuonAdamWConfig`. `MuonConfig` alone is not implemented. |
 | `lr_scheduler_config` | Required | `LRSchedulerConfig` containing learning-rate segments. |
 | `wandb_project` | Required | Tracking project started during trainer construction. |
 | `wandb_mode` | `"online"` | `"online"`, `"offline"`, `"disabled"` or `"shared"`. |
@@ -55,12 +55,12 @@ evaluation task names. With zero workers, set `dataloader_prefetch_factor=None`.
 
 ### Optimizers
 
-Optimizer configs and factories live in `training.core.optimizers.adamw` and
-`training.core.optimizers.muon`. In
+Optimizer configs and factories live in `training.core.optimizers.adamw`,
+`training.core.optimizers.muon` and `training.core.optimizers.muon_adamw`. In
 `training.core.optimizers.registry`, `OptimizerInterface` maps config types to
 optimizer factories. `register(config_type, factory)` registers or replaces a
 factory; `get_interface(config_type)` returns it. Each factory accepts the config
-and model parameters and returns a `BaseOptimizer`. After moving the model to its
+and the model, so it can group parameters by module, and returns a `BaseOptimizer`. After moving the model to its
 device, the trainer calls `OptimizerInterface.get_interface(type(config))` and
 constructs the optimizer with the returned factory.
 Registration affects future optimizer construction. `TrainerConfig` still
@@ -73,6 +73,10 @@ The trainer runs backpropagation and gradient clipping before `optimizer.step()`
 [[autodoc]] training.AdamWConfig
 
 [[autodoc]] training.MuonConfig
+
+[[autodoc]] training.MuonAdamWConfig
+
+[[autodoc]] training.core.optimizers.MuonAdamW
 
 ### Learning rates
 
@@ -107,7 +111,7 @@ and completed updates. Resume requires matching settings, including integer
 versus fractional times. Checkpoints from the former `CosineConfig`/`WSDConfig`
 API are incompatible with this format.
 
-`OptimizerConfig` is the type alias `AdamWConfig | MuonConfig`.
+`OptimizerConfig` is the type alias `AdamWConfig | MuonConfig | MuonAdamWConfig`.
 
 [[autodoc]] training.LRSchedulerConfig
     - none

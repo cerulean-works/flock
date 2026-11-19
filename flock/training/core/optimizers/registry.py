@@ -1,19 +1,22 @@
-from collections.abc import Iterable
 from typing import Any, ClassVar, Protocol
 
-from torch import Tensor
+from torch import nn
 
 from .adamw import AdamWConfig, adamw
 from .base import BaseOptimizer
 from .muon import MuonConfig, muon
+from .muon_adamw import MuonAdamWConfig, muon_adamw
 
-type OptimizerConfig = AdamWConfig | MuonConfig
+type OptimizerConfig = AdamWConfig | MuonConfig | MuonAdamWConfig
 
 
 class OptimizerFactory[ConfigT: OptimizerConfig](Protocol):
-    """Construct an optimizer from its config and parameters on their final device."""
+    """Construct an optimizer from its config and a model already on its final device.
 
-    def __call__(self, config: ConfigT, params: Iterable[Tensor]) -> BaseOptimizer: ...
+    Factories receive the model so they can group parameters by module or name.
+    """
+
+    def __call__(self, config: ConfigT, model: nn.Module) -> BaseOptimizer: ...
 
 
 class OptimizerInterface:
@@ -27,6 +30,7 @@ class OptimizerInterface:
     _global_mapping: ClassVar[dict[type[OptimizerConfig], OptimizerFactory[Any]]] = {
         AdamWConfig: adamw,
         MuonConfig: muon,
+        MuonAdamWConfig: muon_adamw,
     }
 
     @classmethod
