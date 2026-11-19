@@ -252,6 +252,22 @@ class StepLRScheduler:
         if base_lrs != self.base_lrs:
             raise ValueError("Scheduler base_lrs do not match the saved scheduler")
 
+    def continue_from(self, completed_steps: int) -> None:
+        """Place this schedule at `completed_steps` and apply the next update's rates.
+
+        Use this to branch a run into a schedule of a different length: progress comes
+        from the parent run, while this scheduler keeps its own timeframes and total.
+
+        Raises:
+            `ValueError`: If `completed_steps` is negative or not before `total_steps`.
+        """
+        if not 0 <= completed_steps < self.total_steps:
+            raise ValueError(
+                f"Cannot continue from update {completed_steps} of a {self.total_steps}-update plan"
+            )
+        self.completed_steps = completed_steps
+        self._apply_lr()
+
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
         """Restore progress and apply learning rates for the next update.
 

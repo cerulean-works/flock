@@ -41,6 +41,7 @@ from flock.training.core.lr_scheduler import (
 from flock.training.core.models import BaseModel
 from flock.training.core.models.olmo2 import Olmo2
 from flock.training.core.optimizers import AdamWConfig, MuonAdamWConfig, OptimizerInterface
+from flock.training.core.streaming import TextStream
 from flock.training.core.trainer import Trainer, TrainerCheckpoint, TrainerConfig, TrainerState
 from tests.training.test_streaming import make_stream
 
@@ -2778,3 +2779,74 @@ def test_muon_adamw_logs_both_learning_rates(trainer_factory: TrainerFactory) ->
     assert "train/lr" not in first
     assert first["train/lr_muon"] == pytest.approx(0.02)
     assert first["train/lr_adamw"] == pytest.approx(0.01)
+
+
+def _stream_trainer(
+    trainer_factory: TrainerFactory, tmp_path: Path, name: str, **overrides: Any
+) -> TrainerBundle:
+    path = tmp_path / "text.lance"
+    stream = (
+        make_stream(tmp_path)
+        if not path.exists()
+        else TextStream(path=path, block_rows=3, chunk_length=5)
+    )
+    settings = {
+        "dataset": stream,
+        "num_workers": 0,
+        "prefetch_factor": None,
+        "batch_size": None,
+        "batch_tokens": 6,
+        "save_steps": 1,
+        "output_dir": str(tmp_path / name),
+        **overrides,
+    }
+    return trainer_factory(**settings)
+
+
+def _saved_state(trainer: Trainer, checkpoint: Path) -> dict[str, Any]:
+    return trainer.checkpoint_manager.load_checkpoint(checkpoint, copy.deepcopy(trainer.model))
+
+
+def test_branch_continues_its_parent_under_its_own_schedule(
+    trainer_factory: TrainerFactory, tmp_path: Path
+) -> None:
+    parent, _, _ = _stream_trainer(trainer_factory, tmp_path, "parent", max_steps=6)
+    parent.train()
+    branch, run, _ = _stream_trainer(trainer_factory, tmp_path, "branch", max_steps=10)
+    branch.train(branch_from=tmp_path / "parent" / "checkpoint-3")
+
+    assert int(branch.state.step) == 10 and int(branch.state.total_tokens) == 60
+    # Same data position after the first branched update as the parent's own update 4.
+    ours = _saved_state(branch, tmp_path / "branch" / "checkpoint-4")["rank_states"][0]
+    theirs = _saved_state(parent, tmp_path / "parent" / "checkpoint-4")["rank_states"][0]
+    assert ours["data_state"] == theirs["data_state"]
+    # Updates after the branch follow the new 10-update schedule, not the parent's 6.
+    logged = {int(r["global_step"]): r["train/lr"] for r in run.metrics if "train/lr" in r}
+    assert sorted(logged) == list(range(4, 11))
+    for step, rate in logged.items():
+        expected = 0.01 * lr_multiplier(step - 1, branch.lr_scheduler.config, 10)
+        assert rate == pytest.approx(expected)
+    assert logged[4] != pytest.approx(0.01 * lr_multiplier(3, parent.lr_scheduler.config, 6))
+    # The branch resumes from its own checkpoints like any run.
+    resumed, _, _ = _stream_trainer(trainer_factory, tmp_path, "branch", max_steps=10)
+    load_checkpoint(resumed, tmp_path / "branch" / "checkpoint-7")
+
+
+def test_branch_refuses_incompatible_parents_and_directories(
+    trainer_factory: TrainerFactory, tmp_path: Path
+) -> None:
+    parent, _, _ = _stream_trainer(trainer_factory, tmp_path, "parent", max_steps=6)
+    parent.train()
+    finished = tmp_path / "parent" / "checkpoint-6"
+    exhausted, _, _ = _stream_trainer(trainer_factory, tmp_path, "a", max_steps=6)
+    with pytest.raises(ValueError, match="none left"):
+        exhausted.train(branch_from=finished)
+    resized, _, _ = _stream_trainer(trainer_factory, tmp_path, "b", max_steps=10, batch_tokens=7)
+    with pytest.raises(ValueError, match="batch size or tokens"):
+        resized.train(branch_from=tmp_path / "parent" / "checkpoint-3")
+    occupied, _, _ = _stream_trainer(trainer_factory, tmp_path, "c", max_steps=10)
+    (tmp_path / "c" / "notes.txt").write_text("in use")
+    with pytest.raises(RuntimeError, match="not empty"):
+        occupied.train(branch_from=tmp_path / "parent" / "checkpoint-3")
+    with pytest.raises(ValueError, match="not both"):
+        occupied.train(resume_from_checkpoint=True, branch_from=finished)

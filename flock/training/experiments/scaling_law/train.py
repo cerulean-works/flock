@@ -102,8 +102,10 @@ def main(argv: list[str] | None = None) -> None:
         resume = bool(trainer.checkpoint_manager.checkpoints())
         if resume and runtime.is_master:
             logger.info("Resuming %s from its latest checkpoint", experiment.name)
+        # A branch starts from its parent once; afterwards it resumes from its own checkpoints.
+        branch = None if resume else experiment.branch_from
         try:
-            trainer.train(resume_from_checkpoint=resume)
+            trainer.train(resume_from_checkpoint=resume, branch_from=branch)
         finally:
             if trainer.run is not None:
                 trainer.run.finish()

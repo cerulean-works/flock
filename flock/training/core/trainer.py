@@ -335,7 +335,14 @@ class TrainerCheckpoint(PydanticBaseModel):
                 raise ValueError(
                     "Checkpoint dataset size, chunk cache, batch size or tokens, seed, input column or world size changed"
                 )
-            if schedule.total_steps != info.context["total_steps"]:
+            if info.context.get("branch"):
+                # A branch keeps its parent's progress but plans its own schedule.
+                if schedule.completed_steps >= info.context["total_steps"]:
+                    raise ValueError(
+                        f"Checkpoint has completed {schedule.completed_steps} updates; a branch "
+                        f"planning {info.context['total_steps']} has none left to train"
+                    )
+            elif schedule.total_steps != info.context["total_steps"]:
                 raise ValueError(
                     f"Checkpoint plans {schedule.total_steps} updates, but this run plans "
                     f"{info.context['total_steps']}. Set max_steps so the run plans "
@@ -828,7 +835,12 @@ class Trainer:
             ):
                 self.evaluate()
 
-    def train(self, resume_from_checkpoint: bool | str | Path = False) -> None:
+    def train(
+        self,
+        resume_from_checkpoint: bool | str | Path = False,
+        *,
+        branch_from: str | Path | None = None,
+    ) -> None:
         """Train one pass or `max_steps` updates, optionally restoring a checkpoint first.
 
         Args:
@@ -836,6 +848,12 @@ class Trainer:
                 With `True`, select the checkpoint with the latest `saved_at` in
                 `flock.json`. A path selects a checkpoint folder explicitly.
                 With `False`, reset counters and start from the current model weights.
+            branch_from (`str` or `Path`, *optional*): Start this run, in an empty output
+                directory, from another run's checkpoint. Weights, optimizer state,
+                counters, RNG and data position continue from it, but the learning-rate
+                schedule is this run's own, planned over this run's `total_steps`. The data,
+                batching, seed and world size must match the parent, and so must the base
+                learning rates. Cannot be combined with `resume_from_checkpoint`.
 
         Raises:
             `ValueError`: If the dataset is empty or checkpoint settings are incompatible.
@@ -858,16 +876,33 @@ class Trainer:
             # A save killed before publishing leaves only staging; it would block a fresh start.
             self.checkpoint_manager.remove_staging()
 
-        if not resume_from_checkpoint:
-            if (
-                self.runtime.is_master
-                and any(self.output_dir.iterdir())
-                and not self.overwrite_output_dir
-            ):
-                raise RuntimeError(
-                    f"Save directory {self.output_dir} is not empty. "
-                    "Resume from a checkpoint or specify an empty directory."
-                )
+        if branch_from is not None and resume_from_checkpoint:
+            raise ValueError("Pass resume_from_checkpoint or branch_from, not both")
+        if not resume_from_checkpoint and (
+            self.runtime.is_master
+            and any(self.output_dir.iterdir())
+            and not self.overwrite_output_dir
+        ):
+            raise RuntimeError(
+                f"Save directory {self.output_dir} is not empty. "
+                "Resume from a checkpoint or specify an empty directory."
+            )
+        if branch_from is not None:
+            self.logger.info(f"Branching from checkpoint {branch_from}")
+            self.load_state_dict(
+                self.checkpoint_manager.load_checkpoint(
+                    Path(branch_from),
+                    self.model,
+                    validate_state=lambda state: self.validate_state_dict(state, branch=True),
+                ),
+                branch=True,
+            )
+            start_step = int(self.state.step.item())
+            dataloader = self._get_training_dataloader(skip_batches=start_step)
+            self.logger.info(
+                f"Branched at step {start_step}, with {self.total_steps - start_step} steps remaining"
+            )
+        elif not resume_from_checkpoint:
             self.state.reset_global()
             start_step = 0
             self.logger.info("Initializing training dataloader")
@@ -1084,7 +1119,7 @@ class Trainer:
         return contract
 
     def validate_state_dict(
-        self, state: Mapping[str, Any] | TrainerCheckpoint
+        self, state: Mapping[str, Any] | TrainerCheckpoint, *, branch: bool = False
     ) -> TrainerCheckpoint:
         """Validate the run contract and delegate component checks without changing state.
 
@@ -1105,6 +1140,7 @@ class Trainer:
                 "config": self._run_contract(),
                 "total_steps": self.total_steps,
                 "rank": self.runtime.rank,
+                "branch": branch,
             },
         )
         cuda_rng = checkpoint.rank_states[self.runtime.rank].cuda_rng_state
@@ -1123,7 +1159,12 @@ class Trainer:
                 or cast(int, block) >= self.dataset.blocks
             ):
                 raise ValueError("Checkpoint has no valid stream position for this rank")
-        self.lr_scheduler.validate_state_dict(checkpoint.lr_scheduler_state_dict.model_dump())
+        if branch:
+            # The branch plans its own schedule, but must keep the parent's peak rates.
+            if checkpoint.lr_scheduler_state_dict.base_lrs != self.lr_scheduler.base_lrs:
+                raise ValueError("A branch must keep its parent's base learning rates")
+        else:
+            self.lr_scheduler.validate_state_dict(checkpoint.lr_scheduler_state_dict.model_dump())
 
         self.state.validate_state_dict(checkpoint.trainer_state_dict.model_dump())
         saved_groups = checkpoint.optimizer_state_dict["param_groups"]
@@ -1148,7 +1189,9 @@ class Trainer:
                 )
         return checkpoint
 
-    def load_state_dict(self, state: Mapping[str, Any] | TrainerCheckpoint) -> None:
+    def load_state_dict(
+        self, state: Mapping[str, Any] | TrainerCheckpoint, *, branch: bool = False
+    ) -> None:
         """Validate and restore training state without loading model weights.
 
         Args:
@@ -1162,11 +1205,14 @@ class Trainer:
         Loading performs no communication. Logs a warning when CUDA
         is available but the checkpoint has no CUDA RNG state.
         """
-        checkpoint = self.validate_state_dict(state)
+        checkpoint = self.validate_state_dict(state, branch=branch)
 
         self.state.load_state_dict(checkpoint.trainer_state_dict.model_dump())
         self.optimizer.load_state_dict(checkpoint.optimizer_state_dict)
-        self.lr_scheduler.load_state_dict(checkpoint.lr_scheduler_state_dict.model_dump())
+        if branch:
+            self.lr_scheduler.continue_from(checkpoint.lr_scheduler_state_dict.completed_steps)
+        else:
+            self.lr_scheduler.load_state_dict(checkpoint.lr_scheduler_state_dict.model_dump())
 
         rank_state = checkpoint.rank_states[self.runtime.rank]
         if isinstance(self.dataset, TextStream):

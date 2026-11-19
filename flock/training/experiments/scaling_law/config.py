@@ -255,6 +255,10 @@ class ExperimentConfig(BaseModel):
         save_tokens (`list[int]`, *optional*): Also save once each of these counts is reached.
         seed (`int`, *optional*, defaults to `0`): Initialization and data-order seed.
         wandb_group (`str`, *optional*): W&B group, usually the sweep name.
+        branch_from (`str`, *optional*): Checkpoint of another run to start this one from,
+            continuing its weights, optimizer, counters and data position under this run's
+            schedule. Used only on the first start; restarts resume from this run's own
+            checkpoints. Data, batching, seed, GPUs and peak rates must match the parent.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -270,6 +274,7 @@ class ExperimentConfig(BaseModel):
     save_tokens: list[TokenCount] = Field(default_factory=list)
     seed: int = 0
     wandb_group: str | None = None
+    branch_from: str | None = None
 
     @model_validator(mode="after")
     def validate_run(self) -> Self:
