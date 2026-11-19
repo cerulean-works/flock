@@ -544,7 +544,7 @@ class Trainer:
             self.optimizer, config.lr_scheduler_config, self.total_steps
         )
 
-        # Autocast for training forward and update.
+        # Autocast for the training forward and evaluation.
         autocast = partial(
             torch.autocast,
             self.device.type,
