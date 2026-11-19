@@ -265,13 +265,13 @@ def test_training_and_resuming_from_a_checkpoint(
     )
     save = interrupted.checkpoint_manager.save_model
 
-    def save_and_stop(blocking: bool = False) -> None:
-        save(blocking)
+    def save_and_stop(*args: Any, **kwargs: Any) -> None:
+        save(*args, **kwargs)
         if interrupted.state.step.item() == 1:
-            raise InterruptedError("stop after the first checkpoint")
+            raise KeyboardInterrupt("stop after the first checkpoint")
 
     monkeypatch.setattr(interrupted.checkpoint_manager, "save_model", save_and_stop)
-    with pytest.raises(InterruptedError):
+    with pytest.raises(KeyboardInterrupt, match="stop after the first checkpoint"):
         interrupted.train()
 
     resumed = make_trainer(

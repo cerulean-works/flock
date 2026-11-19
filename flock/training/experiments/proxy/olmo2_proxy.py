@@ -1,7 +1,6 @@
 """Train a small OLMo 2 shaped proxy model on one pinned Lance mix."""
 
 import argparse
-import logging
 import os
 from dataclasses import dataclass, replace
 from typing import Literal
@@ -160,10 +159,6 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
     run_name = f"proxy-{args.size}-s{args.seed}"
     # The trainer's wandb.init takes no run name, and the default would be random.
     os.environ.setdefault("WANDB_NAME", run_name)
@@ -181,4 +176,5 @@ if __name__ == "__main__":
     try:
         trainer.train(resume_from_checkpoint=args.resume)
     finally:
-        trainer.run.finish()
+        if trainer.run is not None:
+            trainer.run.finish()

@@ -105,6 +105,8 @@ k_i = (i·(N−1) + (n−1)//2) // (n−1)    for i = 0 … n−1
 
 The formula uses integer division only, so a client computes the same indices as Flock. When the x values are evenly spaced, which is the usual case for `_step`, they aren't sent: point `i` has `x = x0 + dx·k_i`. Otherwise the x section holds them explicitly, starting at the x offset.
 
+Values that overflow `f32` are encoded as signed infinity in the snapshot. The [history API](queries#curves) returns the original finite values.
+
 ### Metric definitions[[metric-definitions]]
 
 A run's `metric_defs` are what its `run.define_metric` calls said about plotting, in the SDK's order. Each is an object with:

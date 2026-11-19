@@ -17,6 +17,7 @@ from flock.hub.models._common import TRAINING_STATE, ModelError
 
 if TYPE_CHECKING:
     import torch
+    from torch import nn
 
     from flock.training.core.models.base import BaseModel
 
@@ -116,7 +117,7 @@ def _write_safetensors(
     save_file(tensors, str(path), metadata={"format": "pt", **metadata})
 
 
-def _write_weights(model: BaseModel, folder: Path, shard_size: int) -> None:
+def _write_weights(model: nn.Module, folder: Path, shard_size: int) -> None:
     """Write the weights and, when split across shards, a Hugging Face weight index."""
     tensors = _tensors_for_safetensors(model.state_dict())
     shards = _split_weight_shards(tensors, shard_size)
@@ -212,7 +213,7 @@ def read_training_state(path: Path, device: str | None = None) -> Any:
 
 
 def write_model(
-    model: BaseModel,
+    model: nn.Module,
     folder: Path,
     *,
     shard_size: int,
@@ -224,18 +225,20 @@ def write_model(
     _torch()
     config = getattr(model, "config", None)
     params = getattr(type(config), "__dataclass_params__", None)
-    if config is None or params is None or not params.frozen:
+    if config is not None and (params is None or not params.frozen):
         raise TypeError(
             f"{type(model).__name__}.config must be a frozen dataclass, so the model can be "
             "built again from config.json"
         )
     dtype = next((p.dtype for p in model.parameters() if p.dtype.is_floating_point), None)
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / "config.json").write_text(json.dumps(dataclasses.asdict(config), indent=2) + "\n")
+    (folder / "config.json").write_text(
+        json.dumps(dataclasses.asdict(config) if config is not None else {}, indent=2) + "\n"
+    )
     provenance = {
         "format": FORMAT,
         "architecture": import_path(type(model)),
-        "config_class": import_path(type(config)),
+        "config_class": import_path(type(config)) if config is not None else None,
         "dtype": str(dtype).removeprefix("torch.") if dtype is not None else None,
         "flock_commit": flock_commit(),
         "run": run,
