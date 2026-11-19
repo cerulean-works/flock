@@ -13,13 +13,8 @@
 	};
 
 	// Static class strings per state so Tailwind sees every class.
-	const TONE: Record<string, string> = {
+	const TONE: Record<RunState, string> = {
 		running: 'bg-state-running/10 text-state-running',
-		pending: 'bg-state-preempting/10 text-state-preempting',
-		up: 'bg-state-finished/10 text-state-finished',
-		down: 'bg-state-failed/10 text-state-failed',
-		drain: 'bg-state-preempting/10 text-state-preempting',
-		inact: 'text-muted-foreground',
 		preempting: 'bg-state-preempting/10 text-state-preempting',
 		finished: 'bg-state-finished/10 text-state-finished',
 		crashed: 'bg-state-failed/10 text-state-failed',

@@ -1,5 +1,4 @@
 <script lang="ts">
-	import CpuIcon from '@lucide/svelte/icons/cpu';
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FolderIcon from '@lucide/svelte/icons/folder';
@@ -64,7 +63,6 @@
 	const inOrg = $derived(
 		!!page.route.id?.startsWith('/(app)/[entity]') ||
 			!!page.route.id?.startsWith('/(app)/orgs/') ||
-			!!page.route.id?.startsWith('/(app)/compute/') ||
 			!!page.route.id?.startsWith('/(app)/datasets/') ||
 			!!page.route.id?.startsWith('/(app)/models/') ||
 			!!page.route.id?.startsWith('/(app)/storage/')
@@ -143,15 +141,6 @@
 				>
 					<ActivityIcon /> Runs
 				</a>
-				{#if signedIn}
-					<a
-						class={ITEM}
-						href={resolve('/(app)/compute/[org]', { org })}
-						aria-current={route === '/(app)/compute/[org]' ? 'page' : undefined}
-					>
-						<CpuIcon /> Compute
-					</a>
-				{/if}
 				{#if s3}
 					<a
 						class={ITEM}

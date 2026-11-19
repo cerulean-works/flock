@@ -103,12 +103,6 @@ def test_compose_configuration(compose: str, configured: bool) -> None:
         assert ui["environment"] == {
             "FLOCK_API_URL": "http://private-api:8080" if configured else "http://flock-api:8080",
             "FLOCK_API_PUBLIC_URL": settings.api_public_url,
-            # The Compute page's Slurm connection, unset unless configured.
-            "FLOCK_SLURM_URL": "",
-            "FLOCK_SLURM_ORG": "",
-            "FLOCK_SLURM_ACCOUNTS": "",
-            "FLOCK_SLURM_ACCESS_CLIENT_ID": "",
-            "FLOCK_SLURM_ACCESS_CLIENT_SECRET": "",
         }
         assert all("ports" not in service for service in services.values())
     else:

@@ -340,26 +340,3 @@ it bits-ui (shadcn's headless layer); all of it is modulepreloaded from the docu
 CPU; `CHANNEL=chromium` uses Playwright's headless shell, which rasterises canvas in software.
 There, redrawing 100-run panels causes 250–500 ms long tasks; moving base-layer drawing into an
 `OffscreenCanvas` worker is the fix if software rendering matters.
-
-### Slurm Compute
-
-The workspace sidebar's Compute page reads job and partition snapshots from
-[slurm-dashboard](https://github.com/cerulean-works/slurm-dashboard). The web server
-fetches snapshots every ten seconds while the page is open. Organization membership
-is required. Configure these runtime variables on the web service (or in the shell
-running `pnpm dev` locally):
-
-- `FLOCK_SLURM_URL` — dashboard origin, reachable from the Flock web server.
-- `FLOCK_SLURM_ORG` — Flock organization slug allowed to access this dashboard.
-- `FLOCK_SLURM_ACCOUNTS` — comma-separated Slurm accounts for the **Our plan** filter.
-- `FLOCK_SLURM_ACCESS_CLIENT_ID` and `FLOCK_SLURM_ACCESS_CLIENT_SECRET` — Cloudflare
-  Access service-token credentials when the dashboard is behind Access. Configure
-  a Service Auth policy accepting this token on that Access application.
-
-Flock's sign-in checks the viewer's workspace membership. The service token
-authenticates Flock's outbound request to the Slurm service and stays server-side.
-A private dashboard URL reachable directly from Flock can omit the Access variables.
-The page shows a configuration message until the URL and matching organization are
-set. No simulated jobs are included. In Compose deployments set these variables in
-`app/.env` and recreate the UI service. Locally, open `/compute/<organization-slug>`
-after signing in to Flock.
