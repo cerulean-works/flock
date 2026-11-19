@@ -170,7 +170,13 @@ def test_compiled_trainer_fa3_resume_and_evaluate(
             grad_reference += expected.grad.square().sum()
         assert (grad_error / grad_reference.clamp_min(1e-20)).sqrt().item() < 0.05
         restored = make("restored")
-        restored.checkpoint_manager.load_checkpoint(compiled.output_dir / "checkpoint-8")
+        restored.load_state_dict(
+            restored.checkpoint_manager.load_checkpoint(
+                compiled.output_dir / "checkpoint-8",
+                restored.model,
+                validate_state=restored.validate_state_dict,
+            )
+        )
         torch.testing.assert_close(
             restored.model.state_dict(), compiled.model.state_dict(), atol=0, rtol=0
         )

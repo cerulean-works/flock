@@ -280,9 +280,14 @@ checkpoint visibility, per-rank RNG state and compatibility checks.
 
 ## Compile the model and loss
 
-Set `torch_compile=True` in `TrainerConfig` to compile the model and batch loss.
-Compilation is disabled by default. You can resume checkpoints with compilation
-enabled or disabled.
+Set `torch_compile=True` in `TrainerConfig` to compile the training model and the
+per-rank token loss. Compilation is disabled by default. You can resume checkpoints
+with compilation enabled or disabled.
+
+In distributed runs the trainer compiles the DDP wrapper rather than the inner model.
+This lets gradient communication overlap the compiled backward pass. The loss
+collectives that weight each rank's tokens stay outside the compiled code, so they
+cause no graph breaks. Evaluation uses the inner model, so it runs eagerly under DDP.
 
 `torch_compile_mode` defaults to `"default"`. Use `"reduce-overhead"` to request
 CUDA graphs for eligible regions, which can reduce launch overhead but use more

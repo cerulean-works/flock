@@ -686,6 +686,7 @@ def test_compiled_training_resumes_and_preserves_checkpoint_format(
     from torch._dynamo.backends.registry import lookup_backend
 
     compile_calls = []
+    compiled_functions = []
     captured_graphs = []
     real_compile = torch.compile
     aot_eager = lookup_backend("aot_eager")
@@ -697,6 +698,7 @@ def test_compiled_training_resumes_and_preserves_checkpoint_format(
 
     def compile_for_test(function: Callable, **kwargs: Any) -> Callable:
         compile_calls.append(kwargs)
+        compiled_functions.append(getattr(function, "__name__", None))
         return real_compile(function, backend=backend, fullgraph=kwargs["fullgraph"])
 
     monkeypatch.setattr(torch, "compile", compile_for_test)
@@ -720,6 +722,9 @@ def test_compiled_training_resumes_and_preserves_checkpoint_format(
         compiled.train(resume_from_checkpoint=checkpoint)
         assert captured_graphs
         assert compile_calls == [{"mode": "default", "fullgraph": False}] * 2
+        # The loss collectives stay eager; only the per-rank token loss compiles.
+        assert "_token_loss" in compiled_functions
+        assert "_calc_batch_loss" not in compiled_functions
         assert compiled.model is original_model
         assert [id(p) for p in compiled.model.parameters()] == parameter_ids
         assert [id(p) for p in compiled.optimizer.param_groups[0]["params"]] == parameter_ids

@@ -86,8 +86,11 @@ class TrainerConfig(PydanticBaseModel):
             Autocast dtype. The trainer moves the model without changing its weight
             dtype; supply FP32 weights to retain FP32 master parameters.
         torch_compile (`bool`, *optional*, defaults to `False`):
-            Compile the model and batch loss when training starts, after checkpoint
-            restoration. Optimizer, scheduler and loop management remain eager.
+            Compile the training model and token loss when training starts, after
+            checkpoint restoration. Under DDP the DDP wrapper is compiled, so
+            gradient communication overlaps the compiled backward; evaluation then
+            runs eagerly. Loss collectives, optimizer, scheduler and loop
+            management remain eager.
         torch_compile_mode (`str`, *optional*, defaults to `"default"`):
             PyTorch compilation mode: `"default"`, `"reduce-overhead"`,
             `"max-autotune"` or `"max-autotune-no-cudagraphs"`.
@@ -463,6 +466,11 @@ class Trainer:
     conversion. Use a main-module guard when starting spawned loader workers.
     """
 
+    # Set when training first compiles; class-level so partially built trainers stay eager.
+    _compiled_loss: (
+        Callable[[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]] | None
+    ) = None
+
     def __init__(
         self,
         *,
@@ -522,9 +530,6 @@ class Trainer:
         self.model_dtype = config.model_dtype
         self.torch_compile = config.torch_compile
         self.torch_compile_mode = config.torch_compile_mode
-        self._compiled_loss: (
-            Callable[[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]] | None
-        ) = None
         self.max_norm = config.max_norm
         self.logging_steps = config.logging_steps
 
@@ -617,16 +622,15 @@ class Trainer:
             generator=torch.Generator().manual_seed(self.seed),
         )
 
-    def _calc_batch_loss(
+    def _token_loss(
         self, output: torch.Tensor, labels: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Return backward loss, detached per-rank mean losses and target counts.
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return this rank's mean loss over valid targets and the valid-target count.
 
         Logits have shape `[batch, sequence, vocabulary]`; labels have shape
         `[batch, sequence]` and are already shifted. Ignore `-100` targets and
         clamp the denominator to one so an all-ignored batch has zero loss.
-        In DDP, gather metrics once and scale the local loss so averaged gradients
-        match the global token mean. Without DDP, metrics remain scalar tensors.
+        This part has no collectives, so it compiles without graph breaks.
         """
         # output is [B, T, V], labels is [B, T]
         num_tokens = (labels != -100).sum()
@@ -639,7 +643,18 @@ class Trainer:
         )
 
         # Keep normalization on-device; an all-ignored batch has zero loss/gradient.
-        loss = loss_sum / num_tokens.clamp_min(1)
+        return loss_sum / num_tokens.clamp_min(1), num_tokens
+
+    def _calc_batch_loss(
+        self, output: torch.Tensor, labels: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Return backward loss, detached per-rank mean losses and target counts.
+
+        Uses the compiled token loss when compilation is active. In DDP, gather
+        metrics once and scale the local loss so averaged gradients match the
+        global token mean. Without DDP, metrics remain scalar tensors.
+        """
+        loss, num_tokens = (self._compiled_loss or self._token_loss)(output, labels)
         losses, tokens = loss.detach(), num_tokens
         if self.runtime.enabled:
             # FP64 preserves batch counts through 2**53; accumulate counts as int64.
@@ -663,7 +678,6 @@ class Trainer:
 
     def _inner_training_loop(self, dataloader: Iterable[Batch], start_step: int) -> None:
         """Update once per batch, then log, save and evaluate at configured intervals."""
-        loss_fn = self._compiled_loss or self._calc_batch_loss
         for step, batch in enumerate(dataloader, start=start_step + 1):
             if self._compiled_loss is not None:
                 torch.compiler.cudagraph_mark_step_begin()
@@ -673,7 +687,7 @@ class Trainer:
 
             with torch.autocast(self.device.type, dtype=self.model_dtype):
                 output: torch.Tensor = self.training_model(batch)
-                loss, losses, num_tokens = loss_fn(output, batch["labels"])
+                loss, losses, num_tokens = self._calc_batch_loss(output, batch["labels"])
 
             loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(
@@ -763,9 +777,11 @@ class Trainer:
         try:
             self.model.train()
             if self.torch_compile and self._compiled_loss is None:
-                self.model.compile(mode=self.torch_compile_mode, fullgraph=False)
+                # Compile in place: checkpoints keep the plain module's state-dict keys.
+                # Compiling the DDP wrapper lets Dynamo split graphs at gradient buckets.
+                self.training_model.compile(mode=self.torch_compile_mode, fullgraph=False)
                 self._compiled_loss = torch.compile(
-                    self._calc_batch_loss, mode=self.torch_compile_mode, fullgraph=False
+                    self._token_loss, mode=self.torch_compile_mode, fullgraph=False
                 )
             self.logger.info("Starting training")
             # We use autocast off for backward pass since the trainer also do not use autocast for the backward pass.
