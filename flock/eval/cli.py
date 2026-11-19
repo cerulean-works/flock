@@ -118,7 +118,8 @@ def digest_command(folder: Path) -> None:
     """Print the model id that scores a local folder: local:FOLDER@DIGEST, where the digest names every file in it."""
     try:
         click.echo(f"local:{folder}@{folder_digest(folder)}")
-    except ValueError as error:  # an empty folder
+    # A folder the digest refuses, or one it can't read.
+    except (ValueError, OSError) as error:
         raise click.ClickException(str(error)) from None
 
 

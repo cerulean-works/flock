@@ -136,7 +136,8 @@ def auto(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
     """Stands in for `AutoTokenizer`, and returns what it was asked to load."""
     asked = []
 
-    def from_pretrained(repo: str, revision: str) -> object:
+    def from_pretrained(repo: str, revision: str, trust_remote_code: bool) -> object:
+        assert trust_remote_code is False  # code another repo names is never run
         asked.append((repo, revision))
         return SENTINEL
 

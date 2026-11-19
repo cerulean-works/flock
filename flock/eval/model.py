@@ -4,6 +4,7 @@ import hashlib
 import itertools
 import json
 import logging
+import posixpath
 import re
 from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
@@ -191,7 +192,8 @@ def folder_digest(folder: Path) -> str:
     if "tokenizer_config.json" in files:
         config = json.loads(files["tokenizer_config.json"].read_text())
         named += config.get("fast_tokenizer_files", [])
-    if outside := sorted(set(named) - files.keys()):
+    # `./a` is `a`, and `../a` or `/a` stay outside.
+    if outside := sorted({posixpath.normpath(name) for name in named} - files.keys()):
         raise ValueError(f"{folder}: its configs name {outside}, which aren't in the folder")
 
     lines = []
@@ -272,7 +274,11 @@ def load_tokenizer(ref: ModelRef) -> Tokenizer:
     if model_file is not None:
         return SentencePieceTokenizer(model_file)
 
-    tokenizer = AutoTokenizer.from_pretrained(ref.repo, revision=ref.revision)
+    # Code from another repo, which an `auto_map` can name, is pinned by neither the revision
+    # nor a digest, so it is never run.
+    tokenizer = AutoTokenizer.from_pretrained(
+        ref.repo, revision=ref.revision, trust_remote_code=False
+    )
     assert tokenizer is not None  # The stubs allow None; loading raises instead.
 
     if tokenizer_json is None and any(
@@ -460,7 +466,7 @@ class ScoringModel:
         if add_bos and tokenizer.bos_token_id is None:
             raise ValueError(f"{ref}: add_bos is set, but the tokenizer has no BOS token")
         model = AutoModelForCausalLM.from_pretrained(
-            ref.repo, revision=ref.revision, dtype=dtype, device_map=device
+            ref.repo, revision=ref.revision, dtype=dtype, device_map=device, trust_remote_code=False
         )
         # Files rewritten between the check and the load would be scored under the old digest.
         if ref.kind == "local" and folder_digest(Path(ref.repo)) != ref.digest:

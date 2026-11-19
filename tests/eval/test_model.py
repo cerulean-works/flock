@@ -309,7 +309,7 @@ def test_folder_digest_refuses_an_index_naming_a_shard_outside(tmp_path: Path, s
     with pytest.raises(ValueError, match="aren't in the folder"):
         model.folder_digest(tmp_path)
 
-    index = {"weight_map": {"lm_head.weight": "model-00001.safetensors"}}
+    index = {"weight_map": {"lm_head.weight": "./model-00001.safetensors"}}
     (tmp_path / "model.safetensors.index.json").write_text(json.dumps(index))
     model.folder_digest(tmp_path)
 
