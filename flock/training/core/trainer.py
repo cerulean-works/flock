@@ -54,7 +54,7 @@ class TrainerConfig(PydanticBaseModel):
             Positive batches prefetched per worker. Must be `None` with zero workers.
             With workers, `None` uses PyTorch's default.
         dataloader_num_workers (`int`, *optional*, defaults to `4`):
-            Nonnegative number of spawned loader processes.
+            Nonnegative number of spawned loader processes per rank.
         validation_tasks (`list[str]`, *optional*, defaults to `[]`):
             Registered evaluation task keys. An empty list skips evaluation.
         validation_steps (`int`, *optional*):
@@ -62,24 +62,25 @@ class TrainerConfig(PydanticBaseModel):
         validation_limit (`int`, *optional*): Positive document limit per task.
         validation_batch_tokens (`int`, *optional*, defaults to `32768`):
             Positive padded-token budget per scoring batch. One request can exceed it.
-        wandb_project (`str`): Project passed to `wandb.init` during construction.
+        wandb_project (`str`): Project passed to `wandb.init` during construction on rank zero.
         wandb_mode (`str`, *optional*, defaults to `"online"`):
             Tracking mode: `"online"`, `"offline"`, `"disabled"` or `"shared"`.
         output_dir (`str`, *optional*):
             Checkpoint root. Uses `.training-checkpoints/<run_name>` in the current
             directory when omitted. The trainer creates it during construction.
         save_steps (`int`, *optional*):
-            Positive checkpoint interval. Also saves at the final update and during
-            loop cleanup when the current step is between intervals.
+            Positive checkpoint interval. Cleanup saves an off-interval step after
+            progress if the loop completes or the run uses a single process.
+            Omit this setting to disable automatic saves.
         save_total_limit (`int`, *optional*):
             Positive local retention limit, ordered by `flock.json`'s `saved_at`.
-            Applied during final cleanup after all writes and uploads finish.
+            Applied after saves and again after pending uploads finish.
         save_to_hub_repo (`str`, *optional*):
             Hub destination `org/model`. Each new checkpoint starts an asynchronous
             upload tagged `checkpoint-<step>`.
         overwrite_output_dir (`bool`, *optional*, defaults to `False`):
             Allow fresh training in a nonempty directory and replacement of a step's
-            checkpoint. Blocking saves reuse an existing step without rewriting it.
+            checkpoint.
         model_dtype (`torch.dtype`, *optional*, defaults to `torch.bfloat16`):
             Autocast dtype. The trainer moves the model without changing its weight
             dtype; supply FP32 weights to retain FP32 master parameters.
@@ -423,12 +424,13 @@ class TrainerState(nn.Module):
 
 
 class Trainer:
-    """Train a causal model for one pass or `max_steps` updates on CPU or distributed devices.
+    """Train a causal model for one pass or `max_steps` updates on one device or across ranks.
 
-    Construction starts a W&B run, moves the supplied model without casting its
-    weights, constructs the optimizer/scheduler and creates the output directory.
-    Each batch is one optimizer update, including a final partial batch. Finish
-    tracking explicitly with `trainer.run.finish()` after training or evaluation.
+    Construction moves the supplied model without casting its weights, builds
+    the optimizer and scheduler, and creates the output directory. Each batch
+    produces one optimizer update, including a final partial batch. In a
+    distributed run, construct the trainer on every rank. Rank zero owns the W&B
+    run. Call `trainer.run.finish()` after training or evaluation if the run exists.
 
     Args:
         config ([`training.TrainerConfig`]): Validated training and persistence settings.
@@ -441,6 +443,8 @@ class Trainer:
         dataset (`SafeLanceDataset` or `TokenChunkDataset`): Finite, indexable text rows or cached token chunks.
         runtime ([`training.core.distributed.DistributedRuntime`] or `None`, *optional*):
             Distributed runtime. If `None`, detect ranks and device from the environment.
+            For multiple ranks, initialize the process group with `distributed_run()`
+            before constructing the trainer.
 
     Raises:
         `NotImplementedError`: If the optimizer configuration selects Muon.
@@ -695,10 +699,13 @@ class Trainer:
                 `overwrite_output_dir` is false, or checkpoint weights do not match.
             `FileNotFoundError`: If automatic resume finds no checkpoint.
 
-        Resume skips already consumed batches in the seeded permutation. Loop
-        cleanup saves an off-interval step when saving is enabled and waits for
-        outstanding uploads. Training errors propagate after cleanup. The W&B
-        run remains open; call `run.finish()` in your own `finally` block.
+        In distributed runs, call this method on every rank. Each rank reads
+        the checkpoint directly and restores its own RNG state and batch cursor.
+
+        If saving is enabled, cleanup saves after progress at an off-interval
+        step. In a distributed run, this final save requires a successful loop.
+        Rank zero then waits for outstanding uploads. If `self.run` exists,
+        finish it in your own `finally` block.
         """
         if self.total_steps == 0:
             raise ValueError("Training requires at least one batch from the dataloader")
@@ -767,7 +774,9 @@ class Trainer:
         if no tasks are configured. Log and skip `KeyError` or `FileExistsError`
         raised during preparation/scoring; propagate other errors.
 
-        Metrics use `eval/<task>/<metric>` keys. No scores are returned.
+        In distributed runs, call this method on every rank. Rank zero scores
+        tasks and broadcasts completion or an exception. Metrics use
+        `eval/<task>/<metric>` keys. No scores are returned.
         """
         if not self.validation_tasks:
             return

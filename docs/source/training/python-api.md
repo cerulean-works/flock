@@ -12,6 +12,19 @@
     - validate_state_dict
     - load_state_dict
 
+## Distributed runtime
+
+Use `flock.training.core.distributed.distributed_run()` to initialize and tear down
+the process group, and pass its `DistributedRuntime` to every `Trainer`. The
+runtime reads `RANK`, `LOCAL_RANK` and `WORLD_SIZE` together and defaults to
+`(0, 0, 1)` when all three are unset. CUDA uses the device at `LOCAL_RANK`.
+Set `enable_cpu=True` on the context manager to select CPU. The context
+initializes NCCL for multiple CUDA ranks or Gloo for multiple CPU ranks.
+
+All ranks call `train()` and `evaluate()` in the same order. Only rank zero
+initializes W&B, scores evaluation tasks and writes checkpoints.
+See [Launch distributed training](trainer#launch-distributed-training).
+
 ## Configuration
 
 All `TrainerConfig` fields, including their defaults, are documented below.
@@ -23,20 +36,20 @@ evaluation task names. With zero workers, set `dataloader_prefetch_factor=None`.
 |---|---|---|
 | `run_name` | Required | Default checkpoint folder name and evaluation label. Does not set the W&B run name. |
 | `input_column` | Required | Text column in each dataset row. |
-| `batch_size` | Required | Positive rows per optimizer update. |
+| `batch_size` | Required | Positive rows or cached chunks per rank per optimizer update. |
 | `max_steps` | `None` | Positive cap on optimizer updates; schedules plan over the capped run. `None` trains the full pass. |
 | `optimizer_config` | Required | `AdamWConfig`; Muon is not implemented. |
 | `lr_scheduler_config` | Required | `LRSchedulerConfig` containing learning-rate segments. |
-| `wandb_project` | Required | Tracking project started during trainer construction. |
+| `wandb_project` | Required | Tracking project started during construction on rank zero. |
 | `wandb_mode` | `"online"` | `"online"`, `"offline"`, `"disabled"` or `"shared"`. |
-| `dataloader_num_workers` | `4` | Nonnegative number of spawned workers. |
+| `dataloader_num_workers` | `4` | Nonnegative number of spawned workers per rank. |
 | `dataloader_prefetch_factor` | `4` | Positive batches per worker, or `None` for PyTorch's default with workers. Must be `None` with zero workers. |
 | `validation_tasks` | `[]` | Registered task keys. Empty skips evaluation. |
 | `validation_steps` | `None` | Positive update interval; also evaluates at the final update. `None` disables automatic evaluation. |
 | `validation_limit` | `None` | Positive document prefix per task; `None` scores all documents. |
 | `validation_batch_tokens` | `32768` | Positive padded-token budget for scoring. One request can exceed it. |
 | `output_dir` | `None` | Uses `.training-checkpoints/<run_name>` in the current directory when unset. |
-| `save_steps` | `None` | Positive update interval; also saves at the final update and off-interval loop cleanup. `None` disables automatic saves. |
+| `save_steps` | `None` | Positive update interval. Cleanup saves an off-interval step after progress on a successful run, or after a loop error in a single-process run. `None` disables automatic saves. |
 | `save_total_limit` | `None` | Positive local retention limit by save timestamp, applied after each successful save. Pending uploads can temporarily put the number of checkpoints over the limit. `None` keeps all checkpoints. |
 | `save_to_hub_repo` | `None` | Optional `org/model` upload destination. |
 | `overwrite_output_dir` | `False` | Permit fresh training in a nonempty directory and replacement of a step's checkpoint. |
@@ -212,10 +225,11 @@ manager.finish_checkpoint_uploads()
 Local serialization always finishes before `save_model` returns. With
 `blocking=False`, the Hub uploads the completed checkpoint in the background.
 Later model or training-state updates cannot change the saved files.
-Each successful save collects completed uploads and prunes old checkpoints,
-keeping folders with uploads still in progress. `finish_checkpoint_uploads()`
-waits for the remaining uploads and applies retention again. Local write errors
-propagate immediately. Upload errors are logged.
+With `blocking=True`, the save waits for all pending uploads before pruning.
+Both modes enforce `overwrite_output_dir` and apply local retention, keeping
+folders while their uploads are pending. `finish_checkpoint_uploads()` waits for
+the remaining uploads and applies retention again. Local persistence errors
+propagate to the caller. Upload errors are logged.
 
 `load_checkpoint(path, model)` restores weights and returns training state.
 Pass `validate_state=trainer.validate_state_dict` to validate the run before

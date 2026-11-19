@@ -113,7 +113,8 @@ trainer = Trainer(config=config, model=model, tokenizer=tokenizer, dataset=datas
 try:
     trainer.train()
 finally:
-    trainer.run.finish()
+    if trainer.run is not None:
+        trainer.run.finish()
 ```
 
 When using workers, create the data, model and trainer inside an
@@ -178,15 +179,16 @@ exceed the tokenizer's model limit.
 Use `torchrun` to start one process per GPU. Each process keeps a full copy of
 the model and optimizer, so each GPU must have enough memory for a replica.
 `torchrun` supplies `RANK`, `LOCAL_RANK` and `WORLD_SIZE`; `distributed_run()`
-initializes NCCL and closes the process group when training finishes.
+uses those variables to select the device and initialize the process group for
+multiple ranks. It uses NCCL on CUDA and Gloo on CPU, and destroys the group when
+you exit the context. Pass `enable_cpu=True` to `distributed_run()` to select
+CPU even on a CUDA host.
 
 Save this as `train_distributed.py`. It uses the same pinned dataset and model
 as the scaffold recipe. Each host needs the installed workspace, dataset access
 and access to the model's tokenizer.
 
 ```python
-import logging
-
 from flock.training import (
     AdamWConfig,
     DatasetConfig,
@@ -201,7 +203,6 @@ from flock.training.core.models import OLMO2_1B_CONFIG, Olmo2
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO)
     with distributed_run() as runtime:
         dataset = get_dataset(DatasetConfig(uri="s3://flock-datasets/finepdfs", version=1))
         model = Olmo2(OLMO2_1B_CONFIG)
@@ -245,19 +246,25 @@ uv run torchrun --standalone --nproc-per-node=4 train_distributed.py
 Set `--nproc-per-node` to the number of GPUs you want to use on that host. The
 trainer selects each worker's GPU from `LOCAL_RANK`, synchronizes gradients with
 DDP and partitions the shuffled dataset across ranks. With `batch_size=2` and four
-ranks, a full global update processes eight rows. You do not need to add another
-distributed sampler or wrap the model in DDP yourself.
+ranks, a full global update processes eight rows. The trainer supplies the
+distributed sampler and the DDP wrapper. On the final partial update, ranks
+with no rows still participate using a dummy batch whose targets are all ignored.
+Each rank's contribution to the gradient is weighted by its valid target count,
+so the update uses the mean loss over all valid targets across ranks.
+All ranks use the same shuffle seed. The trainer seeds Python and PyTorch on
+each rank with `seed + rank`.
 
-Every rank must construct a trainer and call `train()`. Keep those calls outside
-an `if runtime.is_master` branch: gradient and checkpoint collectives need every
-rank. Only rank zero owns a W&B run, which is why the cleanup checks
-`trainer.run is not None`.
+Construct the trainer and call `train()` on every rank inside the
+`distributed_run()` context. If you call `evaluate()` directly, call it on every
+rank too. Rank zero scores the tasks and broadcasts completion or an exception.
+Rank zero also owns the W&B run. Check
+`trainer.run is not None` before finishing it, as in the example.
 
 ### Launch across hosts
 
 For two hosts with four GPUs each, run the same script and configuration on both
-hosts. Set `output_dir` to a shared filesystem path that every rank can read and
-write. Both hosts must reach the first host at the chosen address and port.
+hosts. Set `output_dir` to a shared filesystem path writable by rank zero and readable
+by every rank for resume. Both hosts must reach the first host at the chosen address and port.
 Replace `10.0.0.10` below with that host's address.
 
 On the first host:
@@ -524,9 +531,13 @@ With the recipe's `wandb_mode="offline"`, check the local run directory or
 `wandb_mode="online"`, accept SDK setup during `flock login`, and check the
 project in [Cerulean's dashboard](https://flock.cerulean.works).
 
-The trained weights remain in `trainer.model`. The scaffold has no gradient
-accumulation or distributed training.
-See the [trainer implementation](https://github.com/cerulean-works/flock/blob/main/flock/training/core/trainer.py) for the current loop.
+Loss and token counts include all ranks. `train/loss_window_max` is the largest
+per-rank batch mean loss in the window. Rank zero logs the metrics. When the
+application has yet to configure root logging, the trainer sets up INFO logging
+with the format `MM-DD HH:MM:SS INFO <logger> rank:<rank> <message>`.
+
+The trained weights remain in `trainer.model`. Each batch produces one optimizer
+update, with no gradient accumulation.
 
 ## Validate during training
 
@@ -553,22 +564,30 @@ Keep precision and batching consistent when comparing checkpoints; see
 
 Validation restores each module's previous training mode, including when scoring
 fails. A `KeyError` or `FileExistsError` is logged and skips that validation;
-other errors stop training. When saving and validation fall on the same update,
-the checkpoint is saved first so an evaluation failure leaves it available to resume.
+other errors propagate to every rank. Interval checkpoints are saved before
+validation on the same update. If the final update falls between save intervals,
+validation runs first and the final save happens during loop cleanup.
 
 ## Save and resume training
 
-Set `save_steps` in `TrainerConfig` to save after that many updates and at the
-end of the pass. The default `None` disables scheduled saving.
+Set `save_steps` in `TrainerConfig` to save at that update interval. The default
+`None` disables automatic saves. When training ends between intervals, loop
+cleanup saves the final step if the loop completed at least one update.
+Single-process cleanup also attempts this save if training raises. Distributed
+cleanup attempts it only after the loop returns successfully. The final save
+queues a Hub upload like an interval save. Rank zero then waits for pending
+uploads and applies local retention again.
 Each checkpoint holds model weights, model configuration, optimizer and scheduler
 state, training counters, the unfinished logging window, and Python and PyTorch
 RNG states. Checkpoints use the [Hub model format](../hub/model-storage#what-a-version-holds).
 
 In distributed training, every rank contributes its Python, CPU and CUDA RNG
 states and completed-batch cursor. Rank zero writes these records alongside one
-copy of the model, optimizer, scheduler and global metrics. All ranks wait for
-the local save attempt to finish. A capture failure on any rank skips that save;
-write failures are logged and training continues.
+copy of the model, optimizer, scheduler and global metrics. If any rank fails
+to capture its state, the trainer logs the error and skips that checkpoint.
+On a successful save, all ranks synchronize after rank zero writes the local
+files and queues any Hub upload. Local persistence errors propagate on the
+writing rank. Hub upload errors are logged.
 
 Set `output_dir` for a checkpoint root, or use the default
 `.training-checkpoints/<run_name>`. Fresh training requires an empty directory
@@ -586,7 +605,8 @@ trainer = Trainer(config=config, model=model, tokenizer=tokenizer, dataset=datas
 try:
     trainer.train(resume_from_checkpoint=True)
 finally:
-    trainer.run.finish()
+    if trainer.run is not None:
+        trainer.run.finish()
 ```
 
 You can also pass a specific local folder:
@@ -605,14 +625,13 @@ run and records the restored global steps there.
 
 Every rank reads weights and training state directly from the checkpoint folder
 and restores the RNG streams and sampler cursor saved under its global rank.
-The folder must be readable by every rank. Resume does not broadcast checkpoint
-contents from rank zero or repartition data across a changed world size.
-Each rank must retain its visible CUDA device count. Checkpoints without
-`rank_states` and `world_size` are rejected rather than reusing rank zero's RNG
-state on every worker.
+Make the same checkpoint available to every rank. Keep the original world size
+and each rank's visible CUDA device count. Trainer resume requires a checkpoint
+with `world_size` and a `rank_states` entry for the calling rank.
 
 To resume a checkpoint stored in the Hub, download its training state too, then
-pass the downloaded folder:
+pass the downloaded folder. For a distributed run, make the downloaded files
+readable on every host before calling `train()` on all ranks.
 
 ```python
 from flock.hub import models
@@ -648,9 +667,9 @@ manager.finish_checkpoint_uploads()
 
 The manager writes weights, buffers and training state to local files before
 `save_model` returns. Later training updates cannot change those files. The Hub
-handles background uploads. Each save collects completed uploads before pruning
-old checkpoints. `finish_checkpoint_uploads()` waits for the remaining uploads
-and applies retention again.
+handles background uploads. After a save, the manager collects completed uploads
+and applies retention. `finish_checkpoint_uploads()` waits for the remaining
+uploads and applies retention again.
 
 Set `save_to_hub_repo="org/model"` to upload each checkpoint with a
 `checkpoint-<step>` tag. Passing `blocking=True` to `save_model` waits for all
@@ -670,8 +689,3 @@ trainer.load_state_dict(state)
 
 Pending uploads and published checkpoint folders are available through
 `manager.pending_uploads` and `manager.checkpoints()` respectively.
-
-After entering the training loop, cleanup waits for pending uploads and, when
-automatic saving is enabled, saves the current step if it falls between save
-intervals. This also happens when the loop raises an exception. Local save errors
-propagate. Always finish the tracking run in your own `finally` block.

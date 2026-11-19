@@ -31,7 +31,7 @@ class CheckpointManager:
         save_total_limit (`int`, *optional*): Positive local retention limit.
         overwrite_output_dir (`bool`, *optional*, defaults to `False`): Allow replacement.
         run (`wandb.Run` or `str`, *optional*): Tracking run or `entity/project/id`.
-        logger (`logging.Logger`, *optional*): Logger for retention and upload failures.
+        logger (`logging.Logger`, *optional*): Logger for saves, retention and upload failures.
 
     Saves write weights, buffers and training state to local files before
     returning, then delegate background uploads to the Hub. Later training
@@ -89,6 +89,7 @@ class CheckpointManager:
         published by rename. Staging paths are excluded from checkpoint listing.
 
         Raises:
+            `ValueError`: If the step is negative.
             `FileExistsError`: If a checkpoint for this step already exists and
                 `overwrite_output_dir` is false.
             `OSError`: If a local write fails.
