@@ -288,6 +288,22 @@ def test_folder_digest_is_the_registrys_digest_of_every_file(tmp_path: Path) -> 
     assert model.folder_digest(tmp_path) == hashlib.sha256(lines.encode()).hexdigest()
 
 
+def test_folder_digest_covers_files_in_linked_folders(tmp_path: Path) -> None:
+    (tmp_path / "shards").mkdir()
+    (tmp_path / "shards" / "model-00001.safetensors").write_bytes(b"one")
+    (tmp_path / "export").mkdir()
+    (tmp_path / "export" / "weights").symlink_to(tmp_path / "shards")
+    before = model.folder_digest(tmp_path / "export")
+    (tmp_path / "shards" / "model-00001.safetensors").write_bytes(b"two")
+    assert model.folder_digest(tmp_path / "export") != before
+
+
+def test_folder_digest_refuses_a_tab_in_a_file_name(tmp_path: Path) -> None:
+    (tmp_path / "a\tb").write_bytes(b"")
+    with pytest.raises(ValueError, match="control character"):
+        model.folder_digest(tmp_path)
+
+
 def test_folder_digest_refuses_an_empty_folder(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="holds no files"):
         model.folder_digest(tmp_path)
@@ -311,10 +327,32 @@ def test_model_ref_refuses_a_local_folder_without_a_full_digest(model_id: str) -
 def test_a_local_folder_resolves_to_the_same_id_every_time(export: Path, tmp_path: Path) -> None:
     digest = model.folder_digest(export)
     resolved = ModelRef.parse(f"local:{export}@{digest}").resolve()
-    assert resolved == ModelRef(str(export), digest, "local", digest)
+    assert resolved == ModelRef(str(export.resolve()), digest, "local", digest)
     # The same files elsewhere are the same model.
     copy = shutil.copytree(export, tmp_path / "copy")
     assert str(ModelRef.parse(f"local:{copy}@{digest}").resolve()) == str(resolved)
+
+
+def test_a_link_resolves_to_the_folder_it_points_to(export: Path, tmp_path: Path) -> None:
+    (tmp_path / "latest").symlink_to(export)
+    digest = model.folder_digest(export)
+    assert ModelRef.parse(f"local:{tmp_path / 'latest'}@{digest}").resolve().repo == str(
+        export.resolve()
+    )
+
+
+def test_a_folder_changed_while_it_loads_is_refused(
+    export: Path, lm: LlamaForCausalLM, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def rewrite_and_load(*args: Any, **kwargs: Any) -> LlamaForCausalLM:
+        (export / "config.json").write_text("{}")
+        return lm
+
+    monkeypatch.setattr(
+        model, "AutoModelForCausalLM", SimpleNamespace(from_pretrained=rewrite_and_load)
+    )
+    with pytest.raises(ValueError, match="changed while it loaded"):
+        ScoringModel.from_pretrained(f"local:{export}@{model.folder_digest(export)}", device="cpu")
 
 
 def test_a_changed_weight_file_is_refused(export: Path) -> None:

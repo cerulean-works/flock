@@ -120,13 +120,15 @@ class ModelRef:
             )
 
         if self.kind == "local":
-            digest = folder_digest(Path(self.repo))
+            # The real path, so a link moved to another export after this check can't be loaded.
+            folder = Path(self.repo).resolve()
+            digest = folder_digest(folder)
             if digest != self.revision:
                 raise ValueError(
                     f"{self.repo} has the digest {digest}, not {self.revision}: its files changed, "
                     "or the id names other weights"
                 )
-            return ModelRef(self.repo, self.revision, "local", digest)
+            return ModelRef(str(folder), self.revision, "local", digest)
 
         # Transformers loads a folder of that name before the Hub, and a folder has no commit
         # for the revision to pin, so nothing would say which weights were scored.
@@ -152,15 +154,20 @@ def folder_digest(folder: Path) -> str:
     The digest of every file in `folder`, computed as the Flock registry computes a version's: the sha256 of `{path}\t{size}\t{sha256}\n` per file, sorted by its path in the folder.
 
     Raises:
-        `ValueError`: if `folder` isn't a folder or holds no files.
+        `ValueError`: if `folder` isn't a folder, holds no files, or has a file name with a control character, such as a tab, which the registry refuses too.
     """
     if not folder.is_dir():
         raise ValueError(f"{folder} isn't a folder")
 
-    # Sorted as strings, as the registry sorts, which isn't `Path` order: `a-b` comes before `a/c`.
-    files = {p.relative_to(folder).as_posix(): p for p in folder.rglob("*") if p.is_file()}
+    # Through linked folders too, since transformers follows them to a shard the index names.
+    paths = folder.rglob("*", recurse_symlinks=True)
+    files = {p.relative_to(folder).as_posix(): p for p in paths if p.is_file()}
     lines = []
+    # Sorted as strings, as the registry sorts, which isn't `Path` order: `a-b` comes before `a/c`.
     for name in sorted(files):
+        # A tab or newline in a name would let two file lists write the same lines.
+        if not name.isprintable():
+            raise ValueError(f"{folder}: the file name {name!r} has a control character")
         file_digest = hashlib.sha256()
         with files[name].open("rb") as file:
             while chunk := file.read(8 * 2**20):
@@ -425,6 +432,9 @@ class ScoringModel:
         model = AutoModelForCausalLM.from_pretrained(
             ref.repo, revision=ref.revision, dtype=dtype, device_map=device
         )
+        # Files rewritten between the check and the load would be scored under the old digest.
+        if ref.kind == "local" and folder_digest(Path(ref.repo)) != ref.digest:
+            raise ValueError(f"{ref.repo} changed while it loaded; score it again")
 
         return cls(
             model,
