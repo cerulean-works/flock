@@ -407,7 +407,8 @@ def test_a_link_resolves_to_the_folder_it_points_to(export: Path, tmp_path: Path
 def test_a_folder_changed_while_it_loads_is_refused(
     export: Path, lm: LlamaForCausalLM, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def rewrite_and_load(*args: Any, **kwargs: Any) -> LlamaForCausalLM:
+    def rewrite_and_load(*args: Any, trust_remote_code: bool, **kwargs: Any) -> LlamaForCausalLM:
+        assert trust_remote_code is False  # code another repo names is never run
         (export / "config.json").write_text("{}")
         return lm
 
