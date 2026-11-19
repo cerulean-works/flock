@@ -4,7 +4,6 @@ import hashlib
 import itertools
 import json
 import logging
-import posixpath
 import re
 from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
@@ -156,14 +155,15 @@ def folder_digest(folder: Path) -> str:
     The digest of every file in `folder`, computed as the Flock registry computes a version's: the sha256 of `{path}\t{size}\t{sha256}\n` per file, sorted by its path in the folder.
 
     Raises:
-        `ValueError`: if `folder` isn't a folder, holds no files, holds a link, has a file name with a control character, such as a tab, which the registry refuses too, or has a weights index naming a shard that isn't one of its files.
+        `ValueError`: if `folder` isn't a folder, holds no files, holds a link or another file that isn't a regular file, has a file name with a control character, such as a tab, which the registry refuses too, names a weights shard or tokenizer file that isn't one of its files, or is an adapter, whose base model loads from elsewhere.
         `OSError`: if a folder in it can't be read.
     """
     if not folder.is_dir():
         raise ValueError(f"{folder} isn't a folder")
 
-    # A link can point outside the folder and change there under the same digest, and an
-    # unreadable folder would drop out of the list unnoticed. Exports have neither.
+    # A link can point outside the folder and change there under the same digest, an unreadable
+    # folder would drop out of the list unnoticed, and a pipe would hang the read. Exports have
+    # none of them.
     errors: list[OSError] = []
     files = {}
     for root, folders, names in folder.walk(on_error=errors.append):
@@ -171,11 +171,28 @@ def folder_digest(folder: Path) -> str:
             if (root / name).is_symlink():
                 raise ValueError(f"{folder}: {root / name} is a link, which the digest can't pin")
         for name in names:
+            if not (root / name).is_file():
+                raise ValueError(f"{folder}: {root / name} isn't a regular file")
             files[(root / name).relative_to(folder).as_posix()] = root / name
     if errors:
         raise errors[0]
     if not files:
         raise ValueError(f"{folder} holds no files")
+    # Transformers loads an adapter's base model from wherever its config says.
+    if "adapter_config.json" in files:
+        raise ValueError(f"{folder} is an adapter, whose base model the digest can't pin")
+
+    # Transformers opens the shards a weights index names, and the tokenizer file a tokenizer
+    # config names, by joining them to the folder, so `../` or an absolute path reaches out.
+    named = []
+    for index in ("model.safetensors.index.json", "pytorch_model.bin.index.json"):
+        if index in files:
+            named += json.loads(files[index].read_text())["weight_map"].values()
+    if "tokenizer_config.json" in files:
+        config = json.loads(files["tokenizer_config.json"].read_text())
+        named += config.get("fast_tokenizer_files", [])
+    if outside := sorted(set(named) - files.keys()):
+        raise ValueError(f"{folder}: its configs name {outside}, which aren't in the folder")
 
     lines = []
     # Sorted as strings, as the registry sorts, which isn't `Path` order: `a-b` comes before `a/c`.
@@ -183,12 +200,6 @@ def folder_digest(folder: Path) -> str:
         # A tab or newline in a name would let two file lists write the same lines.
         if not name.isprintable():
             raise ValueError(f"{folder}: the file name {name!r} has a control character")
-        # Transformers opens each shard an index names beside it, even `../` or an absolute path.
-        if name.endswith(".index.json"):
-            weight_map = json.loads(files[name].read_text()).get("weight_map", {})
-            for shard in set(weight_map.values()):
-                if posixpath.normpath(posixpath.join(posixpath.dirname(name), shard)) not in files:
-                    raise ValueError(f"{folder}: {name} names {shard}, which isn't in the folder")
         file_digest = hashlib.sha256()
         with files[name].open("rb") as file:
             while chunk := file.read(8 * 2**20):

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import shutil
 from collections.abc import Callable
 from types import SimpleNamespace
@@ -305,7 +306,7 @@ def test_folder_digest_refuses_an_index_naming_a_shard_outside(tmp_path: Path, s
     (tmp_path / "model-00001.safetensors").write_bytes(b"one")
     index = {"weight_map": {"lm_head.weight": shard}}
     (tmp_path / "model.safetensors.index.json").write_text(json.dumps(index))
-    with pytest.raises(ValueError, match="isn't in the folder"):
+    with pytest.raises(ValueError, match="aren't in the folder"):
         model.folder_digest(tmp_path)
 
     index = {"weight_map": {"lm_head.weight": "model-00001.safetensors"}}
@@ -313,10 +314,37 @@ def test_folder_digest_refuses_an_index_naming_a_shard_outside(tmp_path: Path, s
     model.folder_digest(tmp_path)
 
 
+def test_folder_digest_refuses_a_tokenizer_file_outside(tmp_path: Path) -> None:
+    config = {"fast_tokenizer_files": ["tokenizer.4.0.json", "../tokenizer.json"]}
+    (tmp_path / "tokenizer_config.json").write_text(json.dumps(config))
+    (tmp_path / "tokenizer.4.0.json").write_text("{}")
+    with pytest.raises(ValueError, match=r"\['../tokenizer.json'\]"):
+        model.folder_digest(tmp_path)
+
+
+def test_folder_digest_hashes_another_index_as_bytes(tmp_path: Path) -> None:
+    (tmp_path / "docs.index.json").write_text("[1, 2]")
+    model.folder_digest(tmp_path)
+
+
+def test_folder_digest_refuses_an_adapter(tmp_path: Path) -> None:
+    (tmp_path / "adapter_config.json").write_text('{"base_model_name_or_path": "/work/base"}')
+    with pytest.raises(ValueError, match="is an adapter"):
+        model.folder_digest(tmp_path)
+
+
+def test_folder_digest_refuses_a_pipe(tmp_path: Path) -> None:
+    os.mkfifo(tmp_path / "pipe")
+    with pytest.raises(ValueError, match="isn't a regular file"):
+        model.folder_digest(tmp_path)
+
+
 def test_folder_digest_refuses_an_unreadable_folder(tmp_path: Path) -> None:
     (tmp_path / "config.json").write_text("{}")
     (tmp_path / "hidden").mkdir()
     (tmp_path / "hidden").chmod(0)
+    if os.access(tmp_path / "hidden", os.R_OK):  # root reads any folder
+        pytest.skip("this user can read a folder with no permissions")
     try:
         with pytest.raises(PermissionError):
             model.folder_digest(tmp_path)
