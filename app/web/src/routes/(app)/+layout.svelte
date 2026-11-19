@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CpuIcon from '@lucide/svelte/icons/cpu';
 	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
@@ -57,6 +58,7 @@
 	const stay = $derived(
 		!page.route.id?.startsWith('/(app)/[entity]') &&
 			!page.route.id?.startsWith('/(app)/orgs/') &&
+			!page.route.id?.startsWith('/(app)/compute/') &&
 			!page.route.id?.startsWith('/(app)/datasets/') &&
 			!page.route.id?.startsWith('/(app)/models/') &&
 			!page.route.id?.startsWith('/(app)/storage/')
@@ -133,6 +135,19 @@
 				>
 					<ActivityIcon />
 				</Button>
+			{/if}
+			{#if data.shell.org && !outside}
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					class={[
+						'mt-1 text-muted-foreground',
+						page.route.id === '/(app)/compute/[org]' && 'bg-muted text-foreground'
+					]}
+					href={resolve('/(app)/compute/[org]', { org: data.shell.org })}
+					aria-label="Compute"
+					title="Compute"><CpuIcon /></Button
+				>
 			{/if}
 			{#if data.shell.s3 && data.shell.org && !outside}
 				<Button
