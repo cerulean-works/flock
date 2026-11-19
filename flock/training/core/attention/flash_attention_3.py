@@ -107,6 +107,8 @@ def flash_attention_3(
         )
 
     with _fa3_context(q.device):
+        # Not a fallback: _fa3_context pins SDPA to its FA3 flash backend, so this
+        # still runs FA3. Without padding, the dense path skips the varlen pack/unpack.
         if attention_metadata is None:
             return sdpa_attention(q, k, v, is_causal=is_causal)
 
