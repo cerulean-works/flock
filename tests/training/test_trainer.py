@@ -359,7 +359,7 @@ def test_evaluation_scores_real_tasks_and_logs_at_training_step(
     weights = copy.deepcopy(trainer.model.state_dict())
     state = copy.deepcopy(trainer.state_dict())
     calls = []
-    score_prepared = trainer_module.score_prepared
+    score_task = trainer._score_task
 
     def score(scorer: ScoringModel, prepared: PreparedTask) -> TaskResult:
         task = prepared.task
@@ -369,9 +369,9 @@ def test_evaluation_scores_real_tasks_and_logs_at_training_step(
         assert scorer.tokenizer is trainer.tokenizer
         assert scorer.name == "test-run@step-2"
         calls.append(task)
-        return score_prepared(scorer, prepared)
+        return score_task(scorer, prepared)
 
-    monkeypatch.setattr(trainer_module, "score_prepared", score)
+    monkeypatch.setattr(trainer, "_score_task", score)
     trainer.evaluate()
 
     assert calls == validation_tasks
@@ -421,7 +421,7 @@ def test_validation_preserves_training_updates(
         validation_steps=1,
     )
     calls = []
-    score_prepared = trainer_module.score_prepared
+    score_task = trainer._score_task
 
     def score(scorer: ScoringModel, prepared: PreparedTask) -> TaskResult:
         task = prepared.task
@@ -433,9 +433,9 @@ def test_validation_preserves_training_updates(
             and task is validation_tasks[failed_task]
         ):
             raise error_type("validation fixture failure")
-        return score_prepared(scorer, prepared)
+        return score_task(scorer, prepared)
 
-    monkeypatch.setattr(trainer_module, "score_prepared", score)
+    monkeypatch.setattr(trainer, "_score_task", score)
     trainer.train()
 
     scored_tasks = validation_tasks if failed_task is None else validation_tasks[: failed_task + 1]
@@ -470,7 +470,7 @@ def test_unexpected_validation_error_is_not_silenced(
     def score(scorer: ScoringModel, prepared: PreparedTask) -> Never:
         raise ValueError("invalid validation window")
 
-    monkeypatch.setattr(trainer_module, "score_prepared", score)
+    monkeypatch.setattr(trainer, "_score_task", score)
     with pytest.raises(ValueError, match="invalid validation window"):
         trainer.train()
     assert trainer.state.step.item() == trainer.lr_scheduler.completed_steps == 1
@@ -494,7 +494,7 @@ def test_validation_reuses_loaded_and_tokenized_tasks_with_limits(
     load = Dataset.load
     tokenize = trainer_module.ScoringModel.tokenize
     prepare = trainer_module.prepare_task
-    score = trainer_module.score_prepared
+    score = trainer._score_task
 
     def load_once(dataset: Dataset, split: str | None = None) -> list[dict[str, Any]]:
         loads.append(dataset.split)
@@ -519,7 +519,7 @@ def test_validation_reuses_loaded_and_tokenized_tasks_with_limits(
     monkeypatch.setattr(Dataset, "load", load_once)
     monkeypatch.setattr(trainer_module.ScoringModel, "tokenize", tokenize_once)
     monkeypatch.setattr(trainer_module, "prepare_task", prepare_once)
-    monkeypatch.setattr(trainer_module, "score_prepared", record_score)
+    monkeypatch.setattr(trainer, "_score_task", record_score)
     hook = trainer.model.register_forward_pre_hook(
         lambda model, args: batch_sizes.append(args[0]["input_ids"].numel())
     )
