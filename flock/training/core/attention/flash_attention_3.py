@@ -95,10 +95,15 @@ def flash_attention_3(
 
     if attention_metadata is not None and (
         not isinstance(attention_metadata, VarlenMetadata)
+        or attention_metadata.batch_size != q.shape[0]
+        or attention_metadata.seq_len != q.shape[2]
         or attention_metadata.indices.device != q.device
+        or attention_metadata.cu_seq_lens_q.device != q.device
+        or attention_metadata.cu_seq_lens_k.device != q.device
     ):
         raise ValueError(
-            "FA3 expects VarlenMetadata on Q's device; call prepare_flash_attention_mask first"
+            "FA3 expects VarlenMetadata matching Q's batch size, sequence length and device; "
+            "call prepare_flash_attention_mask first"
         )
 
     with _fa3_context(q.device):

@@ -27,7 +27,7 @@ fa3_module = importlib.import_module("flock.training.core.attention.flash_attent
 
 @pytest.fixture
 def math_kernel(monkeypatch: pytest.MonkeyPatch) -> Mock:
-    # Substitute GPU kernels; exercise the real span packing and restoration.
+    # Substitute GPU kernels; exercise the real packing and restoration.
     monkeypatch.setattr(
         fa3_module,
         "_fa3_context",
@@ -289,22 +289,32 @@ def _prepared(rows: list[list[bool]]) -> VarlenMetadata:
 
 
 @pytest.mark.parametrize(
-    "attention_metadata",
+    "attention_metadata, q_shape",
     [
         # Raw spans and dense masks are not varlen metadata.
-        torch.tensor([[1, 3]]),
-        torch.tensor([[False, True, True, False]]),
-        # Metadata on another device.
-        replace(
-            _prepared([[False, True, True, False]]),
-            indices=torch.empty(2, dtype=torch.int64, device="meta"),
-        ),
+        (torch.tensor([[1, 3]]), (1, 2, 4, 8)),
+        (torch.tensor([[False, True, True, False]]), (1, 2, 4, 8)),
+        # Metadata built for another batch size or a longer sequence.
+        (_prepared([[False, True, True, False]] * 2), (1, 2, 8, 8)),
+        (_prepared([[True] * 8 + [False] * 8]), (1, 2, 8, 8)),
     ],
 )
-def test_fa3_requires_varlen_metadata_on_qs_device(attention_metadata: Any) -> None:
-    q = torch.randn(1, 2, 4, 8)
-    with pytest.raises(ValueError, match="VarlenMetadata"):
+def test_fa3_requires_metadata_matching_q(
+    math_kernel: Mock, attention_metadata: Any, q_shape: tuple[int, ...]
+) -> None:
+    q = torch.randn(q_shape)
+    with pytest.raises(ValueError, match="VarlenMetadata matching"):
         flash_attention_3(q, q, q, attention_metadata=attention_metadata)
+    math_kernel.assert_not_called()
+
+
+@pytest.mark.parametrize("field", ["indices", "cu_seq_lens_q", "cu_seq_lens_k"])
+def test_fa3_requires_metadata_on_qs_device(field: str) -> None:
+    prepared = _prepared([[False, True, True, False]])
+    moved = replace(prepared, **{field: getattr(prepared, field).to("meta")})
+    q = torch.randn(1, 2, 4, 8)
+    with pytest.raises(ValueError, match="VarlenMetadata matching"):
+        flash_attention_3(q, q, q, attention_metadata=moved)
 
 
 @pytest.mark.parametrize(
@@ -420,7 +430,7 @@ def test_varlen_applies_cuda_autocast(
     value_dtype: torch.dtype,
     empty: bool,
 ) -> None:
-    # Real CPU spans exercise packing; emulate the CUDA autocast state and kernel.
+    # Real CPU metadata exercises packing; emulate the CUDA autocast state and kernel.
     monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
     monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda: True)
     compute = Mock(side_effect=lambda q, *args, **kwargs: q.clone())

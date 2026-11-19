@@ -81,3 +81,4 @@ def test_flash_preparation_builds_packing_metadata(is_causal: bool, empty: bool)
     torch.testing.assert_close(prepared.cu_seq_lens_q, expected_cu_seq_lens)
     assert prepared.cu_seq_lens_k is prepared.cu_seq_lens_q
     assert prepared.max_length_q == prepared.max_length_k == (0 if empty else 2)
+    assert (prepared.batch_size, prepared.seq_len) == (2, 4)

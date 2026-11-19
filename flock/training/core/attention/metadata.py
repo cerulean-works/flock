@@ -20,6 +20,8 @@ class VarlenMetadata:
         max_length_k (`int`): Length of the longest key row, or 0 when every row is empty.
         indices (`torch.Tensor`): Positions of real tokens in the flattened
             `[batch * seq_len]` axis.
+        batch_size (`int`): Rows in the padded batch.
+        seq_len (`int`): Sequence length of the padded batch.
     """
 
     cu_seq_lens_q: torch.Tensor
@@ -27,7 +29,9 @@ class VarlenMetadata:
     max_length_q: int
     max_length_k: int
     indices: torch.Tensor
+    batch_size: int
+    seq_len: int
 
 
-# Every kind of prepared attention metadata, one type per kind rather than per
+# Every kind of prepared attention metadata, one type per kind rather than per backend.
 type AttentionMetadata = torch.Tensor | VarlenMetadata | None

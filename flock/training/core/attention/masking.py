@@ -47,7 +47,7 @@ def prepare_flash_attention_mask(
     if padding_mask is None:
         return None
 
-    sequence = padding_mask.shape[1]
+    batch, sequence = padding_mask.shape
     positions = torch.arange(sequence, device=padding_mask.device)
     starts = torch.where(padding_mask, positions, sequence).amin(dim=-1)
     stops = starts + padding_mask.sum(dim=-1)
@@ -71,4 +71,6 @@ def prepare_flash_attention_mask(
         max_length_q=max_length,
         max_length_k=max_length,
         indices=indices.to(device, non_blocking=True),
+        batch_size=batch,
+        seq_len=sequence,
     )
