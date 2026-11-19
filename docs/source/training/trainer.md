@@ -464,11 +464,10 @@ from flock.training.core.models import OLMO2_1B_CONFIG
 config = replace(OLMO2_1B_CONFIG, attn_implementation="flash_attention_4")
 ```
 
-- **Kernels** for FA4 come from the `flash-attn-4` package, which `uv sync`
-  installs on Linux with the default `gpu` dependency group. It ships prebuilt
-  wheels and compiles its kernels on first use. FA3 has no prebuilt package: build
-  FlashAttention-3 against your PyTorch and CUDA versions and install it yourself.
-  PyTorch 2.14 marks its FA4 integration as a prototype.
+- **Kernels** come from prebuilt packages that `uv sync` installs on Linux with
+  the default `gpu` dependency group: `flash-attn-3` from PyTorch's CUDA 13 wheel
+  index, and `flash-attn-4` from PyPI, which compiles its kernels on first use.
+  Neither needs a local build. PyTorch 2.14 marks its FA4 integration as a prototype.
 - **Inputs** must be FP16 or BF16, which the trainer's default BF16 autocast
   provides. Padding can sit at either end of a row, and rows can be empty. Masks
   with holes, dense masks and unequal Q/K sequence lengths are unsupported.

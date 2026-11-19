@@ -1,8 +1,8 @@
 """Explicit FA3 and FA4 checks: require a supported GPU and compatible external kernels.
 
-FA3 needs a Hopper GPU and a FlashAttention-3 build. FA4 needs a Hopper or Blackwell GPU
-and the `flash-attn-4` package from the `gpu` dependency group. Select one with
-`-m 'gpu and fa3'` or `-m 'gpu and fa4'`.
+FA3 needs a Hopper GPU and the `flash-attn-3` package. FA4 needs a Hopper or Blackwell
+GPU and the `flash-attn-4` package. The `gpu` dependency group installs both. Select one
+with `-m 'gpu and fa3'` or `-m 'gpu and fa4'`.
 """
 
 from collections.abc import Callable
