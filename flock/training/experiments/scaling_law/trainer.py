@@ -1,6 +1,7 @@
 """Save when a run reaches given token counts, and stop at its token budget."""
 
 import json
+import math
 from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 
@@ -11,16 +12,28 @@ from flock.training import TokenChunkDataset, Trainer, TrainerConfig
 from flock.training.core.data_utils import Batch, ResumableBatchDataSampler, TokenBatchPlan
 from flock.training.core.distributed import DistributedRuntime
 from flock.training.core.models import BaseModel
+from flock.training.core.streaming import TextStream
 
 
 def step_target_counts(
-    config: TrainerConfig, dataset: TokenChunkDataset, world_size: int
+    config: TrainerConfig,
+    dataset: TokenChunkDataset | TextStream,
+    world_size: int,
+    *,
+    up_to: int = 0,
 ) -> np.ndarray:
-    """Return the targets each global update of one full pass trains on.
+    """Return the targets each global update trains on.
 
-    The counts come from the same seeded plan the trainer's sampler follows, so
-    they match `train/total_tokens` exactly without reading anything back from GPUs.
+    For a token cache, these cover one full pass and come from the same seeded plan the
+    trainer's sampler follows. A text stream fills every row, so each update trains on
+    exactly `batch_tokens * world_size` targets; the counts then run until `up_to`
+    targets. Either way they match `train/total_tokens` without reading back from GPUs.
     """
+    if isinstance(dataset, TextStream):
+        if config.batch_tokens is None:
+            raise ValueError("A text stream needs batch_tokens")
+        per_update = config.batch_tokens * world_size
+        return np.full(max(1, math.ceil(up_to / per_update)), per_update, dtype=np.int64)
     lengths = dataset.target_counts()
     if config.batch_tokens is not None:
         plan = TokenBatchPlan.build(lengths, config.batch_tokens, seed=config.seed)
@@ -63,7 +76,8 @@ class TokenBudgetTrainer(Trainer):
         config ([`training.TrainerConfig`]): Training settings. `max_steps` must be unset.
         model ([`training.core.models.BaseModel`]): Model to train.
         tokenizer (`TokenizersBackend`): Tokenizer that built the cache.
-        dataset ([`training.TokenChunkDataset`]): Token cache; its lengths fix the plan.
+        dataset ([`training.TokenChunkDataset`] or `TextStream`): Token cache, whose lengths
+            fix the plan, or a text stream, whose updates each train on `batch_tokens` per rank.
         stop_tokens (`int`): Train on at least this many targets, save, then stop.
         save_tokens (`Sequence[int]`, *optional*): Further counts to save at.
         runtime ([`training.core.distributed.DistributedRuntime`], *optional*):
@@ -76,7 +90,7 @@ class TokenBudgetTrainer(Trainer):
         config: TrainerConfig,
         model: BaseModel,
         tokenizer: TokenizersBackend,
-        dataset: TokenChunkDataset,
+        dataset: TokenChunkDataset | TextStream,
         stop_tokens: int,
         save_tokens: Sequence[int] = (),
         runtime: DistributedRuntime | None = None,
@@ -86,7 +100,7 @@ class TokenBudgetTrainer(Trainer):
             raise ValueError("TokenBudgetTrainer sets max_steps from stop_tokens")
         runtime = runtime if runtime is not None else DistributedRuntime.from_env()
         targets = sorted({*save_tokens, stop_tokens})
-        counts = step_target_counts(config, dataset, runtime.world_size)
+        counts = step_target_counts(config, dataset, runtime.world_size, up_to=targets[-1])
         steps = steps_for_tokens(counts, targets)
         cumulative = np.cumsum(counts)
         self.token_checkpoints = [

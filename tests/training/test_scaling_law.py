@@ -15,7 +15,13 @@ import pytest
 import torch
 import yaml
 
-from flock.training import TokenChunkDataset
+from flock.training import (
+    AdamWConfig,
+    LRSchedulerConfig,
+    LRScheduleSegment,
+    TokenChunkDataset,
+    TrainerConfig,
+)
 from flock.training.experiments.scaling_law import sweep as sweep_module
 from flock.training.experiments.scaling_law.config import (
     ExperimentConfig,
@@ -197,6 +203,25 @@ def test_local_claims_from_exited_processes_are_stale(tmp_path: Path) -> None:
     assert run_state(run) == "interrupted"
 
 
+def test_claims_from_this_job_are_stale_once_their_launcher_exits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A relaunch in the same allocation must resume runs its interrupted launcher held.
+    monkeypatch.setenv("SLURM_JOB_ID", "12345")
+    run = RunDirectory(tmp_path)
+    owner = sweep_module.current_owner(0)
+    assert owner["job"] == "12345"
+    assert sweep_module.claim_is_live(owner)
+    exited = {**owner, "pid": 2**22 + 7}
+    assert not sweep_module.claim_is_live(exited)
+    # Another host's launcher cannot be checked from here, so its claim stays live.
+    assert sweep_module.claim_is_live({**exited, "host": "elsewhere"})
+    run.write(run.claim, exited)
+    assert run_state(run) == "interrupted"
+    assert try_claim(run, sweep_module.current_owner(1))
+    assert run.read(run.claim)["slot"] == 1
+
+
 def test_srun_command_runs_one_torchrun_per_node(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -210,13 +235,24 @@ def test_srun_command_runs_one_torchrun_per_node(
     )
     assert command[:3] == ["srun", "--exact", "--kill-on-bad-exit=1"]
     assert "--nodes=2" in command and "--ntasks=2" in command
-    assert "--gpus-per-task=4" in command
+    assert "--gpus-per-node=4" in command
+    assert not any(arg.startswith("--gpus-per-task") for arg in command)
     assert "--cpus-per-task=64" in command and "--mem=512000M" in command
     assert "--partition=gpu" in command
     script = command[-1]
     assert "--nnodes=2" in script and "--nproc-per-node=4" in script
     assert "--master-port=29501" in script and '--node-rank="$SLURM_PROCID"' in script
-    assert str(run.config) in script
+    # torchrun's own flags must come before the module, or the training script receives them.
+    entry = script.index("-m flock.training.experiments.scaling_law.train")
+    for flag in (
+        "--nnodes=",
+        "--nproc-per-node=",
+        "--master-port=",
+        "--node-rank=",
+        "--master-addr=",
+    ):
+        assert script.index(flag) < entry, flag
+    assert script.rstrip().endswith(str(run.config))
 
     local = train_command(run, layout, Slot(2), mode="local", master_port=29500)
     assert "--master-addr=127.0.0.1" in local and "--master-port=29502" in local
@@ -224,6 +260,19 @@ def test_srun_command_runs_one_torchrun_per_node(
         run, SlotLayout.plan(Allocation(1, 4), 2), Slot(0), mode="srun", master_port=1
     )
     assert "--cpus-per-task=32" in half and "--mem=256000M" in half
+    assert "--gpus-per-node=2" in half
+    # Memory given per CPU still splits; with no memory known, the step gets no --mem.
+    monkeypatch.delenv("SLURM_MEM_PER_NODE")
+    monkeypatch.setenv("SLURM_MEM_PER_CPU", "1000")
+    per_cpu = train_command(
+        run, SlotLayout.plan(Allocation(1, 4), 1), Slot(0), mode="srun", master_port=1
+    )
+    assert "--mem=16000M" in per_cpu
+    monkeypatch.delenv("SLURM_MEM_PER_CPU")
+    unknown = train_command(
+        run, SlotLayout.plan(Allocation(1, 4), 1), Slot(0), mode="srun", master_port=1
+    )
+    assert not any(arg.startswith("--mem") for arg in unknown)
 
 
 def test_local_launch_trains_every_run_and_records_results(
@@ -337,3 +386,36 @@ def test_pilot_sweep_resolves() -> None:
     assert len(experiments) == 20
     layout = SlotLayout.plan(Allocation(4, 4), sweep.sweep.gpus_per_run)
     assert capacity_warnings(len(experiments), Allocation(4, 4), layout) == []
+
+
+def test_data_settings_take_a_cache_or_a_text_stream() -> None:
+    from flock.training.experiments.scaling_law.config import DataSettings
+
+    assert DataSettings(text_path="/data/text.lance", add_bos=True).streams
+    assert not DataSettings(cache_dir="/data/tokens").streams
+    with pytest.raises(ValueError, match="exactly one"):
+        DataSettings()
+    with pytest.raises(ValueError, match="exactly one"):
+        DataSettings(cache_dir="/a", text_path="/b")
+    with pytest.raises(ValueError, match="needs none"):
+        DataSettings(text_path="/b", source={"uri": "s3://x", "version": 1})
+
+
+def test_stream_token_targets_map_to_exact_updates() -> None:
+    from flock.training.core.streaming import TextStream
+
+    stream = object.__new__(TextStream)
+    config = TrainerConfig.model_validate(
+        {
+            "run_name": "r",
+            "input_column": "text",
+            "batch_tokens": 65536,
+            "optimizer_config": AdamWConfig(lr=1e-3, betas=(0.9, 0.95)),
+            "lr_scheduler_config": LRSchedulerConfig(
+                schedule=[LRScheduleSegment(start=0, end=1.0, start_ratio=1.0, end_ratio=1.0)]
+            ),
+            "wandb_project": "p",
+        }
+    )
+    counts = step_target_counts(config, stream, 1, up_to=4_000_000_000)
+    assert steps_for_tokens(counts, [65536, 65537, 4_000_000_000]) == [1, 2, 61036]

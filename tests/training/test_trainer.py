@@ -5,6 +5,7 @@ import json
 import math
 import os
 import random
+import shutil
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
@@ -36,6 +37,7 @@ from flock.training.core.models import BaseModel
 from flock.training.core.models.olmo2 import Olmo2
 from flock.training.core.optimizers import AdamWConfig, MuonAdamWConfig, OptimizerInterface
 from flock.training.core.trainer import Trainer, TrainerCheckpoint, TrainerConfig, TrainerState
+from tests.training.test_streaming import make_stream
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
@@ -1171,6 +1173,18 @@ def test_existing_output_requires_resume_or_overwrite(
     trainer.checkpoint_manager.overwrite_output_dir = True
     save_checkpoint(trainer, blocking=blocking)
     load_checkpoint(trainer, trainer.output_dir / "checkpoint-0")
+
+
+def test_staging_from_an_interrupted_save_does_not_block_training(
+    trainer_factory: TrainerFactory,
+) -> None:
+    # A process killed mid-save leaves only `.checkpoint-*` staging behind.
+    trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None)
+    staging = trainer.output_dir / ".checkpoint-killed" / "model"
+    staging.mkdir(parents=True)
+    (staging / "flock.json").write_text("{}")
+    trainer.train()
+    assert not staging.parent.exists()
 
 
 @pytest.mark.parametrize(
@@ -2677,3 +2691,45 @@ def test_muon_adamw_training_resumes_from_a_checkpoint(
     resumed.train(resume_from_checkpoint=True)
     assert_nested_equal(resumed.model.state_dict(), reference.model.state_dict())
     assert_nested_equal(resumed.state_dict(), reference.state_dict())
+
+
+def test_text_stream_resumes_exactly(trainer_factory: TrainerFactory, tmp_path: Path) -> None:
+    stream = make_stream(tmp_path)
+    settings = {
+        "dataset": stream,
+        "num_workers": 0,
+        "prefetch_factor": None,
+        "batch_size": None,
+        "batch_tokens": 6,
+        "max_steps": 8,
+        "save_steps": 3,
+    }
+    full, run, _ = trainer_factory(**settings, output_dir=str(tmp_path / "full"))
+    full.train()
+    logged = [
+        record["train/total_tokens"] for record in run.metrics if "train/total_tokens" in record
+    ]
+    assert logged == [6 * step for step in range(1, 9)]
+
+    # Resume a copy of the step-3 checkpoint in a fresh trainer and run to the end.
+    resumed_dir = tmp_path / "resumed"
+    resumed_dir.mkdir()
+    shutil.copytree(tmp_path / "full" / "checkpoint-3", resumed_dir / "checkpoint-3")
+    resumed, _, _ = trainer_factory(**settings, output_dir=str(resumed_dir))
+    resumed.train(resume_from_checkpoint=True)
+    for name, tensor in full.model.state_dict().items():
+        assert torch.equal(resumed.model.state_dict()[name], tensor), name
+    assert (
+        resumed.state_dict()["rank_states"][0]["data_state"]
+        == full.state_dict()["rank_states"][0]["data_state"]
+    )
+
+
+def test_text_stream_needs_max_steps_and_a_token_budget(
+    trainer_factory: TrainerFactory, tmp_path: Path
+) -> None:
+    stream = make_stream(tmp_path)
+    with pytest.raises(ValueError, match="batch_tokens and max_steps"):
+        trainer_factory(
+            dataset=stream, num_workers=0, prefetch_factor=None, batch_size=None, batch_tokens=6
+        )

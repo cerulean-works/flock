@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import FrameType
-from typing import Any, Literal, Self
+from typing import Any, Literal, Self, cast
 
 from .config import ExperimentConfig, Sweep, experiment_json
 
@@ -201,30 +201,36 @@ def current_owner(slot: int) -> dict[str, Any]:
     return {"job": job, "host": host, "pid": os.getpid(), "slot": slot, "claimed_at": now()}
 
 
+def _process_is_alive(pid: Any) -> bool:
+    """Return whether a process on this host exists, counting unknowns as alive."""
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError, TypeError, ValueError, OverflowError:
+        return True
+    return True
+
+
 def claim_is_live(claim: dict[str, Any] | None) -> bool:
     """Return whether the launcher that wrote a claim may still be running its run.
 
-    Claims from this job are live. A local claim is stale when its process has
-    exited on this host. A Slurm claim is stale when `squeue` no longer lists its
-    job. When liveness cannot be checked, the claim counts as live, so a run is
-    never trained twice at once.
+    A claim from this Slurm job, or a local claim, is stale when the launcher
+    process that wrote it has exited on this host; a relaunch inside the same
+    allocation then resumes the run. A claim from another Slurm job is stale when
+    `squeue` no longer lists that job. When liveness cannot be checked, such as a
+    claim written on another host, the claim counts as live, so a run is never
+    trained twice at once.
     """
     if claim is None:
         # Half written by a launcher that is creating it right now.
         return True
     job = str(claim.get("job", ""))
-    if job == (os.environ.get("SLURM_JOB_ID") or f"local-{socket.gethostname()}-{os.getpid()}"):
-        return True
-    if job.startswith("local-"):
+    this_job = os.environ.get("SLURM_JOB_ID") or f"local-{socket.gethostname()}-{os.getpid()}"
+    if job == this_job or job.startswith("local-"):
         if claim.get("host") != socket.gethostname():
             return True
-        try:
-            os.kill(int(claim["pid"]), 0)
-        except ProcessLookupError:
-            return False
-        except PermissionError:
-            return True
-        return True
+        return _process_is_alive(claim.get("pid"))
     try:
         result = subprocess.run(
             ["squeue", "--noheader", "--jobs", job, "--format=%T"],
@@ -351,14 +357,19 @@ def train_command(
         f"--nnodes={layout.nodes_per_run}",
         f"--nproc-per-node={layout.gpus_per_node_used}",
         f"--master-port={master_port + slot.index}",
-        *entry,
     ]
-    # SLURM_PROCID numbers this step's tasks from zero, one task per node.
+    # SLURM_PROCID numbers this step's tasks from zero, one task per node. The rendezvous
+    # flags belong to torchrun, so they must precede the training module and its config.
     script = (
         'first=$(scontrol show hostnames "$SLURM_STEP_NODELIST" | head -n 1)\n'
-        f'exec {shlex.join(torchrun)} --node-rank="$SLURM_PROCID" --master-addr="$first"'
+        f'exec {shlex.join(torchrun)} --node-rank="$SLURM_PROCID" --master-addr="$first" '
+        f"{shlex.join(entry)}"
     )
-    resources = [f"--gpus-per-task={layout.gpus_per_node_used}"]
+    # srun reads the batch job's SLURM_GPUS_PER_NODE and SLURM_MEM_PER_NODE as if they
+    # were its own options, which would hand every step all of the node's GPUs and memory:
+    # each run then trains on the same GPU and steps queue behind each other. Explicit
+    # options take precedence, so always state this run's share.
+    resources = [f"--gpus-per-node={layout.gpus_per_node_used}"]
     gpus_per_node = int(os.environ.get("SLURM_GPUS_ON_NODE") or layout.gpus_per_node_used)
     share = layout.gpus_per_node_used / gpus_per_node
     # With --exact a step gets one CPU unless it asks for more, so take this run's share.
@@ -366,8 +377,15 @@ def train_command(
     if cpus:
         resources.append(f"--cpus-per-task={max(1, int(int(cpus) * share))}")
     memory = os.environ.get("SLURM_MEM_PER_NODE")
+    if not memory and os.environ.get("SLURM_MEM_PER_CPU") and cpus:
+        memory = str(int(os.environ["SLURM_MEM_PER_CPU"]) * int(cpus))
     if memory:
         resources.append(f"--mem={max(1, int(int(memory) * share))}M")
+    elif share < 1:
+        logger.warning(
+            "The job's memory is unknown, so each run's step takes all of it and runs sharing "
+            "a node will queue; request memory explicitly, such as #SBATCH --mem=900G"
+        )
     return [
         "srun",
         "--exact",
@@ -540,18 +558,37 @@ def print_plan(experiments: Sequence[ExperimentConfig], sweep: Sweep) -> None:
 def check_tokens(experiments: Sequence[ExperimentConfig], world_size: int) -> int:
     """Print the update that reaches each run's token targets; return 1 if any cannot."""
     from flock.training import TokenChunkDataset
+    from flock.training.core.streaming import TextStream
 
     from .trainer import step_target_counts, steps_for_tokens
 
     failures = 0
     for experiment in experiments:
         data = experiment.data
-        if not Path(data.cache_dir).exists():
+        dataset: TokenChunkDataset | TextStream
+        if data.text_path is not None:
+            if not Path(data.text_path).exists():
+                print(f"{experiment.name}: text {data.text_path} is missing")
+                failures += 1
+                continue
+            dataset = TextStream(
+                path=data.text_path,
+                input_column=data.input_column,
+                version=data.text_version,
+                block_rows=data.block_rows,
+                chunk_length=data.chunk_length,
+            )
+        elif not Path(cast(str, data.cache_dir)).exists():
             print(f"{experiment.name}: cache {data.cache_dir} is not prepared yet")
             failures += 1
             continue
-        dataset = TokenChunkDataset(cache_dir=data.cache_dir, chunk_length=data.chunk_length)
-        counts = step_target_counts(experiment.trainer_config(), dataset, world_size)
+        else:
+            dataset = TokenChunkDataset(
+                cache_dir=cast(str, data.cache_dir), chunk_length=data.chunk_length
+            )
+        counts = step_target_counts(
+            experiment.trainer_config(), dataset, world_size, up_to=experiment.token_targets()[-1]
+        )
         try:
             steps = steps_for_tokens(counts, experiment.token_targets())
         except ValueError as error:
@@ -613,6 +650,8 @@ def main(argv: list[str] | None = None) -> int:
         seen = set()
         for experiment in experiments:
             data = experiment.data
+            if data.cache_dir is None:
+                continue  # Streams tokenize during training.
             if data.cache_dir in seen or Path(data.cache_dir).exists():
                 seen.add(data.cache_dir)
                 continue

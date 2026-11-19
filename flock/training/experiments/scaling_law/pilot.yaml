@@ -41,7 +41,7 @@ base:
     dataloader_prefetch_factor: 2
     logging_steps: 10
     save_steps: 500                         # Lets a run resume after the job's time limit.
-    save_total_limit: 2
+    # No save_total_limit: retention would also delete the save_tokens checkpoints.
     wandb_project: scaling-law-pilot
   stop_tokens: 1.5B
   save_tokens: [0.5B, 1B]

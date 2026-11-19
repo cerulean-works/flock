@@ -108,6 +108,9 @@ each target, the update that saved it and the exact tokens trained by then.
 Interval saves from `save_steps` still happen. Keep them on, so a run that hits
 the job's time limit can resume close to where it stopped.
 
+Leave `save_total_limit` unset. Retention deletes the oldest checkpoints,
+including the ones saved at `save_tokens`.
+
 ## Check the plan
 
 Before submitting, check that every run is valid and see how the runs fill the

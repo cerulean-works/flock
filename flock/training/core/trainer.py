@@ -1,3 +1,4 @@
+import itertools
 import logging
 import math
 import random
@@ -37,6 +38,13 @@ from flock.training.core.distributed import DistributedRuntime, master_broadcast
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState, StepLRScheduler
 from flock.training.core.models import BaseModel
 from flock.training.core.optimizers import BaseOptimizer, OptimizerConfig, OptimizerInterface
+from flock.training.core.streaming import (
+    StreamPacker,
+    StreamPosition,
+    TextStream,
+    first_position,
+    stream_rows,
+)
 
 
 class TrainerConfig(PydanticBaseModel):
@@ -318,7 +326,7 @@ class TrainerCheckpoint(PydanticBaseModel):
         if not self.rank_states or any(rank < 0 or rank >= world_size for rank in self.rank_states):
             raise ValueError("Checkpoint contains invalid rank states")
         for rank_state in self.rank_states.values():
-            if rank_state.data_state != {"batch_cursor": step}:
+            if rank_state.data_state.get("batch_cursor") != step:
                 raise ValueError("Checkpoint sampler cursor and trainer progress do not match")
 
         if info.context is not None:
@@ -497,10 +505,20 @@ class Trainer:
         config: TrainerConfig,
         model: BaseModel,
         tokenizer: TokenizersBackend,
-        dataset: SafeLanceDataset | TokenChunkDataset,
+        dataset: SafeLanceDataset | TokenChunkDataset | TextStream,
         runtime: DistributedRuntime | None = None,
     ) -> None:
         """Initialize tracking, device placement, optimization and checkpoint storage."""
+        if isinstance(dataset, TextStream):
+            if config.batch_tokens is None or config.max_steps is None:
+                raise ValueError("A TextStream needs batch_tokens and max_steps")
+            if dataset.chunk_length > tokenizer.model_max_length:
+                raise ValueError("chunk_length exceeds tokenizer model_max_length")
+            if dataset.input_column != config.input_column:
+                raise ValueError("TextStream input column does not match Trainer config")
+            if not model.supports_packing():
+                raise ValueError(f"{type(model).__name__} does not support packed batches")
+            dataset.special_ids(tokenizer)
         if isinstance(dataset, TokenChunkDataset):
             if dataset.chunk_length > tokenizer.model_max_length:
                 raise ValueError("chunk_length exceeds tokenizer model_max_length")
@@ -545,7 +563,11 @@ class Trainer:
         self.batch_size = config.batch_size
         self.batch_tokens = config.batch_tokens
         self.token_plan: TokenBatchPlan | None = None
-        if self.batch_tokens is not None:
+        self.stream_packer: StreamPacker | None = None
+        self.stream_start: StreamPosition | None = (
+            first_position(self.runtime.rank) if isinstance(dataset, TextStream) else None
+        )
+        if self.batch_tokens is not None and not isinstance(dataset, TextStream):
             if not isinstance(dataset, TokenChunkDataset):
                 raise ValueError("batch_tokens requires a TokenChunkDataset")
             if self.batch_tokens < dataset.chunk_length - 1:
@@ -567,7 +589,9 @@ class Trainer:
         self.logging_steps = config.logging_steps
 
         self.total_steps = (
-            self.token_plan.global_steps(self.runtime.world_size)
+            cast(int, config.max_steps)
+            if isinstance(dataset, TextStream)
+            else self.token_plan.global_steps(self.runtime.world_size)
             if self.token_plan is not None
             else math.ceil(
                 len(self.dataset) / (cast(int, self.batch_size) * self.runtime.world_size)
@@ -622,8 +646,23 @@ class Trainer:
         self.run.define_metric("train/*", step_metric="global_step")
         self.run.define_metric("eval/*", step_metric="global_step")
 
-    def _get_training_dataloader(self, skip_batches: int = 0) -> DataLoader:
+    def _get_training_dataloader(self, skip_batches: int = 0) -> Iterable[Batch]:
         """Build a seeded, resumable loader with spawned workers and CUDA pinning."""
+        if isinstance(self.dataset, TextStream):
+            assert self.stream_start is not None and self.batch_tokens is not None
+            self.stream_packer = stream_rows(
+                self.dataset,
+                self.tokenizer,
+                start=self.stream_start,
+                batch_tokens=self.batch_tokens,
+                rank=self.runtime.rank,
+                world_size=self.runtime.world_size,
+                num_workers=self.dataloader_num_workers,
+                prefetch_factor=self.dataloader_prefetch_factor,
+                pin_memory=self.device.type == "cuda",
+            )
+            # Rows never run out on their own; stop at the planned update count.
+            return itertools.islice(self.stream_packer, self.total_steps - skip_batches)
         sampler: Sampler[list[int]]
         collate_fn: Callable[[list[dict[str, Any]]], Batch]
         if self.token_plan is not None:
@@ -795,6 +834,10 @@ class Trainer:
         # Set random state at beginning of training to ensure reproducibility
         self._set_seed()
 
+        if self.runtime.is_master:
+            # A save killed before publishing leaves only staging; it would block a fresh start.
+            self.checkpoint_manager.remove_staging()
+
         if not resume_from_checkpoint:
             if (
                 self.runtime.is_master
@@ -809,7 +852,8 @@ class Trainer:
             start_step = 0
             self.logger.info("Initializing training dataloader")
             dataloader = self._get_training_dataloader()
-            self.logger.info(f"Dataloader with {len(dataloader)} steps loaded")
+            if isinstance(dataloader, DataLoader):
+                self.logger.info(f"Dataloader with {len(dataloader)} steps loaded")
         else:
             self.logger.info("Resuming training from checkpoint")
             if resume_from_checkpoint is True:
@@ -981,17 +1025,32 @@ class Trainer:
                         torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
                     ),
                     "python_rng_state": random.getstate(),
-                    "data_state": {"batch_cursor": int(self.state.step.item())},
+                    "data_state": self._data_state(),
                 }
             },
             "config": self._run_contract(),
         }
 
+    def _data_state(self) -> dict[str, int]:
+        """Return this rank's sampler cursor and, for streams, where its next row starts."""
+        state = {"batch_cursor": int(self.state.step.item())}
+        if isinstance(self.dataset, TextStream):
+            position = (
+                self.stream_packer.position if self.stream_packer is not None else self.stream_start
+            )
+            assert position is not None
+            state.update(position.as_dict())
+        return state
+
     def _run_contract(self) -> dict[str, int | str | None]:
         """Return the settings that fix which data each resumed update sees."""
         contract: dict[str, int | str | None] = {
             "chunk_fingerprint": (
-                self.dataset.fingerprint if isinstance(self.dataset, TokenChunkDataset) else None
+                self.dataset.fingerprint
+                if isinstance(self.dataset, TokenChunkDataset)
+                else self.dataset.fingerprint(self.tokenizer)
+                if isinstance(self.dataset, TextStream)
+                else None
             ),
             "dataset_size": len(self.dataset),
             "batch_size": self.batch_size,
@@ -1035,6 +1094,15 @@ class Trainer:
             and len(cuda_rng) != torch.cuda.device_count()
         ):
             raise ValueError("Checkpoint CUDA RNG device count changed for this rank")
+        if isinstance(self.dataset, TextStream):
+            data_state = checkpoint.rank_states[self.runtime.rank].data_state
+            block, document, token = (data_state.get(key) for key in ("block", "document", "token"))
+            if (
+                not all(type(value) is int and value >= 0 for value in (block, document, token))
+                or cast(int, block) % self.runtime.world_size != self.runtime.rank
+                or cast(int, block) >= self.dataset.blocks
+            ):
+                raise ValueError("Checkpoint has no valid stream position for this rank")
         self.lr_scheduler.validate_state_dict(checkpoint.lr_scheduler_state_dict.model_dump())
 
         self.state.validate_state_dict(checkpoint.trainer_state_dict.model_dump())
@@ -1081,6 +1149,13 @@ class Trainer:
         self.lr_scheduler.load_state_dict(checkpoint.lr_scheduler_state_dict.model_dump())
 
         rank_state = checkpoint.rank_states[self.runtime.rank]
+        if isinstance(self.dataset, TextStream):
+            self.stream_start = StreamPosition(
+                rank_state.data_state["block"],
+                rank_state.data_state["document"],
+                rank_state.data_state["token"],
+            )
+            self.stream_packer = None
         torch.set_rng_state(rank_state.cpu_rng_state)
         random.setstate(rank_state.python_rng_state)
         if torch.cuda.is_available():

@@ -233,6 +233,22 @@ class CheckpointManager:
             key=lambda path: int(path.name.removeprefix("checkpoint-")),
         )
 
+    def remove_staging(self) -> list[Path]:
+        """Delete staging folders left by saves that were killed before publishing.
+
+        A save stages into `.checkpoint-*` and publishes by rename, so a process killed
+        mid-save leaves only the staging folder. Call this before training starts, when
+        no save of this run can be in progress.
+
+        Returns:
+            `list[Path]`: The folders removed.
+        """
+        removed = sorted(path for path in self.output_dir.glob(".checkpoint-*") if path.is_dir())
+        for path in removed:
+            self.logger.warning(f"Removing staging folder from an interrupted save: {path}")
+            shutil.rmtree(path)
+        return removed
+
     def _checkpoints_by_save_time(self) -> list[Path]:
         """Order checkpoints by application save time, breaking ties by step."""
 

@@ -14,20 +14,45 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_valida
 
 from flock.training import (
     AdamWConfig,
+    LlamaConfig,
     LRSchedulerConfig,
     LRScheduleSegment,
     MuonAdamWConfig,
     Olmo2Config,
     TrainerConfig,
 )
-from flock.training.core.models import OLMO2_1B_CONFIG
+from flock.training.core.models import (
+    LLAMA3_2_1B_CONFIG,
+    LLAMA3_2_3B_CONFIG,
+    OLMO2_1B_CONFIG,
+    Llama,
+    Olmo2,
+)
+from flock.training.core.models import BaseModel as TrainingModel
 from flock.training.experiments.proxy.olmo2_proxy import PROXY_SIZES
 
-MODEL_PRESETS: dict[str, Olmo2Config] = {
+type ArchitectureConfig = Olmo2Config | LlamaConfig
+
+MODEL_PRESETS: dict[str, ArchitectureConfig] = {
     **{name: size.model for name, size in PROXY_SIZES.items()},
     "1b": OLMO2_1B_CONFIG,
+    "llama3.2-1b": LLAMA3_2_1B_CONFIG,
+    "llama3.2-3b": LLAMA3_2_3B_CONFIG,
+    # Llama 3.2 proportions (head width 64, 4:1 GQA, 4x MLP) at 202M parameters, 98.5M
+    # of them the tied embedding.
+    "llama3.2-200m": replace(
+        LLAMA3_2_1B_CONFIG,
+        hidden_size=768,
+        intermediate_size=3072,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        num_key_value_heads=4,
+    ),
 }
-"""Named OLMo 2 architectures a run can start from."""
+"""Named architectures a run can start from: OLMo 2 sizes and Llama 3.2 sizes."""
+
+ARCHITECTURES: dict[str, type[ArchitectureConfig]] = {"olmo2": Olmo2Config, "llama": LlamaConfig}
+"""Config class for each `ModelSettings.architecture`."""
 
 _SUFFIXES = {"k": 10**3, "m": 10**6, "b": 10**9, "g": 10**9, "t": 10**12}
 
@@ -74,10 +99,19 @@ class DataSource(BaseModel):
 
 
 class DataSettings(BaseModel):
-    """Token cache the run trains on.
+    """Data the run trains on: a prepared token cache, or raw text tokenized during training.
+
+    Set exactly one of `cache_dir` and `text_path`.
 
     Args:
-        cache_dir (`str`): `TokenChunkDataset` directory on storage every node can read.
+        cache_dir (`str`, *optional*): `TokenChunkDataset` directory on storage every node can read.
+        text_path (`str`, *optional*): Local raw-text Lance dataset, read in stored order and
+            tokenized by the training process's DataLoader workers. Shuffle it when writing it.
+        text_version (`int`, *optional*): Lance version of `text_path`; pin it so a resumed
+            run reads the same rows.
+        block_rows (`int`, *optional*, defaults to `2048`): Rows a worker tokenizes at once.
+        add_bos (`bool`, *optional*, defaults to `False`): Start each streamed document with BOS.
+        add_eos (`bool`, *optional*, defaults to `True`): End each streamed document with EOS.
         chunk_length (`int`, *optional*, defaults to `4096`): Token IDs per chunk.
         input_column (`str`, *optional*, defaults to `"text"`): Source text column.
         source (`DataSource`, *optional*): Dataset to tokenize when the cache is missing.
@@ -85,30 +119,53 @@ class DataSettings(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    cache_dir: str
+    cache_dir: str | None = None
+    text_path: str | None = None
+    text_version: int | None = None
+    block_rows: int = Field(default=2048, gt=0)
+    add_bos: bool = False
+    add_eos: bool = True
     chunk_length: int = Field(default=4096, ge=2)
     input_column: str = "text"
     source: DataSource | None = None
 
+    @model_validator(mode="after")
+    def validate_kind(self) -> Self:
+        """Require exactly one data kind, and streaming settings only when streaming."""
+        if (self.cache_dir is None) == (self.text_path is None):
+            raise ValueError("Set exactly one of data.cache_dir and data.text_path")
+        if self.text_path is not None and self.source is not None:
+            raise ValueError("data.source prepares a cache; a text stream needs none")
+        return self
+
+    @property
+    def streams(self) -> bool:
+        """Return whether the run tokenizes `text_path` during training."""
+        return self.text_path is not None
+
 
 class ModelSettings(BaseModel):
-    """OLMo 2 architecture: a preset with field overrides, or every field spelled out.
+    """Architecture: a preset with field overrides, or every field spelled out.
 
     Args:
-        preset (`str`, *optional*): Key of `MODEL_PRESETS`, such as `"190m"`.
+        preset (`str`, *optional*): Key of `MODEL_PRESETS`, such as `"190m"` or
+            `"llama3.2-1b"`. The preset decides the architecture.
+        architecture (`str`, *optional*): `"olmo2"` or `"llama"`. Required without a
+            preset, unless the run is OLMo 2; with a preset it must match it when set.
         attn_implementation (`str`, *optional*, defaults to `"flash_attention_4"`):
             Registered attention backend.
-        overrides (`dict[str, Any]`, *optional*): `Olmo2Config` fields to change.
-            Without a preset, these must hold every required field.
+        overrides (`dict[str, Any]`, *optional*): `Olmo2Config` or `LlamaConfig` fields
+            to change. Without a preset, these must hold every required field.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     preset: str | None = None
+    architecture: Literal["olmo2", "llama"] | None = None
     attn_implementation: str = "flash_attention_4"
     overrides: dict[str, Any] = Field(default_factory=dict)
 
-    def olmo2_config(self, init_seed: int) -> Olmo2Config:
+    def architecture_config(self, init_seed: int) -> ArchitectureConfig:
         """Return the architecture with the run's initialization seed."""
         fields: dict[str, Any] = {
             **self.overrides,
@@ -116,10 +173,20 @@ class ModelSettings(BaseModel):
         }
         fields["init_seed"] = init_seed
         if self.preset is None:
-            return Olmo2Config(**fields)
+            return ARCHITECTURES[self.architecture or "olmo2"](**fields)
         if self.preset not in MODEL_PRESETS:
             raise ValueError(f"Unknown model preset {self.preset!r}; use {sorted(MODEL_PRESETS)}")
-        return replace(MODEL_PRESETS[self.preset], **fields)
+        preset = MODEL_PRESETS[self.preset]
+        if self.architecture is not None and not isinstance(
+            preset, ARCHITECTURES[self.architecture]
+        ):
+            raise ValueError(f"Preset {self.preset!r} is not a {self.architecture} architecture")
+        return replace(preset, **fields)
+
+    def build(self, init_seed: int) -> TrainingModel:
+        """Construct a freshly initialized model for this architecture."""
+        config = self.architecture_config(init_seed)
+        return Llama(config) if isinstance(config, LlamaConfig) else Olmo2(config)
 
 
 class AdamWSettings(BaseModel):
@@ -213,7 +280,7 @@ class ExperimentConfig(BaseModel):
         if any(tokens > self.stop_tokens for tokens in self.save_tokens):
             raise ValueError("save_tokens must not exceed stop_tokens")
         self.trainer_config()
-        self.model.olmo2_config(self.seed)
+        self.model.architecture_config(self.seed)
         return self
 
     def trainer_config(self, max_steps: int | None = None) -> TrainerConfig:
@@ -388,4 +455,4 @@ def experiment_json(experiment: ExperimentConfig) -> str:
 
 def model_summary(experiment: ExperimentConfig) -> dict[str, Any]:
     """Return the resolved architecture as plain JSON, for plans and records."""
-    return asdict(experiment.model.olmo2_config(experiment.seed))
+    return asdict(experiment.model.architecture_config(experiment.seed))

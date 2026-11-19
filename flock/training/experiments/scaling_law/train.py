@@ -11,10 +11,11 @@ import argparse
 import logging
 import os
 from pathlib import Path
+from typing import cast
 
 from flock.training import DatasetConfig, TokenChunkDataset, get_dataset
 from flock.training.core.distributed import DistributedRuntime, distributed_run
-from flock.training.core.models import Olmo2
+from flock.training.core.streaming import TextStream
 
 from .config import DataSettings, ExperimentConfig, ModelSettings
 from .trainer import TokenBudgetTrainer
@@ -29,9 +30,9 @@ def prepare_cache(data: DataSettings, model: ModelSettings) -> TokenChunkDataset
         `FileExistsError`: If the cache already exists.
         `ValueError`: If the data settings name no source.
     """
-    if data.source is None:
+    if data.source is None or data.cache_dir is None:
         raise ValueError(f"{data.cache_dir} is missing and the data settings name no source")
-    tokenizer = Olmo2(model.olmo2_config(init_seed=0)).get_hf_tokenizer()
+    tokenizer = model.build(init_seed=0).get_hf_tokenizer()
     if tokenizer is None:
         raise ValueError("The model config needs hf_repo to load a tokenizer")
     return TokenChunkDataset.prepare(
@@ -46,21 +47,32 @@ def prepare_cache(data: DataSettings, model: ModelSettings) -> TokenChunkDataset
 def build_trainer(
     experiment: ExperimentConfig, runtime: DistributedRuntime | None = None
 ) -> TokenBudgetTrainer:
-    """Build the model, open the token cache and construct the trainer.
+    """Build the model, open the token cache or text stream and construct the trainer.
 
     Raises:
-        `FileNotFoundError`: If the token cache has not been prepared.
+        `FileNotFoundError`: If the token cache has not been prepared or the text is missing.
     """
-    if not Path(experiment.data.cache_dir).exists():
-        raise FileNotFoundError(
-            f"Token cache {experiment.data.cache_dir} is missing. Run `sweep prepare` first."
-        )
-    model = Olmo2(experiment.model.olmo2_config(init_seed=experiment.seed))
+    data = experiment.data
+    location = data.text_path if data.text_path is not None else cast(str, data.cache_dir)
+    if not Path(location).exists():
+        hint = "" if data.streams else " Run `sweep prepare` first."
+        raise FileNotFoundError(f"{location} is missing.{hint}")
+    model = experiment.model.build(init_seed=experiment.seed)
     tokenizer = model.get_hf_tokenizer()
     if tokenizer is None:
         raise ValueError("The model config needs hf_repo to load a tokenizer")
-    dataset = TokenChunkDataset(
-        cache_dir=experiment.data.cache_dir, chunk_length=experiment.data.chunk_length
+    dataset = (
+        TextStream(
+            path=location,
+            input_column=data.input_column,
+            version=data.text_version,
+            block_rows=data.block_rows,
+            chunk_length=data.chunk_length,
+            add_bos=data.add_bos,
+            add_eos=data.add_eos,
+        )
+        if data.streams
+        else TokenChunkDataset(cache_dir=location, chunk_length=data.chunk_length)
     )
     return TokenBudgetTrainer(
         config=experiment.trainer_config(),
