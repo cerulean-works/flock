@@ -14,6 +14,7 @@ from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict, Field, ValidationInfo, field_validator, model_validator
 from torch import nn
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from transformers import TokenizersBackend
 from wandb import Run
@@ -27,7 +28,7 @@ from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableB
 from flock.training.core.distributed import DistributedRuntime, master_broadcast, master_only
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState, StepLRScheduler
 from flock.training.core.models import BaseModel
-from flock.training.core.optimizers import BaseOptimizer, OptimizerConfig, OptimizerInterface
+from flock.training.core.optimizers import OptimizerConfig, OptimizerInterface
 
 
 class TrainerConfig(PydanticBaseModel):
@@ -521,7 +522,7 @@ class Trainer:
             # The schedule and the checkpoint check plan over the capped run.
             self.total_steps = min(self.total_steps, config.max_steps)
         optimizer_factory = OptimizerInterface.get_interface(type(config.optimizer_config))
-        self.optimizer: BaseOptimizer = optimizer_factory(
+        self.optimizer: Optimizer = optimizer_factory(
             config.optimizer_config, self.model.parameters()
         )
         self.lr_scheduler = StepLRScheduler(

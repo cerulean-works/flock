@@ -69,15 +69,12 @@ Optimizer configs and factories live in `training.core.optimizers.adamw` and
 `training.core.optimizers.muon`. In
 `training.core.optimizers.registry`, `OptimizerInterface` maps config types to
 optimizer factories. `register(config_type, factory)` registers or replaces a
-factory; `get_interface(config_type)` returns it. Each factory accepts the config
-and model parameters and returns a `BaseOptimizer`. After moving the model to its
-device, the trainer calls `OptimizerInterface.get_interface(type(config))` and
-constructs the optimizer with the returned factory.
-Registration affects future optimizer construction. `TrainerConfig` still
-accepts the config types in `OptimizerConfig`.
-`BaseOptimizer` describes the PyTorch interface shared by the trainer, scheduler
-and checkpoints: `zero_grad()`, `step()`, `param_groups`, `state_dict()` and
-`load_state_dict()`. Native PyTorch optimizers satisfy this protocol directly.
+factory. `get_interface(config_type)` returns it. Each factory accepts the config
+and model parameters and returns an instance of a `torch.optim.Optimizer` subclass.
+After moving the model to its device, the trainer calls
+`OptimizerInterface.get_interface(type(config.optimizer_config))` and constructs
+the optimizer with the returned factory. Registration affects future optimizer construction.
+`TrainerConfig` accepts the config types in `OptimizerConfig`.
 The trainer runs backpropagation and gradient clipping before `optimizer.step()`.
 
 [[autodoc]] training.AdamWConfig
