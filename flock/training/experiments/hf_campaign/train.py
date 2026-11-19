@@ -71,21 +71,7 @@ def main() -> None:
     )
     checkpoints = args.output_dir / "checkpoints"
     if args.resume:
-        # A save or export killed partway leaves its lock; the run would die on reaching it.
-        incomplete = sorted(
-            [*checkpoints.glob("*.incomplete"), *args.output_dir.glob("*.incomplete")]
-        )
-        if incomplete:
-            raise FileExistsError(f"inspect and remove the interrupted save first: {incomplete}")
-        # By number: the six-digit name is a minimum width, so names stop sorting past 999,999.
-        latest = max(
-            checkpoints.glob("update-*"),
-            key=lambda path: int(path.name.removeprefix("update-")),
-            default=None,
-        )
-        if latest is None:
-            raise FileNotFoundError(f"no committed checkpoint in {checkpoints}")
-        experiment.resume(latest)
+        experiment.resume(latest_checkpoint(checkpoints))
     stop = experiment.total_targets // mix.targets_per_update
     if args.max_updates is not None:
         stop = min(stop, args.max_updates)
@@ -95,26 +81,8 @@ def main() -> None:
         )
     if not args.resume:
         args.output_dir.mkdir(parents=True, exist_ok=False)
-    # Every attempt gets its own record; two resumed from one checkpoint share a segment.
-    attempt = len(list(args.output_dir.glob("run-*.json")))
-    run = {
-        "provisional": True,
-        "attempt": attempt,
-        "args": {key: str(value) for key, value in vars(args).items()},
-        "tokenizer_revision": MODEL_REVISION,
-        "contract": experiment.contract,
-        "started": started,
-        "resumed_at_update": experiment.updates,
-        "device": str(experiment.accelerator.device),
-    } | experiment.description
-    # Renamed into place, so every record counted as an attempt is a complete one.
-    with staged(args.output_dir / f"run-{attempt:03d}.json") as temporary:
-        temporary.write_text(json.dumps(run, indent=2, sort_keys=True))
-        # The log and checkpoint directory exist first, so syncing the run directory on publishing
-        # also keeps their entries: a checkpoint never outlives the record that explains its log.
-        log_path = args.output_dir / "log.jsonl"
-        log_path.touch()
-        checkpoints.mkdir(exist_ok=True)
+    attempt = record_attempt(args, experiment, started)
+    log_path = args.output_dir / "log.jsonl"
 
     # A resumed segment logs the update it started from, so a replayed update is told apart.
     segment = experiment.updates
@@ -165,6 +133,65 @@ def main() -> None:
     export = args.output_dir / f"export-{experiment.updates:06d}"
     if not export.exists():
         experiment.export(export, tokenizer)
+    write_summary(args.output_dir, experiment, attempt, segment, segment_start_targets, started)
+
+
+def latest_checkpoint(checkpoints: Path) -> Path:
+    """The committed checkpoint with the highest update, once no save is left half written."""
+    # A save or export killed partway leaves its lock; the run would die on reaching it.
+    incomplete = sorted(
+        [*checkpoints.glob("*.incomplete"), *checkpoints.parent.glob("*.incomplete")]
+    )
+    if incomplete:
+        raise FileExistsError(f"inspect and remove the interrupted save first: {incomplete}")
+    # By number: the six-digit name is a minimum width, so names stop sorting past 999,999.
+    latest = max(
+        checkpoints.glob("update-*"),
+        key=lambda path: int(path.name.removeprefix("update-")),
+        default=None,
+    )
+    if latest is None:
+        raise FileNotFoundError(f"no committed checkpoint in {checkpoints}")
+    return latest
+
+
+def record_attempt(args: argparse.Namespace, experiment: GpuExperiment, started: float) -> int:
+    """Write this attempt's run record, with the log and checkpoint directory; return its number."""
+    # Every attempt gets its own record; two resumed from one checkpoint share a segment.
+    attempt = len(list(args.output_dir.glob("run-*.json")))
+    run = {
+        "provisional": True,
+        "attempt": attempt,
+        "args": {key: str(value) for key, value in vars(args).items()},
+        "tokenizer_revision": MODEL_REVISION,
+        "contract": experiment.contract,
+        "started": started,
+        "resumed_at_update": experiment.updates,
+        "device": str(experiment.accelerator.device),
+    } | experiment.description
+    # Renamed into place, so every record counted as an attempt is a complete one.
+    with staged(args.output_dir / f"run-{attempt:03d}.json") as temporary:
+        temporary.write_text(json.dumps(run, indent=2, sort_keys=True))
+        # The log and checkpoint directory exist first, so syncing the run directory on publishing
+        # also keeps their entries: a checkpoint never outlives the record that explains its log.
+        (args.output_dir / "log.jsonl").touch()
+        (args.output_dir / "checkpoints").mkdir(exist_ok=True)
+    return attempt
+
+
+def write_summary(
+    output_dir: Path,
+    experiment: GpuExperiment,
+    attempt: int,
+    segment: int,
+    segment_start_targets: int,
+    started: float,
+) -> None:
+    """Write the summary of the run's final update, unless an earlier attempt already did."""
+    # Renamed into place, so an existing summary is a complete one.
+    summary_path = output_dir / f"summary-{experiment.updates:06d}.json"
+    if summary_path.exists():
+        return
     summary = {
         "provisional": True,
         "contract": experiment.contract,
@@ -182,11 +209,8 @@ def main() -> None:
         summary["device_name"] = cuda.get_device_name(device)
         summary["peak_allocated_bytes"] = cuda.max_memory_allocated(device)
         summary["peak_reserved_bytes"] = cuda.max_memory_reserved(device)
-    # Renamed into place, so an existing summary is a complete one.
-    summary_path = args.output_dir / f"summary-{experiment.updates:06d}.json"
-    if not summary_path.exists():
-        with staged(summary_path) as temporary:
-            temporary.write_text(json.dumps(summary, indent=2, sort_keys=True))
+    with staged(summary_path) as temporary:
+        temporary.write_text(json.dumps(summary, indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":
