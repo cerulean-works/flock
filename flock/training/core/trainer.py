@@ -743,8 +743,7 @@ class Trainer:
             batch = cast(Batch, {k: v.to(self.device, non_blocking=True) for k, v in batch.items()})
 
             loss, losses, num_tokens = self._train_forward(batch)
-            # TODO: try compiled autograd to capture the whole backward once the forward has no graph breaks (right now it still)
-            # But the total effect is uncertainty.
+            # TODO: try compiled autograd to capture the whole backward once the forward has no graph breaks (right now it still does), but the total effect is uncertainty.
             loss.backward()
             grad_norm = self._train_update()
             self.lr_scheduler.step()
