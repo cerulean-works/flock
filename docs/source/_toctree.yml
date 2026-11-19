@@ -30,6 +30,8 @@ guide:
   sections:
   - local: training/trainer
     title: Train with Flock
+  - local: training/scaling-law-sweeps
+    title: Run a scaling-law sweep
 - title: Evals
   sections:
   - local: evals/run-evaluation

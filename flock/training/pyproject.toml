@@ -6,6 +6,7 @@ dependencies = [
     "flock",
     "huggingface-hub>=2.2.0",
     "pydantic>=2.14.1",
+    "pyyaml>=6.0.3",
     "tokenizers>=0.23.3",
     "torch>=2.14.1",
     "tqdm>=4.70.1",

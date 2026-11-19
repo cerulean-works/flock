@@ -1,0 +1,47 @@
+# Scaling-law pilot: 2 sizes x 2 Muon rates x 5 seeds = 20 runs of 4 GPUs.
+# Check it with:
+#   python -m flock.training.experiments.scaling_law.sweep plan pilot.yaml --nodes 4 --gpus-per-node 4
+sweep:
+  name: scaling-law-pilot
+  output_root: /shared/flock/sweeps        # Every node must see this path.
+  gpus_per_run: 4
+  name_template: "{model.preset}-mlr{optimizer.muon_lr}-s{seed}"
+  grid:
+    model.preset: [76m, 190m]
+    optimizer.muon_lr: [0.01, 0.02]
+    seed: [0, 1, 2, 3, 4]
+  # zip varies keys together; here each size trains to its own ~20 tokens/parameter budget.
+  # zip:
+  #   model.preset: [76m, 190m]
+  #   stop_tokens: [1.5B, 3.8B]
+
+base:
+  data:
+    cache_dir: /shared/flock/tokens/pilot-mix-4096
+    chunk_length: 4096
+    source:                                 # Used by `sweep prepare` when the cache is missing.
+      uri: s3://flock-datasets/finepdfs
+      version: 1
+  model:
+    preset: 76m
+    attn_implementation: flash_attention_4
+  optimizer:
+    type: muon_adamw
+    lr: 3.0e-3
+    betas: [0.9, 0.95]
+    muon_lr: 0.02
+  schedule:                                 # Fractions are fractions of stop_tokens' updates.
+    - {start: 0, end: 0.01, start_ratio: 0.0, end_ratio: 1.0}
+    - {start: 0.01, end: 0.8, start_ratio: 1.0, end_ratio: 1.0}
+    - {start: 0.8, end: 1.0, start_ratio: 1.0, end_ratio: 0.0, interpolation: linear}
+  trainer:
+    batch_tokens: 65536                     # Per GPU; 4 GPUs train on 262,144 tokens per update.
+    torch_compile: true
+    dataloader_num_workers: 4
+    dataloader_prefetch_factor: 2
+    logging_steps: 10
+    save_steps: 500                         # Lets a run resume after the job's time limit.
+    save_total_limit: 2
+    wandb_project: scaling-law-pilot
+  stop_tokens: 1.5B
+  save_tokens: [0.5B, 1B]
