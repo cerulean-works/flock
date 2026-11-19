@@ -59,21 +59,17 @@ uv run flock eval run \
 
 ## Score a local model folder
 
-A model saved in the Hugging Face format to a folder, such as a training run's export, is scored by the folder and a digest of its files with a `local:` prefix. Print the id with `flock eval digest`:
+A model saved in the Hugging Face format to a folder, such as a training run's export, is scored by the folder and a digest of its files with a `local:` prefix, written `local:{folder}@{digest}`. `flock eval digest` prints that id, so pass its output as `--model`:
 
 ```bash
-uv run flock eval digest /work/acme/run-190m/export-000700
-# local:/work/acme/run-190m/export-000700@5c1f...e9a2
-```
-
-Then pass that id as `--model`:
-
-```bash
+model=$(uv run flock eval digest /work/acme/run-190m/export-000700)
 uv run flock eval run \
-  --model local:/work/acme/run-190m/export-000700@5c1f...e9a2 \
+  --model "$model" \
   --task arc_easy \
   --out results/run-190m-700
 ```
+
+Keep the printed id with the run's notes: a later run of the same export passes the same id, and is refused if the files changed.
 
 The digest names every file in the folder, the weights, config and tokenizer alike, in the same form as a Flock version's digest. A folder holding a link, an adapter, or a weights index or tokenizer config that names a file outside the folder is refused, since the digest couldn't pin what loads. Before anything loads, the folder's files are hashed again, and a folder whose files no longer match the digest is refused. The results record the model as `local:{digest}`, with the digest in `model_digest`, so the same files scored from another folder compare as one model. The folder's path appears only in `command`. A folder passed as `repo@revision` is refused, since a revision can't pin a folder's files, and the message gives the `local:` id to use.
 

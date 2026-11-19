@@ -306,7 +306,7 @@ def test_folder_digest_refuses_an_index_naming_a_shard_outside(tmp_path: Path, s
     (tmp_path / "model-00001.safetensors").write_bytes(b"one")
     index = {"weight_map": {"lm_head.weight": shard}}
     (tmp_path / "model.safetensors.index.json").write_text(json.dumps(index))
-    with pytest.raises(ValueError, match="aren't in the folder"):
+    with pytest.raises(ValueError, match="outside the folder"):
         model.folder_digest(tmp_path)
 
     index = {"weight_map": {"lm_head.weight": "./model-00001.safetensors"}}
@@ -315,11 +315,18 @@ def test_folder_digest_refuses_an_index_naming_a_shard_outside(tmp_path: Path, s
 
 
 def test_folder_digest_refuses_a_tokenizer_file_outside(tmp_path: Path) -> None:
-    config = {"fast_tokenizer_files": ["tokenizer.4.0.json", "../tokenizer.json"]}
-    (tmp_path / "tokenizer_config.json").write_text(json.dumps(config))
-    (tmp_path / "tokenizer.4.0.json").write_text("{}")
+    # A listed version the tokenizer never saved is the loader's to skip, not a refusal.
+    config = {"fast_tokenizer_files": ["tokenizer.99.0.json", "../tokenizer.json"]}
+    (tmp_path / "tokenizer_config.json").write_text(json.dumps(config), encoding="utf-8")
     with pytest.raises(ValueError, match=r"\['../tokenizer.json'\]"):
         model.folder_digest(tmp_path)
+
+    config["fast_tokenizer_files"] = ["tokenizer.99.0.json"]
+    config["eos_token"] = "<|結束|>"  # saved as UTF-8 whatever the locale
+    (tmp_path / "tokenizer_config.json").write_text(
+        json.dumps(config, ensure_ascii=False), encoding="utf-8"
+    )
+    model.folder_digest(tmp_path)
 
 
 def test_folder_digest_hashes_another_index_as_bytes(tmp_path: Path) -> None:
@@ -352,7 +359,9 @@ def test_folder_digest_refuses_an_unreadable_folder(tmp_path: Path) -> None:
         (tmp_path / "hidden").chmod(0o700)
 
 
-def test_folder_digest_refuses_a_tab_in_a_file_name(tmp_path: Path) -> None:
+def test_folder_digest_refuses_control_characters_in_names_only(tmp_path: Path) -> None:
+    (tmp_path / "a\u00a0b").write_bytes(b"")  # a no-break space is a name like any other
+    model.folder_digest(tmp_path)
     (tmp_path / "a\tb").write_bytes(b"")
     with pytest.raises(ValueError, match="control character"):
         model.folder_digest(tmp_path)
@@ -425,9 +434,14 @@ def test_a_local_folder_named_as_a_hub_repo_is_refused(export: Path) -> None:
         ModelRef(str(export), "a" * 40).resolve()
 
 
+@pytest.mark.parametrize("sharded", [False, True])
 def test_from_pretrained_loads_a_local_folder_under_its_digest(
-    export: Path, lm: LlamaForCausalLM
+    export: Path, lm: LlamaForCausalLM, sharded: bool
 ) -> None:
+    if sharded:
+        (export / "model.safetensors").unlink()
+        lm.save_pretrained(export, max_shard_size="20KB")
+        assert (export / "model.safetensors.index.json").exists()
     digest = model.folder_digest(export)
     scorer = ScoringModel.from_pretrained(f"local:{export}@{digest}", device="cpu")
     assert (scorer.name, scorer.digest) == (f"local:{digest}", digest)

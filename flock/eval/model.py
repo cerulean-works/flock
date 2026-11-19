@@ -156,7 +156,7 @@ def folder_digest(folder: Path) -> str:
     The digest of every file in `folder`, computed as the Flock registry computes a version's: the sha256 of `{path}\t{size}\t{sha256}\n` per file, sorted by its path in the folder.
 
     Raises:
-        `ValueError`: if `folder` isn't a folder, holds no files, holds a link or another file that isn't a regular file, has a file name with a control character, such as a tab, which the registry refuses too, names a weights shard or tokenizer file that isn't one of its files, or is an adapter, whose base model loads from elsewhere.
+        `ValueError`: if `folder` isn't a folder, holds no files, holds a link or another file that isn't a regular file, has a file name with a control character, such as a tab, which the registry refuses too, names a weights shard or tokenizer file outside itself, or is an adapter, whose base model loads from elsewhere.
         `OSError`: if a folder in it can't be read.
     """
     if not folder.is_dir():
@@ -184,23 +184,28 @@ def folder_digest(folder: Path) -> str:
         raise ValueError(f"{folder} is an adapter, whose base model the digest can't pin")
 
     # Transformers opens the shards a weights index names, and the tokenizer file a tokenizer
-    # config names, by joining them to the folder, so `../` or an absolute path reaches out.
+    # config names, by joining them to the folder, so `../` or an absolute path reaches out. A
+    # missing name inside is left to the loader: a tokenizer lists versions it never saved.
     named = []
     for index in ("model.safetensors.index.json", "pytorch_model.bin.index.json"):
         if index in files:
-            named += json.loads(files[index].read_text())["weight_map"].values()
+            named += json.loads(files[index].read_bytes())["weight_map"].values()
     if "tokenizer_config.json" in files:
-        config = json.loads(files["tokenizer_config.json"].read_text())
+        config = json.loads(files["tokenizer_config.json"].read_bytes())
         named += config.get("fast_tokenizer_files", [])
-    # `./a` is `a`, and `../a` or `/a` stay outside.
-    if outside := sorted({posixpath.normpath(name) for name in named} - files.keys()):
-        raise ValueError(f"{folder}: its configs name {outside}, which aren't in the folder")
+    outside = []
+    for name in sorted(set(named)):
+        if posixpath.isabs(name) or posixpath.normpath(name).split("/")[0] == "..":
+            outside.append(name)
+    if outside:
+        raise ValueError(f"{folder}: its configs name {outside}, outside the folder")
 
     lines = []
     # Sorted as strings, as the registry sorts, which isn't `Path` order: `a-b` comes before `a/c`.
     for name in sorted(files):
-        # A tab or newline in a name would let two file lists write the same lines.
-        if not name.isprintable():
+        # A tab or newline in a name would let two file lists write the same lines. The
+        # registry refuses the same characters.
+        if any(ord(c) < 32 or ord(c) == 127 for c in name):
             raise ValueError(f"{folder}: the file name {name!r} has a control character")
         file_digest = hashlib.sha256()
         with files[name].open("rb") as file:
