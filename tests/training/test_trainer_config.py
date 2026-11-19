@@ -86,6 +86,13 @@ def test_config_accepts_boundaries_and_disabled_intervals(config_values: dict[st
     assert config.validation_batch_tokens == 32768
     assert config.save_steps is None
     assert config.save_total_limit is None
+    assert config.torch_compile is False
+    assert config.torch_compile_mode == "default"
+
+
+def test_config_rejects_unknown_compile_mode(config_values: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError, match="torch_compile_mode"):
+        TrainerConfig.model_validate(config_values | {"torch_compile_mode": "unknown"})
 
 
 def test_zero_workers_reject_default_prefetch(config_values: dict[str, Any]) -> None:

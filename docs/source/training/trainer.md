@@ -278,6 +278,20 @@ output directory for a fresh run. To resume, change the call in the script to
 same world size. See [Save and resume training](#save-and-resume-training) for
 checkpoint visibility, per-rank RNG state and compatibility checks.
 
+## Compile the model and loss
+
+Set `torch_compile=True` in `TrainerConfig` to compile the model and batch loss.
+Compilation is disabled by default. You can resume checkpoints with compilation
+enabled or disabled.
+
+`torch_compile_mode` defaults to `"default"`. Use `"reduce-overhead"` to request
+CUDA graphs for eligible regions, which can reduce launch overhead but use more
+memory. With `"reduce-overhead"` or `"max-autotune"`, evaluation runs eagerly to
+avoid accumulating CUDA graphs across validation batches.
+Compilation happens lazily and may repeat when input shapes change, so
+measure performance after warmup. See the
+[configuration reference](python-api#configuration) for all modes.
+
 ## Train a Hugging Face architecture
 
 `HFCompatibleModel` wraps a causal language model from `transformers`, such as Qwen 3,

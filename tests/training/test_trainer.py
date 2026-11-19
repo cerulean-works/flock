@@ -15,6 +15,7 @@ import lance
 import pyarrow as pa
 import pytest
 import torch
+import torch._functorch.config as functorch_config
 from lance.torch.data import SafeLanceDataset
 from pydantic import ValidationError
 from tokenizers.models import WordLevel
@@ -673,6 +674,158 @@ def test_local_checkpoint_records_run_identity(
     metadata = json.loads((trainer.output_dir / "checkpoint-3" / "flock.json").read_text())
     assert metadata["run"] == "flock/pretrain/run123"
     assert metadata["step"] == trainer.state.step.item() == 3
+
+
+def test_compiled_training_resumes_and_preserves_checkpoint_format(
+    trainer_factory: TrainerFactory,
+    validation_tasks: list[PerplexityTask | MultipleChoiceTask],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    # Exercise compiled autograd on CPU; GPU tests cover Inductor and CUDA graphs.
+    from torch._dynamo.backends.registry import lookup_backend
+
+    compile_calls = []
+    captured_graphs = []
+    real_compile = torch.compile
+    aot_eager = lookup_backend("aot_eager")
+
+    def backend(graph: torch.fx.GraphModule, inputs: list[torch.Tensor]) -> Callable:
+        assert functorch_config.backward_pass_autocast == "off"
+        captured_graphs.append(graph)
+        return aot_eager(graph, inputs)
+
+    def compile_for_test(function: Callable, **kwargs: Any) -> Callable:
+        compile_calls.append(kwargs)
+        return real_compile(function, backend=backend, fullgraph=kwargs["fullgraph"])
+
+    monkeypatch.setattr(torch, "compile", compile_for_test)
+    options = {
+        "num_workers": 0,
+        "prefetch_factor": None,
+        "validation_tasks": [task.name for task in validation_tasks],
+        "validation_steps": 1,
+    }
+    eager, _, _ = trainer_factory(**options, save_steps=1)
+    eager.train()
+    assert compile_calls == []
+    compiled, run, _ = trainer_factory(
+        **options, torch_compile=True, output_dir=str(tmp_path / "compiled")
+    )
+    original_model = compiled.model
+    parameter_ids = [id(p) for p in compiled.model.parameters()]
+    original_autocast = functorch_config.backward_pass_autocast
+    checkpoint = eager.output_dir / "checkpoint-1"
+    try:
+        compiled.train(resume_from_checkpoint=checkpoint)
+        assert captured_graphs
+        assert compile_calls == [{"mode": "default", "fullgraph": False}] * 2
+        assert compiled.model is original_model
+        assert [id(p) for p in compiled.model.parameters()] == parameter_ids
+        assert [id(p) for p in compiled.optimizer.param_groups[0]["params"]] == parameter_ids
+        torch.testing.assert_close(compiled.model.state_dict(), eager.model.state_dict())
+        torch.testing.assert_close(compiled.optimizer.state_dict(), eager.optimizer.state_dict())
+        assert compiled.state.step.item() == compiled.lr_scheduler.completed_steps == 3
+        assert any(key.startswith("eval/") for metrics in run.metrics for key in metrics)
+        assert compiled.model.training
+        assert functorch_config.backward_pass_autocast == original_autocast
+
+        compiled._save_model(3)
+        saved = compiled.output_dir / "checkpoint-3"
+        metadata = json.loads((saved / "flock.json").read_text())
+        original_metadata = json.loads((checkpoint / "flock.json").read_text())
+        assert metadata["architecture"] == original_metadata["architecture"]
+        restored, _, _ = trainer_factory(output_dir=str(tmp_path / "restored"))
+        restored.load_state_dict(
+            restored.checkpoint_manager.load_checkpoint(
+                saved, restored.model, validate_state=restored.validate_state_dict
+            )
+        )
+        assert_nested_equal(restored.model.state_dict(), compiled.model.state_dict())
+        assert_nested_equal(restored.state_dict(), compiled.state_dict())
+
+        # Reusing a Trainer must not wrap the model/loss again.
+        compiled.train(resume_from_checkpoint=checkpoint)
+        assert len(compile_calls) == 2
+        torch.testing.assert_close(compiled.model.state_dict(), eager.model.state_dict())
+    finally:
+        torch.compiler.reset()
+
+
+@pytest.mark.parametrize("error", [None, KeyError, RuntimeError])
+@pytest.mark.parametrize(
+    "mode", ["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"]
+)
+def test_evaluation_compilation_policy_and_restoration(
+    trainer_factory: TrainerFactory,
+    validation_tasks: list[PerplexityTask | MultipleChoiceTask],
+    monkeypatch: pytest.MonkeyPatch,
+    error: type[Exception] | None,
+    mode: str,
+) -> None:
+    trainer, _, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        torch_compile=True,
+        torch_compile_mode=mode,
+        validation_tasks=[task.name for task in validation_tasks],
+        validation_batch_tokens=4,
+    )
+    executions = []
+
+    def backend(graph: torch.fx.GraphModule, inputs: list[torch.Tensor]) -> Callable:
+        def run(*args: torch.Tensor) -> Any:
+            executions.append(None)
+            return graph.forward(*args)
+
+        return run
+
+    probe = torch.compile(torch.sin, backend=backend, fullgraph=True)
+    value = torch.ones(2)
+    score = trainer_module.score_prepared
+    bypass = mode in ("reduce-overhead", "max-autotune")
+
+    def check_score(scorer: ScoringModel, prepared: PreparedTask) -> TaskResult:
+        # A cached graph must also be bypassed, not just new compilations.
+        before = len(executions)
+        torch.testing.assert_close(probe(value), value.sin())
+        assert len(executions) == before + (0 if bypass else 1)
+        if error is not None:
+            raise error("scoring failed")
+        return score(scorer, prepared)
+
+    monkeypatch.setattr(trainer_module, "score_prepared", check_score)
+    try:
+        with torch.no_grad(), torch.autocast("cpu", dtype=trainer.model_dtype):
+            probe(value)
+            assert len(executions) == 1
+            if error is RuntimeError:
+                with pytest.raises(RuntimeError, match="scoring failed"):
+                    trainer.evaluate()
+            else:
+                trainer.evaluate()
+            before = len(executions)
+            probe(value)
+            assert len(executions) == before + 1
+        assert trainer.model.training
+    finally:
+        torch.compiler.reset()
+
+
+def test_compile_autocast_setting_is_restored_after_training_failure(
+    trainer_factory: TrainerFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None, torch_compile=True)
+    original_autocast = functorch_config.backward_pass_autocast
+
+    def fail(dataloader: DataLoader, start_step: int) -> Never:
+        assert functorch_config.backward_pass_autocast == "off"
+        raise RuntimeError("training failed")
+
+    monkeypatch.setattr(trainer, "_inner_training_loop", fail)
+    with pytest.raises(RuntimeError, match="training failed"):
+        trainer.train()
+    assert functorch_config.backward_pass_autocast == original_autocast
 
 
 def assert_nested_equal(actual: Any, expected: Any) -> None:
