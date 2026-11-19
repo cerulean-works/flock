@@ -19,14 +19,12 @@ class _FlashImplementation:
 
     `capabilities` lists the compute capability majors that PyTorch's integration
     accepts. The remaining fields fill in error messages: `gpus` describes the
-    supported GPUs, `elsewhere` suggests a backend for other GPUs, and `install`
-    names the kernels to install.
+    supported GPUs, and `install` names the kernels to install.
     """
 
     name: Literal["FA3", "FA4"]
     capabilities: tuple[int, ...]
     gpus: str
-    elsewhere: str | None
     install: str
 
 
@@ -34,8 +32,6 @@ _FA3 = _FlashImplementation(
     name="FA3",
     capabilities=(9,),
     gpus="a Hopper GPU (compute capability 9.0)",
-    # FA3 has no Blackwell kernels; FA4 covers both generations.
-    elsewhere="use flash_attention_4 on Blackwell GPUs",
     install="a FlashAttention-3 installation compatible with your PyTorch and CUDA versions",
 )
 _FA4 = _FlashImplementation(
@@ -43,7 +39,6 @@ _FA4 = _FlashImplementation(
     # PyTorch's FA4 integration rejects other GPUs, even where FA4 has kernels.
     capabilities=(9, 10),
     gpus="a Hopper or Blackwell data center GPU (compute capability 9.x or 10.x)",
-    elsewhere=None,
     install="the flash-attn-4 package (flash-attn-4[cu13] with a CUDA 13 build of PyTorch)",
 )
 
@@ -56,10 +51,9 @@ def _flash_context(implementation: _FlashImplementation, device: torch.device) -
         raise ValueError(f"{name} requires CUDA tensors on {implementation.gpus}")
     major, minor = torch.cuda.get_device_capability(device)
     if major not in implementation.capabilities:
-        message = f"{name} requires {implementation.gpus}, got compute capability {major}.{minor}"
-        if implementation.elsewhere is not None:
-            message += f"; {implementation.elsewhere}"
-        raise ValueError(message)
+        raise ValueError(
+            f"{name} requires {implementation.gpus}, got compute capability {major}.{minor}"
+        )
 
     # Check which flash attention implementation is active, if any.
     active: str | None = attention.current_flash_attention_impl()

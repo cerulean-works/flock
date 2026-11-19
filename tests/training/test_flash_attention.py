@@ -415,17 +415,6 @@ def test_gpu_support_matches_pytorch_integration(
         activate.assert_not_called()
 
 
-def test_fa3_on_blackwell_points_to_fa4(
-    mock_activation: tuple[dict[str, str | None], Mock], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda device: (10, 0))
-    with (
-        pytest.raises(ValueError, match="use flash_attention_4 on Blackwell"),
-        flash_module._flash_context(flash_module._FA3, torch.device("cuda")),
-    ):
-        pytest.fail("FA3 accepted a Blackwell GPU")
-
-
 @pytest.fixture
 def fake_cuda(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     # Exercise CUDA autocast's dtype rules without a CUDA runtime or kernels.
