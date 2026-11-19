@@ -38,6 +38,7 @@ from flock.training.core.distributed import DistributedRuntime, master_broadcast
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState, StepLRScheduler
 from flock.training.core.models import BaseModel
 from flock.training.core.optimizers import BaseOptimizer, OptimizerConfig, OptimizerInterface
+from flock.training.core.optimizers.muon_adamw import MuonAdamW
 from flock.training.core.streaming import (
     StreamPacker,
     StreamPosition,
@@ -764,6 +765,22 @@ class Trainer:
 
         return loss, losses, tokens
 
+    def _learning_rates(self) -> dict[str, float]:
+        """Return the learning rates the next optimizer update applies, keyed for logging.
+
+        MuonAdamW reports `train/lr_muon` and `train/lr_adamw`. Other optimizers report
+        `train/lr`, or `train/lr_group<i>` for each of several parameter groups.
+        """
+        if isinstance(self.optimizer, MuonAdamW):
+            return {
+                "train/lr_muon": float(self.optimizer.muon.param_groups[0]["lr"]),
+                "train/lr_adamw": float(self.optimizer.adamw.param_groups[0]["lr"]),
+            }
+        groups = self.optimizer.param_groups
+        if len(groups) == 1:
+            return {"train/lr": float(groups[0]["lr"])}
+        return {f"train/lr_group{index}": float(group["lr"]) for index, group in enumerate(groups)}
+
     def _set_seed(self) -> None:
         """Seed Python and PyTorch before starting or restoring training."""
         random.seed(self.seed + self.runtime.rank)
@@ -788,6 +805,8 @@ class Trainer:
                 max_norm=self.max_norm,
             )
 
+            # Read the rates this update applies; the scheduler then prepares the next update's.
+            learning_rates = self._learning_rates()
             self.optimizer.step()
             self.lr_scheduler.step()
 
@@ -796,6 +815,7 @@ class Trainer:
             if step % self.logging_steps == 0 or step == self.total_steps:
                 if self.runtime.is_master:
                     metrics_dict = self.state.get_logging_metrics()
+                    metrics_dict.update(learning_rates)
                     self._log_metrics(metrics_dict)
                 self.state.reset_window()
 

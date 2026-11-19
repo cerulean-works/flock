@@ -32,7 +32,12 @@ from flock.training import TokenChunkDataset
 from flock.training.core import trainer as trainer_module
 from flock.training.core.data_utils import LanceBatchCollator
 from flock.training.core.distributed import DistributedRuntime
-from flock.training.core.lr_scheduler import LRSchedulerConfig, LRScheduleSegment, StepLRScheduler
+from flock.training.core.lr_scheduler import (
+    LRSchedulerConfig,
+    LRScheduleSegment,
+    StepLRScheduler,
+    lr_multiplier,
+)
 from flock.training.core.models import BaseModel
 from flock.training.core.models.olmo2 import Olmo2
 from flock.training.core.optimizers import AdamWConfig, MuonAdamWConfig, OptimizerInterface
@@ -2205,6 +2210,14 @@ def test_all_ignored_logging_windows_remain_finite(
             "train/grad_norm_window_max": 0.0,
             "train/tokens": 0,
             "train/total_tokens": 0,
+            "train/lr": pytest.approx(
+                0.01
+                * lr_multiplier(
+                    int(metrics["global_step"]) - 1,
+                    trainer.lr_scheduler.config,
+                    trainer.total_steps,
+                )
+            ),
         }
 
 
@@ -2281,6 +2294,11 @@ def test_training_updates_and_token_weighted_logging(
                 "train/tokens": sum(tokens for _, tokens, _ in window),
                 "train/total_tokens": sum(
                     tokens for _, tokens, _ in records[: start + len(window)]
+                ),
+                # The rate the window's last update applied, after its earlier updates.
+                "train/lr": 0.01
+                * lr_multiplier(
+                    start + len(window) - 1, trainer.lr_scheduler.config, trainer.total_steps
                 ),
             }
         )
@@ -2733,3 +2751,30 @@ def test_text_stream_needs_max_steps_and_a_token_budget(
         trainer_factory(
             dataset=stream, num_workers=0, prefetch_factor=None, batch_size=None, batch_tokens=6
         )
+
+
+def test_logged_learning_rate_is_the_one_each_update_applied(
+    trainer_factory: TrainerFactory,
+) -> None:
+    trainer, run, _ = trainer_factory(num_workers=0, prefetch_factor=None)
+    trainer.train()
+    logged = [record for record in run.metrics if "train/loss_mean" in record]
+    assert logged and all("train/lr" in record for record in logged)
+    schedule = trainer.lr_scheduler.config
+    for record in logged:
+        completed = int(record["global_step"]) - 1  # Updates finished before this one.
+        expected = 0.01 * lr_multiplier(completed, schedule, trainer.total_steps)
+        assert record["train/lr"] == pytest.approx(expected)
+
+
+def test_muon_adamw_logs_both_learning_rates(trainer_factory: TrainerFactory) -> None:
+    trainer, run, _ = trainer_factory(
+        num_workers=0,
+        prefetch_factor=None,
+        optimizer_config=MuonAdamWConfig(lr=0.01, betas=(0.9, 0.95), muon_lr=0.02),
+    )
+    trainer.train()
+    first = next(record for record in run.metrics if "train/loss_mean" in record)
+    assert "train/lr" not in first
+    assert first["train/lr_muon"] == pytest.approx(0.02)
+    assert first["train/lr_adamw"] == pytest.approx(0.01)
