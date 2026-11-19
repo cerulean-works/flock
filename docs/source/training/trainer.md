@@ -354,15 +354,15 @@ self-attention with padding at either end and empty rows. Masks with holes,
 dense masks and unequal Q/K sequence lengths are unsupported. For padded batches,
 each layer packs real-token Q/K/V and calls PyTorch's
 `torch.nn.attention.varlen.varlen_attn` once using the registered FA3 kernels.
-The model validates padding and copies token spans to a
-CPU int64 tensor once per forward. All decoder layers reuse those spans. Each
-attention call builds packing indices and cumulative sequence lengths on CPU,
-copies those tensors to CUDA, and restores the packed output to the batch shape.
-Unpadded batches use one batched SDPA call per layer.
+Once per forward, the model validates padding, builds packing indices and
+cumulative sequence lengths on CPU, and copies them to the input IDs' device.
+Every decoder layer reuses this `VarlenMetadata`. Each attention call packs
+Q/K/V with it and restores the packed output to the batch shape. Unpadded
+batches use one batched SDPA call per layer.
 
-The padded path uses a single split (`num_splits=1`) and casts packed Q/K/V to
-the CUDA autocast dtype when autocast is enabled. PyTorch's FA3 integration
-honors its deterministic-algorithm setting during backward.
+The padded path lets PyTorch choose how to split the work (`num_splits=None`) and
+casts packed Q/K/V to the CUDA autocast dtype when autocast is enabled. PyTorch's
+FA3 integration honors its deterministic-algorithm setting during backward.
 
 FA3 attention outputs are zero at padding query positions. Final model logits at
 those positions can differ from SDPA because residual connections still process
@@ -388,22 +388,30 @@ AttentionInterface.register("custom", attention_fn, mask_preparer=prepare_sdpa_m
 Set `attn_implementation="custom"` to select it. Register before constructing or
 loading the model; saved configs keep the backend name.
 
-The function takes Q/K/V shaped `[batch, heads, sequence, head_dim]` and keyword
-arguments `attention_mask` and `is_causal`. Return the same layout, with Q's heads
-and sequence length. `is_causal` describes the model's attention pattern. With
-SDPA, an explicit mask must include the causal restriction. The `sdpa_attention`
-adapter enables the kernel's causal flag only when the mask is `None`.
+The function takes Q/K/V shaped `[batch, heads, sequence, head_dim]` and the
+keyword arguments `attention_metadata` and `is_causal`. Return the same layout,
+with Q's heads and sequence length. With SDPA, an explicit mask must include the
+causal restriction.
 
-For another mask format, supply a preparer that takes a boolean 2D `padding_mask`
-(or `None`) and keyword-only `is_causal`. Return a tensor or `None`. The model
-prepares the mask once per forward and shares it across decoder layers.
+A preparer takes a boolean 2D `padding_mask` (or `None`) and keyword-only
+`is_causal`, and returns the metadata its attention function reads. The model
+calls it once per forward and passes the result to every layer unchanged.
+`AttentionMetadata` lists the kinds of metadata, one type per kind:
 
-For FA3, `prepare_flash_attention_mask` returns a CPU int64 tensor shaped
-`[batch, 2]`. Each row contains the start and exclusive stop of the valid token
-span. Direct callers of `flash_attention_3` must prepare their padding mask first
-and pass these spans on CPU, even though Q/K/V are on CUDA. Each attention call
-derives its packing tensors from the spans, so scalar reads stay on CPU.
-Unpadded inputs use `None` and one batched attention call.
+| Kind | Preparer | Read by |
+|---|---|---|
+| Dense mask (`torch.Tensor`) | `prepare_sdpa_mask` | `sdpa_attention` |
+| `VarlenMetadata` | `prepare_varlen_metadata` | `flash_attention_3` |
+
+`None` means no padding. To support a new kind, add its type to
+`AttentionMetadata`; model code does not change.
+
+Direct callers of `flash_attention_3` prepare the padding mask first:
+
+```python
+metadata = prepare_varlen_metadata(padding_mask, is_causal=True)
+output = flash_attention_3(q, k, v, attention_metadata=metadata, is_causal=True)
+```
 
 ## Check the run
 

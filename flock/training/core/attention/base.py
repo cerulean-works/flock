@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 
+from .metadata import AttentionMetadata
 from .registry import AttentionFunction, AttentionInterface
 
 
@@ -79,21 +80,20 @@ class GroupedAttentionWithRoPE(nn.Module):
         x: torch.Tensor,
         *,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        attention_mask: torch.Tensor | None = None,
+        attention_metadata: AttentionMetadata = None,
         is_causal: bool = False,
     ) -> torch.Tensor:
         """Map [batch, sequence, hidden] to the same shape using the selected attention function.
 
         RoPE cos/sin must broadcast to [batch, heads, sequence, head_dim].
-        attention_mask and is_causal are forwarded unchanged to the selected
-        attention function, which defines supported mask formats and combinations.
+        attention_metadata and is_causal pass through to the attention function.
 
         Args:
             x (`torch.Tensor`): Hidden states shaped `[batch, sequence, hidden]`.
             position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Cosines and sines for split-half RoPE. Omit to skip rotary embeddings.
-            attention_mask (`torch.Tensor`, *optional*):
-                Mask prepared for the selected attention implementation.
+            attention_metadata (`AttentionMetadata`, *optional*):
+                Metadata prepared for the selected attention implementation.
             is_causal (`bool`, *optional*, defaults to `False`):
                 Request causal attention from the selected implementation.
 
@@ -122,7 +122,7 @@ class GroupedAttentionWithRoPE(nn.Module):
             q,
             k,
             v,
-            attention_mask=attention_mask,
+            attention_metadata=attention_metadata,
             is_causal=is_causal,
         )
 
