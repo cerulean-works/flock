@@ -787,7 +787,7 @@ def test_compiled_backward_runs_outside_autocast_like_eager(
     "mode", ["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"]
 )
 @pytest.mark.parametrize("evaluation", [True, False])
-def test_compile_settings_choose_evaluation_model_and_cuda_graph_steps(
+def test_compile_settings_choose_evaluation_model(
     trainer_factory: TrainerFactory,
     compile_calls: list[dict[str, Any]],
     mode: str,
@@ -806,8 +806,6 @@ def test_compile_settings_choose_evaluation_model_and_cuda_graph_steps(
         assert trainer._evaluation_model._orig_mod is trainer.model
     else:
         assert trainer._evaluation_model is trainer.model
-    uses_cuda_graphs = mode in ("reduce-overhead", "max-autotune")
-    assert (trainer._mark_step is torch.compiler.cudagraph_mark_step_begin) == uses_cuda_graphs
 
 
 def assert_nested_equal(actual: Any, expected: Any) -> None:

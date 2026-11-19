@@ -193,7 +193,7 @@ def test_compiled_trainer_matches_eager_resumes_and_evaluates(
         # patch restores its config; pytest 9.2's monkeypatch would hide the key.
         with torch._dynamo.config.patch(error_on_recompile=True):
             for value in (1e-5, 2e-5):
-                compiled._mark_step()
+                torch.compiler.cudagraph_mark_step_begin()
                 for parameter in compiled.model.parameters():
                     parameter.grad = torch.ones_like(parameter)
                 for group in compiled.optimizer.param_groups:

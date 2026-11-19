@@ -560,7 +560,6 @@ class Trainer:
             score_prepared
         )
         self._evaluation_model: nn.Module = self.model
-        self._mark_step: Callable[[], None] = lambda: None
         self.torch_compile = config.torch_compile
 
         # Use torch compile each function that need to be compiled.
@@ -573,9 +572,6 @@ class Trainer:
             self._train_update = compile_(self._train_update)
             if config.torch_compile_evaluation:
                 self._evaluation_model = cast(nn.Module, compile_(self.model))
-            if config.torch_compile_mode in ("reduce-overhead", "max-autotune"):
-                # Each iteration starts a new CUDA graph generation, freeing the last one.
-                self._mark_step = torch.compiler.cudagraph_mark_step_begin
             self._use_tensor_learning_rates()
 
         self.validation_tasks = config.validation_tasks
@@ -737,7 +733,8 @@ class Trainer:
     def _inner_training_loop(self, dataloader: Iterable[Batch], start_step: int) -> None:
         """Update once per batch, then log, save and evaluate at configured intervals."""
         for step, batch in enumerate(dataloader, start=start_step + 1):
-            self._mark_step()
+            if self.torch_compile:
+                torch.compiler.cudagraph_mark_step_begin()
             self.optimizer.zero_grad()
 
             batch = cast(Batch, {k: v.to(self.device, non_blocking=True) for k, v in batch.items()})
