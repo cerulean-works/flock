@@ -75,7 +75,7 @@ uv run flock eval run \
   --out results/run-190m-700
 ```
 
-The digest names every file in the folder, the weights, config and tokenizer alike, in the same form as a Flock version's digest. Before anything loads, the folder's files are hashed again, and a folder whose files no longer match the digest is refused. The results record the model as `local:{digest}`, with the digest in `model_digest`, so the same files scored from another folder compare as one model. The folder's path appears only in `command`. A folder passed as `repo@revision` is refused, since a revision can't pin a folder's files, and the message gives the `local:` id to use.
+The digest names every file in the folder, the weights, config and tokenizer alike, in the same form as a Flock version's digest. A folder holding a link, or a weights index that names a shard outside the folder, is refused, since the digest couldn't pin what loads. Before anything loads, the folder's files are hashed again, and a folder whose files no longer match the digest is refused. The results record the model as `local:{digest}`, with the digest in `model_digest`, so the same files scored from another folder compare as one model. The folder's path appears only in `command`. A folder passed as `repo@revision` is refused, since a revision can't pin a folder's files, and the message gives the `local:` id to use.
 
 ## Run where there is no network
 

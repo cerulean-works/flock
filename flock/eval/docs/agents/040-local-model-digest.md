@@ -18,13 +18,13 @@ A training run's export is a folder in the Hugging Face format, and it should be
 
 ### 040.D1. A local folder is named by a digest of every file in it
 
-The id is `local:folder@digest`, where the digest is the sha256 of one `{path}\t{size}\t{sha256}\n` line per file under the folder, sorted by path as strings. Linked folders are followed, since transformers follows them to the shards an index names, and a file name with a control character is refused, as the registry refuses it, so two file lists can't write the same lines. This is the form the Flock registry uses for a version's digest (D98), so one rule names model files across Flock. It covers every file, not only the weights: the config and tokenizer change scores as much as a weight does. `flock eval digest folder` prints the id, and a mismatch prints the folder's actual digest.
+The id is `local:folder@digest`, where the digest is the sha256 of one `{path}\t{size}\t{sha256}\n` line per file under the folder, sorted by path as strings. A folder that holds a link, has a folder that can't be read, or has a weights index naming a shard outside its files (`../` or an absolute path, which transformers opens) is refused: in each case the loader could read a file the digest never saw. A file name with a control character is refused too, as the registry refuses it, so two file lists can't write the same lines. `save_pretrained` writes none of these. This is the form the Flock registry uses for a version's digest (D98), so one rule names model files across Flock. It covers every file, not only the weights: the config and tokenizer change scores as much as a weight does. `flock eval digest folder` prints the id, and a mismatch prints the folder's actual digest.
 
 *Prior work:* the registry's digest (D98); a Hub commit hash, which also names every file of a repo. No evaluation harness we follow pins a local folder: lm-evaluation-harness and OLMES record the path as given.
 
 ### 040.D2. The digest is checked before anything loads, and a mismatch refuses to score
 
-`ModelRef.resolve` hashes the folder and compares it with the digest in the id, as it resolves a Flock tag to its number before anything loads. A folder whose files changed since its id was printed, or an id copied from another folder, fails in seconds with both digests in the message. A link is resolved to its target first, so a `latest` link moved after the check can't switch the folder that loads. Once the tokenizer and weights have loaded, the folder is hashed again and the run is refused if it changed, so files rewritten during the load are never scored under the old digest.
+`ModelRef.resolve` hashes the folder and compares it with the digest in the id, as it resolves a Flock tag to its number before anything loads. A folder whose files changed since its id was printed, or an id copied from another folder, fails in seconds with both digests in the message. A folder given as a link is resolved to its target first, so a `latest` link moved after the check can't switch the folder that loads. Once the tokenizer and weights have loaded, the folder is hashed again and the run is refused if it changed, so files rewritten during the load are never scored under the old digest.
 
 ### 040.D3. The results record `local:digest`, without the path
 
@@ -42,12 +42,12 @@ A Hugging Face id whose repo is an existing folder is refused, with the `local:`
 
 ## 4. How it was actually built
 
-- **Review.** An independent review found that the first version loaded the folder without checking it again, did not follow linked folders, accepted control characters in names, and broke the local cases of the tokenizer tests, which built a Hugging Face ref for a folder. All four are fixed and tested.
+- **Review.** An independent review found that the first version loaded the folder without checking it again, missed files reached through links, unreadable folders or an index naming shards outside the folder, accepted control characters in names, and broke the local cases of the tokenizer tests, which built a Hugging Face ref for a folder. Each is fixed and tested.
 - **One model path.** A local model loads through the same `AutoModelForCausalLM` and `load_tokenizer` calls as a Hugging Face model; `_repo_file` reads a local model's files from its folder by its kind, no longer by whether a folder of the repo's name exists.
 - **Tests.** On a tiny Llama saved with its tokenizer: the digest equals D98's formula over the same files, including the string order of `a-b` before `a/c`; a folder resolves to the same id twice and from a copy; one flipped bit in `model.safetensors` is refused; the old form is refused with the right id; `from_pretrained` loads the saved weights under `local:{digest}`; and `evaluate`, run twice from the id `flock eval digest` printed, records the same `model` and the digest in `model_digest`.
 
 ## 5. Known gaps
 
 - Hashing reads every file twice more, before and after loading. One hash of a 190M export (1.07 GB) took under 30 seconds on a login node, imports included; the second mostly reads from the page cache.
-- A linked folder that links back to a parent is walked until the system's link limit, so its files are hashed many times over; exports have none.
+- An export kept on another disk through a link must be copied into a real folder to be scored.
 - Results written before this stage with a folder as `repo@revision` keep that id and a `null` digest. They compare with neither a rerun under the new id nor each other's folders unless the paths match.

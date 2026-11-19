@@ -2,7 +2,9 @@
 
 import hashlib
 import itertools
+import json
 import logging
+import posixpath
 import re
 from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
@@ -154,27 +156,44 @@ def folder_digest(folder: Path) -> str:
     The digest of every file in `folder`, computed as the Flock registry computes a version's: the sha256 of `{path}\t{size}\t{sha256}\n` per file, sorted by its path in the folder.
 
     Raises:
-        `ValueError`: if `folder` isn't a folder, holds no files, or has a file name with a control character, such as a tab, which the registry refuses too.
+        `ValueError`: if `folder` isn't a folder, holds no files, holds a link, has a file name with a control character, such as a tab, which the registry refuses too, or has a weights index naming a shard that isn't one of its files.
+        `OSError`: if a folder in it can't be read.
     """
     if not folder.is_dir():
         raise ValueError(f"{folder} isn't a folder")
 
-    # Through linked folders too, since transformers follows them to a shard the index names.
-    paths = folder.rglob("*", recurse_symlinks=True)
-    files = {p.relative_to(folder).as_posix(): p for p in paths if p.is_file()}
+    # A link can point outside the folder and change there under the same digest, and an
+    # unreadable folder would drop out of the list unnoticed. Exports have neither.
+    errors: list[OSError] = []
+    files = {}
+    for root, folders, names in folder.walk(on_error=errors.append):
+        for name in [*folders, *names]:
+            if (root / name).is_symlink():
+                raise ValueError(f"{folder}: {root / name} is a link, which the digest can't pin")
+        for name in names:
+            files[(root / name).relative_to(folder).as_posix()] = root / name
+    if errors:
+        raise errors[0]
+    if not files:
+        raise ValueError(f"{folder} holds no files")
+
     lines = []
     # Sorted as strings, as the registry sorts, which isn't `Path` order: `a-b` comes before `a/c`.
     for name in sorted(files):
         # A tab or newline in a name would let two file lists write the same lines.
         if not name.isprintable():
             raise ValueError(f"{folder}: the file name {name!r} has a control character")
+        # Transformers opens each shard an index names beside it, even `../` or an absolute path.
+        if name.endswith(".index.json"):
+            weight_map = json.loads(files[name].read_text()).get("weight_map", {})
+            for shard in set(weight_map.values()):
+                if posixpath.normpath(posixpath.join(posixpath.dirname(name), shard)) not in files:
+                    raise ValueError(f"{folder}: {name} names {shard}, which isn't in the folder")
         file_digest = hashlib.sha256()
         with files[name].open("rb") as file:
             while chunk := file.read(8 * 2**20):
                 file_digest.update(chunk)
         lines.append(f"{name}\t{files[name].stat().st_size}\t{file_digest.hexdigest()}\n")
-    if not lines:
-        raise ValueError(f"{folder} holds no files")
 
     return hashlib.sha256("".join(lines).encode()).hexdigest()
 
@@ -398,7 +417,7 @@ class ScoringModel:
                 Passed to [`ScoringModel`].
 
         Raises:
-            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision`, `flock:org/name[@version]` or `local:folder@digest`, a local folder's files don't match its digest or a Hugging Face id names a local folder, or a Flock model's config has no `hf_repo` to load its tokenizer from or names a repo whose tokenizer `AutoTokenizer` would convert from a SentencePiece model, [`load_tokenizer`] refuses the repo, or `add_bos` is set and the tokenizer has no BOS token, before a Hugging Face model's weights load.
+            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision`, `flock:org/name[@version]` or `local:folder@digest`, a local folder's files don't match its digest, before or after loading, or a Hugging Face id names a local folder, or a Flock model's config has no `hf_repo` to load its tokenizer from or names a repo whose tokenizer `AutoTokenizer` would convert from a SentencePiece model, [`load_tokenizer`] refuses the repo, or `add_bos` is set and the tokenizer has no BOS token, before a Hugging Face model's weights load.
             [`~hub.models.ModelError`]: if the Flock registry has no such version, or refuses to load it.
         """
         # `__init__` checks it too, but only after the weights have loaded.

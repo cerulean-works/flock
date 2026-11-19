@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import shutil
 from collections.abc import Callable
 from types import SimpleNamespace
@@ -288,14 +289,39 @@ def test_folder_digest_is_the_registrys_digest_of_every_file(tmp_path: Path) -> 
     assert model.folder_digest(tmp_path) == hashlib.sha256(lines.encode()).hexdigest()
 
 
-def test_folder_digest_covers_files_in_linked_folders(tmp_path: Path) -> None:
+@pytest.mark.parametrize("target", ["shards", "shards/model-00001.safetensors"])
+def test_folder_digest_refuses_a_link(tmp_path: Path, target: str) -> None:
     (tmp_path / "shards").mkdir()
     (tmp_path / "shards" / "model-00001.safetensors").write_bytes(b"one")
     (tmp_path / "export").mkdir()
-    (tmp_path / "export" / "weights").symlink_to(tmp_path / "shards")
-    before = model.folder_digest(tmp_path / "export")
-    (tmp_path / "shards" / "model-00001.safetensors").write_bytes(b"two")
-    assert model.folder_digest(tmp_path / "export") != before
+    (tmp_path / "export" / "config.json").write_text("{}")
+    (tmp_path / "export" / "linked").symlink_to(tmp_path / target)
+    with pytest.raises(ValueError, match="is a link"):
+        model.folder_digest(tmp_path / "export")
+
+
+@pytest.mark.parametrize("shard", ["../model-00001.safetensors", "/work/model-00001.safetensors"])
+def test_folder_digest_refuses_an_index_naming_a_shard_outside(tmp_path: Path, shard: str) -> None:
+    (tmp_path / "model-00001.safetensors").write_bytes(b"one")
+    index = {"weight_map": {"lm_head.weight": shard}}
+    (tmp_path / "model.safetensors.index.json").write_text(json.dumps(index))
+    with pytest.raises(ValueError, match="isn't in the folder"):
+        model.folder_digest(tmp_path)
+
+    index = {"weight_map": {"lm_head.weight": "model-00001.safetensors"}}
+    (tmp_path / "model.safetensors.index.json").write_text(json.dumps(index))
+    model.folder_digest(tmp_path)
+
+
+def test_folder_digest_refuses_an_unreadable_folder(tmp_path: Path) -> None:
+    (tmp_path / "config.json").write_text("{}")
+    (tmp_path / "hidden").mkdir()
+    (tmp_path / "hidden").chmod(0)
+    try:
+        with pytest.raises(PermissionError):
+            model.folder_digest(tmp_path)
+    finally:
+        (tmp_path / "hidden").chmod(0o700)
 
 
 def test_folder_digest_refuses_a_tab_in_a_file_name(tmp_path: Path) -> None:
