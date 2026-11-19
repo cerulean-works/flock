@@ -217,7 +217,8 @@
 					}}
 				/>
 			{/if}
-			<ul class="mt-2 grid gap-0.5">
+			<!-- One column no wider than the sidebar, so a long name truncates instead of widening every row. -->
+			<ul class="mt-2 grid grid-cols-1 gap-0.5">
 				{#each shown as p (p.name)}
 					{@const here = page.params.project === p.name}
 					<!-- The project's menu shows over the row's end while it's hovered, focused or
