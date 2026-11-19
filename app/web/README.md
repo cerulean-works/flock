@@ -193,7 +193,7 @@ pnpm dlx shadcn-svelte@latest add <component>   # aliases already point at #lib
   so it never hides the lines being hovered in a small card; the others stay inside their chart.
 - **Full screen**: per panel, deep-linkable (`?panel=train%2Floss`), server-rendered on reload,
   ←/→ to move between panels, Esc or back to close, full run legend.
-- **Settings**: smoothing (debiased EMA), show original under smoothing, ignore outliers, panels per
+- **Settings**: smoothing (W&B's methods and formulas), show original under smoothing, ignore outliers, panels per
   page; per panel log scale, reset zoom, PNG and CSV export.
 - Keyboard: `T` table, `C` charts, `Esc` closes full screen / unpins.
 - **Filter** is present but intentionally inert. Search, Ask ARIA, sweeps and reports are
