@@ -9,7 +9,7 @@ from torch.optim import Muon, Optimizer
 
 from .adamw import AdamWConfig
 
-type _CompanionFactory = Callable[[AdamWConfig, Iterable[Tensor]], Optimizer]
+type _CompanionFactory[ConfigT] = Callable[[ConfigT, Iterable[Tensor]], Optimizer]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -121,7 +121,7 @@ def muon(
     config: MuonConfig,
     params: Iterable[Tensor],
     *,
-    get_companion_factory: Callable[[type[AdamWConfig]], _CompanionFactory],
+    get_companion_factory: Callable[[type[AdamWConfig]], _CompanionFactory[AdamWConfig]],
 ) -> Optimizer:
     """Build Muon with the optimizer selected by the companion config."""
 
