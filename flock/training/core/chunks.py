@@ -104,6 +104,21 @@ class TokenChunkDataset(Dataset):
         lance.write_dataset(batches(), str(destination), schema=schema, mode="create")
         return cls(cache_dir=destination, chunk_length=chunk_length)
 
+    def target_counts(self) -> np.ndarray:
+        """Return each chunk's next-token target count, in chunk-index order.
+
+        Every chunk holds `chunk_length - 1` targets except a document's last, which
+        holds the remainder. The trainer counts exactly these targets.
+        """
+        counts = np.full(len(self), self.chunk_length - 1, dtype=np.int64)
+        targets = np.maximum(self.lengths.astype(np.int64) - 1, 0)
+        has_chunks = targets > 0
+        # Chunks before a document's last are full; the last takes what remains.
+        last = self.ends[has_chunks] - 1
+        firsts = np.concatenate(([0], self.ends[:-1]))[has_chunks]
+        counts[last] = targets[has_chunks] - (last - firsts) * (self.chunk_length - 1)
+        return counts
+
     def __len__(self) -> int:
         """Return the number of chunks with at least one prediction target."""
         return int(self.ends[-1]) if len(self.ends) else 0

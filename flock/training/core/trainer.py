@@ -4,7 +4,7 @@ import random
 from collections.abc import Callable, Iterable, Mapping
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any, Literal, Self
+from typing import Any, Literal, Self, cast
 
 import torch
 import torch._functorch.config as functorch_config
@@ -16,7 +16,7 @@ from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict, Field, ValidationInfo, field_validator, model_validator
 from torch import nn
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Sampler
 from transformers import TokenizersBackend
 from wandb import Run
 
@@ -25,7 +25,14 @@ from flock.eval.run import PreparedTask, prepare_task, score_prepared
 from flock.eval.tasks import TASKS
 from flock.training.core.checkpoint import CheckpointManager
 from flock.training.core.chunks import TokenChunkDataset
-from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableBatchDataSampler
+from flock.training.core.data_utils import (
+    Batch,
+    LanceBatchCollator,
+    PackedBatchCollator,
+    ResumableBatchDataSampler,
+    TokenBatchPlan,
+    TokenBudgetBatchSampler,
+)
 from flock.training.core.distributed import DistributedRuntime, master_broadcast, master_only
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState, StepLRScheduler
 from flock.training.core.models import BaseModel
@@ -43,7 +50,12 @@ class TrainerConfig(PydanticBaseModel):
             Name used for the default checkpoint directory and evaluation labels.
             This is not passed to `wandb.init` as the tracking run's name.
         input_column (`str`): Text column read from each Lance row.
-        batch_size (`int`): Positive number of dataset items per rank per optimizer update; chunks when using a token cache.
+        batch_size (`int`, *optional*): Positive number of dataset items per rank per
+            optimizer update; chunks when using a token cache. Set this or `batch_tokens`.
+        batch_tokens (`int`, *optional*): Positive input-token budget per rank per update.
+            Requires a `TokenChunkDataset`: shuffled chunks are packed greedily into one
+            row of exactly this length, each chunk attending only to itself. Must be at
+            least the chunk length minus one. Set this or `batch_size`.
         max_steps (`int`, *optional*):
             Positive cap on optimizer updates. The run ends at the cap, or at the end of
             the pass if that comes first. Fractional schedule times are fractions of the
@@ -111,7 +123,8 @@ class TrainerConfig(PydanticBaseModel):
     run_name: str
 
     input_column: str
-    batch_size: int = Field(gt=0)
+    batch_size: int | None = Field(default=None, gt=0)
+    batch_tokens: int | None = Field(default=None, gt=0)
     max_steps: int | None = Field(default=None, gt=0)
 
     optimizer_config: OptimizerConfig
@@ -154,6 +167,13 @@ class TrainerConfig(PydanticBaseModel):
                 f"Invalid validation task(s) specified. Supported tasks are: {list(TASKS.keys())}"
             )
         return tasks
+
+    @model_validator(mode="after")
+    def validate_batching(self) -> Self:
+        """Require exactly one of an item count and a token budget per update."""
+        if (self.batch_size is None) == (self.batch_tokens is None):
+            raise ValueError("Set exactly one of batch_size and batch_tokens")
+        return self
 
     @model_validator(mode="after")
     def validate_dataloader(self) -> Self:
@@ -304,7 +324,7 @@ class TrainerCheckpoint(PydanticBaseModel):
         if info.context is not None:
             if self.config != info.context["config"]:
                 raise ValueError(
-                    "Checkpoint dataset size, chunk cache, batch size, seed, input column or world size changed"
+                    "Checkpoint dataset size, chunk cache, batch size or tokens, seed, input column or world size changed"
                 )
             if schedule.total_steps != info.context["total_steps"]:
                 raise ValueError(
@@ -523,6 +543,19 @@ class Trainer:
         self.dataset = dataset
         self.ds_input_column = config.input_column
         self.batch_size = config.batch_size
+        self.batch_tokens = config.batch_tokens
+        self.token_plan: TokenBatchPlan | None = None
+        if self.batch_tokens is not None:
+            if not isinstance(dataset, TokenChunkDataset):
+                raise ValueError("batch_tokens requires a TokenChunkDataset")
+            if self.batch_tokens < dataset.chunk_length - 1:
+                raise ValueError("batch_tokens must be at least chunk_length - 1")
+            if not model.supports_packing():
+                raise ValueError(f"{type(model).__name__} does not support packed batches")
+            # Every rank builds the same seeded plan, so no communication is needed.
+            self.token_plan = TokenBatchPlan.build(
+                dataset.target_counts(), self.batch_tokens, seed=self.seed
+            )
 
         self.dataloader_prefetch_factor = config.dataloader_prefetch_factor
         self.dataloader_num_workers = config.dataloader_num_workers
@@ -533,8 +566,12 @@ class Trainer:
         self.max_norm = config.max_norm
         self.logging_steps = config.logging_steps
 
-        self.total_steps = math.ceil(
-            len(self.dataset) / (self.batch_size * self.runtime.world_size)
+        self.total_steps = (
+            self.token_plan.global_steps(self.runtime.world_size)
+            if self.token_plan is not None
+            else math.ceil(
+                len(self.dataset) / (cast(int, self.batch_size) * self.runtime.world_size)
+            )
         )
         if config.max_steps is not None:
             # The schedule and the checkpoint check plan over the capped run.
@@ -589,29 +626,48 @@ class Trainer:
 
     def _get_training_dataloader(self, skip_batches: int = 0) -> DataLoader:
         """Build a seeded, resumable loader with spawned workers and CUDA pinning."""
-        collator = LanceBatchCollator(
-            self.tokenizer,
-            self.ds_input_column,
-            token_chunks=isinstance(self.dataset, TokenChunkDataset),
-        )
-        sampler = ResumableBatchDataSampler(
-            batch_size=self.batch_size,
-            dataset_size=len(self.dataset),
-            shuffle=True,
-            seed=self.seed,
-            batch_cursor=skip_batches,
-            rank=self.runtime.rank,
-            world_size=self.runtime.world_size,
-            yield_empty_last_batch=True if self.runtime.enabled else None,
-            max_batches=self.total_steps,
-        )
+        sampler: Sampler[list[int]]
+        collate_fn: Callable[[list[dict[str, Any]]], Batch]
+        if self.token_plan is not None:
+            assert isinstance(self.dataset, TokenChunkDataset) and self.batch_tokens is not None
+            pad_token_id = self.tokenizer.pad_token_id
+            assert isinstance(pad_token_id, int)
+            collate_fn = PackedBatchCollator(
+                pad_token_id=pad_token_id,
+                batch_tokens=self.batch_tokens,
+                max_document_tokens=self.dataset.chunk_length - 1,
+            ).collate_fn
+            sampler = TokenBudgetBatchSampler(
+                self.token_plan,
+                batch_cursor=skip_batches,
+                rank=self.runtime.rank,
+                world_size=self.runtime.world_size,
+                max_batches=self.total_steps,
+            )
+        else:
+            collate_fn = LanceBatchCollator(
+                self.tokenizer,
+                self.ds_input_column,
+                token_chunks=isinstance(self.dataset, TokenChunkDataset),
+            ).collate_fn
+            sampler = ResumableBatchDataSampler(
+                batch_size=cast(int, self.batch_size),
+                dataset_size=len(self.dataset),
+                shuffle=True,
+                seed=self.seed,
+                batch_cursor=skip_batches,
+                rank=self.runtime.rank,
+                world_size=self.runtime.world_size,
+                yield_empty_last_batch=True if self.runtime.enabled else None,
+                max_batches=self.total_steps,
+            )
 
         return DataLoader(
             self.dataset,
             # this sampler does batching + shuffling, so we don't need to set batch_size or shuffle here
             batch_sampler=sampler,
             num_workers=self.dataloader_num_workers,
-            collate_fn=collator.collate_fn,
+            collate_fn=collate_fn,
             # lance multi-threads internally, so its best we not use fork
             multiprocessing_context="spawn" if self.dataloader_num_workers > 0 else None,
             # accelerate batch host to device transfers
@@ -930,19 +986,25 @@ class Trainer:
                     "data_state": {"batch_cursor": int(self.state.step.item())},
                 }
             },
-            "config": {
-                "chunk_fingerprint": (
-                    self.dataset.fingerprint
-                    if isinstance(self.dataset, TokenChunkDataset)
-                    else None
-                ),
-                "dataset_size": len(self.dataset),
-                "batch_size": self.batch_size,
-                "seed": self.seed,
-                "input_column": self.ds_input_column,
-                "world_size": self.runtime.world_size,
-            },
+            "config": self._run_contract(),
         }
+
+    def _run_contract(self) -> dict[str, int | str | None]:
+        """Return the settings that fix which data each resumed update sees."""
+        contract: dict[str, int | str | None] = {
+            "chunk_fingerprint": (
+                self.dataset.fingerprint if isinstance(self.dataset, TokenChunkDataset) else None
+            ),
+            "dataset_size": len(self.dataset),
+            "batch_size": self.batch_size,
+            "seed": self.seed,
+            "input_column": self.ds_input_column,
+            "world_size": self.runtime.world_size,
+        }
+        # Item-count runs keep their earlier contract, so their checkpoints still resume.
+        if self.batch_tokens is not None:
+            contract["batch_tokens"] = self.batch_tokens
+        return contract
 
     def validate_state_dict(
         self, state: Mapping[str, Any] | TrainerCheckpoint
@@ -963,18 +1025,7 @@ class Trainer:
         checkpoint = TrainerCheckpoint.model_validate(
             state,
             context={
-                "config": {
-                    "chunk_fingerprint": (
-                        self.dataset.fingerprint
-                        if isinstance(self.dataset, TokenChunkDataset)
-                        else None
-                    ),
-                    "dataset_size": len(self.dataset),
-                    "batch_size": self.batch_size,
-                    "seed": self.seed,
-                    "input_column": self.ds_input_column,
-                    "world_size": self.runtime.world_size,
-                },
+                "config": self._run_contract(),
                 "total_steps": self.total_steps,
                 "rank": self.runtime.rank,
             },

@@ -2566,3 +2566,86 @@ def test_chunk_cache_rejects_changed_special_token_policy(
     resumed, _, _ = trainer_factory(dataset=changed)
     with pytest.raises(ValueError, match="data"):
         resumed.validate_state_dict(checkpoint)
+
+
+def packed_chunks(tmp_path: Path, tokenizer: TokenizersBackend) -> TokenChunkDataset:
+    source = tmp_path / "packed-source.lance"
+    texts = ["a b c d " * 6, "b c d " * 5, "a b", "c d a"]
+    lance.write_dataset(pa.table({"text": texts}), str(source))
+    return TokenChunkDataset.prepare(
+        dataset=SafeLanceDataset(str(source), dataset_options={"version": 1}),
+        tokenizer=tokenizer,
+        input_column="text",
+        cache_dir=tmp_path / "packed-tokens",
+        chunk_length=4,
+    )
+
+
+def test_token_budget_training_covers_every_target_and_resumes(
+    trainer_factory: TrainerFactory,
+    tokenizer: TokenizersBackend,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chunks = packed_chunks(tmp_path, tokenizer)
+    options: dict[str, Any] = {
+        "dataset": chunks,
+        "batch_size": None,
+        "batch_tokens": 7,
+        "num_workers": 0,
+        "prefetch_factor": None,
+    }
+    reference, _, _ = trainer_factory(**options, output_dir=str(tmp_path / "reference"))
+    assert reference.token_plan is not None
+    assert reference.total_steps == len(reference.token_plan)
+    reference.train()
+    assert int(reference.state.total_tokens) == int(chunks.target_counts().sum())
+
+    interrupted, _, _ = trainer_factory(
+        **options, output_dir=str(tmp_path / "interrupted"), save_steps=2
+    )
+    save = interrupted.checkpoint_manager.save_model
+
+    def save_and_interrupt(*args: Any, **kwargs: Any) -> None:
+        save(*args, **kwargs)
+        raise KeyboardInterrupt("completed two packed updates")
+
+    monkeypatch.setattr(interrupted.checkpoint_manager, "save_model", save_and_interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        interrupted.train()
+    resumed, _, _ = trainer_factory(**options, output_dir=str(interrupted.output_dir))
+    resumed.train(resume_from_checkpoint=True)
+    assert_nested_equal(resumed.model.state_dict(), reference.model.state_dict())
+    assert_nested_equal(resumed.state_dict(), reference.state_dict())
+
+    changed, _, _ = trainer_factory(
+        **{**options, "batch_tokens": 9}, output_dir=str(tmp_path / "c")
+    )
+    with pytest.raises(ValueError, match="tokens"):
+        changed.validate_state_dict(resumed.state_dict())
+
+
+def test_token_budget_requires_a_chunk_cache_that_fits(
+    trainer_factory: TrainerFactory, tokenizer: TokenizersBackend, tmp_path: Path
+) -> None:
+    with pytest.raises(ValueError, match="TokenChunkDataset"):
+        trainer_factory(batch_size=None, batch_tokens=8)
+    with pytest.raises(ValueError, match="chunk_length"):
+        trainer_factory(dataset=packed_chunks(tmp_path, tokenizer), batch_size=None, batch_tokens=2)
+
+
+@pytest.mark.parametrize("batching", [{}, {"batch_size": 2, "batch_tokens": 8}])
+def test_config_requires_exactly_one_batching_mode(batching: dict[str, int]) -> None:
+    with pytest.raises(ValidationError, match="exactly one"):
+        TrainerConfig.model_validate(
+            {
+                "run_name": "run",
+                "input_column": "text",
+                "optimizer_config": AdamWConfig(lr=0.01, betas=(0.9, 0.95)),
+                "lr_scheduler_config": LRSchedulerConfig(
+                    schedule=[LRScheduleSegment(start=0, end=1.0, start_ratio=1, end_ratio=0)]
+                ),
+                "wandb_project": "test",
+                **batching,
+            }
+        )

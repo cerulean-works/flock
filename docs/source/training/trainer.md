@@ -173,6 +173,38 @@ Changing any of those requires a fresh training run. The trainer also checks the
 text column and tokenizer against the supplied configuration. Chunk length must not
 exceed the tokenizer's model limit.
 
+### Pack chunks to a token budget
+
+Set `batch_tokens` instead of `batch_size` to train each update on a fixed number
+of tokens rather than a fixed number of chunks. This needs a `TokenChunkDataset`.
+
+```python
+config = TrainerConfig(
+    run_name="olmo2_dolma3",
+    input_column="text",
+    batch_tokens=65536,
+    ...
+)
+trainer = Trainer(config=config, model=model, tokenizer=tokenizer, dataset=chunks)
+```
+
+The trainer shuffles the chunks with `seed`, then fills each rank's row in that
+order until the next chunk would not fit. Each update gives every rank one row of
+exactly `batch_tokens` inputs, so tensor shapes stay the same from step to step.
+The unused tail of a row is padding with no targets.
+
+Each chunk is its own document inside the row. Its positions restart at zero, and
+attention never crosses into another chunk. With FA3 or FA4, every layer makes one
+`varlen_attn` call over the row. SDPA builds a dense `[sequence, sequence]` mask
+instead, which suits short rows and CPU checks but not long training rows.
+
+`batch_tokens` must be at least `chunk_length - 1`, so every chunk fits in a row.
+With four ranks and `batch_tokens=65536`, one update trains on at most 262,144
+target tokens. The schedule counts packed updates, and `train/tokens` reports the
+targets actually trained on. A resumed run must use the same `batch_tokens`.
+Only models that implement packing accept these batches. `Olmo2` does, and
+`HFCompatibleModel` does not.
+
 ## Launch distributed training
 
 Use `torchrun` to start one process per GPU. Each process keeps a full copy of

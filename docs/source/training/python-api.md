@@ -23,7 +23,8 @@ evaluation task names. With zero workers, set `dataloader_prefetch_factor=None`.
 |---|---|---|
 | `run_name` | Required | Default checkpoint folder name and evaluation label. Does not set the W&B run name. |
 | `input_column` | Required | Text column in each dataset row. |
-| `batch_size` | Required | Positive rows per optimizer update. |
+| `batch_size` | `None` | Positive rows per rank per optimizer update. Set this or `batch_tokens`. |
+| `batch_tokens` | `None` | Positive packed input tokens per rank per update. Needs a `TokenChunkDataset`. Set this or `batch_size`. See [Pack chunks to a token budget](trainer#pack-chunks-to-a-token-budget). |
 | `max_steps` | `None` | Positive cap on optimizer updates; schedules plan over the capped run. `None` trains the full pass. |
 | `optimizer_config` | Required | `AdamWConfig`; Muon is not implemented. |
 | `lr_scheduler_config` | Required | `LRSchedulerConfig` containing learning-rate segments. |
@@ -41,7 +42,7 @@ evaluation task names. With zero workers, set `dataloader_prefetch_factor=None`.
 | `save_to_hub_repo` | `None` | Optional `org/model` upload destination. |
 | `overwrite_output_dir` | `False` | Permit fresh training in a nonempty directory and replacement of a step's checkpoint. |
 | `model_dtype` | `torch.bfloat16` | Autocast dtype; model weights are not cast by the trainer. |
-| `torch_compile` | `False` | Compile the model and batch loss after checkpoint restoration. See [Compile the model and loss](trainer#compile-the-model-and-loss). |
+| `torch_compile` | `False` | Compile the training model and token loss after checkpoint restoration. See [Compile the model and loss](trainer#compile-the-model-and-loss). |
 | `torch_compile_mode` | `"default"` | PyTorch mode: `"default"`, `"reduce-overhead"`, `"max-autotune"` or `"max-autotune-no-cudagraphs"`. Used when `torch_compile=True`. |
 | `max_norm` | `1.0` | Finite, nonnegative gradient clipping threshold; zero clips gradients to zero. |
 | `logging_steps` | `10` | Positive logging interval; also logs at the final update. |
@@ -135,6 +136,12 @@ The batch, collator and sampler live in `flock.training.core.data_utils`.
 
 [[autodoc]] training.core.data_utils.ResumableBatchDataSampler
 
+[[autodoc]] training.core.data_utils.TokenBatchPlan
+
+[[autodoc]] training.core.data_utils.TokenBudgetBatchSampler
+
+[[autodoc]] training.core.data_utils.PackedBatchCollator
+
 ## Models
 
 Import model implementations and presets from `flock.training.core.models`.
@@ -169,6 +176,12 @@ The `Olmo2` forward and tokenizer methods follow the `BaseModel` contract above.
 
 [[autodoc]] training.core.attention.GroupedAttentionWithRoPE
     - forward
+
+[[autodoc]] training.core.attention.PackedSequences
+
+[[autodoc]] training.core.attention.flash_attention_3
+
+[[autodoc]] training.core.attention.flash_attention_4
 
 [[autodoc]] training.core.nn.SwiGLU
     - forward

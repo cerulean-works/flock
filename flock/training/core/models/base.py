@@ -9,6 +9,7 @@ from huggingface_hub import try_to_load_from_cache
 from torch import nn
 from transformers import AutoTokenizer, PreTrainedTokenizerBase, TokenizersBackend
 
+from flock.training.core.attention import PackedSequences
 from flock.training.core.data_utils import Batch
 
 
@@ -171,11 +172,40 @@ class BaseModel(nn.Module, ABC):
         position_ids = (attention_mask.long().cumsum(-1) - 1).clamp_min(0)
         return input_ids, attention_mask, position_ids
 
+    def _check_packed_batch(
+        self, batch: Batch
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, PackedSequences]:
+        """Validate a packed batch and describe its documents for attention.
+
+        Each document must fit `max_position_embeddings`; the packing collator
+        guarantees this when its chunk length is within the model's limit. The
+        row itself may be longer.
+        """
+        input_ids = batch["input_ids"]
+        if input_ids.ndim != 2 or input_ids.shape[1] == 0:
+            raise ValueError("input_ids must have shape [batch, sequence]")
+        if not self.supports_packing():
+            raise NotImplementedError(f"{type(self).__name__} does not support packed batches")
+        position_ids = batch.get("position_ids")
+        if position_ids is None or position_ids.shape != input_ids.shape:
+            raise ValueError("Packed batches need position_ids with the same shape as input_ids")
+        if batch["attention_mask"].shape != input_ids.shape:
+            raise ValueError("attention_mask must have the same shape as input_ids")
+        attention_mask = batch["attention_mask"].to(device=input_ids.device, dtype=torch.bool)
+        packed = PackedSequences(
+            batch["cu_seqlens"],
+            # An upper bound sizes the kernels without reading lengths back from the device.
+            max_seqlen=min(input_ids.numel(), self.max_position_embeddings),
+        )
+        return input_ids, attention_mask, position_ids, packed
+
     def forward(self, batch: Batch) -> torch.Tensor:  # ty: ignore[invalid-mutable-override]
         """Return full-sequence logits for a collated batch.
 
         Labels in a batch are ignored: the trainer owns target alignment and loss.
-        Position IDs are contiguous over each row's real tokens.
+        Position IDs are contiguous over each row's real tokens. A batch with
+        `cu_seqlens` is packed: its own `position_ids` restart in each document and
+        attention stays inside documents. Only models that implement `_forward_packed` accept one.
         Subclasses prepare the backend's mask and causal flag in `_forward`.
 
         Args:
@@ -189,6 +219,9 @@ class BaseModel(nn.Module, ABC):
             `ValueError`: If IDs are not rank two, length is outside the configured
                 range, or the attention mask shape differs from the IDs.
         """
+        if "cu_seqlens" in batch:
+            input_ids, attention_mask, position_ids, packed = self._check_packed_batch(batch)
+            return self._forward_packed(input_ids, attention_mask, position_ids, packed)
         input_ids, attention_mask, position_ids = self._check_batch(batch)
         return self._forward(input_ids, attention_mask, position_ids)
 
@@ -204,3 +237,21 @@ class BaseModel(nn.Module, ABC):
         The subclass owns causal attention and backend-specific mask preparation.
         """
         raise NotImplementedError
+
+    def _forward_packed(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_ids: torch.Tensor,
+        packed: PackedSequences,
+    ) -> torch.Tensor:
+        """Run a packed row whose documents never attend to each other.
+
+        Override this to accept packed batches. The default refuses them.
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not support packed batches")
+
+    @classmethod
+    def supports_packing(cls) -> bool:
+        """Return whether this model overrides `_forward_packed`."""
+        return cls._forward_packed is not BaseModel._forward_packed

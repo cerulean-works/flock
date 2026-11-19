@@ -7,6 +7,7 @@ from torch import nn
 from flock.training.core.attention import (
     AttentionInterface,
     GroupedAttentionWithRoPE,
+    PackedSequences,
 )
 from flock.training.core.nn import SwiGLU
 
@@ -129,7 +130,7 @@ class Olmo2DecoderLayer(nn.Module):
         x: torch.Tensor,
         cos: torch.Tensor,
         sin: torch.Tensor,
-        attention_mask: torch.Tensor | None,
+        attention_mask: torch.Tensor | PackedSequences | None,
     ) -> torch.Tensor:
         """Return updated hidden states with the same shape as `x`.
 
@@ -137,7 +138,7 @@ class Olmo2DecoderLayer(nn.Module):
             x (`torch.Tensor`): Hidden states shaped `[batch, sequence, hidden]`.
             cos (`torch.Tensor`): RoPE cosines broadcastable to attention heads.
             sin (`torch.Tensor`): RoPE sines with the same shape as `cos`.
-            attention_mask (`torch.Tensor` or `None`):
+            attention_mask (`torch.Tensor`, `PackedSequences` or `None`):
                 Mask prepared for the selected attention implementation.
 
         Returns:
@@ -177,6 +178,7 @@ class Olmo2Model(nn.Module):
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None,
         position_ids: torch.Tensor,
+        packed: PackedSequences | None = None,
     ) -> torch.Tensor:
         """Return hidden states using RoPE frequencies computed in FP32.
 
@@ -185,11 +187,12 @@ class Olmo2Model(nn.Module):
             attention_mask (`torch.Tensor` or `None`): Boolean padding mask shaped
                 `[batch, sequence]`; `None` means every token is valid.
             position_ids (`torch.Tensor`): Positions shaped `[batch, sequence]`.
+            packed (`PackedSequences`, *optional*): Document boundaries of a packed row.
 
         Returns:
             `torch.Tensor`: Normalized states shaped `[batch, sequence, hidden]`.
         """
-        mask = self.mask_preparer(attention_mask, is_causal=True)
+        mask = self.mask_preparer(attention_mask, is_causal=True, packed=packed)
         x: Any = self.embed_tokens(input_ids)
         # Build frequencies in float32 even when model weights are cast to bfloat16.
         inv_freq = self.rope_theta ** (
@@ -215,6 +218,7 @@ class Olmo2(BaseModel):
 
     The inherited `forward` returns `[batch, sequence, vocabulary]` logits.
     Input embeddings and the output projection have separate, untied weights.
+    Packed batches are supported with every registered attention backend.
     """
 
     def __init__(self, config: Olmo2Config) -> None:
@@ -238,3 +242,13 @@ class Olmo2(BaseModel):
     ) -> torch.Tensor:
         """Project validated decoder outputs to full-sequence vocabulary logits."""
         return self.lm_head(self.model(input_ids, attention_mask, position_ids))
+
+    def _forward_packed(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_ids: torch.Tensor,
+        packed: PackedSequences,
+    ) -> torch.Tensor:
+        """Project a packed row's decoder outputs, keeping attention inside documents."""
+        return self.lm_head(self.model(input_ids, attention_mask, position_ids, packed))
