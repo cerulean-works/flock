@@ -45,7 +45,7 @@ def test_varlen_mixed_padding_outputs_and_gradients(
     ]
     references = [tensor.detach().clone().requires_grad_() for tensor in inputs]
     spans = prepare_flash_attention_mask(mask, is_causal=is_causal)
-    assert spans is not None and spans.device.type == "cpu"
+    assert isinstance(spans, torch.Tensor) and spans.device.type == "cpu"
     with attention.sdpa_kernel(attention.SDPBackend.MATH):
         expected = sdpa_attention(
             *references, attention_mask=prepare_sdpa_mask(mask, is_causal=is_causal)

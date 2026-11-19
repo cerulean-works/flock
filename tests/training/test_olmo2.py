@@ -10,7 +10,12 @@ import torch
 from huggingface_hub import constants
 from torch.nn import functional as F
 
-from flock.training.core.attention import AttentionInterface, prepare_sdpa_mask, sdpa_attention
+from flock.training.core.attention import (
+    AttentionInterface,
+    PackedSequences,
+    prepare_sdpa_mask,
+    sdpa_attention,
+)
 from flock.training.core.data_utils import Batch, LanceBatchCollator
 from flock.training.core.models.olmo2 import OLMO2_1B_CONFIG, OLMO2_7B_CONFIG, Olmo2
 from tests.training._reference import olmo2_training_parity
@@ -68,7 +73,7 @@ def test_attn_implementation_survives_config_round_trip_and_reaches_every_layer(
         k: torch.Tensor,
         v: torch.Tensor,
         *,
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | PackedSequences | None = None,
         is_causal: bool = False,
     ) -> torch.Tensor:
         calls.append(attention_mask)
@@ -105,7 +110,12 @@ def test_model_resolves_mask_preparer_at_construction_and_prepares_once_per_forw
     preparations = []
     calls = []
 
-    def prepare(padding_mask: torch.Tensor | None, *, is_causal: bool) -> torch.Tensor | None:
+    def prepare(
+        padding_mask: torch.Tensor | None,
+        *,
+        is_causal: bool,
+        packed: PackedSequences | None = None,
+    ) -> torch.Tensor | None:
         assert padding_mask is not None
         assert padding_mask.ndim == 2 and padding_mask.dtype == torch.bool
         assert is_causal is True
@@ -118,7 +128,7 @@ def test_model_resolves_mask_preparer_at_construction_and_prepares_once_per_forw
         k: torch.Tensor,
         v: torch.Tensor,
         *,
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | PackedSequences | None = None,
         is_causal: bool = False,
     ) -> torch.Tensor:
         assert attention_mask is preparations[-1]

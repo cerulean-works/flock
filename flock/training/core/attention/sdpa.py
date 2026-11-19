@@ -1,20 +1,25 @@
 import torch
 from torch.nn import functional as F
 
+from .masking import PackedSequences
+
 
 def sdpa_attention(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
     *,
-    attention_mask: torch.Tensor | None = None,
+    attention_mask: torch.Tensor | PackedSequences | None = None,
     is_causal: bool = False,
 ) -> torch.Tensor:
     """Compute attention with a prepared mask, using the causal flag when absent.
 
     An explicit mask defines all visibility, including any causal restriction.
-    `is_causal` applies only when `attention_mask` is `None`.
+    `is_causal` applies only when `attention_mask` is `None`. Packed documents
+    must first become a dense mask through `prepare_sdpa_mask`.
     """
+    if isinstance(attention_mask, PackedSequences):
+        raise TypeError("SDPA needs a dense mask; prepare packed documents with prepare_sdpa_mask")
     kernel_is_causal = is_causal and attention_mask is None
     return F.scaled_dot_product_attention(
         q,

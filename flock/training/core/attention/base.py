@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 
+from .masking import PackedSequences
 from .registry import AttentionFunction, AttentionInterface
 
 
@@ -79,7 +80,7 @@ class GroupedAttentionWithRoPE(nn.Module):
         x: torch.Tensor,
         *,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | PackedSequences | None = None,
         is_causal: bool = False,
     ) -> torch.Tensor:
         """Map [batch, sequence, hidden] to the same shape using the selected attention function.
@@ -92,7 +93,7 @@ class GroupedAttentionWithRoPE(nn.Module):
             x (`torch.Tensor`): Hidden states shaped `[batch, sequence, hidden]`.
             position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Cosines and sines for split-half RoPE. Omit to skip rotary embeddings.
-            attention_mask (`torch.Tensor`, *optional*):
+            attention_mask (`torch.Tensor` or `PackedSequences`, *optional*):
                 Mask prepared for the selected attention implementation.
             is_causal (`bool`, *optional*, defaults to `False`):
                 Request causal attention from the selected implementation.

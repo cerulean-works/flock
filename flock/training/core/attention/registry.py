@@ -3,8 +3,8 @@ from typing import ClassVar, Protocol
 
 import torch
 
-from .flash_attention_3 import flash_attention_3
-from .masking import prepare_flash_attention_mask, prepare_sdpa_mask
+from .flash_attention import flash_attention_3, flash_attention_4
+from .masking import PackedSequences, prepare_flash_attention_mask, prepare_sdpa_mask
 from .sdpa import sdpa_attention
 
 
@@ -15,6 +15,7 @@ class AttentionFunction(Protocol):
     defines its supported mask formats and handles GQA. Models use the registered
     mask preparer; direct callers supply an already prepared mask. `is_causal`
     describes the attention pattern; SDPA masks must already include causality.
+    Packed documents reach the function as whatever its preparer returns for them.
     The caller owns projections, normalization and RoPE.
     """
 
@@ -24,15 +25,19 @@ class AttentionFunction(Protocol):
         k: torch.Tensor,
         v: torch.Tensor,
         *,
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | PackedSequences | None = None,
         is_causal: bool = False,
     ) -> torch.Tensor: ...
 
 
 class _MaskPreparationFunction(Protocol):
     def __call__(
-        self, padding_mask: torch.Tensor | None, *, is_causal: bool
-    ) -> torch.Tensor | None: ...
+        self,
+        padding_mask: torch.Tensor | None,
+        *,
+        is_causal: bool,
+        packed: PackedSequences | None = None,
+    ) -> torch.Tensor | PackedSequences | None: ...
 
 
 @dataclass(frozen=True)
@@ -47,6 +52,7 @@ class AttentionInterface:
     _global_mapping: ClassVar[dict[str, _AttentionBackend]] = {
         "sdpa": _AttentionBackend(sdpa_attention, prepare_sdpa_mask),
         "flash_attention_3": _AttentionBackend(flash_attention_3, prepare_flash_attention_mask),
+        "flash_attention_4": _AttentionBackend(flash_attention_4, prepare_flash_attention_mask),
     }
 
     @classmethod

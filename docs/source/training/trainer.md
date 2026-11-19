@@ -494,6 +494,20 @@ kernels while retaining zero gradients.
 FA3 activation affects PyTorch's Flash backend throughout the process. Keep it
 active until all pending backward passes finish.
 
+### Use FlashAttention-4
+
+FA4 runs on Hopper and Blackwell GPUs (compute capability 9.0 or 10.0). It needs
+the FlashAttention-4 CuTe kernels, which PyTorch imports from `flash_attn.cute`.
+Install them next to PyTorch on the GPU machine, then select the backend:
+
+```python
+config = replace(OLMO2_1B_CONFIG, attn_implementation="flash_attention_4")
+```
+
+FA4 accepts the same inputs as FA3 and handles padding the same way. PyTorch
+can activate only one of FA3 and FA4 in a process, so pick one backend per run.
+Selecting FA4 after FA3 is active raises an error.
+
 ### Register a custom backend
 
 Register your attention function with a matching mask preparer. For an
@@ -518,7 +532,7 @@ For another mask format, supply a preparer that takes a boolean 2D `padding_mask
 (or `None`) and keyword-only `is_causal`. Return a tensor or `None`. The model
 prepares the mask once per forward and shares it across decoder layers.
 
-For FA3, `prepare_flash_attention_mask` returns a CPU int64 tensor shaped
+For FA3 and FA4, `prepare_flash_attention_mask` returns a CPU int64 tensor shaped
 `[batch, 2]`. Each row contains the start and exclusive stop of the valid token
 span. Direct callers of `flash_attention_3` must prepare their padding mask first
 and pass these spans on CPU, even though Q/K/V are on CUDA. Each attention call

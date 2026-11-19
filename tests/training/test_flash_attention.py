@@ -1,4 +1,4 @@
-"""CPU checks for mask adaptation and lifecycle; these do not execute FA3 kernels."""
+"""CPU checks for mask adaptation and lifecycle; these do not execute FA3 or FA4 kernels."""
 
 import importlib
 from collections.abc import Iterator
@@ -13,15 +13,19 @@ from torch.nn import attention
 from torch.nn import functional as F
 
 from flock.training.core.attention import (
+    AttentionInterface,
+    PackedSequences,
     flash_attention_3,
+    flash_attention_4,
     prepare_flash_attention_mask,
+    prepare_sdpa_mask,
     sdpa_attention,
 )
 from flock.training.core.models.olmo2 import Olmo2, Olmo2Config
 from tests.training._reference import olmo2_training_parity
 from tests.training.test_olmo2 import make_batch
 
-fa3_module = importlib.import_module("flock.training.core.attention.flash_attention_3")
+fa3_module = importlib.import_module("flock.training.core.attention.flash_attention")
 
 
 @pytest.fixture
@@ -29,8 +33,8 @@ def math_kernel(monkeypatch: pytest.MonkeyPatch) -> Mock:
     # Substitute GPU kernels; exercise the real span packing and restoration.
     monkeypatch.setattr(
         fa3_module,
-        "_fa3_context",
-        lambda device: attention.sdpa_kernel(attention.SDPBackend.MATH),
+        "_flash_context",
+        lambda device, impl: attention.sdpa_kernel(attention.SDPBackend.MATH),
     )
     compute = Mock(wraps=math_varlen)
     monkeypatch.setattr(fa3_module, "varlen_attn", compute)
@@ -332,7 +336,7 @@ def test_non_hopper_request_does_not_fall_back(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(torch.cuda, "get_device_capability", lambda device: (8, 0))
     with (
         pytest.raises(ValueError, match="Hopper"),
-        fa3_module._fa3_context(torch.device("cuda")),
+        fa3_module._flash_context(torch.device("cuda"), "FA3"),
     ):
         pytest.fail("unsupported GPU was accepted")
 
@@ -443,7 +447,7 @@ def test_activation_survives_forward_and_only_runs_once(
     state, activate = mock_activation
     with attention.sdpa_kernel(attention.SDPBackend.MATH):
         for _ in range(2):
-            with fa3_module._fa3_context(torch.device("cuda")):
+            with fa3_module._flash_context(torch.device("cuda"), "FA3"):
                 assert torch.backends.cuda.flash_sdp_enabled()
                 assert not torch.backends.cuda.math_sdp_enabled()
                 assert not torch.backends.cuda.mem_efficient_sdp_enabled()
@@ -462,7 +466,7 @@ def test_does_not_replace_another_active_implementation(
     state["active"] = "FA4"
     with (
         pytest.raises(RuntimeError, match="FA4"),
-        fa3_module._fa3_context(torch.device("cuda")),
+        fa3_module._flash_context(torch.device("cuda"), "FA3"),
     ):
         pytest.fail("conflicting implementation was replaced")
     activate.assert_not_called()
@@ -475,6 +479,150 @@ def test_missing_kernel_dependency_has_actionable_error(
     activate.side_effect = ModuleNotFoundError("flash_attn_interface")
     with (
         pytest.raises(ImportError, match="installing torch alone"),
-        fa3_module._fa3_context(torch.device("cuda")),
+        fa3_module._flash_context(torch.device("cuda"), "FA3"),
     ):
         pytest.fail("missing dependency was ignored")
+
+
+@pytest.mark.parametrize("capability", [(9, 0), (10, 0)])
+def test_fa4_activates_on_hopper_and_blackwell(
+    mock_activation: tuple[dict[str, str | None], Mock],
+    monkeypatch: pytest.MonkeyPatch,
+    capability: tuple[int, int],
+) -> None:
+    state, activate = mock_activation
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda device: capability)
+    with fa3_module._flash_context(torch.device("cuda"), "FA4"):
+        assert torch.backends.cuda.flash_sdp_enabled()
+    assert state["active"] == "FA4"
+    activate.assert_called_once_with("FA4")
+
+
+def test_fa4_rejects_older_gpus_and_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda device: (8, 0))
+    with (
+        pytest.raises(ValueError, match="Hopper or Blackwell"),
+        fa3_module._flash_context(torch.device("cuda"), "FA4"),
+    ):
+        pytest.fail("unsupported GPU was accepted")
+    q = torch.randn(1, 2, 4, 8)
+    with pytest.raises(ValueError, match="CUDA"):
+        flash_attention_4(q, q, q)
+
+
+def test_fa4_does_not_replace_active_fa3(
+    mock_activation: tuple[dict[str, str | None], Mock],
+) -> None:
+    state, activate = mock_activation
+    state["active"] = "FA3"
+    with (
+        pytest.raises(RuntimeError, match="FA3"),
+        fa3_module._flash_context(torch.device("cuda"), "FA4"),
+    ):
+        pytest.fail("conflicting implementation was replaced")
+    activate.assert_not_called()
+
+
+def test_fa4_missing_kernels_name_the_package(
+    mock_activation: tuple[dict[str, str | None], Mock],
+) -> None:
+    _, activate = mock_activation
+    activate.side_effect = ModuleNotFoundError("flash_attn.cute")
+    with (
+        pytest.raises(ImportError, match="flash_attn.cute"),
+        fa3_module._flash_context(torch.device("cuda"), "FA4"),
+    ):
+        pytest.fail("missing dependency was ignored")
+
+
+def test_fa4_is_registered_with_the_flash_mask_preparer() -> None:
+    assert AttentionInterface.get_interface("flash_attention_4") is flash_attention_4
+    assert AttentionInterface.get_mask_preparer("flash_attention_4") is prepare_flash_attention_mask
+
+
+def documentwise_reference(
+    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, lengths: list[int], *, is_causal: bool
+) -> torch.Tensor:
+    # Attend within each document separately, then concatenate along the sequence.
+    outputs, start = [], 0
+    for length in lengths:
+        window = slice(start, start + length)
+        outputs.append(
+            F.scaled_dot_product_attention(
+                q[:, :, window],
+                k[:, :, window],
+                v[:, :, window],
+                is_causal=is_causal,
+                enable_gqa=q.shape[1] != k.shape[1],
+            )
+        )
+        start += length
+    return torch.cat(outputs, dim=2)
+
+
+@pytest.mark.parametrize("kernel", [flash_attention_3, flash_attention_4])
+@pytest.mark.parametrize("kv_heads", [4, 2])
+@pytest.mark.parametrize("is_causal", [False, True])
+def test_packed_documents_never_attend_across_boundaries(
+    math_kernel: Mock, kernel: Any, kv_heads: int, is_causal: bool
+) -> None:
+    lengths = [3, 1, 5, 2]
+    q = torch.randn(1, 4, sum(lengths), 8, requires_grad=True)
+    k = torch.randn(1, kv_heads, sum(lengths), 8, requires_grad=True)
+    v = torch.randn(1, kv_heads, sum(lengths), 8, requires_grad=True)
+    references = [tensor.detach().clone().requires_grad_() for tensor in (q, k, v)]
+    cu_seqlens = torch.tensor([0, 3, 4, 9, 11], dtype=torch.int32)
+    packed = prepare_flash_attention_mask(
+        torch.ones(1, 11, dtype=torch.bool),
+        is_causal=is_causal,
+        packed=PackedSequences(cu_seqlens, max_seqlen=5),
+    )
+
+    actual = kernel(q, k, v, attention_mask=packed, is_causal=is_causal)
+    expected = documentwise_reference(*references, lengths, is_causal=is_causal)
+
+    torch.testing.assert_close(actual, expected)
+    math_kernel.assert_called_once()
+    assert math_kernel.call_args.args[5:7] == (5, 5)
+    upstream = torch.randn_like(actual)
+    actual.backward(upstream)
+    expected.backward(upstream)
+    for tensor, reference in zip((q, k, v), references, strict=True):
+        torch.testing.assert_close(tensor.grad, reference.grad)
+
+
+@pytest.mark.parametrize("is_causal", [False, True])
+def test_packed_sdpa_mask_matches_documentwise_attention(is_causal: bool) -> None:
+    lengths = [2, 4, 1]
+    q, k, v = (torch.randn(1, 2, sum(lengths), 8) for _ in range(3))
+    mask = prepare_sdpa_mask(
+        torch.ones(1, 7, dtype=torch.bool),
+        is_causal=is_causal,
+        packed=PackedSequences(torch.tensor([0, 2, 6, 7], dtype=torch.int32), max_seqlen=4),
+    )
+    assert mask is not None and mask.shape == (1, 1, 7, 7)
+    torch.testing.assert_close(
+        sdpa_attention(q, k, v, attention_mask=mask, is_causal=is_causal),
+        documentwise_reference(q, k, v, lengths, is_causal=is_causal),
+    )
+
+
+@pytest.mark.parametrize(
+    "packed",
+    [
+        PackedSequences(torch.tensor([0, 4], dtype=torch.int64), max_seqlen=4),
+        PackedSequences(torch.tensor([[0, 4]], dtype=torch.int32), max_seqlen=4),
+        PackedSequences(torch.tensor([0], dtype=torch.int32), max_seqlen=4),
+        PackedSequences(torch.tensor([0, 4], dtype=torch.int32), max_seqlen=0),
+    ],
+)
+def test_flash_preparer_rejects_malformed_packing(packed: PackedSequences) -> None:
+    with pytest.raises(ValueError, match="Packed"):
+        prepare_flash_attention_mask(None, is_causal=True, packed=packed)
+
+
+def test_sdpa_refuses_unprepared_packing() -> None:
+    q = torch.randn(1, 2, 4, 8)
+    packed = PackedSequences(torch.tensor([0, 4], dtype=torch.int32), max_seqlen=4)
+    with pytest.raises(TypeError, match="prepare_sdpa_mask"):
+        sdpa_attention(q, q, q, attention_mask=packed)

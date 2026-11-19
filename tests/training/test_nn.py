@@ -15,6 +15,7 @@ from transformers.models.olmo2.modeling_olmo2 import (
 from flock.training.core.attention import (
     AttentionInterface,
     GroupedAttentionWithRoPE,
+    PackedSequences,
     prepare_flash_attention_mask,
     prepare_sdpa_mask,
     sdpa_attention,
@@ -36,7 +37,7 @@ def test_selected_kernel_preserves_layout_masks_and_gradients(
         k: torch.Tensor,
         v: torch.Tensor,
         *,
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | PackedSequences | None = None,
         is_causal: bool = False,
     ) -> torch.Tensor:
         calls.append((q.shape, k.shape, v.shape, attention_mask, is_causal))
