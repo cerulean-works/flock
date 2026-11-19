@@ -444,6 +444,12 @@ def test_a_spawned_worker_reopens_the_pinned_mix_and_reads_the_same_updates(
     # Spawned loader workers receive the mix pickled, as here.
     worker = pickle.loads(pickle.dumps(mix))
     assert worker.dataset is None
+    # A later version at the same path must not reach the worker, which reopens the pinned one.
+    lance.write_dataset(
+        pa.table({"text": ["9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9"], "tokens": [17]}),
+        tmp_path / "mix.lance",
+        mode="overwrite",
+    )
     assert worker[1].tolist() == mix[1].tolist()
     assert worker.dataset is not None and worker.dataset.version == 1
 

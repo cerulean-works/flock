@@ -35,8 +35,9 @@ class ProxySize:
 # Every size keeps OLMo 2 1B's vocabulary, tokenizer and 4096-token context (arXiv 2501.00656,
 # Table 3) and an MLP four times its width. Counted without the input embedding, as the OLMo
 # ladder counts N (arXiv 2412.04403, Table 1), the sizes are 76,308,864, 190,354,176,
-# 371,262,464 and 455,419,008 parameters. The batch is not part of a preset: the ladder trains
-# them at 262,144, 524,288, 786,432 and 1,048,576 tokens per update.
+# 371,262,464 and 455,419,008 parameters. The batch is not part of a preset. The campaign trains
+# them at 262,144, 524,288, 786,432 and 1,048,576 tokens per update: the OLMo ladder's 190M and
+# 370M batches, half the 190M one at 76M, and at 455M a choice with no published precedent.
 PROXY_SIZES = {
     # DataDecide's 60M width, depth and heads (arXiv 2504.11393, Table 2), with the 190M's MLP
     # rule. Its peak LR extends the ladder's log-log line through its 190M and 370M points down
