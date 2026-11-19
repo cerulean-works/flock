@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import pickle
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
@@ -433,6 +434,18 @@ def test_provisional_mix_packs_documents_in_stored_order(
             window=3,
             rows_per_update=2,
         )
+
+
+def test_a_spawned_worker_reopens_the_pinned_mix_and_reads_the_same_updates(
+    tmp_path: Path,
+) -> None:
+    config = write_mix(tmp_path / "mix.lance", ["2 3 4", "5", "6 7 8 9 2 3", "4 5 6"])
+    mix = ProvisionalMix(config, word_tokenizer(), window=3, rows_per_update=2)
+    # Spawned loader workers receive the mix pickled, as here.
+    worker = pickle.loads(pickle.dumps(mix))
+    assert worker.dataset is None
+    assert worker[1].tolist() == mix[1].tolist()
+    assert worker.dataset is not None and worker.dataset.version == 1
 
 
 def test_provisional_mix_rejects_rows_its_counts_or_hashes_contradict(tmp_path: Path) -> None:

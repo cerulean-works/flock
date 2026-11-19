@@ -5,7 +5,6 @@ import lance
 import numpy as np
 import pyarrow as pa
 import torch
-from lance.torch.data import SafeLanceDataset
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizerFast
 
@@ -52,10 +51,10 @@ class ProvisionalMix(Dataset[torch.Tensor]):
         # Workers reopen the mix, so they get an absolute path: a relative one moves with the
         # working directory.
         uri = config.uri if "://" in config.uri else str(Path(config.uri).resolve())
-        pinned = lance.dataset(uri, version=config.version)
-        self.rows = SafeLanceDataset(uri=uri, dataset_options={"version": config.version})
-        tokens = pinned.to_table(columns=["tokens"])
-        counts = tokens["tokens"]
+        self.uri = uri
+        self.version = config.version
+        self.dataset: lance.LanceDataset | None = lance.dataset(uri, version=config.version)
+        counts = self.dataset.to_table(columns=["tokens"])["tokens"]
         # Every document holds at least its EOS; a zero or negative count would misplace documents.
         if not pa.types.is_integer(counts.type):
             raise ValueError(f"the mix's tokens column is {counts.type}, not integers")
@@ -71,7 +70,7 @@ class ProvisionalMix(Dataset[torch.Tensor]):
             "endpoint": endpoint,
             "uri": uri,
             "version": config.version,
-            "rows": len(self.rows),
+            "rows": len(counts),
             "stream_tokens": int(self.ends[-1]),
             "tokenizer": tokenizer.name_or_path,
             # The encoding rules pin the ids, which the name and the token counts do not.
@@ -80,6 +79,11 @@ class ProvisionalMix(Dataset[torch.Tensor]):
             "window": window,
             "rows_per_update": rows_per_update,
         }
+
+    def __getstate__(self) -> dict:
+        """Pickle for a spawned loader worker, which reopens the pinned mix on first read."""
+        # A worker's own handle reads independently of the main process's.
+        return self.__dict__ | {"dataset": None}
 
     @property
     def targets_per_update(self) -> int:
@@ -98,7 +102,9 @@ class ProvisionalMix(Dataset[torch.Tensor]):
         stop = start + self.targets_per_update + 1
         first = int(np.searchsorted(self.ends, start, side="right"))
         last = int(np.searchsorted(self.ends, stop - 1, side="right"))
-        records = self.rows.__getitems__(list(range(first, last + 1)))
+        if self.dataset is None:
+            self.dataset = lance.dataset(self.uri, version=self.version)
+        records = self.dataset.take(list(range(first, last + 1))).to_pylist()
         texts = [record["text"] for record in records]
         encoded = self.tokenizer(texts, add_special_tokens=False)["input_ids"]
         pieces = []
