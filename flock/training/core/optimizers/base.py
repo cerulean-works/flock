@@ -1,5 +1,8 @@
+from collections import defaultdict
 from collections.abc import Callable
 from typing import Any, Protocol
+
+import torch
 
 
 class BaseOptimizer(Protocol):
@@ -9,9 +12,12 @@ class BaseOptimizer(Protocol):
     inheritance. The trainer clears gradients before backpropagation and steps
     after gradient clipping. The scheduler reads and updates `param_groups`, and
     checkpoints save and restore optimizer state through the state-dict methods.
+    Compiled training also reads `defaults` and moves step counts in `state`.
     """
 
     param_groups: list[dict[str, Any]]
+    defaults: dict[str, Any]
+    state: defaultdict[torch.Tensor, Any]
 
     def zero_grad(self, set_to_none: bool = True) -> None:
         """Clear parameter gradients before backpropagation."""

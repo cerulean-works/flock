@@ -2,6 +2,7 @@ from collections.abc import Mapping
 from math import cos, floor, pi
 from typing import Annotated, Any, Literal, Self
 
+import torch
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from flock.training.core.optimizers.base import BaseOptimizer
@@ -209,7 +210,11 @@ class StepLRScheduler:
             raise ValueError("Optimizer parameter groups changed after scheduler creation")
         factor = lr_multiplier(self.completed_steps, self.config, self.total_steps)
         for group, base_lr in zip(self.optimizer.param_groups, self.base_lrs):
-            group["lr"] = base_lr * factor
+            if isinstance(group["lr"], torch.Tensor):
+                # A compiled optimizer step reads this tensor; replacing it would recompile.
+                group["lr"].fill_(base_lr * factor)
+            else:
+                group["lr"] = base_lr * factor
 
     def step(self) -> None:
         """Advance after one optimizer update; prepare LR for the next update."""

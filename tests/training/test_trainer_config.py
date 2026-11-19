@@ -70,6 +70,17 @@ def test_nonnegative_finite_config_fields(
     assert exc.value.errors()[0]["loc"] == (field,)
 
 
+def test_compile_is_off_by_default_and_rejects_unknown_modes(
+    config_values: dict[str, Any],
+) -> None:
+    config = TrainerConfig.model_validate(config_values)
+    assert (config.torch_compile, config.torch_compile_mode) == (False, "default")
+    assert config.torch_compile_evaluation
+    with pytest.raises(ValidationError) as exc:
+        TrainerConfig.model_validate(config_values | {"torch_compile_mode": "fastest"})
+    assert exc.value.errors()[0]["loc"] == ("torch_compile_mode",)
+
+
 def test_config_accepts_boundaries_and_disabled_intervals(config_values: dict[str, Any]) -> None:
     config = TrainerConfig.model_validate(
         {
