@@ -1,9 +1,9 @@
-"""CPU checks for mask adaptation and lifecycle; these do not execute FA3 kernels."""
+"""CPU checks for mask adaptation and lifecycle; these do not execute FA3 or FA4 kernels."""
 
 import importlib
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import replace
-from typing import Any
+from typing import Any, NamedTuple
 from unittest.mock import Mock
 
 import pytest
@@ -13,8 +13,10 @@ from torch.nn import attention
 from torch.nn import functional as F
 
 from flock.training.core.attention import (
+    AttentionInterface,
     VarlenMetadata,
     flash_attention_3,
+    flash_attention_4,
     prepare_varlen_metadata,
     sdpa_attention,
 )
@@ -22,19 +24,39 @@ from flock.training.core.models.olmo2 import Olmo2, Olmo2Config
 from tests.training._reference import olmo2_training_parity
 from tests.training.test_olmo2 import make_batch
 
-fa3_module = importlib.import_module("flock.training.core.attention.flash_attention_3")
+flash_module = importlib.import_module("flock.training.core.attention.flash_attention")
+
+
+class Flash(NamedTuple):
+    backend: str
+    attend: Callable[..., torch.Tensor]
+    implementation: Any
+    # PyTorch's implementation name and the compute capability majors it accepts.
+    name: str
+    majors: frozenset[int]
+
+
+FLASH_BACKENDS = [
+    Flash("flash_attention_3", flash_attention_3, flash_module._FA3, "FA3", frozenset({9})),
+    Flash("flash_attention_4", flash_attention_4, flash_module._FA4, "FA4", frozenset({9, 10})),
+]
+
+
+@pytest.fixture(params=FLASH_BACKENDS, ids=[flash.backend for flash in FLASH_BACKENDS])
+def flash(request: pytest.FixtureRequest) -> Flash:
+    return request.param
 
 
 @pytest.fixture
 def math_kernel(monkeypatch: pytest.MonkeyPatch) -> Mock:
     # Substitute GPU kernels; exercise the real packing and restoration.
     monkeypatch.setattr(
-        fa3_module,
-        "_fa3_context",
-        lambda device: attention.sdpa_kernel(attention.SDPBackend.MATH),
+        flash_module,
+        "_flash_context",
+        lambda implementation, device: attention.sdpa_kernel(attention.SDPBackend.MATH),
     )
     compute = Mock(wraps=math_varlen)
-    monkeypatch.setattr(fa3_module, "varlen_attn", compute)
+    monkeypatch.setattr(flash_module, "varlen_attn", compute)
     return compute
 
 
@@ -72,11 +94,16 @@ def math_varlen(
     )
 
 
+def test_backend_registers_its_function_with_varlen_preparer(flash: Flash) -> None:
+    assert AttentionInterface.get_interface(flash.backend) is flash.attend
+    assert AttentionInterface.get_mask_preparer(flash.backend) is prepare_varlen_metadata
+
+
 @pytest.mark.parametrize("kv_heads", [4, 2, 1])
 @pytest.mark.parametrize("is_causal", [False, True])
 @pytest.mark.parametrize("padding", ["mixed", "none", "empty"])
 def test_padding_adapter_outputs_and_gradients(
-    math_kernel: Mock, kv_heads: int, is_causal: bool, padding: str
+    math_kernel: Mock, flash: Flash, kv_heads: int, is_causal: bool, padding: str
 ) -> None:
     # Include left, right, both-sided padding, one token, and fully masked rows.
     mask = torch.tensor(
@@ -97,7 +124,7 @@ def test_padding_adapter_outputs_and_gradients(
         dense_mask = dense_mask & torch.ones(5, 5, dtype=torch.bool).tril()
 
     attention_metadata = prepare_varlen_metadata(mask, is_causal=is_causal)
-    actual = flash_attention_3(*inputs, attention_metadata=attention_metadata, is_causal=is_causal)
+    actual = flash.attend(*inputs, attention_metadata=attention_metadata, is_causal=is_causal)
     with attention.sdpa_kernel(attention.SDPBackend.MATH):
         expected = sdpa_attention(*reference_inputs, attention_metadata=dense_mask)
     expected = expected.masked_fill(~mask[:, None, :, None], 0)
@@ -114,10 +141,10 @@ def test_padding_adapter_outputs_and_gradients(
 @pytest.mark.parametrize("kv_heads", [4, 2, 1])
 @pytest.mark.parametrize("padding", ["none", "left", "right"])
 def test_model_huggingface_training_parity(
-    math_kernel: Mock, config: Olmo2Config, kv_heads: int, padding: str
+    math_kernel: Mock, flash: Flash, config: Olmo2Config, kv_heads: int, padding: str
 ) -> None:
     olmo2_training_parity(
-        replace(config, attn_implementation="flash_attention_3", num_key_value_heads=kv_heads),
+        replace(config, attn_implementation=flash.backend, num_key_value_heads=kv_heads),
         padding,
         torch.device("cpu"),
         torch.float32,
@@ -126,11 +153,9 @@ def test_model_huggingface_training_parity(
 
 @pytest.mark.parametrize("kv_heads", [4, 2, 1])
 def test_model_preserves_real_token_logits_and_gradients(
-    math_kernel: Mock, config: Olmo2Config, kv_heads: int
+    math_kernel: Mock, flash: Flash, config: Olmo2Config, kv_heads: int
 ) -> None:
-    model = Olmo2(
-        replace(config, attn_implementation="flash_attention_3", num_key_value_heads=kv_heads)
-    )
+    model = Olmo2(replace(config, attn_implementation=flash.backend, num_key_value_heads=kv_heads))
     reference = Olmo2(replace(config, num_key_value_heads=kv_heads))
     batch = make_batch(
         torch.tensor([[0, 0, 0, 0], [0, 2, 3, 0], [4, 5, 0, 0], [0, 6, 0, 0]]),
@@ -148,7 +173,7 @@ def test_model_preserves_real_token_logits_and_gradients(
         )
 
 
-@pytest.mark.parametrize("backend", ["sdpa", "flash_attention_3"])
+@pytest.mark.parametrize("backend", ["sdpa", "flash_attention_3", "flash_attention_4"])
 @pytest.mark.parametrize("padding", [False, True])
 def test_model_future_tokens_cannot_change_earlier_logits(
     math_kernel: Mock, config: Olmo2Config, backend: str, padding: bool
@@ -168,12 +193,12 @@ def test_model_future_tokens_cannot_change_earlier_logits(
     torch.testing.assert_close(actual[:, start : start + 2], other[:, start : start + 2])
 
 
-def test_unpadded_model_uses_one_batched_fa3_call_per_layer(
-    math_kernel: Mock, config: Olmo2Config, monkeypatch: pytest.MonkeyPatch
+def test_unpadded_model_uses_one_batched_flash_call_per_layer(
+    math_kernel: Mock, flash: Flash, config: Olmo2Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     compute = Mock(wraps=sdpa_attention)
-    monkeypatch.setattr(fa3_module, "sdpa_attention", compute)
-    model = Olmo2(replace(config, attn_implementation="flash_attention_3"))
+    monkeypatch.setattr(flash_module, "sdpa_attention", compute)
+    model = Olmo2(replace(config, attn_implementation=flash.backend))
     ids = torch.tensor([[2, 3, 4, 5], [6, 7, 8, 9]])
     model(make_batch(ids))
     assert compute.call_count == config.num_hidden_layers
@@ -185,10 +210,14 @@ def test_unpadded_model_uses_one_batched_fa3_call_per_layer(
 
 @pytest.mark.parametrize("num_layers", [2, 4])
 def test_model_prepares_packing_before_layers_once_per_forward(
-    math_kernel: Mock, config: Olmo2Config, monkeypatch: pytest.MonkeyPatch, num_layers: int
+    math_kernel: Mock,
+    flash: Flash,
+    config: Olmo2Config,
+    monkeypatch: pytest.MonkeyPatch,
+    num_layers: int,
 ) -> None:
     config = replace(config, num_hidden_layers=num_layers)
-    model = Olmo2(replace(config, attn_implementation="flash_attention_3"))
+    model = Olmo2(replace(config, attn_implementation=flash.backend))
     reference = Olmo2(config)
     ids = torch.tensor([[0, 2, 3, 0], [4, 5, 6, 7]])
     mask = torch.zeros_like(ids, dtype=torch.bool)
@@ -252,11 +281,11 @@ def test_model_prepares_packing_before_layers_once_per_forward(
 
 
 def test_padded_model_uses_one_varlen_call_per_layer(
-    math_kernel: Mock, config: Olmo2Config, monkeypatch: pytest.MonkeyPatch
+    math_kernel: Mock, flash: Flash, config: Olmo2Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     dense = Mock(side_effect=AssertionError("padded input reached SDPA"))
-    monkeypatch.setattr(fa3_module, "sdpa_attention", dense)
-    model = Olmo2(replace(config, attn_implementation="flash_attention_3"))
+    monkeypatch.setattr(flash_module, "sdpa_attention", dense)
+    model = Olmo2(replace(config, attn_implementation=flash.backend))
     ids = torch.tensor([[0, 2, 3, 0], [4, 5, 6, 7], [0, 0, 0, 0]])
     model(make_batch(ids, ids != 0))
     assert math_kernel.call_count == config.num_hidden_layers
@@ -271,9 +300,9 @@ def test_padded_model_uses_one_varlen_call_per_layer(
 
 
 def test_model_rejects_noncontiguous_padding_before_decoder_layers(
-    config: Olmo2Config, monkeypatch: pytest.MonkeyPatch
+    flash: Flash, config: Olmo2Config, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    model = Olmo2(replace(config, attn_implementation="flash_attention_3"))
+    model = Olmo2(replace(config, attn_implementation=flash.backend))
     layer_forward = Mock(side_effect=AssertionError("invalid padding reached a decoder layer"))
     monkeypatch.setattr(model.model.layers[0], "forward", layer_forward)
     batch = make_batch(torch.tensor([[2, 0, 3, 0]]), torch.tensor([[1, 0, 1, 0]]))
@@ -299,22 +328,22 @@ def _prepared(rows: list[list[bool]]) -> VarlenMetadata:
         (_prepared([[True] * 8 + [False] * 8]), (1, 2, 8, 8)),
     ],
 )
-def test_fa3_requires_metadata_matching_q(
-    math_kernel: Mock, attention_metadata: Any, q_shape: tuple[int, ...]
+def test_requires_metadata_matching_q(
+    math_kernel: Mock, flash: Flash, attention_metadata: Any, q_shape: tuple[int, ...]
 ) -> None:
     q = torch.randn(q_shape)
-    with pytest.raises(ValueError, match="VarlenMetadata matching"):
-        flash_attention_3(q, q, q, attention_metadata=attention_metadata)
+    with pytest.raises(ValueError, match=f"{flash.name} expects VarlenMetadata matching"):
+        flash.attend(q, q, q, attention_metadata=attention_metadata)
     math_kernel.assert_not_called()
 
 
 @pytest.mark.parametrize("field", ["indices", "cu_seq_lens_q", "cu_seq_lens_k"])
-def test_fa3_requires_metadata_on_qs_device(field: str) -> None:
+def test_requires_metadata_on_qs_device(flash: Flash, field: str) -> None:
     prepared = _prepared([[False, True, True, False]])
     moved = replace(prepared, **{field: getattr(prepared, field).to("meta")})
     q = torch.randn(1, 2, 4, 8)
     with pytest.raises(ValueError, match="VarlenMetadata matching"):
-        flash_attention_3(q, q, q, attention_metadata=moved)
+        flash.attend(q, q, q, attention_metadata=moved)
 
 
 @pytest.mark.parametrize(
@@ -335,25 +364,16 @@ def test_preparer_rejects_unsupported_padding(mask: torch.Tensor, message: str) 
         prepare_varlen_metadata(mask, is_causal=True)
 
 
-def test_rejects_non_square_attention() -> None:
+def test_rejects_non_square_attention(flash: Flash) -> None:
     q = torch.randn(1, 2, 4, 8)
     with pytest.raises(ValueError, match="full-sequence"):
-        flash_attention_3(q[:, :, :1], q, q, is_causal=True)
+        flash.attend(q[:, :, :1], q, q, is_causal=True)
 
 
-def test_cpu_request_does_not_fall_back() -> None:
+def test_cpu_request_does_not_fall_back(flash: Flash) -> None:
     q = torch.randn(1, 2, 4, 8)
     with pytest.raises(ValueError, match="CUDA"):
-        flash_attention_3(q, q, q)
-
-
-def test_non_hopper_request_does_not_fall_back(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda device: (8, 0))
-    with (
-        pytest.raises(ValueError, match="Hopper"),
-        fa3_module._fa3_context(torch.device("cuda")),
-    ):
-        pytest.fail("unsupported GPU was accepted")
+        flash.attend(q, q, q)
 
 
 @pytest.fixture
@@ -366,6 +386,35 @@ def mock_activation(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, str | No
     return state, activate
 
 
+@pytest.mark.parametrize(
+    "capability",
+    [(8, 0), (9, 0), (10, 0), (10, 3), (11, 0), (12, 0)],
+    ids=["a100", "h100-h200", "b200-gb200", "b300-gb300", "sm110", "rtx-pro-6000-blackwell"],
+)
+def test_gpu_support_matches_pytorch_integration(
+    flash: Flash,
+    mock_activation: tuple[dict[str, str | None], Mock],
+    monkeypatch: pytest.MonkeyPatch,
+    capability: tuple[int, int],
+) -> None:
+    _, activate = mock_activation
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda device: capability)
+    context = flash_module._flash_context(flash.implementation, torch.device("cuda"))
+    major, minor = capability
+    if major in flash.majors:
+        with context:
+            pass
+        activate.assert_called_once_with(flash.name)
+    else:
+        # Unsupported GPUs raise instead of falling back to another kernel.
+        with (
+            pytest.raises(ValueError, match=rf"got compute capability {major}\.{minor}"),
+            context,
+        ):
+            pytest.fail("unsupported GPU was accepted")
+        activate.assert_not_called()
+
+
 @pytest.fixture
 def fake_cuda(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     # Exercise CUDA autocast's dtype rules without a CUDA runtime or kernels.
@@ -375,24 +424,40 @@ def fake_cuda(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         yield
 
 
+def test_public_function_activates_its_implementation(
+    fake_cuda: None,
+    flash: Flash,
+    mock_activation: tuple[dict[str, str | None], Mock],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state, _ = mock_activation
+    compute = Mock(side_effect=lambda q, k, v, **kwargs: q.clone())
+    monkeypatch.setattr(flash_module, "sdpa_attention", compute)
+    q = torch.empty(1, 2, 4, 8, device="cuda:0", dtype=torch.bfloat16)
+    flash.attend(q, q, q, is_causal=True)
+    compute.assert_called_once()
+    assert state["active"] == flash.name
+
+
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("value_dtype", [torch.float32, torch.float16, torch.bfloat16])
 def test_sdpa_handles_cuda_autocast_dtypes(
     fake_cuda: None,
     math_kernel: Mock,
+    flash: Flash,
     monkeypatch: pytest.MonkeyPatch,
     dtype: torch.dtype,
     value_dtype: torch.dtype,
 ) -> None:
     # Exercise real SDPA autocast dispatch without requiring CUDA kernels.
     compute = Mock(wraps=sdpa_attention)
-    monkeypatch.setattr(fa3_module, "sdpa_attention", compute)
+    monkeypatch.setattr(flash_module, "sdpa_attention", compute)
     q = torch.empty(2, 4, 5, 8, device="cuda:0", dtype=torch.float32)
     k = torch.empty(2, 2, 5, 8, device="cuda:0", dtype=torch.float32)
     v = torch.empty_like(k, dtype=value_dtype)
 
     with torch.autocast("cuda", dtype=dtype):
-        output = flash_attention_3(q, k, v, is_causal=True)
+        output = flash.attend(q, k, v, is_causal=True)
 
     assert output.shape == q.shape
     assert output.dtype == dtype
@@ -408,7 +473,10 @@ def test_sdpa_handles_cuda_autocast_dtypes(
 
 @pytest.mark.parametrize("autocast_device", ["cpu", "cuda"])
 def test_mixed_dtypes_require_enabled_cuda_autocast(
-    fake_cuda: None, mock_activation: tuple[dict[str, str | None], Mock], autocast_device: str
+    fake_cuda: None,
+    mock_activation: tuple[dict[str, str | None], Mock],
+    flash: Flash,
+    autocast_device: str,
 ) -> None:
     q = torch.empty(1, 2, 4, 8, device="cuda:0")
     v = torch.empty_like(q, dtype=torch.bfloat16)
@@ -417,7 +485,7 @@ def test_mixed_dtypes_require_enabled_cuda_autocast(
         torch.autocast("cuda", enabled=False),
         pytest.raises(RuntimeError, match="same dtype"),
     ):
-        flash_attention_3(q, q, v)
+        flash.attend(q, q, v)
 
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
@@ -425,6 +493,7 @@ def test_mixed_dtypes_require_enabled_cuda_autocast(
 @pytest.mark.parametrize("empty", [False, True])
 def test_varlen_applies_cuda_autocast(
     math_kernel: Mock,
+    flash: Flash,
     monkeypatch: pytest.MonkeyPatch,
     dtype: torch.dtype,
     value_dtype: torch.dtype,
@@ -434,14 +503,14 @@ def test_varlen_applies_cuda_autocast(
     monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
     monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda: True)
     compute = Mock(side_effect=lambda q, *args, **kwargs: q.clone())
-    monkeypatch.setattr(fa3_module, "varlen_attn", compute)
+    monkeypatch.setattr(flash_module, "varlen_attn", compute)
     q = torch.randn(2, 4, 3, 8, requires_grad=True)
     k = torch.randn(2, 2, 3, 8, requires_grad=True)
     v = torch.randn(2, 2, 3, 8, dtype=value_dtype, requires_grad=True)
     rows = [[False] * 3] * 2 if empty else [[False, True, True], [True, False, False]]
     prepared = _prepared(rows)
     with torch.autocast("cuda", dtype=dtype):
-        output = flash_attention_3(q, k, v, attention_metadata=prepared, is_causal=True)
+        output = flash.attend(q, k, v, attention_metadata=prepared, is_causal=True)
     assert output.shape == q.shape
     assert output.dtype == dtype
     if empty:
@@ -458,43 +527,47 @@ def test_varlen_applies_cuda_autocast(
 
 
 def test_activation_survives_forward_and_only_runs_once(
-    mock_activation: tuple[dict[str, str | None], Mock],
+    flash: Flash, mock_activation: tuple[dict[str, str | None], Mock]
 ) -> None:
     state, activate = mock_activation
     with attention.sdpa_kernel(attention.SDPBackend.MATH):
         for _ in range(2):
-            with fa3_module._fa3_context(torch.device("cuda")):
+            with flash_module._flash_context(flash.implementation, torch.device("cuda")):
                 assert torch.backends.cuda.flash_sdp_enabled()
                 assert not torch.backends.cuda.math_sdp_enabled()
                 assert not torch.backends.cuda.mem_efficient_sdp_enabled()
                 assert not torch.backends.cuda.cudnn_sdp_enabled()
-            # Backward occurs after this point and must still use FA3 registration.
-            assert state["active"] == "FA3"
+            # Backward occurs after this point and must still use the registered kernels.
+            assert state["active"] == flash.name
             assert torch.backends.cuda.math_sdp_enabled()
             assert not torch.backends.cuda.flash_sdp_enabled()
-    activate.assert_called_once_with("FA3")
+    activate.assert_called_once_with(flash.name)
 
 
 def test_does_not_replace_another_active_implementation(
-    mock_activation: tuple[dict[str, str | None], Mock],
+    flash: Flash, mock_activation: tuple[dict[str, str | None], Mock]
 ) -> None:
     state, activate = mock_activation
-    state["active"] = "FA4"
+    other = "FA4" if flash.name == "FA3" else "FA3"
+    state["active"] = other
     with (
-        pytest.raises(RuntimeError, match="FA4"),
-        fa3_module._fa3_context(torch.device("cuda")),
+        pytest.raises(RuntimeError, match=f"Cannot activate {flash.name} while '{other}'"),
+        flash_module._flash_context(flash.implementation, torch.device("cuda")),
     ):
         pytest.fail("conflicting implementation was replaced")
     activate.assert_not_called()
 
 
 def test_missing_kernel_dependency_has_actionable_error(
-    mock_activation: tuple[dict[str, str | None], Mock],
+    flash: Flash, mock_activation: tuple[dict[str, str | None], Mock]
 ) -> None:
     _, activate = mock_activation
-    activate.side_effect = ModuleNotFoundError("flash_attn_interface")
+    activate.side_effect = ModuleNotFoundError("No module named 'flash_attn'")
+    # The message names what to install, not only what is missing.
+    kernels = {"FA3": "FlashAttention-3 installation", "FA4": "flash-attn-4 package"}[flash.name]
     with (
-        pytest.raises(ImportError, match="installing torch alone"),
-        fa3_module._fa3_context(torch.device("cuda")),
+        pytest.raises(ImportError, match="installing torch alone") as error,
+        flash_module._flash_context(flash.implementation, torch.device("cuda")),
     ):
         pytest.fail("missing dependency was ignored")
+    assert kernels in str(error.value)
