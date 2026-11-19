@@ -32,9 +32,11 @@ class ProxySize:
     peak_lr: float
 
 
-# Both sizes keep OLMo 2 1B's vocabulary, tokenizer and 4096-token context (arXiv 2501.00656,
-# Table 3). Counted without the input embedding, as the OLMo ladder counts N (arXiv 2412.04403,
-# Table 1), the sizes are 76,308,864 and 190,354,176 parameters.
+# Every size keeps OLMo 2 1B's vocabulary, tokenizer and 4096-token context (arXiv 2501.00656,
+# Table 3) and an MLP four times its width. Counted without the input embedding, as the OLMo
+# ladder counts N (arXiv 2412.04403, Table 1), the sizes are 76,308,864, 190,354,176,
+# 371,262,464 and 455,419,008 parameters. The batch is not part of a preset: the ladder trains
+# them at 262,144, 524,288, 786,432 and 1,048,576 tokens per update.
 PROXY_SIZES = {
     # DataDecide's 60M width, depth and heads (arXiv 2504.11393, Table 2), with the 190M's MLP
     # rule. Its peak LR extends the ladder's log-log line through its 190M and 370M points down
@@ -63,6 +65,33 @@ PROXY_SIZES = {
             hf_repo="allenai/OLMo-2-0425-1B",
         ),
         peak_lr=9.7e-4,
+    ),
+    # The OLMo ladder's 370M shape and its peak LR (arXiv 2412.04403, Table 1).
+    "371m": ProxySize(
+        model=Olmo2Config(
+            vocab_size=100352,
+            hidden_size=1024,
+            intermediate_size=4096,
+            num_hidden_layers=16,
+            num_attention_heads=16,
+            num_key_value_heads=16,
+            hf_repo="allenai/OLMo-2-0425-1B",
+        ),
+        peak_lr=7.8e-4,
+    ),
+    # No published shape: the widest multiple of 64 that stays under 500M at the 370M's depth,
+    # with 64-wide heads. Its peak LR interpolates the ladder's 370M and 760M values in log N.
+    "455m": ProxySize(
+        model=Olmo2Config(
+            vocab_size=100352,
+            hidden_size=1152,
+            intermediate_size=4608,
+            num_hidden_layers=16,
+            num_attention_heads=18,
+            num_key_value_heads=18,
+            hf_repo="allenai/OLMo-2-0425-1B",
+        ),
+        peak_lr=7.27e-4,
     ),
 }
 

@@ -31,7 +31,7 @@ def existing_config() -> Olmo2Config:
 
 
 def proxy_config(size: str) -> Olmo2Config:
-    """Return a flock proxy preset, `"76m"` or `"190m"`, as an HF configuration."""
+    """Return a flock proxy preset, a key of `PROXY_SIZES`, as an HF configuration."""
     preset = PROXY_SIZES[size].model
     base = existing_config()
     # The presets keep the 1B's vocabulary, context, RoPE base, norm and init: only the shape moves.

@@ -24,7 +24,12 @@ if TYPE_CHECKING:
 
 @pytest.mark.parametrize(
     ("size", "expected"),
-    [("76m", 76_308_864), ("190m", 190_354_176)],
+    [
+        ("76m", 76_308_864),
+        ("190m", 190_354_176),
+        ("371m", 371_262_464),
+        ("455m", 455_419_008),
+    ],
 )
 def test_presets_have_the_ladder_parameter_counts(size: str, expected: int) -> None:
     with torch.device("meta"):

@@ -379,7 +379,15 @@ def fresh_accelerator_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     AcceleratorState._reset_state(True)
 
 
-@pytest.mark.parametrize(("size", "count"), [("76m", 76_308_864), ("190m", 190_354_176)])
+@pytest.mark.parametrize(
+    ("size", "count"),
+    [
+        ("76m", 76_308_864),
+        ("190m", 190_354_176),
+        ("371m", 371_262_464),
+        ("455m", 455_419_008),
+    ],
+)
 def test_proxy_configs_keep_the_flock_presets_parameter_counts(size: str, count: int) -> None:
     with torch.device("meta"):
         model = Olmo2ForCausalLM(proxy_config(size))
