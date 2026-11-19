@@ -20,9 +20,9 @@ class Provenance:
 
     Args:
         model (`str`):
-            The scored model as `repo@commit`, or as `flock:org/name@number` for a version in the Flock registry.
+            The scored model as `repo@commit`, as `flock:org/name@number` for a version in the Flock registry, or as `local:digest` for a local folder.
         model_digest (`str`, *optional*):
-            The Flock version's digest, which names its exact files, or `None` for a Hugging Face model, whose commit in `model` already does. Results files written before it was added have no `model_digest`, and read as `None`.
+            The digest of the Flock version or local folder, which names its exact files, or `None` for a Hugging Face model, whose commit in `model` already does. Results files written before it was added have no `model_digest`, and read as `None`.
         flock_commit (`str`):
             The flock commit that ran, from `FLOCK_COMMIT` or git, or `"unknown"`. A `-dirty` suffix means the checkout had uncommitted changes or new files under `flock/`.
         command (`str`, *optional*):

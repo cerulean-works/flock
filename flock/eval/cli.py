@@ -9,7 +9,7 @@ import click
 
 from flock.eval import hub
 from flock.eval.compare import Comparison, compare
-from flock.eval.model import DEFAULT_BATCH_TOKENS
+from flock.eval.model import DEFAULT_BATCH_TOKENS, folder_digest
 from flock.eval.results import Results
 from flock.eval.run import Dtype, EvalConfig, evaluate
 from flock.eval.tasks import SUITES, TASKS
@@ -21,7 +21,11 @@ def main() -> None:
 
 
 @main.command()
-@click.option("--model", required=True, help="Model as repo@revision or flock:org/name[@version].")
+@click.option(
+    "--model",
+    required=True,
+    help="Model as repo@revision, flock:org/name[@version] or local:folder@digest.",
+)
 @click.option(
     "--task",
     "tasks",
@@ -106,6 +110,16 @@ def run(
         raise click.UsageError(str(error)) from None
 
     click.echo(format_results(evaluate(config), verbose=verbose))
+
+
+@main.command(name="digest")
+@click.argument("folder", type=click.Path(exists=True, file_okay=False, path_type=Path))
+def digest_command(folder: Path) -> None:
+    """Print the model id that scores a local folder: local:FOLDER@DIGEST, where the digest names every file in it."""
+    try:
+        click.echo(f"local:{folder}@{folder_digest(folder)}")
+    except ValueError as error:  # an empty folder
+        raise click.ClickException(str(error)) from None
 
 
 @main.command(name="compare")

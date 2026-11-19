@@ -57,6 +57,26 @@ uv run flock eval run \
 
 [Sign in](../cli/sign-in) first. The version is resolved to its number before anything loads, and the results record it as `flock:acme/olmo2-1b@12`, with the version's digest in `model_digest`. Moving the tag or the primary later doesn't change what the results say was scored. The tokenizer is the Hugging Face one that the model's config names in `hf_repo`, so a model saved without `hf_repo` can't be scored.
 
+## Score a local model folder
+
+A model saved in the Hugging Face format to a folder, such as a training run's export, is scored by the folder and a digest of its files with a `local:` prefix. Print the id with `flock eval digest`:
+
+```bash
+uv run flock eval digest /work/acme/run-190m/export-000700
+# local:/work/acme/run-190m/export-000700@5c1f...e9a2
+```
+
+Then pass that id as `--model`:
+
+```bash
+uv run flock eval run \
+  --model local:/work/acme/run-190m/export-000700@5c1f...e9a2 \
+  --task arc_easy \
+  --out results/run-190m-700
+```
+
+The digest names every file in the folder, the weights, config and tokenizer alike, in the same form as a Flock version's digest. Before anything loads, the folder's files are hashed again, and a folder whose files no longer match the digest is refused. The results record the model as `local:{digest}`, with the digest in `model_digest`, so the same files scored from another folder compare as one model. The folder's path appears only in `command`. A folder passed as `repo@revision` is refused, since a revision can't pin a folder's files, and the message gives the `local:` id to use.
+
 ## Run where there is no network
 
 A job on a machine that can't reach the Hugging Face Hub reads its datasets from copies staged on shared disk. Each task's dataset is a Hugging Face repo pinned to a commit, and your organization keeps a private copy of that pin on Flock at `eval/<owner>/<name>`. The copy holds the configurations and splits the tasks read.
