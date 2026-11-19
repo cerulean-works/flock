@@ -96,7 +96,9 @@ def native_lance_profile(
                     "ALLOW_HTTP": "false",
                 }
             )
-            s3.get_process(org="flock", host=flock.url, token=signed_in, ttl=NATIVE_TTL, read_only=True)
+            s3.get_process(
+                org="flock", host=flock.url, token=signed_in, ttl=NATIVE_TTL, read_only=True
+            )
         else:
             _configure_native_lance_profile(flock, flock_cli, tmp_path, monkeypatch)
         yield
