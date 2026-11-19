@@ -27,7 +27,6 @@ const isPublic = (path: string) =>
 /** The first segment of the app's pages that are only for people signed in. */
 const SIGNED_IN_PAGES = new Set([
 	'account',
-	'compute',
 	'admin',
 	'orgs',
 	'storage',
