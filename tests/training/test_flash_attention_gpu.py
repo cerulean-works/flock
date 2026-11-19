@@ -1,6 +1,12 @@
-"""Explicit FA3 checks: require a Hopper GPU and compatible external FA3 kernels."""
+"""Explicit FA3 and FA4 checks: require a supported GPU and compatible external kernels.
 
+FA3 needs a Hopper GPU and FlashAttention-3. FA4 needs a Hopper or Blackwell GPU and
+the `flash-attn-4` package. Select one with `-m 'gpu and fa3'` or `-m 'gpu and fa4'`.
+"""
+
+from collections.abc import Callable
 from dataclasses import replace
+from typing import NamedTuple
 from unittest.mock import Mock
 
 import pytest
@@ -9,6 +15,7 @@ from torch.nn import attention
 
 from flock.training.core.attention import (
     flash_attention_3,
+    flash_attention_4,
     prepare_sdpa_mask,
     prepare_varlen_metadata,
     sdpa_attention,
@@ -18,13 +25,39 @@ from flock.training.core.models.olmo2 import Olmo2, Olmo2Config
 from flock.training.core.trainer import Trainer
 from tests.training._reference import assert_parity, olmo2_training_parity, token_batch
 
-pytestmark = [pytest.mark.gpu, pytest.mark.fa3]
+pytestmark = [pytest.mark.gpu]
+
+
+class Flash(NamedTuple):
+    backend: str
+    attend: Callable[..., torch.Tensor]
+    # PyTorch's implementation name.
+    name: str
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            Flash("flash_attention_3", flash_attention_3, "FA3"),
+            marks=pytest.mark.fa3,
+            id="flash_attention_3",
+        ),
+        pytest.param(
+            Flash("flash_attention_4", flash_attention_4, "FA4"),
+            marks=pytest.mark.fa4,
+            id="flash_attention_4",
+        ),
+    ]
+)
+def flash(request: pytest.FixtureRequest) -> Flash:
+    return request.param
 
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("kv_heads", [4, 2, 1], ids=["mha", "gqa", "mqa"])
 @pytest.mark.parametrize("is_causal", [False, True])
 def test_varlen_mixed_padding_outputs_and_gradients(
+    flash: Flash,
     cuda_device: torch.device,
     dtype: torch.dtype,
     kv_heads: int,
@@ -54,12 +87,12 @@ def test_varlen_mixed_padding_outputs_and_gradients(
             ~mask[:, None, :, None], 0
         )
     previous = attention.current_flash_attention_impl()
-    assert previous in (None, "FA3")
-    cudnn = Mock(side_effect=AssertionError("FA3 varlen must not dispatch to cuDNN"))
+    assert previous in (None, flash.name)
+    cudnn = Mock(side_effect=AssertionError(f"{flash.name} varlen must not dispatch to cuDNN"))
     monkeypatch.setattr(torch.ops.aten, "_cudnn_attention_forward", cudnn)
     monkeypatch.setattr(torch.ops.aten, "_cudnn_attention_backward", cudnn)
     try:
-        actual = flash_attention_3(*inputs, attention_metadata=prepared, is_causal=is_causal)
+        actual = flash.attend(*inputs, attention_metadata=prepared, is_causal=is_causal)
         assert_parity(actual, expected, dtype, "logits", "packed attention")
         upstream = torch.randn_like(actual)
         actual.backward(upstream)
@@ -68,18 +101,25 @@ def test_varlen_mixed_padding_outputs_and_gradients(
             assert_parity(tensor.grad, reference.grad, dtype, "gradients", "packed attention")
         cudnn.assert_not_called()
     finally:
-        if previous is None and attention.current_flash_attention_impl() == "FA3":
+        if previous is None and attention.current_flash_attention_impl() == flash.name:
             attention.restore_flash_attention_impl()
 
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("kv_heads", [4, 2, 1], ids=["mha", "gqa", "mqa"])
 @pytest.mark.parametrize("padding", ["none", "left", "right"])
-def test_fa3_huggingface_training_parity(
-    config: Olmo2Config, cuda_device: torch.device, dtype: torch.dtype, kv_heads: int, padding: str
+def test_huggingface_training_parity(
+    flash: Flash,
+    config: Olmo2Config,
+    cuda_device: torch.device,
+    dtype: torch.dtype,
+    kv_heads: int,
+    padding: str,
 ) -> None:
     previous = attention.current_flash_attention_impl()
-    assert previous in (None, "FA3"), "run FA3 checks without another custom flash implementation"
+    assert previous in (None, flash.name), (
+        f"run {flash.name} checks without another custom flash implementation"
+    )
     try:
         olmo2_training_parity(
             replace(
@@ -87,28 +127,33 @@ def test_fa3_huggingface_training_parity(
                 hidden_size=256,
                 intermediate_size=384,
                 num_key_value_heads=kv_heads,
-                attn_implementation="flash_attention_3",
+                attn_implementation=flash.backend,
             ),
             padding,
             cuda_device,
             dtype,
         )
-        assert attention.current_flash_attention_impl() == "FA3"
+        assert attention.current_flash_attention_impl() == flash.name
     finally:
         # All backward work has finished; leave unrelated GPU tests' dispatch intact.
-        if previous is None and attention.current_flash_attention_impl() == "FA3":
+        if previous is None and attention.current_flash_attention_impl() == flash.name:
             attention.restore_flash_attention_impl()
 
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("kv_heads", [4, 2, 1], ids=["mha", "gqa", "mqa"])
 @pytest.mark.parametrize("padding", ["none", "left", "right"])
-def test_fa3_fp32_weights_with_cuda_autocast(
-    config: Olmo2Config, cuda_device: torch.device, dtype: torch.dtype, kv_heads: int, padding: str
+def test_fp32_weights_with_cuda_autocast(
+    flash: Flash,
+    config: Olmo2Config,
+    cuda_device: torch.device,
+    dtype: torch.dtype,
+    kv_heads: int,
+    padding: str,
 ) -> None:
     config = replace(config, hidden_size=256, intermediate_size=384, num_key_value_heads=kv_heads)
     # Match the trainer: master weights stay FP32; only forward runs under autocast.
-    model = Olmo2(replace(config, attn_implementation="flash_attention_3")).to(cuda_device)
+    model = Olmo2(replace(config, attn_implementation=flash.backend)).to(cuda_device)
     reference = Olmo2(replace(config, attn_implementation="sdpa")).to(cuda_device)
     reference.load_state_dict(model.state_dict(), strict=True)
     ids, mask = token_batch(padding, cuda_device)
@@ -119,7 +164,9 @@ def test_fa3_fp32_weights_with_cuda_autocast(
     trainer.runtime = DistributedRuntime(0, 0, 1, cuda_device)
 
     previous = attention.current_flash_attention_impl()
-    assert previous in (None, "FA3"), "run FA3 checks without another custom flash implementation"
+    assert previous in (None, flash.name), (
+        f"run {flash.name} checks without another custom flash implementation"
+    )
     try:
         with torch.autocast("cuda", dtype=dtype):
             with attention.sdpa_kernel(attention.SDPBackend.MATH):
@@ -141,7 +188,7 @@ def test_fa3_fp32_weights_with_cuda_autocast(
             assert_parity(
                 parameter.grad, reference.get_parameter(name).grad, dtype, "gradients", name
             )
-        assert attention.current_flash_attention_impl() == "FA3"
+        assert attention.current_flash_attention_impl() == flash.name
     finally:
-        if previous is None and attention.current_flash_attention_impl() == "FA3":
+        if previous is None and attention.current_flash_attention_impl() == flash.name:
             attention.restore_flash_attention_impl()

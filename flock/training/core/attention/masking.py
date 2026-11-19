@@ -38,7 +38,7 @@ def prepare_sdpa_mask(padding_mask: torch.Tensor | None, *, is_causal: bool) -> 
 def prepare_varlen_metadata(
     padding_mask: torch.Tensor | None, *, is_causal: bool
 ) -> VarlenMetadata | None:
-    """Return `VarlenMetadata` for varlen backends such as FA3, on the padding mask's device.
+    """Return `VarlenMetadata` for varlen backends such as FA3 and FA4, on the mask's device.
 
     Prepare once per model forward and pass it to every layer. Return `None`
     when there is no padding; causality always stays in `is_causal`.

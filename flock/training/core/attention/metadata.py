@@ -7,8 +7,8 @@ import torch
 class VarlenMetadata:
     """Varlen metadata for one padded batch, built once per model forward.
 
-    Varlen backends such as FA3 pack the real tokens before their kernel and
-    restore the batch shape afterwards. The `cu_seq_lens_*` and `max_length_*`
+    Varlen backends such as FA3 and FA4 pack the real tokens before their kernel
+    and restore the batch shape afterwards. The `cu_seq_lens_*` and `max_length_*`
     names match Hugging Face's `FlashAttentionKwargs`. Self-attention uses the
     same lengths for queries and keys.
 

@@ -443,49 +443,45 @@ the example's weights and computations remain FP32.
 ## Choose an attention backend
 
 `Olmo2Config.attn_implementation` defaults to `"sdpa"`, which lets PyTorch choose
-an attention kernel. Leave it unset to keep the default.
+an attention kernel. Leave it unset to keep the default. The backends on this
+page apply to OLMo 2 only: `HFCompatibleConfig.attn_implementation` names a
+`transformers` kernel instead.
 
 Pass a `[batch, sequence]` padding mask in `Batch["attention_mask"]`, with True/1
 for real tokens. OLMo 2 handles causality and prepares the backend's mask for you.
 
-### Use FlashAttention-3
+### Use FlashAttention-3 or FlashAttention-4
 
-FA3 requires a Hopper GPU (compute capability 9.0), FP16 or BF16 Q/K/V, and an
-external FlashAttention-3 installation compatible with your PyTorch and CUDA
-versions. The trainer uses BF16 autocast by default.
+Set `attn_implementation` to `"flash_attention_3"` or `"flash_attention_4"`. FA3
+runs only on Hopper GPUs (compute capability 9.0), such as H100 and H200. FA4 also
+runs on Blackwell data center GPUs (10.x), such as B200 and B300, so use FA4 there.
 
 ```python
 from dataclasses import replace
 
 from flock.training.core.models import OLMO2_1B_CONFIG
 
-config = replace(OLMO2_1B_CONFIG, attn_implementation="flash_attention_3")
+config = replace(OLMO2_1B_CONFIG, attn_implementation="flash_attention_4")
 ```
 
-Unsupported inputs raise an error; there is no fallback. FA3 supports full-sequence
-self-attention with padding at either end and empty rows. Masks with holes,
-dense masks and unequal Q/K sequence lengths are unsupported. For padded batches,
-each layer packs real-token Q/K/V and calls PyTorch's
-`torch.nn.attention.varlen.varlen_attn` once using the registered FA3 kernels.
-Once per forward, the model validates padding, builds packing indices and
-cumulative sequence lengths on CPU, and copies them to the input IDs' device.
-Every decoder layer reuses this `VarlenMetadata`. Each attention call packs
-Q/K/V with it and restores the packed output to the batch shape. Unpadded
-batches use one batched SDPA call per layer.
+- **Kernels** come from a separate installation: a FlashAttention-3 build compatible
+  with your PyTorch and CUDA versions, or the `flash-attn-4` package
+  (`flash-attn-4[cu13]` with a CUDA 13 build of PyTorch). PyTorch 2.14 marks its
+  FA4 integration as a prototype.
+- **Inputs** must be FP16 or BF16, which the trainer's default BF16 autocast
+  provides. Padding can sit at either end of a row, and rows can be empty. Masks
+  with holes, dense masks and unequal Q/K sequence lengths are unsupported.
+- **Padded batches** reuse one `VarlenMetadata`, built once per forward, and each
+  layer packs the real tokens into one `varlen_attn` call. Unpadded batches use one
+  batched SDPA call per layer.
 
-The padded path lets PyTorch choose how to split the work (`num_splits=None`) and
-casts packed Q/K/V to the CUDA autocast dtype when autocast is enabled. PyTorch's
-FA3 integration honors its deterministic-algorithm setting during backward.
+An unsupported GPU or input raises an error; there is no fallback. Outputs at
+padding positions are zero, so final logits there can differ from SDPA. Compare
+real-token outputs; the trainer's collator already excludes padding from the loss.
 
-FA3 attention outputs are zero at padding query positions. Final model logits at
-those positions can differ from SDPA because residual connections still process
-padding tokens. Compare real-token outputs and ignore padding in the loss; the
-trainer's collator already excludes targets involving padding. Empty rows are
-omitted from the packed batch. An entirely padded batch skips the attention
-kernels while retaining zero gradients.
-
-FA3 activation affects PyTorch's Flash backend throughout the process. Keep it
-active until all pending backward passes finish.
+Activating FA3 or FA4 replaces PyTorch's Flash backend for the whole process, so
+only one of them can be active. Keep it active until all pending backward passes
+finish.
 
 ### Register a custom backend
 
@@ -514,12 +510,13 @@ calls it once per forward and passes the result to every layer unchanged.
 | Kind | Preparer | Read by |
 |---|---|---|
 | Dense mask (`torch.Tensor`) | `prepare_sdpa_mask` | `sdpa_attention` |
-| `VarlenMetadata` | `prepare_varlen_metadata` | `flash_attention_3` |
+| `VarlenMetadata` | `prepare_varlen_metadata` | `flash_attention_3`, `flash_attention_4` |
 
 `None` means no padding. To support a new kind, add its type to
 `AttentionMetadata`; model code does not change.
 
-Direct callers of `flash_attention_3` prepare the padding mask first:
+Direct callers of `flash_attention_3` or `flash_attention_4` prepare the padding
+mask first:
 
 ```python
 metadata = prepare_varlen_metadata(padding_mask, is_causal=True)

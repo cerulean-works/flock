@@ -3,7 +3,7 @@ from typing import Any, ClassVar, Protocol
 
 import torch
 
-from .flash_attention_3 import flash_attention_3
+from .flash_attention import flash_attention_3, flash_attention_4
 from .masking import prepare_sdpa_mask, prepare_varlen_metadata
 from .sdpa import sdpa_attention
 
@@ -44,6 +44,7 @@ class AttentionInterface:
     _global_mapping: ClassVar[dict[str, _AttentionBackend[Any]]] = {
         "sdpa": _AttentionBackend(sdpa_attention, prepare_sdpa_mask),
         "flash_attention_3": _AttentionBackend(flash_attention_3, prepare_varlen_metadata),
+        "flash_attention_4": _AttentionBackend(flash_attention_4, prepare_varlen_metadata),
     }
 
     @classmethod
