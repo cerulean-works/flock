@@ -82,4 +82,7 @@ dev = [
     "ty>=0.0.89",
 ]
 cpu-tests = ["torch==2.14.1"]
-gpu = ["torch>=2.14.1"]
+gpu = [
+    "torch>=2.14.1",
+    "flash-attn-4[cu13]>=4.0.0b40; sys_platform == 'linux'",
+]
