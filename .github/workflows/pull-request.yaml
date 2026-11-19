@@ -78,3 +78,34 @@ jobs:
 
       - name: Check every task definition and toy request against the snapshot
         run: uv run --no-sync python -m pytest -q tests/eval/test_snapshot.py
+
+  GPU:
+    name: Run GPU tests on Modal
+    runs-on: ubuntu-latest
+    # Pull requests from forks get no secrets, so they cannot reach Modal.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    concurrency:
+      group: gpu-tests-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        with:
+          version: "0.12.17"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Setup Python
+        run: uv python install
+
+      - name: Install Dependencies
+        run: uv sync --only-dev --frozen
+
+      - name: Run GPU tests on an H100
+        run: uv run --no-sync modal run tests/modal_gpu.py
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
