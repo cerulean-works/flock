@@ -2,9 +2,8 @@ import logging
 import math
 import random
 from collections.abc import Callable, Iterable, Mapping
-from functools import partial
 from pathlib import Path
-from typing import Any, Literal, Self, cast
+from typing import Any, Literal, Self
 
 import torch
 import torch._functorch.config as functorch_config
@@ -26,11 +25,17 @@ from flock.eval.run import PreparedTask, prepare_task, score_prepared
 from flock.eval.tasks import TASKS
 from flock.training.core.checkpoint import CheckpointManager
 from flock.training.core.chunks import TokenChunkDataset
+from flock.training.core.compilation import compile_if_enabled
 from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableBatchDataSampler
 from flock.training.core.distributed import DistributedRuntime, master_broadcast, master_only
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState, StepLRScheduler
 from flock.training.core.models import BaseModel
-from flock.training.core.optimizers import BaseOptimizer, OptimizerConfig, OptimizerInterface
+from flock.training.core.optimizers import (
+    BaseOptimizer,
+    OptimizerConfig,
+    OptimizerInterface,
+    prepare_for_compile,
+)
 
 
 class TrainerConfig(PydanticBaseModel):
@@ -88,13 +93,12 @@ class TrainerConfig(PydanticBaseModel):
             Autocast dtype. The trainer moves the model without changing its weight
             dtype; supply FP32 weights to retain FP32 master parameters.
         torch_compile (`bool`, *optional*, defaults to `False`):
-            Compile the forward pass with the loss, and gradient clipping with the
-            optimizer step. Learning rates become tensors, so schedules do not recompile.
+            Compile the training model, the loss, gradient clipping with the optimizer
+            step, and the evaluation model. Learning rates become tensors, so schedules
+            do not recompile.
         torch_compile_mode (`str`, *optional*, defaults to `"default"`):
             PyTorch compilation mode: `"default"`, `"reduce-overhead"`,
             `"max-autotune"` or `"max-autotune-no-cudagraphs"`.
-        torch_compile_evaluation (`bool`, *optional*, defaults to `True`):
-            Also compile the model for evaluation when `torch_compile` is set.
         max_norm (`float`, *optional*, defaults to `1.0`):
             Finite, nonnegative gradient clipping threshold. Zero clips gradients to zero.
         logging_steps (`int`, *optional*, defaults to `10`):
@@ -141,7 +145,6 @@ class TrainerConfig(PydanticBaseModel):
     torch_compile_mode: Literal[
         "default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"
     ] = "default"
-    torch_compile_evaluation: bool = True
     max_norm: float = Field(default=1.0, ge=0, allow_inf_nan=False)
     logging_steps: int = Field(default=10, gt=0)
     seed: int = 42
@@ -544,35 +547,15 @@ class Trainer:
             self.optimizer, config.lr_scheduler_config, self.total_steps
         )
 
-        # Autocast for the training forward and evaluation.
-        autocast = partial(
-            torch.autocast,
-            self.device.type,
-            dtype=self.model_dtype,
-            enabled=self.model_dtype != torch.float32,
-        )
-        self._train_forward: Callable[[Batch], tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = (
-            autocast()(self._forward_loss)
-        )
-        # No need to autocast since _clip_and_step need FP32.
-        self._train_update: Callable[[], torch.Tensor] = self._clip_and_step
-        self._score_task: Callable[[ScoringModel, PreparedTask], TaskResult] = autocast()(
-            score_prepared
-        )
-        self._evaluation_model: nn.Module = self.model
-        self.torch_compile = config.torch_compile
-
-        # Use torch compile each function that need to be compiled.
+        # torch compile method
+        self.torch_compile: bool = config.torch_compile
+        self.torch_compile_mode = config.torch_compile_mode
+        # `compile_if_enabled` keeps the compiled `_calc_batch_loss` and `_clip_and_step` here.
+        self._compiled_methods: dict[Callable[..., Any], Callable[..., Any]] = {}
         if self.torch_compile:
-            compile_ = partial(torch.compile, mode=config.torch_compile_mode)
-            # Eager backward runs outside autocast; make the compiled backward match.
-            self._train_forward = functorch_config.patch(backward_pass_autocast="off")(
-                compile_(self._train_forward)
-            )
-            self._train_update = compile_(self._train_update)
-            if config.torch_compile_evaluation:
-                self._evaluation_model = cast(nn.Module, compile_(self.model))
-            self._use_tensor_learning_rates()
+            # Compile in place, so training, DDP and evaluation all call the compiled model.
+            self.model.compile(mode=self.torch_compile_mode)
+            prepare_for_compile(self.optimizer, self.device)
 
         self.validation_tasks = config.validation_tasks
         self.validation_steps = config.validation_steps
@@ -649,6 +632,7 @@ class Trainer:
             generator=torch.Generator().manual_seed(self.seed),
         )
 
+    @compile_if_enabled
     def _calc_batch_loss(
         self, output: torch.Tensor, labels: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -688,61 +672,50 @@ class Trainer:
 
         return loss, losses, tokens
 
-    def _forward_loss(self, batch: Batch) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Return `_calc_batch_loss` outputs; `_train_forward` adds autocast and compilation."""
-        output = self.training_model(batch)
-        return self._calc_batch_loss(output, batch["labels"])
-
-    def _clip_and_step(self) -> torch.Tensor:
-        """Clip gradients, update the parameters and return the gradient norm before clipping."""
-        grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.max_norm)
-        self.optimizer.step()
-        return grad_norm
-
-    def _use_tensor_learning_rates(self) -> None:
-        """Hold learning rates in tensors so a changing schedule does not recompile the step."""
-        capturable = self.device.type == "cuda"
-        for group in self.optimizer.param_groups:
-            group["lr"] = torch.tensor(data=float(group["lr"]), device=self.device)
-            if "capturable" in group:
-                group["capturable"] = capturable
-        if capturable:
-            for state in self.optimizer.state.values():
-                if "step" in state:
-                    state["step"] = state["step"].to(self.device)
-
-    def _optimizer_state_dict(self) -> dict[str, Any]:
-        """Return optimizer state as eager training stores it, whether or not it is compiled."""
-        state = self.optimizer.state_dict()
-        for group in state["param_groups"]:
-            group["lr"] = float(group["lr"])
-            if "capturable" in group:
-                group["capturable"] = self.optimizer.defaults["capturable"]
-        # The per-parameter dicts are the optimizer's own; copy before replacing steps.
-        state["state"] = {
-            index: {**values, "step": values["step"].cpu()} if "step" in values else values
-            for index, values in state["state"].items()
-        }
-        return state
+    def _autocast(self) -> torch.autocast:
+        """Autocast to `model_dtype` on the training device; FP32 runs without autocast."""
+        return torch.autocast(
+            self.device.type,
+            dtype=self.model_dtype,
+            enabled=self.model_dtype != torch.float32,
+        )
 
     def _set_seed(self) -> None:
         """Seed Python and PyTorch before starting or restoring training."""
         random.seed(self.seed + self.runtime.rank)
         torch.manual_seed(self.seed + self.runtime.rank)
 
+    # `torch.compile` needs a function, so clipping and the optimizer step share this method.
+    # Compiling `self.optimizer.step` in place would replace another object's method, which ty
+    # rejects; moving this into the optimizer module would take much more work.
+    @compile_if_enabled
+    def _clip_and_step(self) -> torch.Tensor:
+        """Clip gradients, update the parameters and return the gradient norm before clipping."""
+        grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.max_norm)
+        self.optimizer.step()
+        return grad_norm
+
     def _inner_training_loop(self, dataloader: Iterable[Batch], start_step: int) -> None:
         """Update once per batch, then log, save and evaluate at configured intervals."""
         for step, batch in enumerate(dataloader, start=start_step + 1):
+            # Mark the step begin for CUDA Graphs if torch.compile is enabled.
             if self.torch_compile:
                 torch.compiler.cudagraph_mark_step_begin()
             self.optimizer.zero_grad()
 
-            batch = cast(Batch, {k: v.to(self.device, non_blocking=True) for k, v in batch.items()})
+            batch = {k: v.to(self.device, non_blocking=True) for k, v in batch.items()}
 
-            loss, losses, num_tokens = self._train_forward(batch)
+            with (
+                self._autocast(),
+                # Ensure the compiled backward matches eager behavior by running backward outside autocast.
+                functorch_config.patch(backward_pass_autocast="off"),
+            ):
+                output: torch.Tensor = self.training_model(batch)
+                loss, losses, num_tokens = self._calc_batch_loss(output, labels=batch["labels"])
+
             # TODO: try compiled autograd to capture the whole backward once the forward has no graph breaks (right now it still does), but the total effect is uncertainty.
             loss.backward()
-            grad_norm = self._train_update()
+            grad_norm = self._clip_and_step()
             self.lr_scheduler.step()
 
             self.state.update(add_step=1, loss=losses, grad_norm=grad_norm, tokens=num_tokens)
@@ -861,7 +834,7 @@ class Trainer:
 
         step = int(self.state.step.item())
         scorer = ScoringModel(
-            FlockCausalLM(self._evaluation_model),
+            FlockCausalLM(self.model),
             self.tokenizer,
             name=f"{self.run_name}@step-{step}",
             batch_tokens=self.validation_batch_tokens,
@@ -878,10 +851,12 @@ class Trainer:
                     self._prepared_validation_tasks[task] = prepare_task(
                         scorer, TASKS[task], limit=self.validation_limit
                     )
-            results = {
-                task: self._score_task(scorer, self._prepared_validation_tasks[task])
-                for task in self.validation_tasks
-            }
+            # Match training precision without casting or copying the FP32 master weights.
+            with self._autocast():
+                results: dict[str, TaskResult] = {
+                    task: score_prepared(scorer, self._prepared_validation_tasks[task])
+                    for task in self.validation_tasks
+                }
         except (FileExistsError, KeyError) as e:
             self.logger.error(f"Error during evaluation, skipping: {e}")
             return
@@ -942,7 +917,7 @@ class Trainer:
         """
         return {
             "trainer_state_dict": self.state.state_dict(),
-            "optimizer_state_dict": self._optimizer_state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
             "lr_scheduler_state_dict": self.lr_scheduler.state_dict(),
             "rank_states": {
                 self.runtime.rank: {
@@ -1014,8 +989,7 @@ class Trainer:
 
         self.state.validate_state_dict(checkpoint.trainer_state_dict.model_dump())
         saved_groups = checkpoint.optimizer_state_dict["param_groups"]
-        # An eager-only branch could skip this conversion, but it only runs once when loading.
-        current_groups = self._optimizer_state_dict()["param_groups"]
+        current_groups = self.optimizer.param_groups
         if len(saved_groups) != len(current_groups):
             raise ValueError("Checkpoint optimizer parameter groups do not match this run")
         for index, (saved, current) in enumerate(zip(saved_groups, current_groups, strict=True)):
@@ -1024,12 +998,10 @@ class Trainer:
                     f"Checkpoint optimizer parameter group {index} size does not match this run"
                 )
             # The current LR depends on progress; original LRs are checked by the scheduler.
-            saved_settings = {
-                key: value for key, value in saved.items() if key not in ("params", "lr")
-            }
-            current_settings = {
-                key: value for key, value in current.items() if key not in ("params", "lr")
-            }
+            # Compiled CUDA runs turn `capturable` on, so it may differ between runs.
+            ignored = ("params", "lr", "capturable")
+            saved_settings = {key: value for key, value in saved.items() if key not in ignored}
+            current_settings = {key: value for key, value in current.items() if key not in ignored}
             if saved_settings != current_settings:
                 raise ValueError(
                     f"Checkpoint optimizer parameter group {index} settings do not match this run"
@@ -1054,9 +1026,6 @@ class Trainer:
 
         self.state.load_state_dict(checkpoint.trainer_state_dict.model_dump())
         self.optimizer.load_state_dict(checkpoint.optimizer_state_dict)
-        if self.torch_compile:
-            # Loading restores the checkpoint's float learning rates.
-            self._use_tensor_learning_rates()
         self.lr_scheduler.load_state_dict(checkpoint.lr_scheduler_state_dict.model_dump())
 
         rank_state = checkpoint.rank_states[self.runtime.rank]

@@ -12,6 +12,7 @@ from flock.training.core.optimizers import (
     MuonConfig,
     OptimizerConfig,
     OptimizerInterface,
+    prepare_for_compile,
 )
 
 
@@ -34,6 +35,29 @@ def test_adamw_forwards_configuration_and_matches_torch_updates() -> None:
         expected_optimizer.step()
     for actual, expected in zip(model.parameters(), reference.parameters(), strict=True):
         torch.testing.assert_close(actual, expected, atol=0, rtol=0)
+
+
+def test_compile_preparation_holds_tensor_rates_and_saves_float_rates() -> None:
+    model = nn.Linear(3, 2)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.02)
+    model(torch.ones(1, 3)).sum().backward()
+    optimizer.step()
+    eager = copy.deepcopy(optimizer.state_dict())
+
+    prepare_for_compile(optimizer, torch.device("cpu"))
+    assert all(isinstance(group["lr"], torch.Tensor) for group in optimizer.param_groups)
+    saved = optimizer.state_dict()
+    # The rate round-trips through float32; resuming reapplies the scheduler's exact rates.
+    saved_lr = saved["param_groups"][0]["lr"]
+    assert isinstance(saved_lr, float) and saved_lr == pytest.approx(0.02)
+    saved["param_groups"][0]["lr"] = eager["param_groups"][0]["lr"]
+    torch.testing.assert_close(saved, eager, atol=0, rtol=0)
+
+    # The schedule fills the live tensor; loading replaces it with the checkpoint's float.
+    optimizer.param_groups[0]["lr"].fill_(0.5)
+    optimizer.load_state_dict(eager)
+    lr = optimizer.param_groups[0]["lr"]
+    assert isinstance(lr, torch.Tensor) and lr.item() == pytest.approx(0.02)
 
 
 def test_muon_remains_explicitly_unsupported() -> None:

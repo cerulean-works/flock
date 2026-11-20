@@ -163,6 +163,7 @@ def test_fp32_weights_with_cuda_autocast(
     batch = {"input_ids": ids[:, :-1], "attention_mask": mask[:, :-1], "labels": labels}
     trainer = object.__new__(Trainer)
     trainer.runtime = DistributedRuntime(0, 0, 1, cuda_device)
+    trainer.torch_compile = False
 
     previous = attention.current_flash_attention_impl()
     assert previous in (None, flash.name), (

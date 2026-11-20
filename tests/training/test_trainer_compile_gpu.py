@@ -152,7 +152,9 @@ def test_compiled_trainer_matches_eager_resumes_and_evaluates(
         for group in compiled.optimizer.param_groups:
             assert isinstance(group["lr"], torch.Tensor) and group["lr"].is_cuda
             assert group["capturable"]
-        assert all(state["step"].is_cuda for state in compiled.optimizer.state.values())
+        # Dynamo moves the eager checkpoint's CPU step counts to the GPU.
+        optimizer_state = compiled.optimizer.state_dict()["state"]
+        assert all(state["step"].is_cuda for state in optimizer_state.values())
 
         torch.testing.assert_close(
             compiled.model.state_dict(), eager.model.state_dict(), atol=2e-4, rtol=2e-2
@@ -168,12 +170,12 @@ def test_compiled_trainer_matches_eager_resumes_and_evaluates(
             grad_reference += expected.grad.square().sum()
         assert (grad_error / grad_reference.clamp_min(1e-20)).sqrt().item() < 0.05
 
-        # Compiled checkpoints use the eager format, so an eager run resumes them.
+        # Compiled checkpoints keep float learning rates, so an eager run resumes them and
+        # keeps their `capturable` setting.
         saved = compiled.state_dict()["optimizer_state_dict"]
         for group in saved["param_groups"]:
             assert isinstance(group["lr"], float)
-            assert group["capturable"] is False
-        assert all(state["step"].device.type == "cpu" for state in saved["state"].values())
+            assert group["capturable"]
         restored = make("restored")
         manager = restored.checkpoint_manager
         assert manager is not None
@@ -198,7 +200,7 @@ def test_compiled_trainer_matches_eager_resumes_and_evaluates(
                     parameter.grad = torch.ones_like(parameter)
                 for group in compiled.optimizer.param_groups:
                     group["lr"].fill_(value)
-                compiled._train_update()
+                compiled._clip_and_step()
     finally:
         torch.compiler.reset()
         if previous is None and attention.current_flash_attention_impl() == "FA3":

@@ -112,6 +112,7 @@ def olmo2_training_parity(
     )
     trainer = object.__new__(Trainer)
     trainer.runtime = DistributedRuntime(0, 0, 1, device)
+    trainer.torch_compile = False
     loss, _, token_count = trainer._calc_batch_loss(actual, labels)
     assert token_count.item() == (labels != -100).sum().item()
     # HF computes its loss in FP32. Compare scalar values while retaining each

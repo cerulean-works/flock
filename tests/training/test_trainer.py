@@ -19,7 +19,6 @@ import torch._functorch.config as functorch_config
 from lance.torch.data import SafeLanceDataset
 from pydantic import ValidationError
 from tokenizers.models import WordLevel
-from torch._dynamo.eval_frame import OptimizedModule
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import _MultiProcessingDataLoaderIter
@@ -359,7 +358,7 @@ def test_evaluation_scores_real_tasks_and_logs_at_training_step(
     weights = copy.deepcopy(trainer.model.state_dict())
     state = copy.deepcopy(trainer.state_dict())
     calls = []
-    score_task = trainer._score_task
+    score_prepared = trainer_module.score_prepared
 
     def score(scorer: ScoringModel, prepared: PreparedTask) -> TaskResult:
         task = prepared.task
@@ -369,9 +368,9 @@ def test_evaluation_scores_real_tasks_and_logs_at_training_step(
         assert scorer.tokenizer is trainer.tokenizer
         assert scorer.name == "test-run@step-2"
         calls.append(task)
-        return score_task(scorer, prepared)
+        return score_prepared(scorer, prepared)
 
-    monkeypatch.setattr(trainer, "_score_task", score)
+    monkeypatch.setattr(trainer_module, "score_prepared", score)
     trainer.evaluate()
 
     assert calls == validation_tasks
@@ -421,7 +420,7 @@ def test_validation_preserves_training_updates(
         validation_steps=1,
     )
     calls = []
-    score_task = trainer._score_task
+    score_prepared = trainer_module.score_prepared
 
     def score(scorer: ScoringModel, prepared: PreparedTask) -> TaskResult:
         task = prepared.task
@@ -433,9 +432,9 @@ def test_validation_preserves_training_updates(
             and task is validation_tasks[failed_task]
         ):
             raise error_type("validation fixture failure")
-        return score_task(scorer, prepared)
+        return score_prepared(scorer, prepared)
 
-    monkeypatch.setattr(trainer, "_score_task", score)
+    monkeypatch.setattr(trainer_module, "score_prepared", score)
     trainer.train()
 
     scored_tasks = validation_tasks if failed_task is None else validation_tasks[: failed_task + 1]
@@ -470,7 +469,7 @@ def test_unexpected_validation_error_is_not_silenced(
     def score(scorer: ScoringModel, prepared: PreparedTask) -> Never:
         raise ValueError("invalid validation window")
 
-    monkeypatch.setattr(trainer, "_score_task", score)
+    monkeypatch.setattr(trainer_module, "score_prepared", score)
     with pytest.raises(ValueError, match="invalid validation window"):
         trainer.train()
     assert trainer.state.step.item() == trainer.lr_scheduler.completed_steps == 1
@@ -494,7 +493,7 @@ def test_validation_reuses_loaded_and_tokenized_tasks_with_limits(
     load = Dataset.load
     tokenize = trainer_module.ScoringModel.tokenize
     prepare = trainer_module.prepare_task
-    score = trainer._score_task
+    score = trainer_module.score_prepared
 
     def load_once(dataset: Dataset, split: str | None = None) -> list[dict[str, Any]]:
         loads.append(dataset.split)
@@ -519,7 +518,7 @@ def test_validation_reuses_loaded_and_tokenized_tasks_with_limits(
     monkeypatch.setattr(Dataset, "load", load_once)
     monkeypatch.setattr(trainer_module.ScoringModel, "tokenize", tokenize_once)
     monkeypatch.setattr(trainer_module, "prepare_task", prepare_once)
-    monkeypatch.setattr(trainer, "_score_task", record_score)
+    monkeypatch.setattr(trainer_module, "score_prepared", record_score)
     hook = trainer.model.register_forward_pre_hook(
         lambda model, args: batch_sizes.append(args[0]["input_ids"].numel())
     )
@@ -710,10 +709,12 @@ def test_compiled_training_matches_eager_and_shares_checkpoints(
     compiled, run, _ = trainer_factory(
         **options, torch_compile=True, output_dir=str(tmp_path / "compiled")
     )
-    # The forward with the loss, clipping with the update, and evaluation.
-    assert compile_calls == [{"mode": "default"}] * 3
+    # The model compiles in place up front.
+    assert compile_calls == [{"mode": "default"}]
 
     compiled.train(resume_from_checkpoint=eager.output_dir / "checkpoint-1")
+    # The loss and the clipped update compile on first call, then every step reuses them.
+    assert compile_calls == [{"mode": "default"}] * 3
     torch.testing.assert_close(compiled.model.state_dict(), eager.model.state_dict())
     torch.testing.assert_close(
         compiled.state_dict()["optimizer_state_dict"], eager.state_dict()["optimizer_state_dict"]
@@ -723,7 +724,7 @@ def test_compiled_training_matches_eager_and_shares_checkpoints(
     assert compiled.model.training
     assert isinstance(compiled.optimizer.param_groups[0]["lr"], torch.Tensor)
 
-    # Compiled runs save the eager checkpoint format, so an eager run resumes them.
+    # Compiled checkpoints keep float learning rates, so an eager run resumes them.
     save_checkpoint(compiled)
     restored, _, _ = trainer_factory(output_dir=str(tmp_path / "restored"))
     load_checkpoint(restored, compiled.output_dir / "checkpoint-3")
@@ -747,7 +748,7 @@ def test_compiled_update_does_not_recompile_as_the_learning_rate_changes(
         for _ in range(3):
             for parameter in trainer.model.parameters():
                 parameter.grad = torch.ones_like(parameter)
-            trainer._train_update()
+            trainer._clip_and_step()
             trainer.lr_scheduler.step()
             learning_rates.append(float(trainer.optimizer.param_groups[0]["lr"]))
     assert len(set(learning_rates)) == 3
@@ -763,8 +764,10 @@ def test_compiled_backward_runs_outside_autocast_like_eager(
     aot_eager = lookup_backend("aot_eager")
 
     def backend(graph: torch.fx.GraphModule, inputs: list[torch.Tensor]) -> Callable:
-        # AOTAutograd traces the backward when the forward graph compiles.
-        settings.append(functorch_config.backward_pass_autocast)
+        # AOTAutograd traces the backward when the forward graph compiles. The clipped
+        # update compiles outside autocast and has no backward.
+        if torch.is_autocast_enabled("cpu"):
+            settings.append(functorch_config.backward_pass_autocast)
         return aot_eager(graph, inputs)
 
     monkeypatch.setattr(
@@ -772,10 +775,8 @@ def test_compiled_backward_runs_outside_autocast_like_eager(
     )
     trainer, _, _ = trainer_factory(num_workers=0, prefetch_factor=None, torch_compile=True)
     original = functorch_config.backward_pass_autocast
-    batch = next(iter(trainer._get_training_dataloader()))
     try:
-        loss, _, _ = trainer._train_forward(batch)
-        loss.backward()
+        trainer.train()
     finally:
         torch.compiler.reset()
     assert settings
@@ -786,26 +787,17 @@ def test_compiled_backward_runs_outside_autocast_like_eager(
 @pytest.mark.parametrize(
     "mode", ["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"]
 )
-@pytest.mark.parametrize("evaluation", [True, False])
-def test_compile_settings_choose_evaluation_model(
-    trainer_factory: TrainerFactory,
-    compile_calls: list[dict[str, Any]],
-    mode: str,
-    evaluation: bool,
+def test_compile_mode_compiles_the_model_in_place(
+    trainer_factory: TrainerFactory, compile_calls: list[dict[str, Any]], mode: str
 ) -> None:
     trainer, _, _ = trainer_factory(
-        num_workers=0,
-        prefetch_factor=None,
-        torch_compile=True,
-        torch_compile_mode=mode,
-        torch_compile_evaluation=evaluation,
+        num_workers=0, prefetch_factor=None, torch_compile=True, torch_compile_mode=mode
     )
-    assert compile_calls == [{"mode": mode}] * (3 if evaluation else 2)
-    if evaluation:
-        assert isinstance(trainer._evaluation_model, OptimizedModule)
-        assert trainer._evaluation_model._orig_mod is trainer.model
-    else:
-        assert trainer._evaluation_model is trainer.model
+    assert compile_calls == [{"mode": mode}]
+    # Training and evaluation share the compiled model, and its state-dict keys stay unchanged.
+    assert trainer.training_model is trainer.model
+    assert trainer.model._compiled_call_impl is not None
+    assert not any(key.startswith("_orig_mod.") for key in trainer.model.state_dict())
 
 
 def assert_nested_equal(actual: Any, expected: Any) -> None:
@@ -2080,6 +2072,7 @@ def test_loss_and_gradients_match_cross_entropy_over_valid_targets(dtype: torch.
     valid = labels != -100
     trainer = object.__new__(Trainer)
     trainer.runtime = DistributedRuntime(0, 0, 1, torch.device("cpu"))
+    trainer.torch_compile = False
     loss, losses, count = trainer._calc_batch_loss(logits, labels)
     expected = F.cross_entropy(reference.float()[valid], labels[valid])
     assert count.item() == 4
@@ -2100,6 +2093,7 @@ def test_all_ignored_targets_do_not_produce_nan_loss(dtype: torch.dtype) -> None
     labels = torch.full((2, 3), -100, dtype=torch.long)
     trainer = object.__new__(Trainer)
     trainer.runtime = DistributedRuntime(0, 0, 1, torch.device("cpu"))
+    trainer.torch_compile = False
     loss, losses, count = trainer._calc_batch_loss(logits, labels)
     assert count.item() == 0
     assert torch.isfinite(loss), (
@@ -2126,6 +2120,7 @@ def test_dummy_batch_has_zero_loss_tokens_and_model_gradients(
     model = Olmo2(config)
     trainer = object.__new__(Trainer)
     trainer.runtime = DistributedRuntime(0, 0, 1, torch.device("cpu"))
+    trainer.torch_compile = False
     calc_loss = trainer._calc_batch_loss
     if compiled_loss:
         # Full-graph capture rejects graph breaks in the dummy loss path.
