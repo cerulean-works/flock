@@ -124,3 +124,37 @@ def test_gloo_gradients_loss_accounting_and_resume_match_one_process(tmp_path: P
     manifest = json.loads((tmp_path / "checkpoint" / "COMMITTED.json").read_text())
     assert {"random_states_0.pkl", "random_states_1.pkl"} <= manifest["files"].keys()
     AcceleratorState._reset_state(True)
+
+
+def test_one_gpu_contract_matches_the_pre_distributed_runtime(tmp_path: Path) -> None:
+    from flock.training.experiments.hf_campaign.runtime import GpuExperiment
+    from tests.training.test_hf_campaign import sdpa_config
+
+    AcceleratorState._reset_state(True)
+    previous = os.environ.get("ACCELERATE_USE_CPU")
+    os.environ["ACCELERATE_USE_CPU"] = "1"
+    try:
+        config = write_mix(tmp_path / "mix", ["2 3 4 5 6 7 8 9"] * 4)
+        mix = ProvisionalMix(config, word_tokenizer(), window=3, rows_per_update=2)
+        mix.contract["uri"] = "fixture://one-gpu-contract"
+        experiment = GpuExperiment(
+            sdpa_config(),
+            mix,
+            peak_lr=1e-3,
+            seed=17,
+            total_targets=24,
+            warmup_targets=6,
+            micro_rows=1,
+            device="cpu",
+        )
+        # Generated with this fixture on the one-device implementation before DDP.
+        assert (
+            experiment.contract
+            == "cffcb8383ff984485ca0e16581a0ea18fcfcc390fac8b57ae3b8552152f4c560"
+        )
+    finally:
+        AcceleratorState._reset_state(True)
+        if previous is None:
+            os.environ.pop("ACCELERATE_USE_CPU", None)
+        else:
+            os.environ["ACCELERATE_USE_CPU"] = previous
