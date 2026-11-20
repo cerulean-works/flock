@@ -160,7 +160,12 @@ def main() -> None:
 
     # A resume at the stop point finds all three written and leaves them as they are.
     final = checkpoints / f"update-{experiment.updates:06d}"
-    if not final.exists():
+    save_final = [False]
+    with experiment.synchronized_phase():
+        if accelerator.is_main_process:
+            save_final[0] = not final.exists()
+    broadcast_object_list(save_final)
+    if save_final[0]:
         experiment.checkpoint(final)
     export = args.output_dir / f"export-{experiment.updates:06d}"
     with experiment.synchronized_phase():

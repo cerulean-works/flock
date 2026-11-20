@@ -333,6 +333,15 @@ def distributed_launcher_worker(rank: int, port: int, root: str, resume: bool) -
         patch.setattr(train.AutoTokenizer, "from_pretrained", lambda *_, **__: word_tokenizer())
         patch.setattr(train, "proxy_config", lambda _: sdpa_config(context=3))
         patch.setattr(train, "GpuExperiment", partial(GpuExperiment, device="cpu"))
+        if rank == 1:
+            original_exists = Path.exists
+
+            def refuse_peer_checkpoint_lookup(path: Path, **kwargs: Any) -> bool:
+                if path.parent.name == "checkpoints" and path.name.startswith("update-"):
+                    raise AssertionError("only rank zero decides whether to save")
+                return original_exists(path, **kwargs)
+
+            patch.setattr(Path, "exists", refuse_peer_checkpoint_lookup)
         patch.setattr(
             sys,
             "argv",
