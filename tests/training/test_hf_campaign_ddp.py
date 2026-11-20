@@ -377,6 +377,36 @@ def distributed_launcher_worker(rank: int, port: int, root: str, resume: bool) -
             with pytest.raises(RuntimeError, match="FileExistsError"):
                 train.main()
             dist.barrier()
+            original_fsync = os.fsync
+            for phase in ("log-sync", "final-sync", "export"):
+                with pytest.MonkeyPatch.context() as fault:
+                    arguments = [
+                        f"--output-dir={root}/{phase}" if arg.startswith("--output-dir=") else arg
+                        for arg in sys.argv
+                    ]
+                    if phase == "final-sync":
+                        arguments = [
+                            "--checkpoint-every=99" if arg == "--checkpoint-every=2" else arg
+                            for arg in arguments
+                        ]
+                    fault.setattr(sys, "argv", arguments)
+                    if rank == 0:
+
+                        def fail_log_sync(fd: int) -> None:
+                            if os.readlink(f"/proc/self/fd/{fd}").endswith("/log.jsonl"):
+                                raise OSError("injected launcher I/O failure")
+                            original_fsync(fd)
+
+                        def fail_export(*args: Any, **kwargs: Any) -> None:
+                            raise OSError("injected launcher I/O failure")
+
+                        if phase == "export":
+                            fault.setattr(GpuExperiment, "export", fail_export)
+                        else:
+                            fault.setattr(os, "fsync", fail_log_sync)
+                    with pytest.raises(RuntimeError, match="injected launcher I/O failure"):
+                        train.main()
+                    dist.barrier()
     dist.destroy_process_group()
     AcceleratorState._reset_state(True)
 

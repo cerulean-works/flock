@@ -4,7 +4,7 @@ import argparse
 import json
 import os
 import time
-from contextlib import nullcontext
+from contextlib import ExitStack
 from pathlib import Path
 
 import torch
@@ -124,11 +124,14 @@ def main() -> None:
         # has just restored, so a resumed run's checkpoints match an uninterrupted run's.
         generator=torch.Generator(),
     )
-    if accelerator.is_main_process and log_path.stat().st_size:
-        # A kill mid-write leaves a partial last line for an update past the checkpoint, which
-        # this attempt replays; cutting it keeps every line JSON.
-        os.truncate(log_path, log_path.read_bytes().rfind(b"\n") + 1)
-    with log_path.open("a") if accelerator.is_main_process else nullcontext() as log:
+    with ExitStack() as stack:
+        log = None
+        with experiment.synchronized_phase():
+            if accelerator.is_main_process:
+                if log_path.stat().st_size:
+                    # A kill mid-write can leave a partial line past the committed update.
+                    os.truncate(log_path, log_path.read_bytes().rfind(b"\n") + 1)
+                log = stack.enter_context(log_path.open("a"))
         for windows in loader:
             loss = experiment.update(windows)
             line = {
@@ -140,26 +143,29 @@ def main() -> None:
                 "lr": experiment.optimizer.param_groups[0]["lr"],
                 "time": time.time(),
             }
-            if log is not None:
-                log.write(json.dumps(line) + "\n")
-                log.flush()
-            if args.checkpoint_every and experiment.updates % args.checkpoint_every == 0:
-                # The lines up to a checkpoint outlive a node crash with it: a resume never
-                # replays them.
+            save = bool(args.checkpoint_every and experiment.updates % args.checkpoint_every == 0)
+            with experiment.synchronized_phase():
                 if log is not None:
-                    os.fsync(log.fileno())
+                    log.write(json.dumps(line) + "\n")
+                    log.flush()
+                    if save:
+                        # Committed log lines must outlive a node crash with the checkpoint.
+                        os.fsync(log.fileno())
+            if save:
                 experiment.checkpoint(checkpoints / f"update-{experiment.updates:06d}")
-        if log is not None:
-            os.fsync(log.fileno())
+        with experiment.synchronized_phase():
+            if log is not None:
+                os.fsync(log.fileno())
+            stack.close()
 
     # A resume at the stop point finds all three written and leaves them as they are.
     final = checkpoints / f"update-{experiment.updates:06d}"
     if not final.exists():
         experiment.checkpoint(final)
     export = args.output_dir / f"export-{experiment.updates:06d}"
-    if not export.exists():
-        experiment.export(export, tokenizer)
-    accelerator.wait_for_everyone()
+    with experiment.synchronized_phase():
+        if accelerator.is_main_process and not export.exists():
+            experiment.export(export, tokenizer)
     write_summary(args.output_dir, experiment, attempt, segment, segment_start_targets, started)
 
 
