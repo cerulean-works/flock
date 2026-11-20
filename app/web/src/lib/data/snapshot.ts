@@ -278,7 +278,7 @@ export function decodeWorkspace(buf: ArrayBuffer, query: RunQuery): WorkspaceDat
 		const xOff = seriesMeta[o + 5];
 		series[s] =
 			xOff >= 0
-				? new Series(y, xs.subarray(xOff, xOff + n))
+				? new Series(y, xs.subarray(xOff, xOff + n), { raw: seriesMeta[o + 2], x0: 0, dx: 1 })
 				: new Series(y, null, {
 						raw: seriesMeta[o + 2],
 						x0: seriesMeta[o + 3],

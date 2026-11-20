@@ -5,10 +5,10 @@ from typing import cast
 import pytest
 import torch
 from torch import nn
+from torch.optim import Optimizer
 
 from flock.training.core.optimizers import (
     AdamWConfig,
-    BaseOptimizer,
     MuonConfig,
     OptimizerConfig,
     OptimizerInterface,
@@ -19,7 +19,7 @@ from flock.training.core.optimizers import (
 def test_adamw_forwards_configuration_and_matches_torch_updates() -> None:
     model = nn.Linear(3, 2)
     reference = copy.deepcopy(model)
-    optimizer: BaseOptimizer = OptimizerInterface.get_interface(AdamWConfig)(
+    optimizer: Optimizer = OptimizerInterface.get_interface(AdamWConfig)(
         AdamWConfig(lr=0.02, betas=(0.7, 0.95)), model.parameters()
     )
     expected_optimizer = torch.optim.AdamW(reference.parameters(), lr=0.02, betas=(0.7, 0.95))
@@ -60,11 +60,54 @@ def test_compile_preparation_holds_tensor_rates_and_saves_float_rates() -> None:
     assert isinstance(lr, torch.Tensor) and lr.item() == pytest.approx(0.02)
 
 
-def test_muon_remains_explicitly_unsupported() -> None:
-    with pytest.raises(NotImplementedError, match="Muon"):
-        OptimizerInterface.get_interface(MuonConfig)(
-            MuonConfig(lr=0.01, momentum=0.9), nn.Linear(3, 2).parameters()
+def test_muon_companion_preserves_all_groups_on_resume(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        OptimizerInterface, "_global_mapping", OptimizerInterface._global_mapping.copy()
+    )
+
+    def make_sgd(config: AdamWConfig, params: Iterable[torch.Tensor]) -> Optimizer:
+        first, second = params
+        return torch.optim.SGD(
+            [{"params": [first]}, {"params": [second], "lr": config.lr / 2}],
+            lr=config.lr,
+            momentum=0.9,
         )
+
+    OptimizerInterface.register(AdamWConfig, make_sgd)
+    config = MuonConfig(
+        lr=0.01,
+        momentum=0.9,
+        weight_decay=0.0,
+        companion_optimizer_config=AdamWConfig(lr=0.02, betas=(0.7, 0.95)),
+    )
+    factory = OptimizerInterface.get_interface(MuonConfig)
+    model = nn.Sequential(nn.Linear(3, 2), nn.Linear(2, 1))
+    with torch.no_grad():
+        for param in model.parameters():
+            param.fill_(0.25)
+    optimizer = factory(config, model.parameters())
+
+    inputs = torch.ones(1, 3)
+
+    def step(model: nn.Module, optimizer: Optimizer) -> None:
+        optimizer.zero_grad()
+        model(inputs).square().mean().backward()
+        optimizer.step()
+
+    step(model, optimizer)
+    checkpoint = copy.deepcopy(optimizer.state_dict())
+    assert len(checkpoint["param_groups"]) == 3
+    assert len(checkpoint["state"]) == 4
+
+    resumed_model = copy.deepcopy(model)
+    resumed_optimizer = factory(config, resumed_model.parameters())
+    resumed_optimizer.load_state_dict(checkpoint)
+    step(model, optimizer)
+    step(resumed_model, resumed_optimizer)
+    for actual, expected in zip(resumed_model.parameters(), model.parameters(), strict=True):
+        torch.testing.assert_close(actual, expected, atol=0, rtol=0)
 
 
 def test_unsupported_configuration_reports_actual_type() -> None:
@@ -82,7 +125,7 @@ def test_registered_factory_replaces_default_for_future_optimizers(
     model = nn.Linear(3, 2)
     original = OptimizerInterface.get_interface(type(config))(config, model.parameters())
 
-    def make_sgd(config: AdamWConfig, params: Iterable[torch.Tensor]) -> BaseOptimizer:
+    def make_sgd(config: AdamWConfig, params: Iterable[torch.Tensor]) -> Optimizer:
         return torch.optim.SGD(params, lr=config.lr)
 
     OptimizerInterface.register(AdamWConfig, make_sgd)

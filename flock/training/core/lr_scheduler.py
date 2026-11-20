@@ -4,8 +4,7 @@ from typing import Annotated, Any, Literal, Self
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-from flock.training.core.optimizers.base import BaseOptimizer
+from torch.optim import Optimizer
 
 type TrainingTime = (
     Annotated[int, Field(strict=True, ge=0)]
@@ -185,14 +184,14 @@ class StepLRScheduler:
     `step()` after each optimizer update to prepare the next update's rate.
 
     Args:
-        optimizer (`BaseOptimizer`): Optimizer whose current rates become base rates.
+        optimizer (`torch.optim.Optimizer`): Optimizer whose current rates become base rates.
         config (`LRSchedulerConfig`): Ordered timeframes and learning-rate ratios.
         total_steps (`int`): Positive planned number of optimizer updates.
     """
 
     def __init__(
         self,
-        optimizer: BaseOptimizer,
+        optimizer: Optimizer,
         config: LRSchedulerConfig,
         total_steps: int,
     ) -> None:

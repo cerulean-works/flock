@@ -19,6 +19,11 @@ export class Series {
 	max = -Infinity;
 	/** Bumped on every change; caches derived from the series (smoothing) check it. */
 	version = 0;
+	/**
+	 * History rows the points stand for: more than `n` when the line was sampled. Samples are
+	 * spread evenly over the rows, so each point stands for about `rows / n` of them.
+	 */
+	rows: number;
 
 	/** Live series are halved when they grow past this, so memory and draw cost stay bounded. */
 	static MAX_POINTS = 4096;
@@ -34,6 +39,7 @@ export class Series {
 		this.x0 = regular.x0;
 		this.dx = regular.dx;
 		this.raw = regular.raw;
+		this.rows = regular.raw;
 		this.extent(0);
 	}
 
@@ -122,6 +128,7 @@ export class Series {
 			this.ys[from + i] = values[start + i] ?? NaN;
 		}
 		this.n = need;
+		this.rows += count;
 		this.extent(from);
 		if (this.n > Series.MAX_POINTS) this.halve();
 		this.version++;
@@ -260,46 +267,53 @@ export function smooths(s: Smoothing): boolean {
 }
 
 /**
- * Debiased exponential moving average, the same smoothing W&B applies by default.
+ * Debiased exponential moving average over the history's rows, as W&B's EMA scans the full
+ * history. `rows` is how many rows the points stand for: a sampled line decays by `weight` once
+ * per row it skips, so it smooths as much as the full line would rather than far more.
  * `weight` 0 returns the input unchanged. Non-finite points stay gaps and don't feed the average,
  * so one inf doesn't turn the rest of the smoothed line into inf.
  */
-export function ema(src: Float32Array, weight: number): Float32Array {
+export function ema(src: Float32Array, weight: number, rows = src.length): Float32Array {
 	if (weight <= 0) return src;
-	const out = new Float32Array(src.length);
+	const n = src.length;
+	const w = n > 1 && rows > n ? weight ** ((rows - 1) / (n - 1)) : weight;
+	const out = new Float32Array(n);
 	let acc = 0;
 	let norm = 0;
-	for (let i = 0; i < src.length; i++) {
+	for (let i = 0; i < n; i++) {
 		const v = src[i];
 		if (!Number.isFinite(v)) {
 			out[i] = NaN;
 			continue;
 		}
-		acc = acc * weight + (1 - weight) * v;
-		norm = norm * weight + (1 - weight);
+		acc = acc * w + (1 - w) * v;
+		norm = norm * w + (1 - w);
 		out[i] = acc / norm;
 	}
 	return out;
 }
 
+/** W&B's time weighted EMA decays by its weight once per this fraction of the line's x range. */
+const TWEMA_SCALE = 1000;
+
 /**
- * Time weighted EMA: a debiased EMA whose decay between two points scales with the gap between
- * their steps. `weight` is the decay over the average gap, so an evenly logged line smooths
- * exactly as `ema` smooths it, and an unevenly logged one smooths the same.
+ * Time weighted EMA, W&B's default smoothing and its formula: the decay between two points is
+ * `sqrt(param)` raised to their gap in thousandths of the line's x range. How much a line is
+ * smoothed then depends on its x range alone, not on how many points it was logged or sampled
+ * at. Non-finite points stay gaps.
  */
-export function timeWeightedEma(xs: Float64Array, src: Float32Array, weight: number): Float32Array {
-	if (weight <= 0) return src;
+export function timeWeightedEma(xs: Float64Array, src: Float32Array, param: number): Float32Array {
+	if (param <= 0) return src;
+	const weight = Math.min(Math.sqrt(param), 0.999);
 	const n = Math.min(xs.length, src.length);
 	let first = NaN;
 	let last = NaN;
-	let count = 0;
 	for (let i = 0; i < n; i++) {
 		if (!Number.isFinite(src[i])) continue;
 		if (Number.isNaN(first)) first = xs[i];
 		last = xs[i];
-		count++;
 	}
-	const gap = count > 1 ? (last - first) / (count - 1) : 1;
+	const range = last - first;
 	const out = new Float32Array(src.length).fill(NaN);
 	let acc = 0;
 	let norm = 0;
@@ -307,9 +321,10 @@ export function timeWeightedEma(xs: Float64Array, src: Float32Array, weight: num
 	for (let i = 0; i < n; i++) {
 		const v = src[i];
 		if (!Number.isFinite(v)) continue;
-		const w = Number.isNaN(prev) || !(gap > 0) ? weight : weight ** ((xs[i] - prev) / gap);
-		acc = acc * w + (1 - w) * v;
-		norm = norm * w + (1 - w);
+		const w =
+			Number.isNaN(prev) || !(range > 0) ? 1 : weight ** (((xs[i] - prev) / range) * TWEMA_SCALE);
+		acc = acc * w + v;
+		norm = norm * w + 1;
 		out[i] = acc / norm;
 		prev = xs[i];
 	}
@@ -364,12 +379,20 @@ export function gaussian(src: Float32Array, sigma: number): Float32Array {
 	return out;
 }
 
-/** `src` (with steps `xs`) smoothed by `s`; `src` itself when `s` leaves it as it is. */
-export function smooth(xs: Float64Array, src: Float32Array, s: Smoothing): Float32Array {
+/**
+ * `src` (with steps `xs`, standing for `rows` history rows) smoothed by `s`; `src` itself when
+ * `s` leaves it as it is.
+ */
+export function smooth(
+	xs: Float64Array,
+	src: Float32Array,
+	s: Smoothing,
+	rows = src.length
+): Float32Array {
 	if (!smooths(s)) return src;
 	switch (s.type) {
 		case 'ema':
-			return ema(src, s.param);
+			return ema(src, s.param, rows);
 		case 'twema':
 			return timeWeightedEma(xs, src, s.param);
 		case 'average':
@@ -392,7 +415,7 @@ export function smoothed(series: Series, s: Smoothing): Float32Array {
 	const hit = smoothCache.get(series);
 	if (hit && hit.type === s.type && hit.param === s.param && hit.version === series.version)
 		return hit.values;
-	const values = smooth(series.x, series.y, s);
+	const values = smooth(series.x, series.y, s, series.rows);
 	smoothCache.set(series, { type: s.type, param: s.param, version: series.version, values });
 	return values;
 }

@@ -15,12 +15,12 @@ from pydantic import BaseModel as PydanticBaseModel
 from pydantic import ConfigDict, Field, ValidationInfo, field_validator, model_validator
 from torch import nn
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from transformers import TokenizersBackend
 from wandb import Run
 
 from flock.eval.model import DEFAULT_BATCH_TOKENS, FlockCausalLM, ScoringModel
-from flock.eval.results import TaskResult
 from flock.eval.run import PreparedTask, prepare_task, score_prepared
 from flock.eval.tasks import TASKS
 from flock.training.core.checkpoint import CheckpointManager
@@ -30,12 +30,7 @@ from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableB
 from flock.training.core.distributed import DistributedRuntime, master_broadcast, master_only
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState, StepLRScheduler
 from flock.training.core.models import BaseModel
-from flock.training.core.optimizers import (
-    BaseOptimizer,
-    OptimizerConfig,
-    OptimizerInterface,
-    prepare_for_compile,
-)
+from flock.training.core.optimizers import OptimizerConfig, OptimizerInterface, prepare_for_compile
 
 
 class TrainerConfig(PydanticBaseModel):
@@ -540,7 +535,7 @@ class Trainer:
             # The schedule and the checkpoint check plan over the capped run.
             self.total_steps = min(self.total_steps, config.max_steps)
         optimizer_factory = OptimizerInterface.get_interface(type(config.optimizer_config))
-        self.optimizer: BaseOptimizer = optimizer_factory(
+        self.optimizer: Optimizer = optimizer_factory(
             config.optimizer_config, self.model.parameters()
         )
         self.lr_scheduler = StepLRScheduler(
@@ -711,7 +706,7 @@ class Trainer:
                 functorch_config.patch(backward_pass_autocast="off"),
             ):
                 output: torch.Tensor = self.training_model(batch)
-                loss, losses, num_tokens = self._calc_batch_loss(output, labels=batch["labels"])
+                loss, losses, num_tokens = self._calc_batch_loss(output, batch["labels"])
 
             # TODO: try compiled autograd to capture the whole backward once the forward has no graph breaks (right now it still does), but the total effect is uncertainty.
             loss.backward()
@@ -853,7 +848,7 @@ class Trainer:
                     )
             # Match training precision without casting or copying the FP32 master weights.
             with self._autocast():
-                results: dict[str, TaskResult] = {
+                results = {
                     task: score_prepared(scorer, self._prepared_validation_tasks[task])
                     for task in self.validation_tasks
                 }
