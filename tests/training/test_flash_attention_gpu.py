@@ -5,6 +5,7 @@ GPU and the `flash-attn-4` package. The `gpu` dependency group installs both. Se
 with `-m 'gpu and fa3'` or `-m 'gpu and fa4'`.
 """
 
+import copy
 from collections.abc import Callable
 from dataclasses import replace
 from typing import NamedTuple
@@ -78,14 +79,18 @@ def test_varlen_mixed_padding_outputs_and_gradients(
         for heads in (4, kv_heads, kv_heads)
     ]
     references = [tensor.detach().clone().requires_grad_() for tensor in inputs]
+    fp32_references = [tensor.detach().float().requires_grad_() for tensor in inputs]
     prepared = prepare_varlen_metadata(mask, is_causal=is_causal)
     assert prepared is not None
     assert prepared.indices.device.type == "cuda"
     assert prepared.cu_seq_lens_q.device.type == "cuda"
     dense_mask = prepare_sdpa_mask(mask, is_causal=is_causal)
     with attention.sdpa_kernel(attention.SDPBackend.MATH):
-        expected = sdpa_attention(*references, attention_metadata=dense_mask).masked_fill(
-            ~mask[:, None, :, None], 0
+        expected, fp32_expected = (
+            sdpa_attention(*tensors, attention_metadata=dense_mask).masked_fill(
+                ~mask[:, None, :, None], 0
+            )
+            for tensors in (references, fp32_references)
         )
     previous = attention.current_flash_attention_impl()
     assert previous in (None, flash.name)
@@ -94,12 +99,22 @@ def test_varlen_mixed_padding_outputs_and_gradients(
     monkeypatch.setattr(torch.ops.aten, "_cudnn_attention_backward", cudnn)
     try:
         actual = flash.attend(*inputs, attention_metadata=prepared, is_causal=is_causal)
-        assert_parity(actual, expected, dtype, "logits", "packed attention")
+        assert_parity(actual, expected, dtype, "logits", "packed attention", fp32=fp32_expected)
         upstream = torch.randn_like(actual)
         actual.backward(upstream)
         expected.backward(upstream)
-        for tensor, reference in zip(inputs, references, strict=True):
-            assert_parity(tensor.grad, reference.grad, dtype, "gradients", "packed attention")
+        fp32_expected.backward(upstream.float())
+        for tensor, reference, fp32_reference in zip(
+            inputs, references, fp32_references, strict=True
+        ):
+            assert_parity(
+                tensor.grad,
+                reference.grad,
+                dtype,
+                "gradients",
+                "packed attention",
+                fp32=fp32_reference.grad,
+            )
         cudnn.assert_not_called()
     finally:
         if previous is None and attention.current_flash_attention_impl() == flash.name:
@@ -157,6 +172,8 @@ def test_fp32_weights_with_cuda_autocast(
     model = Olmo2(replace(config, attn_implementation=flash.backend)).to(cuda_device)
     reference = Olmo2(replace(config, attn_implementation="sdpa")).to(cuda_device)
     reference.load_state_dict(model.state_dict(), strict=True)
+    # The same FP32 weights run without autocast give the FP32 result.
+    fp32_reference = copy.deepcopy(reference)
     ids, mask = token_batch(padding, cuda_device)
     labels = ids[:, 1:].clone()
     labels.masked_fill_(~(mask[:, :-1] & mask[:, 1:]), -100)
@@ -175,19 +192,34 @@ def test_fp32_weights_with_cuda_autocast(
             actual = model(batch)
             loss, _, _ = trainer._calc_batch_loss(actual, labels)
             expected_loss, _, _ = trainer._calc_batch_loss(expected, labels)
+        with attention.sdpa_kernel(attention.SDPBackend.MATH):
+            fp32_expected = fp32_reference(batch)
+        fp32_loss, _, _ = trainer._calc_batch_loss(fp32_expected, labels)
         assert actual.dtype == dtype
         valid = mask[:, :-1]
-        assert_parity(actual[valid], expected[valid], dtype, "logits", "autocast logits")
-        assert_parity(loss, expected_loss, dtype, "logits", "autocast loss")
+        assert_parity(
+            actual[valid],
+            expected[valid],
+            dtype,
+            "logits",
+            "autocast logits",
+            fp32=fp32_expected[valid],
+        )
         loss.backward()
         expected_loss.backward()
+        fp32_loss.backward()
         for name, parameter in model.named_parameters():
             assert parameter.dtype == torch.float32, name
             assert parameter.grad is not None, name
             assert parameter.grad.dtype == torch.float32, name
             assert parameter.grad.isfinite().all(), name
             assert_parity(
-                parameter.grad, reference.get_parameter(name).grad, dtype, "gradients", name
+                parameter.grad,
+                reference.get_parameter(name).grad,
+                dtype,
+                "gradients",
+                name,
+                fp32=fp32_reference.get_parameter(name).grad,
             )
         assert attention.current_flash_attention_impl() == flash.name
     finally:
