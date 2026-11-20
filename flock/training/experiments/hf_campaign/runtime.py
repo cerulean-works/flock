@@ -5,7 +5,7 @@ import json
 import math
 import os
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -68,8 +68,6 @@ class Experiment:
     ) -> None:
         if not 0 < warmup_targets < total_targets:
             raise ValueError("warmup must precede the finite target endpoint")
-        if accelerator.num_processes != 1:
-            raise ValueError("distributed training requires a separately approved GPU gate")
         # The loss is already divided by the update's targets; Accelerate would divide it again.
         if accelerator.gradient_accumulation_steps != 1:
             raise ValueError("Accelerate's gradient accumulation must stay at 1")
@@ -123,7 +121,8 @@ class Experiment:
         total = sum(labels.numel() for _, labels in micro_batches)
         if total == 0:
             raise ValueError("an update needs at least one target")
-        if self.targets + total > self.total_targets:
+        global_total = total * self.accelerator.num_processes
+        if self.targets + global_total > self.total_targets:
             raise ValueError("update would overshoot the target endpoint")
         # Linear warmup, then cosine to 10 percent of the peak, both by update-start targets.
         if self.targets < self.warmup_targets:
@@ -138,44 +137,55 @@ class Experiment:
         self.optimizer.zero_grad()
         loss_sum = torch.zeros((), device=self.accelerator.device)
         try:
-            for inputs, labels in micro_batches:
-                # Summed over targets and divided by the update's total, so accumulating
-                # micro-batches gives one batch's gradient. HF model labels would shift these
-                # aligned targets a second time, and a named logits tensor would stay alive
-                # through the next micro-batch's forward.
-                loss = (
-                    F.cross_entropy(
-                        self.model(input_ids=inputs, use_cache=False).logits.float().flatten(0, 1),
-                        labels.flatten(),
-                        reduction="sum",
+            for index, (inputs, labels) in enumerate(micro_batches):
+                # DDP averages rank-local means once, after the last micro-batch.
+                sync = index == len(micro_batches) - 1
+                with nullcontext() if sync else self.accelerator.no_sync(self.model):
+                    # Summed over targets and divided by the update's total, so accumulating
+                    # micro-batches gives one batch's gradient. HF model labels would shift these
+                    # aligned targets a second time, and a named logits tensor would stay alive
+                    # through the next micro-batch's forward.
+                    loss = (
+                        F.cross_entropy(
+                            self.model(input_ids=inputs, use_cache=False)
+                            .logits.float()
+                            .flatten(0, 1),
+                            labels.flatten(),
+                            reduction="sum",
+                        )
+                        / total
                     )
-                    / total
-                )
-                self.accelerator.backward(loss)
-                loss_sum += loss.detach()
+                    self.accelerator.backward(loss)
+                    loss_sum += loss.detach()
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0, error_if_nonfinite=True)
             self.optimizer.step()
         except Exception:
             self.optimizer.zero_grad()
             raise
         self.updates += 1
-        self.targets += total
-        return float(loss_sum)
+        self.targets += global_total
+        return float(self.accelerator.reduce(loss_sum, reduction="mean"))
 
     def checkpoint(self, destination: Path) -> None:
         """Commit a checksummed Accelerate checkpoint in a new immutable directory."""
-        with staged(destination, directory=True) as temporary:
+        temporary = destination.with_name(destination.name + ".incomplete")
+        writer = staged(destination, directory=True)
+        with writer if self.accelerator.is_main_process else nullcontext(temporary):
+            self.accelerator.wait_for_everyone()
             self.accelerator.save_state(str(temporary))
-            hashes = {}
-            for path in sorted(temporary.iterdir()):
-                if path.is_file():
-                    # Streamed: the 190M optimizer state alone is about 2 GB.
-                    with path.open("rb") as handle:
-                        hashes[path.name] = hashlib.file_digest(handle, "sha256").hexdigest()
-            manifest = temporary / "COMMITTED.json"
-            manifest.write_text(
-                json.dumps({"files": hashes, "contract": self.contract}, sort_keys=True)
-            )
+            self.accelerator.wait_for_everyone()
+            if self.accelerator.is_main_process:
+                hashes = {}
+                for path in sorted(temporary.iterdir()):
+                    if path.is_file():
+                        # Streamed: the 190M optimizer state alone is about 2 GB.
+                        with path.open("rb") as handle:
+                            hashes[path.name] = hashlib.file_digest(handle, "sha256").hexdigest()
+                manifest = temporary / "COMMITTED.json"
+                manifest.write_text(
+                    json.dumps({"files": hashes, "contract": self.contract}, sort_keys=True)
+                )
+        self.accelerator.wait_for_everyone()
 
     def resume(self, checkpoint: Path) -> None:
         """Verify every checkpoint file before loading trusted local training state."""
@@ -192,6 +202,8 @@ class Experiment:
 
     def export(self, destination: Path, tokenizer: PreTrainedTokenizerBase) -> None:
         """Write an HF model, its tokenizer and an `experiment.json` card for evaluation."""
+        if not self.accelerator.is_main_process:
+            return
         # Written aside and renamed, so an export directory is always complete. A resume at the
         # stop point skips an existing export, so it must survive a node crash: the whole tree is
         # synced, including a tokenizer's subdirectories.
@@ -231,9 +243,12 @@ class CpuExperiment(Experiment):
             or config.max_position_embeddings > 256
         ):
             raise ValueError("CPU harness accepts tiny synthetic configurations only")
+        accelerator = Accelerator(cpu=True, mixed_precision="no")
+        if accelerator.num_processes != 1:
+            raise ValueError("the admitted CPU harness requires one process")
         super().__init__(
             config,
-            accelerator=Accelerator(cpu=True, mixed_precision="no"),
+            accelerator=accelerator,
             source={"stream": stream.contract},
             peak_lr=1e-3,
             betas=(0.9, 0.999),
@@ -277,7 +292,7 @@ class CpuExperiment(Experiment):
 
 
 class GpuExperiment(Experiment):
-    """Train on one device in BF16 with the flash SDPA kernel, from a provisional mix only."""
+    """Train on one node in BF16 with the flash SDPA kernel, from a provisional mix only."""
 
     def __init__(
         self,
@@ -305,11 +320,22 @@ class GpuExperiment(Experiment):
         # Accelerate falls back to the CPU without a GPU, or when the environment asks for it.
         if accelerator.device.type != device:
             raise RuntimeError(f"Accelerate selected {accelerator.device}, not {device}")
+        world_size = accelerator.num_processes
+        if world_size > 1:
+            if int(os.environ.get("LOCAL_WORLD_SIZE", "1")) != world_size:
+                raise ValueError("the GPU runtime supports one node only")
+            if mix.rows_per_update % (world_size * micro_rows):
+                raise ValueError("rows per update must divide over ranks and micro-batches")
+        if (mix.rank, mix.world_size) != (accelerator.process_index, world_size):
+            raise ValueError("the mix shard must match the Accelerate rank and world size")
+        source = {"provisional": True, "mix": mix.contract, "micro_rows": micro_rows}
+        if world_size > 1:
+            source["world_size"] = world_size
         super().__init__(
             config,
             accelerator=accelerator,
             # The micro-batch split sets the gradient's summation order, so a resume keeps it.
-            source={"provisional": True, "mix": mix.contract, "micro_rows": micro_rows},
+            source=source,
             # 141's optimizer for the flock Trainer, so the two trainers differ only in packing,
             # precision and batch: the scaffold's betas (OLMo 2 states none) and PyTorch's 0.01
             # weight decay on every parameter.
@@ -321,7 +347,7 @@ class GpuExperiment(Experiment):
             warmup_targets=warmup_targets,
         )
         self.micro_rows = micro_rows
-        self.update_shape = (mix.rows_per_update, mix.window + 1)
+        self.update_shape = (mix.rows_per_update // world_size, mix.window + 1)
 
     def update(self, windows: torch.Tensor) -> float:
         """Apply the mix's update `self.updates` from its `[rows, window + 1]` token ids."""

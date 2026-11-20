@@ -1,9 +1,10 @@
-"""Train one proxy preset on one GPU from a provisional hub Lance mix."""
+"""Train one proxy preset on one node from a provisional hub Lance mix."""
 
 import argparse
 import json
 import os
 import time
+from contextlib import nullcontext
 from pathlib import Path
 
 import torch
@@ -36,7 +37,7 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--checkpoint-every", type=int, help="Checkpoint interval in updates.")
     parser.add_argument("--max-updates", type=int, help="Stop at this update; the schedule stays.")
-    parser.add_argument("--workers", type=int, default=4, help="Loader processes.")
+    parser.add_argument("--workers", type=int, default=2, help="Loader processes per rank.")
     parser.add_argument(
         "--resume", action="store_true", help="Continue from the latest checkpoint."
     )
@@ -57,6 +58,8 @@ def main() -> None:
         # 4096, OLMo 2's context (arXiv 2501.00656, Table 3), as the presets and 141 use.
         window=config.max_position_embeddings,
         rows_per_update=args.rows_per_update,
+        rank=int(os.environ.get("RANK", "0")),
+        world_size=int(os.environ.get("WORLD_SIZE", "1")),
     )
     experiment = GpuExperiment(
         config,
@@ -69,6 +72,7 @@ def main() -> None:
         warmup_targets=args.warmup_targets,
         micro_rows=args.micro_rows,
     )
+    accelerator = experiment.accelerator
     checkpoints = args.output_dir / "checkpoints"
     if args.resume:
         experiment.resume(latest_checkpoint(checkpoints))
@@ -79,9 +83,12 @@ def main() -> None:
         raise ValueError(
             f"stop at update {stop} precedes the committed update {experiment.updates}"
         )
-    if not args.resume:
-        args.output_dir.mkdir(parents=True, exist_ok=False)
-    attempt = record_attempt(args, experiment, started)
+    attempt = 0
+    if accelerator.is_main_process:
+        if not args.resume:
+            args.output_dir.mkdir(parents=True, exist_ok=False)
+        attempt = record_attempt(args, experiment, started)
+    accelerator.wait_for_everyone()
     log_path = args.output_dir / "log.jsonl"
 
     # A resumed segment logs the update it started from, so a replayed update is told apart.
@@ -101,11 +108,11 @@ def main() -> None:
         # has just restored, so a resumed run's checkpoints match an uninterrupted run's.
         generator=torch.Generator(),
     )
-    if log_path.stat().st_size:
+    if accelerator.is_main_process and log_path.stat().st_size:
         # A kill mid-write leaves a partial last line for an update past the checkpoint, which
         # this attempt replays; cutting it keeps every line JSON.
         os.truncate(log_path, log_path.read_bytes().rfind(b"\n") + 1)
-    with log_path.open("a") as log:
+    with log_path.open("a") if accelerator.is_main_process else nullcontext() as log:
         for windows in loader:
             loss = experiment.update(windows)
             line = {
@@ -117,14 +124,17 @@ def main() -> None:
                 "lr": experiment.optimizer.param_groups[0]["lr"],
                 "time": time.time(),
             }
-            log.write(json.dumps(line) + "\n")
-            log.flush()
+            if log is not None:
+                log.write(json.dumps(line) + "\n")
+                log.flush()
             if args.checkpoint_every and experiment.updates % args.checkpoint_every == 0:
                 # The lines up to a checkpoint outlive a node crash with it: a resume never
                 # replays them.
-                os.fsync(log.fileno())
+                if log is not None:
+                    os.fsync(log.fileno())
                 experiment.checkpoint(checkpoints / f"update-{experiment.updates:06d}")
-        os.fsync(log.fileno())
+        if log is not None:
+            os.fsync(log.fileno())
 
     # A resume at the stop point finds all three written and leaves them as they are.
     final = checkpoints / f"update-{experiment.updates:06d}"
@@ -133,6 +143,7 @@ def main() -> None:
     export = args.output_dir / f"export-{experiment.updates:06d}"
     if not export.exists():
         experiment.export(export, tokenizer)
+    accelerator.wait_for_everyone()
     write_summary(args.output_dir, experiment, attempt, segment, segment_start_targets, started)
 
 
@@ -188,6 +199,14 @@ def write_summary(
     started: float,
 ) -> None:
     """Write the summary of the run's final update, unless an earlier attempt already did."""
+    accelerator = experiment.accelerator
+    memory = torch.zeros((1, 2), dtype=torch.int64, device=accelerator.device)
+    if accelerator.device.type == "cuda":
+        memory[0, 0] = cuda.max_memory_allocated(accelerator.device)
+        memory[0, 1] = cuda.max_memory_reserved(accelerator.device)
+    memory = accelerator.gather(memory).tolist()
+    if not accelerator.is_main_process:
+        return
     # Renamed into place, so an existing summary is a complete one.
     summary_path = output_dir / f"summary-{experiment.updates:06d}.json"
     if summary_path.exists():
@@ -200,6 +219,8 @@ def write_summary(
         "attempt": attempt,
         "segment": segment,
         "segment_targets": experiment.targets - segment_start_targets,
+        "world_size": accelerator.num_processes,
+        "rank_peak_memory_bytes": memory,
         "started": started,
         "finished": time.time(),
         "device": str(experiment.accelerator.device),

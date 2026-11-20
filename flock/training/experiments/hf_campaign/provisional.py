@@ -22,7 +22,9 @@ class ProvisionalMix(Dataset[torch.Tensor]):
         config ([`training.DatasetConfig`]): The mix, pinned to a version, with `text` and `tokens` columns (`tokens` counts the document's EOS).
         tokenizer (`PreTrainedTokenizerFast`): The tokenizer the mix's `tokens` column was counted with.
         window (`int`): Targets per row.
-        rows_per_update (`int`): Rows per optimizer update.
+        rows_per_update (`int`): Global rows per optimizer update.
+        rank (`int`): Zero-based rank whose contiguous rows are read.
+        world_size (`int`): Number of ranks sharing each update.
     """
 
     def __init__(
@@ -32,9 +34,17 @@ class ProvisionalMix(Dataset[torch.Tensor]):
         *,
         window: int,
         rows_per_update: int,
+        rank: int = 0,
+        world_size: int = 1,
     ) -> None:
         if window < 1 or rows_per_update < 1:
             raise ValueError("window and rows per update must be positive")
+        if world_size < 1 or not 0 <= rank < world_size:
+            raise ValueError("rank must belong to a positive world size")
+        if rows_per_update % world_size:
+            raise ValueError("rows per update must divide evenly over ranks")
+        self.rank = rank
+        self.world_size = world_size
         if tokenizer.eos_token_id is None:
             raise ValueError("the tokenizer has no EOS token")
         # A tag can move, and can name a version on another branch, where numbers mean other
@@ -95,11 +105,12 @@ class ProvisionalMix(Dataset[torch.Tensor]):
         return (int(self.ends[-1]) - 1) // self.targets_per_update
 
     def __getitem__(self, index: int) -> torch.Tensor:
-        """Return update `index` as `[rows_per_update, window + 1]` token ids."""
+        """Return this rank's contiguous rows of update `index` as token ids."""
         if not 0 <= index < len(self):
             raise IndexError(index)
-        start = index * self.targets_per_update
-        stop = start + self.targets_per_update + 1
+        local_targets = self.targets_per_update // self.world_size
+        start = index * self.targets_per_update + self.rank * local_targets
+        stop = start + local_targets + 1
         first = int(np.searchsorted(self.ends, start, side="right"))
         last = int(np.searchsorted(self.ends, stop - 1, side="right"))
         if self.dataset is None:

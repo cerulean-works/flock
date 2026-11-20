@@ -1,6 +1,6 @@
 # Standalone HF campaign
 
-This experiment uses Transformers OLMo 2, Datasets and Accelerate independently of the shared trainer. The selected full architecture is freshly initialized OLMo 2 1B: 1,484,916,736 parameters including both untied matrices. The CPU harness accepts only tiny synthetic models. The full architecture is instantiated on the meta device in tests. A one-GPU path trains the 76M, 190M, 371M and 455M proxy presets on provisional mixes (below); nothing larger runs here.
+This experiment uses Transformers OLMo 2, Datasets and Accelerate independently of the shared trainer. The selected full architecture is freshly initialized OLMo 2 1B: 1,484,916,736 parameters including both untied matrices. The CPU harness accepts only tiny synthetic models. The full architecture is instantiated on the meta device in tests. A single-node path trains the 76M, 190M, 371M and 455M proxy presets on provisional mixes (below); nothing larger runs here.
 
 From the flock checkout, create an isolated environment from the existing lockfile:
 
@@ -52,6 +52,19 @@ Checkpoints and the export are written beside their final name with an `.incompl
 
 To score an export, name it by its run and keep its directory where training wrote it: `flock eval run --model <run dir>/export-<update>@<first 40 hex of the contract in its experiment.json> --task fineweb_en --out <new directory>`. `flock.eval` takes a 40-hex revision as pinned without reading the files, and the contract names the recipe (model, optimizer, schedule, seed, mix and its version), not the weights: every export of one run shares it, so the export's own path, which carries its update, is what tells two exports apart, and a path must never be reused for other weights. The evaluation's `results.json` does not carry the export card's `provisional: true`, so keep the card with the results. This naming is for provisional runs only; before an admitted or reported run relies on a local export, `flock.eval` must identify it by a digest of its weights.
 
+## Multiple GPUs on one node
+
+Launch the same command with `uv run torchrun --standalone --nproc-per-node 8 -m` in place of `uv run python -m`. Keep `--rows-per-update` as the global batch and `--micro-rows` as the per-device micro-batch. The global row count must divide evenly by the world size times the micro-batch size. Each rank reads a contiguous share of each update, and gradients synchronize once after its last micro-batch. Losses are rank-local means averaged across ranks; the schedule and committed target counts use the global batch.
+
+Use two loader workers per rank by default. Cap CPU pools when launching several ranks on a shared node:
+
+```bash
+export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=1 RAYON_NUM_THREADS=2
+export LANCE_CPU_THREADS=2 LANCE_IO_THREADS=4 TOKIO_WORKER_THREADS=2
+```
+
+Only rank zero writes the run records, loss log, summary and export. Checkpoints hold every rank's RNG state, and all ranks wait for the checkpoint to be published before training continues. Summaries include the world size and each rank's peak allocated and reserved memory in bytes. Resume with the same world size and micro-batch size. Existing one-GPU contracts keep their original fields; multi-GPU contracts add the world size. Multi-node launches are refused.
+
 ## Next gate
 
-No production launcher, corpus materializer, distributed worker plan or FA3 dispatch is released here. Beyond one GPU at proxy size, these remain separate validation work: full-model memory, BF16/FA3 backward and causal checks, same-node throughput, distributed global-loss normalization, crash/durability tests on cluster storage and exact rank ownership. Pin the actual FA3 implementation and environment before GPU validation. Do not transplant historical throughput or budgets into this HF stack. The full 200B campaign needs its own data, metric, storage and compute release.
+No production launcher, corpus materializer or FA3 dispatch is released here. Full-model memory and BF16/FA3 backward and causal checks remain separate validation work. Pin the actual FA3 implementation and environment before GPU validation. Do not transplant historical throughput or budgets into this HF stack. The full 200B campaign needs its own data, metric, storage and compute release.
