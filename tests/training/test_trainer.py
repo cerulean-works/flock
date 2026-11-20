@@ -1091,7 +1091,7 @@ def test_checkpoint_preserves_tied_parameters_and_optimizer_references(
     with torch.no_grad():
         for parameter in trainer.model.parameters():
             parameter.zero_()
-    cast(torch.optim.Optimizer, trainer.optimizer).state.clear()
+    trainer.optimizer.state.clear()
     load_checkpoint(trainer, checkpoint)
     assert (
         cast(Olmo2, trainer.model).lm_head.weight
@@ -1157,7 +1157,7 @@ def test_saved_checkpoints_remain_independent_of_later_updates(
         for parameter in trainer.model.parameters():
             parameter.zero_()
     trainer.state.reset_global()
-    cast(torch.optim.Optimizer, trainer.optimizer).state.clear()
+    trainer.optimizer.state.clear()
 
     restored, _, _ = trainer_factory(output_dir=str(tmp_path / "restored"))
     for step, (weights, state) in snapshots.items():

@@ -1,10 +1,11 @@
 from collections.abc import Iterable
+from functools import partial
 from typing import Any, ClassVar, Protocol
 
 from torch import Tensor
+from torch.optim import Optimizer
 
 from .adamw import AdamWConfig, adamw
-from .base import BaseOptimizer
 from .muon import MuonConfig, muon
 
 type OptimizerConfig = AdamWConfig | MuonConfig
@@ -13,21 +14,18 @@ type OptimizerConfig = AdamWConfig | MuonConfig
 class OptimizerFactory[ConfigT: OptimizerConfig](Protocol):
     """Construct an optimizer from its config and parameters on their final device."""
 
-    def __call__(self, config: ConfigT, params: Iterable[Tensor]) -> BaseOptimizer: ...
+    def __call__(self, config: ConfigT, params: Iterable[Tensor]) -> Optimizer: ...
 
 
 class OptimizerInterface:
     """Register optimizer factories by configuration type.
 
-    Factories return the shared `BaseOptimizer` contract. Registering a factory
-    replaces the implementation for that config type; existing optimizers keep
-    their implementation. Trainer configs accept the types in `OptimizerConfig`.
+    Factories return instances of `torch.optim.Optimizer` subclasses. Registrations
+    apply to future optimizer construction. Trainer configs accept the types in
+    `OptimizerConfig`.
     """
 
-    _global_mapping: ClassVar[dict[type[OptimizerConfig], OptimizerFactory[Any]]] = {
-        AdamWConfig: adamw,
-        MuonConfig: muon,
-    }
+    _global_mapping: ClassVar[dict[type[OptimizerConfig], OptimizerFactory[Any]]] = {}
 
     @classmethod
     def register[ConfigT: OptimizerConfig](
@@ -48,3 +46,10 @@ class OptimizerInterface:
             raise TypeError(
                 f"Unsupported OptimizerConfig type {config_type.__name__}; available: {available}"
             ) from None
+
+
+OptimizerInterface.register(AdamWConfig, adamw)
+
+OptimizerInterface.register(
+    MuonConfig, partial(muon, get_companion_factory=OptimizerInterface.get_interface)
+)
