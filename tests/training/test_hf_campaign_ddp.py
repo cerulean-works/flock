@@ -5,6 +5,7 @@ import os
 import random
 import socket
 import sys
+import time
 from collections.abc import Iterable
 from functools import partial
 from pathlib import Path
@@ -289,6 +290,31 @@ def distributed_launcher_worker(rank: int, port: int, root: str, resume: bool) -
                 *(["--resume"] if resume else []),
             ],
         )
+        if resume:
+            original_latest = train.latest_checkpoint
+            original_resume = GpuExperiment.resume
+            original_record = train.record_attempt
+
+            def delayed_latest(checkpoints: Path) -> Path:
+                if rank == 1:
+                    deadline = time.monotonic() + 20
+                    while not (Path(root) / "rank0-loaded").exists():
+                        if time.monotonic() > deadline:
+                            raise TimeoutError("rank zero did not finish loading")
+                        time.sleep(0.01)
+                return original_latest(checkpoints)
+
+            def mark_loaded(experiment: GpuExperiment, checkpoint: Path) -> None:
+                original_resume(experiment, checkpoint)
+                (Path(root) / f"rank{rank}-loaded").touch()
+
+            def record_after_all_load(*args: Any, **kwargs: Any) -> int:
+                assert (Path(root) / "rank1-loaded").exists()
+                return original_record(*args, **kwargs)
+
+            patch.setattr(train, "latest_checkpoint", delayed_latest)
+            patch.setattr(GpuExperiment, "resume", mark_loaded)
+            patch.setattr(train, "record_attempt", record_after_all_load)
         train.main()
     dist.destroy_process_group()
     AcceleratorState._reset_state(True)

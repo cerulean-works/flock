@@ -76,6 +76,8 @@ def main() -> None:
     checkpoints = args.output_dir / "checkpoints"
     if args.resume:
         experiment.resume(latest_checkpoint(checkpoints))
+        # No attempt marker may appear while another rank checks for interrupted saves.
+        accelerator.wait_for_everyone()
     stop = experiment.total_targets // mix.targets_per_update
     if args.max_updates is not None:
         stop = min(stop, args.max_updates)

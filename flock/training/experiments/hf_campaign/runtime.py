@@ -199,7 +199,8 @@ class Experiment:
             with (checkpoint / name).open("rb") as handle:
                 if hashlib.file_digest(handle, "sha256").hexdigest() != expected:
                     raise ValueError("checkpoint checksum mismatch")
-        self.accelerator.load_state(str(checkpoint))
+        # AdamW keeps non-capturable step counters on the CPU, including after DDP resume.
+        self.accelerator.load_state(str(checkpoint), map_location="cpu")
 
     def export(self, destination: Path, tokenizer: PreTrainedTokenizerBase) -> None:
         """Write an HF model, its tokenizer and an `experiment.json` card for evaluation."""
