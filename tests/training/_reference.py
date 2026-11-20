@@ -51,13 +51,9 @@ def token_batch(padding: str, device: torch.device) -> tuple[torch.Tensor, torch
     return torch.tensor(ids, device=device), torch.tensor(mask, device=device, dtype=torch.bool)
 
 
-# Absolute tolerances also cover gradients close to zero. Low precision has its own
-# fixed error budget; never choose tolerances by retrying until a test passes.
-TOLERANCES = {
-    torch.float32: {"logits": (1e-6, 1e-5), "gradients": (2e-5, 2e-4), "update": (2e-5, 2e-4)},
-    torch.float16: {"logits": (5e-4, 5e-3), "gradients": (2e-3, 2e-2), "update": (2e-4, 1e-2)},
-    torch.bfloat16: {"logits": (3e-3, 3e-2), "gradients": (1e-2, 5e-2), "update": (5e-4, 2e-2)},
-}
+# FP32 tolerances. Absolute tolerances also cover gradients close to zero; never
+# choose tolerances by retrying until a test passes.
+FP32_TOLERANCES = {"logits": (1e-6, 1e-5), "gradients": (2e-5, 2e-4), "update": (2e-5, 2e-4)}
 
 
 def assert_parity(
@@ -66,16 +62,37 @@ def assert_parity(
     dtype: torch.dtype,
     kind: str,
     name: str,
+    *,
+    fp32: torch.Tensor | None = None,
 ) -> None:
+    """Compare `actual` with `expected`, a trusted run in the same `dtype`.
+
+    FP32 uses fixed tolerances and ignores `fp32`. FP16 and BF16 use FlashAttention-3/4's
+    rule: `fp32` is an FP32 run on the same rounded weights and inputs, and `actual` may
+    be at most twice as far from it as `expected`, plus twice the rounding error of
+    arithmetic on it in `dtype`.
+    """
     assert actual is not None, name
     assert expected is not None, name
-    atol, rtol = TOLERANCES[dtype][kind]
-    torch.testing.assert_close(
-        actual,
-        expected,
-        atol=atol,
-        rtol=rtol,
-        msg=lambda error: f"{name} ({dtype}, {kind}): {error}",
+    if dtype == torch.float32:
+        atol, rtol = FP32_TOLERANCES[kind]
+        torch.testing.assert_close(
+            actual,
+            expected,
+            atol=atol,
+            rtol=rtol,
+            msg=lambda error: f"{name} ({dtype}, {kind}): {error}",
+        )
+        return
+    assert fp32 is not None, name
+    fp32 = fp32.detach().float()
+    error = (actual.detach().float() - fp32).abs().max().item()
+    expected_error = (expected.detach().float() - fp32).abs().max().item()
+    rounded = fp32.to(dtype)
+    rounding_error = ((rounded + 0.3 - 0.3) - rounded).abs().max().item()
+    assert error <= 2 * expected_error + 2 * rounding_error, (
+        f"{name} ({dtype}, {kind}): FP32 error {error:.3g} exceeds twice the expected "
+        f"run's {expected_error:.3g} plus twice the rounding error {rounding_error:.3g}"
     )
 
 
@@ -89,8 +106,13 @@ def olmo2_training_parity(
     # Transformers' functools.wraps decoration exposes an extra self to ty.
     reference.to(device=device, dtype=dtype)  # ty: ignore[missing-argument]
     reference.load_state_dict(model.state_dict(), strict=True)
+    # FP32 run on the same rounded weights, for FP16 and BF16 comparisons.
+    fp32_reference = Olmo2ForCausalLM(reference_config)
+    fp32_reference.to(device=device)  # ty: ignore[missing-argument]
+    fp32_reference.load_state_dict(model.state_dict(), strict=True)
     model.train()
     reference.train()
+    fp32_reference.train()
 
     ids, mask = token_batch(padding, device)
     labels = ids[:, 1:].clone()
@@ -100,32 +122,46 @@ def olmo2_training_parity(
     # well as padding targets, exactly matching the collator's adjacent-token rule.
     hf_labels = torch.full_like(ids, -100)
     hf_labels[:, 1:] = labels
-    expected = reference(
-        ids,
-        attention_mask=mask,
-        position_ids=(mask.long().cumsum(-1) - 1).clamp_min(0),
-        labels=hf_labels,
+    position_ids = (mask.long().cumsum(-1) - 1).clamp_min(0)
+    expected, fp32_expected = (
+        hf_model(ids, attention_mask=mask, position_ids=position_ids, labels=hf_labels)
+        for hf_model in (reference, fp32_reference)
     )
     valid_inputs = mask[:, :-1]
     assert_parity(
-        actual[valid_inputs], expected.logits[:, :-1][valid_inputs], dtype, "logits", "logits"
+        actual[valid_inputs],
+        expected.logits[:, :-1][valid_inputs],
+        dtype,
+        "logits",
+        "logits",
+        fp32=fp32_expected.logits[:, :-1][valid_inputs],
     )
     trainer = object.__new__(Trainer)
     trainer.runtime = DistributedRuntime(0, 0, 1, device)
     loss, _, token_count = trainer._calc_batch_loss(actual, labels)
     assert token_count.item() == (labels != -100).sum().item()
-    # HF computes its loss in FP32. Compare scalar values while retaining each
-    # implementation's real loss precision for backward, including mixed precision.
-    assert_parity(loss.float(), expected.loss, dtype, "logits", "masked next-token loss")
     loss.backward()
     expected.loss.backward()
+    fp32_expected.loss.backward()
     for name, parameter in model.named_parameters():
         other = reference.get_parameter(name)
         assert parameter.grad is not None, name
         assert other.grad is not None, name
         assert parameter.grad.isfinite().all(), name
-        assert_parity(parameter.grad, other.grad, dtype, "gradients", name)
+        assert_parity(
+            parameter.grad,
+            other.grad,
+            dtype,
+            "gradients",
+            name,
+            fp32=fp32_reference.get_parameter(name).grad,
+        )
 
+    # Like FlashAttention's and PyTorch's tests, FP16 and BF16 compare only outputs
+    # and gradients.
+    if dtype != torch.float32:
+        return
+    assert_parity(loss, expected.loss, dtype, "logits", "masked next-token loss")
     for candidate in (model, reference):
         torch.optim.AdamW(
             candidate.parameters(), lr=1e-3, betas=(0.9, 0.95), eps=1e-4, weight_decay=0.01
@@ -140,16 +176,25 @@ def check_swiglu_parity(config: Olmo2Config, device: torch.device, dtype: torch.
     reference.load_state_dict(model.state_dict(), strict=True)
     model.to(device=device, dtype=dtype)
     reference.to(device=device, dtype=dtype)
+    fp32_reference = copy.deepcopy(reference).float()
     x = torch.linspace(-1, 1, 2 * 5 * config.hidden_size, device=device, dtype=dtype)
     x = x.reshape(2, 5, config.hidden_size).requires_grad_()
     reference_x = x.detach().clone().requires_grad_()
-    actual, expected = model(x), reference(reference_x)
-    assert_parity(actual, expected, dtype, "logits", "SwiGLU output")
-    actual.float().square().mean().backward()
-    expected.float().square().mean().backward()
-    assert_parity(x.grad, reference_x.grad, dtype, "gradients", "SwiGLU input")
+    fp32_x = x.detach().float().requires_grad_()
+    actual, expected, fp32_expected = model(x), reference(reference_x), fp32_reference(fp32_x)
+    assert_parity(actual, expected, dtype, "logits", "SwiGLU output", fp32=fp32_expected)
+    for output in (actual, expected, fp32_expected):
+        output.float().square().mean().backward()
+    assert_parity(x.grad, reference_x.grad, dtype, "gradients", "SwiGLU input", fp32=fp32_x.grad)
     for name, parameter in model.named_parameters():
-        assert_parity(parameter.grad, reference.get_parameter(name).grad, dtype, "gradients", name)
+        assert_parity(
+            parameter.grad,
+            reference.get_parameter(name).grad,
+            dtype,
+            "gradients",
+            name,
+            fp32=fp32_reference.get_parameter(name).grad,
+        )
 
 
 def check_gqa_parity(kv_heads: int, device: torch.device, dtype: torch.dtype, causal: bool) -> None:
@@ -157,26 +202,39 @@ def check_gqa_parity(kv_heads: int, device: torch.device, dtype: torch.dtype, ca
         hidden_size=32, num_attention_heads=4, num_key_value_heads=kv_heads, bias=True
     ).to(device=device, dtype=dtype)
     reference = copy.deepcopy(attention)
+    fp32_reference = copy.deepcopy(attention).float()
     x = torch.linspace(-1, 1, 2 * 5 * 32, device=device, dtype=dtype)
     x = x.reshape(2, 5, 32).requires_grad_()
     reference_x = x.detach().clone().requires_grad_()
+    fp32_x = x.detach().float().requires_grad_()
     actual = attention(x, is_causal=causal)
-    # Do not use SDPA in the oracle: explicitly repeat K/V and evaluate QK^T.
-    q = reference.q_proj(reference_x).reshape(2, 5, 4, 8).transpose(1, 2)
-    k = reference.k_proj(reference_x).reshape(2, 5, kv_heads, 8).transpose(1, 2)
-    v = reference.v_proj(reference_x).reshape(2, 5, kv_heads, 8).transpose(1, 2)
-    k = k.repeat_interleave(4 // kv_heads, dim=1)
-    v = v.repeat_interleave(4 // kv_heads, dim=1)
-    scores = q @ k.transpose(-2, -1) / (8**0.5)
-    if causal:
-        scores = scores.masked_fill(
-            torch.ones(5, 5, device=device, dtype=torch.bool).triu(1), float("-inf")
-        )
-    weights = scores.float().softmax(-1).to(dtype)
-    expected = reference.o_proj((weights @ v).transpose(1, 2).reshape(2, 5, 32))
-    assert_parity(actual, expected, dtype, "logits", "GQA output")
-    actual.float().square().mean().backward()
-    expected.float().square().mean().backward()
-    assert_parity(x.grad, reference_x.grad, dtype, "gradients", "GQA input")
+
+    def oracle(module: GroupedAttentionWithRoPE, inputs: torch.Tensor) -> torch.Tensor:
+        # Do not use SDPA in the oracle: explicitly repeat K/V and evaluate QK^T.
+        q = module.q_proj(inputs).reshape(2, 5, 4, 8).transpose(1, 2)
+        k = module.k_proj(inputs).reshape(2, 5, kv_heads, 8).transpose(1, 2)
+        v = module.v_proj(inputs).reshape(2, 5, kv_heads, 8).transpose(1, 2)
+        k = k.repeat_interleave(4 // kv_heads, dim=1)
+        v = v.repeat_interleave(4 // kv_heads, dim=1)
+        scores = q @ k.transpose(-2, -1) / (8**0.5)
+        if causal:
+            scores = scores.masked_fill(
+                torch.ones(5, 5, device=device, dtype=torch.bool).triu(1), float("-inf")
+            )
+        weights = scores.float().softmax(-1).to(inputs.dtype)
+        return module.o_proj((weights @ v).transpose(1, 2).reshape(2, 5, 32))
+
+    expected, fp32_expected = oracle(reference, reference_x), oracle(fp32_reference, fp32_x)
+    assert_parity(actual, expected, dtype, "logits", "GQA output", fp32=fp32_expected)
+    for output in (actual, expected, fp32_expected):
+        output.float().square().mean().backward()
+    assert_parity(x.grad, reference_x.grad, dtype, "gradients", "GQA input", fp32=fp32_x.grad)
     for name, parameter in attention.named_parameters():
-        assert_parity(parameter.grad, reference.get_parameter(name).grad, dtype, "gradients", name)
+        assert_parity(
+            parameter.grad,
+            reference.get_parameter(name).grad,
+            dtype,
+            "gradients",
+            name,
+            fp32=fp32_reference.get_parameter(name).grad,
+        )

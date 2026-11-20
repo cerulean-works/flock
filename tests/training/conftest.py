@@ -24,7 +24,8 @@ def isolated_random_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("TOKENIZERS_PARALLELISM", "false")
     devices = list(range(torch.cuda.device_count())) if torch.cuda.is_initialized() else []
     with torch.random.fork_rng(devices=devices):
-        torch.random.default_generator.manual_seed(0)
+        # Seeds CUDA as well; before CUDA starts, the seed waits until initialization.
+        torch.manual_seed(0)
         try:
             yield
         finally:
