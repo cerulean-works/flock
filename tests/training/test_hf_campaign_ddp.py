@@ -15,8 +15,8 @@ from accelerate import Accelerator
 from accelerate.state import AcceleratorState
 
 from flock.training.experiments.hf_campaign.provisional import ProvisionalMix
-from flock.training.experiments.hf_campaign.runtime import Experiment
-from tests.training.test_hf_campaign import tiny_config, word_tokenizer, write_mix
+from flock.training.experiments.hf_campaign.runtime import Experiment, GpuExperiment
+from tests.training.test_hf_campaign import sdpa_config, tiny_config, word_tokenizer, write_mix
 
 
 def test_rank_shards_tile_every_update_without_changing_the_contract(tmp_path: Path) -> None:
@@ -127,9 +127,6 @@ def test_gloo_gradients_loss_accounting_and_resume_match_one_process(tmp_path: P
 
 
 def test_one_gpu_contract_matches_the_pre_distributed_runtime(tmp_path: Path) -> None:
-    from flock.training.experiments.hf_campaign.runtime import GpuExperiment
-    from tests.training.test_hf_campaign import sdpa_config
-
     AcceleratorState._reset_state(True)
     previous = os.environ.get("ACCELERATE_USE_CPU")
     os.environ["ACCELERATE_USE_CPU"] = "1"
