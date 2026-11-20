@@ -2,19 +2,26 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import socket
+import sys
 from collections.abc import Iterable
+from functools import partial
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
+import numpy as np
 import pytest
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from accelerate import Accelerator
 from accelerate.state import AcceleratorState
+from accelerate.utils import DistributedType
 
 from flock.training import DatasetConfig
+from flock.training.experiments.hf_campaign import runtime, train
 from flock.training.experiments.hf_campaign.provisional import ProvisionalMix
 from flock.training.experiments.hf_campaign.runtime import Experiment, GpuExperiment
 from tests.training.test_hf_campaign import sdpa_config, tiny_config, word_tokenizer, write_mix
@@ -78,10 +85,17 @@ def distributed_worker(rank: int, port: int, root: str) -> None:
         {"loss": loss, "gradients": unclipped, "targets": experiment.targets},
         Path(root) / f"rank-{rank}.pt",
     )
+    torch.manual_seed(100 + rank)
+    np.random.seed(200 + rank)
+    random.seed(300 + rank)
     experiment.checkpoint(Path(root) / "checkpoint")
+    expected_random = (torch.rand(3), np.random.rand(3), random.random())
     expected = experiment._step([(rows[:, :-1], rows[:, 1:])])
     expected_weights = {k: v.clone() for k, v in experiment.model.state_dict().items()}
     experiment.resume(Path(root) / "checkpoint")
+    torch.testing.assert_close(torch.rand(3), expected_random[0], rtol=0, atol=0)
+    np.testing.assert_array_equal(np.random.rand(3), expected_random[1])
+    assert random.random() == expected_random[2]
     assert experiment._step([(rows[:, :-1], rows[:, 1:])]) == expected
     for name, weight in experiment.model.state_dict().items():
         torch.testing.assert_close(weight, expected_weights[name], rtol=0, atol=0)
@@ -218,3 +232,89 @@ def test_gpu_path_uses_shards_and_resumes_under_gloo(tmp_path: Path) -> None:
     card = json.loads((tmp_path / "export" / "experiment.json").read_text())
     assert card["targets"] == 24
     assert card["source"]["world_size"] == 2
+
+
+@pytest.mark.parametrize("backend", [DistributedType.FSDP, DistributedType.DEEPSPEED])
+def test_gpu_runtime_refuses_sharded_backends(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: DistributedType
+) -> None:
+    config = write_mix(tmp_path / "mix", ["2 3 4 5 6 7 8 9"] * 4)
+    mix = ProvisionalMix(config, word_tokenizer(), window=3, rows_per_update=2)
+    fake = SimpleNamespace(device=torch.device("cpu"), distributed_type=backend)
+    monkeypatch.setattr(runtime, "Accelerator", lambda **_: fake)
+    with pytest.raises(ValueError, match="ordinary DDP"):
+        GpuExperiment(
+            sdpa_config(),
+            mix,
+            peak_lr=1e-3,
+            seed=17,
+            total_targets=24,
+            warmup_targets=6,
+            micro_rows=1,
+            device="cpu",
+        )
+
+
+def distributed_launcher_worker(rank: int, port: int, root: str, resume: bool) -> None:
+    os.environ.update(
+        RANK=str(rank),
+        LOCAL_RANK=str(rank),
+        WORLD_SIZE="2",
+        LOCAL_WORLD_SIZE="2",
+        MASTER_ADDR="127.0.0.1",
+        MASTER_PORT=str(port),
+        ACCELERATE_USE_CPU="1",
+    )
+    torch.set_num_threads(1)
+    AcceleratorState._reset_state(True)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(train.AutoTokenizer, "from_pretrained", lambda *_, **__: word_tokenizer())
+        patch.setattr(train, "proxy_config", lambda _: sdpa_config(context=3))
+        patch.setattr(train, "GpuExperiment", partial(GpuExperiment, device="cpu"))
+        patch.setattr(
+            sys,
+            "argv",
+            [
+                "train",
+                "--size=76m",
+                f"--dataset-uri={root}/mix",
+                "--dataset-version=1",
+                "--warmup-targets=12",
+                "--rows-per-update=4",
+                "--micro-rows=1",
+                f"--output-dir={root}/run",
+                "--checkpoint-every=2",
+                "--workers=0",
+                "--max-updates=3" if resume else "--max-updates=2",
+                *(["--resume"] if resume else []),
+            ],
+        )
+        train.main()
+    dist.destroy_process_group()
+    AcceleratorState._reset_state(True)
+
+
+def test_distributed_launcher_keeps_one_record_and_log_per_update(tmp_path: Path) -> None:
+    write_mix(tmp_path / "mix", ["2 3 4 5 6 7 8 9"] * 10)
+    for resume in (False, True):
+        if resume:
+            with (tmp_path / "run" / "log.jsonl").open("a") as log:
+                log.write('{"attempt": 0, "upd')
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = listener.getsockname()[1]
+        mp.spawn(
+            distributed_launcher_worker, args=(port, str(tmp_path), resume), nprocs=2, join=True
+        )
+    root = tmp_path / "run"
+    assert sorted(path.name for path in root.glob("run-*.json")) == ["run-000.json", "run-001.json"]
+    logs = [json.loads(line) for line in (root / "log.jsonl").read_text().splitlines()]
+    assert [(line["attempt"], line["update"], line["targets"]) for line in logs] == [
+        (0, 1, 12),
+        (0, 2, 24),
+        (1, 3, 36),
+    ]
+    summary = json.loads((root / "summary-000003.json").read_text())
+    assert summary["world_size"] == 2
+    assert summary["rank_peak_memory_bytes"] == [[0, 0], [0, 0]]
+    assert summary["attempt"] == 1 and summary["segment"] == 2

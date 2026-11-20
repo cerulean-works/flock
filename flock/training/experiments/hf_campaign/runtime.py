@@ -11,6 +11,7 @@ from typing import Any
 
 import torch
 from accelerate import Accelerator
+from accelerate.utils import DistributedType
 from torch.nn import functional as F
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import Olmo2Config, Olmo2ForCausalLM, PreTrainedTokenizerBase
@@ -320,6 +321,12 @@ class GpuExperiment(Experiment):
         # Accelerate falls back to the CPU without a GPU, or when the environment asks for it.
         if accelerator.device.type != device:
             raise RuntimeError(f"Accelerate selected {accelerator.device}, not {device}")
+        if accelerator.distributed_type not in (
+            DistributedType.NO,
+            DistributedType.MULTI_GPU,
+            DistributedType.MULTI_CPU,
+        ):
+            raise ValueError("the GPU runtime supports ordinary DDP only")
         world_size = accelerator.num_processes
         if world_size > 1:
             if int(os.environ.get("LOCAL_WORLD_SIZE", "1")) != world_size:
