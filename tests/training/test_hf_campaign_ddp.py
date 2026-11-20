@@ -424,3 +424,36 @@ def test_gpu_runtime_refuses_a_virtual_rank_device_mapping(
             warmup_targets=6,
             micro_rows=1,
         )
+
+
+@pytest.mark.parametrize("rank", [0, 1])
+def test_resume_restores_only_the_owned_cuda_rng(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rank: int
+) -> None:
+    # Saved with eight visible devices, resumed with just the devices the run uses.
+    states = {
+        "random_state": random.getstate(),
+        "numpy_random_seed": np.random.get_state(),
+        "torch_manual_seed": torch.get_rng_state(),
+        "torch_cuda_manual_seed": [torch.tensor([index]) for index in range(8)],
+    }
+    experiment = object.__new__(Experiment)
+    accelerator = SimpleNamespace(
+        is_main_process=False,
+        process_index=rank,
+        device=torch.device(f"cuda:{rank}"),
+        load_state=lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(experiment, "accelerator", accelerator, raising=False)
+    monkeypatch.setattr(runtime, "broadcast_object_list", lambda values: values)
+    monkeypatch.setattr(runtime, "gather_object", lambda values: values)
+    monkeypatch.setattr(torch, "load", lambda *args, **kwargs: states)
+    restored = []
+
+    def restore_owned(state: torch.Tensor, device: torch.device) -> None:
+        assert device.index == rank
+        restored.append(state.tolist())
+
+    monkeypatch.setattr(torch.cuda, "set_rng_state", restore_owned)
+    experiment.resume(tmp_path)
+    assert restored == [[rank]]

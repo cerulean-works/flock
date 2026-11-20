@@ -246,7 +246,8 @@ class Experiment:
             np.random.set_state(states["numpy_random_seed"])
             torch.set_rng_state(states["torch_manual_seed"])
             if self.accelerator.device.type == "cuda":
-                torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
+                device = self.accelerator.device
+                torch.cuda.set_rng_state(states["torch_cuda_manual_seed"][device.index], device)
 
     def export(self, destination: Path, tokenizer: PreTrainedTokenizerBase) -> None:
         """Write an HF model, its tokenizer and an `experiment.json` card for evaluation."""
