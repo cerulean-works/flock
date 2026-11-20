@@ -8,6 +8,7 @@ from contextlib import nullcontext
 from pathlib import Path
 
 import torch
+from accelerate.utils import broadcast_object_list
 from torch import cuda
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, PreTrainedTokenizerFast
@@ -75,7 +76,19 @@ def main() -> None:
     accelerator = experiment.accelerator
     checkpoints = args.output_dir / "checkpoints"
     if args.resume:
-        experiment.resume(latest_checkpoint(checkpoints))
+        selected: list[Path | Exception | None] = [None]
+        if accelerator.is_main_process:
+            try:
+                selected[0] = latest_checkpoint(checkpoints)
+            except Exception as error:  # noqa: BLE001
+                # Broadcast and re-raise so peers never wait for a rank that raised.
+                selected[0] = error
+        broadcast_object_list(selected)
+        checkpoint = selected[0]
+        if isinstance(checkpoint, Exception):
+            raise checkpoint
+        assert isinstance(checkpoint, Path)
+        experiment.resume(checkpoint)
         # No attempt marker may appear while another rank checks for interrupted saves.
         accelerator.wait_for_everyone()
     stop = experiment.total_targets // mix.targets_per_update

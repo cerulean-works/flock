@@ -213,7 +213,14 @@ def distributed_gpu_worker(rank: int, port: int, root: str) -> None:
     experiment.checkpoint(Path(root) / "gpu-checkpoint")
     expected = experiment.update(mix[1])
     expected_weights = {k: v.clone() for k, v in experiment.model.state_dict().items()}
-    experiment.resume(Path(root) / "gpu-checkpoint")
+    with pytest.MonkeyPatch.context() as patch:
+        if rank == 1:
+
+            def refuse_peer_hash(*args: Any, **kwargs: Any) -> Any:
+                raise AssertionError("only rank zero verifies the shared checkpoint")
+
+            patch.setattr(runtime.hashlib, "file_digest", refuse_peer_hash)
+        experiment.resume(Path(root) / "gpu-checkpoint")
     assert experiment.update(mix[1]) == expected
     assert experiment.targets == 24
     for name, weight in experiment.model.state_dict().items():
@@ -291,28 +298,24 @@ def distributed_launcher_worker(rank: int, port: int, root: str, resume: bool) -
             ],
         )
         if resume:
-            original_latest = train.latest_checkpoint
             original_resume = GpuExperiment.resume
             original_record = train.record_attempt
 
-            def delayed_latest(checkpoints: Path) -> Path:
+            def mark_loaded(experiment: GpuExperiment, checkpoint: Path) -> None:
+                original_resume(experiment, checkpoint)
                 if rank == 1:
                     deadline = time.monotonic() + 20
                     while not (Path(root) / "rank0-loaded").exists():
                         if time.monotonic() > deadline:
                             raise TimeoutError("rank zero did not finish loading")
                         time.sleep(0.01)
-                return original_latest(checkpoints)
-
-            def mark_loaded(experiment: GpuExperiment, checkpoint: Path) -> None:
-                original_resume(experiment, checkpoint)
+                    time.sleep(0.1)
                 (Path(root) / f"rank{rank}-loaded").touch()
 
             def record_after_all_load(*args: Any, **kwargs: Any) -> int:
                 assert (Path(root) / "rank1-loaded").exists()
                 return original_record(*args, **kwargs)
 
-            patch.setattr(train, "latest_checkpoint", delayed_latest)
             patch.setattr(GpuExperiment, "resume", mark_loaded)
             patch.setattr(train, "record_attempt", record_after_all_load)
         train.main()
@@ -344,3 +347,29 @@ def test_distributed_launcher_keeps_one_record_and_log_per_update(tmp_path: Path
     assert summary["world_size"] == 2
     assert summary["rank_peak_memory_bytes"] == [[0, 0], [0, 0]]
     assert summary["attempt"] == 1 and summary["segment"] == 2
+
+
+def test_gpu_runtime_refuses_a_virtual_rank_device_mapping(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = write_mix(tmp_path / "mix", ["2 3 4 5 6 7 8 9"] * 4)
+    mix = ProvisionalMix(
+        config, word_tokenizer(), window=3, rows_per_update=4, rank=1, world_size=2
+    )
+    fake = SimpleNamespace(
+        device=torch.device("cuda:0"),
+        distributed_type=DistributedType.MULTI_GPU,
+        num_processes=2,
+        process_index=1,
+    )
+    monkeypatch.setattr(runtime, "Accelerator", lambda **_: fake)
+    with pytest.raises(ValueError, match="ordinary torchrun"):
+        GpuExperiment(
+            sdpa_config(),
+            mix,
+            peak_lr=1e-3,
+            seed=17,
+            total_targets=24,
+            warmup_targets=6,
+            micro_rows=1,
+        )

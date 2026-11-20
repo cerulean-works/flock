@@ -63,7 +63,7 @@ export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=1 RAYON_NUM_THRE
 export LANCE_CPU_THREADS=2 LANCE_IO_THREADS=4 TOKIO_WORKER_THREADS=2
 ```
 
-Only rank zero writes the run records, loss log, summary and export. Checkpoints hold every rank's RNG state, and all ranks wait for the checkpoint to be published before training continues. Summaries include the world size and each rank's peak allocated and reserved memory in bytes. Resume with the same world size and micro-batch size. Existing one-GPU contracts keep their original fields; multi-GPU contracts add the world size. Multi-node launches are refused.
+Only rank zero writes the run records, loss log, summary and export. Checkpoints hold every rank's RNG state, and all ranks wait for the checkpoint to be published before training continues. Summaries include the world size and each rank's peak allocated and reserved memory in bytes. Resume with the same world size and micro-batch size. Existing one-GPU contracts keep their original fields; multi-GPU contracts add the world size. Rank zero selects and verifies the shared checkpoint before every rank loads it. Use ordinary torchrun mapping, with the logical CUDA device index equal to the rank; virtual local ranks and multi-node launches are refused.
 
 ## Next gate
 

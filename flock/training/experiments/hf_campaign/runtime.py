@@ -11,7 +11,7 @@ from typing import Any
 
 import torch
 from accelerate import Accelerator
-from accelerate.utils import DistributedType
+from accelerate.utils import DistributedType, broadcast_object_list
 from torch.nn import functional as F
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import Olmo2Config, Olmo2ForCausalLM, PreTrainedTokenizerBase
@@ -190,15 +190,25 @@ class Experiment:
 
     def resume(self, checkpoint: Path) -> None:
         """Verify every checkpoint file before loading trusted local training state."""
-        manifest = json.loads((checkpoint / "COMMITTED.json").read_text())
-        if manifest["contract"] != self.contract:
-            raise ValueError("checkpoint runtime contract changed")
-        for name, expected in manifest["files"].items():
-            if Path(name).name != name:
-                raise ValueError("invalid checkpoint path")
-            with (checkpoint / name).open("rb") as handle:
-                if hashlib.file_digest(handle, "sha256").hexdigest() != expected:
-                    raise ValueError("checkpoint checksum mismatch")
+        failure: list[Exception | None] = [None]
+        if self.accelerator.is_main_process:
+            try:
+                manifest = json.loads((checkpoint / "COMMITTED.json").read_text())
+                if manifest["contract"] != self.contract:
+                    raise ValueError("checkpoint runtime contract changed")
+                for name, expected in manifest["files"].items():
+                    if Path(name).name != name:
+                        raise ValueError("invalid checkpoint path")
+                    with (checkpoint / name).open("rb") as handle:
+                        if hashlib.file_digest(handle, "sha256").hexdigest() != expected:
+                            raise ValueError("checkpoint checksum mismatch")
+            except Exception as error:  # noqa: BLE001
+                # Broadcast and re-raise so peers never wait for a rank that raised.
+                failure[0] = error
+        # The shared immutable tree needs one verification, before any rank loads it.
+        broadcast_object_list(failure)
+        if failure[0] is not None:
+            raise failure[0]
         # AdamW keeps non-capturable step counters on the CPU, including after DDP resume.
         self.accelerator.load_state(str(checkpoint), map_location="cpu")
 
@@ -330,6 +340,9 @@ class GpuExperiment(Experiment):
             raise ValueError("the GPU runtime supports ordinary DDP only")
         world_size = accelerator.num_processes
         if world_size > 1:
+            # Accelerate restores CUDA RNG by logical device index; keep index equal to rank.
+            if device == "cuda" and accelerator.device.index != accelerator.process_index:
+                raise ValueError("use ordinary torchrun with one logical CUDA device per rank")
             if int(os.environ.get("LOCAL_WORLD_SIZE", "1")) != world_size:
                 raise ValueError("the GPU runtime supports one node only")
             if mix.rows_per_update % (world_size * micro_rows):
