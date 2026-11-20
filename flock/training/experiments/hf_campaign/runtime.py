@@ -170,8 +170,8 @@ class Experiment:
         return float(self.accelerator.reduce(loss_sum, reduction="mean"))
 
     @contextmanager
-    def _checkpoint_phase(self) -> Generator[None]:
-        """Propagate a failed checkpoint phase to every rank."""
+    def synchronized_phase(self) -> Generator[None]:
+        """Propagate a phase failure to every rank before continuing."""
         failure = None
         try:
             yield
@@ -188,12 +188,12 @@ class Experiment:
         """Commit a checksummed Accelerate checkpoint in a new immutable directory."""
         temporary = destination.with_name(destination.name + ".incomplete")
         with ExitStack() as stack:
-            with self._checkpoint_phase():
+            with self.synchronized_phase():
                 if self.accelerator.is_main_process:
                     stack.enter_context(staged(destination, directory=True))
-            with self._checkpoint_phase():
+            with self.synchronized_phase():
                 self.accelerator.save_state(str(temporary))
-            with self._checkpoint_phase():
+            with self.synchronized_phase():
                 if self.accelerator.is_main_process:
                     hashes = {}
                     for path in sorted(temporary.iterdir()):
@@ -213,7 +213,7 @@ class Experiment:
     def resume(self, checkpoint: Path) -> None:
         """Verify every checkpoint file before loading trusted local training state."""
         # The shared immutable tree needs one verification, before any rank loads it.
-        with self._checkpoint_phase():
+        with self.synchronized_phase():
             if self.accelerator.is_main_process:
                 manifest = json.loads((checkpoint / "COMMITTED.json").read_text())
                 if manifest["contract"] != self.contract:
@@ -228,7 +228,7 @@ class Experiment:
                         if hashlib.file_digest(handle, "sha256").hexdigest() != expected:
                             raise ValueError("checkpoint checksum mismatch")
         # AdamW keeps non-capturable step counters on the CPU, including after DDP resume.
-        with self._checkpoint_phase():
+        with self.synchronized_phase():
             self.accelerator.load_state(str(checkpoint), map_location="cpu")
             # Accelerate silently catches RNG restore errors. Restore explicitly so a peer
             # cannot continue with initialization RNG after a local read or device failure.

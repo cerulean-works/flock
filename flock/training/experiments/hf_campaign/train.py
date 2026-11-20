@@ -100,11 +100,11 @@ def main() -> None:
             f"stop at update {stop} precedes the committed update {experiment.updates}"
         )
     attempt = 0
-    if accelerator.is_main_process:
-        if not args.resume:
-            args.output_dir.mkdir(parents=True, exist_ok=False)
-        attempt = record_attempt(args, experiment, started)
-    accelerator.wait_for_everyone()
+    with experiment.synchronized_phase():
+        if accelerator.is_main_process:
+            if not args.resume:
+                args.output_dir.mkdir(parents=True, exist_ok=False)
+            attempt = record_attempt(args, experiment, started)
     log_path = args.output_dir / "log.jsonl"
 
     # A resumed segment logs the update it started from, so a replayed update is told apart.

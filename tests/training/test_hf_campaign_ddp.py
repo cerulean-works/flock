@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import random
@@ -17,7 +18,7 @@ import pytest
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
-from accelerate import Accelerator
+from accelerate import Accelerator, checkpointing
 from accelerate.state import AcceleratorState
 from accelerate.utils import DistributedType
 
@@ -372,6 +373,10 @@ def distributed_launcher_worker(rank: int, port: int, root: str, resume: bool) -
             patch.setattr(GpuExperiment, "resume", mark_loaded)
             patch.setattr(train, "record_attempt", record_after_all_load)
         train.main()
+        if not resume:
+            with pytest.raises(RuntimeError, match="FileExistsError"):
+                train.main()
+            dist.barrier()
     dist.destroy_process_group()
     AcceleratorState._reset_state(True)
 
@@ -460,3 +465,49 @@ def test_resume_restores_only_the_owned_cuda_rng(
     monkeypatch.setattr(torch.cuda, "set_rng_state", restore_owned)
     experiment.resume(tmp_path)
     assert restored == [[rank or 0]]
+
+
+def test_real_accelerate_load_recovers_from_unused_cuda_rng_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    AcceleratorState._reset_state(True)
+    experiment = Experiment(
+        tiny_config(),
+        accelerator=Accelerator(cpu=True, mixed_precision="no"),
+        source={},
+        peak_lr=1e-3,
+        betas=(0.9, 0.999),
+        weight_decay=0.0,
+        seed=3,
+        total_targets=64,
+        warmup_targets=16,
+    )
+    checkpoint = tmp_path / "checkpoint"
+    experiment.checkpoint(checkpoint)
+    rng_path = checkpoint / "random_states_0.pkl"
+    states = torch.load(rng_path, weights_only=False)
+    states["torch_cuda_manual_seed"] = [torch.tensor([index]) for index in range(8)]
+    torch.save(states, rng_path)
+    manifest_path = checkpoint / "COMMITTED.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["files"][rng_path.name] = hashlib.sha256(rng_path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest))
+    attempts = []
+
+    def fail_on_unused_device(states: list[torch.Tensor]) -> None:
+        attempts.append("accelerate")
+        raise IndexError("saved unused CUDA device is no longer visible")
+
+    def restore_owned(state: torch.Tensor, device: torch.device) -> None:
+        assert state.tolist() == [0] and device == torch.device("cuda")
+        attempts.append("owned")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(experiment.accelerator.state, "device", torch.device("cuda"))
+        patch.setattr(checkpointing, "is_cuda_available", lambda: True)
+        patch.setattr(torch.cuda, "set_rng_state_all", fail_on_unused_device)
+        patch.setattr(torch.cuda, "set_rng_state", restore_owned)
+        patch.setattr(torch.cuda, "current_device", lambda: 0)
+        experiment.resume(checkpoint)
+    assert attempts == ["accelerate", "owned"]
+    AcceleratorState._reset_state(True)
