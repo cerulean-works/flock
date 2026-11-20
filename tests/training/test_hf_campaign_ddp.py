@@ -232,11 +232,13 @@ def distributed_gpu_worker(rank: int, port: int, root: str) -> None:
     if rank == 0:
         (Path(root) / "locked.incomplete").mkdir()
     experiment.accelerator.wait_for_everyone()
-    with pytest.raises(FileExistsError):
+    with pytest.raises(RuntimeError, match="FileExistsError"):
         experiment.checkpoint(Path(root) / "locked")
 
     def fail_write(*args: Any, **kwargs: Any) -> Any:
-        raise OSError("injected checkpoint failure")
+        error: Any = OSError("injected checkpoint failure")
+        error.unpicklable = lambda: None
+        raise error
 
     for phase in ("save", "publish"):
         with pytest.MonkeyPatch.context() as patch:
@@ -244,7 +246,7 @@ def distributed_gpu_worker(rank: int, port: int, root: str) -> None:
                 patch.setattr(experiment.accelerator, "save_state", fail_write)
             if phase == "publish" and rank == 0:
                 patch.setattr(runtime.os, "fsync", fail_write)
-            with pytest.raises(OSError, match="injected checkpoint failure"):
+            with pytest.raises(RuntimeError, match="injected checkpoint failure"):
                 experiment.checkpoint(Path(root) / phase)
         assert (Path(root) / f"{phase}.incomplete").is_dir()
         assert not (Path(root) / phase).exists()
@@ -265,7 +267,7 @@ def distributed_gpu_worker(rank: int, port: int, root: str) -> None:
                         return original_load(path, *args, **kwargs)
 
                     patch.setattr(torch, "load", fail_rng_read)
-            with pytest.raises(OSError, match="injected checkpoint failure"):
+            with pytest.raises(RuntimeError, match="injected checkpoint failure"):
                 experiment.resume(Path(root) / "gpu-checkpoint")
         experiment.accelerator.wait_for_everyone()
 
@@ -276,7 +278,7 @@ def distributed_gpu_worker(rank: int, port: int, root: str) -> None:
         del manifest["files"]["random_states_1.pkl"]
         (checkpoint / "COMMITTED.json").write_text(json.dumps(manifest))
     experiment.accelerator.wait_for_everyone()
-    with pytest.raises(ValueError, match="missing rank 1's RNG"):
+    with pytest.raises(RuntimeError, match="missing rank 1's RNG"):
         experiment.resume(Path(root) / "gpu-checkpoint")
     dist.destroy_process_group()
     AcceleratorState._reset_state(True)
@@ -426,9 +428,9 @@ def test_gpu_runtime_refuses_a_virtual_rank_device_mapping(
         )
 
 
-@pytest.mark.parametrize("rank", [0, 1])
+@pytest.mark.parametrize("rank", [None, 0, 1])
 def test_resume_restores_only_the_owned_cuda_rng(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rank: int
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rank: int | None
 ) -> None:
     # Saved with eight visible devices, resumed with just the devices the run uses.
     states = {
@@ -440,14 +442,15 @@ def test_resume_restores_only_the_owned_cuda_rng(
     experiment = object.__new__(Experiment)
     accelerator = SimpleNamespace(
         is_main_process=False,
-        process_index=rank,
-        device=torch.device(f"cuda:{rank}"),
+        process_index=rank or 0,
+        num_processes=1,
+        device=torch.device("cuda" if rank is None else f"cuda:{rank}"),
         load_state=lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(experiment, "accelerator", accelerator, raising=False)
-    monkeypatch.setattr(runtime, "broadcast_object_list", lambda values: values)
     monkeypatch.setattr(runtime, "gather_object", lambda values: values)
     monkeypatch.setattr(torch, "load", lambda *args, **kwargs: states)
+    monkeypatch.setattr(torch.cuda, "current_device", lambda: 0)
     restored = []
 
     def restore_owned(state: torch.Tensor, device: torch.device) -> None:
@@ -456,4 +459,4 @@ def test_resume_restores_only_the_owned_cuda_rng(
 
     monkeypatch.setattr(torch.cuda, "set_rng_state", restore_owned)
     experiment.resume(tmp_path)
-    assert restored == [[rank]]
+    assert restored == [[rank or 0]]

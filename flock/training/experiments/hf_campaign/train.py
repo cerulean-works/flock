@@ -76,19 +76,20 @@ def main() -> None:
     accelerator = experiment.accelerator
     checkpoints = args.output_dir / "checkpoints"
     if args.resume:
-        selected: list[Path | Exception | None] = [None]
+        selected: list[str | None] = [None, None]
         if accelerator.is_main_process:
             try:
-                selected[0] = latest_checkpoint(checkpoints)
-            except Exception as error:  # noqa: BLE001
-                # Broadcast and re-raise so peers never wait for a rank that raised.
-                selected[0] = error
+                selected[0] = str(latest_checkpoint(checkpoints))
+            except Exception as error:
+                if accelerator.num_processes == 1:
+                    raise
+                # Only plain strings cross ranks; exception objects may not be picklable.
+                selected[1] = f"{type(error).__name__}: {error}"
         broadcast_object_list(selected)
-        checkpoint = selected[0]
-        if isinstance(checkpoint, Exception):
-            raise checkpoint
-        assert isinstance(checkpoint, Path)
-        experiment.resume(checkpoint)
+        if selected[1] is not None:
+            raise RuntimeError(selected[1])
+        assert selected[0] is not None
+        experiment.resume(Path(selected[0]))
         # No attempt marker may appear while another rank checks for interrupted saves.
         accelerator.wait_for_everyone()
     stop = experiment.total_targets // mix.targets_per_update

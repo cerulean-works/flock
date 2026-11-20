@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 import torch
 from accelerate import Accelerator
-from accelerate.utils import DistributedType, broadcast_object_list, gather_object
+from accelerate.utils import DistributedType, gather_object
 from torch.nn import functional as F
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import Olmo2Config, Olmo2ForCausalLM, PreTrainedTokenizerBase
@@ -175,12 +175,14 @@ class Experiment:
         failure = None
         try:
             yield
-        except Exception as error:  # noqa: BLE001
+        except Exception as error:
             # Exchange failures before any rank enters the next collective phase.
-            failure = error
+            if self.accelerator.num_processes == 1:
+                raise
+            failure = f"{type(error).__name__}: {error}"
         for error in gather_object([failure]):
             if error is not None:
-                raise error
+                raise RuntimeError(error)
 
     def checkpoint(self, destination: Path) -> None:
         """Commit a checksummed Accelerate checkpoint in a new immutable directory."""
@@ -210,9 +212,9 @@ class Experiment:
 
     def resume(self, checkpoint: Path) -> None:
         """Verify every checkpoint file before loading trusted local training state."""
-        failure: list[Exception | None] = [None]
-        if self.accelerator.is_main_process:
-            try:
+        # The shared immutable tree needs one verification, before any rank loads it.
+        with self._checkpoint_phase():
+            if self.accelerator.is_main_process:
                 manifest = json.loads((checkpoint / "COMMITTED.json").read_text())
                 if manifest["contract"] != self.contract:
                     raise ValueError("checkpoint runtime contract changed")
@@ -225,13 +227,6 @@ class Experiment:
                     with (checkpoint / name).open("rb") as handle:
                         if hashlib.file_digest(handle, "sha256").hexdigest() != expected:
                             raise ValueError("checkpoint checksum mismatch")
-            except Exception as error:  # noqa: BLE001
-                # Broadcast and re-raise so peers never wait for a rank that raised.
-                failure[0] = error
-        # The shared immutable tree needs one verification, before any rank loads it.
-        broadcast_object_list(failure)
-        if failure[0] is not None:
-            raise failure[0]
         # AdamW keeps non-capturable step counters on the CPU, including after DDP resume.
         with self._checkpoint_phase():
             self.accelerator.load_state(str(checkpoint), map_location="cpu")
@@ -247,7 +242,8 @@ class Experiment:
             torch.set_rng_state(states["torch_manual_seed"])
             if self.accelerator.device.type == "cuda":
                 device = self.accelerator.device
-                torch.cuda.set_rng_state(states["torch_cuda_manual_seed"][device.index], device)
+                index = device.index if device.index is not None else torch.cuda.current_device()
+                torch.cuda.set_rng_state(states["torch_cuda_manual_seed"][index], device)
 
     def export(self, destination: Path, tokenizer: PreTrainedTokenizerBase) -> None:
         """Write an HF model, its tokenizer and an `experiment.json` card for evaluation."""
