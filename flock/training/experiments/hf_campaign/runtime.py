@@ -5,13 +5,13 @@ import json
 import math
 import os
 from collections.abc import Generator
-from contextlib import contextmanager, nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 from pathlib import Path
 from typing import Any
 
 import torch
 from accelerate import Accelerator
-from accelerate.utils import DistributedType, broadcast_object_list
+from accelerate.utils import DistributedType, broadcast_object_list, gather_object
 from torch.nn import functional as F
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import Olmo2Config, Olmo2ForCausalLM, PreTrainedTokenizerBase
@@ -167,26 +167,44 @@ class Experiment:
         self.targets += global_total
         return float(self.accelerator.reduce(loss_sum, reduction="mean"))
 
+    @contextmanager
+    def _checkpoint_phase(self) -> Generator[None]:
+        """Propagate a failed checkpoint phase to every rank."""
+        failure = None
+        try:
+            yield
+        except Exception as error:  # noqa: BLE001
+            # Exchange failures before any rank enters the next collective phase.
+            failure = error
+        for error in gather_object([failure]):
+            if error is not None:
+                raise error
+
     def checkpoint(self, destination: Path) -> None:
         """Commit a checksummed Accelerate checkpoint in a new immutable directory."""
         temporary = destination.with_name(destination.name + ".incomplete")
-        writer = staged(destination, directory=True)
-        with writer if self.accelerator.is_main_process else nullcontext(temporary):
-            self.accelerator.wait_for_everyone()
-            self.accelerator.save_state(str(temporary))
-            self.accelerator.wait_for_everyone()
-            if self.accelerator.is_main_process:
-                hashes = {}
-                for path in sorted(temporary.iterdir()):
-                    if path.is_file():
-                        # Streamed: the 190M optimizer state alone is about 2 GB.
-                        with path.open("rb") as handle:
-                            hashes[path.name] = hashlib.file_digest(handle, "sha256").hexdigest()
-                manifest = temporary / "COMMITTED.json"
-                manifest.write_text(
-                    json.dumps({"files": hashes, "contract": self.contract}, sort_keys=True)
-                )
-        self.accelerator.wait_for_everyone()
+        with ExitStack() as stack:
+            with self._checkpoint_phase():
+                if self.accelerator.is_main_process:
+                    stack.enter_context(staged(destination, directory=True))
+            with self._checkpoint_phase():
+                self.accelerator.save_state(str(temporary))
+            with self._checkpoint_phase():
+                if self.accelerator.is_main_process:
+                    hashes = {}
+                    for path in sorted(temporary.iterdir()):
+                        if path.is_file():
+                            # Streamed: the 190M optimizer state alone is about 2 GB.
+                            with path.open("rb") as handle:
+                                hashes[path.name] = hashlib.file_digest(
+                                    handle, "sha256"
+                                ).hexdigest()
+                    manifest = temporary / "COMMITTED.json"
+                    manifest.write_text(
+                        json.dumps({"files": hashes, "contract": self.contract}, sort_keys=True)
+                    )
+                # Publication is part of this phase, so an fsync failure reaches every rank.
+                stack.close()
 
     def resume(self, checkpoint: Path) -> None:
         """Verify every checkpoint file before loading trusted local training state."""
@@ -196,6 +214,9 @@ class Experiment:
                 manifest = json.loads((checkpoint / "COMMITTED.json").read_text())
                 if manifest["contract"] != self.contract:
                     raise ValueError("checkpoint runtime contract changed")
+                for rank in range(self.accelerator.num_processes):
+                    if f"random_states_{rank}.pkl" not in manifest["files"]:
+                        raise ValueError(f"checkpoint is missing rank {rank}'s RNG state")
                 for name, expected in manifest["files"].items():
                     if Path(name).name != name:
                         raise ValueError("invalid checkpoint path")

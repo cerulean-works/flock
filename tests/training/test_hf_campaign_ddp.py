@@ -227,6 +227,37 @@ def distributed_gpu_worker(rank: int, port: int, root: str) -> None:
         torch.testing.assert_close(weight, expected_weights[name], rtol=0, atol=0)
     experiment.export(Path(root) / "export", word_tokenizer())
     experiment.accelerator.wait_for_everyone()
+
+    # Each failure reaches both ranks without poisoning the group or publishing a checkpoint.
+    if rank == 0:
+        (Path(root) / "locked.incomplete").mkdir()
+    experiment.accelerator.wait_for_everyone()
+    with pytest.raises(FileExistsError):
+        experiment.checkpoint(Path(root) / "locked")
+
+    def fail_write(*args: Any, **kwargs: Any) -> Any:
+        raise OSError("injected checkpoint failure")
+
+    for phase in ("save", "publish"):
+        with pytest.MonkeyPatch.context() as patch:
+            if phase == "save" and rank == 1:
+                patch.setattr(experiment.accelerator, "save_state", fail_write)
+            if phase == "publish" and rank == 0:
+                patch.setattr(runtime.os, "fsync", fail_write)
+            with pytest.raises(OSError, match="injected checkpoint failure"):
+                experiment.checkpoint(Path(root) / phase)
+        assert (Path(root) / f"{phase}.incomplete").is_dir()
+        assert not (Path(root) / phase).exists()
+
+    if rank == 0:
+        checkpoint = Path(root) / "gpu-checkpoint"
+        (checkpoint / "random_states_1.pkl").unlink()
+        manifest = json.loads((checkpoint / "COMMITTED.json").read_text())
+        del manifest["files"]["random_states_1.pkl"]
+        (checkpoint / "COMMITTED.json").write_text(json.dumps(manifest))
+    experiment.accelerator.wait_for_everyone()
+    with pytest.raises(ValueError, match="missing rank 1's RNG"):
+        experiment.resume(Path(root) / "gpu-checkpoint")
     dist.destroy_process_group()
     AcceleratorState._reset_state(True)
 
