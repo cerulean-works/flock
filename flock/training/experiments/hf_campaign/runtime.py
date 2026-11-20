@@ -4,11 +4,13 @@ import hashlib
 import json
 import math
 import os
+import random
 from collections.abc import Generator
 from contextlib import ExitStack, contextmanager, nullcontext
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import torch
 from accelerate import Accelerator
 from accelerate.utils import DistributedType, broadcast_object_list, gather_object
@@ -231,7 +233,20 @@ class Experiment:
         if failure[0] is not None:
             raise failure[0]
         # AdamW keeps non-capturable step counters on the CPU, including after DDP resume.
-        self.accelerator.load_state(str(checkpoint), map_location="cpu")
+        with self._checkpoint_phase():
+            self.accelerator.load_state(str(checkpoint), map_location="cpu")
+            # Accelerate silently catches RNG restore errors. Restore explicitly so a peer
+            # cannot continue with initialization RNG after a local read or device failure.
+            states = torch.load(
+                checkpoint / f"random_states_{self.accelerator.process_index}.pkl",
+                map_location="cpu",
+                weights_only=False,
+            )
+            random.setstate(states["random_state"])
+            np.random.set_state(states["numpy_random_seed"])
+            torch.set_rng_state(states["torch_manual_seed"])
+            if self.accelerator.device.type == "cuda":
+                torch.cuda.set_rng_state_all(states["torch_cuda_manual_seed"])
 
     def export(self, destination: Path, tokenizer: PreTrainedTokenizerBase) -> None:
         """Write an HF model, its tokenizer and an `experiment.json` card for evaluation."""

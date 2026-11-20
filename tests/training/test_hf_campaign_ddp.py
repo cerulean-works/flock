@@ -249,6 +249,26 @@ def distributed_gpu_worker(rank: int, port: int, root: str) -> None:
         assert (Path(root) / f"{phase}.incomplete").is_dir()
         assert not (Path(root) / phase).exists()
 
+    original_load = torch.load
+    for phase in ("load", "rng-read", "rng-apply"):
+        with pytest.MonkeyPatch.context() as patch:
+            if rank == 1:
+                if phase == "load":
+                    patch.setattr(experiment.accelerator, "load_state", fail_write)
+                elif phase == "rng-apply":
+                    patch.setattr(torch, "set_rng_state", fail_write)
+                else:
+
+                    def fail_rng_read(path: Any, *args: Any, **kwargs: Any) -> Any:
+                        if str(path).endswith("random_states_1.pkl"):
+                            raise OSError("injected checkpoint failure")
+                        return original_load(path, *args, **kwargs)
+
+                    patch.setattr(torch, "load", fail_rng_read)
+            with pytest.raises(OSError, match="injected checkpoint failure"):
+                experiment.resume(Path(root) / "gpu-checkpoint")
+        experiment.accelerator.wait_for_everyone()
+
     if rank == 0:
         checkpoint = Path(root) / "gpu-checkpoint"
         (checkpoint / "random_states_1.pkl").unlink()
