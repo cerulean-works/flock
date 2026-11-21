@@ -304,6 +304,39 @@ output directory for a fresh run. To resume, change the call in the script to
 same world size. See [Save and resume training](#save-and-resume-training) for
 checkpoint visibility, per-rank RNG state and compatibility checks.
 
+## Compile training
+
+Set `torch_compile=True` in `TrainerConfig` to compile each training step with
+`torch.compile`. Compilation is off by default. The trainer compiles three parts:
+
+- The training model, including its backward.
+- The loss, including its backward.
+- Gradient clipping together with the optimizer step.
+
+Evaluation also uses a compiled model.
+Compilation happens on first use, and new input shapes can compile again, so measure
+speed after warmup.
+
+The trainer keeps each learning rate in a tensor and updates it in place, so a changing
+schedule does not compile the optimizer step again. With float rates, the first change
+would trigger a recompile. On CUDA, optimizers that support it run with
+`capturable=True`. Checkpoints store float learning rates, so you can resume a
+checkpoint with compilation enabled or disabled. A checkpoint from a compiled CUDA run
+keeps `capturable=True`, and an eager run that resumes it keeps that setting.
+
+`torch_compile_mode` selects the PyTorch mode:
+
+| Mode | Use |
+|---|---|
+| `"default"` | Fuse operations without CUDA graphs. |
+| `"max-autotune-no-cudagraphs"` | Also benchmark kernel choices. The first step takes longer. |
+| `"reduce-overhead"` | Replay CUDA graphs to cut kernel launch overhead. Uses more memory. |
+| `"max-autotune"` | Autotune and replay CUDA graphs. |
+
+With CUDA graphs, each training step starts a new graph generation. Evaluation can
+record a graph for every batch shape it scores; use a mode without CUDA graphs if that
+memory matters.
+
 ## Train a Hugging Face architecture
 
 `HFCompatibleModel` wraps a causal language model from `transformers`, such as Qwen 3,
