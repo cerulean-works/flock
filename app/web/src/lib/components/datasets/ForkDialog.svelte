@@ -6,9 +6,17 @@
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
-	import { datasetCall, datasetsApi, datasetsHref, pathError } from '#lib/datasets.ts';
+	import {
+		datasetCall,
+		datasetsApi,
+		datasetsHref,
+		nameOf,
+		parentOf,
+		pathError
+	} from '#lib/datasets.ts';
 	import { forkPath } from '#lib/forks.ts';
 	import FormError from '../FormError.svelte';
+	import DatasetPicker from './DatasetPicker.svelte';
 	import VersionSelect from './VersionSelect.svelte';
 
 	interface Props {
@@ -22,14 +30,23 @@
 
 	let { open = $bindable(), org, path, version = null }: Props = $props();
 
-	let to = $derived(forkPath(path));
+	let toFolder = $derived(parentOf(forkPath(path)));
+	let toName = $derived(nameOf(forkPath(path)));
 	let at = $derived(version === null ? '' : String(version));
 	let error = $state<string | null>(null);
 	let pending = $state(false);
 
 	async function submit() {
-		const target = to.trim().replace(/^\/+|\/+$/g, '');
-		const invalid = target === path ? 'Choose a new path for the fork' : pathError(target);
+		const name = toName.trim();
+		const target = [toFolder, name]
+			.filter(Boolean)
+			.join('/')
+			.replace(/^\/+|\/+$/g, '');
+		const invalid = !name
+			? 'Name the fork'
+			: target === path
+				? 'Choose a new name or folder for the fork'
+				: pathError(target);
 		if (invalid) {
 			error = invalid;
 			return;
@@ -56,7 +73,8 @@
 	bind:open={() => open, (o) => (open = pending ? true : o)}
 	onOpenChangeComplete={(o) => {
 		if (o) return;
-		to = forkPath(path);
+		toFolder = parentOf(forkPath(path));
+		toName = nameOf(forkPath(path));
 		at = version === null ? '' : String(version);
 		error = null;
 	}}
@@ -79,16 +97,28 @@
 				<Label for="fork-version">Version</Label>
 				<VersionSelect id="fork-version" {org} {path} bind:value={at} disabled={pending} />
 			</div>
-			<div class="grid gap-2">
-				<Label for="fork-path">New path</Label>
-				<Input
-					id="fork-path"
-					class="font-mono text-[13px]"
-					bind:value={to}
-					disabled={pending}
-					autocomplete="off"
-					spellcheck="false"
-				/>
+			<div class="grid gap-4 sm:grid-cols-2">
+				<div class="grid gap-2">
+					<Label>In folder</Label>
+					<DatasetPicker
+						{org}
+						pick="folder"
+						aria-label="In folder"
+						bind:value={toFolder}
+						disabled={pending}
+					/>
+				</div>
+				<div class="grid gap-2">
+					<Label for="fork-name">Name</Label>
+					<Input
+						id="fork-name"
+						class="font-mono text-[13px]"
+						bind:value={toName}
+						disabled={pending}
+						autocomplete="off"
+						spellcheck="false"
+					/>
+				</div>
 			</div>
 			<FormError {error} />
 			<Dialog.Footer>
