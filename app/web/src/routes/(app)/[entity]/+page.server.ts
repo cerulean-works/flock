@@ -66,7 +66,9 @@ export const actions: Actions = {
 		const res = await change('POST', '/api/v1/projects', {
 			entity: params.entity,
 			name,
-			description: formText(form, 'description') || null
+			description: formText(form, 'description') || null,
+			// Sent only when public: private is the default.
+			...(formText(form, 'visibility') === 'public' && { visibility: 'public' })
 		});
 		if (refused(res)) return res;
 		redirect(303, projectHref(params.entity, name));

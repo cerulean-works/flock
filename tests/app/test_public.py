@@ -233,6 +233,31 @@ def test_creators_change_visibility_and_nothing_else(
     assert publish(api, "m")["visibility"] == "public"
 
 
+def test_projects_can_be_created_public(
+    setup: tuple[Client, Client, Client, Client], flock: FlockServer
+) -> None:
+    _, member, outsider, _ = setup
+    body = {"entity": "flock", "name": "open", "visibility": "public"}
+    created = member.post("/api/v1/projects", body)
+    assert created.status == 201 and created.json()["visibility"] == "public"
+    assert call(outsider, "GET", "/open").status == 200
+    # Recorded like publishing it right after, by its creator.
+    me = member.get("/api/v1/me").json()["id"]
+    events = flock.call(
+        flock.store.db.fetch(
+            "SELECT from_visibility, to_visibility, user_pk FROM visibility_events"
+        )
+    )
+    assert [tuple(e) for e in events] == [("private", "public", me)]
+    # Private stays the default, and nothing else is accepted.
+    assert (
+        member.post("/api/v1/projects", {"entity": "flock", "name": "shut"}).json()["visibility"]
+        == "private"
+    )
+    bad = {"entity": "flock", "name": "x", "visibility": "secret"}
+    assert member.post("/api/v1/projects", bad).status == 422
+
+
 def test_going_private_ends_outsiders_streams_only(
     setup: tuple[Client, Client, Client, Client],
     flock: FlockServer,

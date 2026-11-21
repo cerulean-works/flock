@@ -30,6 +30,7 @@ class ProjectCreate(BaseModel):
     entity: Name
     name: Name
     description: str | None = None
+    visibility: Literal["private", "public"] = "private"
 
 
 class ProjectUpdate(BaseModel):
@@ -66,9 +67,14 @@ async def list_projects(
 
 @router.post("/projects", status_code=201)
 async def create_project(body: ProjectCreate, store: StoreDep, user: UserDep) -> Response:
-    """Create an empty project in an org of the user (``wandb.init`` also creates projects)."""
+    """Create an empty project in an org of the user (``wandb.init`` also creates projects).
+
+    ``visibility: public`` publishes it as its creator would right after (D110, D118), so the
+    change is recorded like any other."""
     await visible_org(body.entity, store, user)
     project = await store.create_project(body.entity, body.name, body.description, creator=user.pk)
+    if body.visibility == "public":
+        project = await store.update_project(project, {"visibility": "public"}, user)
     return JSONResponse(await store.project_info(project), status_code=201)
 
 
