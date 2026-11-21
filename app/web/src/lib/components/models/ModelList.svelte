@@ -12,14 +12,23 @@
 	import type { ModelEntry, ModelFolder, ModelMove } from '#lib/types.ts';
 	import { bytes, count, dateTime, relativeTime } from '#lib/utils.ts';
 	import CopyBlock from '../CopyBlock.svelte';
+	import DataTable, { type Column, ROW_LINK } from '../DataTable.svelte';
 	import EmptyState from '../EmptyState.svelte';
-	import RowCheckbox from '../RowCheckbox.svelte';
 	import RowMenu from '../RowMenu.svelte';
 	import DeleteModelDialog from './DeleteModelDialog.svelte';
 	import DeleteModelsDialog from './DeleteModelsDialog.svelte';
 	import FolderDialog from './FolderDialog.svelte';
 	import MoveModelsDialog from './MoveModelsDialog.svelte';
 	import RenameModelDialog from './RenameModelDialog.svelte';
+
+	// Folders have no versions, size or update time: their count of models goes under Primary.
+	const COLUMNS: Column[] = [
+		{ id: 'name', label: 'Name' },
+		{ id: 'latest', label: 'Latest', size: 'fit', from: 'sm' },
+		{ id: 'primary', label: 'Primary', size: 'fit' },
+		{ id: 'size', label: 'Size', from: 'sm', align: 'end' },
+		{ id: 'updated', label: 'Updated', align: 'end' }
+	];
 
 	interface Props {
 		scope: Scope;
@@ -42,13 +51,20 @@
 
 	// The server's first page, then pages loaded here with "Load more", with models deleted or
 	// moved here taken out until it's read again. Models come first in each page, then folders.
-	let rows = $derived(folder.models);
+	let models = $derived(folder.models);
 	let folders = $derived(folder.folders);
+	// One table: the models, then the folders.
+	type Row =
+		{ kind: 'model'; m: ModelEntry } | { kind: 'folder'; f: ModelFolder['folders'][number] };
+	const rows: Row[] = $derived([
+		...models.map((m) => ({ kind: 'model' as const, m })),
+		...folders.map((f) => ({ kind: 'folder' as const, f }))
+	]);
 	let cursor = $derived(folder.cursor);
 	let loading = $state(false);
 	let failed = $state<string | null>(null);
 	$effect.pre(() => {
-		if (selection) selection.keys = rows.map((m) => m.name);
+		if (selection) selection.keys = models.map((m) => m.name);
 	});
 
 	/** The folder whose ⋯ menu was used, and what for. */
@@ -72,13 +88,13 @@
 	$effect.pre(() => {
 		const name = selection?.targets[0] ?? '';
 		untrack(() => {
-			one = rows.find((m) => m.name === name) ?? { name, model: refOf(name), versions: 0 };
+			one = models.find((m) => m.name === name) ?? { name, model: refOf(name), versions: 0 };
 		});
 	});
 
 	function gone(names: string[]) {
 		const out = new Set(names);
-		rows = rows.filter((m) => !out.has(m.name));
+		models = models.filter((m) => !out.has(m.name));
 		selection?.drop(names);
 	}
 
@@ -96,7 +112,7 @@
 	/** A model renamed in this folder keeps its row, under the new name; elsewhere it leaves. */
 	async function renamed(from: string, to: string) {
 		if (parentOf(to) !== path) return landed([from], [to]);
-		rows = rows.map((m) => (m.name === from ? { ...m, name: to, model: refOf(to) } : m));
+		models = models.map((m) => (m.name === from ? { ...m, name: to, model: refOf(to) } : m));
 		selection?.drop([from]);
 		await invalidateAll();
 	}
@@ -116,7 +132,7 @@
 		failed = null;
 		try {
 			const page = await modelCall<ModelFolder>(folderApi(scope, path, cursor));
-			rows = [...rows, ...page.models];
+			models = [...models, ...page.models];
 			folders = [...folders, ...page.folders];
 			cursor = page.cursor;
 		} catch (e) {
@@ -127,13 +143,13 @@
 	}
 </script>
 
-{#if !rows.length && !folders.length && path}
+{#if !rows.length && path}
 	<EmptyState variant="onboarding" title="This folder is empty">
 		{#snippet lead()}
 			Move a model here, or save one under <code class="font-mono text-[0.9em]">{path}/</code>.
 		{/snippet}
 	</EmptyState>
-{:else if !rows.length && !folders.length}
+{:else if !rows.length}
 	<EmptyState
 		variant="onboarding"
 		title={scope.project === null ? 'No models yet' : `No models in ${scope.project} yet`}
@@ -148,109 +164,83 @@
 		{/snippet}
 	</EmptyState>
 {:else}
-	<div class="grid gap-3">
-		<table class="group/table w-full table-fixed border-collapse text-[13.5px]">
-			<thead>
-				<tr class="h-10 border-b text-left text-xs font-medium text-muted-foreground">
-					{#if selection}
-						<th class="w-8 pl-2"><RowCheckbox {selection} /></th>
-					{/if}
-					<th class="px-2 font-medium">Name</th>
-					<th class="hidden w-28 px-2 font-medium sm:table-cell">Latest</th>
-					<th class="w-28 px-2 font-medium">Primary</th>
-					<th class="hidden w-28 px-2 font-medium sm:table-cell">Size</th>
-					<th class="w-32 px-2 font-medium">Updated</th>
-					{#if selection}<th class="w-9"><span class="sr-only">Actions</span></th>{/if}
-				</tr>
-			</thead>
-			<tbody>
-				{#each rows as m (`m:${m.name}`)}
-					{@const on = !!selection?.has(m.name)}
-					<tr
-						class={[
-							'group/row h-10 border-b border-divider',
-							on ? 'bg-selection/45' : 'hover:bg-muted'
-						]}
-						aria-selected={selection ? on : undefined}
-					>
-						{#if selection}
-							<td class="pl-2"><RowCheckbox {selection} key={m.name} name={nameOf(m.name)} /></td>
-						{/if}
-						<td class="truncate px-2">
-							<a
-								class="flex items-center gap-2 underline-offset-3 hover:text-link hover:underline"
-								href={modelsHref(scope, m.name)}
-							>
-								<BoxIcon class="size-4 flex-none text-muted-foreground" />
-								<span class="truncate">{nameOf(m.name)}</span>
-							</a>
-						</td>
-						<td class="hidden px-2 text-muted-foreground tabular-nums sm:table-cell">
-							{m.latest === null ? '—' : `Version ${m.latest}`}
-						</td>
-						<td class="px-2 text-muted-foreground tabular-nums">
-							{m.primary === null ? '—' : `Version ${m.primary}`}
-						</td>
-						<td class="hidden px-2 text-muted-foreground tabular-nums sm:table-cell">
-							{m.size == null ? '—' : bytes(m.size)}
-						</td>
-						<td class="px-2 text-muted-foreground tabular-nums" title={dateTime(m.updated_at)}>
-							{relativeTime(m.updated_at, now)}
-						</td>
-						{#if selection}
-							<td class="pr-1 text-right">
-								<RowMenu
-									name={nameOf(m.name)}
-									onrename={() => selection.act('rename', [m.name])}
-									onmove={() => selection.act('move', [m.name])}
-									ondelete={() => selection.act('delete', [m.name])}
-								/>
-							</td>
-						{/if}
-					</tr>
-				{/each}
-				{#each folders as f (`f:${f.path}`)}
-					<tr class="group/row h-10 border-b border-divider hover:bg-muted">
-						{#if selection}<td></td>{/if}
-						<td class="truncate px-2">
-							<a
-								class="flex items-center gap-2 underline-offset-3 hover:text-link hover:underline"
-								href={modelsHref(scope, f.path)}
-							>
-								<FolderIcon class="size-4 flex-none text-muted-foreground" />
-								<span class="truncate">{f.name}/</span>
-							</a>
-						</td>
-						<td class="hidden px-2 text-muted-foreground sm:table-cell">—</td>
-						<td class="px-2 text-muted-foreground tabular-nums">{count(f.models, 'model')}</td>
-						<td class="hidden px-2 text-muted-foreground sm:table-cell">—</td>
-						<td class="px-2 text-muted-foreground">—</td>
-						{#if selection}
-							<td class="pr-1 text-right">
-								<RowMenu
-									name="{f.name}/"
-									onrename={() => onFolder(f, 'rename')}
-									onmove={() => onFolder(f, 'move')}
-									ondelete={() => onFolder(f, 'delete')}
-								/>
-							</td>
-						{/if}
-					</tr>
-				{/each}
-			</tbody>
-		</table>
-		{#if failed}
-			<p class="text-[13px] text-destructive" role="alert">{failed}</p>
-		{/if}
-		{#if cursor}
-			<div>
-				<Button variant="outline" size="sm" disabled={loading} onclick={more}>
-					{loading ? 'Loading…' : 'Load more'}
-				</Button>
-			</div>
-		{/if}
-	</div>
+	<DataTable
+		columns={COLUMNS}
+		{rows}
+		key={(r) => (r.kind === 'model' ? r.m.name : `${r.f.path}/`)}
+		label="Models"
+		selection={selection ?? null}
+		selectable={(r) => r.kind === 'model'}
+		name={(r) => (r.kind === 'model' ? nameOf(r.m.name) : `${r.f.name}/`)}
+		menu={selection ? rowMenu : undefined}
+		dense
+		footer={cursor || failed ? footer : undefined}
+	>
+		{#snippet lead(r)}
+			{#if r.kind === 'model'}<BoxIcon />{:else}<FolderIcon />{/if}
+		{/snippet}
+		{#snippet cell(r, column)}
+			{#if column === 'name'}
+				<a
+					class={['block truncate underline-offset-3 hover:text-link hover:underline', ROW_LINK]}
+					href={modelsHref(scope, r.kind === 'model' ? r.m.name : r.f.path)}
+				>
+					{r.kind === 'model' ? nameOf(r.m.name) : `${r.f.name}/`}
+				</a>
+			{:else if r.kind === 'folder'}
+				<!-- A folder has only its count of models, under Primary. -->
+				{#if column === 'primary'}
+					<span class="text-muted-foreground tabular-nums">{count(r.f.models, 'model')}</span>
+				{:else}
+					<span class="text-faint">—</span>
+				{/if}
+			{:else if column === 'latest'}
+				<span class="text-muted-foreground">
+					{r.m.latest === null ? '—' : `Version ${r.m.latest}`}
+				</span>
+			{:else if column === 'primary'}
+				<span class="text-muted-foreground">
+					{r.m.primary === null ? '—' : `Version ${r.m.primary}`}
+				</span>
+			{:else if column === 'size'}
+				<span class="text-muted-foreground">{r.m.size == null ? '—' : bytes(r.m.size)}</span>
+			{:else}
+				<span class="text-muted-foreground" title={dateTime(r.m.updated_at)}>
+					{relativeTime(r.m.updated_at, now)}
+				</span>
+			{/if}
+		{/snippet}
+	</DataTable>
 {/if}
+
+{#snippet rowMenu(r: Row)}
+	{#if selection && r.kind === 'model'}
+		<RowMenu
+			name={nameOf(r.m.name)}
+			onrename={() => selection.act('rename', [r.m.name])}
+			onmove={() => selection.act('move', [r.m.name])}
+			ondelete={() => selection.act('delete', [r.m.name])}
+		/>
+	{:else if r.kind === 'folder'}
+		<RowMenu
+			name="{r.f.name}/"
+			onrename={() => onFolder(r.f, 'rename')}
+			onmove={() => onFolder(r.f, 'move')}
+			ondelete={() => onFolder(r.f, 'delete')}
+		/>
+	{/if}
+{/snippet}
+
+{#snippet footer()}
+	{#if cursor}
+		<Button variant="outline" disabled={loading} onclick={more}>
+			{loading ? 'Loading…' : 'Load more'}
+		</Button>
+	{/if}
+	{#if failed}
+		<span class="text-[13px] text-destructive" role="alert">{failed}</span>
+	{/if}
+{/snippet}
 
 {#if selection}
 	{@const many = selection.targets.length > 1}

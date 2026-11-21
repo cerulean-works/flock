@@ -30,7 +30,7 @@
 
 <!-- The page's one filled action. "HF" keeps it short; the hover text spells it out. -->
 <Button title="Import from Hugging Face" onclick={() => (open = true)}>
-	<DownloadIcon /> Import from HF
+	<DownloadIcon /><span class="max-sm:sr-only">Import from HF</span>
 </Button>
 {#if kind === 'dataset'}
 	<HFDatasetDialog bind:open {scope} {folder} onstarted={started} />

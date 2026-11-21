@@ -6,20 +6,15 @@
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import UploadIcon from '@lucide/svelte/icons/upload';
+	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
-	import {
-		PAGE,
-		bucketCall,
-		clickSelect,
-		entries,
-		nameOf,
-		objectHref,
-		s3Uri,
-		typeLabel
-	} from '#lib/storage.ts';
+	import DataTable, { type Column, ROW_LINK } from '#lib/components/DataTable.svelte';
+	import ListPage from '#lib/components/ListPage.svelte';
+	import { Selection } from '#lib/selection.svelte.ts';
+	import { PAGE, bucketCall, entries, nameOf, objectHref, s3Uri, typeLabel } from '#lib/storage.ts';
 	import { DATASETS_BUCKET, PROJECTS, datasetsHref } from '#lib/datasets.ts';
+	import type { Crumb } from '#lib/storage.ts';
 	import type { Listing, Presigned, ProjectInfo } from '#lib/types.ts';
 	import {
 		UploadQueue,
@@ -31,6 +26,7 @@
 	import { MODELS_BUCKET, modelsHref } from '#lib/models.ts';
 	import { bytes, count, dateTime, relativeTime } from '#lib/utils.ts';
 	import CopyButton from '../CopyButton.svelte';
+	import Breadcrumbs from '../Breadcrumbs.svelte';
 	import CreateFolderDialog from './CreateFolderDialog.svelte';
 	import DeleteObjectsDialog from './DeleteObjectsDialog.svelte';
 	import UploadList from './UploadList.svelte';
@@ -45,9 +41,22 @@
 		now: number;
 		/** The org's projects, to link each `-projects/{id}/` folder to its project (D169). */
 		projects?: readonly ProjectInfo[];
+		/** The page's title: the bucket's name unless given. */
+		title?: string;
+		/** The page's breadcrumbs, under the title. */
+		crumbs?: Crumb[];
 	}
 
-	let { org, bucket, prefix, listing, now, projects = [] }: Props = $props();
+	let {
+		org,
+		bucket,
+		prefix,
+		listing,
+		now,
+		projects = [],
+		title = bucket,
+		crumbs = []
+	}: Props = $props();
 
 	// In `-projects/` of flock-datasets and flock-models each folder is a project's, by its id
 	// (D160): it links to that project's Datasets or Models tab.
@@ -94,7 +103,10 @@
 			folders = more ? [...folders, ...page.folders] : page.folders;
 			objects = more ? [...objects, ...page.objects] : page.objects;
 			cursor = page.cursor;
-			if (!more) selected = new Set([...selected].filter((k) => keys.includes(k)));
+			if (!more) {
+				const shown = new Set(entries(folders, objects).map((r) => r.key));
+				selection.drop(selection.chosen.filter((k) => !shown.has(k)));
+			}
 		} catch (e) {
 			if (ask === asked) failed = (e as Error).message;
 		} finally {
@@ -108,19 +120,27 @@
 		typing = setTimeout(() => load(), 250);
 	}
 
-	// Selection: a click toggles a row, a shift-click the range from the last click.
-	let selected = $derived.by(() => {
+	// Selection: a click toggles a row, a shift-click the range from the last click. A new
+	// folder starts with nothing checked. Its rows are given at once, not only from the effect:
+	// the header's checkbox stays disabled if its first render finds none.
+	const selection = $derived.by(() => {
 		void prefix;
-		return new Set<string>();
+		const fresh = new Selection();
+		fresh.keys = untrack(() => keys);
+		return fresh;
 	});
-	let anchor: string | null = null;
-	function select(key: string, shift: boolean) {
-		selected = clickSelect(selected, keys, key, anchor, shift);
-		anchor = key;
-	}
-	const allSelected = $derived(keys.length > 0 && keys.every((k) => selected.has(k)));
-	const chosenKeys = $derived(keys.filter((k) => selected.has(k) && !k.endsWith('/')));
-	const chosenFolders = $derived(keys.filter((k) => selected.has(k) && k.endsWith('/')));
+	$effect.pre(() => {
+		selection.keys = keys;
+	});
+	const chosenKeys = $derived(selection.chosen.filter((k) => !k.endsWith('/')));
+	const chosenFolders = $derived(selection.chosen.filter((k) => k.endsWith('/')));
+
+	const COLUMNS: Column[] = [
+		{ id: 'name', label: 'Name' },
+		{ id: 'type', label: 'Type', from: 'md' },
+		{ id: 'size', label: 'Size', align: 'end', from: 'sm' },
+		{ id: 'modified', label: 'Last modified', align: 'end', from: 'sm' }
+	];
 
 	// Uploads, and refreshing the listing once they're done.
 	const queue = $derived(new UploadQueue(browserTransport(org, bucket), () => load()));
@@ -143,205 +163,175 @@
 	let deleting = $state(false);
 </script>
 
-<div class="grid gap-3">
-	<div class="flex flex-wrap items-center gap-2">
-		<div class="relative w-full max-w-72">
-			<SearchIcon
-				class="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-			/>
-			<input
-				class="h-8 w-full rounded-lg border border-input bg-background pr-2.5 pl-8 text-[13px] outline-none placeholder:text-faint focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-				placeholder="Filter by name prefix"
-				aria-label="Filter by name prefix"
-				spellcheck="false"
-				bind:value={filter}
-				oninput={filtered}
-			/>
-		</div>
-		<div class="ml-auto flex items-center gap-2">
-			<span class="flex items-center gap-1 text-[13px] text-muted-foreground max-sm:hidden">
-				<span class="max-w-60 truncate font-mono text-[12.5px]">{s3Uri(bucket, prefix)}</span>
-				<CopyButton text={s3Uri(bucket, prefix)} label="Copy S3 URI" />
-			</span>
-			{#if !readOnly}
-				<Button variant="outline" size="sm" onclick={() => (creatingFolder = true)}>
-					<FolderPlusIcon /> Create folder
-				</Button>
-				<Button size="sm" onclick={() => picker?.click()}><UploadIcon /> Upload</Button>
-			{/if}
-			<input
-				bind:this={picker}
-				type="file"
-				multiple
-				hidden
-				onchange={(e) => {
-					const input = e.currentTarget;
-					if (input.files?.length) upload(pickedFiles(input.files));
-					input.value = '';
-				}}
-			/>
-		</div>
+{#snippet path()}<Breadcrumbs {crumbs} />{/snippet}
+
+{#snippet actions()}
+	{#if !readOnly}
+		<Button variant="outline" onclick={() => (creatingFolder = true)}>
+			<FolderPlusIcon /> <span class="max-sm:sr-only">Create folder</span>
+		</Button>
+		<Button onclick={() => picker?.click()}>
+			<UploadIcon /> <span class="max-sm:sr-only">Upload</span>
+		</Button>
+	{/if}
+	<input
+		bind:this={picker}
+		type="file"
+		multiple
+		hidden
+		onchange={(e) => {
+			const input = e.currentTarget;
+			if (input.files?.length) upload(pickedFiles(input.files));
+			input.value = '';
+		}}
+	/>
+{/snippet}
+
+<!-- While rows are checked: what to do with them. -->
+{#snippet selected()}
+	{#if chosenKeys.length === 1 && !chosenFolders.length}
+		<Button variant="outline" size="sm" onclick={() => download(chosenKeys[0])}>
+			<DownloadIcon /> Download
+		</Button>
+	{/if}
+	{#if !readOnly}
+		<Button variant="outline" size="sm" class="text-destructive" onclick={() => (deleting = true)}>
+			<Trash2Icon /> Delete
+		</Button>
+	{/if}
+{/snippet}
+
+<!-- The folder's S3 URI to copy, and the filter. -->
+{#snippet controls()}
+	<span class="flex min-w-0 items-center gap-1 text-[13px] text-muted-foreground max-md:hidden">
+		<span class="truncate font-mono text-[12.5px]">{s3Uri(bucket, prefix)}</span>
+		<CopyButton text={s3Uri(bucket, prefix)} label="Copy S3 URI" />
+	</span>
+	<div class="relative w-56">
+		<SearchIcon
+			class="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+		/>
+		<input
+			class="h-8 w-full rounded-lg border border-input bg-background pr-2.5 pl-8 text-[13px] outline-none placeholder:text-faint focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+			placeholder="Filter by name prefix"
+			aria-label="Filter by name prefix"
+			spellcheck="false"
+			bind:value={filter}
+			oninput={filtered}
+		/>
 	</div>
+{/snippet}
 
-	{#if readOnly}
-		<p class="text-[13px] text-muted-foreground">
-			Versions are added with <code class="font-mono text-[0.9em]">flock models push</code> and
-			deleted in
-			<a class="text-link underline-offset-3 hover:underline" href={modelsHref(org)}>Models</a>.
-		</p>
-	{/if}
-	<UploadList {queue} />
-
-	{#if selected.size}
-		<div
-			class="flex h-10 items-center gap-2 bg-card px-3 text-[13px]"
-			role="toolbar"
-			aria-label="Selection"
-		>
-			<span class="tabular-nums">{selected.size.toLocaleString('en-US')} selected</span>
-			<Button
-				variant="ghost"
-				size="xs"
-				class="text-muted-foreground"
-				onclick={() => (selected = new Set())}
-			>
-				Clear
-			</Button>
-			<div class="ml-auto flex gap-1">
-				{#if chosenKeys.length === 1 && !chosenFolders.length}
-					<Button variant="outline" size="sm" onclick={() => download(chosenKeys[0])}>
-						<DownloadIcon /> Download
-					</Button>
-				{/if}
-				{#if !readOnly}
-					<Button
-						variant="outline"
-						size="sm"
-						class="text-destructive"
-						onclick={() => (deleting = true)}
-					>
-						<Trash2Icon /> Delete
-					</Button>
-				{/if}
-			</div>
+<!-- Files dropped anywhere on the listing upload into this folder; folders keep their paths. -->
+<ListPage
+	{title}
+	location={crumbs.length ? path : undefined}
+	{actions}
+	{controls}
+	{selection}
+	{selected}
+	class={dragging ? 'outline-2 -outline-offset-4 outline-primary outline-dashed' : undefined}
+	aria-label="Objects in {s3Uri(bucket, prefix)}"
+	ondragenter={(e) => {
+		if (readOnly || !e.dataTransfer?.types.includes('Files')) return;
+		e.preventDefault();
+		dragging++;
+	}}
+	ondragover={(e) => {
+		if (!readOnly && e.dataTransfer?.types.includes('Files')) e.preventDefault();
+	}}
+	ondragleave={() => (dragging = Math.max(0, dragging - 1))}
+	ondrop={async (e) => {
+		e.preventDefault();
+		dragging = 0;
+		if (e.dataTransfer && !readOnly) upload(await droppedFiles(e.dataTransfer));
+	}}
+>
+	{#if readOnly || queue.uploads.length}
+		<div class="grid gap-3 px-5 pt-4 pb-1">
+			{#if readOnly}
+				<p class="text-[13px] text-muted-foreground">
+					Versions are added with <code class="font-mono text-[0.9em]">flock models push</code> and
+					deleted in
+					<a class="text-link underline-offset-3 hover:underline" href={modelsHref(org)}>Models</a>.
+				</p>
+			{/if}
+			<UploadList {queue} />
 		</div>
 	{/if}
 
-	<!-- Files dropped anywhere on the listing upload into this folder; folders keep their paths. -->
-	<div
-		class={['relative', dragging && 'outline-2 outline-offset-2 outline-primary outline-dashed']}
-		role="region"
-		aria-label="Objects in {s3Uri(bucket, prefix)}"
-		ondragenter={(e) => {
-			if (readOnly || !e.dataTransfer?.types.includes('Files')) return;
-			e.preventDefault();
-			dragging++;
-		}}
-		ondragover={(e) => {
-			if (!readOnly && e.dataTransfer?.types.includes('Files')) e.preventDefault();
-		}}
-		ondragleave={() => (dragging = Math.max(0, dragging - 1))}
-		ondrop={async (e) => {
-			e.preventDefault();
-			dragging = 0;
-			if (e.dataTransfer && !readOnly) upload(await droppedFiles(e.dataTransfer));
-		}}
+	<DataTable
+		columns={COLUMNS}
+		{rows}
+		key={(row) => row.key}
+		name={(row) => nameOf(row.key)}
+		{selection}
+		label="Objects"
+		dense
+		empty={failed || loading ? undefined : none}
+		footer={failed || rows.length || cursor ? more : undefined}
 	>
-		<table class="w-full table-fixed border-collapse text-[13.5px]">
-			<thead>
-				<tr class="h-10 border-b text-left text-xs font-medium text-muted-foreground">
-					<th class="w-9 pl-2">
-						<Checkbox
-							checked={allSelected}
-							indeterminate={selected.size > 0 && !allSelected}
-							disabled={!keys.length}
-							onCheckedChange={() => (selected = allSelected ? new Set() : new Set(keys))}
-							aria-label={allSelected ? 'Deselect all' : 'Select all shown'}
-						/>
-					</th>
-					<th class="px-2 font-medium">Name</th>
-					<th class="hidden w-24 px-2 text-right font-medium sm:table-cell">Size</th>
-					<th class="hidden w-32 px-2 font-medium md:table-cell">Type</th>
-					<th class="hidden w-36 px-2 font-medium sm:table-cell">Last modified</th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each rows as row (row.key)}
-					{@const on = selected.has(row.key)}
-					{@const link = row.kind === 'folder' ? projectLink(row.key) : null}
-					<tr
-						class={['h-10 border-b border-divider', on ? 'bg-selection/45' : 'hover:bg-muted']}
-						aria-selected={on}
-					>
-						<td class="pl-2">
-							<Checkbox
-								bind:checked={() => on, () => {}}
-								onclick={(e: MouseEvent) => select(row.key, e.shiftKey)}
-								aria-label="Select {nameOf(row.key)}"
-							/>
-						</td>
-						<td class="px-2">
-							<div class="flex min-w-0 items-center gap-3">
-								<a
-									class="flex min-w-0 items-center gap-2 underline-offset-3 hover:text-link hover:underline"
-									href={objectHref(org, bucket, row.key)}
-									title={row.key}
-								>
-									{#if row.kind === 'folder'}
-										<FolderIcon class="size-4 flex-none text-muted-foreground" />
-										<span class="truncate">{nameOf(row.key)}/</span>
-									{:else}
-										<FileIcon class="size-4 flex-none text-muted-foreground" />
-										<span class="truncate">{nameOf(row.key)}</span>
-									{/if}
-								</a>
-								{#if link}
-									<a
-										class="min-w-0 truncate text-[12.5px] text-muted-foreground underline-offset-3 hover:text-link hover:underline"
-										href={link.href}>{link.name} · {link.tab}</a
-									>
-								{/if}
-							</div>
-						</td>
-						<td class="hidden px-2 text-right text-muted-foreground tabular-nums sm:table-cell">
-							{row.kind === 'folder' ? '—' : bytes(row.size)}
-						</td>
-						<td class="hidden truncate px-2 text-muted-foreground md:table-cell">
-							{typeLabel(row.key)}
-						</td>
-						<td
-							class="hidden px-2 text-muted-foreground tabular-nums sm:table-cell"
-							title={row.kind === 'folder' ? undefined : dateTime(row.last_modified)}
+		{#snippet lead(row)}
+			{#if row.kind === 'folder'}<FolderIcon />{:else}<FileIcon />{/if}
+		{/snippet}
+		{#snippet cell(row, column)}
+			{#if column === 'name'}
+				{@const link = row.kind === 'folder' ? projectLink(row.key) : null}
+				<div class="flex min-w-0 items-center gap-3">
+					<span class="flex min-w-0 items-center gap-2">
+						<a
+							class={['truncate hover:text-link', ROW_LINK]}
+							href={objectHref(org, bucket, row.key)}
+							title={row.key}
 						>
-							{row.kind === 'folder' ? '—' : relativeTime(row.last_modified, now)}
-						</td>
-					</tr>
-				{/each}
-			</tbody>
-		</table>
-		{#if failed}
-			<p class="mt-3 text-[13px] text-destructive" role="alert">{failed}</p>
-		{:else if !rows.length && !loading}
-			<p class="mt-4 text-muted-foreground">
-				{filter
-					? `Nothing here starts with “${filter}”.`
-					: 'This folder is empty. Drop files here, or upload them.'}
-			</p>
-		{/if}
-		<div class="mt-3 flex items-center gap-3 text-[13px] text-muted-foreground">
-			{#if rows.length}
-				<span class="tabular-nums">
-					{count(rows.length, 'entry', 'entries')}{cursor ? ' so far' : ''}
+							{nameOf(row.key)}{row.kind === 'folder' ? '/' : ''}
+						</a>
+					</span>
+					{#if link}
+						<a
+							class="relative z-1 min-w-0 truncate text-[12.5px] text-muted-foreground underline-offset-3 hover:text-link hover:underline"
+							href={link.href}>{link.name} in {link.tab}</a
+						>
+					{/if}
+				</div>
+			{:else if column === 'size'}
+				<span class="text-muted-foreground">{row.kind === 'folder' ? '–' : bytes(row.size)}</span>
+			{:else if column === 'type'}
+				<span class="block truncate text-muted-foreground">{typeLabel(row.key)}</span>
+			{:else if row.kind === 'folder'}
+				<span class="text-faint">–</span>
+			{:else}
+				<span class="text-muted-foreground" title={dateTime(row.last_modified)}>
+					{relativeTime(row.last_modified, now)}
 				</span>
 			{/if}
-			{#if cursor}
-				<Button variant="outline" size="sm" disabled={loading} onclick={() => load(true)}>
-					{loading ? 'Loading…' : 'Load more'}
-				</Button>
-			{/if}
-		</div>
-	</div>
-</div>
+		{/snippet}
+	</DataTable>
+</ListPage>
+
+{#snippet none()}
+	{filter
+		? `Nothing here starts with “${filter}”.`
+		: readOnly
+			? 'This folder is empty.'
+			: 'This folder is empty. Drop files here, or upload them.'}
+{/snippet}
+
+{#snippet more()}
+	{#if failed}
+		<p class="text-[13px] text-destructive" role="alert">{failed}</p>
+	{/if}
+	{#if rows.length}
+		<span class="text-[13px] text-muted-foreground tabular-nums">
+			{count(rows.length, 'entry', 'entries')}{cursor ? ' so far' : ''}
+		</span>
+	{/if}
+	{#if cursor}
+		<Button variant="outline" size="sm" disabled={loading} onclick={() => load(true)}>
+			{loading ? 'Loading…' : 'Load more'}
+		</Button>
+	{/if}
+{/snippet}
 
 <CreateFolderDialog bind:open={creatingFolder} {org} {bucket} {prefix} oncreated={() => load()} />
 <DeleteObjectsDialog
@@ -351,7 +341,7 @@
 	keys={chosenKeys}
 	prefixes={chosenFolders}
 	ondeleted={() => {
-		selected = new Set();
+		selection.clear();
 		load();
 	}}
 />

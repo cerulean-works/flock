@@ -61,7 +61,9 @@ const folder = (names = ['a', 'b', 'c'], cursor: string | null = null): DatasetF
 const box = (name: string) => screen.getByRole('checkbox', { name: `Select ${name}`, exact: true });
 const opacity = (name: string) => getComputedStyle(box(name).element()).opacity;
 const names = () =>
-	[...document.querySelectorAll('tbody tr td:nth-child(2)')].map((td) => td.textContent!.trim());
+	[...document.querySelectorAll('[role="rowgroup"] [role="row"] [role="cell"]:first-child')].map(
+		(td) => td.textContent!.trim()
+	);
 
 function list(f = folder()) {
 	const selection = new Selection();
@@ -89,7 +91,7 @@ describe('selecting datasets and folders', () => {
 		await box('a').click();
 		expect([...selection.selected]).toEqual(['eval/a']);
 		await vi.waitFor(() => expect(opacity('deep/')).toBe('1'));
-		const row = box('a').element().closest('tr')!;
+		const row = box('a').element().closest('[role="row"]')!;
 		expect(row.getAttribute('aria-selected')).toBe('true');
 		expect(row.className).toContain('bg-selection/45');
 	});

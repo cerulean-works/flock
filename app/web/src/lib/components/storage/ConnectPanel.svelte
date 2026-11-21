@@ -38,8 +38,11 @@
 	]);
 </script>
 
-<!-- How to reach the org's buckets from code: the proxy's address, and ready-to-copy snippets. -->
-<div class="bg-card px-4 py-4">
+<!--
+	How to reach the org's buckets from code: the proxy's address, and ready-to-copy snippets.
+	The body of the Storage page's Connect dialog.
+-->
+<div class="min-w-0">
 	<dl class="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-1 text-[13px]">
 		<dt class="text-muted-foreground">Endpoint</dt>
 		<dd class="flex min-w-0 items-center gap-1">

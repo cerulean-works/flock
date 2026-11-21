@@ -68,12 +68,12 @@
 					{/if}
 				</div>
 				{#if subtitle}
-					<p
+					<div
 						class="min-w-0 truncate text-[13px] text-muted-foreground tabular-nums max-sm:hidden"
 						title={subtitleTitle}
 					>
 						{@render subtitle()}
-					</p>
+					</div>
 				{/if}
 			</div>
 			{#if actions}
@@ -89,12 +89,16 @@
 	</header>
 {:else}
 	<header class="flex-none">
-		<div class="box-content flex h-10 items-baseline gap-x-3 px-5 pt-5 pb-3">
+		<div class="box-content flex h-10 items-baseline gap-x-3 pt-5 pr-7 pb-3 pl-5">
 			<div class="flex min-w-0 items-baseline gap-1">
 				{#if leading}
 					<div class="mr-2 flex flex-none items-center self-center">{@render leading()}</div>
 				{/if}
-				<h1 class="min-w-0 truncate text-[34px] leading-10 font-normal tracking-[-0.025em]" {title}>
+				<!-- Pulled left by the big F's side bearing, so its stem lines up with the text below. -->
+				<h1
+					class="-ml-[0.045em] min-w-0 truncate text-[34px] leading-10 font-normal tracking-[-0.025em]"
+					{title}
+				>
 					{title}
 				</h1>
 				{#if badges}
@@ -102,19 +106,19 @@
 				{/if}
 			</div>
 			{#if subtitle}
-				<p
+				<div
 					class="min-w-0 flex-1 truncate text-[13px] text-muted-foreground max-sm:hidden"
 					title={subtitleTitle}
 				>
 					{@render subtitle()}
-				</p>
+				</div>
 			{/if}
 			{#if actions}
 				<div class="ml-auto flex flex-none items-center gap-2 self-center">{@render actions()}</div>
 			{/if}
 		</div>
 		{#if toolbar}
-			<div class="flex h-12 items-center gap-2 border-b px-5">{@render toolbar()}</div>
+			<div class="flex h-12 items-center gap-2 border-b pr-7 pl-5">{@render toolbar()}</div>
 		{/if}
 	</header>
 {/if}

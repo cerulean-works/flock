@@ -3,9 +3,8 @@
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import Page from '#lib/components/Page.svelte';
-	import PageHeader from '#lib/components/PageHeader.svelte';
-	import SelectionBar from '#lib/components/SelectionBar.svelte';
-	import Breadcrumbs from '#lib/components/storage/Breadcrumbs.svelte';
+	import ListPage from '#lib/components/ListPage.svelte';
+	import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import HFImportButton from '#lib/components/imports/HFImportButton.svelte';
 	import HFImportRows from '#lib/components/imports/HFImportRows.svelte';
@@ -61,6 +60,8 @@
 		void [scope.org, scope.project, data.path];
 		return writer ? new Selection() : undefined;
 	});
+	// Org scope: Datasets › org › folders; a project's: project › Datasets › folders.
+	const subtrail = $derived(trail.filter((_, i) => i !== (project === null ? 0 : 1)));
 	const projects = $derived(shell.projects.map((p) => p.name));
 </script>
 
@@ -70,45 +71,55 @@
 	>
 </svelte:head>
 
-{#snippet trailCrumbs()}<Breadcrumbs crumbs={trail} />{/snippet}
+{#snippet trailCrumbs()}<Breadcrumbs crumbs={subtrail} />{/snippet}
 
 {#snippet actions()}
-	{#if selection?.size}
-		<SelectionBar {selection}>
-			<Button variant="outline" size="sm" onclick={() => blend(selection.chosen)}>
-				<BlendIcon /> Blend
-			</Button>
-			<Button variant="outline" size="sm" onclick={() => selection.act('move')}>
-				<FolderInputIcon /> Move
-			</Button>
-			<Button
-				variant="outline"
-				size="sm"
-				class="text-destructive"
-				onclick={() => selection.act('delete')}
-			>
-				<Trash2Icon /> Delete
-			</Button>
-		</SelectionBar>
-	{:else}
-		<!-- One filled action (the import), with the quieter ones beside it. -->
-		{#if writer}
-			<Button variant="ghost" onclick={() => blend()}>
-				<BlendIcon /> New blend
-			</Button>
-		{/if}
-		<NewFolderButton {scope} path={data.path} />
-		{#if writer}
-			<HFImportButton {scope} kind="dataset" list={imports} folder={data.path} />
-		{/if}
+	<!-- One filled action (the import), with the quieter ones beside it. -->
+	{#if writer}
+		<Button variant="ghost" onclick={() => blend()}>
+			<BlendIcon /> <span class="max-sm:sr-only">New blend</span>
+		</Button>
+	{/if}
+	<NewFolderButton {scope} path={data.path} />
+	{#if writer}
+		<HFImportButton {scope} kind="dataset" list={imports} folder={data.path} />
 	{/if}
 {/snippet}
 
-<Page width="home">
-	{#if data.kind === 'folder'}
-		<PageHeader {title} layout="home" crumbs={trail.length ? trailCrumbs : undefined} {actions} />
-		<HFImportRows {scope} list={imports} kind="dataset" folder={data.path} />
-		<DatasetJobRows {scope} list={jobs} folder={data.path} />
+<!-- While rows are checked: what to do with them. -->
+{#snippet selected()}
+	{#if selection}
+		<Button variant="outline" size="sm" onclick={() => blend(selection.chosen)}>
+			<BlendIcon /> Blend
+		</Button>
+		<Button variant="outline" size="sm" onclick={() => selection.act('move')}>
+			<FolderInputIcon /> Move
+		</Button>
+		<Button
+			variant="outline"
+			size="sm"
+			class="text-destructive"
+			onclick={() => selection.act('delete')}
+		>
+			<Trash2Icon /> Delete
+		</Button>
+	{/if}
+{/snippet}
+
+{#if data.kind === 'folder'}
+	<ListPage
+		title="Datasets"
+		heading="All datasets"
+		location={subtrail.length ? trailCrumbs : undefined}
+		{actions}
+		{selection}
+		{selected}
+	>
+		<!-- Imports and blends writing into this folder, over its listing. -->
+		<div class="px-5 has-[li]:pt-4">
+			<HFImportRows {scope} list={imports} kind="dataset" folder={data.path} />
+			<DatasetJobRows {scope} list={jobs} folder={data.path} />
+		</div>
 		{#key data.path}
 			<FolderView
 				{scope}
@@ -128,7 +139,9 @@
 				onstarted={(job) => jobs.add(job)}
 			/>
 		{/if}
-	{:else}
+	</ListPage>
+{:else}
+	<Page width="home">
 		<div class="pt-5">
 			{#if trail.length}<Breadcrumbs crumbs={trail} />{/if}
 		</div>
@@ -146,5 +159,5 @@
 				{projects}
 			/>
 		{/key}
-	{/if}
-</Page>
+	</Page>
+{/if}

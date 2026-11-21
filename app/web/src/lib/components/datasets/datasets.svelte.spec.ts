@@ -84,7 +84,9 @@ describe('FolderView', () => {
 			now: 1_790_000_100
 		});
 		const names = () =>
-			[...document.querySelectorAll('tbody tr td:first-child')].map((td) => td.textContent!.trim());
+			[
+				...document.querySelectorAll('[role="rowgroup"] [role="row"] [role="cell"]:first-child')
+			].map((td) => td.textContent!.trim());
 		expect(names()).toEqual(['mmlu', 'deep/', 'notes.md']);
 		// (Version and size columns show on wider screens.)
 		await expect.element(screen.getByText('v12')).toBeInTheDocument();
