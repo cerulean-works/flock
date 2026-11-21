@@ -23,6 +23,7 @@ from flock.hub.models._common import (
     Progress,
     Ref,
     Registry,
+    parse_ref,
     s3_client,
     sha256_file,
 )
@@ -114,6 +115,8 @@ def save_to_hub(
     blocking: Literal[True] = True,
     resume: bool = True,
     keep_local: bool = False,
+    project: str | None = None,
+    org: str | None = None,
 ) -> ModelVersion: ...
 
 
@@ -133,6 +136,8 @@ def save_to_hub(
     blocking: Literal[False],
     resume: bool = True,
     keep_local: bool = False,
+    project: str | None = None,
+    org: str | None = None,
 ) -> PendingUpload: ...
 
 
@@ -152,6 +157,8 @@ def save_to_hub(
     blocking: bool,
     resume: bool = True,
     keep_local: bool = False,
+    project: str | None = None,
+    org: str | None = None,
 ) -> ModelVersion | PendingUpload: ...
 
 
@@ -170,6 +177,8 @@ def save_to_hub(
     blocking: bool = True,
     resume: bool = True,
     keep_local: bool = False,
+    project: str | None = None,
+    org: str | None = None,
 ) -> ModelVersion | PendingUpload:
     """
     Saves `model` as a new version of `name`, creating the model if it's new.
@@ -183,7 +192,9 @@ def save_to_hub(
             A Flock model, such as `Olmo2`, whose `config` is a frozen dataclass. Or the path
             of a folder that already holds a version's files, which is pushed as it is.
         name (`str`):
-            The model, as `org/name`.
+            The model: `org/path` for a global one, such as `acme/eval/olmo2-1b`, or
+            `project:path`, or with `project` a path inside it, such as `sweeps/lr-3e-4`.
+            Folders in the path are made as needed.
         tags (`Sequence[str]`, *optional*):
             Tags for the new version. A tag on another version moves to it, except a
             `checkpoint-{step}` tag, which is refused.
@@ -195,7 +206,8 @@ def save_to_hub(
         run (`wandb.Run` or `str`, *optional*):
             The run that made the model, or its `entity/project/id`. The registry links the
             version to an existing run in the same org. Model snapshots also record it in
-            `flock.json`.
+            `flock.json`. It doesn't choose where the model is saved: without `project`, it's
+            global. Pass `project=run.project` to save into the run's project.
         step (`int`, *optional*):
             The training step, stored with the version and in the model snapshot's `flock.json`.
         dedupe_key (`str`, *optional*):
@@ -216,6 +228,11 @@ def save_to_hub(
         keep_local (`bool`, *optional*, defaults to `False`):
             Keep the written model in `~/.cache/flock/uploads/{ulid}/model/` once the version
             exists.
+        project (`str`, *optional*):
+            The project the model belongs to, by name or as `org/project`. `name` is then a
+            path inside it. Not with the `project:path` shorthand.
+        org (`str`, *optional*):
+            The project's org. Defaults to your default org.
 
     Returns:
         [`~hub.models.ModelVersion`] or [`~hub.models.PendingUpload`]: the version, or with `blocking=False`, the
@@ -233,9 +250,11 @@ def save_to_hub(
 
     version = models.save_to_hub(model, "acme/olmo2-1b", tags=["checkpoint-12000"], step=12000)
     print(version)  # acme/olmo2-1b@1
+    version = models.save_to_hub(model, "sweeps/lr-3e-4", project="pretrain", run=run, step=12000)
+    print(version)  # pretrain:sweeps/lr-3e-4@1
     ```
     """
-    ref = Ref.parse(name, version=False)
+    ref = parse_ref(name, version=False, project=project, org=org)
     run_path, run_id = _run_path(run)
     if dedupe_key is None and run_id is not None and step is not None:
         dedupe_key = f"{run_id}:{step}"
@@ -262,7 +281,7 @@ def save_to_hub(
             earlier = next(
                 (
                     journal
-                    for journal in journals(ref.model)
+                    for journal in journals(ref)
                     if journal.staged and journal.options.get("dedupe_key") == dedupe_key
                 ),
                 None,
@@ -314,7 +333,7 @@ def push(
         raise ModelError(f"{source} has no files to push")
     if resume and not staged:
         file_names = set(paths)
-        for journal in journals(ref.model):
+        for journal in journals(ref):
             if journal.source != source or journal.files.keys() != file_names:
                 continue
             if journal.changed_file() is None:
@@ -346,6 +365,7 @@ def push(
             ref,
             opened.ulid,
             opened.part_size,
+            opened.prefix,
             source,
             files,
             options,
@@ -355,7 +375,9 @@ def push(
         return _send_and_commit(registry, journal, progress, resume=False)
 
 
-def resume_uploads(name: str) -> list[ModelVersion]:
+def resume_uploads(
+    name: str, *, project: str | None = None, org: str | None = None
+) -> list[ModelVersion]:
     """
     Finishes every upload of `name` that a crashed process left on this machine, and returns
     the versions made. Call it when a job starts, before saving anything new.
@@ -366,15 +388,19 @@ def resume_uploads(name: str) -> list[ModelVersion]:
 
     Args:
         name (`str`):
-            The model, as `org/name`.
+            The model, as `org/path`, `project:path`, or a path with `project`.
+        project (`str`, *optional*):
+            The project the model belongs to, by name or as `org/project`.
+        org (`str`, *optional*):
+            The project's org. Defaults to your default org.
 
     Raises:
         [`~hub.models.ModelError`]: when a local file changed since its upload started. Abort that upload
             with `flock models uploads abort ULID`.
     """
-    ref = Ref.parse(name, version=False)
+    ref = parse_ref(name, version=False, project=project, org=org)
     done = []
-    for journal in journals(ref.model):
+    for journal in journals(ref):
         version = _resume_upload(journal, None, discard_stale=True)
         if version is not None:
             done.append(version)
@@ -421,20 +447,23 @@ def _resume_upload(
         if isinstance(opened, ModelVersion):
             journal.cleanup(committed=True)
             return opened
-        journal.restart(opened.ulid, opened.part_size)
+        journal.restart(opened.ulid, opened.part_size, opened.prefix)
         return _send_and_commit(registry, journal, progress, resume=False)
 
 
-def abort(ulid: str, model: str | None = None) -> None:
+def abort(
+    ulid: str, model: str | None = None, *, project: str | None = None, org: str | None = None
+) -> None:
     """Abort an upload and delete its local journal, if it was found by upload ID."""
-    journal = find_journal(ulid) if model is None else None
-    path = (
-        journal.upload_path
-        if journal is not None
-        else f"{Ref.parse(model or '', version=False).path}/uploads/{ulid}"
-    )
+    if model is None:
+        journal: Journal | None = find_journal(ulid)
+        assert journal is not None
+        ref, route = journal.ref, journal.upload_route
+    else:
+        journal = None
+        ref, route = parse_ref(model, version=False, project=project, org=org), f"uploads/{ulid}"
     with Registry() as registry:
-        registry.call("DELETE", path, ok=204)
+        registry.model_call("DELETE", ref, route, ok=204)
     if journal is not None:
         journal.cleanup()
 
@@ -456,19 +485,20 @@ def interrupted_uploads() -> list[tuple[Journal, str]]:
 class _OpenedUpload:
     ulid: str
     part_size: int
+    prefix: str
 
 
 def _open_upload(
     registry: Registry, ref: Ref, files: Mapping[str, UploadFile], options: dict[str, Any]
 ) -> _OpenedUpload | ModelVersion:
     declared = [{"path": path, "size": file["size"]} for path, file in sorted(files.items())]
-    answer = registry.call(
-        "POST", f"{ref.path}/uploads", {"files": declared, **options}, (200, 201)
-    )
+    answer = registry.model_call("POST", ref, "uploads", {"files": declared, **options}, (200, 201))
     # A successful request can return the existing version for this dedupe key.
     if "ulid" not in answer:
         return ModelVersion.from_api(answer)
-    return _OpenedUpload(answer["ulid"], answer.get("part_size") or PART_SIZE)
+    # The folder is the registry's to choose (D161): a project's models are under -projects/.
+    prefix = answer.get("prefix") or f"{ref.name}/u/{answer['ulid']}/"
+    return _OpenedUpload(answer["ulid"], answer.get("part_size") or PART_SIZE, prefix)
 
 
 def _commit(registry: Registry, journal: Journal) -> ModelVersion:
@@ -476,13 +506,13 @@ def _commit(registry: Registry, journal: Journal) -> ModelVersion:
         {"path": path, "sha256": file["sha256"]} for path, file in sorted(journal.files.items())
     ]
     return ModelVersion.from_api(
-        registry.call("POST", f"{journal.upload_path}/commit", {"files": files})
+        registry.model_call("POST", journal.ref, f"{journal.upload_route}/commit", {"files": files})
     )
 
 
 def _upload_state(registry: Registry, journal: Journal) -> str:
     try:
-        return registry.call("GET", journal.upload_path)["state"]
+        return registry.model_call("GET", journal.ref, journal.upload_route)["state"]
     except ModelError as error:
         if error.status != 404:
             raise

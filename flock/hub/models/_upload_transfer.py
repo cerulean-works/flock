@@ -33,7 +33,7 @@ class UploadTransfer:
         self.s3 = s3
         self.progress = progress
         self.part_size = journal.part_size
-        self.prefix = f"{journal.ref.name}/u/{journal.ulid}/"
+        self.prefix = journal.prefix
 
     def send_files(self, *, resume: bool) -> None:
         pool = TransferPool(concurrency())

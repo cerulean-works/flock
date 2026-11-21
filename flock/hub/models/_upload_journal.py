@@ -1,4 +1,6 @@
-"""Local state for an upload. Journal format 1 is shared with earlier Flock clients."""
+"""Local state for an upload. Journal format 1 is shared with earlier Flock clients. Format 2
+is the same with the model's `org`, `project` and `name` recorded apart, for a model earlier
+clients can't name (a project's, or one in a folder), so they skip its journal."""
 
 import json
 import os
@@ -12,6 +14,7 @@ from flock.hub.models._common import PART_SIZE, ModelError, Ref, cache_root
 
 JOURNAL_NAME = "journal.json"
 JOURNAL_FORMAT = 1
+SCOPED_FORMAT = 2
 STAGED_MODEL = "model"
 STAGING_PREFIX = ".staging-"
 STALE_STAGING_SECONDS = 86400
@@ -32,7 +35,11 @@ class UploadFile(TypedDict):
 class _JournalData(TypedDict):
     format: int
     model: str
+    org: NotRequired[str]
+    project: NotRequired[str | None]
+    name: NotRequired[str]
     ulid: str
+    prefix: NotRequired[str]
     source: str
     staged: NotRequired[bool]
     keep_local: NotRequired[bool]
@@ -56,7 +63,7 @@ class Journal:
             data = json.loads((folder / JOURNAL_NAME).read_text())
         except OSError, ValueError:
             return None
-        if not isinstance(data, dict) or data.get("format") != JOURNAL_FORMAT:
+        if not isinstance(data, dict) or data.get("format") not in (JOURNAL_FORMAT, SCOPED_FORMAT):
             return None
         return cls(folder, cast(_JournalData, data))
 
@@ -66,6 +73,7 @@ class Journal:
         ref: Ref,
         ulid: str,
         part_size: int,
+        prefix: str,
         source: Path,
         files: dict[str, UploadFile],
         options: dict[str, Any],
@@ -78,12 +86,15 @@ class Journal:
         if staged:
             os.replace(source, folder / STAGED_MODEL)
             source = folder / STAGED_MODEL
+        scoped = ref.project is not None or "/" in ref.name
         journal = cls(
             folder,
             {
-                "format": JOURNAL_FORMAT,
+                "format": SCOPED_FORMAT if scoped else JOURNAL_FORMAT,
                 "model": ref.model,
+                **({"org": ref.org, "project": ref.project, "name": ref.name} if scoped else {}),
                 "ulid": ulid,
+                "prefix": prefix,
                 "source": str(source),
                 "staged": staged,
                 "keep_local": keep_local,
@@ -106,7 +117,18 @@ class Journal:
 
     @property
     def ref(self) -> Ref:
+        """The model, in the scope the upload was opened in."""
+        if "name" in self._data:
+            data = self._data
+            return Ref(data["org"], data["name"], None, data.get("project"))
         return Ref.parse(self.model, version=False)
+
+    @property
+    def prefix(self) -> str:
+        """The upload's folder in `flock-models`, as the registry answered when it opened it.
+        Journals from before it was recorded only uploaded to global models, whose folder was
+        their name."""
+        return self._data.get("prefix") or f"{self.ref.name}/u/{self.ulid}/"
 
     @property
     def source(self) -> Path:
@@ -129,11 +151,11 @@ class Journal:
         return self._data.get("part_size") or PART_SIZE
 
     @property
-    def upload_path(self) -> str:
-        """Registry route for this upload."""
-        return f"{self.ref.path}/uploads/{self.ulid}"
+    def upload_route(self) -> str:
+        """The upload's route under its model's (see [`Registry.model_call`])."""
+        return f"uploads/{self.ulid}"
 
-    def restart(self, ulid: str, part_size: int) -> None:
+    def restart(self, ulid: str, part_size: int, prefix: str) -> None:
         """Move the journal and staged files to a new upload and clear S3 progress."""
         folder = uploads_root() / ulid
         if self.folder != folder:
@@ -143,6 +165,7 @@ class Journal:
                 self._data["source"] = str(folder / STAGED_MODEL)
         self._data["ulid"] = ulid
         self._data["part_size"] = part_size
+        self._data["prefix"] = prefix
         for file in self.files.values():
             file.update(upload_id=None, done=False)
         self._write()
@@ -181,8 +204,9 @@ class Journal:
             shutil.rmtree(self.folder, ignore_errors=True)
 
 
-def journals(model: str | None = None) -> list[Journal]:
-    """Find local journals by upload ID order and clear stale staging directories."""
+def journals(model: Ref | None = None) -> list[Journal]:
+    """Find local journals by upload ID order, of `model` (without a version) or of every
+    model, and clear stale staging directories."""
     root = uploads_root()
     if not root.is_dir():
         return []
@@ -196,7 +220,7 @@ def journals(model: str | None = None) -> list[Journal]:
                 pass
             continue
         journal = Journal.load(folder)
-        if journal is not None and (model is None or journal.model == model):
+        if journal is not None and (model is None or journal.ref == model):
             found.append(journal)
     return found
 

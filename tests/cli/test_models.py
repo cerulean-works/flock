@@ -180,7 +180,7 @@ def test_round_trip_single_and_sharded(flock: S3Flock, signed_in: str, cache_dir
     assert isinstance(loaded, Olmo2) and loaded.config == model.config
     assert same_weights(model, loaded)
     folder = models.download("flock/tiny@1")
-    assert folder == cache_dir / "models" / "flock" / "tiny" / version.digest
+    assert folder == cache_dir / "models" / "flock" / version.digest
     described = json.loads((folder / "flock.json").read_text())
     assert described["architecture"] == "flock.training.core.models.olmo2:Olmo2"
     assert described["config_class"] == "flock.training.core.models.olmo2:Olmo2Config"
@@ -213,14 +213,43 @@ def test_round_trip_single_and_sharded(flock: S3Flock, signed_in: str, cache_dir
     assert models.tag("flock/tiny@2", "release", move=True).tags == ("release", "small")
     models.untag("flock/tiny", "release")
     assert models.versions("flock/tiny")[0].tags == ("small",)
-    assert [m["model"] for m in models.list_models()] == ["flock/tiny"]
+    assert [m["model"] for m in models.list_models()["models"]] == ["flock/tiny"]
+
+
+def test_a_project_s_model_and_folders(flock: S3Flock, signed_in: str, cache_dir: Path) -> None:
+    made = flock.client().post("/api/v1/projects", {"entity": "flock", "name": "pretrain"})
+    assert made.status == 201, made.body
+    model = tiny()
+    version = models.save_to_hub(model, "sweeps/tiny", project="pretrain", tags=["checkpoint-1"])
+    assert isinstance(version, models.ModelVersion)
+    assert str(version) == "pretrain:sweeps/tiny@1" and version.project == "pretrain"
+    cases: tuple[tuple[str, dict[str, Any]], ...] = (
+        ("pretrain:sweeps/tiny@checkpoint-1", {}),
+        ("sweeps/tiny@1", {"project": "pretrain"}),
+        ("sweeps/tiny", {"project": "flock/pretrain"}),
+    )
+    for ref, options in cases:
+        assert same_weights(model, models.load_from_hub(ref, device="cpu", **options)), ref
+    # Global and project scopes are apart.
+    with pytest.raises(models.ModelError):
+        models.download("flock/sweeps/tiny")
+    listed = models.list_models("sweeps", project="pretrain")
+    assert [m["model"] for m in listed["models"]] == ["pretrain:sweeps/tiny"]
+    assert models.list_models()["models"] == []
+
+    # A global model in a folder, from the CLI too.
+    other = models.save_to_hub(tiny(seed=3), "flock/eval/tiny")
+    assert isinstance(other, models.ModelVersion) and str(other) == "flock/eval/tiny@1"
+    assert models.list_models()["folders"] == [{"name": "eval", "path": "eval", "models": 1}]
 
 
 def test_references() -> None:
     assert Ref.parse("acme/olmo2-1b") == Ref("acme", "olmo2-1b", None)
     assert Ref.parse("acme/olmo2-1b@12").version == "12"
     assert Ref.parse("acme/olmo2-1b@primary").version == "primary"
-    for bad in ("olmo2-1b", "acme/olmo/1b", "acme/olmo2-1b@", "/x", "acme/x@1@2"):
+    # Model names may have folders (022): acme/olmo/1b is model olmo/1b of acme.
+    assert Ref.parse("acme/olmo/1b") == Ref("acme", "olmo/1b", None)
+    for bad in ("olmo2-1b", "acme/olmo2-1b@", "/x", "acme/x@1@2", "acme/a:b"):
         with pytest.raises(ValueError):
             Ref.parse(bad)
     with pytest.raises(ValueError, match="names a version"):
@@ -595,7 +624,7 @@ def test_a_download_resumes_from_its_partial_file(
         real(self, download, start, end)
 
     monkeypatch.setattr(cache._DownloadTransfer, "_download_range", download_range)
-    folder = cache_dir / "models" / "flock" / "m" / version.digest
+    folder = cache_dir / "models" / "flock" / version.digest
     folder.mkdir(parents=True)
     data = (source / "model.safetensors").read_bytes()
     (folder / "model.safetensors.partial").write_bytes(data[:MIB])
@@ -619,7 +648,7 @@ def test_a_corrupted_file_is_rejected(
     pushed: tuple[Path, models.ModelVersion], cache_dir: Path
 ) -> None:
     source, version = pushed
-    folder = cache_dir / "models" / "flock" / "m" / version.digest
+    folder = cache_dir / "models" / "flock" / version.digest
     folder.mkdir(parents=True)
     size = (source / "model.safetensors").stat().st_size
     (folder / "model.safetensors.partial").write_bytes(b"\0" * size)
@@ -675,7 +704,7 @@ def test_two_processes_share_one_download(
         out, _ = process.communicate(timeout=120)
         assert process.returncode == 0
         answers.append(json.loads(out.splitlines()[-1]))
-    assert {a["folder"] for a in answers} == {str(cache_dir / "models/flock/m" / version.digest)}
+    assert {a["folder"] for a in answers} == {str(cache_dir / "models/flock" / version.digest)}
     assert sum(a["gets"] for a in answers) == 4  # each file once, not twice
     assert sha(Path(answers[0]["folder"]) / "model.safetensors") == sha(
         source / "model.safetensors"
@@ -773,7 +802,7 @@ def test_cli_commands(
         "model.safetensors",
     ]
     cached = flock_cli("models", "pull", "flock/m")
-    assert str(cache_dir / "models" / "flock" / "m") in cached.output
+    assert str(cache_dir / "models" / "flock") in cached.output
 
     missing = flock_cli("models", "pull", "flock/nothing")
     assert missing.exit_code == 1 and "not found" in missing.output
