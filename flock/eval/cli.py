@@ -137,9 +137,10 @@ def diff_command(a: str, b: str, as_json: bool) -> None:
     """Compare two runs doc by doc, each a folder holding results.json or a tracker run as run:ENTITY/PROJECT/ID, on every accuracy task both scored under the same task hash. Exits 2 if the runs can't be compared."""
     try:
         found = diff(read_results(a), read_results(b))
-    # A missing or damaged results file, another instrument, or a refused read of a run.
-    except (OSError, ValueError) as error:
-        click.echo(f"refused: {error}", err=True)
+    # A missing or damaged results file, another instrument, or a refused or unreachable run.
+    except (OSError, ValueError, click.ClickException) as error:
+        message = error.format_message() if isinstance(error, click.ClickException) else error
+        click.echo(f"refused: {message}", err=True)
         sys.exit(2)
 
     click.echo(json.dumps(found.to_dict(), indent=2) if as_json else format_diff(found))

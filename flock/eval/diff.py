@@ -1,6 +1,7 @@
 """Compare two runs doc by doc: which docs each model gets right on the tasks both scored the same way."""
 
 import dataclasses
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -70,7 +71,7 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
     Compares two runs doc by doc on every task both scored under the same `task_hash` with an accuracy as its primary metric, from each doc's `correct` in the predictions. The runs may score different models; that is the point.
 
     Raises:
-        `ValueError`: if the runs are different instruments (another `dtype`, `batch_tokens` or `attention`, or another `sdpa_backend`), or a compared task's predictions don't match its results: another set of doc ids, a repeated id, or a count of right docs that isn't its accuracy over its docs.
+        `ValueError`: if the runs are different instruments (another `dtype`, `batch_tokens` or `attention`, or another `sdpa_backend`), or a compared task's predictions don't match its results: another row count than its `num_docs`, a row without a string `id` or a boolean `correct`, another set of doc ids, a repeated id, or a count of right docs that isn't its finite accuracy over its docs.
     """
     # Settings of the instrument, not of the model: two models scored under different ones
     # aren't compared (principle 3, as `compare` refuses them). `max_length` and `add_bos` belong
@@ -103,7 +104,7 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
         if rows_a is None or rows_b is None:
             not_compared.append((task.task, "no_predictions"))
             continue
-        if any("correct" not in row for row in rows_a + rows_b):
+        if any(isinstance(row, dict) and "correct" not in row for row in rows_a + rows_b):
             not_compared.append((task.task, "no_outcome"))
             continue
 
@@ -111,15 +112,33 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
         # or rows that disagree with the task's own accuracy, means a damaged or mixed-up file.
         outcomes = []
         for run, result, rows in ((a, task, rows_a), (b, other, rows_b)):
-            by_id = {row["id"]: row["correct"] for row in rows}
+            if len(rows) != result.num_docs:
+                raise ValueError(
+                    f"{run.source}: {task.task} has {len(rows)} prediction rows for "
+                    f"{result.num_docs} docs"
+                )
+            by_id = {}
+            for row in rows:
+                if not (
+                    isinstance(row, dict)
+                    and isinstance(row.get("id"), str)
+                    and isinstance(row["correct"], bool)
+                ):
+                    # A damaged file, refused as every other mismatch is.
+                    raise ValueError(  # noqa: TRY004
+                        f"{run.source}: {task.task} has a malformed row: {row!r}"
+                    )
+                by_id[row["id"]] = row["correct"]
             if len(by_id) != len(rows):
                 raise ValueError(f"{run.source}: {task.task}'s predictions repeat a doc id")
             right = sum(by_id.values())
-            # Half a doc of slack for the FP32 mean the accuracy was written as.
-            if abs(right - result.metrics[task.primary_metric] * result.num_docs) > 0.5:
+            accuracy = result.metrics.get(task.primary_metric, math.nan)
+            # Half a doc of slack for the FP32 mean the accuracy was written as. A missing or
+            # non-finite accuracy can't vouch for the rows.
+            if not math.isfinite(accuracy) or abs(right - accuracy * result.num_docs) > 0.5:
                 raise ValueError(
                     f"{run.source}: {task.task}'s predictions have {right} of {len(rows)} right, "
-                    f"but its {task.primary_metric} is {result.metrics[task.primary_metric]} "
+                    f"but its {task.primary_metric} is {accuracy} "
                     f"over {result.num_docs} docs"
                 )
             outcomes.append(by_id)

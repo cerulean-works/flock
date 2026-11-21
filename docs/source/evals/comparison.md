@@ -75,7 +75,7 @@ The diff gives counts only. No significance test comes with it.
 
 ### Refusals
 
-The models may differ, and so may `max_length` and `add_bos`, which belong to the model (OLMES adds BOS for Gemma only). The diff refuses runs with another `dtype`, `batch_tokens`, `attention` or `sdpa_backend`, since a doc could then flip because of the instrument rather than the model. It also refuses a compared task whose predictions don't match its results: another set of doc ids, a repeated id, or a count of right docs that isn't the task's accuracy over its docs.
+The models may differ, and so may `max_length` and `add_bos`, which belong to the model (OLMES adds BOS for Gemma only). The diff refuses runs with another `dtype`, `batch_tokens`, `attention` or `sdpa_backend`, since a doc could then flip because of the instrument rather than the model. It also refuses a compared task whose predictions don't match its results: another row count than the task's `num_docs`, a row without a string `id` or a boolean `correct`, another set of doc ids, a repeated id, or a count of right docs that isn't the task's accuracy over its docs (a missing or non-finite accuracy refuses too).
 
 ### JSON
 

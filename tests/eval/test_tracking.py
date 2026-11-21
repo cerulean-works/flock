@@ -376,6 +376,35 @@ def test_a_live_run_uploads_its_results_and_predictions(
     # Nothing private, so the SDK's own settings still decide where the run goes.
     assert logged["init"]["entity"] is None
     assert logged["init"]["settings"] is None
+    # A run of its own even inside a training script's active run.
+    assert logged["init"]["reinit"] == "create_new"
+
+
+def test_a_task_name_that_leaves_the_predictions_folder_is_refused(
+    logged: dict[str, Any], tmp_path: Path
+) -> None:
+    path = written_run(tmp_path / "run")
+    results = json.loads(path.read_text())
+    results["tasks"][0]["task"] = "../toy"
+
+    with pytest.raises(ValueError, match="can't name a predictions file"):
+        log_to_tracker(results, "project", results_file=path)
+
+    assert "init" not in logged
+
+
+def test_a_schema_9_task_without_a_privacy_mark_is_refused(
+    logged: dict[str, Any], tmp_path: Path
+) -> None:
+    # A damaged file must not pass as public.
+    path = written_run(tmp_path / "run")
+    results = json.loads(path.read_text())
+    del results["tasks"][1]["dataset"]["private"]
+
+    with pytest.raises(ValueError, match="exam: dataset.private is None"):
+        log_to_tracker(results, "project", results_file=path)
+
+    assert "init" not in logged
 
 
 def test_a_banked_copy_arrives_as_results_json_and_an_older_schema_without_predictions(

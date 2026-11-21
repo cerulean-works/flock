@@ -5,12 +5,13 @@ import json
 import math
 from typing import TYPE_CHECKING
 
+import click
 import pytest
 import torch
 from click.testing import CliRunner
 from transformers import LlamaForCausalLM
 
-from flock.eval import run
+from flock.eval import run, tracking
 from flock.eval.cli import main
 from flock.eval.diff import diff
 from flock.eval.model import ScoringModel
@@ -188,6 +189,30 @@ def test_predictions_that_disagree_with_their_results_are_refused(tmp_path: Path
     with pytest.raises(ValueError, match="same hash .* but other doc ids"):
         diff(read_results(a), read_results(b))
 
+    # A lost wrong row would still match the right-doc count.
+    rows.write_text('{"id": "d-0", "correct": true}\n')
+    with pytest.raises(ValueError, match="1 prediction rows for 2 docs"):
+        diff(read_results(a), read_results(b))
+
+    rows.write_text('{"id": "d-0", "correct": 1}\n{"id": "d-1", "correct": false}\n')
+    with pytest.raises(ValueError, match="malformed row"):
+        diff(read_results(a), read_results(b))
+    rows.write_text('{"correct": true}\n{"id": "d-1", "correct": false}\n')
+    with pytest.raises(ValueError, match="malformed row"):
+        diff(read_results(a), read_results(b))
+
+
+def test_a_null_accuracy_cannot_vouch_for_its_rows(tmp_path: Path) -> None:
+    a = write_run(tmp_path / "a", {"t": ("h", [True, False])})
+    b = write_run(tmp_path / "b", {"t": ("h", [True, False])})
+    results = tmp_path / "b" / "results.json"
+    data = json.loads(results.read_text())
+    data["tasks"][0]["metrics"]["acc_raw"] = None
+    results.write_text(json.dumps(data))
+
+    with pytest.raises(ValueError, match="but its acc_raw is nan"):
+        diff(read_results(a), read_results(b))
+
 
 def test_reading_a_folder_refuses_what_is_not_a_results_file(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match="has no results.json"):
@@ -250,3 +275,16 @@ def test_the_diff_command_prints_a_table_or_the_json_contract(tmp_path: Path) ->
     refused = CliRunner().invoke(main, ["diff", a, str(tmp_path / "missing")])
     assert refused.exit_code == 2
     assert "refused:" in refused.output
+
+
+def test_an_unreachable_tracker_exits_2(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    a = write_run(tmp_path / "a", {"t": ("h", [True])})
+
+    def unreachable(run: str, name: str) -> None:
+        raise click.ClickException("Couldn't reach https://flock.test: timed out")
+
+    monkeypatch.setattr(tracking, "read_run_file", unreachable)
+    refused = CliRunner().invoke(main, ["diff", a, "run:acme/model-evals/run-1"])
+
+    assert refused.exit_code == 2
+    assert "refused: Couldn't reach" in refused.output

@@ -55,7 +55,7 @@ Before the run is created, a log that would upload predictions of a private task
 `diff(a, b)` compares every task both runs scored under the same `task_hash` with an accuracy as its primary metric and `correct` in both runs' rows, and lists every other task with its reason (`only_a`, `only_b`, `task_hash`, `not_accuracy`, `no_predictions`, `no_outcome`). A task with another hash is another task (principle of one instrument). Each compared task gives both-right and both-wrong counts and the ids of the docs only one run got right.
 
 - **The models may differ; the instrument may not.** `dtype`, `batch_tokens`, `attention` and `sdpa_backend` must be equal, as `compare` requires. `max_length` and `add_bos` belong to the model (OLMES adds BOS for Gemma only) and may differ.
-- **Rows must match their results.** Equal hashes mean the same docs, so another id set, a repeated id, or a count of right docs more than half a doc away from the accuracy times the doc count refuses the diff: one of the files is damaged or mixed up.
+- **Rows must match their results.** Equal hashes mean the same docs, so another row count than `num_docs`, a row without a string `id` or a boolean `correct`, another id set, a repeated id, or a count of right docs more than half a doc away from a finite accuracy times the doc count refuses the diff: one of the files is damaged or mixed up.
 - **Counts only.** No significance test: no paired test is established in the suite to cite, so the diff reports the cells and leaves inference to the reader.
 - **The JSON is a contract.** `ItemDiff.to_dict()` is what `flock eval diff --json` prints and the app renders, with its own `schema_version` (1).
 
@@ -78,6 +78,9 @@ Before the run is created, a log that would upload predictions of a private task
 - **`results.py`** writes `correct` as a JSON boolean from one host copy of the tensor, beside `id` and `gold`. `read_results` builds the dataclasses from the JSON, and its folder reader returns `None` for a missing file so a folder and a run behave alike.
 - **`tracking.py`** imports the Flock API client at the top now: reading a run and checking a project need it, and `wandb` already costs more. `_signed_in` resolves the `flock login` credential, asks `me` for the default organization, and returns a fresh client, because an `httpx` client can't be opened again once closed. A file is read from `projects/{entity}/{project}/runs/{id}/files/{name}`; a 404 saying `file not found` is a missing file, and any other refusal raises.
 - **Uploads** are copied into `run.dir` and saved with `policy="now"`, so each starts at once, and leaving the run's block waits for them.
+- **Always a new run.** `wandb.init` returns an active run by default outside notebooks (`reinit="return_previous"`), so inside a training script the eval summary and files would have gone to the training run, in its project, past the visibility check. `log_to_tracker` passes `reinit="create_new"`.
+- **Names and marks from a file are checked.** A task name must be one file name, so a results file can't point the upload outside `predictions/` or the run's folder. A schema 9 task with predictions must have a boolean `dataset.private`; anything else refuses rather than passing as public.
+- **Reading a run file** resolves the credential only, with no organization lookup: the run names its own, and a diff reads one file per task.
 - **`diff.py`** is its own module beside `compare.py`: it shares the instrument check's idea but not its inputs, since `compare` reads raw JSON of any schema and `diff` reads typed results.
 - **The CLI** prints a table by default and the JSON with `--json`, and exits 2 on a refusal, as `compare` does.
 

@@ -69,18 +69,30 @@ def log_to_tracker(
     if results_file is not None:
         files["results.json"] = results_file
         for task in results["tasks"] if results["schema_version"] >= 9 else []:
-            path = results_file.parent / "predictions" / f"{task['task']}.jsonl"
+            # A task name read from a file names a file in `predictions/` and on the run, never
+            # a path that leaves either folder.
+            name = task["task"]
+            if not name or Path(name).name != name or name in (".", ".."):
+                raise ValueError(f"task name {name!r} can't name a predictions file")
+            path = results_file.parent / "predictions" / f"{name}.jsonl"
             if path.is_file():
-                files[f"predictions/{task['task']}.jsonl"] = path
+                files[f"predictions/{name}.jsonl"] = path
 
     # A run in a project has the project's visibility, so a private dataset's per-doc rows go
     # only to a project known to be private, checked before the run exists. A project the run
-    # creates is private (the tracker's default).
-    private = [
-        task["task"]
-        for task in results["tasks"]
-        if task["dataset"].get("private") and f"predictions/{task['task']}.jsonl" in files
-    ]
+    # creates is private (the tracker's default). A mark that isn't a boolean refuses: a damaged
+    # file must not pass as public.
+    private = []
+    for task in results["tasks"]:
+        if f"predictions/{task['task']}.jsonl" not in files:
+            continue
+        marked = task["dataset"].get("private")
+        if not isinstance(marked, bool):
+            raise ValueError(  # noqa: TRY004 - a damaged file, refused as a value
+                f"{task['task']}: dataset.private is {marked!r}, not true or false"
+            )
+        if marked:
+            private.append(task["task"])
     if private:
         api, default_org = _signed_in(host)
         # The run goes where the visibility was read.
@@ -106,11 +118,18 @@ def log_to_tracker(
     # isn't left running on the tracker.
     # Online even where `WANDB_MODE` says offline, so a backfill never reports a run it didn't
     # log, and never resumed, so a `WANDB_RUN_ID` left in the environment can't overwrite a run.
+    # Always a new run, even inside a training script's active run, which `wandb.init` would
+    # otherwise return (`reinit`'s default outside notebooks), with its own project.
     settings = None
     if host is not None:
         settings = wandb.Settings(base_url=host, mode="online", resume="never")
     with wandb.init(
-        entity=entity, project=project, job_type="eval", config=config, settings=settings
+        entity=entity,
+        project=project,
+        job_type="eval",
+        config=config,
+        settings=settings,
+        reinit="create_new",
     ) as run:
         run.summary.update(summary)
         # Copied under their names on the run, so a banked copy named otherwise still arrives as
@@ -187,7 +206,11 @@ def read_run_file(run: str, name: str) -> str | None:
         raise ValueError(f"expected a run as entity/project/id, got {run!r}")
 
     entity, project, run_id = parts
-    api, _ = _signed_in()
+    # No organization lookup: the run names its own, and a read is one request per file.
+    found = credentials.resolve()
+    if found is None:
+        raise ValueError("Not logged in: run flock login, or set FLOCK_TOKEN.")
+    api = Api(found.host, found.token)
     with api.client:
         answer = api.get(f"projects/{entity}/{project}/runs/{run_id}/files/{quote(name)}")
     if answer.status_code == 200:
