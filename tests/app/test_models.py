@@ -20,6 +20,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from app.api.src.core.models import Models, digest
+from app.api.src.db.migrate import Migrations
 from tests.app.conftest import Client, Flocks, FlockServer, S3Flock
 from tests.conftest import S3Server
 
@@ -1143,3 +1144,189 @@ def test_the_trash_and_restores_use_the_folder(
         assert f"{version['prefix']}config.json" in keys(flock, bucket, version["prefix"])
     assert api.get(f"{MODELS}/new/resolve", ref="1").json()["prefix"] == first["prefix"]
     assert api.get(f"{MODELS}/old/resolve").json()["prefix"] == other["prefix"]
+
+
+# ---------------------------------------------------------------------- folders and scopes (022)
+
+
+def project(flock: S3Flock, name: str = "pretrain") -> int:
+    made = flock.client().post("/api/v1/projects", {"entity": "flock", "name": name})
+    assert made.status == 201, made.body
+    return sql(flock, "SELECT pk FROM projects WHERE name = $1", name)[0][0]
+
+
+class ScopedPusher(Pusher):
+    """A pusher through the path routes (``{name}/-/…``), in ``project`` if given."""
+
+    def __init__(self, flock: S3Flock, project: str | None = None) -> None:
+        super().__init__(flock)
+        self.query = f"?project={project}" if project else ""
+
+    def url(self, name: str, rest: str = "") -> str:
+        return f"{MODELS}/{name}/-{rest}{self.query}"
+
+    def open(self, name: str, files: dict[str, bytes], **body: Any) -> Any:
+        declared = [{"path": p, "size": len(d)} for p, d in files.items()]
+        return self.api.post(self.url(name, "/uploads"), {"files": declared, **body})
+
+    def commit(self, name: str, ulid: str, files: dict[str, bytes]) -> Any:
+        body = {"files": [{"path": p, "sha256": sha(d)} for p, d in files.items()]}
+        return self.api.post(self.url(name, f"/uploads/{ulid}/commit"), body)
+
+
+def test_model_names_have_folders(flock: S3Flock) -> None:
+    api = flock.client()
+    scoped = ScopedPusher(flock)
+    version = scoped.push("eval/olmo2-1b")
+    assert (version["name"], version["model"]) == ("eval/olmo2-1b", "flock/eval/olmo2-1b")
+    assert version["prefix"].startswith("eval/olmo2-1b/u/")
+    scoped.push("eval/sweeps/a")
+    scoped.push("eval/sweeps/b")
+    scoped.push("top")
+
+    root = api.get(MODELS).json()
+    assert [m["name"] for m in root["models"]] == ["top"]
+    assert root["folders"] == [{"name": "eval", "path": "eval", "models": 3}]
+    level = api.get(MODELS, folder="eval").json()
+    assert [m["name"] for m in level["models"]] == ["eval/olmo2-1b"]
+    assert level["folders"] == [{"name": "sweeps", "path": "eval/sweeps", "models": 2}]
+    assert api.get(MODELS, folder="eval/olmo2-1b").json() == {
+        "kind": "model",
+        "name": "eval/olmo2-1b",
+        "project": None,
+    }
+    assert api.get(MODELS, folder="nope").status == 404
+    assert api.get(scoped.url("eval/olmo2-1b", "/resolve")).json()["number"] == 1
+
+    # A path is a model or a folder, never both (D158).
+    for name in ("eval", "eval/sweeps", "eval/olmo2-1b/x"):
+        refused = scoped.open(name, single())
+        assert refused.status == 409 and refused.json()["taken"] is True, name
+    assert api.patch(scoped.url("top"), {"name": "eval/sweeps"}).status == 409
+    moved = api.patch(scoped.url("top"), {"name": "eval/top"})
+    assert moved.status == 200 and moved.json()["model"] == "flock/eval/top"
+
+    # Paging: models first, then folders.
+    paged: list[str] = []
+    cursor = None
+    monkey = Models.PAGE
+    try:
+        Models.PAGE = 1
+        while True:
+            page = api.get(MODELS, folder="eval", **({"cursor": cursor} if cursor else {})).json()
+            paged += [m["name"] for m in page["models"]] + [f["path"] for f in page["folders"]]
+            if (cursor := page["cursor"]) is None:
+                break
+    finally:
+        Models.PAGE = monkey
+    assert paged == ["eval/olmo2-1b", "eval/top", "eval/sweeps"]
+
+
+def test_a_project_s_models(flock: S3Flock) -> None:
+    api = flock.client()
+    pk = project(flock, "pre train")
+    scoped = ScopedPusher(flock, "pre%20train")
+    version = scoped.push("sweeps/lr", tags=["checkpoint-10"])
+    assert (version["model"], version["project"]) == ("pre train:sweeps/lr", "pre train")
+    assert version["prefix"].startswith(f"-projects/{pk}/sweeps/lr/u/")
+    bucket = upstream_name(flock)
+    assert keys(flock, bucket, f"-projects/{pk}/sweeps/lr/u/")
+
+    # Scopes are apart: the same name globally, and nothing of the project's at the root.
+    assert api.get(MODELS).json()["folders"] == []
+    assert api.get(MODELS, project="pre train").json()["folders"][0]["path"] == "sweeps"
+    assert api.get(f"{MODELS}/sweeps/lr/-/resolve").status == 404
+    assert api.get(scoped.url("sweeps/lr", "/resolve")).json()["number"] == 1
+    assert api.get(f"{MODELS}/sweeps/lr/-", project="nope").status == 404
+
+    # Promote: one row update, the folder stays (D166).
+    promoted = api.patch(scoped.url("sweeps/lr"), {"name": "release/lr", "project": None})
+    assert promoted.status == 200, promoted.body
+    info = promoted.json()
+    assert (info["model"], info["project"], info["prefix"]) == (
+        "flock/release/lr",
+        None,
+        f"-projects/{pk}/sweeps/lr/",
+    )
+    assert api.get(scoped.url("sweeps/lr")).status == 404
+    resolved = api.get(f"{MODELS}/release/lr/-/resolve", ref="checkpoint-10").json()
+    assert resolved["prefix"] == version["prefix"]
+
+    # Another model of the project, then the project's deletion takes it, not the promoted one.
+    other = scoped.push("scratch")
+    storage = api.get("/api/v1/projects/flock/pre%20train/storage").json()
+    assert storage["models"] == 1 and storage["bytes"] == other["total_bytes"]
+    assert api.delete("/api/v1/projects/flock/pre%20train", force="true").status == 204
+    flock.call(flock.store.flush())
+    assert keys(flock, bucket, f"-projects/{pk}/scratch/") == []
+    assert keys(flock, bucket, version["prefix"])
+    assert [r[0] for r in sql(flock, "SELECT name FROM models")] == ["release/lr"]
+
+
+def test_project_and_global_trash_entries(flock: S3Flock, wait_for: Callable[..., Any]) -> None:
+    api = flock.client()
+    project(flock)
+    ScopedPusher(flock).push("a")
+    # Until 0023's contract, names are unique across the org too (D170).
+    refused = ScopedPusher(flock, "pretrain").open("a", single())
+    assert refused.status == 409 and refused.json()["taken"] is True
+    applied = asyncio.run(Migrations().apply_contracts(flock.database_url, 0, force=True))
+    assert applied == ["0024_models_scope.contract"]
+    ScopedPusher(flock, "pretrain").push("a")
+    assert api.delete(f"{MODELS}/a/-", project="pretrain").status == 200
+    wait_for(lambda: all(e["moved"] for e in api.get(f"{MODELS}/-/trash").json()["entries"]))
+    entries = api.get(f"{MODELS}/-/trash").json()["entries"]
+    assert [(e["model"], e["project"]) for e in entries] == [("pretrain:a", "pretrain")]
+    assert api.get(f"{MODELS}/-/trash", project="pretrain").json()["entries"] == entries
+    restored = api.post(f"{MODELS}/-/trash/models/{entries[0]['id']}/restore", {})
+    assert restored.status == 200 and restored.json()["model"] == "pretrain:a"
+
+
+def test_strays_are_found_in_nested_folders(flock: S3Flock) -> None:
+    upload = ScopedPusher(flock).open("deep/er/model", single()).json()
+    s3 = flock.s3.client()
+    bucket = upstream_name(flock)
+    stray = upload["prefix"].replace(upload["ulid"], "0" * 26)
+    s3.put_object(Bucket=bucket, Key=f"{stray}config.json", Body=b"{}")
+    sql(flock, "UPDATE model_uploads SET state = 'aborted'")
+    s3.put_object(Bucket=bucket, Key=f"{upload['prefix']}config.json", Body=b"{}")
+    assert flock.call(models(flock)._sweep_strays()) == 1
+    assert keys(flock, bucket, upload["prefix"]) == []
+
+
+def test_empty_model_folders(flock: S3Flock) -> None:
+    api = flock.client()
+    project(flock)
+    folders = f"{MODELS}/-/folders"
+    made = api.post(folders, {"path": "eval/sweeps"})
+    assert made.status == 201 and made.json() == {"path": "eval/sweeps", "project": None}
+    assert api.post(f"{folders}?project=pretrain", {"path": "eval"}).status == 201
+
+    # Made folders list like any folder, with no models in them, and open (not 404).
+    assert api.get(MODELS).json()["folders"] == [{"name": "eval", "path": "eval", "models": 0}]
+    level = api.get(MODELS, folder="eval/sweeps").json()
+    assert level["models"] == [] and level["folders"] == []
+    assert api.get(MODELS, project="pretrain").json()["folders"][0]["path"] == "eval"
+    assert api.get(MODELS, project="pretrain", folder="eval/sweeps").status == 404
+
+    # A path is a model or a folder, never both (D158).
+    scoped = ScopedPusher(flock)
+    scoped.push("top")
+    for path in ("eval/sweeps", "eval", "top", "top/x"):
+        taken = api.post(folders, {"path": path})
+        assert taken.status == 409 and taken.json()["taken"] is True, path
+    refused = scoped.open("eval/sweeps", single())
+    assert refused.status == 409 and refused.json()["taken"] is True
+    assert api.patch(scoped.url("top"), {"name": "eval/sweeps"}).status == 409
+    inside = scoped.push("eval/sweeps/a")
+    assert inside["name"] == "eval/sweeps/a"
+    assert api.get(MODELS).json()["folders"] == [{"name": "eval", "path": "eval", "models": 1}]
+
+    # Deleting: refused while a model is under it, then the empty folders go.
+    assert api.delete(f"{folders}?path=eval").status == 409
+    assert api.patch(scoped.url("eval/sweeps/a"), {"name": "a"}).status == 200
+    assert api.delete(f"{folders}?path=eval").status == 204
+    assert api.get(MODELS).json()["folders"] == []
+    assert api.delete(f"{folders}?path=eval").status == 404
+    assert api.get(MODELS, project="pretrain").json()["folders"][0]["path"] == "eval"
+    assert api.delete(f"{folders}?path=eval&project=pretrain").status == 204

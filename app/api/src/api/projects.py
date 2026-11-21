@@ -94,6 +94,19 @@ async def list_owners(project: ReadableProjectDep, store: StoreDep, viewer: View
     return JSONResponse({"owners": sorted(briefs.values(), key=lambda b: b["id"])})
 
 
+@router.get("/projects/{entity}/{project}/storage")
+async def project_storage(project: MemberProjectDep, store: StoreDep) -> Response:
+    """What deleting the project deletes with it (D167): how many datasets and models it has,
+    and their bytes. Zeros when S3 is off."""
+    if store.s3.upstream is None:
+        return JSONResponse({"datasets": 0, "models": 0, "bytes": 0})
+    datasets, dataset_bytes = await store.datasets.project_storage(project.org, project.pk)
+    models, model_bytes = await store.models.project_storage(project.pk)
+    return JSONResponse(
+        {"datasets": datasets, "models": models, "bytes": dataset_bytes + model_bytes}
+    )
+
+
 @router.patch("/projects/{entity}/{project}")
 async def update_project(
     project: MemberProjectDep, body: ProjectUpdate, store: StoreDep, user: UserDep
