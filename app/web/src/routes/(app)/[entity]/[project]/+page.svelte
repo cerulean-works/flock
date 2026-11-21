@@ -337,7 +337,12 @@
 					<!-- Two eval runs, doc by doc (023 D174); the page says if they can't be compared. -->
 					<Button
 						variant="outline"
-						href={compareHref(ws.meta.entity, ws.meta.project, a, `${ws.meta.entity}/${ws.meta.project}/${b}`)}
+						href={compareHref(
+							ws.meta.entity,
+							ws.meta.project,
+							a,
+							`${ws.meta.entity}/${ws.meta.project}/${b}`
+						)}
 					>
 						<GitCompareArrowsIcon /> Compare items
 					</Button>

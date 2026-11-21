@@ -19,8 +19,10 @@ P = "/api/v1/projects/flock"
 
 
 def log_run(api: Client, project: str, run: str, folder: str) -> None:
-    """A run with a written run's files, uploaded under the names `log_to_tracker` gives them."""
-    api.create_run(project, run, config={"job_type": "eval"})
+    """An eval run with a written run's files, uploaded under the names `log_to_tracker` gives
+    them."""
+    api.create_run(project, run)
+    assert api.patch(f"{P}/{project}/runs/{run}", {"job_type": "eval"}).status == 200
     for path in sorted(Path(folder).rglob("*")):
         if path.is_file():
             api.upload(project, run, path.relative_to(folder).as_posix(), path.read_bytes())

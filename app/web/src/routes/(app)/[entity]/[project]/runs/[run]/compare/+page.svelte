@@ -103,7 +103,9 @@
 											aria-expanded={shown}
 											onclick={() => (shown ? open.delete(t.task) : open.add(t.task))}
 										>
-											<ChevronRightIcon class={['size-3.5 transition-transform', shown && 'rotate-90']} />
+											<ChevronRightIcon
+												class={['size-3.5 transition-transform', shown && 'rotate-90']}
+											/>
 											{t.task}
 										</button>
 										<span class="ml-5 text-xs text-faint" title={t.task_hash}>
@@ -158,7 +160,8 @@
 							{#each data.diff.not_compared as [task, reason] (task)}
 								<tr class="border-b border-divider">
 									<td class="px-3 py-1.5 font-mono text-[12.5px]">{task}</td>
-									<td class="px-3 py-1.5 text-muted-foreground">{NOT_COMPARED[reason] ?? reason}</td>
+									<td class="px-3 py-1.5 text-muted-foreground">{NOT_COMPARED[reason] ?? reason}</td
+									>
 								</tr>
 							{/each}
 						</tbody>

@@ -376,53 +376,71 @@ describe('ModelView', () => {
 		await expect.element(screen.getByRole('button', { name: 'Delete' })).toBeVisible();
 	});
 
-	it('shows each eval run’s metrics side by side', async () => {
+	it('shows each eval run’s scores side by side and compares two of them', async () => {
 		const scored = detail(versions[2], { evals: ['acme/evals/e1', 'acme/evals/e2'] });
+		const run = (id: string, display_name: string | null, scores: unknown) => ({
+			path: `acme/evals/${id}`,
+			entity: 'acme',
+			project: 'evals',
+			id,
+			display_name,
+			state: 'finished',
+			created_at: NOW,
+			scores
+		});
+		const row = (key: string, kind: string, name: string, metric: string | null) => ({
+			key,
+			kind,
+			name,
+			metric
+		});
 		const calls = serve({
 			[`${API}/olmo2-1b/versions/12/evals`]: () => ({
 				runs: [
-					{
-						path: 'acme/evals/e1',
-						entity: 'acme',
-						project: 'evals',
-						id: 'e1',
-						display_name: 'mmlu run',
-						state: 'finished',
-						created_at: NOW,
-						metrics: { 'mmlu/acc': 0.5, 'mmlu/docs_per_second': 30, _runtime: 4 }
-					},
-					{
-						path: 'acme/evals/e2',
-						entity: 'acme',
-						project: 'evals',
-						id: 'e2',
-						display_name: null,
-						state: 'finished',
-						created_at: NOW,
-						metrics: { 'mmlu/acc': 0.625, 'hellaswag/acc_norm': 0.25 }
-					}
+					run('e1', 'base easy', {
+						rows: [row('mmlu/acc_raw', 'task', 'mmlu', 'acc_raw')],
+						values: { 'mmlu/acc_raw': 0.5 }
+					}),
+					run('e2', null, {
+						rows: [
+							row('suites/core', 'suite', 'core', null),
+							row('mmlu/acc_raw', 'task', 'mmlu', 'acc_raw')
+						],
+						values: { 'suites/core': 0.25, 'mmlu/acc_raw': 0.625 }
+					}),
+					run('old', null, null)
 				]
 			})
 		});
 		resetApp('http://flock.test/models/acme/olmo2-1b?tab=evals');
 		render(ModelView, { org: 'acme', info, version: scored, requested: null, now: NOW });
-		await expect.element(screen.getByRole('link', { name: 'mmlu run' })).toBeVisible();
+		await expect.element(screen.getByRole('link', { name: 'base easy' })).toBeVisible();
 		expect(screen.getByRole('link', { name: 'e2' }).element().getAttribute('href')).toBe(
 			'/acme/evals/runs/e2'
 		);
+		// Suites first, then each task's primary metric.
 		const rows = screen
 			.getByRole('rowheader')
 			.all()
-			.map((r) => r.element().textContent!.trim());
-		expect(rows).toEqual(['hellaswag/acc_norm', 'mmlu/acc']);
-		const mmlu = screen.getByRole('row').filter({ hasText: 'mmlu/acc' });
+			.map((r) => r.element().textContent!.replace(/\s+/g, ' ').trim());
+		expect(rows).toEqual(['core suite', 'mmlu acc_raw']);
+		const mmlu = screen.getByRole('row').filter({ hasText: 'acc_raw' });
 		expect(
 			mmlu
 				.getByRole('cell')
 				.all()
 				.map((c) => c.element().textContent!.trim())
-		).toEqual(['0.5', '0.625']);
+		).toEqual(['0.5', '0.625', '–']);
 		expect(calls[0].url).toBe(`${API}/olmo2-1b/versions/12/evals`);
+
+		// Two checked runs give the comparison's link; a third can't be checked.
+		await screen.getByRole('checkbox', { name: 'Compare base easy' }).click();
+		await screen.getByRole('checkbox', { name: 'Compare e2' }).click();
+		await expect.element(screen.getByRole('checkbox', { name: 'Compare old' })).toBeDisabled();
+		const compare = screen.getByRole('link', { name: 'Compare items' });
+		expect(compare.element().getAttribute('href')).toBe(
+			'/acme/evals/runs/e1/compare?with=acme%2Fevals%2Fe2'
+		);
 	});
 
 	it('says how to evaluate a version no run has scored', async () => {
@@ -432,7 +450,11 @@ describe('ModelView', () => {
 			.element(screen.getByText('No eval runs have scored this version yet.'))
 			.toBeVisible();
 		await expect
-			.element(screen.getByText('flock eval run --model flock:acme/olmo2-1b@12'))
+			.element(
+				screen.getByText(
+					'flock eval run --model flock:acme/olmo2-1b@12 --wandb-project model-evals'
+				)
+			)
 			.toBeVisible();
 	});
 });

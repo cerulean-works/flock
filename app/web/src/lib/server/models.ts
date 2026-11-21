@@ -48,7 +48,8 @@ export async function evalRuns(org: string, name: string, number: number): Promi
 				display_name: run.display_name,
 				state: run.state,
 				created_at: run.created_at,
-				scores: results && RESULT_SCHEMAS.includes(results.schema_version) ? evalScores(results) : null
+				scores:
+					results && RESULT_SCHEMAS.includes(results.schema_version) ? evalScores(results) : null
 			};
 		}
 	}

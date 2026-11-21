@@ -15,7 +15,15 @@ const results = (suites: [string, number | null][], tasks: [string, string, numb
 
 describe('eval scores', () => {
 	it('keys suites and each task’s primary metric as the run’s summary does', () => {
-		const scores = evalScores(results([['core', 0.4], ['group', null]], [['arc', 'acc_raw', 0.5]]));
+		const scores = evalScores(
+			results(
+				[
+					['core', 0.4],
+					['group', null]
+				],
+				[['arc', 'acc_raw', 0.5]]
+			)
+		);
 		expect(scores.rows.map((r) => r.key)).toEqual(['suites/core', 'arc/acc_raw']);
 		expect(scores.values).toEqual({ 'suites/core': 0.4, 'arc/acc_raw': 0.5 });
 	});
@@ -30,7 +38,15 @@ describe('eval scores', () => {
 		const rows = evalRows([
 			run(results([], [['b', 'acc_raw', 1]])),
 			run(null),
-			run(results([['core', 1]], [['a', 'acc_raw', 1], ['b', 'acc_raw', 0]]))
+			run(
+				results(
+					[['core', 1]],
+					[
+						['a', 'acc_raw', 1],
+						['b', 'acc_raw', 0]
+					]
+				)
+			)
 		]);
 		expect(rows.map((r) => r.key)).toEqual(['suites/core', 'b/acc_raw', 'a/acc_raw']);
 	});

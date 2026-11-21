@@ -53,11 +53,23 @@ describe('a version’s eval runs', () => {
 					}
 				},
 				// No results file (an eval logged before 041): listed, with no scores.
-				{ ...run, path: 'acme/evals/old', id: 'old', state: 'finished', created_at: 1, scores: null }
+				{
+					...run,
+					path: 'acme/evals/old',
+					id: 'old',
+					state: 'finished',
+					created_at: 1,
+					scores: null
+				}
 			]
 		});
 		// Eight runs are read at once, so the order of the calls isn't fixed.
-		expect(vi.mocked(flockAnswer).mock.calls.map(([url]) => url).sort()).toEqual([
+		expect(
+			vi
+				.mocked(flockAnswer)
+				.mock.calls.map(([url]) => url)
+				.sort()
+		).toEqual([
 			'/api/v1/orgs/acme/models/olmo2-1b/versions/12',
 			'/api/v1/projects/acme/evals/runs/e1',
 			'/api/v1/projects/acme/evals/runs/e1/files/results.json',

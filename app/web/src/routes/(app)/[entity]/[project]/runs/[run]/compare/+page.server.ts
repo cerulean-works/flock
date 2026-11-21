@@ -14,7 +14,9 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	let diff: ItemDiff | null = null;
 	let refusal: string | null = null;
 	try {
-		diff = (await (await flock(`${path}/diff?with=${encodeURIComponent(other)}`)).json()) as ItemDiff;
+		diff = (await (
+			await flock(`${path}/diff?with=${encodeURIComponent(other)}`)
+		).json()) as ItemDiff;
 	} catch (err) {
 		if (!isHttpError(err) || err.status !== 409) throw err;
 		refusal = err.body.message;

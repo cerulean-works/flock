@@ -32,7 +32,9 @@
 
 {#snippet hash(value: string)}
 	<span class="inline-flex items-center gap-1">
-		<span class="font-mono text-[12px] text-muted-foreground" title={value}>{value.slice(0, 12)}</span>
+		<span class="font-mono text-[12px] text-muted-foreground" title={value}
+			>{value.slice(0, 12)}</span
+		>
 		<CopyButton text={value} label="Copy hash" class="size-6" />
 	</span>
 {/snippet}
@@ -40,8 +42,8 @@
 <div class="absolute inset-0 overflow-y-auto">
 	{#if !RESULT_SCHEMAS.includes(results.schema_version)}
 		<EmptyState>
-			This run’s results file has schema {results.schema_version}; the dashboard reads schemas 8
-			and 9.
+			This run’s results file has schema {results.schema_version}; the dashboard reads schemas 8 and
+			9.
 		</EmptyState>
 	{:else}
 		<div class="grid max-w-250 gap-8 px-5 pt-6 pb-16 text-[13px]">
@@ -115,8 +117,8 @@
 									<td class="px-3 py-1.5">{@render hash(t.task_hash)}</td>
 									<td
 										class="max-w-64 truncate px-3 py-1.5 text-muted-foreground"
-										title="{t.dataset.repo}@{t.dataset.revision} {t.dataset.subset ??
-											''} {t.dataset.split}"
+										title="{t.dataset.repo}@{t.dataset.revision} {t.dataset.subset ?? ''} {t.dataset
+											.split}"
 									>
 										{#if t.dataset.private}
 											<LockIcon class="mr-1 inline size-3.5" aria-label="Private dataset" />
@@ -124,7 +126,10 @@
 										{t.dataset.repo}{t.dataset.subset ? ` · ${t.dataset.subset}` : ''}
 									</td>
 									<td
-										class={['px-3 py-1.5 text-right tabular-nums', !t.truncation.docs && 'text-faint']}
+										class={[
+											'px-3 py-1.5 text-right tabular-nums',
+											!t.truncation.docs && 'text-faint'
+										]}
 										title="Docs whose context lost tokens to fit the model"
 									>
 										{t.truncation.docs}
