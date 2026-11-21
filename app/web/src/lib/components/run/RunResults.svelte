@@ -22,8 +22,10 @@
 		['SDPA kernel', p.sdpa_backend],
 		['Device', p.device],
 		['Flock commit', p.flock_commit],
-		['Libraries', `torch ${p.torch}, transformers ${p.transformers}, tokenizers ${p.tokenizers}`],
-		['Datasets', p.datasets],
+		[
+			'Libraries',
+			`torch ${p.torch}, transformers ${p.transformers}, tokenizers ${p.tokenizers}, datasets ${p.datasets}`
+		],
 		['Python', p.python],
 		['Scored at', p.created_at],
 		['Command', p.command]

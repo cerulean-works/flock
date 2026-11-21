@@ -9,6 +9,16 @@ vi.mock('./flock.ts', () => ({
 
 beforeEach(() => vi.resetAllMocks());
 
+const task = (name: string, metric: string, value: number | null) => ({
+	task: name,
+	task_hash: `h-${name}`,
+	primary_metric: metric,
+	metrics: { [metric]: value, bpb: 1 },
+	num_docs: 2,
+	dataset: { repo: 'allenai/ai2_arc' },
+	truncation: { requests: 0, docs: 0, max_tokens_cut: 0 }
+});
+
 const RESULTS = {
 	schema_version: 9,
 	provenance: { model: 'flock:acme/olmo2-1b@12' },
@@ -16,10 +26,7 @@ const RESULTS = {
 		{ suite: 'core', suite_hash: 's', members: ['arc', 'mmlu'], metric: null, score: 0.4 },
 		{ suite: 'group', suite_hash: 'g', members: ['core'], metric: null, score: null }
 	],
-	tasks: [
-		{ task: 'arc', primary_metric: 'acc_per_char', metrics: { acc_per_char: 0.5, bpb: 1 } },
-		{ task: 'mmlu', primary_metric: 'acc_raw', metrics: { acc_raw: null } }
-	]
+	tasks: [task('arc', 'acc_per_char', 0.5), task('mmlu', 'acc_raw', null)]
 };
 
 describe('a version’s eval runs', () => {
@@ -45,11 +52,27 @@ describe('a version’s eval runs', () => {
 					created_at: 1,
 					scores: {
 						rows: [
-							{ key: 'suites/core', kind: 'suite', name: 'core', metric: null },
-							{ key: 'arc/acc_per_char', kind: 'task', name: 'arc', metric: 'acc_per_char' },
-							{ key: 'mmlu/acc_raw', kind: 'task', name: 'mmlu', metric: 'acc_raw' }
+							{ key: 'suites/core@s', kind: 'suite', name: 'core', metric: null, hash: 's' },
+							{
+								key: 'arc/acc_per_char@h-arc',
+								kind: 'task',
+								name: 'arc',
+								metric: 'acc_per_char',
+								hash: 'h-arc'
+							},
+							{
+								key: 'mmlu/acc_raw@h-mmlu',
+								kind: 'task',
+								name: 'mmlu',
+								metric: 'acc_raw',
+								hash: 'h-mmlu'
+							}
 						],
-						values: { 'suites/core': 0.4, 'arc/acc_per_char': 0.5, 'mmlu/acc_raw': null }
+						values: {
+							'suites/core@s': 0.4,
+							'arc/acc_per_char@h-arc': 0.5,
+							'mmlu/acc_raw@h-mmlu': null
+						}
 					}
 				},
 				// No results file (an eval logged before 041): listed, with no scores.

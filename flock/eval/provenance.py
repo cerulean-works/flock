@@ -8,7 +8,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-# Only `collect` needs torch and the libraries it records, so reading a results file doesn't.
+# Only `collect` needs torch and the libraries it records, so reading a results file doesn't. Its
+# torch annotations are strings: the docs read its signature, where torch isn't imported.
 if TYPE_CHECKING:
     import torch
 
@@ -73,8 +74,8 @@ class Provenance:
         *,
         model: str,
         command: str | None,
-        device: torch.device,
-        dtype: torch.dtype,
+        device: "torch.device",  # noqa: UP037
+        dtype: "torch.dtype",  # noqa: UP037
         batch_tokens: int,
         max_length: int,
         add_bos: bool,

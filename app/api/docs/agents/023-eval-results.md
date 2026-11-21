@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | designed |
+| Status | implemented, pending review |
 | Date | 2026-11-21 |
 | Builds on | [014](014-model-registry.md) (D106, D108, D109 and section 7.5), [015](015-public-projects.md) (D110 to D116), [021](021-public-access-checks.md); eval's stage 041 (`flock/eval/docs/agents/041-result-files.md`: `results.json` and `predictions/<task>.jsonl` on the run, `correct`, `flock eval diff`) |
 | Amends | D106 (eval links come back, matched by number and digest), D109 (retention keeps a version with live eval runs again), D108 (the model page gets its Evals tab back, the run page its **Models scored**) |
@@ -42,12 +42,13 @@ branch; whichever stage merges second takes the next stage and migration number.
   finding a version's runs per request means parsing the config of every run in the org. The
   link is written once, in the transaction that stores the config, and answered by an index. It
   also lets retention see a version's eval runs (below), which a page-time query can't.
-- **The match.** When a run's config is stored and its `model` is `flock:…@N` (a version number,
-  never a tag) and its `model_digest` is 64 hex characters, the run links to the live version
-  numbered `N` of a live model in the run's own org whose digest is that one. The model's name in
-  `model` isn't parsed: a version's number and digest name its bytes, and the name can change
-  (D134's renames, and 022's folders and moves). A ref that matches nothing links nothing, and
-  the run is stored as usual. 014's other rules stay: an insert that exists changes nothing, a
+- **The match.** When a run's config is stored and its `model` is `flock:{org}/{name}@N` (a
+  version number, never a tag) and its `model_digest` is 64 hex characters, the candidates are
+  the live versions numbered `N` of live models in the run's own org whose digest is that one.
+  The named model's version links if it is one of them. Otherwise the run links only when there
+  is a single candidate: a model renamed or moved since the run (D134, and 022's folders) still
+  gets its link, and the same bytes saved as two models never link to the one the run didn't
+  name. A ref that matches nothing links nothing, and the run is stored as usual. 014's other rules stay: an insert that exists changes nothing, a
   config that later names another version adds a second link, imported runs aren't linked, and
   links aren't gated on `job_type`.
 - **The migration** is an expand file. A database that applied the old 0015 still has an empty
@@ -57,6 +58,8 @@ branch; whichever stage merges second takes the next stage and migration number.
   models were scored only in tests.
 - **Retention (D109) keeps a version with a live eval run,** as 014 first wrote it, so a score a
   page shows never points at a deleted version. The org settings' docstring already says so.
+  Linking holds a share lock on the version and retention an update lock, so a link made while
+  the sweep runs is either seen by it or refused because the version is gone.
 
 ### D172. A version's Evals tab reads each run's results file
 
@@ -64,8 +67,10 @@ branch; whichever stage merges second takes the next stage and migration number.
   every numeric summary value. A run's summary holds every metric of every task (about 600 values
   for Base Easy), and only the results file says which one is a task's primary metric.
 - **Rows:** each suite with a score, then each task's primary metric, labelled with the metric.
-  **Columns:** the eval runs, linked to their pages, with their model and time. A run without a
-  results file, or one the viewer can't read, shows as such rather than disappearing.
+  A row is one name under one hash: a task two runs scored under different task hashes gets two
+  rows, each showing its hash, so numbers side by side are always comparable (principle 3).
+  **Columns:** the eval runs, linked to their pages. A run without a usable results file shows
+  dashes; one the viewer can't read (deleted since) is left out, as in 014.
 - **The dashboard's server** reads the version and then each run's `results.json`, eight at a
   time, as 7.4 did with summaries, with the viewer's own credentials.
 - **Compare:** checking two runs' columns offers **Compare items** (D174).
@@ -74,13 +79,16 @@ branch; whichever stage merges second takes the next stage and migration number.
 
 ### D173. A Results tab on an eval run
 
-- **Shown when** the run has a `results.json` (from its file list). Older eval runs have none,
-  and other runs never do.
+- **Shown when** the run has a `results.json` the page can show, whatever its `job_type` says
+  (the field can be edited). Older eval runs have none, and other runs never do. The file is the
+  run's own upload, so its shape is checked first (`isEvalResults`); a damaged file, or a Flock
+  that fails to answer, leaves the tab out rather than failing the page.
 - **What it reads:** `results.json` through the run's file route, by the dashboard's server, so
   a private project's file stays behind the project's access check (D112). No new API route.
 - **What it shows:** suites (score, metric, members, hash), then tasks (primary metric and its
   value, `num_docs`, task hash, dataset `repo@revision` with a private mark, truncation counts),
-  then the provenance (model, digest, instrument, versions, command, time). Hashes show their
+  then the provenance (model, digest, instrument, versions, command, time). The dataset shows as
+  its repo and subset, with the revision and split on hover. Hashes show their
   first 12 characters, with the whole value on hover and a copy button.
 - **Schemas 8 and 9** are read, as eval's reader does. Another schema shows a note, not a table.
 
@@ -96,14 +104,18 @@ branch; whichever stage merges second takes the next stage and migration number.
   answers 404 naming it. A refusal of the diff (other instrument, damaged or mismatched files)
   answers 409 with eval's message. The answer is `ItemDiff.to_dict()`, schema 1, unchanged.
 - **Files are read on the server.** Reading the files of two Base Easy runs over HTTP took about
-  3 minutes (220 requests); here the diff runs in a worker thread and reads each file from the
-  file store as it needs it (only the tasks both runs can compare), so nothing goes through the
-  client.
+  3 minutes (220 requests); here the diff reads each file from the file store as it needs it
+  (only the tasks both runs can compare), so nothing goes through the client. It runs in a pool
+  of four threads of its own: a file read needs the default executor's threads, so a diff
+  waiting in one of them could deadlock the server, and four at a time bound the memory held.
 - **The page:** `/{entity}/{project}/runs/{run}/compare?with={entity}/{project}/{run}`. A header
   names both runs and their models; a table has one row per compared task (task, hash, docs, the
   four counts); a row opens to the two id lists; tasks not compared are listed with eval's
-  reason in words. **Entry points:** the runs table's selection bar shows **Compare items** when
-  exactly two runs are selected, and a version's Evals tab when two runs are checked.
+  reason in words. A pair that can't be compared (no results file, another instrument) shows
+  the reason on the page. **Entry points:** the runs table's selection bar shows **Compare
+  items** when exactly two runs are selected, and a version's Evals tab when two runs are
+  checked. Both are for members, as selection is (D130); a public project's visitor reaches the
+  page by its link.
 
 ### D175. Eval's results reader imports no torch
 
@@ -171,3 +183,32 @@ merges.
   (`evals`, `eval_runs`), `docs/source/app/browse-models.md` (the Evals tab), and a section on the
   Results tab and comparison where the app's run pages are described; eval's `comparison.md`
   links to it.
+
+## 4. How it was actually built
+
+- **Eval (D175).** `results.py` keeps the write side's annotations under `TYPE_CHECKING`;
+  `Provenance.collect`'s two torch annotations are strings, because the docs read its signature
+  where torch isn't imported. `WrittenResults.read` holds the parse that `read_results` had;
+  stage 041's later tidy-up (`_read_task`, `_check_types`, `predictions_name`) moved into it
+  unchanged. `write_run`, the test helper that writes a run folder, moved to `tests/eval/toy.py`
+  so the app's tests share it.
+- **API.** The link table, `evals`, `eval_runs`, `scored` and retention's check are 014's code
+  (`14bd505`, reverted from `b55a966`), with the match of D171. The diff route's file reads go
+  through `Store.read_file`, scheduled on the event loop from the diff's thread with
+  `run_coroutine_threadsafe`. The API image copies five eval modules; importing the API with
+  only its own locked dependencies and those files loads no torch.
+- **Web.** Ak's Evals tab, its server route and **Models scored** came back from `2d2be2c`;
+  the tab reads results files instead of summaries. `src/lib/evals.ts` holds the parsing and
+  row logic both the tab and the server use; `src/lib/server/evals.ts` reads a results file.
+- **Tests.** As planned, plus: a database that kept the early `model_version_runs`
+  (`test_migrations.py`), two models with the same bytes, and the built dashboard's answers to
+  a member, an outsider and a signed-out visitor for the run page, the compare page and the
+  Evals route (`test_web_access.py`).
+
+## 5. Known gaps
+
+- A run whose config was stored before this release links only when its config is sent again.
+- Doc ids aren't linked to dataset rows (D176).
+- Each comparison reads both runs' prediction files again; nothing is cached.
+- Public visitors have no selection in the runs table, so they open a comparison by its link.
+

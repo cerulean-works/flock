@@ -30,6 +30,12 @@
 	});
 
 	const rows = $derived(runs ? evalRows(runs) : []);
+	// A name on two rows was scored two ways: its hash tells the rows apart.
+	const repeated = $derived(
+		new Set(
+			rows.filter((r, i) => rows.findIndex((o) => o.name === r.name) !== i).map((r) => r.name)
+		)
+	);
 	const ref = $derived(`flock:${version.model}@${version.number}`);
 
 	// Two checked runs, in the table's order, are compared doc by doc (023 D174).
@@ -98,8 +104,10 @@
 					<tr class="h-9 border-b border-divider hover:bg-muted">
 						<th scope="row" class="px-2 text-left font-normal">
 							<span class="font-mono text-[12.5px]">{row.name}</span>
-							<span class="ml-1.5 text-xs text-faint">
-								{row.kind === 'suite' ? 'suite' : row.metric}
+							<span class="ml-1.5 text-xs text-faint" title={row.hash}>
+								{row.kind === 'suite' ? 'suite' : row.metric}{repeated.has(row.name)
+									? ` · ${row.hash.slice(0, 12)}`
+									: ''}
 							</span>
 						</th>
 						{#each runs as run (run.path)}

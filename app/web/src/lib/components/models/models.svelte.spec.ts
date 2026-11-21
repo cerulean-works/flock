@@ -392,21 +392,22 @@ describe('ModelView', () => {
 			key,
 			kind,
 			name,
-			metric
+			metric,
+			hash: key.split('@')[1]
 		});
 		const calls = serve({
 			[`${API}/olmo2-1b/versions/12/evals`]: () => ({
 				runs: [
 					run('e1', 'base easy', {
-						rows: [row('mmlu/acc_raw', 'task', 'mmlu', 'acc_raw')],
-						values: { 'mmlu/acc_raw': 0.5 }
+						rows: [row('mmlu/acc_raw@h', 'task', 'mmlu', 'acc_raw')],
+						values: { 'mmlu/acc_raw@h': 0.5 }
 					}),
 					run('e2', null, {
 						rows: [
-							row('suites/core', 'suite', 'core', null),
-							row('mmlu/acc_raw', 'task', 'mmlu', 'acc_raw')
+							row('suites/core@s', 'suite', 'core', null),
+							row('mmlu/acc_raw@h', 'task', 'mmlu', 'acc_raw')
 						],
-						values: { 'suites/core': 0.25, 'mmlu/acc_raw': 0.625 }
+						values: { 'suites/core@s': 0.25, 'mmlu/acc_raw@h': 0.625 }
 					}),
 					run('old', null, null)
 				]

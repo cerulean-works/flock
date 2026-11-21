@@ -48,8 +48,9 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		)
 	]);
 	const run = (await (await flock(path)).json()) as RunDetail;
-	// An eval run's results file, for its Results tab (023 D173).
-	const results = run.job_type === 'eval' ? await readEvalResults(path) : null;
+	// A run's results file, for its Results tab (023 D173): any run that has one, whatever its
+	// job type says.
+	const results = await readEvalResults(path);
 	const owner = run.owner_user ?? null;
 	return {
 		run,

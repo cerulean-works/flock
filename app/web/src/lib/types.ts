@@ -522,11 +522,13 @@ export interface EvalResults {
 
 /** A row of the Evals tab: a suite's score, or a task's primary metric. */
 export interface EvalRow {
-	/** As the run's summary names it: `suites/{suite}` or `{task}/{metric}`. */
+	/** `suites/{suite}@{suite_hash}` or `{task}/{metric}@{task_hash}`. */
 	key: string;
 	kind: 'suite' | 'task';
 	name: string;
 	metric: string | null;
+	/** The suite or task hash its scores were made under. */
+	hash: string;
 }
 
 /** An eval run's scores, rows in its results file's order. */

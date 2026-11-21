@@ -596,6 +596,25 @@ def test_eval_runs_are_linked_from_their_config(flock: S3Flock, pusher: Pusher) 
     assert eval_links(flock) == [("e1", 1), ("e1", 2), ("e2", 1), ("e3", 2)]
 
 
+def test_the_same_bytes_in_two_models_link_only_the_named_one(
+    flock: S3Flock, pusher: Pusher
+) -> None:
+    api = flock.client()
+    a, b = pusher.push("a"), pusher.push("b")
+    assert a["digest"] == b["digest"]  # one file list, so one digest
+
+    api.create_run("evals", "e1", config={"model": "flock:flock/b@1", "model_digest": b["digest"]})
+    # A name that is neither leaves two candidates, so nothing is linked rather than a guess.
+    api.create_run("evals", "e2", config={"model": "flock:flock/c@1", "model_digest": b["digest"]})
+
+    linked = sql(
+        flock,
+        "SELECT r.name, m.name FROM model_version_runs e JOIN runs r ON r.pk = e.run_pk "
+        "JOIN model_versions v ON v.pk = e.version_pk JOIN models m ON m.pk = v.model_pk",
+    )
+    assert [(row[0], row[1]) for row in linked] == [("e1", "b")]
+
+
 def test_eval_configs_that_name_no_live_version_link_nothing(
     flock: S3Flock, pusher: Pusher
 ) -> None:

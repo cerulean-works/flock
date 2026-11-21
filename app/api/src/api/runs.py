@@ -1,5 +1,6 @@
 import asyncio
 import mimetypes
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -34,6 +35,10 @@ from flock.eval.diff import diff
 from flock.eval.results import WrittenResults
 
 router = APIRouter(prefix="/api/v1", tags=["flock"], dependencies=[Depends(rest_user)])
+# Item comparisons (023, D174) run here, never in the default executor: each waits on file reads
+# that need the default executor's threads, so sharing it could deadlock. Four at a time also
+# bound the files held in memory.
+DIFFS = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diff")
 # Reads that answer outsiders too, on public projects (D112): they need no credential.
 public = APIRouter(prefix="/api/v1", tags=["flock"])
 
@@ -578,8 +583,8 @@ async def diff_runs(
     found = await find_run(store, await get_readable_project(entity, project, store, viewer), name)
     loop = asyncio.get_running_loop()
 
-    # The diff runs in a worker thread and reads a file only when a task needs it, each through
-    # this loop, so two runs' hundreds of files never travel to the client.
+    # The diff runs in a thread of its own pool and reads a file only when a task needs it, each
+    # through this loop, so two runs' hundreds of files never travel to the client.
     def read_file(of: Run, file: str) -> str | None:
         data = asyncio.run_coroutine_threadsafe(store.read_file(of, file), loop).result()
         return None if data is None else data.decode()
@@ -592,7 +597,7 @@ async def diff_runs(
         return diff(a, b).to_dict()
 
     try:
-        return JSONResponse(await asyncio.to_thread(compare))
+        return JSONResponse(await loop.run_in_executor(DIFFS, compare))
     except FileNotFoundError as exc:
         raise APIError(404, str(exc)) from exc
     except ValueError as exc:  # another instrument, or files that don't match their results

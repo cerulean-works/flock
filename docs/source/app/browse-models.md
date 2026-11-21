@@ -64,7 +64,7 @@ If one model can't be deleted, the rest still are, and the dialog lists the ones
 
 Every type-to-confirm prompt has a **Copy** button next to the text to type, so you can paste it instead.
 
-Files in `flock-models` can't be deleted from **Storage**, so a version can't lose files under an eval that scored it.
+Files in `flock-models` can't be deleted from **Storage**, so a version can't lose files once it's saved, and its eval runs always name the bytes they scored.
 
 ## Rename a model
 
