@@ -329,6 +329,10 @@ def read_results(source: str) -> WrittenResults:
         # provenance fields.
         if data.get("schema_version") not in (8, 9):
             raise ValueError(f"schema {data.get('schema_version')}; only 8 and 9 are read")
+        # An object or a string would iterate as nothing, and a diff would read every task as
+        # missing from this run.
+        if not isinstance(data["tasks"], list) or not isinstance(data["suites"], list):
+            raise TypeError("tasks and suites must be arrays")
         tasks = []
         for entry in data["tasks"]:
             entry = {key: value for key, value in entry.items() if key != "docs_per_second"}
@@ -336,6 +340,9 @@ def read_results(source: str) -> WrittenResults:
             for key in ("task", "task_hash", "primary_metric"):
                 if not isinstance(entry[key], str):
                     raise TypeError(f"a task's {key} is {entry[key]!r}, not a string")
+            # A bool is an int to Python, and `true` would pass as one doc.
+            if type(entry["num_docs"]) is not int or entry["num_docs"] < 0:
+                raise TypeError(f"{entry['task']}: num_docs is {entry['num_docs']!r}")
             # Schema 9 always writes the mark, so a missing one is damage, not "public".
             if data["schema_version"] >= 9 and not isinstance(
                 entry["dataset"].get("private"), bool

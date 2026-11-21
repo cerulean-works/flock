@@ -289,6 +289,14 @@ def test_reading_a_folder_refuses_what_is_not_a_results_file(tmp_path: Path) -> 
         read_results(c)
 
     data["tasks"][0]["task"] = "t"
+    for damaged in (
+        {**data, "tasks": {}},
+        {**data, "tasks": [{**data["tasks"][0], "num_docs": True}]},
+    ):
+        (tmp_path / "c" / "results.json").write_text(json.dumps(damaged))
+        with pytest.raises(ValueError, match="must be arrays|num_docs is True"):
+            read_results(c)
+
     (tmp_path / "c" / "results.json").write_text(json.dumps({**data, "tasks": data["tasks"] * 2}))
     with pytest.raises(ValueError, match="a task name repeats: \\['t'\\]"):
         read_results(c)
