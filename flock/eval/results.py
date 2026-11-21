@@ -301,8 +301,8 @@ class WrittenResults:
         name = predictions_name(task)
         # A tracker run holds a private dataset's rows under `private/`, which only the
         # organization's members read; a folder keeps every task's rows in `predictions/`.
-        private = any(t.task == task and t.dataset.private for t in self.tasks)
-        if self.source.startswith("run:") and private:
+        on_run = self.source.startswith("run:")
+        if on_run and any(t.task == task and t.dataset.private for t in self.tasks):
             name = f"private/{name}"
         text = self.read_file(name)
         return None if text is None else [json.loads(line) for line in text.splitlines()]

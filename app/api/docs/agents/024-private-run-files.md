@@ -58,4 +58,5 @@ The numbering continues from 023 (D171 to D176), which is on another branch.
 - Files uploaded before this release under another name are not moved. Eval's only such uploads were two check runs in a private project, deleted by hand.
 - A server older than this release serves `private/` files like any other. The server must be deployed before clients upload under the prefix.
 - The rule covers the run files routes. A route added later that reads a run's files on the server, such as one that diffs two eval runs, must apply it too before it answers an outsider.
+- The case-insensitive match covers case only. A local volume that also ignores some Unicode characters in names (HFS+ on macOS) could serve the folder under a name the check reads as public. The deployed backend is S3, whose keys compare exactly, and the local backend runs on Linux.
 - Previously downloaded copies can't be recalled, as for every other permission change (D157).
