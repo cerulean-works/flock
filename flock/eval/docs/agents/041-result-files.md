@@ -89,6 +89,8 @@ Before the run is created, a log that would upload predictions of a private task
 - **`diff.py`** is its own module beside `compare.py`: it shares the instrument check's idea but not its inputs, since `compare` reads raw JSON of any schema and `diff` reads typed results.
 - **The CLI** prints a table by default and the JSON with `--json`, and exits 2 on a refusal, as `compare` does.
 
+- **Checked end to end** on OLMo 2 1B and Llama 3.2 1B, Base Easy plus one private exam subject, BF16 at batch tokens 16384, each logged live to a new private project: every task hash and every metric equals the earlier BF16 results of both models bit for bit, each run holds `results.json` and its 110 predictions files, the diff read from the two runs equals the diff of the two folders byte for byte, and an anonymous read of the exam subject's predictions answers 404 while a member's answers 200.
+
 ## 5. Known gaps
 
 - The visibility check and the upload are two requests, and the tracker keeps no mark on the files: a project made public during or after the upload serves the private predictions to anyone. The same holds when a run is moved to a public project. Closing this needs the tracker to remember which files are private and refuse outsiders, or refuse to make such a project public or move such a run.
