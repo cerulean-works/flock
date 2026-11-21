@@ -154,7 +154,7 @@ def test_a_schema_8_run_reads_but_its_rows_have_no_outcome(tmp_path: Path) -> No
 
 @pytest.mark.parametrize("key", ["dtype", "batch_tokens", "attention", "sdpa_backend"])
 def test_runs_on_different_instruments_are_refused(tmp_path: Path, key: str) -> None:
-    changed = dataclasses.replace(PROVENANCE, **{key: "other"})
+    changed = dataclasses.replace(PROVENANCE, **{key: 1 if key == "batch_tokens" else "other"})
     a = write_run(tmp_path / "a", {"t": ("h", [True])})
     b = write_run(tmp_path / "b", {"t": ("h", [True])}, provenance=changed)
 
@@ -292,6 +292,12 @@ def test_reading_a_folder_refuses_what_is_not_a_results_file(tmp_path: Path) -> 
     (tmp_path / "c" / "results.json").write_text(json.dumps({**data, "tasks": data["tasks"] * 2}))
     with pytest.raises(ValueError, match="a task name repeats: \\['t'\\]"):
         read_results(c)
+
+    for key in ("model", "dtype", "attention", "batch_tokens"):
+        damaged = {**data, "provenance": {**data["provenance"], key: None}}
+        (tmp_path / "c" / "results.json").write_text(json.dumps(damaged))
+        with pytest.raises(ValueError, match=f"provenance.{key} is None"):
+            read_results(c)
 
     del data["tasks"][0]["dataset"]["private"]
     (tmp_path / "c" / "results.json").write_text(json.dumps(data))

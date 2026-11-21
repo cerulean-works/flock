@@ -352,6 +352,14 @@ def read_results(source: str) -> WrittenResults:
                 metrics[name] = math.nan if value is None else value
             entry["metrics"] = metrics
             tasks.append(TaskResult(**entry))
+        # The fields that name the model and the instrument a diff compares. Dataclasses check
+        # no types, and a null on both sides would pass as equal.
+        provenance = data["provenance"]
+        for key in ("model", "dtype", "attention"):
+            if not isinstance(provenance[key], str):
+                raise TypeError(f"provenance.{key} is {provenance[key]!r}, not a string")
+        if type(provenance["batch_tokens"]) is not int:
+            raise TypeError(f"provenance.batch_tokens is {provenance['batch_tokens']!r}")
         # Tasks are looked up by name, so a repeated one would drop or double a task.
         names = [task.task for task in tasks]
         if len(set(names)) != len(names):
@@ -361,7 +369,7 @@ def read_results(source: str) -> WrittenResults:
         written = WrittenResults(
             source=source,
             schema_version=data["schema_version"],
-            provenance=Provenance(**data["provenance"]),
+            provenance=Provenance(**provenance),
             tasks=tasks,
             suites=[SuiteResult(**entry) for entry in data["suites"]],
             read_file=read_file,
