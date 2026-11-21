@@ -35,7 +35,8 @@ class FakeRun:
         self.summary = summary
         self.dir = str(folder)
 
-    def save(self, glob_str: str, base_path: str, policy: str) -> None:
+    def save(self, glob_str: str, base_path: str, policy: str, glob: bool) -> None:
+        assert glob is False  # a task name may hold `[`
         # What the tracker would receive: each file by its name on the run, and its contents.
         name = str(Path(glob_str).relative_to(base_path))
         self.calls.setdefault("files", {})[name] = (Path(glob_str).read_text(), policy)

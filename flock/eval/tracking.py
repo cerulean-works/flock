@@ -141,7 +141,8 @@ def log_to_tracker(
             copy = Path(run.dir) / name
             copy.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(path, copy)
-            run.save(str(copy), base_path=run.dir, policy="now")
+            # Literally, not as a glob: a task name may hold `[`.
+            run.save(str(copy), base_path=run.dir, policy="now", glob=False)
 
 
 def log_results_file(path: Path, project: str) -> str:

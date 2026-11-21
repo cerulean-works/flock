@@ -219,6 +219,10 @@ def test_a_task_name_from_a_file_cannot_leave_the_predictions_folder(tmp_path: P
 
     with pytest.raises(ValueError, match="can't name a predictions file"):
         run_a.predictions("../a/predictions/t")
+    # Nor can a caller of the reader itself.
+    for name in ("../b/results.json", str(tmp_path / "a" / "results.json")):
+        with pytest.raises(ValueError, match="isn't a file name inside"):
+            run_a.read_file(name)
 
 
 def test_a_null_accuracy_cannot_vouch_for_its_rows(tmp_path: Path) -> None:
@@ -251,6 +255,18 @@ def test_reading_a_folder_refuses_what_is_not_a_results_file(tmp_path: Path) -> 
     data["tasks"][0]["metrics"]["acc_raw"] = "1.0"
     (tmp_path / "c" / "results.json").write_text(json.dumps(data))
     with pytest.raises(ValueError, match="t: metric acc_raw is '1.0', not a number"):
+        read_results(c)
+
+    data["tasks"][0]["metrics"]["acc_raw"] = 1.0
+    data["tasks"][0]["task"] = ["t"]
+    (tmp_path / "c" / "results.json").write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="a task's task is \\['t'\\], not a string"):
+        read_results(c)
+
+    data["tasks"][0]["task"] = "t"
+    del data["tasks"][0]["dataset"]["private"]
+    (tmp_path / "c" / "results.json").write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="t: dataset.private is not true or false"):
         read_results(c)
 
 

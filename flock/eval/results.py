@@ -332,6 +332,15 @@ def read_results(source: str) -> WrittenResults:
         tasks = []
         for entry in data["tasks"]:
             entry = {key: value for key, value in entry.items() if key != "docs_per_second"}
+            # The fields a diff looks tasks up and reads metrics by. Dataclasses check no types.
+            for key in ("task", "task_hash", "primary_metric"):
+                if not isinstance(entry[key], str):
+                    raise TypeError(f"a task's {key} is {entry[key]!r}, not a string")
+            # Schema 9 always writes the mark, so a missing one is damage, not "public".
+            if data["schema_version"] >= 9 and not isinstance(
+                entry["dataset"].get("private"), bool
+            ):
+                raise ValueError(f"{entry['task']}: dataset.private is not true or false")
             entry["dataset"] = Dataset(**entry["dataset"])
             entry["truncation"] = Truncation(**entry["truncation"])
             # `Results.write` writes a non-finite metric as null.
@@ -351,7 +360,7 @@ def read_results(source: str) -> WrittenResults:
             suites=[SuiteResult(**entry) for entry in data["suites"]],
             read_file=read_file,
         )
-    # Not JSON, a missing key, or a field these types don't have.
+    # Not JSON, a missing key, a field these types don't have, or a value of the wrong type.
     except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as error:
         raise ValueError(f"{source} is not a results file: {error!r}") from None
     except ValueError as error:
@@ -361,8 +370,13 @@ def read_results(source: str) -> WrittenResults:
 
 
 def _read_folder_file(folder: Path, name: str) -> str | None:
-    """Reads `folder/name`, or returns `None` if it doesn't exist. A link is refused, so a run's files come from its own folder."""
-    path = folder / name
-    if path.is_symlink() or path.parent.is_symlink():
-        raise ValueError(f"{path} is a link; a run's files must be in its folder")
+    """Reads `folder/name`, or returns `None` if it doesn't exist. A name that leaves the folder, and a link on the way, are refused, so a run's files come from its own folder."""
+    parts = Path(name).parts
+    if not parts or Path(name).is_absolute() or ".." in parts:
+        raise ValueError(f"{name!r} isn't a file name inside {folder}")
+    path = folder
+    for part in parts:
+        path = path / part
+        if path.is_symlink():
+            raise ValueError(f"{path} is a link; a run's files must be in its folder")
     return path.read_text() if path.is_file() else None
