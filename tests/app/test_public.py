@@ -208,6 +208,7 @@ def test_private_run_files_stay_with_members_whatever_the_projects_visibility(
             "private//predictions/exam.jsonl",
             "%2e/private/predictions/exam.jsonl",
             "%70rivate/predictions/exam.jsonl",
+            "PRIVATE/predictions/exam.jsonl",  # the same folder on a case-insensitive volume
         ):
             response = call(client, "GET", f"/p/runs/r1/files/{name}")
             assert (response.status, response.body) == (404, missing.body), name
