@@ -104,6 +104,7 @@ def exam_task(
     prefix: str,
     repo: str,
     revision: str,
+    private: bool,
     keep: Callable[[dict[str, Any]], bool] | None = None,
 ) -> MultipleChoiceTask:
     """
@@ -118,6 +119,8 @@ def exam_task(
             The set's dataset repo, with one config per subject and the splits `dev` and `test`.
         revision (`str`):
             The repo's commit.
+        private (`bool`):
+            Whether the repo is private, as [`~eval.tasks.Dataset`] reads it.
         keep (`Callable[[dict[str, Any]], bool]`, *optional*):
             The task's `keep`. Every row if not set.
     """
@@ -133,7 +136,9 @@ def exam_task(
 
     return MultipleChoiceTask(
         name=f"{prefix}_{subject.name}",
-        dataset=Dataset(repo=repo, revision=revision, subset=subject.name, split="test"),
+        dataset=Dataset(
+            repo=repo, revision=revision, subset=subject.name, split="test", private=private
+        ),
         to_doc=to_doc,
         # As TMMLU+ and OLMES's MMLU.
         primary_metric="acc_per_char",
@@ -265,6 +270,7 @@ TW_MOCK_EXAMS_TASKS = tuple(
         prefix="tw_mock_exams",
         repo="cerulean-works/tw-mock-exams",
         revision="e62f9adf374da2e0fcd0095428f6339da980f020",
+        private=True,
         keep=scored,
     )
     for subject in SUBJECTS

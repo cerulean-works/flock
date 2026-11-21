@@ -1946,6 +1946,7 @@
   "tasks": {
     "arc_challenge": {
       "dataset": {
+        "private": false,
         "repo": "allenai/ai2_arc",
         "revision": "210d026faf9955653af8916fad021475a3f00453",
         "row_index": false,
@@ -1974,6 +1975,7 @@
     },
     "arc_easy": {
       "dataset": {
+        "private": false,
         "repo": "allenai/ai2_arc",
         "revision": "210d026faf9955653af8916fad021475a3f00453",
         "row_index": false,
@@ -2002,6 +2004,7 @@
     },
     "basic_skills_arithmetic": {
       "dataset": {
+        "private": false,
         "repo": "cerulean-works/basic-skills",
         "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
         "row_index": false,
@@ -2031,6 +2034,7 @@
     },
     "basic_skills_coding": {
       "dataset": {
+        "private": false,
         "repo": "cerulean-works/basic-skills",
         "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
         "row_index": false,
@@ -2060,6 +2064,7 @@
     },
     "basic_skills_common_knowledge": {
       "dataset": {
+        "private": false,
         "repo": "cerulean-works/basic-skills",
         "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
         "row_index": false,
@@ -2089,6 +2094,7 @@
     },
     "basic_skills_logical_reasoning": {
       "dataset": {
+        "private": false,
         "repo": "cerulean-works/basic-skills",
         "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
         "row_index": false,
@@ -2118,6 +2124,7 @@
     },
     "basic_skills_pattern": {
       "dataset": {
+        "private": false,
         "repo": "cerulean-works/basic-skills",
         "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
         "row_index": false,
@@ -2147,6 +2154,7 @@
     },
     "basic_skills_string_operations": {
       "dataset": {
+        "private": false,
         "repo": "cerulean-works/basic-skills",
         "revision": "849126c520dd18b3d07ada2b4716ebde7c3ef50e",
         "row_index": false,
@@ -2176,6 +2184,7 @@
     },
     "ceval_accountant": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2204,6 +2213,7 @@
     },
     "ceval_advanced_mathematics": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2232,6 +2242,7 @@
     },
     "ceval_art_studies": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2260,6 +2271,7 @@
     },
     "ceval_basic_medicine": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2288,6 +2300,7 @@
     },
     "ceval_business_administration": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2316,6 +2329,7 @@
     },
     "ceval_chinese_language_and_literature": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2344,6 +2358,7 @@
     },
     "ceval_civil_servant": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2372,6 +2387,7 @@
     },
     "ceval_clinical_medicine": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2400,6 +2416,7 @@
     },
     "ceval_college_chemistry": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2428,6 +2445,7 @@
     },
     "ceval_college_economics": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2456,6 +2474,7 @@
     },
     "ceval_college_physics": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2484,6 +2503,7 @@
     },
     "ceval_college_programming": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2512,6 +2532,7 @@
     },
     "ceval_computer_architecture": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2540,6 +2561,7 @@
     },
     "ceval_computer_network": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2568,6 +2590,7 @@
     },
     "ceval_discrete_mathematics": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2596,6 +2619,7 @@
     },
     "ceval_education_science": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2624,6 +2648,7 @@
     },
     "ceval_electrical_engineer": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2652,6 +2677,7 @@
     },
     "ceval_environmental_impact_assessment_engineer": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2680,6 +2706,7 @@
     },
     "ceval_fire_engineer": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2708,6 +2735,7 @@
     },
     "ceval_high_school_biology": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2736,6 +2764,7 @@
     },
     "ceval_high_school_chemistry": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2764,6 +2793,7 @@
     },
     "ceval_high_school_chinese": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2792,6 +2822,7 @@
     },
     "ceval_high_school_geography": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2820,6 +2851,7 @@
     },
     "ceval_high_school_history": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2848,6 +2880,7 @@
     },
     "ceval_high_school_mathematics": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2876,6 +2909,7 @@
     },
     "ceval_high_school_physics": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2904,6 +2938,7 @@
     },
     "ceval_high_school_politics": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2932,6 +2967,7 @@
     },
     "ceval_ideological_and_moral_cultivation": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2960,6 +2996,7 @@
     },
     "ceval_law": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -2988,6 +3025,7 @@
     },
     "ceval_legal_professional": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3016,6 +3054,7 @@
     },
     "ceval_logic": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3044,6 +3083,7 @@
     },
     "ceval_mao_zedong_thought": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3072,6 +3112,7 @@
     },
     "ceval_marxism": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3100,6 +3141,7 @@
     },
     "ceval_metrology_engineer": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3128,6 +3170,7 @@
     },
     "ceval_middle_school_biology": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3156,6 +3199,7 @@
     },
     "ceval_middle_school_chemistry": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3184,6 +3228,7 @@
     },
     "ceval_middle_school_geography": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3212,6 +3257,7 @@
     },
     "ceval_middle_school_history": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3240,6 +3286,7 @@
     },
     "ceval_middle_school_mathematics": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3268,6 +3315,7 @@
     },
     "ceval_middle_school_physics": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3296,6 +3344,7 @@
     },
     "ceval_middle_school_politics": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3324,6 +3373,7 @@
     },
     "ceval_modern_chinese_history": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3352,6 +3402,7 @@
     },
     "ceval_operating_system": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3380,6 +3431,7 @@
     },
     "ceval_physician": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3408,6 +3460,7 @@
     },
     "ceval_plant_protection": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3436,6 +3489,7 @@
     },
     "ceval_probability_and_statistics": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3464,6 +3518,7 @@
     },
     "ceval_professional_tour_guide": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3492,6 +3547,7 @@
     },
     "ceval_sports_science": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3520,6 +3576,7 @@
     },
     "ceval_tax_accountant": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3548,6 +3605,7 @@
     },
     "ceval_teacher_qualification": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3576,6 +3634,7 @@
     },
     "ceval_urban_and_rural_planner": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3604,6 +3663,7 @@
     },
     "ceval_veterinary_medicine": {
       "dataset": {
+        "private": false,
         "repo": "ceval/ceval-exam",
         "revision": "617524a00b307ff6f9933702f724131fe12ca7ce",
         "row_index": true,
@@ -3632,6 +3692,7 @@
     },
     "cmmlu_agronomy": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -3660,6 +3721,7 @@
     },
     "cmmlu_anatomy": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -3688,6 +3750,7 @@
     },
     "cmmlu_ancient_chinese": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -3716,6 +3779,7 @@
     },
     "cmmlu_arts": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -3744,6 +3808,7 @@
     },
     "cmmlu_astronomy": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -3772,6 +3837,7 @@
     },
     "cmmlu_business_ethics": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -3800,6 +3866,7 @@
     },
     "cmmlu_chinese_civil_service_exam": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -3828,6 +3895,7 @@
     },
     "cmmlu_chinese_driving_rule": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -3856,6 +3924,7 @@
     },
     "cmmlu_chinese_food_culture": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -3884,6 +3953,7 @@
     },
     "cmmlu_chinese_foreign_policy": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -3912,6 +3982,7 @@
     },
     "cmmlu_chinese_history": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -3940,6 +4011,7 @@
     },
     "cmmlu_chinese_literature": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -3968,6 +4040,7 @@
     },
     "cmmlu_chinese_teacher_qualification": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -3996,6 +4069,7 @@
     },
     "cmmlu_clinical_knowledge": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4024,6 +4098,7 @@
     },
     "cmmlu_college_actuarial_science": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4052,6 +4127,7 @@
     },
     "cmmlu_college_education": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4080,6 +4156,7 @@
     },
     "cmmlu_college_engineering_hydrology": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4108,6 +4185,7 @@
     },
     "cmmlu_college_law": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4136,6 +4214,7 @@
     },
     "cmmlu_college_mathematics": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4164,6 +4243,7 @@
     },
     "cmmlu_college_medical_statistics": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4192,6 +4272,7 @@
     },
     "cmmlu_college_medicine": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4220,6 +4301,7 @@
     },
     "cmmlu_computer_science": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4248,6 +4330,7 @@
     },
     "cmmlu_computer_security": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4276,6 +4359,7 @@
     },
     "cmmlu_conceptual_physics": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4304,6 +4388,7 @@
     },
     "cmmlu_construction_project_management": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4332,6 +4417,7 @@
     },
     "cmmlu_economics": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4360,6 +4446,7 @@
     },
     "cmmlu_education": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4388,6 +4475,7 @@
     },
     "cmmlu_electrical_engineering": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4416,6 +4504,7 @@
     },
     "cmmlu_elementary_chinese": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4444,6 +4533,7 @@
     },
     "cmmlu_elementary_commonsense": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4472,6 +4562,7 @@
     },
     "cmmlu_elementary_information_and_technology": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4500,6 +4591,7 @@
     },
     "cmmlu_elementary_mathematics": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4528,6 +4620,7 @@
     },
     "cmmlu_ethnology": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4556,6 +4649,7 @@
     },
     "cmmlu_food_science": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4584,6 +4678,7 @@
     },
     "cmmlu_genetics": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4612,6 +4707,7 @@
     },
     "cmmlu_global_facts": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4640,6 +4736,7 @@
     },
     "cmmlu_high_school_biology": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4668,6 +4765,7 @@
     },
     "cmmlu_high_school_chemistry": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4696,6 +4794,7 @@
     },
     "cmmlu_high_school_geography": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4724,6 +4823,7 @@
     },
     "cmmlu_high_school_mathematics": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4752,6 +4852,7 @@
     },
     "cmmlu_high_school_physics": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4780,6 +4881,7 @@
     },
     "cmmlu_high_school_politics": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4808,6 +4910,7 @@
     },
     "cmmlu_human_sexuality": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4836,6 +4939,7 @@
     },
     "cmmlu_international_law": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4864,6 +4968,7 @@
     },
     "cmmlu_journalism": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4892,6 +4997,7 @@
     },
     "cmmlu_jurisprudence": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4920,6 +5026,7 @@
     },
     "cmmlu_legal_and_moral_basis": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4948,6 +5055,7 @@
     },
     "cmmlu_logical": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -4976,6 +5084,7 @@
     },
     "cmmlu_machine_learning": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5004,6 +5113,7 @@
     },
     "cmmlu_management": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5032,6 +5142,7 @@
     },
     "cmmlu_marketing": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5060,6 +5171,7 @@
     },
     "cmmlu_marxist_theory": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5088,6 +5200,7 @@
     },
     "cmmlu_modern_chinese": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5116,6 +5229,7 @@
     },
     "cmmlu_nutrition": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5144,6 +5258,7 @@
     },
     "cmmlu_philosophy": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5172,6 +5287,7 @@
     },
     "cmmlu_professional_accounting": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5200,6 +5316,7 @@
     },
     "cmmlu_professional_law": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5228,6 +5345,7 @@
     },
     "cmmlu_professional_medicine": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5256,6 +5374,7 @@
     },
     "cmmlu_professional_psychology": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5284,6 +5403,7 @@
     },
     "cmmlu_public_relations": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5312,6 +5432,7 @@
     },
     "cmmlu_security_study": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5340,6 +5461,7 @@
     },
     "cmmlu_sociology": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5368,6 +5490,7 @@
     },
     "cmmlu_sports_science": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5396,6 +5519,7 @@
     },
     "cmmlu_traditional_chinese_medicine": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5424,6 +5548,7 @@
     },
     "cmmlu_virology": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5452,6 +5577,7 @@
     },
     "cmmlu_world_history": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5480,6 +5606,7 @@
     },
     "cmmlu_world_religions": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/cmmlu",
         "revision": "46bb6edee95673e17186965063d2fba50ec23e00",
         "row_index": true,
@@ -5508,6 +5635,7 @@
     },
     "coqa": {
       "dataset": {
+        "private": false,
         "repo": "allenai/coqa-gen2mc",
         "revision": "5e0394a08cc63398a22b745541e5cedf9c171bf3",
         "row_index": false,
@@ -5525,6 +5653,7 @@
     },
     "csqa": {
       "dataset": {
+        "private": false,
         "repo": "tau/commonsense_qa",
         "revision": "94630fe30dad47192a8546eb75f094926d47e155",
         "row_index": false,
@@ -5553,6 +5682,7 @@
     },
     "drcd_bpb": {
       "dataset": {
+        "private": false,
         "repo": "cerulean-works/drcd",
         "revision": "e409db6dd4090dcc390a05e660b1344b42b79e98",
         "row_index": false,
@@ -5579,6 +5709,7 @@
     },
     "drop": {
       "dataset": {
+        "private": false,
         "repo": "allenai/drop-gen2mc",
         "revision": "33191ccb7014f77bc6dc3f59792acd43f658eb06",
         "row_index": false,
@@ -5604,6 +5735,7 @@
     },
     "fineweb_edu": {
       "dataset": {
+        "private": false,
         "repo": "cerulean-works/fineweb-edu-dev",
         "revision": "2484afe000a6fdf442ba2396391a3bec12644903",
         "row_index": false,
@@ -5617,6 +5749,7 @@
     },
     "fineweb_en": {
       "dataset": {
+        "private": false,
         "repo": "cerulean-works/fineweb-edu-dev",
         "revision": "2484afe000a6fdf442ba2396391a3bec12644903",
         "row_index": false,
@@ -5630,6 +5763,7 @@
     },
     "fineweb_zh_hans": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/fineweb-2-zh-dev",
         "revision": "6d54ae9ec544b822699267d615597649452d9eea",
         "row_index": false,
@@ -5643,6 +5777,7 @@
     },
     "fineweb_zh_hant": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/fineweb-2-zh-dev",
         "revision": "6d54ae9ec544b822699267d615597649452d9eea",
         "row_index": false,
@@ -5656,6 +5791,7 @@
     },
     "hellaswag": {
       "dataset": {
+        "private": false,
         "repo": "allenai/hellaswag",
         "revision": "55aa56627db098098f50549e650a00be2684f4bf",
         "row_index": true,
@@ -5684,6 +5820,7 @@
     },
     "humaneval": {
       "dataset": {
+        "private": false,
         "repo": "openai/openai_humaneval",
         "revision": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544",
         "row_index": false,
@@ -5713,6 +5850,7 @@
     },
     "jeopardy": {
       "dataset": {
+        "private": false,
         "repo": "allenai/jeopardy-gen2mc",
         "revision": "0bbd389863e56b304b22b66106caf72566144aa8",
         "row_index": false,
@@ -5738,6 +5876,7 @@
     },
     "lab_bench_dbqa": {
       "dataset": {
+        "private": false,
         "repo": "futurehouse/lab-bench",
         "revision": "5c77cec648430f30611808808861eb86f81d5eaa",
         "row_index": false,
@@ -5764,6 +5903,7 @@
     },
     "lab_bench_protocolqa": {
       "dataset": {
+        "private": false,
         "repo": "futurehouse/lab-bench",
         "revision": "5c77cec648430f30611808808861eb86f81d5eaa",
         "row_index": false,
@@ -5790,6 +5930,7 @@
     },
     "lambada": {
       "dataset": {
+        "private": false,
         "repo": "EleutherAI/lambada_openai",
         "revision": "900124bf3b8235c6daf21033af9948b3f07346c4",
         "row_index": true,
@@ -5810,6 +5951,7 @@
     },
     "mbpp": {
       "dataset": {
+        "private": false,
         "repo": "google-research-datasets/mbpp",
         "revision": "4bb6404fdc6cacfda99d4ac4205087b89d32030c",
         "row_index": false,
@@ -5838,6 +5980,7 @@
     },
     "medmcqa": {
       "dataset": {
+        "private": false,
         "repo": "openlifescienceai/medmcqa",
         "revision": "91c6572c454088bf71b679ad90aa8dffcd0d5868",
         "row_index": false,
@@ -5866,6 +6009,7 @@
     },
     "medqa_en": {
       "dataset": {
+        "private": false,
         "repo": "davidheineman/medqa-en",
         "revision": "a9cc2ff94f0444e1970fd785c986f4b1571239c0",
         "row_index": true,
@@ -5894,6 +6038,7 @@
     },
     "minerva_math_algebra": {
       "dataset": {
+        "private": false,
         "repo": "EleutherAI/hendrycks_math",
         "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
         "row_index": true,
@@ -5921,6 +6066,7 @@
     },
     "minerva_math_counting_and_probability": {
       "dataset": {
+        "private": false,
         "repo": "EleutherAI/hendrycks_math",
         "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
         "row_index": true,
@@ -5948,6 +6094,7 @@
     },
     "minerva_math_geometry": {
       "dataset": {
+        "private": false,
         "repo": "EleutherAI/hendrycks_math",
         "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
         "row_index": true,
@@ -5975,6 +6122,7 @@
     },
     "minerva_math_intermediate_algebra": {
       "dataset": {
+        "private": false,
         "repo": "EleutherAI/hendrycks_math",
         "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
         "row_index": true,
@@ -6002,6 +6150,7 @@
     },
     "minerva_math_number_theory": {
       "dataset": {
+        "private": false,
         "repo": "EleutherAI/hendrycks_math",
         "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
         "row_index": true,
@@ -6029,6 +6178,7 @@
     },
     "minerva_math_prealgebra": {
       "dataset": {
+        "private": false,
         "repo": "EleutherAI/hendrycks_math",
         "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
         "row_index": true,
@@ -6056,6 +6206,7 @@
     },
     "minerva_math_precalculus": {
       "dataset": {
+        "private": false,
         "repo": "EleutherAI/hendrycks_math",
         "revision": "21a5633873b6a120296cce3e2df9d5550074f4a3",
         "row_index": true,
@@ -6083,6 +6234,7 @@
     },
     "mmlu_abstract_algebra": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6111,6 +6263,7 @@
     },
     "mmlu_anatomy": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6139,6 +6292,7 @@
     },
     "mmlu_astronomy": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6167,6 +6321,7 @@
     },
     "mmlu_business_ethics": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6195,6 +6350,7 @@
     },
     "mmlu_clinical_knowledge": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6223,6 +6379,7 @@
     },
     "mmlu_college_biology": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6251,6 +6408,7 @@
     },
     "mmlu_college_chemistry": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6279,6 +6437,7 @@
     },
     "mmlu_college_computer_science": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6307,6 +6466,7 @@
     },
     "mmlu_college_mathematics": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6335,6 +6495,7 @@
     },
     "mmlu_college_medicine": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6363,6 +6524,7 @@
     },
     "mmlu_college_physics": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6391,6 +6553,7 @@
     },
     "mmlu_computer_security": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6419,6 +6582,7 @@
     },
     "mmlu_conceptual_physics": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6447,6 +6611,7 @@
     },
     "mmlu_econometrics": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6475,6 +6640,7 @@
     },
     "mmlu_electrical_engineering": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6503,6 +6669,7 @@
     },
     "mmlu_elementary_mathematics": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6531,6 +6698,7 @@
     },
     "mmlu_formal_logic": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6559,6 +6727,7 @@
     },
     "mmlu_global_facts": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6587,6 +6756,7 @@
     },
     "mmlu_high_school_biology": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6615,6 +6785,7 @@
     },
     "mmlu_high_school_chemistry": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6643,6 +6814,7 @@
     },
     "mmlu_high_school_computer_science": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6671,6 +6843,7 @@
     },
     "mmlu_high_school_european_history": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6699,6 +6872,7 @@
     },
     "mmlu_high_school_geography": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6727,6 +6901,7 @@
     },
     "mmlu_high_school_government_and_politics": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6755,6 +6930,7 @@
     },
     "mmlu_high_school_macroeconomics": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6783,6 +6959,7 @@
     },
     "mmlu_high_school_mathematics": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6811,6 +6988,7 @@
     },
     "mmlu_high_school_microeconomics": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6839,6 +7017,7 @@
     },
     "mmlu_high_school_physics": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6867,6 +7046,7 @@
     },
     "mmlu_high_school_psychology": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6895,6 +7075,7 @@
     },
     "mmlu_high_school_statistics": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6923,6 +7104,7 @@
     },
     "mmlu_high_school_us_history": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6951,6 +7133,7 @@
     },
     "mmlu_high_school_world_history": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -6979,6 +7162,7 @@
     },
     "mmlu_human_aging": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7007,6 +7191,7 @@
     },
     "mmlu_human_sexuality": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7035,6 +7220,7 @@
     },
     "mmlu_international_law": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7063,6 +7249,7 @@
     },
     "mmlu_jurisprudence": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7091,6 +7278,7 @@
     },
     "mmlu_logical_fallacies": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7119,6 +7307,7 @@
     },
     "mmlu_machine_learning": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7147,6 +7336,7 @@
     },
     "mmlu_management": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7175,6 +7365,7 @@
     },
     "mmlu_marketing": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7203,6 +7394,7 @@
     },
     "mmlu_medical_genetics": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7231,6 +7423,7 @@
     },
     "mmlu_miscellaneous": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7259,6 +7452,7 @@
     },
     "mmlu_moral_disputes": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7287,6 +7481,7 @@
     },
     "mmlu_moral_scenarios": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7315,6 +7510,7 @@
     },
     "mmlu_nutrition": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7343,6 +7539,7 @@
     },
     "mmlu_philosophy": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7371,6 +7568,7 @@
     },
     "mmlu_prehistory": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7399,6 +7597,7 @@
     },
     "mmlu_professional_accounting": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7427,6 +7626,7 @@
     },
     "mmlu_professional_law": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7455,6 +7655,7 @@
     },
     "mmlu_professional_medicine": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7483,6 +7684,7 @@
     },
     "mmlu_professional_psychology": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7511,6 +7713,7 @@
     },
     "mmlu_public_relations": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7539,6 +7742,7 @@
     },
     "mmlu_security_studies": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7567,6 +7771,7 @@
     },
     "mmlu_sociology": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7595,6 +7800,7 @@
     },
     "mmlu_us_foreign_policy": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7623,6 +7829,7 @@
     },
     "mmlu_virology": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7651,6 +7858,7 @@
     },
     "mmlu_world_religions": {
       "dataset": {
+        "private": false,
         "repo": "cais/mmlu",
         "revision": "c30699e8356da336a370243923dbaf21066bb9fe",
         "row_index": true,
@@ -7679,6 +7887,7 @@
     },
     "mt_mbpp_bash": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -7707,6 +7916,7 @@
     },
     "mt_mbpp_c": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -7735,6 +7945,7 @@
     },
     "mt_mbpp_cpp": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -7763,6 +7974,7 @@
     },
     "mt_mbpp_csharp": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -7791,6 +8003,7 @@
     },
     "mt_mbpp_go": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -7819,6 +8032,7 @@
     },
     "mt_mbpp_haskell": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -7847,6 +8061,7 @@
     },
     "mt_mbpp_java": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -7875,6 +8090,7 @@
     },
     "mt_mbpp_javascript": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -7903,6 +8119,7 @@
     },
     "mt_mbpp_matlab": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -7931,6 +8148,7 @@
     },
     "mt_mbpp_php": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -7959,6 +8177,7 @@
     },
     "mt_mbpp_python": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -7987,6 +8206,7 @@
     },
     "mt_mbpp_r": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -8015,6 +8235,7 @@
     },
     "mt_mbpp_ruby": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -8043,6 +8264,7 @@
     },
     "mt_mbpp_rust": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -8071,6 +8293,7 @@
     },
     "mt_mbpp_scala": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -8099,6 +8322,7 @@
     },
     "mt_mbpp_swift": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -8127,6 +8351,7 @@
     },
     "mt_mbpp_typescript": {
       "dataset": {
+        "private": false,
         "repo": "allenai/multilingual_mbpp",
         "revision": "c86b037e7d20e705f3595b1cbb9db993681ca181",
         "row_index": false,
@@ -8155,6 +8380,7 @@
     },
     "naturalqs": {
       "dataset": {
+        "private": false,
         "repo": "allenai/nq-gen2mc",
         "revision": "a7e553744f28cb673bf25b734513c41e3f413840",
         "row_index": false,
@@ -8180,6 +8406,7 @@
     },
     "paloma_c4_100_domains__100_www.ign.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8193,6 +8420,7 @@
     },
     "paloma_c4_100_domains__10_www.eventbrite.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8206,6 +8434,7 @@
     },
     "paloma_c4_100_domains__11_link.springer.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8219,6 +8448,7 @@
     },
     "paloma_c4_100_domains__12_www.chicagotribune.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8232,6 +8462,7 @@
     },
     "paloma_c4_100_domains__13_www.foxnews.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8245,6 +8476,7 @@
     },
     "paloma_c4_100_domains__14_www.aljazeera.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8258,6 +8490,7 @@
     },
     "paloma_c4_100_domains__15_www.dailymail.co.uk": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8271,6 +8504,7 @@
     },
     "paloma_c4_100_domains__16_www.ncbi.nlm.nih.gov": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8284,6 +8518,7 @@
     },
     "paloma_c4_100_domains__17_www.express.co.uk": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8297,6 +8532,7 @@
     },
     "paloma_c4_100_domains__18_en.m.wikipedia.org": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8310,6 +8546,7 @@
     },
     "paloma_c4_100_domains__19_www.cnet.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8323,6 +8560,7 @@
     },
     "paloma_c4_100_domains__1_www.nytimes.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8336,6 +8574,7 @@
     },
     "paloma_c4_100_domains__20_www.telegraph.co.uk": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8349,6 +8588,7 @@
     },
     "paloma_c4_100_domains__21_www.theatlantic.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8362,6 +8602,7 @@
     },
     "paloma_c4_100_domains__22_forums.macrumors.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8375,6 +8616,7 @@
     },
     "paloma_c4_100_domains__23_www.oreilly.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8388,6 +8630,7 @@
     },
     "paloma_c4_100_domains__24_www.washingtonpost.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8401,6 +8644,7 @@
     },
     "paloma_c4_100_domains__25_www.zdnet.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8414,6 +8658,7 @@
     },
     "paloma_c4_100_domains__26_www.foxbusiness.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8427,6 +8672,7 @@
     },
     "paloma_c4_100_domains__27_www.reuters.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8440,6 +8686,7 @@
     },
     "paloma_c4_100_domains__28_www.ibtimes.co.uk": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8453,6 +8700,7 @@
     },
     "paloma_c4_100_domains__29_www.rt.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8466,6 +8714,7 @@
     },
     "paloma_c4_100_domains__2_en.wikipedia.org": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8479,6 +8728,7 @@
     },
     "paloma_c4_100_domains__30_www.prweb.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8492,6 +8742,7 @@
     },
     "paloma_c4_100_domains__31_www.deviantart.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8505,6 +8756,7 @@
     },
     "paloma_c4_100_domains__32_www.si.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8518,6 +8770,7 @@
     },
     "paloma_c4_100_domains__33_www.bbc.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8531,6 +8784,7 @@
     },
     "paloma_c4_100_domains__34_github.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8544,6 +8798,7 @@
     },
     "paloma_c4_100_domains__35_nypost.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8557,6 +8812,7 @@
     },
     "paloma_c4_100_domains__36_itunes.apple.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8570,6 +8826,7 @@
     },
     "paloma_c4_100_domains__37_www.instructables.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8583,6 +8840,7 @@
     },
     "paloma_c4_100_domains__38_www.youtube.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8596,6 +8854,7 @@
     },
     "paloma_c4_100_domains__39_www.booking.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8609,6 +8868,7 @@
     },
     "paloma_c4_100_domains__40_www.etsy.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8622,6 +8882,7 @@
     },
     "paloma_c4_100_domains__41_www.marketwired.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8635,6 +8896,7 @@
     },
     "paloma_c4_100_domains__42_sites.google.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8648,6 +8910,7 @@
     },
     "paloma_c4_100_domains__43_www.baltimoresun.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8661,6 +8924,7 @@
     },
     "paloma_c4_100_domains__44_www.agreatertown.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8674,6 +8938,7 @@
     },
     "paloma_c4_100_domains__45_www.npr.org": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8687,6 +8952,7 @@
     },
     "paloma_c4_100_domains__46_www.fool.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8700,6 +8966,7 @@
     },
     "paloma_c4_100_domains__47_www.tripadvisor.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8713,6 +8980,7 @@
     },
     "paloma_c4_100_domains__48_www.bbc.co.uk": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8726,6 +8994,7 @@
     },
     "paloma_c4_100_domains__49_lists.w3.org": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8739,6 +9008,7 @@
     },
     "paloma_c4_100_domains__4_www.latimes.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8752,6 +9022,7 @@
     },
     "paloma_c4_100_domains__50_mashable.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8765,6 +9036,7 @@
     },
     "paloma_c4_100_domains__51_disneyparksmomspanel.disney.go.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8778,6 +9050,7 @@
     },
     "paloma_c4_100_domains__52_www.cnbc.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8791,6 +9064,7 @@
     },
     "paloma_c4_100_domains__53_answers.sap.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8804,6 +9078,7 @@
     },
     "paloma_c4_100_domains__54_homestars.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8817,6 +9092,7 @@
     },
     "paloma_c4_100_domains__55_www.hindustantimes.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8830,6 +9106,7 @@
     },
     "paloma_c4_100_domains__56_www.reference.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8843,6 +9120,7 @@
     },
     "paloma_c4_100_domains__57_www.city-data.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8856,6 +9134,7 @@
     },
     "paloma_c4_100_domains__58_medium.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8869,6 +9148,7 @@
     },
     "paloma_c4_100_domains__59_app-wiringdiagram.herokuapp.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8882,6 +9162,7 @@
     },
     "paloma_c4_100_domains__5_www.theguardian.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8895,6 +9176,7 @@
     },
     "paloma_c4_100_domains__60_www.csmonitor.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8908,6 +9190,7 @@
     },
     "paloma_c4_100_domains__61_www.adweek.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8921,6 +9204,7 @@
     },
     "paloma_c4_100_domains__62_docs.microsoft.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8934,6 +9218,7 @@
     },
     "paloma_c4_100_domains__63_www.yahoo.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8947,6 +9232,7 @@
     },
     "paloma_c4_100_domains__64_www.thesun.co.uk": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8960,6 +9246,7 @@
     },
     "paloma_c4_100_domains__65_www.nydailynews.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8973,6 +9260,7 @@
     },
     "paloma_c4_100_domains__66_www.dailystar.co.uk": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8986,6 +9274,7 @@
     },
     "paloma_c4_100_domains__67_fineartamerica.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -8999,6 +9288,7 @@
     },
     "paloma_c4_100_domains__68_www.kickstarter.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9012,6 +9302,7 @@
     },
     "paloma_c4_100_domains__69_uk.reuters.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9025,6 +9316,7 @@
     },
     "paloma_c4_100_domains__6_www.huffpost.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9038,6 +9330,7 @@
     },
     "paloma_c4_100_domains__70_www.insiderpages.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9051,6 +9344,7 @@
     },
     "paloma_c4_100_domains__71_www.inquisitr.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9064,6 +9358,7 @@
     },
     "paloma_c4_100_domains__72_lists.debian.org": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9077,6 +9372,7 @@
     },
     "paloma_c4_100_domains__73_www.straitstimes.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9090,6 +9386,7 @@
     },
     "paloma_c4_100_domains__74_www.cbsnews.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9103,6 +9400,7 @@
     },
     "paloma_c4_100_domains__75_simple.wikipedia.org": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9116,6 +9414,7 @@
     },
     "paloma_c4_100_domains__76_deadline.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9129,6 +9428,7 @@
     },
     "paloma_c4_100_domains__77_www.androidheadlines.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9142,6 +9442,7 @@
     },
     "paloma_c4_100_domains__78_www.wired.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9155,6 +9456,7 @@
     },
     "paloma_c4_100_domains__79_www.bustle.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9168,6 +9470,7 @@
     },
     "paloma_c4_100_domains__7_patents.google.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9181,6 +9484,7 @@
     },
     "paloma_c4_100_domains__80_premium.wpmudev.org": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9194,6 +9498,7 @@
     },
     "paloma_c4_100_domains__81_www.librarything.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9207,6 +9512,7 @@
     },
     "paloma_c4_100_domains__82_mail-archives.apache.org": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9220,6 +9526,7 @@
     },
     "paloma_c4_100_domains__83_scholars.duke.edu": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9233,6 +9540,7 @@
     },
     "paloma_c4_100_domains__84_www.glassdoor.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9246,6 +9554,7 @@
     },
     "paloma_c4_100_domains__85_www.pcworld.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9259,6 +9568,7 @@
     },
     "paloma_c4_100_domains__86_www.shutterstock.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9272,6 +9582,7 @@
     },
     "paloma_c4_100_domains__87_myemail.constantcontact.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9285,6 +9596,7 @@
     },
     "paloma_c4_100_domains__88_www.eventbrite.co.uk": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9298,6 +9610,7 @@
     },
     "paloma_c4_100_domains__89_www.fastcompany.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9311,6 +9624,7 @@
     },
     "paloma_c4_100_domains__8_www.businessinsider.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9324,6 +9638,7 @@
     },
     "paloma_c4_100_domains__90_www.firstpost.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9337,6 +9652,7 @@
     },
     "paloma_c4_100_domains__91_www.entrepreneur.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9350,6 +9666,7 @@
     },
     "paloma_c4_100_domains__92_www.breitbart.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9363,6 +9680,7 @@
     },
     "paloma_c4_100_domains__93_techcrunch.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9376,6 +9694,7 @@
     },
     "paloma_c4_100_domains__94_www.nme.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9389,6 +9708,7 @@
     },
     "paloma_c4_100_domains__95_www.ndtv.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9402,6 +9722,7 @@
     },
     "paloma_c4_100_domains__96_finance.yahoo.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9415,6 +9736,7 @@
     },
     "paloma_c4_100_domains__97_archives.lib.state.ma.us": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9428,6 +9750,7 @@
     },
     "paloma_c4_100_domains__98_www.gsmarena.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9441,6 +9764,7 @@
     },
     "paloma_c4_100_domains__99_www.lonelyplanet.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9454,6 +9778,7 @@
     },
     "paloma_c4_100_domains__9_www.forbes.com": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9467,6 +9792,7 @@
     },
     "paloma_c4_en": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9480,6 +9806,7 @@
     },
     "paloma_dolma-v1_5__common-crawl": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9493,6 +9820,7 @@
     },
     "paloma_dolma-v1_5__pes2o": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9506,6 +9834,7 @@
     },
     "paloma_dolma-v1_5__reddit_uniform": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9519,6 +9848,7 @@
     },
     "paloma_dolma-v1_5__stack_uniform": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9532,6 +9862,7 @@
     },
     "paloma_dolma-v1_5__wiki": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9545,6 +9876,7 @@
     },
     "paloma_dolma_100_programing_languages__00_text": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9558,6 +9890,7 @@
     },
     "paloma_dolma_100_programing_languages__01_markdown": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9571,6 +9904,7 @@
     },
     "paloma_dolma_100_programing_languages__02_c": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9584,6 +9918,7 @@
     },
     "paloma_dolma_100_programing_languages__03_php": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9597,6 +9932,7 @@
     },
     "paloma_dolma_100_programing_languages__04_java": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9610,6 +9946,7 @@
     },
     "paloma_dolma_100_programing_languages__05_c++": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9623,6 +9960,7 @@
     },
     "paloma_dolma_100_programing_languages__06_python": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9636,6 +9974,7 @@
     },
     "paloma_dolma_100_programing_languages__07_javascript": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9649,6 +9988,7 @@
     },
     "paloma_dolma_100_programing_languages__08_html": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9662,6 +10002,7 @@
     },
     "paloma_dolma_100_programing_languages__09_c#": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9675,6 +10016,7 @@
     },
     "paloma_dolma_100_programing_languages__10_yaml": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9688,6 +10030,7 @@
     },
     "paloma_dolma_100_programing_languages__11_go": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9701,6 +10044,7 @@
     },
     "paloma_dolma_100_programing_languages__12_typescript": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9714,6 +10058,7 @@
     },
     "paloma_dolma_100_programing_languages__13_xml": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9727,6 +10072,7 @@
     },
     "paloma_dolma_100_programing_languages__14_css": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9740,6 +10086,7 @@
     },
     "paloma_dolma_100_programing_languages__15_jupyter-notebook": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9753,6 +10100,7 @@
     },
     "paloma_dolma_100_programing_languages__16_rust": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9766,6 +10114,7 @@
     },
     "paloma_dolma_100_programing_languages__17_unity3d-asset": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9779,6 +10128,7 @@
     },
     "paloma_dolma_100_programing_languages__18_gettext-catalog": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9792,6 +10142,7 @@
     },
     "paloma_dolma_100_programing_languages__19_ruby": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9805,6 +10156,7 @@
     },
     "paloma_dolma_100_programing_languages__20_vue": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9818,6 +10170,7 @@
     },
     "paloma_dolma_100_programing_languages__21_sql": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9831,6 +10184,7 @@
     },
     "paloma_dolma_100_programing_languages__22_swift": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9844,6 +10198,7 @@
     },
     "paloma_dolma_100_programing_languages__23_kotlin": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9857,6 +10212,7 @@
     },
     "paloma_dolma_100_programing_languages__24_scala": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9870,6 +10226,7 @@
     },
     "paloma_dolma_100_programing_languages__25_scss": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9883,6 +10240,7 @@
     },
     "paloma_dolma_100_programing_languages__26_tex": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9896,6 +10254,7 @@
     },
     "paloma_dolma_100_programing_languages__27_dart": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9909,6 +10268,7 @@
     },
     "paloma_dolma_100_programing_languages__28_kicad": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9922,6 +10282,7 @@
     },
     "paloma_dolma_100_programing_languages__29_shell": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9935,6 +10296,7 @@
     },
     "paloma_dolma_100_programing_languages__30_smali": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9948,6 +10310,7 @@
     },
     "paloma_dolma_100_programing_languages__31_lua": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9961,6 +10324,7 @@
     },
     "paloma_dolma_100_programing_languages__32_restructuredtext": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9974,6 +10338,7 @@
     },
     "paloma_dolma_100_programing_languages__33_perl": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -9987,6 +10352,7 @@
     },
     "paloma_dolma_100_programing_languages__34_diff": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10000,6 +10366,7 @@
     },
     "paloma_dolma_100_programing_languages__35_ini": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10013,6 +10380,7 @@
     },
     "paloma_dolma_100_programing_languages__36_jsx": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10026,6 +10394,7 @@
     },
     "paloma_dolma_100_programing_languages__37_haskell": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10039,6 +10408,7 @@
     },
     "paloma_dolma_100_programing_languages__38_gnuplot": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10052,6 +10422,7 @@
     },
     "paloma_dolma_100_programing_languages__39_postscript": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10065,6 +10436,7 @@
     },
     "paloma_dolma_100_programing_languages__40_groff": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10078,6 +10450,7 @@
     },
     "paloma_dolma_100_programing_languages__41_turtle": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10091,6 +10464,7 @@
     },
     "paloma_dolma_100_programing_languages__42_fortran": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10104,6 +10478,7 @@
     },
     "paloma_dolma_100_programing_languages__43_makefile": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10117,6 +10492,7 @@
     },
     "paloma_dolma_100_programing_languages__44_mathematica": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10130,6 +10506,7 @@
     },
     "paloma_dolma_100_programing_languages__45_pascal": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10143,6 +10520,7 @@
     },
     "paloma_dolma_100_programing_languages__46_common-lisp": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10156,6 +10534,7 @@
     },
     "paloma_dolma_100_programing_languages__47_gas": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10169,6 +10548,7 @@
     },
     "paloma_dolma_100_programing_languages__48_vhdl": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10182,6 +10562,7 @@
     },
     "paloma_dolma_100_programing_languages__49_julia": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10195,6 +10576,7 @@
     },
     "paloma_dolma_100_programing_languages__50_edn": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10208,6 +10590,7 @@
     },
     "paloma_dolma_100_programing_languages__51_visual-basic": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10221,6 +10604,7 @@
     },
     "paloma_dolma_100_programing_languages__52_powershell": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10234,6 +10618,7 @@
     },
     "paloma_dolma_100_programing_languages__53_g-code": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10247,6 +10632,7 @@
     },
     "paloma_dolma_100_programing_languages__54_ocaml": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10260,6 +10646,7 @@
     },
     "paloma_dolma_100_programing_languages__55_java-server-pages": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10273,6 +10660,7 @@
     },
     "paloma_dolma_100_programing_languages__56_solidity": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10286,6 +10674,7 @@
     },
     "paloma_dolma_100_programing_languages__57_graphviz-dot": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10299,6 +10688,7 @@
     },
     "paloma_dolma_100_programing_languages__58_less": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10312,6 +10702,7 @@
     },
     "paloma_dolma_100_programing_languages__59_twig": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10325,6 +10716,7 @@
     },
     "paloma_dolma_100_programing_languages__60_asciidoc": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10338,6 +10730,7 @@
     },
     "paloma_dolma_100_programing_languages__61_groovy": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10351,6 +10744,7 @@
     },
     "paloma_dolma_100_programing_languages__62_llvm": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10364,6 +10758,7 @@
     },
     "paloma_dolma_100_programing_languages__63_hcl": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10377,6 +10772,7 @@
     },
     "paloma_dolma_100_programing_languages__64_html+erb": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10390,6 +10786,7 @@
     },
     "paloma_dolma_100_programing_languages__65_erlang": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10403,6 +10800,7 @@
     },
     "paloma_dolma_100_programing_languages__66_elixir": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10416,6 +10814,7 @@
     },
     "paloma_dolma_100_programing_languages__67_eagle": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10429,6 +10828,7 @@
     },
     "paloma_dolma_100_programing_languages__68_arduino": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10442,6 +10842,7 @@
     },
     "paloma_dolma_100_programing_languages__69_coffeescript": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10455,6 +10856,7 @@
     },
     "paloma_dolma_100_programing_languages__70_toml": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10468,6 +10870,7 @@
     },
     "paloma_dolma_100_programing_languages__71_cuda": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10481,6 +10884,7 @@
     },
     "paloma_dolma_100_programing_languages__72_nix": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10494,6 +10898,7 @@
     },
     "paloma_dolma_100_programing_languages__73_smalltalk": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10507,6 +10912,7 @@
     },
     "paloma_dolma_100_programing_languages__74_cmake": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10520,6 +10926,7 @@
     },
     "paloma_dolma_100_programing_languages__75_actionscript": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10533,6 +10940,7 @@
     },
     "paloma_dolma_100_programing_languages__76_glsl": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10546,6 +10954,7 @@
     },
     "paloma_dolma_100_programing_languages__77_systemverilog": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10559,6 +10968,7 @@
     },
     "paloma_dolma_100_programing_languages__78_haxe": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10572,6 +10982,7 @@
     },
     "paloma_dolma_100_programing_languages__79_f#": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10585,6 +10996,7 @@
     },
     "paloma_dolma_100_programing_languages__80_max": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10598,6 +11010,7 @@
     },
     "paloma_dolma_100_programing_languages__81_objective-c++": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10611,6 +11024,7 @@
     },
     "paloma_dolma_100_programing_languages__82_standard-ml": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10624,6 +11038,7 @@
     },
     "paloma_dolma_100_programing_languages__83_dockerfile": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10637,6 +11052,7 @@
     },
     "paloma_dolma_100_programing_languages__84_emacs-lisp": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10650,6 +11066,7 @@
     },
     "paloma_dolma_100_programing_languages__85_scheme": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10663,6 +11080,7 @@
     },
     "paloma_dolma_100_programing_languages__86_clojure": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10676,6 +11094,7 @@
     },
     "paloma_dolma_100_programing_languages__87_handlebars": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10689,6 +11108,7 @@
     },
     "paloma_dolma_100_programing_languages__88_smarty": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10702,6 +11122,7 @@
     },
     "paloma_dolma_100_programing_languages__89_logos": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10715,6 +11136,7 @@
     },
     "paloma_dolma_100_programing_languages__90_stata": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10728,6 +11150,7 @@
     },
     "paloma_dolma_100_programing_languages__91_yacc": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10741,6 +11164,7 @@
     },
     "paloma_dolma_100_programing_languages__92_nimrod": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10754,6 +11178,7 @@
     },
     "paloma_dolma_100_programing_languages__93_tcl": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10767,6 +11192,7 @@
     },
     "paloma_dolma_100_programing_languages__94_viml": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10780,6 +11206,7 @@
     },
     "paloma_dolma_100_programing_languages__95_asp": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10793,6 +11220,7 @@
     },
     "paloma_dolma_100_programing_languages__96_protocol-buffer": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10806,6 +11234,7 @@
     },
     "paloma_dolma_100_programing_languages__97_r": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10819,6 +11248,7 @@
     },
     "paloma_dolma_100_programing_languages__98_cython": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10832,6 +11262,7 @@
     },
     "paloma_dolma_100_programing_languages__99_mediawiki": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10845,6 +11276,7 @@
     },
     "paloma_dolma_100_subreddits__00_AskReddit": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10858,6 +11290,7 @@
     },
     "paloma_dolma_100_subreddits__01_politics": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10871,6 +11304,7 @@
     },
     "paloma_dolma_100_subreddits__02_AmItheAsshole": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10884,6 +11318,7 @@
     },
     "paloma_dolma_100_subreddits__03_worldnews": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10897,6 +11332,7 @@
     },
     "paloma_dolma_100_subreddits__04_relationships": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10910,6 +11346,7 @@
     },
     "paloma_dolma_100_subreddits__05_relationship_advice": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10923,6 +11360,7 @@
     },
     "paloma_dolma_100_subreddits__06_news": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10936,6 +11374,7 @@
     },
     "paloma_dolma_100_subreddits__07_leagueoflegends": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10949,6 +11388,7 @@
     },
     "paloma_dolma_100_subreddits__08_todayilearned": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10962,6 +11402,7 @@
     },
     "paloma_dolma_100_subreddits__09_TwoXChromosomes": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10975,6 +11416,7 @@
     },
     "paloma_dolma_100_subreddits__10_personalfinance": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -10988,6 +11430,7 @@
     },
     "paloma_dolma_100_subreddits__11_changemyview": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11001,6 +11444,7 @@
     },
     "paloma_dolma_100_subreddits__12_unpopularopinion": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11014,6 +11458,7 @@
     },
     "paloma_dolma_100_subreddits__13_movies": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11027,6 +11472,7 @@
     },
     "paloma_dolma_100_subreddits__14_Games": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11040,6 +11486,7 @@
     },
     "paloma_dolma_100_subreddits__15_nba": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11053,6 +11500,7 @@
     },
     "paloma_dolma_100_subreddits__16_pics": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11066,6 +11514,7 @@
     },
     "paloma_dolma_100_subreddits__17_gaming": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11079,6 +11528,7 @@
     },
     "paloma_dolma_100_subreddits__18_soccer": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11092,6 +11542,7 @@
     },
     "paloma_dolma_100_subreddits__19_nfl": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11105,6 +11556,7 @@
     },
     "paloma_dolma_100_subreddits__20_explainlikeimfive": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11118,6 +11570,7 @@
     },
     "paloma_dolma_100_subreddits__21_conspiracy": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11131,6 +11584,7 @@
     },
     "paloma_dolma_100_subreddits__22_atheism": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11144,6 +11598,7 @@
     },
     "paloma_dolma_100_subreddits__23_AskMen": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11157,6 +11612,7 @@
     },
     "paloma_dolma_100_subreddits__24_videos": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11170,6 +11626,7 @@
     },
     "paloma_dolma_100_subreddits__25_sex": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11183,6 +11640,7 @@
     },
     "paloma_dolma_100_subreddits__26_raisedbynarcissists": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11196,6 +11654,7 @@
     },
     "paloma_dolma_100_subreddits__27_NoStupidQuestions": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11209,6 +11668,7 @@
     },
     "paloma_dolma_100_subreddits__28_DestinyTheGame": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11222,6 +11682,7 @@
     },
     "paloma_dolma_100_subreddits__29_anime": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11235,6 +11696,7 @@
     },
     "paloma_dolma_100_subreddits__30_DnD": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11248,6 +11710,7 @@
     },
     "paloma_dolma_100_subreddits__31_ukpolitics": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11261,6 +11724,7 @@
     },
     "paloma_dolma_100_subreddits__32_funny": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11274,6 +11738,7 @@
     },
     "paloma_dolma_100_subreddits__33_europe": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11287,6 +11752,7 @@
     },
     "paloma_dolma_100_subreddits__34_canada": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11300,6 +11766,7 @@
     },
     "paloma_dolma_100_subreddits__35_Christianity": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11313,6 +11780,7 @@
     },
     "paloma_dolma_100_subreddits__36_SquaredCircle": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11326,6 +11794,7 @@
     },
     "paloma_dolma_100_subreddits__37_AskWomen": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11339,6 +11808,7 @@
     },
     "paloma_dolma_100_subreddits__38_legaladvice": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11352,6 +11822,7 @@
     },
     "paloma_dolma_100_subreddits__39_JUSTNOMIL": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11365,6 +11836,7 @@
     },
     "paloma_dolma_100_subreddits__40_technology": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11378,6 +11850,7 @@
     },
     "paloma_dolma_100_subreddits__41_IAmA": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11391,6 +11864,7 @@
     },
     "paloma_dolma_100_subreddits__42_wow": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11404,6 +11878,7 @@
     },
     "paloma_dolma_100_subreddits__43_Parenting": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11417,6 +11892,7 @@
     },
     "paloma_dolma_100_subreddits__44_exmormon": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11430,6 +11906,7 @@
     },
     "paloma_dolma_100_subreddits__45_AdviceAnimals": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11443,6 +11920,7 @@
     },
     "paloma_dolma_100_subreddits__46_childfree": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11456,6 +11934,7 @@
     },
     "paloma_dolma_100_subreddits__47_unitedkingdom": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11469,6 +11948,7 @@
     },
     "paloma_dolma_100_subreddits__48_ffxiv": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11482,6 +11962,7 @@
     },
     "paloma_dolma_100_subreddits__49_dndnext": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11495,6 +11976,7 @@
     },
     "paloma_dolma_100_subreddits__50_ADHD": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11508,6 +11990,7 @@
     },
     "paloma_dolma_100_subreddits__51_loseit": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11521,6 +12004,7 @@
     },
     "paloma_dolma_100_subreddits__52_asoiaf": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11534,6 +12018,7 @@
     },
     "paloma_dolma_100_subreddits__53_BabyBumps": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11547,6 +12032,7 @@
     },
     "paloma_dolma_100_subreddits__54_Advice": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11560,6 +12046,7 @@
     },
     "paloma_dolma_100_subreddits__55_australia": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11573,6 +12060,7 @@
     },
     "paloma_dolma_100_subreddits__56_CFB": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11586,6 +12074,7 @@
     },
     "paloma_dolma_100_subreddits__57_offmychest": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11599,6 +12088,7 @@
     },
     "paloma_dolma_100_subreddits__58_PublicFreakout": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11612,6 +12102,7 @@
     },
     "paloma_dolma_100_subreddits__59_TrueOffMyChest": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11625,6 +12116,7 @@
     },
     "paloma_dolma_100_subreddits__60_science": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11638,6 +12130,7 @@
     },
     "paloma_dolma_100_subreddits__61_magicTCG": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11651,6 +12144,7 @@
     },
     "paloma_dolma_100_subreddits__62_asktransgender": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11664,6 +12158,7 @@
     },
     "paloma_dolma_100_subreddits__63_DotA2": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11677,6 +12172,7 @@
     },
     "paloma_dolma_100_subreddits__64_neoliberal": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11690,6 +12186,7 @@
     },
     "paloma_dolma_100_subreddits__65_whowouldwin": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11703,6 +12200,7 @@
     },
     "paloma_dolma_100_subreddits__66_depression": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11716,6 +12214,7 @@
     },
     "paloma_dolma_100_subreddits__67_WTF": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11729,6 +12228,7 @@
     },
     "paloma_dolma_100_subreddits__68_pathofexile": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11742,6 +12242,7 @@
     },
     "paloma_dolma_100_subreddits__69_PoliticalDiscussion": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11755,6 +12256,7 @@
     },
     "paloma_dolma_100_subreddits__70_Libertarian": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11768,6 +12270,7 @@
     },
     "paloma_dolma_100_subreddits__71_PurplePillDebate": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11781,6 +12284,7 @@
     },
     "paloma_dolma_100_subreddits__72_Fitness": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11794,6 +12298,7 @@
     },
     "paloma_dolma_100_subreddits__73_books": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11807,6 +12312,7 @@
     },
     "paloma_dolma_100_subreddits__74_dogs": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11820,6 +12326,7 @@
     },
     "paloma_dolma_100_subreddits__75_pcmasterrace": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11833,6 +12340,7 @@
     },
     "paloma_dolma_100_subreddits__76_teenagers": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11846,6 +12354,7 @@
     },
     "paloma_dolma_100_subreddits__77_stopdrinking": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11859,6 +12368,7 @@
     },
     "paloma_dolma_100_subreddits__78_Overwatch": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11872,6 +12382,7 @@
     },
     "paloma_dolma_100_subreddits__79_television": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11885,6 +12396,7 @@
     },
     "paloma_dolma_100_subreddits__80_buildapc": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11898,6 +12410,7 @@
     },
     "paloma_dolma_100_subreddits__81_askscience": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11911,6 +12424,7 @@
     },
     "paloma_dolma_100_subreddits__82_programming": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11924,6 +12438,7 @@
     },
     "paloma_dolma_100_subreddits__83_Guildwars2": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11937,6 +12452,7 @@
     },
     "paloma_dolma_100_subreddits__84_cars": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11950,6 +12466,7 @@
     },
     "paloma_dolma_100_subreddits__85_formula1": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11963,6 +12480,7 @@
     },
     "paloma_dolma_100_subreddits__86_sysadmin": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11976,6 +12494,7 @@
     },
     "paloma_dolma_100_subreddits__87_hockey": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -11989,6 +12508,7 @@
     },
     "paloma_dolma_100_subreddits__88_india": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12002,6 +12522,7 @@
     },
     "paloma_dolma_100_subreddits__89_SubredditDrama": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12015,6 +12536,7 @@
     },
     "paloma_dolma_100_subreddits__90_DMAcademy": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12028,6 +12550,7 @@
     },
     "paloma_dolma_100_subreddits__91_dating_advice": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12041,6 +12564,7 @@
     },
     "paloma_dolma_100_subreddits__92_Catholicism": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12054,6 +12578,7 @@
     },
     "paloma_dolma_100_subreddits__93_Drugs": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12067,6 +12592,7 @@
     },
     "paloma_dolma_100_subreddits__94_trees": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12080,6 +12606,7 @@
     },
     "paloma_dolma_100_subreddits__95_boardgames": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12093,6 +12620,7 @@
     },
     "paloma_dolma_100_subreddits__96_Conservative": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12106,6 +12634,7 @@
     },
     "paloma_dolma_100_subreddits__97_Futurology": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12119,6 +12648,7 @@
     },
     "paloma_dolma_100_subreddits__98_beyondthebump": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12132,6 +12662,7 @@
     },
     "paloma_dolma_100_subreddits__99_weddingplanning": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12145,6 +12676,7 @@
     },
     "paloma_falcon-refinedweb": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12158,6 +12690,7 @@
     },
     "paloma_mc4": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12171,6 +12704,7 @@
     },
     "paloma_ptb": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12184,6 +12718,7 @@
     },
     "paloma_wikitext_103": {
       "dataset": {
+        "private": false,
         "repo": "allenai/paloma",
         "revision": "65cd6fc59dba021b21db414fa5e8d7765ffbe5e6",
         "row_index": false,
@@ -12197,6 +12732,7 @@
     },
     "piqa": {
       "dataset": {
+        "private": false,
         "repo": "ybisk/piqa",
         "revision": "142c51238b3ca2bc61e9a075913871b8b600e8e1",
         "row_index": true,
@@ -12225,6 +12761,7 @@
     },
     "qasper_yesno": {
       "dataset": {
+        "private": false,
         "repo": "allenai/qasper-yesno",
         "revision": "f47a392e5444515c600ab595bf7227f8710a8c68",
         "row_index": false,
@@ -12253,6 +12790,7 @@
     },
     "sciq": {
       "dataset": {
+        "private": false,
         "repo": "allenai/sciq",
         "revision": "2c94ad3e1aafab77146f384e23536f97a4849815",
         "row_index": true,
@@ -12281,6 +12819,7 @@
     },
     "sciriff_yesno": {
       "dataset": {
+        "private": false,
         "repo": "allenai/sciriff-yesno",
         "revision": "c5ce62cb03b2b6052ff9fd24817444ea79e66bd4",
         "row_index": false,
@@ -12309,6 +12848,7 @@
     },
     "socialiqa": {
       "dataset": {
+        "private": false,
         "repo": "allenai/social_i_qa",
         "revision": "537a2ec8ec565adc0b70b70752893e59e024df26",
         "row_index": true,
@@ -12337,6 +12877,7 @@
     },
     "squad": {
       "dataset": {
+        "private": false,
         "repo": "allenai/squad-gen2mc",
         "revision": "e80f601243d8ed28732c5073cea1092aa4b8bc09",
         "row_index": false,
@@ -12362,6 +12903,7 @@
     },
     "tc_edu_hs_chinese": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tc-edu-exams",
         "revision": "66c8db07fa379e9ee88af646debd3d22aed6a49e",
         "row_index": false,
@@ -12390,6 +12932,7 @@
     },
     "tc_edu_jh_arts": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tc-edu-exams",
         "revision": "66c8db07fa379e9ee88af646debd3d22aed6a49e",
         "row_index": false,
@@ -12418,6 +12961,7 @@
     },
     "tc_edu_jh_chinese": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tc-edu-exams",
         "revision": "66c8db07fa379e9ee88af646debd3d22aed6a49e",
         "row_index": false,
@@ -12446,6 +12990,7 @@
     },
     "tc_edu_jh_english": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tc-edu-exams",
         "revision": "66c8db07fa379e9ee88af646debd3d22aed6a49e",
         "row_index": false,
@@ -12474,6 +13019,7 @@
     },
     "tc_edu_jh_health_and_pe": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tc-edu-exams",
         "revision": "66c8db07fa379e9ee88af646debd3d22aed6a49e",
         "row_index": false,
@@ -12502,6 +13048,7 @@
     },
     "tc_edu_jh_integrative_activities": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tc-edu-exams",
         "revision": "66c8db07fa379e9ee88af646debd3d22aed6a49e",
         "row_index": false,
@@ -12530,6 +13077,7 @@
     },
     "tc_edu_jh_math": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tc-edu-exams",
         "revision": "66c8db07fa379e9ee88af646debd3d22aed6a49e",
         "row_index": false,
@@ -12558,6 +13106,7 @@
     },
     "tc_edu_jh_science": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tc-edu-exams",
         "revision": "66c8db07fa379e9ee88af646debd3d22aed6a49e",
         "row_index": false,
@@ -12586,6 +13135,7 @@
     },
     "tc_edu_jh_social": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tc-edu-exams",
         "revision": "66c8db07fa379e9ee88af646debd3d22aed6a49e",
         "row_index": false,
@@ -12614,6 +13164,7 @@
     },
     "tmmluplus_accounting": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -12642,6 +13193,7 @@
     },
     "tmmluplus_administrative_law": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -12670,6 +13222,7 @@
     },
     "tmmluplus_advance_chemistry": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -12698,6 +13251,7 @@
     },
     "tmmluplus_agriculture": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -12725,6 +13279,7 @@
     },
     "tmmluplus_anti_money_laundering": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -12753,6 +13308,7 @@
     },
     "tmmluplus_auditing": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -12781,6 +13337,7 @@
     },
     "tmmluplus_basic_medical_science": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -12809,6 +13366,7 @@
     },
     "tmmluplus_business_management": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -12837,6 +13395,7 @@
     },
     "tmmluplus_chinese_language_and_literature": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -12865,6 +13424,7 @@
     },
     "tmmluplus_clinical_psychology": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -12893,6 +13453,7 @@
     },
     "tmmluplus_computer_science": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -12921,6 +13482,7 @@
     },
     "tmmluplus_culinary_skills": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -12949,6 +13511,7 @@
     },
     "tmmluplus_dentistry": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -12977,6 +13540,7 @@
     },
     "tmmluplus_economics": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13005,6 +13569,7 @@
     },
     "tmmluplus_education": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13032,6 +13597,7 @@
     },
     "tmmluplus_education_(profession_level)": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13060,6 +13626,7 @@
     },
     "tmmluplus_educational_psychology": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13088,6 +13655,7 @@
     },
     "tmmluplus_engineering_math": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13116,6 +13684,7 @@
     },
     "tmmluplus_finance_banking": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13144,6 +13713,7 @@
     },
     "tmmluplus_financial_analysis": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13172,6 +13742,7 @@
     },
     "tmmluplus_fire_science": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13200,6 +13771,7 @@
     },
     "tmmluplus_general_principles_of_law": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13228,6 +13800,7 @@
     },
     "tmmluplus_geography_of_taiwan": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13256,6 +13829,7 @@
     },
     "tmmluplus_human_behavior": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13284,6 +13858,7 @@
     },
     "tmmluplus_insurance_studies": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13311,6 +13886,7 @@
     },
     "tmmluplus_introduction_to_law": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13339,6 +13915,7 @@
     },
     "tmmluplus_jce_humanities": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13367,6 +13944,7 @@
     },
     "tmmluplus_junior_chemistry": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13395,6 +13973,7 @@
     },
     "tmmluplus_junior_chinese_exam": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13423,6 +14002,7 @@
     },
     "tmmluplus_junior_math_exam": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13450,6 +14030,7 @@
     },
     "tmmluplus_junior_science_exam": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13478,6 +14059,7 @@
     },
     "tmmluplus_junior_social_studies": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13505,6 +14087,7 @@
     },
     "tmmluplus_logic_reasoning": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13533,6 +14116,7 @@
     },
     "tmmluplus_macroeconomics": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13561,6 +14145,7 @@
     },
     "tmmluplus_management_accounting": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13589,6 +14174,7 @@
     },
     "tmmluplus_marketing_management": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13617,6 +14203,7 @@
     },
     "tmmluplus_mechanical": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13645,6 +14232,7 @@
     },
     "tmmluplus_music": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13673,6 +14261,7 @@
     },
     "tmmluplus_national_protection": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13701,6 +14290,7 @@
     },
     "tmmluplus_nautical_science": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13729,6 +14319,7 @@
     },
     "tmmluplus_occupational_therapy_for_psychological_disorders": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13757,6 +14348,7 @@
     },
     "tmmluplus_official_document_management": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13784,6 +14376,7 @@
     },
     "tmmluplus_optometry": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13812,6 +14405,7 @@
     },
     "tmmluplus_organic_chemistry": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13838,6 +14432,7 @@
     },
     "tmmluplus_pharmacology": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13865,6 +14460,7 @@
     },
     "tmmluplus_pharmacy": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13892,6 +14488,7 @@
     },
     "tmmluplus_physical_education": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13920,6 +14517,7 @@
     },
     "tmmluplus_physics": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13948,6 +14546,7 @@
     },
     "tmmluplus_politic_science": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -13976,6 +14575,7 @@
     },
     "tmmluplus_real_estate": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14004,6 +14604,7 @@
     },
     "tmmluplus_secondary_physics": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14032,6 +14633,7 @@
     },
     "tmmluplus_statistics_and_machine_learning": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14060,6 +14662,7 @@
     },
     "tmmluplus_taiwanese_hokkien": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14088,6 +14691,7 @@
     },
     "tmmluplus_taxation": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14116,6 +14720,7 @@
     },
     "tmmluplus_technical": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14144,6 +14749,7 @@
     },
     "tmmluplus_three_principles_of_people": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14172,6 +14778,7 @@
     },
     "tmmluplus_trade": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14199,6 +14806,7 @@
     },
     "tmmluplus_traditional_chinese_medicine_clinical_medicine": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14227,6 +14835,7 @@
     },
     "tmmluplus_trust_practice": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14254,6 +14863,7 @@
     },
     "tmmluplus_ttqav2": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14282,6 +14892,7 @@
     },
     "tmmluplus_tve_chinese_language": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14310,6 +14921,7 @@
     },
     "tmmluplus_tve_design": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14338,6 +14950,7 @@
     },
     "tmmluplus_tve_mathematics": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14365,6 +14978,7 @@
     },
     "tmmluplus_tve_natural_sciences": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14393,6 +15007,7 @@
     },
     "tmmluplus_veterinary_pathology": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14421,6 +15036,7 @@
     },
     "tmmluplus_veterinary_pharmacology": {
       "dataset": {
+        "private": false,
         "repo": "ikala/tmmluplus",
         "revision": "94d86f1d013d59f389b710a902af30b7a0aa8c8f",
         "row_index": true,
@@ -14449,6 +15065,7 @@
     },
     "tw_mock_exams_biology": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-mock-exams",
         "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
         "row_index": false,
@@ -14477,6 +15094,7 @@
     },
     "tw_mock_exams_chemistry": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-mock-exams",
         "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
         "row_index": false,
@@ -14505,6 +15123,7 @@
     },
     "tw_mock_exams_chinese": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-mock-exams",
         "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
         "row_index": false,
@@ -14533,6 +15152,7 @@
     },
     "tw_mock_exams_civics": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-mock-exams",
         "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
         "row_index": false,
@@ -14561,6 +15181,7 @@
     },
     "tw_mock_exams_english": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-mock-exams",
         "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
         "row_index": false,
@@ -14589,6 +15210,7 @@
     },
     "tw_mock_exams_geography": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-mock-exams",
         "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
         "row_index": false,
@@ -14617,6 +15239,7 @@
     },
     "tw_mock_exams_history": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-mock-exams",
         "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
         "row_index": false,
@@ -14645,6 +15268,7 @@
     },
     "tw_mock_exams_physics": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-mock-exams",
         "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
         "row_index": false,
@@ -14673,6 +15297,7 @@
     },
     "tw_mock_exams_science": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-mock-exams",
         "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
         "row_index": false,
@@ -14701,6 +15326,7 @@
     },
     "tw_mock_exams_social": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-mock-exams",
         "revision": "e62f9adf374da2e0fcd0095428f6339da980f020",
         "row_index": false,
@@ -14729,6 +15355,7 @@
     },
     "tw_text_cna": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14742,6 +15369,7 @@
     },
     "tw_text_cnyes": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14755,6 +15383,7 @@
     },
     "tw_text_gov_press__文化部": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14768,6 +15397,7 @@
     },
     "tw_text_gov_press__行政院": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14781,6 +15411,7 @@
     },
     "tw_text_gov_press__農業部": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14794,6 +15425,7 @@
     },
     "tw_text_gov_press__金管會": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14807,6 +15439,7 @@
     },
     "tw_text_judicial__地方": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14820,6 +15453,7 @@
     },
     "tw_text_judicial__高等": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14833,6 +15467,7 @@
     },
     "tw_text_ltn": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14846,6 +15481,7 @@
     },
     "tw_text_ly__委員會紀錄": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14859,6 +15495,7 @@
     },
     "tw_text_ly__院會紀錄": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14872,6 +15509,7 @@
     },
     "tw_text_pts": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14885,6 +15523,7 @@
     },
     "tw_text_ptt__Baseball": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14898,6 +15537,7 @@
     },
     "tw_text_ptt__Gossiping": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14911,6 +15551,7 @@
     },
     "tw_text_ptt__HatePolitics": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14924,6 +15565,7 @@
     },
     "tw_text_ptt__MobileComm": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14937,6 +15579,7 @@
     },
     "tw_text_ptt__Stock": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14950,6 +15593,7 @@
     },
     "tw_text_ptt__Tech_Job": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14963,6 +15607,7 @@
     },
     "tw_text_ptt__WomenTalk": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14976,6 +15621,7 @@
     },
     "tw_text_ptt__movie": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -14989,6 +15635,7 @@
     },
     "tw_text_theses__NTNU": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -15002,6 +15649,7 @@
     },
     "tw_text_theses__NYCU": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -15015,6 +15663,7 @@
     },
     "tw_text_twreporter": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -15028,6 +15677,7 @@
     },
     "tw_text_v1_cna__other": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15041,6 +15691,7 @@
     },
     "tw_text_v1_cna__兩岸": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15054,6 +15705,7 @@
     },
     "tw_text_v1_cna__國際": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15067,6 +15719,7 @@
     },
     "tw_text_v1_cna__地方": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15080,6 +15733,7 @@
     },
     "tw_text_v1_cna__政治": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15093,6 +15747,7 @@
     },
     "tw_text_v1_cna__生活": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15106,6 +15761,7 @@
     },
     "tw_text_v1_cna__產經": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15119,6 +15775,7 @@
     },
     "tw_text_v1_cna__社會": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15132,6 +15789,7 @@
     },
     "tw_text_v1_cna__運動": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15145,6 +15803,7 @@
     },
     "tw_text_v1_cnyes__announcement": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15158,6 +15817,7 @@
     },
     "tw_text_v1_cnyes__bc": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15171,6 +15831,7 @@
     },
     "tw_text_v1_cnyes__other": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15184,6 +15845,7 @@
     },
     "tw_text_v1_cnyes__tw_stock": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15197,6 +15859,7 @@
     },
     "tw_text_v1_cnyes__wd_stock": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15210,6 +15873,7 @@
     },
     "tw_text_v1_gov_press__文化部": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15223,6 +15887,7 @@
     },
     "tw_text_v1_gov_press__行政院": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15236,6 +15901,7 @@
     },
     "tw_text_v1_gov_press__農業部": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15249,6 +15915,7 @@
     },
     "tw_text_v1_gov_press__金管會": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15262,6 +15929,7 @@
     },
     "tw_text_v1_judicial__other": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15275,6 +15943,7 @@
     },
     "tw_text_v1_judicial__地方刑事": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15288,6 +15957,7 @@
     },
     "tw_text_v1_judicial__地方民事": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15301,6 +15971,7 @@
     },
     "tw_text_v1_judicial__最高刑事": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15314,6 +15985,7 @@
     },
     "tw_text_v1_judicial__最高家事": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15327,6 +15999,7 @@
     },
     "tw_text_v1_judicial__最高民事": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15340,6 +16013,7 @@
     },
     "tw_text_v1_judicial__行政": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15353,6 +16027,7 @@
     },
     "tw_text_v1_judicial__高等刑事": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15366,6 +16041,7 @@
     },
     "tw_text_v1_judicial__高等民事": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15379,6 +16055,7 @@
     },
     "tw_text_v1_ltn__other": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15392,6 +16069,7 @@
     },
     "tw_text_v1_ltn__健康": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15405,6 +16083,7 @@
     },
     "tw_text_v1_ltn__國際": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15418,6 +16097,7 @@
     },
     "tw_text_v1_ltn__政治": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15431,6 +16111,7 @@
     },
     "tw_text_v1_ltn__最新消息": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15444,6 +16125,7 @@
     },
     "tw_text_v1_ltn__生活": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15457,6 +16139,7 @@
     },
     "tw_text_v1_ltn__社會": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15470,6 +16153,7 @@
     },
     "tw_text_v1_ly__委員會紀錄": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15483,6 +16167,7 @@
     },
     "tw_text_v1_ly__質詢": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15496,6 +16181,7 @@
     },
     "tw_text_v1_ly__院會紀錄": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15509,6 +16195,7 @@
     },
     "tw_text_v1_pts__other": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15522,6 +16209,7 @@
     },
     "tw_text_v1_pts__全球": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15535,6 +16223,7 @@
     },
     "tw_text_v1_pts__地方": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15548,6 +16237,7 @@
     },
     "tw_text_v1_pts__政治": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15561,6 +16251,7 @@
     },
     "tw_text_v1_pts__文教科技": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15574,6 +16265,7 @@
     },
     "tw_text_v1_pts__生活": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15587,6 +16279,7 @@
     },
     "tw_text_v1_pts__產經": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15600,6 +16293,7 @@
     },
     "tw_text_v1_pts__社會": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15613,6 +16307,7 @@
     },
     "tw_text_v1_ptt__Baseball": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15626,6 +16321,7 @@
     },
     "tw_text_v1_ptt__Gossiping": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15639,6 +16335,7 @@
     },
     "tw_text_v1_ptt__HatePolitics": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15652,6 +16349,7 @@
     },
     "tw_text_v1_ptt__MobileComm": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15665,6 +16363,7 @@
     },
     "tw_text_v1_ptt__Stock": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15678,6 +16377,7 @@
     },
     "tw_text_v1_ptt__Tech_Job": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15691,6 +16391,7 @@
     },
     "tw_text_v1_ptt__WomenTalk": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15704,6 +16405,7 @@
     },
     "tw_text_v1_ptt__movie": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15717,6 +16419,7 @@
     },
     "tw_text_v1_theses__other": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15730,6 +16433,7 @@
     },
     "tw_text_v1_theses__人文社會": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15743,6 +16447,7 @@
     },
     "tw_text_v1_theses__商管": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15756,6 +16461,7 @@
     },
     "tw_text_v1_theses__工程": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15769,6 +16475,7 @@
     },
     "tw_text_v1_theses__教育": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15782,6 +16489,7 @@
     },
     "tw_text_v1_theses__理學": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15795,6 +16503,7 @@
     },
     "tw_text_v1_theses__藝術設計": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15808,6 +16517,7 @@
     },
     "tw_text_v1_theses__醫護": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15821,6 +16531,7 @@
     },
     "tw_text_v1_twreporter": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15834,6 +16545,7 @@
     },
     "tw_text_v1_zhwiki": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v1",
         "revision": "b60d46e622d3c9ce7f022831004aab0bef91b32d",
         "row_index": false,
@@ -15847,6 +16559,7 @@
     },
     "tw_text_zhwiki": {
       "dataset": {
+        "private": true,
         "repo": "cerulean-works/tw-text-v0",
         "revision": "1786e787a4ab786d1ed021994007ef3c9590e497",
         "row_index": false,
@@ -15860,6 +16573,7 @@
     },
     "winogrande": {
       "dataset": {
+        "private": false,
         "repo": "allenai/winogrande",
         "revision": "01e74176c63542e6b0bcb004dcdea22d94fb67b5",
         "row_index": true,

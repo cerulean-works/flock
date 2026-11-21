@@ -115,6 +115,7 @@ TC_EDU_TASKS = tuple(
         prefix="tc_edu",
         repo="cerulean-works/tc-edu-exams",
         revision="66c8db07fa379e9ee88af646debd3d22aed6a49e",
+        private=True,
     )
     for subject in SUBJECTS
 )
