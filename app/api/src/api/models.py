@@ -204,7 +204,7 @@ async def versions(
 
 @router.get("/{name}/versions/{number}")
 async def get_version(org: OrgDep, name: str, number: int, store: StoreDep) -> Response:
-    """A version with its files."""
+    """A version with its files and eval runs."""
     return JSONResponse(await with_user(store, await models(store).version(org, name, str(number))))
 
 
