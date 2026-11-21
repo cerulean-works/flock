@@ -50,6 +50,19 @@ class Org:
     max_ttl: int | None  # seconds; None: keys may live forever
     buckets: dict[str, Bucket]  # live buckets by name
 
+    def bucket(self, name: str) -> Bucket | None:
+        """The live bucket called ``name``, or the org's flock-datasets by its upstream name
+        (023, D172): forks and blends name their sources that way in their manifests, so Lance
+        clients reading them through the proxy ask for it. Another org's upstream name is no
+        bucket of this one."""
+        found = self.buckets.get(name)
+        if found is not None:
+            return found
+        for bucket in self.buckets.values():
+            if bucket.managed == "datasets" and bucket.upstream_name == name:
+                return bucket
+        return None
+
 
 @dataclass(frozen=True)
 class Caller:

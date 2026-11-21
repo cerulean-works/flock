@@ -28,6 +28,7 @@ import httpx
 import orjson
 
 from app.api.src.core.errors import BadGateway, Conflict, Invalid, NotFound
+from app.api.src.core.forks import PIN
 from app.api.src.s3_proxy.upstream import DELETE_BATCH, ListedObject, Upstream, UpstreamError
 
 if TYPE_CHECKING:
@@ -169,6 +170,18 @@ def check_tag(tag: str) -> None:
         )
     if tag.isdigit():
         raise Invalid("Tag names can't be only digits, since those are version numbers.")
+
+
+def check_not_pin(tag: str) -> None:
+    """Tags starting with ``flock-ref-`` keep a version for the datasets reading it (023,
+    D173), so only Flock adds or removes them."""
+    if tag.startswith(PIN):
+        raise Invalid(f"Tags starting with {PIN} keep a version for the datasets that read it.")
+
+
+def visible_tags(tags: dict[str, Any]) -> dict[str, Any]:
+    """A dataset's tags without Flock's pins (D179)."""
+    return {name: info for name, info in tags.items() if not name.startswith(PIN)}
 
 
 def image_type(data: bytes) -> str | None:
@@ -738,6 +751,9 @@ class Datasets:
             manifests.append((dataset, found))
         if details:
             await self._details(name, manifests)
+        kinds = await self.store.forks.kinds(org, [d["path"] for d in datasets])
+        for dataset in datasets:
+            dataset["origin"] = kinds.get(dataset["path"])
         files = [
             {
                 "name": o.key.rpartition("/")[2],
@@ -775,8 +791,11 @@ class Datasets:
             schema = ds.schema
             fragments = ds.get_fragments()
             tags = sorted(
-                ({"name": tag, "version": info["version"]} for tag, info in ds.tags.list().items()),
-                key=lambda t: (-t["version"], t["name"]),
+                (
+                    {"name": tag, "version": info["version"]}
+                    for tag, info in visible_tags(ds.tags.list()).items()
+                ),
+                key=lambda t: (-int(t["version"]), t["name"]),
             )
             indices = [
                 {"name": i.name, "type": index_type(i.type_url), "columns": list(i.field_names)}
@@ -933,7 +952,8 @@ class Datasets:
             options = self.storage_options()
             uri = self.uri(name, path)
             tags: dict[int, list[str]] = {}
-            for tag, info in self._open(name, path, version(numbers[0])).tags.list().items():
+            listed = self._open(name, path, version(numbers[0])).tags.list()
+            for tag, info in visible_tags(listed).items():
                 tags.setdefault(info["version"], []).append(tag)
 
             def detail(n: int) -> dict[str, Any]:
@@ -971,7 +991,11 @@ class Datasets:
                 )
             return {"versions": out, "latest": numbers[0], "cursor": page[-1] if more else None}
 
-        return await self._lance(read)
+        found_versions = await self._lance(read)
+        kept = await self.store.forks.kept(org, path)
+        for v in found_versions["versions"]:
+            v["kept_for"] = kept.get(v["version"], 0)
+        return found_versions
 
     async def readme(self, org: Org, path: str) -> dict[str, Any]:
         """The dataset's README.md, its first 1 MiB (D92)."""
@@ -1273,6 +1297,7 @@ class Datasets:
             if not objects:
                 raise NotFound(f"Nothing exists at {path}.")
             self._check_size(objects, "move", self._mv_command(path, to), kind)
+            await self.store.forks.refuse_sources(conn, org, path, kind == "folder", "moved")
             await self._check_target(name, to)
             datasets = inside(objects)
             before = await self._states(name, datasets)
@@ -1296,6 +1321,7 @@ class Datasets:
                 )
                 raise Conflict(message)
             await self._delete_all(name, [o.key for o in objects], prefix)
+            await self.store.forks.renamed(conn, org, path, to)
             await self._copy_public(conn, org, path, to, folder=True)
             await conn.execute(
                 "DELETE FROM public_datasets WHERE org_pk = $1 "
@@ -1359,6 +1385,7 @@ class Datasets:
         name = bucket.upstream_name
         check_path(path)
         check_tag(tag)
+        check_not_pin(tag)
         await self.resolve(name, path, str(version))
         import lance
 
@@ -1390,6 +1417,7 @@ class Datasets:
         bucket = await self.bucket(org)
         name = bucket.upstream_name
         check_path(path)
+        check_not_pin(tag)
         if await self.latest(name, path) is None:
             raise NotFound(f"dataset {path} not found")
         import lance
@@ -1469,10 +1497,12 @@ class Datasets:
                 self._upstream().list_all(name, f"{path}/", self.MOVE_OBJECTS)
             )
             self._check_size(objects, "delete", self._rm_command(path))
+            await self.store.forks.refuse_sources(conn, org, path, False, "deleted")
             latest = newest(found) if found else None
             if latest is None:
                 latest = (await self.resolve(name, path, None)).number
             record = await self._to_trash(conn, org, name, path, user, "dataset", latest, objects)
+            await self.store.forks.trashed(conn, org, path, record[0])
         self._forget(name, path)
         return self._entry(record)
 
@@ -1491,7 +1521,9 @@ class Datasets:
             if not objects:
                 raise NotFound(f"Nothing exists at {path}.")
             self._check_size(objects, "delete", self._rm_command(path), "folder")
+            await self.store.forks.refuse_sources(conn, org, path, True, "deleted")
             record = await self._to_trash(conn, org, name, path, user, "folder", None, objects)
+            await self.store.forks.trashed(conn, org, path, record[0])
         self._forget(name, path)
         return self._entry(record)
 
@@ -1589,6 +1621,7 @@ class Datasets:
                     await self._copy_private(org, source, destination)
                 await self._copy_all(objects, trash, prefix, name, f"{target}/")
                 await self._delete_all(trash, [o.key for o in objects], prefix)
+                await self.store.forks.restored(conn, org, path, target, pk)
                 await self._copy_public(conn, org, path, target, folder=True)
             await conn.execute("DELETE FROM dataset_trash WHERE pk = $1", pk)
         self._forget(name, target)
@@ -1601,6 +1634,7 @@ class Datasets:
             await self._claim(conn, org, pk)
             await self._remove_prefix(trash, self._trash_prefix(org.pk, pk))
             await conn.execute("DELETE FROM dataset_trash WHERE pk = $1", pk)
+        await self.store.forks.purged(org.pk, pk)
 
     async def delete_org(self, conn: asyncpg.Connection, org: Org) -> None:
         """In the org's deletion's transaction: forget its trash entries. Call ``purge_org``
@@ -1645,6 +1679,7 @@ class Datasets:
                 if moved:
                     await self._remove_prefix(trash, prefix)
                     await conn.execute("DELETE FROM dataset_trash WHERE pk = $1", pk)
+                    await self.store.forks.purged(org_pk, pk)
                     done["expired"] += 1
                     continue
                 await self._settle(conn, record, trash, prefix)
@@ -1665,7 +1700,7 @@ class Datasets:
         pk, org_pk, path, deleted_at, _, kind, count = record
         org = await self.store.org_by_pk(org_pk)
         bucket = await self.store.s3.managed_bucket(org) if org is not None else None
-        if bucket is None:
+        if org is None or bucket is None:
             await self._remove_prefix(trash, prefix)
             await conn.execute("DELETE FROM dataset_trash WHERE pk = $1", pk)
             return
@@ -1682,6 +1717,7 @@ class Datasets:
         # Only what was there when it was deleted: anything written since is someone else's.
         await self._remove_prefix(name, f"{path}/", before=deleted_at)
         await conn.execute("UPDATE dataset_trash SET moved_at = now() WHERE pk = $1", pk)
+        await self.store.forks.trashed(conn, org, path, pk)
         self._forget(name, path)
         log.info("finished the delete of %s (trash %d)", path, pk)
 

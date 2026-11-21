@@ -21,6 +21,7 @@ from app.api.src.core.datasets import Datasets
 from app.api.src.core.errors import Conflict, Discarded, Forbidden, NotFound
 from app.api.src.core.feed import Feed
 from app.api.src.core.files import file_store
+from app.api.src.core.forks import Forks
 from app.api.src.core.hf_imports import HFImports
 from app.api.src.core.history import History, Series, write_chunks
 from app.api.src.core.imports import Imports
@@ -391,6 +392,7 @@ class Store:
         self.imports = Imports(self)
         self.s3 = S3(self)
         self.datasets = Datasets(self)
+        self.forks = Forks(self)
         self.models = Models(self)
         self.hf_imports = HFImports(self)
 
@@ -431,6 +433,7 @@ class Store:
             await self.datasets.load()
             await self.models.load()
             await self.hf_imports.load()
+            await self.forks.load()
             self._background(self._detect_missing_gpus())
             self._worker = asyncio.get_running_loop().create_task(self._work_loop())
             # With migrations on startup off, the migration Job applies contracts too.
@@ -446,6 +449,7 @@ class Store:
             raise
 
     async def close(self) -> None:
+        await self.forks.close()
         await self.hf_imports.close()
         await self.models.close()
         await self.datasets.close()

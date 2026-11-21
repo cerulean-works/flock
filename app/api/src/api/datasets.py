@@ -16,7 +16,9 @@ from app.api.src.api.deps import (
     ViewerDep,
     rest_user,
 )
+from app.api.src.core import forks
 from app.api.src.core.datasets import Datasets, TagTaken, Taken, TooLarge
+from app.api.src.core.forks import Job
 from app.api.src.core.store import Org, Store
 
 router = APIRouter(
@@ -80,6 +82,54 @@ class TagBody(PathBody):
     move: bool = Field(False, description="move the tag if it's on another version")
 
 
+class ForkBody(PathBody):
+    version: str | int | None = Field(
+        None, description="a version number or tag (default: the latest)"
+    )
+    to: str = Field(min_length=1, max_length=512, description="where the fork goes")
+
+
+class BlendSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=1024)
+    version: str | int | None = None
+    rows: int | None = Field(None, ge=0)
+    fraction: float | None = Field(None, ge=0, le=1)
+
+
+class BlendColumn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(max_length=256)
+    type: str = Field(max_length=2048)
+    nullable: bool = True
+    from_: dict[str, dict[str, Any]] = Field(alias="from")
+
+
+class BlendBody(BaseModel):
+    """A blend (023, D174, D175): a row count for each source, or a fraction of each with the
+    ``total``; and a column map, or none for the automatic one."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sources: list[BlendSource] = Field(min_length=1, max_length=16)
+    total: int | None = Field(None, ge=1)
+    seed: int | None = Field(None, ge=0, le=forks.MAX_SEED)
+    columns: list[BlendColumn] | None = Field(None, max_length=1000)
+    replace: bool = False
+    to: str | None = Field(None, max_length=512)
+
+    def request(self) -> forks.Request:
+        return forks.request_from(self.model_dump(by_alias=True))
+
+
+async def job_info(store: Store, job: Job) -> dict[str, Any]:
+    info = job.info()
+    user = await store.accounts.user(job.started_by) if job.started_by else None
+    return {**info, "started_by": store.accounts.brief(user) if user is not None else None}
+
+
 async def entry_info(store: Store, entry: dict[str, Any]) -> dict[str, Any]:
     user = await store.accounts.user(entry["deleted_by"])
     return {**entry, "deleted_by": store.accounts.brief(user) if user is not None else None}
@@ -133,8 +183,14 @@ async def info(
     resolved (and the latest), and whether it's ``public``."""
     found = await datasets(store).info(org, path, version)
     # An outsider only gets here for a public dataset (``get_readable_org`` checked).
-    public = not store.accounts.role(viewer, org) or await store.datasets.is_public(org, path)
-    return JSONResponse({**found, "public": public})
+    member = bool(store.accounts.role(viewer, org))
+    public = not member or await store.datasets.is_public(org, path)
+    origin = await store.forks.origin(org, path)
+    if origin is not None and not member:
+        origin.pop("created_by", None)
+    # Who reads it is only for its org (D179): the paths may be private.
+    dependents = await store.forks.dependents(org, path) if member else None
+    return JSONResponse({**found, "public": public, "origin": origin, "dependents": dependents})
 
 
 @public.get("/rows")
@@ -290,3 +346,71 @@ async def delete_tag(org: OrgDep, tag: str, path: DatasetPath, store: StoreDep) 
     """Remove a tag. The version it was on stays."""
     await datasets(store).delete_tag(org, path, tag)
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------- forks and blends (023)
+
+
+@router.post("/fork", status_code=201)
+async def fork(org: OrgDep, body: ForkBody, user: UserDep, store: StoreDep) -> Response:
+    """Fork ``path`` at ``version`` (default: the latest) to ``to``: a new dataset reading the
+    source's files in place, edited without touching it (D171). The source version is pinned
+    (D173). 409 when something exists at ``to``."""
+    datasets(store)
+    version = None if body.version in (None, "") else str(body.version)
+    try:
+        made = await store.forks.fork(org, user, body.path, version, body.to)
+    except Taken as e:
+        raise APIError(409, e.message, taken=True) from None
+    return JSONResponse(made, status_code=201)
+
+
+@router.post("/blend/preview")
+async def blend_preview(org: OrgDep, body: BlendBody, store: StoreDep) -> Response:
+    """What a blend would take from each source, its column map (the automatic one when
+    ``columns`` is left out), the source columns no output uses, what will be written, and
+    every problem. Writes nothing."""
+    datasets(store)
+    return JSONResponse(await store.forks.preview(org, body.request()))
+
+
+@router.post("/blend", status_code=202)
+async def blend(org: OrgDep, body: BlendBody, user: UserDep, store: StoreDep) -> Response:
+    """Start building a blend at ``to`` with ``seed`` (D174). Answers its job. 422 naming
+    every problem when it can't be made as asked; 409 when something exists at ``to``."""
+    datasets(store)
+    try:
+        job = await store.forks.start_blend(org, user, body.request())
+    except Taken as e:
+        raise APIError(409, e.message, taken=True) from None
+    return JSONResponse(await job_info(store, job), status_code=202)
+
+
+@router.post("/independent", status_code=202)
+async def independent(org: OrgDep, body: PathBody, user: UserDep, store: StoreDep) -> Response:
+    """Start rewriting a fork or blend into its own files, releasing its sources (D178). Its
+    earlier versions are removed. 409 with ``command`` over the size limit."""
+    datasets(store)
+    try:
+        job = await store.forks.start_independent(org, user, body.path)
+    except forks.TooLarge as e:
+        raise APIError(409, e.message, command=e.command) from None
+    return JSONResponse(await job_info(store, job), status_code=202)
+
+
+@router.get("/jobs")
+async def jobs(org: OrgDep, store: StoreDep) -> Response:
+    """The org's blends and datasets made independent in the last week, newest first."""
+    found = await store.forks.recent(org)
+    return JSONResponse({"jobs": [await job_info(store, j) for j in found]})
+
+
+@router.get("/jobs/{pk}")
+async def job(org: OrgDep, pk: int, store: StoreDep) -> Response:
+    return JSONResponse(await job_info(store, await store.forks.get(org, pk)))
+
+
+@router.delete("/jobs/{pk}")
+async def cancel_job(org: OrgDep, pk: int, user: UserDep, store: StoreDep) -> Response:
+    """Cancel a running blend (who started it, or an admin). What it wrote is removed."""
+    return JSONResponse(await job_info(store, await store.forks.cancel(org, pk, user)))
