@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+from pathlib import PureWindowsPath
 from typing import TYPE_CHECKING
 
 import click
@@ -15,7 +16,7 @@ from flock.eval import run, tracking
 from flock.eval.cli import main
 from flock.eval.diff import diff
 from flock.eval.model import ScoringModel
-from flock.eval.results import Results, read_results
+from flock.eval.results import Results, predictions_name, read_results, stays_inside
 from flock.eval.run import EvalConfig, evaluate
 
 from .toy import PROMPT_PATHS, PROVENANCE, task_result
@@ -227,6 +228,17 @@ def test_a_task_name_from_a_file_cannot_leave_the_predictions_folder(tmp_path: P
     for name in ("../b/results.json", str(tmp_path / "a" / "results.json")):
         with pytest.raises(ValueError, match="isn't a file name inside"):
             run_a.read_file(name)
+
+
+def test_a_name_windows_would_split_is_refused_there(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("flock.eval.results.Path", PureWindowsPath)
+
+    for name in ("..\\b\\results.json", "C:results.json", "a\\b"):
+        assert not stays_inside(name)
+        with pytest.raises(ValueError, match="can't name a predictions file"):
+            predictions_name(name)
+    assert stays_inside("predictions/t.jsonl")
+    assert predictions_name("t") == "predictions/t.jsonl"
 
 
 def test_an_accuracy_its_rows_cannot_produce_is_refused(tmp_path: Path) -> None:

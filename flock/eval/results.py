@@ -414,7 +414,8 @@ def _check_types(record: dict[str, Any], types: dict[str, tuple[type, ...]], whe
 def stays_inside(name: str) -> bool:
     """Whether `name`, split at `/`, has no empty, `.` or `..` part, so joined to a folder or a run's URL it names something inside it (a client normalizes `..` in a URL). Names read from a file pass this before any read."""
     parts = name.split("/")
-    return all(parts) and not {".", ".."} & set(parts)
+    # The platform's own path must see the same parts: on Windows a backslash and a drive split too.
+    return all(parts) and not {".", ".."} & set(parts) and Path(name).parts == tuple(parts)
 
 
 def predictions_name(task: str) -> str:
