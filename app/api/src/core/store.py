@@ -594,6 +594,8 @@ class Store:
             runs, active = counts.get(project.pk, (0, 0))
             out.append(
                 {
+                    # Names its folder in flock-datasets and flock-models, -projects/{id}/ (D160).
+                    "id": project.pk,
                     "entity": project.entity,
                     "name": project.name,
                     "description": project.description,
@@ -2057,6 +2059,9 @@ class Store:
         """Remove deleted runs (``pks``, or a batch of any) with what they logged, then
         deleted projects and orgs left empty; returns how many runs. Runs are claimed, so
         replicas purging at once don't wait on each other."""
+        kept: list[int] = []  # deleted projects whose storage couldn't be removed yet
+        if pks is None:
+            kept = await self._purge_project_storage()
         async with self.db.pool.acquire() as conn, conn.transaction():
             rows = await conn.fetch(
                 "SELECT r.pk, r.project_pk, p.deleted_at IS NULL FROM runs r "
@@ -2078,7 +2083,9 @@ class Store:
             if pks is None:
                 await conn.execute(
                     "DELETE FROM projects p WHERE p.deleted_at IS NOT NULL "
-                    "AND NOT EXISTS (SELECT FROM runs r WHERE r.project_pk = p.pk)"
+                    "AND NOT EXISTS (SELECT FROM runs r WHERE r.project_pk = p.pk) "
+                    "AND p.pk <> ALL($1)",
+                    kept,
                 )
                 await conn.execute(
                     "DELETE FROM orgs o WHERE o.deleted_at IS NOT NULL "
@@ -2087,6 +2094,23 @@ class Store:
         if purged:
             await self._remove_files(purged)
         return len(purged)
+
+    async def _purge_project_storage(self) -> list[int]:
+        """Remove the datasets and models of deleted projects whose runs are gone, before their
+        rows go (D167); returns the projects whose removal failed, to try again next time."""
+        projects = await self.db.fetch(
+            "SELECT p.pk, p.org_pk FROM projects p WHERE p.deleted_at IS NOT NULL "
+            "AND NOT EXISTS (SELECT FROM runs r WHERE r.project_pk = p.pk) ORDER BY p.pk"
+        )
+        failed = []
+        for pk, org_pk in projects:
+            try:
+                await self.models.purge_project(org_pk, pk)
+                await self.datasets.purge_project(org_pk, pk)
+            except Exception:
+                log.exception("could not remove the datasets and models of project %d", pk)
+                failed.append(pk)
+        return failed
 
     async def _remove_files(self, pks: Iterable[int]) -> None:
         await self.files.delete_runs(pks)

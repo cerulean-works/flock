@@ -113,10 +113,16 @@ CORS_EXPOSE = (
     "ETag, Content-Length, Content-Range, Content-Type, Content-Disposition, Accept-Ranges, "
     "Last-Modified"
 )
-# flock-models (D97): written only into an open upload's folder, `{model}/u/{ulid}/…`.
+# flock-models (D97): written only into an open upload's folder, `{model}/u/{ulid}/…`. A model's
+# folder may be nested (D158, D161); its segments are lowercase and a ULID is upper case, so the
+# first `/u/{ulid}/` is the upload's.
 MODELS = "models"
-UPLOAD_KEY = re.compile(r"([^/]+)/u/([0-9A-HJKMNP-TV-Z]{26})/.+", re.DOTALL)
+UPLOAD_KEY = re.compile(r"(.+?)/u/([0-9A-HJKMNP-TV-Z]{26})/.+", re.DOTALL)
 MODELS_REFUSED = "flock-models is written through flock models push"
+# flock-datasets (D160): projects' datasets are under `-projects/{pk}/`, written only while the
+# project is live, by members of its org.
+DATASETS = "datasets"
+PROJECT_KEY = re.compile(r"-projects/(?:([0-9]{1,18})(?:/|$))?", re.DOTALL)
 
 
 class S3Error(SigV4Error):
@@ -462,6 +468,7 @@ class Proxy:
             return await self._relay(call, response)
         self._writable(call)
         await self._models_write(call)
+        await self._projects_write(call)
         if method == "PUT":
             if "uploadId" in params or "partNumber" in params:
                 self._only(call, UPLOAD_PART_PARAMS)
@@ -514,6 +521,20 @@ class Proxy:
         if upload is None:
             raise S3Error("AccessDenied", MODELS_REFUSED)
         self.directory.touch_upload(upload.pk)
+
+    async def _projects_write(self, call: Call) -> None:
+        """Refuse a write under ``-projects/`` of flock-datasets (D160) unless its folder is a
+        live project of the caller's org. Deletes (and aborting a multipart upload) are let
+        through, so what's there can still be cleaned up."""
+        if call.bucket.managed != DATASETS or not call.key or call.method == "DELETE":
+            return
+        found = PROJECT_KEY.match(call.key)
+        if found is None:
+            return
+        org = call.caller.org
+        if found[1] is None or int(found[1]) not in await self.directory.live_projects(org.pk):
+            folder = call.key.split("/", 2)[:2]
+            raise S3Error("AccessDenied", f"{'/'.join(folder)}/ isn't a project of this org")
 
     async def _put(self, call: Call) -> Response:
         """PutObject and UploadPart, streamed."""

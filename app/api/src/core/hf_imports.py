@@ -36,7 +36,7 @@ import httpx
 import orjson
 
 from app.api.src.core.causal_lms import CAUSAL_LMS
-from app.api.src.core.datasets import check_new_path
+from app.api.src.core.datasets import GLOBAL, Scope
 from app.api.src.core.errors import Conflict, Forbidden, Invalid, NotFound
 from app.api.src.core.models import Models, check_name, check_tag
 from app.api.src.s3_proxy.upstream import UpstreamError
@@ -57,7 +57,8 @@ STATES = ("running", "finished", "failed", "cancelled", "interrupted")
 COLUMNS = (
     "pk, org_pk, kind, repo, revision, sha, dest, options::text, state, phase, bytes_total, "
     "bytes_done, files_total, files_done, rows_done, result::text, error, command, started_by, "
-    "extract(epoch FROM started_at)::float8, extract(epoch FROM finished_at)::float8"
+    "extract(epoch FROM started_at)::float8, extract(epoch FROM finished_at)::float8, "
+    "project_pk, (SELECT name FROM projects WHERE pk = project_pk)"
 )
 
 
@@ -95,11 +96,17 @@ def human(size: int) -> str:
 
 
 def dataset_command(
-    org: str, repo: str, dest: str, revision: str, configs: dict[str, list[str] | None]
+    org: str,
+    repo: str,
+    dest: str,
+    revision: str,
+    configs: dict[str, list[str] | None],
+    project: str | None = None,
 ) -> str:
     """The ``flock datasets import`` command doing what the dialog asked: each config with its
     splits (``None`` for all). Configs whose splits differ need a command each, one per line,
-    since ``--split`` applies to every config of a command."""
+    since ``--split`` applies to every config of a command. ``project`` names the project the
+    dataset lands in, None for global."""
     groups: dict[tuple[str, ...] | None, list[str]] = {}
     for config, splits in configs.items():
         groups.setdefault(tuple(splits) if splits is not None else None, []).append(config)
@@ -113,15 +120,27 @@ def dataset_command(
         if revision != "main":
             parts += ["--revision", revision]
         parts += ["--org", org]
+        if project is not None:
+            parts += ["--project", project]
         lines.append(shlex.join(parts))
     return "\n".join(lines)
 
 
 def model_command(
-    org: str, repo: str, name: str, revision: str, tags: list[str], primary: bool
+    org: str,
+    repo: str,
+    name: str,
+    revision: str,
+    tags: list[str],
+    primary: bool,
+    project: str | None = None,
 ) -> str:
-    """The ``flock models import`` command doing what the dialog asked."""
-    parts = ["flock", "models", "import", repo, f"{org}/{name}"]
+    """The ``flock models import`` command doing what the dialog asked, into ``project`` or
+    global."""
+    ref = f"{org}/{name}" if project is None else name
+    parts = ["flock", "models", "import", repo, ref]
+    if project is not None:
+        parts += ["--org", org, "--project", project]
     if revision != "main":
         parts += ["--revision", revision]
     for tag in tags:
@@ -350,6 +369,8 @@ class HFImport:
     started_by: int | None
     started_at: float
     finished_at: float | None = None
+    project_pk: int | None = None  # where it lands (022): None for global
+    project: str | None = None
     task: asyncio.Task | None = field(default=None, repr=False)
     saved_at: float = field(default=0.0, repr=False)
 
@@ -359,6 +380,10 @@ class HFImport:
         values[7] = orjson.loads(values[7])
         values[15] = orjson.loads(values[15]) if values[15] is not None else None
         return cls(*values)
+
+    @property
+    def scope(self) -> Scope:
+        return Scope(self.project_pk, self.project)
 
     @property
     def progress(self) -> float:
@@ -382,6 +407,7 @@ class HFImport:
             "revision": self.revision,
             "sha": self.sha,
             "dest": self.dest,
+            "project": self.project,
             **self.options,
             "state": self.state,
             "phase": self.phase,
@@ -662,14 +688,15 @@ class HFImports:
 
     # ------------------------------------------------------------------ starting
 
-    async def _running_at(self, org: Org, kind: str, dest: str) -> bool:
+    async def _running_at(self, org: Org, kind: str, dest: str, scope: Scope) -> bool:
         return bool(
             await self.store.db.fetchval(
                 "SELECT true FROM hf_imports WHERE org_pk = $1 AND kind = $2 AND dest = $3 "
-                "AND state = 'running'",
+                "AND project_pk IS NOT DISTINCT FROM $4 AND state = 'running'",
                 org.pk,
                 kind,
                 dest,
+                scope.pk,
             )
         )
 
@@ -683,6 +710,7 @@ class HFImports:
         tags: list[str],
         primary: bool,
         token: str | None,
+        scope: Scope = GLOBAL,
     ) -> HFImport:
         """Check the model and start importing it as a new version of ``name``. Raises
         ``HubError`` when the Hub refuses or the repository can't be imported, and ``TooLarge``
@@ -692,8 +720,8 @@ class HFImports:
             check_tag(tag)
         if len(set(tags)) != len(tags):
             raise Invalid("A tag is given twice.")
-        command = model_command(org.name, repo, name, revision, tags, primary)
-        if await self._running_at(org, "model", name):
+        command = model_command(org.name, repo, name, revision, tags, primary, scope.name)
+        if await self._running_at(org, "model", name, scope):
             raise Conflict(f"An import into {name} is already running.")
         await self.store.models.bucket(org, ensure=True)
         hub = self.hub(token)
@@ -702,7 +730,9 @@ class HFImports:
             plan = await self._model_plan(hub, repo, revision, info)
             self._check_size(plan.size, "model", command)
             options = {"tags": tags, "primary": primary}
-            job = await self._insert(org, user, "model", repo, revision, name, options, command)
+            job = await self._insert(
+                org, user, "model", repo, revision, name, options, command, scope
+            )
         except BaseException:
             await hub.close()
             raise
@@ -722,6 +752,7 @@ class HFImports:
         configs: dict[str, list[str] | None] | None,
         dest: str,
         token: str | None,
+        scope: Scope = GLOBAL,
     ) -> HFImport:
         """Check the dataset and start importing ``configs`` (each with its splits, ``None`` for
         all; the default config when not given) to ``dest``. Raises ``HubError`` when the Hub
@@ -729,21 +760,25 @@ class HFImports:
         together pass the size limit, and ``Conflict`` when a dataset is already at a split's
         path."""
         dest = dest.strip("/")
-        check_new_path(dest)
-        if await self._running_at(org, "dataset", dest):
+        scope.check_new(dest)
+        if await self._running_at(org, "dataset", dest, scope):
             raise Conflict(f"An import into {dest} is already running.")
         bucket = (await self.store.datasets.bucket(org, ensure=True)).upstream_name
         hub = self.hub(token)
         try:
             await hub.info("dataset", repo, revision)
-            plan = await self._dataset_plan(hub, repo, revision, configs, dest, token)
+            # Split paths are bucket keys, under the project's folder in a project (D160).
+            plan = await self._dataset_plan(hub, repo, revision, configs, scope.key(dest), token)
             manifest = plan.manifest
             asked = {c: (configs or {}).get(c) for c in manifest.splits}
-            command = dataset_command(org.name, repo, dest, revision, asked)
+            command = dataset_command(org.name, repo, dest, revision, asked, scope.name)
             self._check_size(plan.size, "dataset", command)
-            await self._check_free(bucket, dest, plan.paths)
+            with scope.errors():
+                await self._check_free(bucket, scope.key(dest), plan.paths)
             options = {"configs": {c: list(found) for c, found in manifest.splits.items()}}
-            job = await self._insert(org, user, "dataset", repo, revision, dest, options, command)
+            job = await self._insert(
+                org, user, "dataset", repo, revision, dest, options, command, scope
+            )
         except BaseException:
             await hub.close()
             raise
@@ -785,11 +820,12 @@ class HFImports:
         dest: str,
         options: dict[str, Any],
         command: str,
+        scope: Scope = GLOBAL,
     ) -> HFImport:
         record = await self.store.db.fetchrow(
             "INSERT INTO hf_imports (org_pk, kind, repo, revision, dest, options, state, "
-            "command, started_by, started_at, heartbeat_at) "
-            "VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'running', $7, $8, now(), now()) "
+            "command, started_by, started_at, heartbeat_at, project_pk) "
+            "VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'running', $7, $8, now(), now(), $9) "
             f"RETURNING {COLUMNS}",
             org.pk,
             kind,
@@ -799,6 +835,7 @@ class HFImports:
             orjson.dumps(options).decode(),
             command,
             user.pk,
+            scope.pk,
         )
         job = HFImport.from_record(record)
         self.jobs[job.pk] = job
@@ -985,6 +1022,7 @@ class HFImports:
             None,
             None,
             dedupe_key(repo, sha),
+            job.scope,
         )
         if not opened:  # this commit was imported into the model before
             job.bytes_done = job.bytes_total
@@ -1014,10 +1052,10 @@ class HFImports:
                     group.create_task(send(path))
             job.phase = "committing"
             await self._save(job, force=True)
-            version = await models.commit(org, job.dest, ulid, user, hashes)
+            version = await models.commit(org, job.dest, ulid, user, hashes, job.scope)
         except BaseException:
             try:
-                await asyncio.shield(models.abort(org, job.dest, ulid, user))
+                await asyncio.shield(models.abort(org, job.dest, ulid, user, job.scope))
             except Exception:
                 log.exception("could not abort the upload of Hugging Face import %d", job.pk)
             raise
@@ -1137,7 +1175,11 @@ class HFImports:
 
             job.phase = "converting"
             await self._save(job, force=True)
-            job.result = {"datasets": await self._convert(job, folder, bucket)}
+            converted = await self._convert(job, folder, bucket)
+            for dataset in converted:
+                if isinstance(dataset.get("path"), str):
+                    dataset["path"] = job.scope.rel(dataset["path"])
+            job.result = {"datasets": converted}
             job.rows_done = sum(d["rows"] for d in job.result["datasets"])
         finally:
             await asyncio.to_thread(shutil.rmtree, folder, True)
@@ -1160,7 +1202,7 @@ class HFImports:
         workers = max(1, min(self.settings.hf_import_workers, job.files_total or 1))
         child = context.Process(
             target=convert_child,
-            args=(send, str(folder), job.dest, bucket, self._s3(), workers),
+            args=(send, str(folder), job.scope.key(job.dest), bucket, self._s3(), workers),
             name=f"flock-hf-import-{job.pk}",
         )
         child.start()

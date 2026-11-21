@@ -18,7 +18,7 @@ import re
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
@@ -169,6 +169,68 @@ def check_tag(tag: str) -> None:
         )
     if tag.isdigit():
         raise Invalid("Tag names can't be only digits, since those are version numbers.")
+
+
+# The folder of flock-datasets and flock-models that holds projects' datasets and models, one
+# folder per project pk (D160, D161). Reserved in the global scope.
+PROJECTS = "-projects"
+
+
+@dataclass(frozen=True)
+class Scope:
+    """Where datasets and models live (D159): the org's (global, ``pk`` None) or one project's.
+    A project's datasets are under ``-projects/{pk}/`` of flock-datasets (D160): paths in
+    requests and answers are relative to the scope, and ``key`` gives the bucket's key."""
+
+    pk: int | None = None  # the project's
+    name: str | None = None
+
+    @property
+    def root(self) -> str:
+        return f"{PROJECTS}/{self.pk}/" if self.pk is not None else ""
+
+    def key(self, path: str) -> str:
+        """The bucket key of ``path``; ``""`` is the scope's root folder, without its slash."""
+        return self.root + path if path else self.root.removesuffix("/")
+
+    def rel(self, key: str) -> str:
+        """``key``'s path in the scope."""
+        return key.removeprefix(self.root)
+
+    def clean(self, text: str) -> str:
+        """``text`` with the scope's root taken out of the keys it names."""
+        return text.replace(self.root, "") if self.root else text
+
+    def _global_check(self, path: str) -> None:
+        if self.pk is None and path.split("/", 1)[0] == PROJECTS:
+            raise Invalid(f"{PROJECTS} is where Flock keeps projects' datasets.")
+
+    def check(self, path: str) -> None:
+        """Raises ``Invalid`` unless ``path`` names a folder of the scope (not its root)."""
+        check_path(path)
+        self._global_check(path)
+
+    def check_new(self, path: str) -> None:
+        """``check_new_path`` in the scope."""
+        check_new_path(path)
+        self._global_check(path)
+
+    @contextlib.contextmanager
+    def errors(self) -> Iterator[None]:
+        """Errors raised inside name paths of the scope, not bucket keys."""
+        try:
+            yield
+        except Exception as e:
+            # A refusal over the limits keeps its keys: its command must name the real objects.
+            if self.root and not isinstance(e, TooLarge):
+                if isinstance(getattr(e, "message", None), str):
+                    e.message = self.clean(e.message)  # type: ignore[attr-defined]
+                if e.args and isinstance(e.args[0], str):
+                    e.args = (self.clean(e.args[0]), *e.args[1:])
+            raise
+
+
+GLOBAL = Scope()
 
 
 def image_type(data: bytes) -> str | None:
@@ -686,30 +748,38 @@ class Datasets:
         await asyncio.gather(*(fill(entry, found) for entry, found in datasets))
 
     async def at(
-        self, org: Org, path: str, cursor: str | None, details: bool = False
+        self,
+        org: Org,
+        path: str,
+        cursor: str | None,
+        details: bool = False,
+        scope: Scope = GLOBAL,
     ) -> dict[str, Any]:
         """A folder's listing, one level, or ``{kind: "dataset"}`` when ``path`` is one. With
-        ``details``, each dataset also has its data size and always its version."""
+        ``details``, each dataset also has its data size and always its version. Paths are in
+        ``scope``; files keep their bucket ``key``."""
         bucket = await self.bucket(org, ensure=True)
         name = bucket.upstream_name
+        rel = path
         if path:
-            check_path(path)
+            scope.check(path)
+            path = scope.key(path)
             found = await self.latest(name, path)
             if found is not None:
                 return {
                     "kind": "dataset",
-                    "path": path,
+                    "path": rel,
                     "version": newest(found),
                     "updated_at": found[0].last_modified if found else None,
                 }
             # Inside a dataset, the browser doesn't descend (its data/, _versions/ and the rest
             # are only in Storage).
-            parts = path.split("/")
-            ancestors = ["/".join(parts[:i]) for i in range(1, len(parts))]
+            parts = rel.split("/")
+            ancestors = [scope.key("/".join(parts[:i])) for i in range(1, len(parts))]
             inside = await asyncio.gather(*(self.latest(name, a) for a in ancestors))
             if any(found is not None for found in inside):
-                raise NotFound(f"folder {path} not found")
-        prefix = f"{path}/" if path else ""
+                raise NotFound(f"folder {rel} not found")
+        prefix = f"{path}/" if path else scope.root
         listing = await self._call(
             self._upstream().list_objects(name, prefix, "/", cursor, self.PAGE)
         )
@@ -724,6 +794,8 @@ class Datasets:
         folders: list[dict[str, Any]] = []
         manifests: list[tuple[dict[str, Any], tuple[ListedObject] | tuple[()]]] = []
         for folder, found in zip(listing.prefixes, detected, strict=True):
+            if scope.pk is None and folder == f"{PROJECTS}/":
+                continue  # projects' datasets (D160)
             sub = folder.removesuffix("/")
             entry = {"name": sub.rpartition("/")[2], "path": sub}
             if found is None:
@@ -750,10 +822,12 @@ class Datasets:
         ]
         marker = any(o.key == prefix for o in listing.objects)
         if path and not cursor and not (datasets or folders or files or marker):
-            raise NotFound(f"folder {path} not found")
+            raise NotFound(f"folder {rel} not found")
+        for entry in datasets + folders:  # after ``_details``, which reads by key
+            entry["path"] = scope.rel(entry["path"])
         return {
             "kind": "folder",
-            "path": path,
+            "path": rel,
             "datasets": datasets,
             "folders": folders,
             "files": files,
@@ -762,11 +836,14 @@ class Datasets:
 
     # ------------------------------------------------------------------ the dataset page
 
-    async def info(self, org: Org, path: str, version: str | None) -> dict[str, Any]:
+    async def info(
+        self, org: Org, path: str, version: str | None, scope: Scope = GLOBAL
+    ) -> dict[str, Any]:
         """The header's numbers, the schema and details of ``path`` at ``version`` (D88, D91)."""
         bucket = await self.bucket(org)
         name = bucket.upstream_name
-        check_path(path)
+        scope.check(path)
+        rel, path = path, scope.key(path)
         resolved = await self.resolve(name, path, version)
         latest = await self.latest_version(name, path)
 
@@ -802,7 +879,7 @@ class Datasets:
 
         info = await self._lance(read)
         return {
-            "path": path,
+            "path": rel,
             "version": resolved.number,
             "latest_version": latest,
             **info,
@@ -816,11 +893,13 @@ class Datasets:
         offset: int,
         limit: int | None,
         columns: list[str] | None,
+        scope: Scope = GLOBAL,
     ) -> dict[str, Any]:
         """One page of rendered cells (D90): hidden columns aren't read."""
         bucket = await self.bucket(org)
         name = bucket.upstream_name
-        check_path(path)
+        scope.check(path)
+        path = scope.key(path)
         resolved = await self.resolve(name, path, version)
 
         def read() -> dict[str, Any]:
@@ -876,12 +955,19 @@ class Datasets:
         return await self._lance(read)
 
     async def cell(
-        self, org: Org, path: str, version: str | None, row: int, column: str
+        self,
+        org: Org,
+        path: str,
+        version: str | None,
+        row: int,
+        column: str,
+        scope: Scope = GLOBAL,
     ) -> dict[str, Any]:
         """One cell in full, up to 1 MiB, for an opened row."""
         bucket = await self.bucket(org)
         name = bucket.upstream_name
-        check_path(path)
+        scope.check(path)
+        path = scope.key(path)
         resolved = await self.resolve(name, path, version)
 
         def read() -> dict[str, Any]:
@@ -903,12 +989,15 @@ class Datasets:
 
         return await self._lance(read)
 
-    async def versions(self, org: Org, path: str, cursor: int | None) -> dict[str, Any]:
+    async def versions(
+        self, org: Org, path: str, cursor: int | None, scope: Scope = GLOBAL
+    ) -> dict[str, Any]:
         """The history, newest first, 50 a page (D89). ``cursor`` is the version to continue
         below; the next page's is in the answer, null on the last."""
         bucket = await self.bucket(org)
         name = bucket.upstream_name
-        check_path(path)
+        scope.check(path)
+        path = scope.key(path)
         listed = await self._call(self._upstream().list_all(name, f"{path}/{VERSIONS}"))
         found: dict[int, ListedObject] = {}
         for o in listed:
@@ -973,11 +1062,12 @@ class Datasets:
 
         return await self._lance(read)
 
-    async def readme(self, org: Org, path: str) -> dict[str, Any]:
+    async def readme(self, org: Org, path: str, scope: Scope = GLOBAL) -> dict[str, Any]:
         """The dataset's README.md, its first 1 MiB (D92)."""
         bucket = await self.bucket(org)
         name = bucket.upstream_name
-        check_path(path)
+        scope.check(path)
+        path = scope.key(path)
         if await self.latest(name, path) is None:
             raise NotFound(f"dataset {path} not found")
         data = await self._call(
@@ -1241,22 +1331,38 @@ class Datasets:
 
         return list(await asyncio.gather(*map(state, paths)))
 
-    async def rename(self, org: Org, path: str, to: str) -> dict[str, Any]:
-        """Move the dataset or folder at ``path`` to ``to`` (D95, D133)."""
+    async def rename(
+        self,
+        org: Org,
+        path: str,
+        to: str,
+        scope: Scope = GLOBAL,
+        to_scope: Scope | None = None,
+    ) -> dict[str, Any]:
+        """Move the dataset or folder at ``path`` to ``to`` (D95, D133), into ``to_scope`` if
+        given (D166): both are in flock-datasets, so it's the same copy."""
         bucket = await self.bucket(org)
-        await self._rename(org, bucket.upstream_name, path, to)
-        return {"path": to}
+        target = scope if to_scope is None else to_scope
+        with scope.errors(), target.errors():
+            await self._rename(org, bucket.upstream_name, path, to, scope, target)
+        return {"path": to, "project": target.name}
 
-    async def _rename(self, org: Org, name: str, path: str, to: str) -> None:
-        check_path(path)
-        check_new_path(to)
+    async def _rename(
+        self, org: Org, name: str, path: str, to: str, scope: Scope, target: Scope
+    ) -> None:
+        scope.check(path)
+        target.check_new(to)
+        path, to = scope.key(path), target.key(to)
         kind = await self._kind(name, path)
         if to == path or to.startswith(f"{path}/"):
             raise Invalid(f"The new path can't be inside the {kind}.")
-        await self._rename_tree(org, name, path, to, kind)
+        # Projects' datasets are never public (D165): grants don't follow one into a project.
+        await self._rename_tree(org, name, path, to, kind, public=target.pk is None)
         self._forget(name, path)
 
-    async def _rename_tree(self, org: Org, name: str, path: str, to: str, kind: str) -> None:
+    async def _rename_tree(
+        self, org: Org, name: str, path: str, to: str, kind: str, public: bool = True
+    ) -> None:
         """Move a dataset or folder tree, preserving each exact path's visibility."""
         upstream = self._upstream()
         prefix = f"{path}/"
@@ -1296,7 +1402,8 @@ class Datasets:
                 )
                 raise Conflict(message)
             await self._delete_all(name, [o.key for o in objects], prefix)
-            await self._copy_public(conn, org, path, to, folder=True)
+            if public:
+                await self._copy_public(conn, org, path, to, folder=True)
             await conn.execute(
                 "DELETE FROM public_datasets WHERE org_pk = $1 "
                 "AND (path = $2 OR left(path, length($2) + 1) = $2 || '/')",
@@ -1304,40 +1411,55 @@ class Datasets:
                 path,
             )
 
-    async def move(self, org: Org, paths: list[str], to: str) -> list[dict[str, Any]]:
+    async def move(
+        self,
+        org: Org,
+        paths: list[str],
+        to: str,
+        scope: Scope = GLOBAL,
+        to_scope: Scope | None = None,
+    ) -> list[dict[str, Any]]:
         """Move each dataset or folder of ``paths`` into the folder ``to`` (``""``: the
-        bucket's root), keeping its last name (D131). The limits count every path, and refuse
-        (``TooLarge``) before anything moves. Then each moves as a rename would, one at a time,
-        and one that fails doesn't stop the rest: the answer says, for each, where it went
-        (``to``), whether it ``moved``, and if not, the ``error`` (``taken`` when something
-        already exists there)."""
+        scope's root) of ``to_scope`` (default: the same scope, D166), keeping its last name
+        (D131). The limits count every path, and refuse (``TooLarge``) before anything moves.
+        Then each moves as a rename would, one at a time, and one that fails doesn't stop the
+        rest: the answer says, for each, where it went (``to``), whether it ``moved``, and if
+        not, the ``error`` (``taken`` when something already exists there)."""
         bucket = await self.bucket(org)
         name = bucket.upstream_name
+        target_scope = scope if to_scope is None else to_scope
+        same = target_scope == scope
         if to:
-            check_new_path(to)
+            target_scope.check_new(to)
 
         def target(path: str) -> str:
             last = path.rpartition("/")[2]
             return f"{to}/{last}" if to else last
 
-        await self._check_sizes(
-            name, paths, "move", lambda path: self._mv_command(path, target(path))
-        )
+        with scope.errors(), target_scope.errors():
+            await self._check_sizes(
+                name,
+                [scope.key(p) if p else p for p in paths],
+                "move",
+                lambda key: self._mv_command(key, target_scope.key(target(scope.rel(key)))),
+            )
         results = []
         for path in paths:
             result: dict[str, Any] = {
                 "path": path,
                 "to": target(path),
+                "project": target_scope.name,
                 "moved": False,
                 "error": None,
                 "taken": False,
             }
             try:
-                if to == path or to.startswith(f"{path}/"):
-                    raise Invalid(f"{path} can't move into itself.")
-                if target(path) == path:
-                    raise Invalid(f"{path} is already in {to or 'the top folder'}.")
-                await self._rename(org, name, path, target(path))
+                with scope.errors(), target_scope.errors():
+                    if same and (to == path or to.startswith(f"{path}/")):
+                        raise Invalid(f"{path} can't move into itself.")
+                    if same and target(path) == path:
+                        raise Invalid(f"{path} is already in {to or 'the top folder'}.")
+                    await self._rename(org, name, path, target(path), scope, target_scope)
                 result["moved"] = True
             except Taken as e:
                 result.update(error=e.message, taken=True)
@@ -1351,13 +1473,14 @@ class Datasets:
     # ------------------------------------------------------------------ tags (D96)
 
     async def set_tag(
-        self, org: Org, path: str, tag: str, version: int, move: bool
+        self, org: Org, path: str, tag: str, version: int, move: bool, scope: Scope = GLOBAL
     ) -> dict[str, Any]:
         """Put ``tag`` on ``version``. If it's on another version, it moves only with ``move``;
         otherwise ``TagTaken`` says where it is."""
         bucket = await self.bucket(org)
         name = bucket.upstream_name
-        check_path(path)
+        scope.check(path)
+        path = scope.key(path)
         check_tag(tag)
         await self.resolve(name, path, str(version))
         import lance
@@ -1386,10 +1509,11 @@ class Datasets:
         await self._lance(write)
         return {"tag": tag, "version": version}
 
-    async def delete_tag(self, org: Org, path: str, tag: str) -> None:
+    async def delete_tag(self, org: Org, path: str, tag: str, scope: Scope = GLOBAL) -> None:
         bucket = await self.bucket(org)
         name = bucket.upstream_name
-        check_path(path)
+        scope.check(path)
+        path = scope.key(path)
         if await self.latest(name, path) is None:
             raise NotFound(f"dataset {path} not found")
         import lance
@@ -1411,15 +1535,18 @@ class Datasets:
 
     TRASH_COLUMNS: ClassVar[str] = (
         "pk, path, deleted_by, extract(epoch FROM deleted_at)::float8, "
-        "extract(epoch FROM moved_at)::float8, latest_version, objects, bytes, kind"
+        "extract(epoch FROM moved_at)::float8, latest_version, objects, bytes, kind, "
+        "project_pk, (SELECT name FROM projects WHERE pk = project_pk)"
     )
 
     def _entry(self, record: Any) -> dict[str, Any]:
-        pk, path, deleted_by, deleted_at, moved_at, latest, objects, size, kind = record
+        pk, path, deleted_by, deleted_at, moved_at, latest, objects, size, kind = record[:9]
+        project_pk, project = record[9:11]
         return {
             "id": pk,
             "kind": kind,
-            "path": path,
+            "path": Scope(project_pk, project).rel(path),
+            "project": project,
             "deleted_by": deleted_by,
             "deleted_at": deleted_at,
             "moved_at": moved_at,
@@ -1429,26 +1556,34 @@ class Datasets:
             "bytes": size,
         }
 
-    async def delete(self, org: Org, path: str, user: User) -> dict[str, Any]:
+    async def delete(
+        self, org: Org, path: str, user: User, scope: Scope = GLOBAL
+    ) -> dict[str, Any]:
         """Move the dataset or folder at ``path`` to the trash (D93, D132): its row first, then
         the copy (``_versions/`` last), then the original's deletion (``_versions/`` first). A
         folder is one entry, with everything under it."""
         bucket = await self.bucket(org)
-        return await self._delete(org, bucket.upstream_name, path, user)
+        with scope.errors():
+            return await self._delete(org, bucket.upstream_name, path, user, scope)
 
-    async def delete_many(self, org: Org, paths: list[str], user: User) -> list[dict[str, Any]]:
+    async def delete_many(
+        self, org: Org, paths: list[str], user: User, scope: Scope = GLOBAL
+    ) -> list[dict[str, Any]]:
         """Move each dataset or folder of ``paths`` to the trash (D132). The limits count every
         path, and refuse (``TooLarge``) before anything moves. Then each goes as ``delete``
         would, one at a time, and one that fails doesn't stop the rest: the answer says, for
         each, whether it was ``deleted`` and its trash ``entry``, or the ``error``."""
         bucket = await self.bucket(org)
         name = bucket.upstream_name
-        await self._check_sizes(name, paths, "delete", self._rm_command)
+        await self._check_sizes(
+            name, [scope.key(p) if p else p for p in paths], "delete", self._rm_command
+        )
         results = []
         for path in paths:
             result: dict[str, Any] = {"path": path, "deleted": False, "error": None, "entry": None}
             try:
-                result["entry"] = await self._delete(org, name, path, user)
+                with scope.errors():
+                    result["entry"] = await self._delete(org, name, path, user, scope)
                 result["deleted"] = True
             except (Conflict, TooLarge) as e:
                 result["error"] = e.message
@@ -1457,10 +1592,13 @@ class Datasets:
             results.append(result)
         return results
 
-    async def _delete(self, org: Org, name: str, path: str, user: User) -> dict[str, Any]:
-        check_path(path)
+    async def _delete(
+        self, org: Org, name: str, path: str, user: User, scope: Scope
+    ) -> dict[str, Any]:
+        scope.check(path)
+        path = scope.key(path)
         if await self._kind(name, path) == "folder":
-            return await self._delete_folder(org, name, path, user)
+            return await self._delete_folder(org, name, path, user, scope)
         async with self._locked(name, [path]) as conn:
             found = await self.latest(name, path)
             if found is None:
@@ -1472,11 +1610,15 @@ class Datasets:
             latest = newest(found) if found else None
             if latest is None:
                 latest = (await self.resolve(name, path, None)).number
-            record = await self._to_trash(conn, org, name, path, user, "dataset", latest, objects)
+            record = await self._to_trash(
+                conn, org, name, path, user, "dataset", latest, objects, scope
+            )
         self._forget(name, path)
         return self._entry(record)
 
-    async def _delete_folder(self, org: Org, name: str, path: str, user: User) -> dict[str, Any]:
+    async def _delete_folder(
+        self, org: Org, name: str, path: str, user: User, scope: Scope
+    ) -> dict[str, Any]:
         """Move the folder at ``path`` to the trash as one entry (D132), its datasets each in
         D93's order, so none is ever broken."""
         upstream = self._upstream()
@@ -1491,7 +1633,9 @@ class Datasets:
             if not objects:
                 raise NotFound(f"Nothing exists at {path}.")
             self._check_size(objects, "delete", self._rm_command(path), "folder")
-            record = await self._to_trash(conn, org, name, path, user, "folder", None, objects)
+            record = await self._to_trash(
+                conn, org, name, path, user, "folder", None, objects, scope
+            )
         self._forget(name, path)
         return self._entry(record)
 
@@ -1505,6 +1649,7 @@ class Datasets:
         kind: str,
         latest: int | None,
         objects: list[ListedObject],
+        scope: Scope,
     ) -> Any:
         """With ``path``'s lock held: the trash row, the copy and the original's deletion.
         Returns the row, moved."""
@@ -1513,7 +1658,8 @@ class Datasets:
         # stays locked meanwhile, so the sweep leaves a running move alone.
         pk = await self.store.db.fetchval(
             "INSERT INTO dataset_trash (org_pk, path, deleted_by, deleted_at, latest_version, "
-            "objects, bytes, kind) VALUES ($1, $2, $3, now(), $4, $5, $6, $7) RETURNING pk",
+            "objects, bytes, kind, project_pk) VALUES ($1, $2, $3, now(), $4, $5, $6, $7, $8) "
+            "RETURNING pk",
             org.pk,
             path,
             user.pk,
@@ -1521,6 +1667,7 @@ class Datasets:
             len(objects),
             sum(o.size for o in objects),
             kind,
+            scope.pk,
         )
         await conn.execute("SELECT 1 FROM dataset_trash WHERE pk = $1 FOR UPDATE", pk)
         # A private flag stays at ``path`` (D115): the dataset comes back private, and
@@ -1567,13 +1714,15 @@ class Datasets:
         if something now exists at the path."""
         bucket = await self.bucket(org)
         name = bucket.upstream_name
-        if to is not None:
-            check_new_path(to)
         trash = await self._call(self._ensure_trash())
         async with self.store.db.pool.acquire() as conn, conn.transaction():
             record = await self._claim(conn, org, pk)
             path = record[1]
-            target = to if to is not None else path
+            # Back into its own scope (D168), at its path or at ``to`` in the same scope.
+            scope = Scope(record[9], record[10])
+            if to is not None:
+                scope.check_new(to)
+            target = scope.key(to) if to is not None else path
             prefix = self._trash_prefix(org.pk, pk)
             objects = await self._call(self._upstream().list_all(trash, prefix))
             inside = [
@@ -1581,7 +1730,8 @@ class Datasets:
                 for folder in dataset_folders((o.key for o in objects), prefix)
             ]
             async with self._locked(name, [target, *inside]):
-                await self._check_target(name, target)
+                with scope.errors():
+                    await self._check_target(name, target)
                 # Committed before any object lands at ``target`` (D115).
                 await self._copy_private_folder(org, path, target)
                 for destination in inside:
@@ -1592,7 +1742,7 @@ class Datasets:
                 await self._copy_public(conn, org, path, target, folder=True)
             await conn.execute("DELETE FROM dataset_trash WHERE pk = $1", pk)
         self._forget(name, target)
-        return {"path": target}
+        return {"path": scope.rel(target), "project": scope.name}
 
     async def delete_now(self, org: Org, pk: int) -> None:
         """Remove a deleted dataset from the trash for good."""
@@ -1601,6 +1751,50 @@ class Datasets:
             await self._claim(conn, org, pk)
             await self._remove_prefix(trash, self._trash_prefix(org.pk, pk))
             await conn.execute("DELETE FROM dataset_trash WHERE pk = $1", pk)
+
+    async def purge_project(self, org_pk: int, project_pk: int) -> None:
+        """A deleted project's datasets, for good (D167): its trash entries' copies and rows,
+        and everything under ``-projects/{pk}/`` of the org's flock-datasets. The proxy has
+        refused writes there since the project was deleted (D160)."""
+        if self.store.s3.upstream is None:
+            return
+        trash = await self._ensure_trash()
+        for (pk,) in await self.store.db.fetch(
+            "SELECT pk FROM dataset_trash WHERE project_pk = $1", project_pk
+        ):
+            await self._remove_prefix(trash, self._trash_prefix(org_pk, pk))
+            await self.store.db.execute("DELETE FROM dataset_trash WHERE pk = $1", pk)
+        bucket = await self.store.db.fetchval(
+            "SELECT upstream_name FROM s3_buckets WHERE org_pk = $1 AND managed = 'datasets' "
+            "AND deleted_at IS NULL",
+            org_pk,
+        )
+        if bucket is not None:
+            await self._remove_prefix(bucket, Scope(project_pk).root)
+
+    async def project_storage(self, org: Org, project_pk: int) -> tuple[int, int]:
+        """How many datasets a project has, and the bytes under its folder (D167)."""
+        bucket = await self.store.s3.managed_bucket(org)
+        if bucket is None:
+            return 0, 0
+        root = Scope(project_pk).root
+        objects = await self._call(self._upstream().list_all(bucket.upstream_name, root))
+        found = dataset_folders((o.key for o in objects), root)
+        return len(found), sum(o.size for o in objects)
+
+    async def location(self, org: Org, path: str, scope: Scope = GLOBAL) -> dict[str, Any]:
+        """Where the dataset at ``path`` is, or would be (D163): what a writer needs."""
+        await self.bucket(org, ensure=True)
+        scope.check(path)
+        key = scope.key(path)
+        datasets = self.store.s3.DATASETS
+        return {
+            "bucket": datasets,
+            "key": key,
+            "uri": self.uri(datasets, key),
+            "path": path,
+            "project": scope.name,
+        }
 
     async def delete_org(self, conn: asyncpg.Connection, org: Org) -> None:
         """In the org's deletion's transaction: forget its trash entries. Call ``purge_org``

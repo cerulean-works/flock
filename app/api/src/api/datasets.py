@@ -16,7 +16,7 @@ from app.api.src.api.deps import (
     ViewerDep,
     rest_user,
 )
-from app.api.src.core.datasets import Datasets, TagTaken, Taken, TooLarge
+from app.api.src.core.datasets import GLOBAL, Datasets, Scope, TagTaken, Taken, TooLarge
 from app.api.src.core.store import Org, Store
 
 router = APIRouter(
@@ -26,6 +26,10 @@ router = APIRouter(
 public = APIRouter(prefix="/api/v1/orgs/{org}/datasets", tags=["datasets"])
 
 DatasetPath = Annotated[str, Query(min_length=1, max_length=1024, description="the dataset's path")]
+ProjectQuery = Annotated[
+    str | None,
+    Query(max_length=128, description="the project whose datasets these are (default: global)"),
+]
 VersionQuery = Annotated[
     str | None,
     Query(max_length=128, description="a version number or a tag (default: the latest)"),
@@ -38,7 +42,17 @@ class PathBody(BaseModel):
     path: str = Field(min_length=1, max_length=1024)
 
 
-class RenameBody(PathBody):
+class ToProject(BaseModel):
+    to_project: str | None = Field(
+        None, max_length=128, description="the scope to move to: a project, or null for global"
+    )
+
+    def target(self) -> bool:
+        """Whether ``to_project`` was given (null too): absent keeps the source's scope."""
+        return "to_project" in self.model_fields_set
+
+
+class RenameBody(PathBody, ToProject):
     to: str = Field(min_length=1, max_length=512, description="the new path")
 
 
@@ -60,7 +74,7 @@ class DeleteBody(BaseModel):
         return self
 
 
-class MoveBody(BaseModel):
+class MoveBody(ToProject):
     model_config = ConfigDict(extra="forbid")
 
     paths: ManyPaths
@@ -90,12 +104,25 @@ def datasets(store: Store) -> Datasets:
     return store.datasets
 
 
-async def get_readable_org(org: str, path: DatasetPath, store: StoreDep, viewer: ViewerDep) -> Org:
-    """The org, for reading the dataset at ``path``: any of its members, and outsiders only when that exact path is public. Others get the same 404 as for a missing dataset."""
+async def scope_of(store: Store, org: Org, project: str | None) -> Scope:
+    """The scope ``project`` names in ``org`` (D159): global when None, 404 for a project that
+    doesn't exist."""
+    if project is None:
+        return GLOBAL
+    found = await store.project(org.name, project)
+    if found is None:
+        raise APIError(404, f"project {org.name}/{project} not found")
+    return Scope(found.pk, found.name)
+
+
+async def get_readable_org(
+    org: str, path: DatasetPath, store: StoreDep, viewer: ViewerDep, project: ProjectQuery = None
+) -> Org:
+    """The org, for reading the dataset at ``path``: any of its members, and outsiders only when that exact path is public. Others get the same 404 as for a missing dataset. A project's datasets are never public (D165)."""
     found = await store.find_org(org)
     if found is not None and store.accounts.role(viewer, found):
         return found
-    if found is None or not await store.datasets.is_public(found, path):
+    if found is None or project is not None or not await store.datasets.is_public(found, path):
         raise APIError(404, f"dataset {path} not found")
     return found
 
@@ -109,6 +136,7 @@ async def at(
     store: StoreDep,
     path: str = "",
     cursor: str | None = None,
+    project: ProjectQuery = None,
     details: Annotated[
         bool, Query(description="also each dataset's data size, and its version in any naming")
     ] = False,
@@ -118,7 +146,18 @@ async def at(
     ``details``, each dataset has ``size`` (its data files' bytes, as ``info``'s ``data_size``,
     null if it can't be read) and its version even with Lance's older manifest naming. The
     org's flock-datasets is created here if it's missing."""
-    return JSONResponse(await datasets(store).at(org, path, cursor, details))
+    scope = await scope_of(store, org, project)
+    return JSONResponse(await datasets(store).at(org, path, cursor, details, scope))
+
+
+@router.get("/location")
+async def location(
+    org: OrgDep, store: StoreDep, path: DatasetPath, project: ProjectQuery = None
+) -> Response:
+    """Where the dataset at ``path`` is, or would be written: its bucket, key and S3 URI
+    (D163). A project's datasets are under ``-projects/{pk}/`` of flock-datasets."""
+    scope = await scope_of(store, org, project)
+    return JSONResponse(await datasets(store).location(org, path, scope))
 
 
 @public.get("/info")
@@ -128,12 +167,16 @@ async def info(
     viewer: ViewerDep,
     path: DatasetPath,
     version: VersionQuery = None,
+    project: ProjectQuery = None,
 ) -> Response:
     """The dataset at ``version``: its numbers, schema, details and tags, with the version
     resolved (and the latest), and whether it's ``public``."""
-    found = await datasets(store).info(org, path, version)
+    scope = await scope_of(store, org, project)
+    found = await datasets(store).info(org, path, version, scope)
     # An outsider only gets here for a public dataset (``get_readable_org`` checked).
-    public = not store.accounts.role(viewer, org) or await store.datasets.is_public(org, path)
+    public = scope.pk is None and (
+        not store.accounts.role(viewer, org) or await store.datasets.is_public(org, path)
+    )
     return JSONResponse({**found, "public": public})
 
 
@@ -148,10 +191,13 @@ async def rows(
     columns: Annotated[
         list[str] | None, Query(description="the columns to read (default: all)")
     ] = None,
+    project: ProjectQuery = None,
 ) -> Response:
     """One page of rows, its cells rendered for display: 50 rows, or 10 when a column holds
     binary data."""
-    return JSONResponse(await datasets(store).rows(org, path, version, offset, limit, columns))
+    scope = await scope_of(store, org, project)
+    found = await datasets(store).rows(org, path, version, offset, limit, columns, scope)
+    return JSONResponse(found)
 
 
 @public.get("/cell")
@@ -162,9 +208,11 @@ async def cell(
     row: Annotated[int, Query(ge=0)],
     column: str,
     version: VersionQuery = None,
+    project: ProjectQuery = None,
 ) -> Response:
     """One cell in full (up to 1 MiB)."""
-    return JSONResponse(await datasets(store).cell(org, path, version, row, column))
+    scope = await scope_of(store, org, project)
+    return JSONResponse(await datasets(store).cell(org, path, version, row, column, scope))
 
 
 @public.get("/versions")
@@ -173,49 +221,69 @@ async def versions(
     store: StoreDep,
     path: DatasetPath,
     cursor: Annotated[int | None, Query(ge=0)] = None,
+    project: ProjectQuery = None,
 ) -> Response:
     """The dataset's versions, newest first, 50 a page, with their operations and tags."""
-    return JSONResponse(await datasets(store).versions(org, path, cursor))
+    scope = await scope_of(store, org, project)
+    return JSONResponse(await datasets(store).versions(org, path, cursor, scope))
 
 
 @public.get("/readme")
-async def readme(org: ReadableOrgDep, store: StoreDep, path: DatasetPath) -> Response:
+async def readme(
+    org: ReadableOrgDep, store: StoreDep, path: DatasetPath, project: ProjectQuery = None
+) -> Response:
     """The README.md in the dataset's folder (its first 1 MiB), or 404."""
-    return JSONResponse(await datasets(store).readme(org, path))
+    scope = await scope_of(store, org, project)
+    return JSONResponse(await datasets(store).readme(org, path, scope))
 
 
 @router.put("/public")
 async def make_public(
-    org: AdminOrgDep, path: DatasetPath, user: UserDep, store: StoreDep
+    org: AdminOrgDep,
+    path: DatasetPath,
+    user: UserDep,
+    store: StoreDep,
+    project: ProjectQuery = None,
 ) -> Response:
     """Grant public access to exactly ``path`` (admins): anyone with its URL can read its page, at any version (D115). Its folder and the bucket's objects stay members-only."""
+    if project is not None:
+        raise APIError(422, "A project's datasets can't be public.")
     await datasets(store).set_public(org, path, True, user)
     return JSONResponse({"path": path, "public": True})
 
 
 @router.delete("/public", status_code=204)
 async def make_private(
-    org: AdminOrgDep, path: DatasetPath, user: UserDep, store: StoreDep
+    org: AdminOrgDep,
+    path: DatasetPath,
+    user: UserDep,
+    store: StoreDep,
+    project: ProjectQuery = None,
 ) -> Response:
     """Make the dataset at ``path`` private (admins), even before anything is written there."""
+    if project is not None:
+        raise APIError(422, "A project's datasets can't be public.")
     await datasets(store).set_public(org, path, False, user)
     return Response(status_code=204)
 
 
 @router.post("/delete")
-async def delete(org: OrgDep, body: DeleteBody, user: UserDep, store: StoreDep) -> Response:
+async def delete(
+    org: OrgDep, body: DeleteBody, user: UserDep, store: StoreDep, project: ProjectQuery = None
+) -> Response:
     """Move datasets or folders to the trash, where org admins can restore them for 14 days. A
     folder is one entry, with everything in it. With ``path``, answers its trash entry. With
     ``paths``, each goes in turn, and one that fails doesn't stop the rest: ``results`` says,
     for each, whether it was ``deleted`` and its trash ``entry``, or the ``error``. 409 with
     ``command`` (one line per path) when they're over the limits together, before anything
     moves."""
+    scope = await scope_of(store, org, project)
     try:
         if body.path is not None:
-            entry = await datasets(store).delete(org, body.path, user)
+            entry = await datasets(store).delete(org, body.path, user, scope)
             return JSONResponse(await entry_info(store, entry))
         assert body.paths is not None
-        results = await datasets(store).delete_many(org, body.paths, user)
+        results = await datasets(store).delete_many(org, body.paths, user, scope)
     except TooLarge as e:
         raise APIError(409, e.message, command=e.command) from None
     for result in results:
@@ -249,11 +317,15 @@ async def delete_now(org: AdminOrgDep, pk: int, store: StoreDep) -> Response:
 
 
 @router.post("/rename")
-async def rename(org: OrgDep, body: RenameBody, store: StoreDep) -> Response:
+async def rename(
+    org: OrgDep, body: RenameBody, store: StoreDep, project: ProjectQuery = None
+) -> Response:
     """Move a dataset to the path ``to``, with all its versions and tags, or a folder with
     everything in it."""
     try:
-        return JSONResponse(await datasets(store).rename(org, body.path, body.to))
+        scope = await scope_of(store, org, project)
+        target = await scope_of(store, org, body.to_project) if body.target() else None
+        return JSONResponse(await datasets(store).rename(org, body.path, body.to, scope, target))
     except Taken as e:
         raise APIError(409, e.message, taken=True) from None
     except TooLarge as e:
@@ -261,7 +333,9 @@ async def rename(org: OrgDep, body: RenameBody, store: StoreDep) -> Response:
 
 
 @router.post("/move")
-async def move(org: OrgDep, body: MoveBody, store: StoreDep) -> Response:
+async def move(
+    org: OrgDep, body: MoveBody, store: StoreDep, project: ProjectQuery = None
+) -> Response:
     """Move datasets and folders into the folder ``to``, each keeping its last name:
     ``eval/mmlu`` moved to ``archive`` becomes ``archive/mmlu``. Each moves in turn, and one
     that fails doesn't stop the rest: ``results`` says, for each, where it goes (``to``),
@@ -269,24 +343,33 @@ async def move(org: OrgDep, body: MoveBody, store: StoreDep) -> Response:
     there). 409 with ``command`` (one line per path) when they're over the limits together,
     before anything moves."""
     try:
-        return JSONResponse({"results": await datasets(store).move(org, body.paths, body.to)})
+        scope = await scope_of(store, org, project)
+        target = await scope_of(store, org, body.to_project) if body.target() else None
+        moved = await datasets(store).move(org, body.paths, body.to, scope, target)
+        return JSONResponse({"results": moved})
     except TooLarge as e:
         raise APIError(409, e.message, command=e.command) from None
 
 
 @router.put("/tags/{tag}")
-async def put_tag(org: OrgDep, tag: str, body: TagBody, store: StoreDep) -> Response:
+async def put_tag(
+    org: OrgDep, tag: str, body: TagBody, store: StoreDep, project: ProjectQuery = None
+) -> Response:
     """Tag ``version``. A tag on another version moves only with ``move``; otherwise 409 says
     which version it's on."""
+    scope = await scope_of(store, org, project)
     try:
-        out = await datasets(store).set_tag(org, body.path, tag, body.version, body.move)
+        out = await datasets(store).set_tag(org, body.path, tag, body.version, body.move, scope)
     except TagTaken as e:
         raise APIError(409, e.message, version=e.version) from None
     return JSONResponse(out)
 
 
 @router.delete("/tags/{tag}", status_code=204)
-async def delete_tag(org: OrgDep, tag: str, path: DatasetPath, store: StoreDep) -> Response:
+async def delete_tag(
+    org: OrgDep, tag: str, path: DatasetPath, store: StoreDep, project: ProjectQuery = None
+) -> Response:
     """Remove a tag. The version it was on stays."""
-    await datasets(store).delete_tag(org, path, tag)
+    scope = await scope_of(store, org, project)
+    await datasets(store).delete_tag(org, path, tag, scope)
     return Response(status_code=204)
