@@ -9,7 +9,7 @@ Anyone with a public project's or dataset's link can read it, signed in or not, 
 
 ## Check for secrets first
 
-Outsiders see everything a public project's runs logged: configs, summaries, metrics, system metrics, files and console logs. Flock can't tell which config value or log line is a secret, so it shows them all. The one exception is run files in a top-level `private/` folder, which only members see ([Run files](api/projects#run-files)). `flock eval` puts the predictions of a task on a private dataset there.
+Outsiders see everything a public project's runs logged: configs, summaries, metrics, system metrics, files and console logs. Flock can't tell which config value or log line is a secret, so it shows them all. The one exception is run files in a top-level `private/` folder, which only members see ([Run files](api/projects#run-files)). `flock eval` puts the predictions of a task on a private dataset there. Earlier releases of `flock eval` uploaded them to `predictions/`, which outsiders see: check the files of older eval runs before you publish their project or move them into a public one.
 
 > [!WARNING]
 > Before you make a project public, check that none of its runs logged API keys, tokens, passwords, internal hostnames, or exam and held-out text or identifiers. A private source dataset does not protect text copied into a public run. Runs you move into a public project later become public too.

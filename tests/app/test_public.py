@@ -201,7 +201,7 @@ def test_private_run_files_stay_with_members_whatever_the_projects_visibility(
         assert call(client, "GET", "/p/runs/r1/files/predictions/toy.jsonl").body == rows
         assert call(client, "GET", "/p/runs/r1/files/private-notes.txt").body == b"public"
         # The same answer as a file the run doesn't have, for every spelling of the path.
-        missing = call(client, "GET", "/p/runs/r1/files/private/predictions/nope.jsonl")
+        missing = call(client, "GET", "/p/runs/r1/files/predictions/nope.jsonl")
         for name in (
             "private/predictions/exam.jsonl",
             "./private/predictions/exam.jsonl",
