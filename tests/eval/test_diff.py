@@ -289,6 +289,10 @@ def test_reading_a_folder_refuses_what_is_not_a_results_file(tmp_path: Path) -> 
         read_results(c)
 
     data["tasks"][0]["task"] = "t"
+    (tmp_path / "c" / "results.json").write_text(json.dumps({**data, "tasks": data["tasks"] * 2}))
+    with pytest.raises(ValueError, match="a task name repeats: \\['t'\\]"):
+        read_results(c)
+
     del data["tasks"][0]["dataset"]["private"]
     (tmp_path / "c" / "results.json").write_text(json.dumps(data))
     with pytest.raises(ValueError, match="t: dataset.private is not true or false"):

@@ -352,6 +352,12 @@ def read_results(source: str) -> WrittenResults:
                 metrics[name] = math.nan if value is None else value
             entry["metrics"] = metrics
             tasks.append(TaskResult(**entry))
+        # Tasks are looked up by name, so a repeated one would drop or double a task.
+        names = [task.task for task in tasks]
+        if len(set(names)) != len(names):
+            raise ValueError(
+                f"a task name repeats: {sorted({n for n in names if names.count(n) > 1})}"
+            )
         written = WrittenResults(
             source=source,
             schema_version=data["schema_version"],
