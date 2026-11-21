@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | proposed |
+| Status | implemented, pending review |
 | Date | 2026-11-21 |
 | Builds on | [002](002-projects-and-crud.md), [013](013-datasets-tab.md), [014](014-model-registry.md), [019](019-bulk-select.md), [021](021-public-access-checks.md) |
 | Amends | D86 and D108 (routes), D98 (model names have folders, and models have a scope), D99 and D134 (where a new model's folder goes), D104 to D106 (refs), D109 and D93 (trash entries know their project), D131 and D134 (models can move, and anything can move between scopes) |
@@ -495,3 +495,32 @@ ALTER TABLE dataset_trash ADD COLUMN project_pk bigint REFERENCES projects ON DE
    button like the Datasets tab's?
 6. **"Database" in the request is read as "dataset".** If a per-project database of something
    else (run metadata, eval results) was meant, this doc covers only datasets and models.
+
+## 6. How it was built
+
+The plan above was followed, with these differences and details:
+
+- **Model routes are registered twice.** A `both()` decorator in `api/models.py` puts each
+  handler at the old one-segment route (`/{name}`, `/{name}/versions`, ...) and at
+  `/{name:path}/-...`, so old clients keep working and nested paths need the `/-` separator.
+- **Names stay unique in the org until the contract runs.** `0022_project_scopes.sql` adds the
+  per-scope partial unique indexes, but `models_org_name` stays until
+  `0023_models_scope.contract.sql` drops it (D170). Until then, a project model can't take the
+  name of a global model or of another project's, and the API answers 409 `taken`.
+- **`list_models` returns the folder listing** (a dict with `kind`, `models` and `folders`)
+  rather than a list of models, since a folder's subfolders have to come back too.
+- **The model cache moved** to `~/.cache/flock/models/{org}/{digest}/`, so two orgs' models
+  never share a folder. Earlier downloads are fetched again once.
+- **Project answers gain `id`,** the project's pk, so the Storage tab can link each
+  `-projects/{id}/` folder to its project.
+- **Hugging Face imports into a project** carry `project`, and the `command` a refused import
+  answers names the project with `--project`.
+- **The trash lists' Project column** is hidden on narrow screens, where it left no room for
+  the name.
+
+Checks run in the orb: `tests/app` and `tests/s3` (577 passed; the 6 `docker compose` tests in
+`test_settings.py` can't run without Docker), `tests/hub`, `tests/cli` and `tests/eval`, ruff,
+the web app's `pnpm check`, `pnpm lint` and `pnpm test`, and the docs build and link check.
+The web pages were looked at on a local stack (PostgreSQL, moto, the API and S3 proxy, Vite)
+with models pushed and Lance datasets written into a project and globally. The manual run in
+Tests (a short training run saving checkpoints into its project) wasn't done.

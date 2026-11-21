@@ -7,11 +7,12 @@ Endpoints for projects, single runs, bulk changes to runs, and run logs and file
 A project is returned as:
 
 ```json
-{"entity": "flock", "name": "llm-pretrain", "description": null, "created_at": 1792282202.83, "updated_at": 1792282202.83, "run_count": 1, "active_run_count": 0, "column_count": 21, "visibility": "private", "created_by": 3}
+{"id": 412, "entity": "flock", "name": "llm-pretrain", "description": null, "created_at": 1792282202.83, "updated_at": 1792282202.83, "run_count": 1, "active_run_count": 0, "column_count": 21, "visibility": "private", "created_by": 3}
 ```
 
 | Field | Meaning |
 |---|---|
+| `id` | The project's number. Its datasets and models are stored under `-projects/{id}/` of `flock-datasets` and `flock-models`. |
 | `entity` | The organization's ID. |
 | `name` | The project's name. |
 | `description` | Free text, or `null`. |
@@ -29,7 +30,8 @@ A project is returned as:
 | `GET /projects/{entity}/{project}` | members, anyone if public | One project. |
 | `GET /projects/{entity}/{project}/owners` | members, anyone if public | `{"owners": [{"id", "name", "email", "avatar_url"}]}`: the users who logged its runs, which the run table's `owner` column names by `id`. Outsiders get them without `email`. |
 | `PATCH /projects/{entity}/{project}` | org admins, its creator for `visibility` | Changes `name`, `description` and `visibility`. Fields you leave out don't change, and `"description": null` clears it. Returns the project. Its creator, if a member, may send only `visibility`, and other fields answer 403. |
-| `DELETE /projects/{entity}/{project}` | org admins | Deletes the project with all its runs, their history, logs and files. Answers 204. |
+| `DELETE /projects/{entity}/{project}` | org admins | Deletes the project with all its runs, their history, logs and files, and its datasets and models, for good, without the trash. Answers 204. |
+| `GET /projects/{entity}/{project}/storage` | members | What deleting the project deletes with it: `{"datasets", "models", "bytes"}`, the number of its datasets, the number of its models, and the bytes of both together. |
 
 Project names given here are 1 to 128 characters, with no spaces around them, no control characters and none of `/ \ # ? % :`. Other names answer 422. Names that arrive from the `wandb` SDK aren't checked.
 
