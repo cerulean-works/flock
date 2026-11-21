@@ -77,7 +77,12 @@ describe('FolderView', () => {
 				cursor: null
 			})
 		});
-		render(FolderView, { org: 'acme', path: 'eval', folder, now: 1_790_000_100 });
+		render(FolderView, {
+			scope: { org: 'acme', project: null },
+			path: 'eval',
+			folder,
+			now: 1_790_000_100
+		});
 		const names = () =>
 			[...document.querySelectorAll('tbody tr td:first-child')].map((td) => td.textContent!.trim());
 		expect(names()).toEqual(['mmlu', 'deep/', 'notes.md']);
@@ -106,7 +111,7 @@ describe('FolderView', () => {
 
 	it('shows how to write a dataset when the bucket is empty', async () => {
 		const empty = { ...folder, path: '', datasets: [], folders: [], files: [], cursor: null };
-		render(FolderView, { org: 'acme', path: '', folder: empty, now: 0 });
+		render(FolderView, { scope: { org: 'acme', project: null }, path: '', folder: empty, now: 0 });
 		await expect.element(screen.getByText('No datasets yet.')).toBeVisible();
 		await expect.element(screen.getByText('s3://flock-datasets/')).not.toBeInTheDocument();
 		await expect.element(screen.getByText(/s3\.credentials\("acme"\)/)).toBeVisible();
@@ -115,7 +120,12 @@ describe('FolderView', () => {
 
 	it('says when a folder is empty', async () => {
 		const empty = { ...folder, datasets: [], folders: [], files: [], cursor: null };
-		render(FolderView, { org: 'acme', path: 'eval', folder: empty, now: 0 });
+		render(FolderView, {
+			scope: { org: 'acme', project: null },
+			path: 'eval',
+			folder: empty,
+			now: 0
+		});
 		await expect.element(screen.getByText('This folder is empty.')).toBeVisible();
 	});
 });
@@ -125,7 +135,7 @@ describe('NewFolderButton', () => {
 		const calls = serve({
 			'/api/storage/acme/flock-datasets/folders': () => ({ prefix: 'eval/new/' })
 		});
-		render(NewFolderButton, { org: 'acme', path: 'eval' });
+		render(NewFolderButton, { scope: { org: 'acme', project: null }, path: 'eval' });
 		await screen.getByRole('button', { name: 'New folder' }).click();
 		await expect.element(screen.getByText('s3://flock-datasets/eval/')).toBeVisible();
 		await screen.getByLabelText('Name').fill('a/b');
@@ -143,7 +153,7 @@ describe('NewFolderButton', () => {
 
 	it('creates one at the root of the bucket', async () => {
 		const calls = serve({ '/api/storage/acme/flock-datasets/folders': () => ({ prefix: 'x/' }) });
-		render(NewFolderButton, { org: 'acme', path: '' });
+		render(NewFolderButton, { scope: { org: 'acme', project: null }, path: '' });
 		await screen.getByRole('button', { name: 'New folder' }).click();
 		await screen.getByLabelText('Name').fill('x');
 		await screen.getByRole('button', { name: 'Create folder' }).click();
@@ -213,7 +223,7 @@ describe('DatasetView', () => {
 	const view = (url = 'http://flock.test/datasets/acme/eval/mmlu?version=3') => {
 		resetApp(url);
 		render(DatasetView, {
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			path: 'eval/mmlu',
 			info,
 			failed: null,
@@ -511,7 +521,7 @@ describe('DatasetView', () => {
 	it('warns before removing a tag', async () => {
 		render(RemoveTagDialog, {
 			open: true,
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			path: 'eval/mmlu',
 			tag: 'v1.0',
 			version: 3,
@@ -528,7 +538,7 @@ describe('DatasetView', () => {
 		serve({});
 		resetApp('http://flock.test/datasets/acme/eval/mmlu?tab=rows');
 		render(DatasetView, {
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			path: 'eval/mmlu',
 			info: null,
 			failed: 'Lance couldn’t read the dataset: missing data file',
@@ -552,7 +562,7 @@ describe('a dataset’s visibility', () => {
 		});
 		resetApp('http://flock.test/datasets/acme/eval/mmlu');
 		render(DatasetView, {
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			path: 'eval/mmlu',
 			info: { ...info, public: pub },
 			failed: null,
@@ -691,7 +701,11 @@ describe('the dialogs', () => {
 				Response.json({ message: 'folder eval/deep not found' }, { status: 404 }),
 			'/api/datasets/acme/at?path=eval': () => ({ kind: 'folder' })
 		});
-		render(DeleteDatasetDialog, { open: true, org: 'acme', path: 'eval/deep/mmlu' });
+		render(DeleteDatasetDialog, {
+			open: true,
+			scope: { org: 'acme', project: null },
+			path: 'eval/deep/mmlu'
+		});
 		await expect.element(screen.getByText('Org admins can restore it for 14 days.')).toBeVisible();
 		const confirm = screen.getByRole('button', { name: 'Delete dataset' });
 		await expect.element(confirm).toBeDisabled();
@@ -714,7 +728,11 @@ describe('the dialogs', () => {
 						)
 					: { path: 'eval/mmlu' }
 		});
-		render(RenameDialog, { open: true, org: 'acme', path: 'scratch/mmlu' });
+		render(RenameDialog, {
+			open: true,
+			scope: { org: 'acme', project: null },
+			path: 'scratch/mmlu'
+		});
 		await expect
 			.element(
 				screen.getByText('Anything still writing to the old path will create a new dataset there.')
@@ -747,7 +765,13 @@ describe('the dialogs', () => {
 					: Response.json({ message: 'v1.0 is on version 3.', version: 3 }, { status: 409 })
 		});
 		const ontagged = vi.fn();
-		render(TagDialog, { open: true, org: 'acme', path: 'eval/mmlu', version: 7, ontagged });
+		render(TagDialog, {
+			open: true,
+			scope: { org: 'acme', project: null },
+			path: 'eval/mmlu',
+			version: 7,
+			ontagged
+		});
 		await screen.getByLabelText('Name').fill('123');
 		await screen.getByRole('button', { name: 'Add tag' }).click();
 		await expect.element(screen.getByRole('alert')).toBeVisible();

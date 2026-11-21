@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
@@ -10,14 +11,14 @@
 
 	interface Props {
 		open: boolean;
-		org: string;
+		scope: Scope;
 		version: ModelVersion | null;
 		/** It's the version the page shows: the page goes to the primary after. */
 		shown: boolean;
 		ondeleted: () => void;
 	}
 
-	let { open = $bindable(), org, version, shown, ondeleted }: Props = $props();
+	let { open = $bindable(), scope, version, shown, ondeleted }: Props = $props();
 
 	const ref = $derived(version ? `${version.model}@${version.number}` : '');
 	// What the API would refuse (D109), said before anything is typed, in its words.
@@ -43,12 +44,12 @@
 		pending = true;
 		error = null;
 		try {
-			await modelCall(modelApi(org, version.name, `versions/${version.number}`), {
+			await modelCall(modelApi(scope, version.name, `versions/${version.number}`), {
 				method: 'DELETE'
 			});
 			toast.success(`Deleted ${ref}`);
 			open = false;
-			if (shown) await goto(modelsHref(org, version.name), { replace: true });
+			if (shown) await goto(modelsHref(scope, version.name), { replace: true });
 			else ondeleted();
 		} catch (e) {
 			error = (e as Error).message;

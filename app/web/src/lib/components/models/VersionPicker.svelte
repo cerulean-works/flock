@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import type { ResolvedPathname } from '$app/types';
@@ -9,7 +10,7 @@
 	import type { ModelTag, ModelVersion, ModelVersionsPage } from '#lib/types.ts';
 
 	interface Props {
-		org: string;
+		scope: Scope;
 		name: string;
 		/** The version shown. */
 		version: number;
@@ -22,7 +23,7 @@
 		versionHref: (version: string | null) => ResolvedPathname;
 	}
 
-	let { org, name, version, requested, primary, tags, versionHref }: Props = $props();
+	let { scope, name, version, requested, primary, tags, versionHref }: Props = $props();
 
 	let open = $state(false);
 	let versions = $state<ModelVersion[] | null>(null);
@@ -32,7 +33,7 @@
 	$effect(() => {
 		if (!open || versions !== null) return;
 		const controller = new AbortController();
-		modelCall<ModelVersionsPage>(modelApi(org, name, 'versions'), { signal: controller.signal })
+		modelCall<ModelVersionsPage>(modelApi(scope, name, 'versions'), { signal: controller.signal })
 			.then((page) => (versions = page.versions))
 			.catch((e: Error) => {
 				if (!controller.signal.aborted) failed = e.message;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
@@ -11,7 +12,7 @@
 
 	interface Props {
 		open: boolean;
-		org: string;
+		scope: Scope;
 		/** The dataset's or folder's path now. */
 		path: string;
 		/** A folder, renamed with everything in it (D133). */
@@ -20,7 +21,7 @@
 		onrenamed?: (to: string) => void | Promise<void>;
 	}
 
-	let { open = $bindable(), org, path, folder = false, onrenamed }: Props = $props();
+	let { open = $bindable(), scope, path, folder = false, onrenamed }: Props = $props();
 
 	// Starts as the current path, a rename being a move too. Reset once the dialog has closed,
 	// so its text stays put while it animates closed.
@@ -38,14 +39,14 @@
 		error = null;
 		pending = true;
 		try {
-			await datasetCall(datasetsApi(org, 'rename'), {
+			await datasetCall(datasetsApi(scope, 'rename'), {
 				method: 'POST',
 				body: { path, to: target }
 			});
 			toast.success(`Renamed to ${target}`);
 			open = false;
 			if (onrenamed) await onrenamed(target);
-			else await goto(datasetsHref(org, target), { replace: true });
+			else await goto(datasetsHref(scope, target), { replace: true });
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {

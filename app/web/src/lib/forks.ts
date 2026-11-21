@@ -1,6 +1,7 @@
 /** Forks and blends (023): the rules and wording the dialogs share with the API. */
 
-import { nameOf, parentOf } from './datasets.ts';
+import { nameOf, parentOf, refScope } from './datasets.ts';
+import type { Scope } from './scope.ts';
 import type { BlendColumn, BlendPreview, ColumnFrom, DatasetJob } from './types.ts';
 
 /** What the blend dialog starts with: the selected datasets, or a blend to make again. */
@@ -145,6 +146,10 @@ export function jobText(job: DatasetJob): string {
 	return `${what} ${job.dest} failed.`;
 }
 
-/** The jobs whose dataset is in `folder` (the root holds everything). */
-export const jobsAt = (jobs: DatasetJob[], folder: string) =>
-	jobs.filter((j) => parentOf(j.dest) === folder);
+/** The jobs whose dataset is in `folder` of `scope` (a job names it as `datasetRef` does). */
+export function jobsAt(jobs: DatasetJob[], scope: Scope, folder: string) {
+	return jobs.filter((j) => {
+		const where = refScope(scope.org, j.dest);
+		return where.scope.project === scope.project && parentOf(where.path) === folder;
+	});
+}

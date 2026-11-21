@@ -3,22 +3,23 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { datasetsHref } from '#lib/datasets.ts';
+	import { refHref } from '#lib/datasets.ts';
 	import { jobText, jobsAt } from '#lib/forks.ts';
 	import type { DatasetJobList } from '#lib/forks.svelte.ts';
+	import type { Scope } from '#lib/scope.ts';
 	import type { DatasetJob } from '#lib/types.ts';
 
 	// Blends and datasets being made independent in this folder (D176), as rows above the
 	// listing, as Hugging Face imports show.
 	interface Props {
-		org: string;
+		scope: Scope;
 		list: DatasetJobList;
 		folder: string;
 	}
 
-	let { org, list, folder }: Props = $props();
+	let { scope, list, folder }: Props = $props();
 
-	const rows = $derived(jobsAt(list.shown, folder));
+	const rows = $derived(jobsAt(list.shown, scope, folder));
 	let cancelling = $state<number | null>(null);
 
 	async function cancel(job: DatasetJob) {
@@ -73,7 +74,7 @@
 								{#if job.state === 'finished'}
 									<a
 										class="text-link underline-offset-3 hover:underline"
-										href={datasetsHref(org, job.dest)}>Open</a
+										href={refHref(scope.org, job.dest)}>Open</a
 									>
 								{/if}
 							</p>
