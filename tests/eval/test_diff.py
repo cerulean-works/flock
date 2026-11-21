@@ -27,47 +27,12 @@ from flock.eval.results import (
 )
 from flock.eval.run import EvalConfig, evaluate
 
-from .toy import PROMPT_PATHS, PROVENANCE, task_result
+from .toy import PROMPT_PATHS, PROVENANCE, task_result, write_run
 
 if TYPE_CHECKING:
     from pathlib import Path
-    from typing import Any
 
     from transformers import PreTrainedTokenizerFast
-
-    from flock.eval.provenance import Provenance
-
-
-def write_run(
-    folder: Path,
-    tasks: dict[str, tuple[str, list[bool] | None]],
-    provenance: Provenance = PROVENANCE,
-    schema: int = 9,
-) -> str:
-    """Writes a run whose tasks are read by `acc_raw`, each as `name: (task_hash, outcomes)`, with docs `d-0`, `d-1`, ..., and returns its folder. Outcomes of `None` write no predictions file."""
-    results = []
-    for name, (task_hash, outcomes) in tasks.items():
-        right = sum(outcomes) / len(outcomes) if outcomes else 0.0
-        result = dataclasses.replace(task_result(name, {"acc_raw": right}), task_hash=task_hash)
-        results.append(dataclasses.replace(result, num_docs=len(outcomes or [])))
-    data = Results(provenance, results).to_dict()
-    data["schema_version"] = schema
-    folder.mkdir(parents=True)
-    (folder / "results.json").write_text(json.dumps(data))
-
-    (folder / "predictions").mkdir()
-    for name, (_, outcomes) in tasks.items():
-        if outcomes is None:
-            continue
-        rows = []
-        for i, right in enumerate(outcomes):
-            row: dict[str, Any] = {"id": f"d-{i}", "gold": 0}
-            if schema >= 9:
-                row["correct"] = right
-            rows.append(row)
-        text = "".join(json.dumps(row) + "\n" for row in rows)
-        (folder / "predictions" / f"{name}.jsonl").write_text(text)
-    return str(folder)
 
 
 def test_two_models_split_each_tasks_docs_into_four_cells(
