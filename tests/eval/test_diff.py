@@ -371,7 +371,7 @@ def test_the_diff_command_prints_a_table_or_the_json_contract(tmp_path: Path) ->
 def test_an_unreachable_tracker_exits_2(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     a = write_run(tmp_path / "a", {"t": ("h", [True])})
 
-    def unreachable(run: str, name: str) -> None:
+    def unreachable(run: str, name: str, credential: object = None) -> None:
         raise click.ClickException("Couldn't reach https://flock.test: timed out")
 
     monkeypatch.setattr(tracking, "read_run_file", unreachable)

@@ -314,9 +314,13 @@ def read_results(source: str) -> WrittenResults:
     """
     if source.startswith("run:"):
         # Imported here so reading a folder doesn't import wandb.
+        from flock.cli import credentials
         from flock.eval.tracking import read_run_file
 
-        read_file = partial(read_run_file, source.removeprefix("run:"))
+        # Resolved once, so every file of the run comes from the server its results came from.
+        read_file = partial(
+            read_run_file, source.removeprefix("run:"), credential=credentials.resolve()
+        )
     else:
         read_file = partial(_read_folder_file, Path(source))
 

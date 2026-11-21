@@ -226,9 +226,11 @@ def log_results_file(path: Path, project: str) -> str:
     return f"{entity}/{project}"
 
 
-def read_run_file(run: str, name: str) -> str | None:
+def read_run_file(
+    run: str, name: str, credential: credentials.Credentials | None = None
+) -> str | None:
     """
-    Returns a file the tracker run `run`, as `entity/project/id`, uploaded, such as `results.json`, or `None` if it has no file of that name. Reads as the signed-in Flock user, on the Flock API that user signed in to.
+    Returns a file the tracker run `run`, as `entity/project/id`, uploaded, such as `results.json`, or `None` if it has no file of that name. Reads with `credential`, on its server, or as the signed-in Flock user if not given.
 
     Raises:
         `ValueError`: if `run` isn't `entity/project/id`, you aren't signed in, or Flock refuses the read for another reason than a missing file (an unknown run, a project you can't read).
@@ -240,7 +242,7 @@ def read_run_file(run: str, name: str) -> str | None:
 
     entity, project, run_id = parts
     # No organization lookup: the run names its own, and a read is one request per file.
-    found = credentials.resolve()
+    found = credential or credentials.resolve()
     if found is None:
         raise ValueError("Not logged in: run flock login, or set FLOCK_TOKEN.")
     api = Api(found.host, found.token)

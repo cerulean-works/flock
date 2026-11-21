@@ -573,6 +573,21 @@ def test_a_run_reads_back_as_its_folder_does(hub: FakeHub, tmp_path: Path) -> No
     assert read_run_file("acme/model-evals/run-1", "results.json") == path.read_text()
 
 
+def test_a_run_keeps_reading_with_the_sign_in_it_was_opened_with(
+    hub: FakeHub, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    written_run(tmp_path / "run")
+    for name in ("results.json", "predictions/toy.jsonl"):
+        hub.files[name] = (tmp_path / "run" / name).read_text()
+    remote = read_results("run:acme/model-evals/run-1")
+
+    # Signing out (or into another server) after opening doesn't change where rows come from.
+    monkeypatch.delenv("FLOCK_TOKEN")
+    monkeypatch.setattr("flock.cli.credentials.load", lambda: None)
+
+    assert remote.predictions("toy") is not None
+
+
 def test_reading_a_run_refuses_a_bad_path_and_an_unknown_run(hub: FakeHub) -> None:
     with pytest.raises(ValueError, match="expected a run as entity/project/id"):
         read_run_file("acme/model-evals", "results.json")
