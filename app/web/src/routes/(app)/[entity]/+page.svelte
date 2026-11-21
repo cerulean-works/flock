@@ -1,8 +1,6 @@
 <script lang="ts">
-	import FolderIcon from '@lucide/svelte/icons/folder';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
-	import UsersIcon from '@lucide/svelte/icons/users';
 	import CopyBlock from '#lib/components/CopyBlock.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import FeedFilters from '#lib/components/home/FeedFilters.svelte';
@@ -73,26 +71,17 @@
 		actions={data.outside ? undefined : actions}
 	>
 		{#snippet subtitle()}
-			<span class="inline-flex items-center gap-x-4">
-				{#if data.outside}
-					<span>Public projects</span>
-				{:else}
-					<span class="inline-flex items-center gap-1.5">
-						<FolderIcon class="size-3.5" aria-hidden="true" />
-						{count(data.org.project_count, 'project')}
-					</span>
-					<span class="inline-flex items-center gap-1.5">
-						<UsersIcon class="size-3.5" aria-hidden="true" />
-						{count(data.org.member_count, 'member')}
-					</span>
-				{/if}
-				{#if running}
-					<span class="inline-flex items-center gap-1.5 text-state-running">
-						<span class="size-1.5 rounded-full bg-current" aria-hidden="true"></span>
-						{count(running, 'run')} running
-					</span>
-				{/if}
-			</span>
+			{#if data.outside || running}
+				<span class="inline-flex items-center gap-x-4">
+					{#if data.outside}<span>Public projects</span>{/if}
+					{#if running}
+						<span class="inline-flex items-center gap-1.5 text-state-running">
+							<span class="size-1.5 rounded-full bg-current" aria-hidden="true"></span>
+							{count(running, 'run')} running
+						</span>
+					{/if}
+				</span>
+			{/if}
 		{/snippet}
 	</PageHeader>
 
