@@ -39,7 +39,7 @@ def log_to_tracker(
             The tracker's URL, logged to online as a new run, or `None` for the SDK's settings.
 
     Raises:
-        `ValueError`: if predictions of a task on a private dataset would go to a project that is public, or whose visibility can't be read (not signed in to Flock, or Flock refuses the query), or a `results_file` of schema 9 or later isn't named `results.json`, before the run is created.
+        `ValueError`: if predictions of a task on a private dataset would go to a project that is public, or whose visibility can't be read (not signed in to Flock, or Flock refuses the query), or a `results_file` of schema 9 or later isn't a file named `results.json` or names one predictions file for two tasks, before the run is created.
         `click.ClickException`: if Flock can't be reached for that check.
     """
     summary: dict[str, Any] = {}
@@ -154,7 +154,8 @@ def _run_files(results: dict[str, Any], results_file: Path | None) -> dict[str, 
             raise ValueError(f"{path} is a link; upload the predictions themselves")
         if not path.is_file():
             continue
-        identity = (path.stat().st_dev, path.stat().st_ino)
+        stat = path.stat()
+        identity = (stat.st_dev, stat.st_ino)
         if identity in seen:
             raise ValueError(f"{path} is the predictions file of two tasks")
         seen.add(identity)
@@ -203,7 +204,7 @@ def log_results_file(path: Path, project: str) -> str:
     A field the file lacks stays absent from the run: an older file's missing `sdpa_backend` means an unknown kernel, not none. The tracker stamps the run with this machine's host, time and commit; the scoring job's are the config's `created_at` and `flock_commit`.
 
     Raises:
-        `ValueError`: if the file's schema isn't 6 to 10, Flock refuses the sign-in or the query, the project already has a run with the file's `model` and `created_at` that didn't fail or crash, the project is public and the predictions of a task on a private dataset would go to it, or the file is schema 9 or later and isn't named `results.json`.
+        `ValueError`: if the file's schema isn't 6 to 10, Flock refuses the sign-in or the query, the project already has a run with the file's `model` and `created_at` that didn't fail or crash, the project is public and the predictions of a task on a private dataset would go to it, or the file is schema 9 or later and isn't a file named `results.json` or names one predictions file for two tasks.
         `click.ClickException`: if Flock can't be reached.
         `wandb.errors.Error`: if the tracker refuses the run, for example for a wandb key set for another server.
     """
