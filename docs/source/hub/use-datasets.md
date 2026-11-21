@@ -186,6 +186,37 @@ Each successful append adds those rows again; it does not deduplicate by `id`. C
 
 Use `mode="overwrite"` only when you intend to replace the current table contents with a new snapshot. It is not an append. Older snapshots remain readable only while their required files and manifests are retained. Do not run version cleanup while experiments still need that history; tags protect versions from Lance cleanup. The [dataset behavior reference](../app/s3-behavior#datasets) explains Flock's version and tag handling.
 
+## Use a project's datasets
+
+Datasets belong to your organization, or to one of its projects. Keep datasets that are large or that many projects read at the organization's level. Put a project's own datasets, such as filtered evaluation sets, in the project: they show in its **Datasets** tab rather than the organization's, and they're deleted with the project.
+
+A project's datasets are in `flock-datasets` too, under a folder of `-projects/` named by the project's id. Ask `datasets.location` for the URI rather than writing it out:
+
+```python
+import lance
+from flock.hub import datasets
+
+where = datasets.location("eval/mmlu-filtered", project="pretrain")
+print(where.uri)  # s3://flock-datasets/-projects/412/eval/mmlu-filtered
+lance.write_dataset(table, where.uri, storage_options=where.storage_options)
+
+dataset = lance.dataset(where.uri, storage_options=where.storage_options)
+```
+
+The path doesn't need to exist yet. `project="pretrain"` names a project of your default organization. Pass `org="acme"`, or write `project="acme/pretrain"`, for another organization's. Without `project=`, `location` gives the organization's dataset at that path. The storage options hold a key that expires, so ask again in a long job, or follow [Renew credentials for long runs](#renew-credentials-for-long-runs).
+
+To keep a project's dataset after the project, move it to the organization's datasets:
+
+```python
+datasets.move(["eval/mmlu-filtered"], "eval", project="pretrain", to_global=True)
+```
+
+```bash
+flock datasets move eval/mmlu-filtered eval --project pretrain --to-global
+```
+
+Each dataset keeps its last name, so this one becomes `eval/mmlu-filtered` of the organization. The objects are copied, then deleted from the project. `flock datasets list --project pretrain` lists the project's datasets.
+
 ## Renew credentials for long runs
 
 For reads or writes that can outlast the temporary keys, call `s3.get_process()` before creating the dataset. This is the setup used by the [trainer's S3 dataset helper](../training/trainer):
