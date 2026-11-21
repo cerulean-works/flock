@@ -112,8 +112,8 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
             not_compared.append((task.task, "no_predictions"))
             continue
 
-        # Each run's outcome by doc id. Equal hashes mean the same docs, so any other set of ids,
-        # or rows that disagree with the task's own accuracy, means a damaged or mixed-up file.
+        # Each run's outcome by doc id. Equal hashes mean the same docs, so other ids, or rows that
+        # disagree with the task's own accuracy, mean a damaged or mixed-up file.
         outcomes = []
         for run, result, rows in ((a, task, rows_a), (b, other, rows_b)):
             if not rows or len(rows) != result.num_docs:
@@ -155,12 +155,14 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
                 "or another order"
             )
 
-        cells = {(True, True): 0, (False, False): 0}
+        both_right = both_wrong = 0
         only_a, only_b = [], []
         for doc, right_a in outcomes[0].items():
             right_b = outcomes[1][doc]
-            if right_a == right_b:
-                cells[right_a, right_b] += 1
+            if right_a and right_b:
+                both_right += 1
+            elif not (right_a or right_b):
+                both_wrong += 1
             elif right_a:
                 only_a.append(doc)
             else:
@@ -171,8 +173,8 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
                 task_hash=task.task_hash,
                 metric=task.primary_metric,
                 num_docs=len(outcomes[0]),
-                both_right=cells[True, True],
-                both_wrong=cells[False, False],
+                both_right=both_right,
+                both_wrong=both_wrong,
                 only_a=only_a,
                 only_b=only_b,
             )
