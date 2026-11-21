@@ -591,6 +591,10 @@ def test_a_run_keeps_reading_with_the_sign_in_it_was_opened_with(
 def test_reading_a_run_refuses_a_bad_path_and_an_unknown_run(hub: FakeHub) -> None:
     with pytest.raises(ValueError, match="expected a run as entity/project/id"):
         read_run_file("acme/model-evals", "results.json")
+    with pytest.raises(ValueError, match="expected a run as entity/project/id"):
+        read_run_file("acme/model-evals/..", "results.json")
+    with pytest.raises(ValueError, match="isn't a file name inside"):
+        read_run_file("acme/model-evals/run-1", "../run-2/results.json")
     with pytest.raises(ValueError, match="run not found"):
         read_run_file("acme/model-evals/run-2", "results.json")
     with pytest.raises(FileNotFoundError, match="has no results.json"):

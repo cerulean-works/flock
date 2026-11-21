@@ -237,8 +237,12 @@ def read_run_file(
         `click.ClickException`: if Flock can't be reached.
     """
     parts = run.split("/")
-    if len(parts) != 3 or not all(parts):
+    if len(parts) != 3 or not all(parts) or {".", ".."} & set(parts):
         raise ValueError(f"expected a run as entity/project/id, got {run!r}")
+    # As a folder's reader does: a client normalizes `..` in a URL, which would leave the run.
+    names = name.split("/")
+    if not all(names) or {".", ".."} & set(names):
+        raise ValueError(f"{name!r} isn't a file name inside {run}")
 
     entity, project, run_id = parts
     # No organization lookup: the run names its own, and a read is one request per file.
