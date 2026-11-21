@@ -229,7 +229,7 @@ def test_a_banked_file_logs_its_provenance_as_written(
     assert logged["init"]["entity"] == "acme"
     assert logged["init"]["settings"].base_url == HOST
     assert logged["init"]["settings"].mode == "online"  # never a silent offline run
-    assert logged["init"]["settings"].resume == "never"  # never into an existing run
+    assert logged["init"]["resume"] == "never"  # never into an existing run
     (query,) = hub.queries
     assert query["filter"] == {
         "$and": [
@@ -384,8 +384,12 @@ def test_a_live_run_uploads_its_results_and_predictions(
     # Nothing private, so the SDK's own settings still decide where the run goes.
     assert logged["init"]["entity"] is None
     assert logged["init"]["settings"] is None
-    # A run of its own even inside a training script's active run.
+    # A run of its own even inside a training script's active run, and never a resumed one.
     assert logged["init"]["reinit"] == "create_new"
+    assert logged["init"]["resume"] == "never"
+    # Staged copies are readable by their owner only.
+    for staged in (tmp_path / "wandb-files").rglob("*.json*"):
+        assert staged.stat().st_mode & 0o777 == 0o600
 
 
 def test_a_task_name_that_leaves_the_predictions_folder_is_refused(

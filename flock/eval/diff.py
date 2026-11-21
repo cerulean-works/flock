@@ -116,7 +116,7 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
         # or rows that disagree with the task's own accuracy, means a damaged or mixed-up file.
         outcomes = []
         for run, result, rows in ((a, task, rows_a), (b, other, rows_b)):
-            if len(rows) != result.num_docs:
+            if not rows or len(rows) != result.num_docs:
                 raise ValueError(
                     f"{run.source}: {task.task} has {len(rows)} prediction rows for "
                     f"{result.num_docs} docs"

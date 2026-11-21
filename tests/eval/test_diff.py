@@ -242,6 +242,14 @@ def test_an_accuracy_its_rows_cannot_produce_is_refused(tmp_path: Path) -> None:
         diff(read_results(a), read_results(b))
 
 
+def test_a_task_with_no_rows_is_refused(tmp_path: Path) -> None:
+    a = write_run(tmp_path / "a", {"t": ("h", [])})
+    b = write_run(tmp_path / "b", {"t": ("h", [])})
+
+    with pytest.raises(ValueError, match="0 prediction rows for 0 docs"):
+        diff(read_results(a), read_results(b))
+
+
 def test_a_null_accuracy_cannot_vouch_for_its_rows(tmp_path: Path) -> None:
     a = write_run(tmp_path / "a", {"t": ("h", [True, False])})
     b = write_run(tmp_path / "b", {"t": ("h", [True, False])})

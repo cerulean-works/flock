@@ -123,15 +123,16 @@ def log_to_tracker(
     # Leaving the block finishes the run, with exit code 1 if the update raised, so a failed log
     # isn't left running on the tracker.
     # A backfill is online even where `WANDB_MODE` says offline, so it never reports a run it
-    # didn't log. Never resumed, so a `WANDB_RUN_ID` left in the environment can't overwrite a run.
+    # didn't log. Never resumed, live or backfilled, so a `WANDB_RUN_ID` left in the environment
+    # can't overwrite another run or its files.
     # Always a new run, even inside a training script's active run, which `wandb.init` would
     # otherwise return (`reinit`'s default outside notebooks), with its own project.
     settings = None
     if host is not None:
         settings = (
-            wandb.Settings(base_url=host, mode="online", resume="never")
+            wandb.Settings(base_url=host, mode="online")
             if backfill
-            else wandb.Settings(base_url=host, resume="never")
+            else wandb.Settings(base_url=host)
         )
     with wandb.init(
         entity=entity,
@@ -139,6 +140,7 @@ def log_to_tracker(
         job_type="eval",
         config=config,
         settings=settings,
+        resume="never",
         reinit="create_new",
     ) as run:
         # `WANDB_MODE=disabled` gives a run that logs nothing, so nothing is staged for it either.
@@ -164,6 +166,9 @@ def log_to_tracker(
         for name, path in files.items():
             copy = Path(run.dir) / name
             copy.parent.mkdir(parents=True, exist_ok=True)
+            # Owner-only from the start: the staging folder may be readable by others where the
+            # predictions' own folder isn't. `copyfile` keeps an existing file's mode.
+            copy.touch(mode=0o600)
             shutil.copyfile(path, copy)
             # Literally, not as a glob: a task name may hold `[`.
             run.save(str(copy), base_path=run.dir, policy="now", glob=False)
