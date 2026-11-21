@@ -23,6 +23,24 @@ On a run's page, open **Logs** to inspect its console output and **Files** to br
 
 An expected file appears only if the client uploaded it. Imported W&B runs include a [limited set of files](import-behavior#what-is-copied). For scripts, the [Projects API](api/projects) exposes the same logs and file routes.
 
+## Eval results[[eval-results]]
+
+An eval run that `flock eval run --wandb-project` logged carries its `results.json` and one predictions file per task. Its page then has a **Results** tab:
+
+- **Suites:** each suite's score, its metric, how many members it has and its suite hash.
+- **Tasks:** each task's primary metric and score, its number of docs, its task hash, its dataset (with a lock on a private one) and how many docs had their context cut to fit the model.
+- **Provenance:** the model and its digest, the instrument (dtype, batch tokens, attention, SDPA kernel), the libraries, the flock commit and the command.
+
+Hashes show their first 12 characters. Hover one for the whole value, or copy it. Two scores are comparable only when their hashes are equal, as [comparing results](../evals/comparison) explains.
+
+### Compare two eval runs[[compare-two-eval-runs]]
+
+1. In **Table**, check exactly two eval runs and click **Compare items**. From a model version, open **Evals**, check two runs and click the same button.
+2. The page lists every task both runs scored under the same task hash, with four counts: docs both got right, both got wrong, only A got right and only B got right.
+3. Click a task to see the ids of the docs only one run got right. **Copy ids** puts a list on the clipboard.
+
+Tasks that can't be compared are listed below with the reason, such as another task hash or a primary metric that isn't an accuracy. Runs scored with another instrument aren't compared at all, and the page says why. The counts are those of `flock eval diff`, computed by Flock from the runs' files, and the page shows ids only, never a doc's text.
+
 ## Organize projects and runs
 
 Members can change their own runs; organization admins can also change other people's runs and manage projects.

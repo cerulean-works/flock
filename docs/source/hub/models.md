@@ -76,4 +76,4 @@ Use `org/name@12` for a numbered version, `org/name@release` for a tag, or `org/
 
 Model and tag names are up to 100 ASCII characters. They start with a letter or digit and may also contain `.`, `-`, and `_`. Model names use lowercase letters. Tags reserve `primary` in any case and names made entirely of digits.
 
-A `checkpoint-{step}` tag uses the optimizer step without leading zeros. Checkpoint tags cannot move, and versions with only checkpoint tags are eligible for retention. [Manage models and retention](../app/browse-models)
+A `checkpoint-{step}` tag uses the optimizer step without leading zeros. Checkpoint tags cannot move, and versions with only checkpoint tags and no eval runs are eligible for retention. [Manage models and retention](../app/browse-models)

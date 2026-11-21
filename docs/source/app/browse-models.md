@@ -18,6 +18,7 @@ The tabs show the version in more detail. The tab is kept in the URL as `?tab=`.
 |---|---|
 | **Overview** | The version's `README.md`, if it has one, and `config.json` and `flock.json` as tables, beside its size, file count, step, run, tags and digest. |
 | **Versions** | Every version, newest first, with its tags, size, the run and step it came from, and who pushed it and when. |
+| **Evals** | The eval runs that scored the version side by side, linked to the runs: each suite's score, then each task's primary metric, read from the runs' results files. Check two runs and click **Compare items** to [compare them doc by doc](explore-runs#compare-two-eval-runs). |
 | **Files** | Each file's path, size and sha256. |
 
 ## Make a version primary
@@ -49,6 +50,8 @@ The dialog refuses two kinds of version, and says what to do first:
 - **The primary version:** make another version primary.
 - **A version with a tag other than a checkpoint tag:** move or remove that tag. Checkpoint tags are deleted with their version.
 
+A version that eval runs scored can be deleted. The dialog says how many runs scored it, since their results will name a version that no longer loads.
+
 To delete a whole model with every version in it, click **Delete** in the model's header, or **Delete…** in the model's **⋯** menu in the list. Type its name, such as `acme/olmo2-1b`.
 
 To delete several models at once:
@@ -61,7 +64,7 @@ If one model can't be deleted, the rest still are, and the dialog lists the ones
 
 Every type-to-confirm prompt has a **Copy** button next to the text to type, so you can paste it instead.
 
-Files in `flock-models` can't be deleted from **Storage**, so a version can't lose files once it's saved.
+Files in `flock-models` can't be deleted from **Storage**, so a version can't lose files under an eval that scored it.
 
 ## Rename a model
 
@@ -85,10 +88,15 @@ Deleted models and versions wait 14 days in the trash. Organization admins find 
 
 Training saves many checkpoints, and most are never loaded again. An organization admin can turn on **Model retention** in the organization's settings: "Keep the newest N untagged versions of each model". It's off by default.
 
-When it's on, Flock deletes older versions that aren't primary, and have no tag other than a checkpoint tag. They go to **Deleted models** like any deleted version, so you have 14 days to restore one.
+When it's on, Flock deletes older versions that aren't primary, have no tag other than a checkpoint tag and have no eval runs. They go to **Deleted models** like any deleted version, so you have 14 days to restore one.
 
 To keep a checkpoint for good, tag it, for example `best`, or make it primary.
 
 ## Models on a run's page
 
-A run's **Overview** lists the model versions the run saved under **Checkpoints**, with their steps and tags. Each one links to the version in the Models tab. [Models API and CLI reference](../hub/models) · [Model registry endpoints](api/models)
+A run's **Overview** lists the model versions it's linked to:
+
+- **Checkpoints** are the versions the run saved, with their steps and tags.
+- **Models scored** are the versions an eval run evaluated.
+
+Each one links to the version in the Models tab. [Models API and CLI reference](../hub/models) · [Model registry endpoints](api/models)
