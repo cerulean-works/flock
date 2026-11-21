@@ -226,19 +226,28 @@ describe('MoveDatasetsDialog', () => {
 		await box('deep/').click();
 		selection.act('move');
 		await expect.element(screen.getByRole('heading', { name: 'Move 2 items' })).toBeVisible();
-		const to = screen.getByLabelText('Folder', { exact: true });
-		await expect.element(to).toHaveValue('eval');
+		// The destination is picked, never typed: the breadcrumbs say where it is.
+		const to = screen.getByRole('group', { name: 'Folder', exact: true });
+		const at = (name: string) =>
+			expect
+				.element(to.getByRole('button', { name, exact: true }))
+				.toHaveAttribute('aria-current', 'location');
+		await at('eval');
 		// The picker browses folders only, without the ones being moved.
 		const picker = screen.getByRole('group', { name: 'Folders' });
 		await expect.element(picker.getByRole('button', { name: 'old/' })).toBeVisible();
 		await expect.element(picker.getByRole('button', { name: 'deep/' })).not.toBeInTheDocument();
 		expect(calls[0].url).toBe('/api/datasets/acme/at?path=eval');
 		await picker.getByRole('button', { name: 'old/' }).click();
-		await expect.element(to).toHaveValue('eval/old');
+		await at('old');
 		await expect.element(picker.getByText('No folders here.')).toBeVisible();
-		await picker.getByRole('button', { name: 'eval' }).click();
-		await expect.element(to).toHaveValue('eval');
-		await to.fill('eval/deep');
+		await to.getByRole('button', { name: 'eval', exact: true }).click();
+		await at('eval');
+		// A folder that isn't listed is named in place.
+		await picker.getByRole('button', { name: 'New folder' }).click();
+		await screen.getByRole('textbox', { name: 'New folder name' }).fill('deep');
+		await userEvent.keyboard('{Enter}');
+		await at('deep');
 		await screen.getByRole('button', { name: 'Move', exact: true }).click();
 		await expect.element(screen.getByText('1 item didn’t move.')).toBeVisible();
 		await expect.element(screen.getByText('A folder can’t move into itself.')).toBeVisible();
@@ -254,7 +263,10 @@ describe('MoveDatasetsDialog', () => {
 
 	it('refuses a destination the items are already in, and shows the command over the limits', async () => {
 		serve({
-			'/api/datasets/acme/at': () => ({ ...folder(), folders: [] }),
+			'/api/datasets/acme/at': () => ({
+				...folder(),
+				folders: [{ name: 'archive', path: 'eval/archive' }]
+			}),
 			'/api/datasets/acme/move': () =>
 				Response.json(
 					{ message: 'That’s more than 10,000 objects.', command: 'aws s3 mv …' },
@@ -268,7 +280,10 @@ describe('MoveDatasetsDialog', () => {
 		await expect
 			.element(screen.getByRole('alert'))
 			.toHaveTextContent('It’s already in this folder');
-		await screen.getByLabelText('Folder', { exact: true }).fill('archive');
+		await screen
+			.getByRole('group', { name: 'Folders' })
+			.getByRole('button', { name: 'archive/' })
+			.click();
 		await screen.getByRole('button', { name: 'Move', exact: true }).click();
 		await expect
 			.element(screen.getByRole('alert'))
