@@ -285,7 +285,7 @@ def test_reading_a_folder_refuses_what_is_not_a_results_file(tmp_path: Path) -> 
     data["tasks"][0]["metrics"]["acc_raw"] = 1.0
     data["tasks"][0]["task"] = ["t"]
     (tmp_path / "c" / "results.json").write_text(json.dumps(data))
-    with pytest.raises(ValueError, match="a task's task is \\['t'\\], not a string"):
+    with pytest.raises(ValueError, match="a task's task is \\['t'\\], not str"):
         read_results(c)
 
     data["tasks"][0]["task"] = "t"
@@ -315,7 +315,7 @@ def test_reading_a_folder_refuses_what_is_not_a_results_file(tmp_path: Path) -> 
 
     del data["tasks"][0]["dataset"]["private"]
     (tmp_path / "c" / "results.json").write_text(json.dumps(data))
-    with pytest.raises(ValueError, match="t: dataset.private is not true or false"):
+    with pytest.raises(ValueError, match="t: dataset.private is None, not bool"):
         read_results(c)
 
 

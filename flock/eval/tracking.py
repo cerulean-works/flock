@@ -10,6 +10,7 @@ import wandb
 
 from flock.cli import credentials
 from flock.cli.api import Api, error_of
+from flock.eval.results import predictions_name, stays_inside
 
 
 def log_to_tracker(
@@ -63,62 +64,14 @@ def log_to_tracker(
         "suite_hashes": {suite["suite"]: suite["suite_hash"] for suite in results["suites"]},
     }
 
-    # The files the tracker shows a run's docs from. An older file's predictions have no outcome
-    # (`correct`) and its tasks no privacy mark, so only its results go.
-    files = {}
-    if results_file is not None:
-        files["results.json"] = results_file
-        for task in results["tasks"] if results["schema_version"] >= 9 else []:
-            # A task name read from a file names a file in `predictions/` and on the run, never
-            # a path that leaves either folder.
-            name = task["task"]
-            if not name or Path(name).name != name or name in (".", ".."):
-                raise ValueError(f"task name {name!r} can't name a predictions file")
-            path = results_file.parent / "predictions" / f"{name}.jsonl"
-            # A link could send any local file under a task's name.
-            if path.is_symlink() or path.parent.is_symlink():
-                raise ValueError(f"{path} is a link; upload the predictions themselves")
-            if path.is_file():
-                files[f"predictions/{name}.jsonl"] = path
-
-    # A run in a project has the project's visibility, so a private dataset's per-doc rows go
-    # only to a project known to be private, checked before the run exists. A project the run
-    # creates is private (the tracker's default). A mark that isn't a boolean refuses: a damaged
-    # file must not pass as public.
-    private = []
-    for task in results["tasks"]:
-        if f"predictions/{task['task']}.jsonl" not in files:
-            continue
-        marked = task["dataset"].get("private")
-        if not isinstance(marked, bool):
-            raise ValueError(  # noqa: TRY004 - a damaged file, refused as a value
-                f"{task['task']}: dataset.private is {marked!r}, not true or false"
-            )
-        if marked:
-            private.append(task["task"])
+    files = _run_files(results, results_file)
+    private = _private_tasks(results, files)
     # Only a backfill, which names its host, goes online whatever `WANDB_MODE` says; a live run
     # keeps the SDK's mode even when the check below names its host.
     backfill = host is not None
     if private:
-        api, default_org = _signed_in(host)
         # The run goes where the visibility was read.
-        entity, host = entity or default_org, api.host
-        with api.client:
-            answer = api.get(f"projects/{entity}/{project}")
-        if answer.status_code == 200:
-            visibility = answer.json()["visibility"]
-        elif (
-            answer.status_code == 404
-            and error_of(answer) == f"project {entity}/{project} not found"
-        ):
-            visibility = "new"
-        else:
-            raise ValueError(f"{host} refused the project query ({error_of(answer)})")
-        if visibility not in ("private", "new"):
-            raise ValueError(
-                f"{entity}/{project} is {visibility}, and the predictions of {', '.join(private)} "
-                "read a private dataset: log to a private project"
-            )
+        entity, host = _private_destination(private, project, entity, host)
 
     # Leaving the block finishes the run, with exit code 1 if the update raised, so a failed log
     # isn't left running on the tracker.
@@ -172,6 +125,65 @@ def log_to_tracker(
             shutil.copyfile(path, copy)
             # Literally, not as a glob: a task name may hold `[`.
             run.save(str(copy), base_path=run.dir, policy="now", glob=False)
+
+
+def _run_files(results: dict[str, Any], results_file: Path | None) -> dict[str, Path]:
+    """The files the tracker shows a run's docs from, by their names on the run: `results_file` as `results.json` and, for schema 9, each task's predictions file found beside it. An older file's predictions have no outcome (`correct`) and its tasks no privacy mark, so only its results go."""
+    files = {}
+    if results_file is None:
+        return files
+    files["results.json"] = results_file
+    for task in results["tasks"] if results["schema_version"] >= 9 else []:
+        name = predictions_name(task["task"])
+        path = results_file.parent / name
+        # A link could send any local file under a task's name.
+        if path.is_symlink() or path.parent.is_symlink():
+            raise ValueError(f"{path} is a link; upload the predictions themselves")
+        if path.is_file():
+            files[name] = path
+    return files
+
+
+def _private_tasks(results: dict[str, Any], files: dict[str, Path]) -> list[str]:
+    """The tasks among `files`' predictions whose dataset is private. A mark that isn't a boolean refuses: a damaged file must not pass as public."""
+    private = []
+    for task in results["tasks"]:
+        if f"predictions/{task['task']}.jsonl" not in files:
+            continue
+        marked = task["dataset"].get("private")
+        if not isinstance(marked, bool):
+            raise ValueError(  # noqa: TRY004 - a damaged file, refused as a value
+                f"{task['task']}: dataset.private is {marked!r}, not true or false"
+            )
+        if marked:
+            private.append(task["task"])
+    return private
+
+
+def _private_destination(
+    private: list[str], project: str, entity: str | None, host: str | None
+) -> tuple[str, str]:
+    """
+    The organization and host a run with the predictions of the `private` tasks goes to: `entity` (or the signed-in user's default organization) on the signed-in Flock API, once `project` there is known to be private.
+
+    A run in a project has the project's visibility, so a private dataset's per-doc rows go only to a project known to be private, checked before the run exists. A project the run creates is private (the tracker's default).
+    """
+    api, default_org = _signed_in(host)
+    entity = entity or default_org
+    with api.client:
+        answer = api.get(f"projects/{entity}/{project}")
+    if answer.status_code == 200:
+        visibility = answer.json()["visibility"]
+    elif answer.status_code == 404 and error_of(answer) == f"project {entity}/{project} not found":
+        visibility = "new"
+    else:
+        raise ValueError(f"{api.host} refused the project query ({error_of(answer)})")
+    if visibility not in ("private", "new"):
+        raise ValueError(
+            f"{entity}/{project} is {visibility}, and the predictions of {', '.join(private)} "
+            "read a private dataset: log to a private project"
+        )
+    return entity, api.host
 
 
 def log_results_file(path: Path, project: str) -> str:
@@ -236,19 +248,15 @@ def read_run_file(
         `ValueError`: if `run` isn't `entity/project/id`, you aren't signed in, or Flock refuses the read for another reason than a missing file (an unknown run, a project you can't read).
         `click.ClickException`: if Flock can't be reached.
     """
-    parts = run.split("/")
-    if len(parts) != 3 or not all(parts) or {".", ".."} & set(parts):
+    # A client normalizes `..` in a URL, which would leave the run.
+    if len(run.split("/")) != 3 or not stays_inside(run):
         raise ValueError(f"expected a run as entity/project/id, got {run!r}")
-    # As a folder's reader does: a client normalizes `..` in a URL, which would leave the run.
-    names = name.split("/")
-    if not all(names) or {".", ".."} & set(names):
+    if not stays_inside(name):
         raise ValueError(f"{name!r} isn't a file name inside {run}")
 
-    entity, project, run_id = parts
+    entity, project, run_id = run.split("/")
     # No organization lookup: the run names its own, and a read is one request per file.
-    found = credential or credentials.resolve()
-    if found is None:
-        raise ValueError("Not logged in: run flock login, or set FLOCK_TOKEN.")
+    found = credential or _credential()
     api = Api(found.host, found.token)
     with api.client:
         answer = api.get(f"projects/{entity}/{project}/runs/{run_id}/files/{quote(name)}")
@@ -261,9 +269,7 @@ def read_run_file(
 
 def _signed_in(host: str | None = None) -> tuple[Api, str]:
     """The Flock API the user signed in to (at `host`, if given) and the user's default organization, or `ValueError` if there's no sign-in, Flock refuses it, or the user has no organization."""
-    found = credentials.resolve(host)
-    if found is None:
-        raise ValueError("Not logged in: run flock login, or set FLOCK_TOKEN.")
+    found = _credential(host)
     api = Api(found.host, found.token)
     with api.client:
         me = api.get("me")
@@ -274,3 +280,11 @@ def _signed_in(host: str | None = None) -> tuple[Api, str]:
         raise ValueError("You don't belong to any organization.")
     # A new client for the caller's requests: a closed one can't be reopened.
     return Api(found.host, found.token), entity
+
+
+def _credential(host: str | None = None) -> credentials.Credentials:
+    """The Flock credential `flock login` saved or `FLOCK_TOKEN` sets (for `host`, if given), or `ValueError` if there's none."""
+    found = credentials.resolve(host)
+    if found is None:
+        raise ValueError("Not logged in: run flock login, or set FLOCK_TOKEN.")
+    return found

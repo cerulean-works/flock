@@ -7,6 +7,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
+from types import NoneType
 from typing import Any
 
 import torch
@@ -297,9 +298,7 @@ class WrittenResults:
         Raises:
             `ValueError`: if `task` isn't a single file name, so a name read from a file can't reach outside `predictions/`.
         """
-        if not task or Path(task).name != task or task in (".", ".."):
-            raise ValueError(f"task name {task!r} can't name a predictions file")
-        text = self.read_file(f"predictions/{task}.jsonl")
+        text = self.read_file(predictions_name(task))
         return None if text is None else [json.loads(line) for line in text.splitlines()]
 
 
@@ -337,42 +336,21 @@ def read_results(source: str) -> WrittenResults:
         # missing from this run.
         if not isinstance(data["tasks"], list) or not isinstance(data["suites"], list):
             raise TypeError("tasks and suites must be arrays")
-        tasks = []
-        for entry in data["tasks"]:
-            entry = {key: value for key, value in entry.items() if key != "docs_per_second"}
-            # The fields a diff looks tasks up and reads metrics by. Dataclasses check no types.
-            for key in ("task", "task_hash", "primary_metric"):
-                if not isinstance(entry[key], str):
-                    raise TypeError(f"a task's {key} is {entry[key]!r}, not a string")
-            # A bool is an int to Python, and `true` would pass as one doc.
-            if type(entry["num_docs"]) is not int or entry["num_docs"] < 0:
-                raise TypeError(f"{entry['task']}: num_docs is {entry['num_docs']!r}")
-            # Schema 9 always writes the mark, so a missing one is damage, not "public".
-            if data["schema_version"] >= 9 and not isinstance(
-                entry["dataset"].get("private"), bool
-            ):
-                raise ValueError(f"{entry['task']}: dataset.private is not true or false")
-            entry["dataset"] = Dataset(**entry["dataset"])
-            entry["truncation"] = Truncation(**entry["truncation"])
-            # `Results.write` writes a non-finite metric as null.
-            metrics = {}
-            for name, value in entry["metrics"].items():
-                # A bool is an int to Python but no score.
-                if value is not None and type(value) not in (int, float):
-                    raise ValueError(f"{entry['task']}: metric {name} is {value!r}, not a number")
-                metrics[name] = math.nan if value is None else value
-            entry["metrics"] = metrics
-            tasks.append(TaskResult(**entry))
-        # The fields that name the model and the instrument a diff compares. Dataclasses check
-        # no types, and a null on both sides would pass as equal.
+        tasks = [_read_task(entry, data["schema_version"]) for entry in data["tasks"]]
+        # The fields that name the model and the instrument a diff compares. A null on both
+        # sides would pass as equal.
         provenance = data["provenance"]
-        for key in ("model", "dtype", "attention"):
-            if not isinstance(provenance[key], str):
-                raise TypeError(f"provenance.{key} is {provenance[key]!r}, not a string")
-        if type(provenance["batch_tokens"]) is not int:
-            raise TypeError(f"provenance.batch_tokens is {provenance['batch_tokens']!r}")
-        if not isinstance(provenance["sdpa_backend"], str | None):
-            raise TypeError(f"provenance.sdpa_backend is {provenance['sdpa_backend']!r}")
+        _check_types(
+            provenance,
+            {
+                "model": (str,),
+                "dtype": (str,),
+                "attention": (str,),
+                "batch_tokens": (int,),
+                "sdpa_backend": (str, NoneType),
+            },
+            "provenance.",
+        )
         # Tasks are looked up by name, so a repeated one would drop or double a task.
         names = [task.task for task in tasks]
         if len(set(names)) != len(names):
@@ -396,13 +374,67 @@ def read_results(source: str) -> WrittenResults:
     return written
 
 
+def _read_task(entry: dict[str, Any], schema_version: int) -> TaskResult:
+    """One task of a written results file, with the fields a diff looks tasks up and reads metrics by checked."""
+    entry = {key: value for key, value in entry.items() if key != "docs_per_second"}
+    _check_types(
+        entry,
+        {"task": (str,), "task_hash": (str,), "primary_metric": (str,), "num_docs": (int,)},
+        "a task's ",
+    )
+    if entry["num_docs"] < 0:
+        raise ValueError(f"{entry['task']}: num_docs is {entry['num_docs']}")
+    # Schema 9 always writes the mark, so a missing one is damage, not "public".
+    if schema_version >= 9:
+        _check_types(entry["dataset"], {"private": (bool,)}, f"{entry['task']}: dataset.")
+
+    # `Results.write` writes a non-finite metric as null.
+    metrics = {}
+    for name, value in entry["metrics"].items():
+        # A bool is an int to Python but no score.
+        if value is not None and type(value) not in (int, float):
+            raise ValueError(f"{entry['task']}: metric {name} is {value!r}, not a number")
+        metrics[name] = math.nan if value is None else value
+    entry["metrics"] = metrics
+    entry["dataset"] = Dataset(**entry["dataset"])
+    entry["truncation"] = Truncation(**entry["truncation"])
+
+    return TaskResult(**entry)
+
+
+def _check_types(record: dict[str, Any], types: dict[str, tuple[type, ...]], where: str) -> None:
+    """Refuses a field of `record` missing or not of exactly one of its `types`, named `where` plus its key in the error. Dataclasses check no types, and a bool is an int to Python, so `true` would pass as one doc."""
+    for key, allowed in types.items():
+        value = record.get(key)
+        if type(value) not in allowed:
+            names = " or ".join(kind.__name__ for kind in allowed)
+            raise TypeError(f"{where}{key} is {value!r}, not {names}")
+
+
+def stays_inside(name: str) -> bool:
+    """Whether `name`, split at `/`, has no empty, `.` or `..` part, so joined to a folder or a run's URL it names something inside it (a client normalizes `..` in a URL). Names read from a file pass this before any read."""
+    parts = name.split("/")
+    return all(parts) and not {".", ".."} & set(parts)
+
+
+def predictions_name(task: str) -> str:
+    """
+    Returns the name of `task`'s predictions file in a run's folder and on its tracker run, `predictions/<task>.jsonl`.
+
+    Raises:
+        `ValueError`: if `task` isn't a single file name, so a task name read from a file can't name a file outside `predictions/`.
+    """
+    if "/" in task or not stays_inside(task):
+        raise ValueError(f"task name {task!r} can't name a predictions file")
+    return f"predictions/{task}.jsonl"
+
+
 def _read_folder_file(folder: Path, name: str) -> str | None:
     """Reads `folder/name`, or returns `None` if it doesn't exist. A name that leaves the folder, and a link on the way, are refused, so a run's files come from its own folder."""
-    parts = Path(name).parts
-    if not parts or Path(name).is_absolute() or ".." in parts:
+    if not stays_inside(name):
         raise ValueError(f"{name!r} isn't a file name inside {folder}")
     path = folder
-    for part in parts:
+    for part in name.split("/"):
         path = path / part
         if path.is_symlink():
             raise ValueError(f"{path} is a link; a run's files must be in its folder")
