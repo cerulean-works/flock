@@ -48,7 +48,7 @@ A run with an output directory writes `results.json` and one predictions file pe
 
 `flock eval run` prints only a summary of this file (each suite's score and the primary metric of each task outside a scored suite, or every metric with `--verbose`), so read the file for the rest. The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.results.TaskResult`] plus its `docs_per_second`, which is `null` if the clock measured no time. A metric or suite score that isn't finite, such as a diverged checkpoint's `perplexity`, is written as `null`, since JSON has no infinity (RFC 8259, sec. 6). Each entry of `suites` is a [`~eval.results.SuiteResult`], and `provenance` is described below. The class docstrings at the end of this page define every field.
 
-`dataset.private` says whether the dataset's repository is private, such as the Taiwanese exam sets. A run never uploads a private dataset's predictions to a public tracker project (see [Tracker runs](commands#tracker-runs)). Task hashes leave it out, since it changes no request. Files written before schema version 9 have no `private`.
+`dataset.private` says whether the dataset's repository is private, such as the Taiwanese exam sets. A run never uploads a private dataset's predictions to a public tracker project, and it uploads them under `private/`, which only your organization's members read (see [Tracker runs](commands#tracker-runs)). In the run's folder they stay in `predictions/`. Task hashes leave it out, since it changes no request. Files written before schema version 9 have no `private`.
 
 ### The task hash
 
