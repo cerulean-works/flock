@@ -51,6 +51,10 @@ Each item moves on its own. If one fails, for example because its new path is ta
 
 Stop writers first. A move copies the objects to the new path and then deletes the old ones. If a dataset is written to during the move, that item doesn't move.
 
+## Fork and blend datasets
+
+A dataset's page has **Fork**, and a folder has **New blend**, to make datasets that copy no rows. See [Fork a dataset](../hub/fork-datasets) and [Blend datasets](../hub/blend-datasets). A dataset that a fork or blend reads can't be renamed, moved or deleted.
+
 ## Rename, delete and restore
 
 Each dataset and folder row has a **⋯** menu, shown on hover, with **Rename…** and **Delete…**. A dataset's own page has the same actions.

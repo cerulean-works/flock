@@ -13,6 +13,7 @@ Run `uv run flock COMMAND` from the repository root, or `flock COMMAND` in the a
 | `flock s3 buckets` | List, create and delete buckets | [S3 commands](commands/s3#flock-s3-buckets) |
 | `flock models` | Push, pull, tag and list stored models | [Models API](../hub/models#flock-models) |
 | `flock datasets` | Import Hugging Face datasets and list datasets | [Import datasets](../hub/import-datasets-from-hf#commands) |
+| `flock datasets fork`, `blend`, `make-independent` | Fork and blend datasets without copying them | [Forks and blends](../hub/forks-and-blends#commands) |
 | `flock eval run`, `flock eval compare` | Score models and compare results | [Evals commands](../evals/commands) |
 
 For account and storage commands, see [Credential resolution](credentials). Local evaluations need no Flock sign-in unless they log to the tracker.

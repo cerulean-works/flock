@@ -316,7 +316,7 @@ The way out of D177, and a way to read a heavily subsampled blend at full speed.
 
 - **Fork.** A "Fork" button on the dataset page, next to Rename, and "Fork…" in the row menu
   (D133). The dialog has the source (fixed), the version (D89's picker, defaulting to the one
-  shown) and the destination path (default `{folder}/{name}-fork`, then `-fork-2`…). It opens
+  shown) and the destination as a folder (D131's folder picker, defaulting to the source's) and a name (default `{name}-fork`, then `-fork-2`…). It opens
   the new dataset when done.
 - **Blend.** A "New blend" button in the folder header, next to "Import from Hugging Face" and
   "New folder", and a "Blend…" action in the selection bar (D130) when two or more datasets are
@@ -494,6 +494,13 @@ Everything above except the guide pages and Part 0 on Ceph, which are still to d
   total, and the destination's folder, name and seed), then Columns, then a confirmation that
   shows what will be written, with Create. Each step shows its own problems, and Next stays
   disabled until there are none.
+- **Column map checks found by the end-to-end tests** (`tests/app/test_dataset_blends.py`):
+  a non-nullable output can't take a nullable source column (Lance wrote it, then failed every
+  read); a source giving only nulls is refused; a source column given to a second output is
+  written as a fill file (`copy`), since one field id can only be one column (it read as null
+  before); and `columns: []` is an empty map, not the automatic one.
+- **Guides and reference:** `docs/source/hub/fork-datasets.md`, `blend-datasets.md` and
+  `forks-and-blends.md`.
 - **The About tab** shows where a fork or blend came from at the top of the right column, above
   the version's numbers.
 - **`columns` in Python** has no `datasets.cast()`. A named column of another type is cast
