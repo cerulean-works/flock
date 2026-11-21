@@ -25,6 +25,7 @@
 	import RowMenu from '../RowMenu.svelte';
 	import DeleteDatasetsDialog from './DeleteDatasetsDialog.svelte';
 	import MoveDatasetsDialog from './MoveDatasetsDialog.svelte';
+	import ForkDialog from './ForkDialog.svelte';
 	import RenameDialog from './RenameDialog.svelte';
 
 	interface Props {
@@ -170,6 +171,11 @@
 							>
 								<DatabaseIcon class="size-4 flex-none text-muted-foreground" />
 								<span class="truncate">{d.name}</span>
+								{#if d.origin}
+									<span class="flex-none rounded bg-muted px-1.5 text-[11px] text-muted-foreground">
+										{d.origin}
+									</span>
+								{/if}
 							</a>
 						</td>
 						<td class="hidden px-2 text-muted-foreground tabular-nums sm:table-cell">
@@ -188,6 +194,7 @@
 							<td class="pr-1 text-right">
 								<RowMenu
 									name={d.name}
+									onfork={() => selection.act('fork', [d.path])}
 									onrename={() => selection.act('rename', [d.path])}
 									ondelete={() => selection.act('delete', [d.path])}
 								/>
@@ -284,6 +291,11 @@
 		{org}
 		items={targets}
 		ondeleted={deleted}
+	/>
+	<ForkDialog
+		bind:open={() => selection.action === 'fork', (o) => o || selection.close('fork')}
+		{org}
+		path={one.path}
 	/>
 	<RenameDialog
 		bind:open={() => selection.action === 'rename', (o) => o || selection.close('rename')}

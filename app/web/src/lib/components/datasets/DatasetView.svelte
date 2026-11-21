@@ -1,6 +1,7 @@
 <script lang="ts">
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
+	import GitForkIcon from '@lucide/svelte/icons/git-fork';
 	import GlobeIcon from '@lucide/svelte/icons/globe';
 	import LockIcon from '@lucide/svelte/icons/lock';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
@@ -16,11 +17,22 @@
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
-	import { DATASETS_BUCKET, datasetCall, datasetsApi, nameOf } from '#lib/datasets.ts';
+	import {
+		DATASETS_BUCKET,
+		datasetCall,
+		datasetsApi,
+		datasetsHref,
+		nameOf,
+		parentOf
+	} from '#lib/datasets.ts';
 	import { objectHref } from '#lib/storage.ts';
 	import type { Access, DatasetInfo, S3Config } from '#lib/types.ts';
 	import { withParam } from '#lib/workspace/url.ts';
+	import type { BlendStart } from '#lib/forks.ts';
 	import AboutTab from './AboutTab.svelte';
+	import BlendDialog from './BlendDialog.svelte';
+	import ForkDialog from './ForkDialog.svelte';
+	import IndependentDialog from './IndependentDialog.svelte';
 	import ColumnsPicker from './ColumnsPicker.svelte';
 	import DeleteDatasetDialog from './DeleteDatasetDialog.svelte';
 	import RenameDialog from './RenameDialog.svelte';
@@ -103,6 +115,34 @@
 		}
 	}
 
+	let forking = $state(false);
+	let blending = $state(false);
+	let independent = $state(false);
+	/** Datasets reading this one keep it in place (D177): Rename and Delete say so. */
+	const held = $derived(
+		info?.dependents?.count
+			? `Read by ${info.dependents.count} dataset${info.dependents.count === 1 ? '' : 's'}, so it can’t be renamed or deleted. See About.`
+			: null
+	);
+	/** "Blend again…" (D179): the same blend, with the next seed. */
+	const blendStart = $derived.by((): BlendStart | null => {
+		const o = info?.origin;
+		if (!o || o.kind !== 'blend') return null;
+		const fraction = o.spec.mode === 'fraction';
+		return {
+			sources: o.sources.map((s) => ({
+				path: s.path,
+				version: String(s.version),
+				amount: fraction ? String(Math.round((s.fraction ?? 0) * 10000) / 100) : String(s.rows)
+			})),
+			mode: fraction ? 'fraction' : 'rows',
+			total: o.spec.mode === 'fraction' ? String(o.spec.total) : undefined,
+			seed: o.seed + 1,
+			replace: o.replace,
+			columns: o.columns,
+			to: `${path}-${o.seed + 1}`
+		};
+	});
 	let accessing = $state(false);
 	let renaming = $state(false);
 	let deleting = $state(false);
@@ -165,10 +205,22 @@
 			>
 				<FolderOpenIcon /> Browse files
 			</Button>
+			{#if info}
+				<Button
+					variant="ghost"
+					size="sm"
+					class="text-muted-foreground"
+					onclick={() => (forking = true)}
+				>
+					<GitForkIcon /> Fork
+				</Button>
+			{/if}
 			<Button
 				variant="ghost"
 				size="sm"
 				class="text-muted-foreground"
+				disabled={!!held}
+				title={held ?? undefined}
 				onclick={() => (renaming = true)}
 			>
 				<PencilIcon /> Rename
@@ -177,6 +229,8 @@
 				variant="ghost"
 				size="sm"
 				class="text-muted-foreground hover:text-destructive"
+				disabled={!!held}
+				title={held ?? undefined}
 				onclick={() => (deleting = true)}
 			>
 				<Trash2Icon /> Delete
@@ -216,7 +270,16 @@
 
 <div class={tab === 'rows' ? 'mt-3' : 'mt-6'}>
 	{#if tab === 'about'}
-		<AboutTab {org} {path} {info} tags={tags.map((t) => t.name)} />
+		<AboutTab
+			{org}
+			{path}
+			{info}
+			tags={tags.map((t) => t.name)}
+			onblendagain={access !== 'public' && blendStart ? () => (blending = true) : undefined}
+			onindependent={access !== 'public' && info?.origin && !info.origin.independent
+				? () => (independent = true)
+				: undefined}
+		/>
 	{:else if failed || !info}
 		<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">
 			{failed ?? 'This dataset couldn’t be read.'}
@@ -244,6 +307,19 @@
 	<S3AccessDialog bind:open={accessing} {path} {s3} />
 	<RenameDialog bind:open={renaming} {org} {path} />
 	<DeleteDatasetDialog bind:open={deleting} {org} {path} />
+	{#if info}
+		<ForkDialog bind:open={forking} {org} {path} version={info.version} />
+		<IndependentDialog bind:open={independent} {org} {path} size={info.data_size} />
+	{/if}
+	{#if blendStart}
+		<BlendDialog
+			bind:open={blending}
+			{org}
+			folder={parentOf(path)}
+			start={blendStart}
+			onstarted={(job) => void goto(datasetsHref(org, parentOf(job.dest)))}
+		/>
+	{/if}
 {/if}
 {#if access === 'admin'}
 	<ConfirmDialog

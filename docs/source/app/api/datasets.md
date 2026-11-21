@@ -68,6 +68,10 @@ Deleting, renaming and moving copy every object on the S3 server, in the request
 
 An item fails when nothing exists at its path, when its new path is taken, when it would move into itself or stay where it is, or when it's written to during the copy.
 
+## Forks and blends[[forks-and-blends]]
+
+`POST fork`, `POST blend/preview`, `POST blend`, `POST independent` and the `jobs` routes make datasets that read other datasets' files in place. `info` also answers `origin` and `dependents`. A dataset that a fork or blend reads can't be deleted, renamed or moved, and answers 409. See [Forks and blends](../../hub/forks-and-blends#http-api).
+
 ## The trash[[trash]]
 
 Only organization admins can use these. Members get 403.

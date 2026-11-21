@@ -14,6 +14,10 @@ folder = datasets.download_from_hf(
     "HuggingFaceFW/fineweb-edu", "/scratch/fineweb-edu", config="sample-10BT"
 )
 written = datasets.convert(folder, "web/fineweb-edu", workers=64)
+
+# Forks and blends (023) read their sources' files in place
+datasets.fork("web/fineweb-edu/sample-10BT", "exp/alice/edu")
+datasets.blend({"web/fineweb-edu/sample-10BT": 100_000, "code/stack/train": 200_000}, "mixes/a")
 ```
 
 Downloading needs only the Hugging Face Hub, and converting only Flock, which signs in as
@@ -29,6 +33,15 @@ from typing import Any
 from flock.hub.datasets._common import MANIFEST, DataFile, DatasetError, Manifest
 from flock.hub.datasets._convert import BUCKET, ConvertedSplit, Mode, convert
 from flock.hub.datasets._download import Configs, download_from_hf
+from flock.hub.datasets._forks import (
+    DEFAULT_SEED,
+    blend,
+    blend_preview,
+    fork,
+    make_independent,
+    null,
+    value,
+)
 
 
 def import_from_hf(
@@ -129,13 +142,20 @@ def list_datasets(path: str = "", *, org: str | None = None) -> dict[str, Any]:
 
 __all__ = [
     "BUCKET",
+    "DEFAULT_SEED",
     "MANIFEST",
     "ConvertedSplit",
     "DataFile",
     "DatasetError",
     "Manifest",
+    "blend",
+    "blend_preview",
     "convert",
     "download_from_hf",
+    "fork",
     "import_from_hf",
     "list_datasets",
+    "make_independent",
+    "null",
+    "value",
 ]

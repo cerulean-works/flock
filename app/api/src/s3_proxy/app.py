@@ -243,7 +243,7 @@ class Proxy:
                     "organization's page",
                     501,
                 )
-            bucket = caller.org.buckets.get(bucket_name)
+            bucket = caller.org.bucket(bucket_name)
             if bucket is None:
                 raise S3Error("NoSuchBucket", "The specified bucket does not exist", 404)
             call = Call(
@@ -537,7 +537,7 @@ class Proxy:
         source_bucket, _, source_key = source.partition("/")
         if version:
             raise S3Error("NotImplemented", "copying a version of an object is not supported", 501)
-        found = call.caller.org.buckets.get(source_bucket)
+        found = call.caller.org.bucket(source_bucket)
         if found is None or not source_key:
             raise S3Error("NoSuchBucket", "The specified bucket does not exist", 404)
         headers = self._forwarded(call)

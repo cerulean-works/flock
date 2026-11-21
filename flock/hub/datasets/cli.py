@@ -1,12 +1,14 @@
-"""`flock datasets` (D122): import Hugging Face datasets to Flock, and list what's there."""
+"""`flock datasets` (D122, 023): import Hugging Face datasets, list, fork and blend them."""
 
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import click
 
 from flock.hub import datasets
+from flock.hub.datasets import DatasetError
 from flock.hub.datasets._convert import MODES, ConvertedSplit, Mode, human
 from flock.hub.s3 import S3Error
 
@@ -25,7 +27,7 @@ def _failing() -> Generator[None]:
     """Refusals and failures as the command's error (exit code 1)."""
     try:
         yield
-    except S3Error as error:
+    except (S3Error, DatasetError) as error:
         raise click.ClickException(str(error)) from None
 
 
@@ -161,3 +163,103 @@ def list_command(path: str, org: str | None) -> None:
         click.echo(f"{folder['path']}/")
     for dataset in found["datasets"]:
         click.echo(f"{dataset['path']}\tversion {dataset['version']}")
+
+
+def _amount(text: str) -> int | float:
+    """`100000` is rows; `66%` or `0.66` is a fraction."""
+    try:
+        if text.endswith("%"):
+            return float(text[:-1]) / 100
+        return float(text) if "." in text else int(text.replace("_", ""))
+    except ValueError:
+        raise click.BadParameter(f"{text} isn't a row count or a fraction.") from None
+
+
+@datasets_group.command("fork")
+@click.argument("src")
+@click.argument("dest")
+@click.option("--version", help="A version number or tag (default: the latest).")
+@click.option("--org", help="The org (default: your default org).")
+def fork_command(src: str, dest: str, version: str | None, org: str | None) -> None:
+    """Fork the dataset SRC to DEST: a copy-on-write dataset reading SRC's files in place."""
+    with _failing():
+        made = datasets.fork(src, dest, version=version, org=org)
+    click.echo(f"✓ Forked {src} at version {made['source']['version']} to {made['path']}")
+
+
+@datasets_group.command("blend")
+@click.argument("dest")
+@click.option(
+    "--source",
+    "sources",
+    multiple=True,
+    required=True,
+    metavar="PATH[@VERSION]=AMOUNT",
+    help="A source and its rows (100000), or its fraction (66% or 0.66) of --total. Repeat.",
+)
+@click.option("--total", type=click.IntRange(min=1), help="The blend's rows, for fractions.")
+@click.option(
+    "--seed", type=click.IntRange(min=0), default=datasets.DEFAULT_SEED, show_default=True
+)
+@click.option(
+    "--columns",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="A JSON column map, as datasets.blend takes (default: match columns by name).",
+)
+@click.option("--replace", is_flag=True, help="Take rows more than once from small sources.")
+@click.option("--preview", is_flag=True, help="Print the column map and problems; write nothing.")
+@click.option("--org", help="The org (default: your default org).")
+def blend_command(
+    dest: str,
+    sources: tuple[str, ...],
+    total: int | None,
+    seed: int,
+    columns: Path | None,
+    replace: bool,
+    preview: bool,
+    org: str | None,
+) -> None:
+    """Blend datasets into DEST, reading their files in place. The same seed picks the same rows."""
+    import json
+
+    amounts: dict[str, int | float] = {}
+    for spec in sources:
+        path, sep, amount = spec.rpartition("=")
+        if not sep or not path:
+            raise click.BadParameter(f"{spec}: use PATH[@VERSION]=AMOUNT.", param_hint="--source")
+        amounts[path] = _amount(amount)
+    mapping = json.loads(columns.read_text()) if columns is not None else None
+    options: dict[str, Any] = {
+        "total": total,
+        "seed": seed,
+        "columns": mapping,
+        "replace": replace,
+        "org": org,
+    }
+    with _failing():
+        if preview:
+            found = datasets.blend_preview(amounts, dest, **options)
+        else:
+            made = datasets.blend(amounts, dest, **options)
+    if not preview:
+        click.echo(f"✓ Blended {made['rows']:,} rows to {made['path']}, version {made['version']}")
+        return
+    for source in found["sources"]:
+        click.echo(f"{source['path']}@{source['version']}\t{source['rows']:,} rows")
+    for column in found["columns"]:
+        froms = ", ".join(f"{p}: {json.dumps(s)}" for p, s in column["from"].items())
+        click.echo(f"{column['name']} ({column['type']})\t{froms}")
+    for problem in found["problems"]:
+        click.echo(f"✗ {problem}", err=True)
+    if found["problems"]:
+        raise SystemExit(1)
+
+
+@datasets_group.command("make-independent")
+@click.argument("path")
+@click.option("--org", help="The org (default: your default org).")
+def independent_command(path: str, org: str | None) -> None:
+    """Rewrite the fork or blend PATH into its own files, releasing its sources."""
+    with _failing():
+        made = datasets.make_independent(path, org=org)
+    click.echo(f"✓ {made['path']} is independent, at version {made['version']}")

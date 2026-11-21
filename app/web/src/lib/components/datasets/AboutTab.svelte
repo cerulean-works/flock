@@ -1,5 +1,11 @@
 <script lang="ts">
-	import { DatasetError, datasetCall, datasetsApi } from '#lib/datasets.ts';
+	import {
+		DatasetError,
+		datasetCall,
+		datasetsApi,
+		datasetsHref,
+		datasetVersionHref
+	} from '#lib/datasets.ts';
 	import type { DatasetInfo } from '#lib/types.ts';
 	import { bytes, dateTime } from '#lib/utils.ts';
 	import Markdown from '../Markdown.svelte';
@@ -12,9 +18,37 @@
 		info: DatasetInfo | null;
 		/** The tags on that version. */
 		tags: string[];
+		/** For a blend made by Flock: opens the blend dialog filled in with its settings. */
+		onblendagain?: () => void;
+		/** For a fork or blend that still reads its sources (D178). */
+		onindependent?: () => void;
 	}
 
-	let { org, path, info, tags }: Props = $props();
+	let { org, path, info, tags, onblendagain, onindependent }: Props = $props();
+
+	const origin = $derived(info?.origin ?? null);
+	const fmt = (n: number) => n.toLocaleString('en-US');
+	/** How much of a source a blend took: a percentage, or a multiple once oversampled. */
+	const share = (rows: number, live: number) =>
+		!live
+			? '—'
+			: rows > live
+				? `${(rows / live).toFixed(1)}× its rows`
+				: `${((rows / live) * 100).toFixed(rows / live < 0.1 ? 2 : 1)}% of its rows`;
+	const blendFacts = $derived(
+		origin?.kind === 'blend'
+			? [
+					['Seed', String(origin.seed)],
+					[
+						'Split',
+						origin.spec.mode === 'fraction'
+							? `By percentage of ${fmt(origin.spec.total)}`
+							: 'By row count'
+					],
+					...(origin.replace ? [['Oversampled', 'Yes']] : [])
+				]
+			: []
+	);
 
 	let readme = $state<{ text: string; truncated: boolean } | null>(null);
 	let missing = $state(false);
@@ -72,6 +106,81 @@
 
 	{#if info}
 		<aside aria-labelledby="about-version">
+			{#if origin}
+				<section class="mb-6 text-[13px]" aria-labelledby="about-origin">
+					<h2 id="about-origin" class="text-[13px] text-muted-foreground">
+						{origin.kind === 'fork' ? 'Fork' : 'Blend'}
+					</h2>
+					{#if origin.kind === 'fork'}
+						<p class="mt-2">
+							Forked from
+							<a
+								class="font-mono text-link underline-offset-3 hover:underline"
+								href={datasetVersionHref(org, origin.source.path, origin.source.version)}
+								>{origin.source.path}</a
+							>
+							at version {origin.source.version}.
+							{#if origin.independent}It has its own copy of the rows now.{/if}
+						</p>
+					{:else}
+						<table class="mt-1 w-full border-collapse">
+							<tbody>
+								{#each blendFacts as [label, value] (label)}
+									<tr class="border-b border-divider">
+										<th
+											scope="row"
+											class="py-2 pr-4 text-left font-normal whitespace-nowrap text-muted-foreground"
+											>{label}</th
+										>
+										<td class="py-2 text-right tabular-nums">{value}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+						<ul class="mt-3 grid gap-2" aria-label="Sources">
+							{#each origin.sources as s (s.path)}
+								<li>
+									<a
+										class="font-mono break-all text-link underline-offset-3 hover:underline"
+										href={datasetVersionHref(org, s.path, s.version)}>{s.path}</a
+									>
+									<p class="text-xs text-muted-foreground tabular-nums">
+										{[
+											s.fraction !== undefined ? `${Math.round(s.fraction * 1000) / 10}%` : null,
+											`v${s.version}`,
+											`${fmt(s.rows)} rows`,
+											share(s.rows, s.live)
+										]
+											.filter(Boolean)
+											.join(' · ')}
+									</p>
+								</li>
+							{/each}
+						</ul>
+						{#if origin.independent}
+							<p class="mt-2">It has its own copy of the rows now.</p>
+						{/if}
+					{/if}
+					{#if (onblendagain && origin.kind === 'blend') || (onindependent && !origin.independent)}
+						<div class="mt-3 flex flex-wrap gap-x-3 gap-y-1">
+							{#if onblendagain && origin.kind === 'blend'}
+								<button
+									type="button"
+									class="text-link underline-offset-3 hover:underline"
+									onclick={onblendagain}>Blend again…</button
+								>
+							{/if}
+							{#if onindependent && !origin.independent}
+								<button
+									type="button"
+									class="text-link underline-offset-3 hover:underline"
+									onclick={onindependent}>Make independent…</button
+								>
+							{/if}
+						</div>
+					{/if}
+				</section>
+			{/if}
 			<h2 id="about-version" class="text-[13px] text-muted-foreground">
 				Version {info.version}
 			</h2>
@@ -107,6 +216,32 @@
 					{/if}
 				</tbody>
 			</table>
+			{#if info.dependents?.count}
+				<h2 class="mt-6 text-[13px] text-muted-foreground">
+					Read by {info.dependents.count} dataset{info.dependents.count === 1 ? '' : 's'}
+				</h2>
+				<ul class="mt-1 grid gap-1 text-[13px]" aria-label="Datasets reading this one">
+					{#each info.dependents.paths as p (p)}
+						<li>
+							<a
+								class="font-mono text-link underline-offset-3 hover:underline"
+								href={datasetsHref(org, p)}>{p}</a
+							>
+						</li>
+					{/each}
+					{#if info.dependents.trashed}
+						<li class="text-muted-foreground">{info.dependents.trashed} in the trash</li>
+					{/if}
+					{#if info.dependents.count - info.dependents.trashed > info.dependents.paths.length}
+						<li class="text-muted-foreground">
+							and {info.dependents.count - info.dependents.trashed - info.dependents.paths.length} more
+						</li>
+					{/if}
+				</ul>
+				<p class="mt-2 text-xs text-muted-foreground">
+					It can’t be renamed, moved or deleted while they read it.
+				</p>
+			{/if}
 		</aside>
 	{/if}
 </div>

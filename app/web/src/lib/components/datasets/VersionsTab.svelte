@@ -114,8 +114,16 @@
 									/>
 								{/each}
 							</ul>
-						{:else}
+						{:else if !v.kept_for}
 							<span class="text-faint">None</span>
+						{/if}
+						{#if v.kept_for}
+							<p
+								class="mt-1 text-xs whitespace-nowrap text-muted-foreground"
+								title="Forks or blends read this version, so it's never cleaned up (D173)."
+							>
+								Kept for {v.kept_for} dataset{v.kept_for === 1 ? '' : 's'}
+							</p>
 						{/if}
 					</td>
 					<td
