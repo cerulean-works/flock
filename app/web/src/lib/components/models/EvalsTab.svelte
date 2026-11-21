@@ -31,14 +31,10 @@
 
 	const rows = $derived(runs ? evalRows(runs) : []);
 	// A name on two rows was scored two ways: its hash tells the rows apart.
-	const repeated = $derived.by(() => {
-		const seen = new Set<string>();
-		const twice = new Set<string>();
-		for (const row of rows) {
-			if (seen.has(row.name)) twice.add(row.name);
-			seen.add(row.name);
-		}
-		return twice;
+	const uses = $derived.by(() => {
+		const count: Record<string, number> = {};
+		for (const row of rows) count[row.name] = (count[row.name] ?? 0) + 1;
+		return count;
 	});
 	const ref = $derived(`flock:${version.model}@${version.number}`);
 
@@ -110,7 +106,7 @@
 						<th scope="row" class="px-2 text-left font-normal">
 							<span class="font-mono text-[12.5px]">{row.name}</span>
 							<span class="ml-1.5 text-xs text-faint" title={row.hash}>
-								{row.kind === 'suite' ? 'suite' : row.metric}{repeated.has(row.name)
+								{row.kind === 'suite' ? 'suite' : row.metric}{uses[row.name] > 1
 									? ` · ${row.hash.slice(0, 12)}`
 									: ''}
 							</span>
