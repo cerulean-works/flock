@@ -24,7 +24,7 @@ uv run flock eval run \
 | `--dtype` | `bfloat16` | The weights' dtype, `bfloat16` or `float32`. Log-softmax runs in float32 either way. Compare only runs with the same value. |
 | `--add-bos` | off | Start every non-empty context with the tokenizer's BOS token. Set it for Gemma models, as OLMES does. Compare only runs with the same value. See [Tokenizing a request](scoring#tokenizing-a-request). |
 | `--device` | `cuda` if available, else `cpu` | The torch device. |
-| `--wandb-project` | off | Also log the run to this project through the `wandb` SDK. [Connect the SDK](../cli/sign-in#wandb-sdk) first so it goes to Flock. |
+| `--wandb-project` | off | Also log the run to this project through the `wandb` SDK, with `results.json` and the predictions as files of the run. [Connect the SDK](../cli/sign-in#wandb-sdk) first so it goes to Flock. See [Tracker runs](#tracker-runs). |
 | `--verbose` | off | Print every metric of each task, primary first, with its speed and the start of its task hash, then each suite with its members. |
 
 Give at least one `--task` or `--suite`. The command runs [`~eval.run.evaluate`], and every flag maps to a field of [`~eval.run.EvalConfig`].
@@ -46,6 +46,21 @@ Compares a new `results.json` with a banked one and exits non-zero if any score 
 uv run flock eval compare tests/eval/regression/olmo-2-0425-1b-float32.json results/regression/results.json
 ```
 
+## `flock eval diff`
+
+Compares two runs doc by doc: for each task both scored the same way, it counts the docs both runs got right, both got wrong, and only one of them got right, and lists the ids of the docs only one got right. The two runs may score different models.
+
+```bash
+uv run flock eval diff results/olmo2-1b run:acme/model-evals/k3v9x2pa
+```
+
+| Argument or flag | Default | Meaning |
+|---|---|---|
+| `A`, `B` | required | Each run: a folder holding `results.json` and `predictions/`, or a tracker run as `run:<entity>/<project>/<id>`, read as the user signed in with `flock login`. |
+| `--json` | off | Print the diff as JSON instead of a table. See [Doc-by-doc diff](comparison#doc-by-doc-diff) for its fields. |
+
+It exits with code 2 if the runs can't be compared: a missing or damaged results file, a run it can't read, or runs scored with another `dtype`, `batch_tokens`, `attention` or `sdpa_backend`. [Doc-by-doc diff](comparison#doc-by-doc-diff) lists which tasks it compares.
+
 ## `flock eval log`
 
 Logs a `results.json` written earlier to a tracker project, as written, without scoring anything. Use it for results scored without `--wandb-project`.
@@ -56,7 +71,7 @@ uv run flock eval log results/olmo2-1b/results.json --project model-evals
 
 | Argument or flag | Default | Meaning |
 |---|---|---|
-| `RESULTS` | required | The `results.json` to log. It must have `schema_version` 6, 7 or 8. |
+| `RESULTS` | required | The `results.json` to log. It must have `schema_version` 6, 7, 8 or 9. It goes on the run as `results.json`, whatever its name, and for schema version 9 so do the predictions in the `predictions/` folder beside it. |
 | `--project` | required | The tracker project. |
 
 It needs both sign-ins: `flock login` for the duplicate check, and the wandb SDK's key for the same server to log the run. [Sign in](../cli/sign-in) sets up both. The run goes to the server you signed in to with `flock login` and to your default organization, online, whatever the SDK's own settings and `WANDB_MODE` say. A `WANDB_API_KEY` set for another server fails with HTTP 401.
@@ -96,5 +111,8 @@ uv run flock eval hub pull acme/allenai/ai2_arc@210d026faf9955653af8916fad021475
 |---|---|
 | config | The [provenance](results#provenance), plus `task_hashes` (each task's hash by name), `suite_members` (each suite's members by name) and `suite_hashes` (each suite's hash by name). |
 | summary | `<task>/<metric>` for each metric, `<task>/docs_per_second` unless the clock measured no time, and `suites/<suite>` for each scored suite's score. |
+| files | `results.json`, and `predictions/<task>.jsonl` for each task that has one. A file older than schema version 9 sends only `results.json`: its predictions have no `correct`. |
 
-`flock eval run` writes `results.json` whether or not it logs.
+`flock eval run` writes `results.json` whether or not it logs. It uploads files only when `--out` is set.
+
+A run has its project's visibility, so anyone can read the predictions of a run in a public project. A task on a private dataset (`dataset.private` in [`results.json`](results#resultsjson)) therefore sends its predictions only to a project that is private, or that the run creates, which starts private. To check, the command reads the project from the server you signed in to with `flock login`, and the run goes there, to your default organization unless one is named. It refuses before creating the run if the project is public, if you aren't signed in to Flock, or if Flock refuses the query. Log such runs to a private project, such as `model-evals` in your organization.

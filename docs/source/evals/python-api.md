@@ -41,3 +41,9 @@ The entry points for running evaluations, and the model wrapper they score with.
 [[autodoc]] eval.compare.Comparison
 
 [[autodoc]] eval.compare.Breach
+
+[[autodoc]] eval.diff.diff
+
+[[autodoc]] eval.diff.ItemDiff
+
+[[autodoc]] eval.diff.TaskDiff
