@@ -146,6 +146,13 @@ def log_to_tracker(
             return
         # A sweep or launch agent can replace the entity and project `wandb.init` was given, so
         # private predictions go only to the project whose visibility was read.
+        # An offline run is synced later, and `wandb sync` can send it to any project, past the
+        # check; its private predictions wait for an online `flock eval log`.
+        if private and run.offline:
+            raise ValueError(
+                "an offline run can be synced to any project: private predictions are uploaded "
+                "only online; log the folder later with flock eval log"
+            )
         if private and (run.entity, run.project) != (entity, project):
             raise ValueError(
                 f"the run went to {run.entity}/{run.project}, not the checked {entity}/{project}: "

@@ -137,9 +137,10 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
                 raise ValueError(f"{run.source}: {task.task}'s predictions repeat a doc id")
             right = sum(by_id.values())
             accuracy = result.metrics.get(task.primary_metric, math.nan)
-            # Half a doc of slack for the FP32 mean the accuracy was written as. A missing or
+            # The accuracy is an FP32 mean of 0s and 1s: the sum is exact below 2**24 docs, and the
+            # division rounds once, so it lies within about 1e-7 of the rows' share. A missing or
             # non-finite accuracy can't vouch for the rows.
-            if not math.isfinite(accuracy) or abs(right - accuracy * result.num_docs) > 0.5:
+            if not math.isfinite(accuracy) or abs(right / len(rows) - accuracy) > 1e-6:
                 raise ValueError(
                     f"{run.source}: {task.task}'s predictions have {right} of {len(rows)} right, "
                     f"but its {task.primary_metric} is {accuracy} "

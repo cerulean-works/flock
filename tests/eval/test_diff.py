@@ -229,6 +229,19 @@ def test_a_task_name_from_a_file_cannot_leave_the_predictions_folder(tmp_path: P
             run_a.read_file(name)
 
 
+def test_an_accuracy_its_rows_cannot_produce_is_refused(tmp_path: Path) -> None:
+    # One doc can't score 0.5, though 0.5 is within half a doc of either outcome.
+    a = write_run(tmp_path / "a", {"t": ("h", [True])})
+    b = write_run(tmp_path / "b", {"t": ("h", [True])})
+    results = tmp_path / "b" / "results.json"
+    data = json.loads(results.read_text())
+    data["tasks"][0]["metrics"]["acc_raw"] = 0.5
+    results.write_text(json.dumps(data))
+
+    with pytest.raises(ValueError, match="1 of 1 right, but its acc_raw is 0.5"):
+        diff(read_results(a), read_results(b))
+
+
 def test_a_null_accuracy_cannot_vouch_for_its_rows(tmp_path: Path) -> None:
     a = write_run(tmp_path / "a", {"t": ("h", [True, False])})
     b = write_run(tmp_path / "b", {"t": ("h", [True, False])})

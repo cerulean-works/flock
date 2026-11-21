@@ -37,6 +37,7 @@ class FakeRun:
         self.summary = summary
         self.dir = str(folder)
         self.disabled = calls.get("disabled", False)
+        self.offline = calls.get("offline", False)
         # Where the run went: where it was asked to go, unless a test overrides it.
         self.entity = calls.get("override", init).get("entity")
         self.project = calls.get("override", init).get("project")
@@ -503,6 +504,19 @@ def test_private_predictions_never_follow_a_run_sent_elsewhere(
 
     assert "files" not in logged
     assert logged["exit_code"] == 1  # finished as failed
+
+
+def test_an_offline_run_stages_no_private_predictions(
+    logged: dict[str, Any], hub: FakeHub, tmp_path: Path
+) -> None:
+    # `wandb sync` could later send it anywhere.
+    logged["offline"] = True
+    path = written_run(tmp_path / "run", private=True)
+
+    with pytest.raises(ValueError, match="private predictions are uploaded only online"):
+        log_to_tracker(json.loads(path.read_text()), "model-evals", results_file=path)
+
+    assert "files" not in logged
 
 
 def test_a_live_private_run_keeps_the_sdk_mode(

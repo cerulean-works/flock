@@ -55,7 +55,7 @@ Before the run is created, a log that would upload predictions of a private task
 `diff(a, b)` compares every task both runs scored under the same `task_hash` with an accuracy as its primary metric and `correct` in both runs' rows, and lists every other task with its reason (`only_a`, `only_b`, `task_hash`, `not_accuracy`, `no_predictions`, `no_outcome`). A task with another hash is another task (principle of one instrument). Each compared task gives both-right and both-wrong counts and the ids of the docs only one run got right.
 
 - **The models may differ; the instrument may not.** `dtype`, `batch_tokens`, `attention` and `sdpa_backend` must be equal, as `compare` requires. `max_length` and `add_bos` belong to the model (OLMES adds BOS for Gemma only) and may differ.
-- **Rows must match their results.** Equal hashes mean the same docs, so another row count than `num_docs`, a row without a string `id` or a boolean `correct`, another id sequence (rows follow the scored requests, so order counts), a repeated id, or a count of right docs more than half a doc away from a finite accuracy times the doc count refuses the diff: one of the files is damaged or mixed up.
+- **Rows must match their results.** Equal hashes mean the same docs, so another row count than `num_docs`, a row without a string `id` or a boolean `correct`, another id sequence (rows follow the scored requests, so order counts), a repeated id, or a share of right docs more than 1e-6 from a finite accuracy (the FP32 mean of 0s and 1s rounds once) refuses the diff: one of the files is damaged or mixed up.
 - **Counts only.** No significance test: no paired test is established in the suite to cite, so the diff reports the cells and leaves inference to the reader.
 - **The JSON is a contract.** `ItemDiff.to_dict()` is what `flock eval diff --json` prints and the app renders, with its own `schema_version` (1).
 
@@ -82,14 +82,15 @@ Before the run is created, a log that would upload predictions of a private task
 - **Names, links and marks from a file are checked.** A task name must be one file name, on upload and on read, so a results file can't point outside `predictions/` or the run's folder, and a predictions file or folder that is a link is refused, so no other local file goes up or is read under a task's name. A non-numeric metric refuses the read. A schema 9 task with predictions must have a boolean `dataset.private`; anything else refuses rather than passing as public.
 - **The run is checked after it starts.** A sweep or launch agent can replace the entity and project given to `wandb.init`, so before copying private predictions the run's own `entity` and `project` must equal the checked ones, or the run finishes as failed with nothing uploaded.
 - **A disabled SDK stages nothing.** With `WANDB_MODE=disabled` the run is a no-op, and no file is copied for it.
-- **Only a backfill is forced online.** A live run with private predictions is sent to the checked server, but keeps the SDK's `WANDB_MODE`, so an offline job stays offline (its later sync goes to the project checked here).
+- **Only a backfill is forced online.** A live run with private predictions is sent to the checked server, but keeps the SDK's `WANDB_MODE`. An offline run with private predictions is refused before anything is staged, since `wandb sync` can send it to any project; `flock eval log` uploads the folder later, online and checked.
 - **Reading a run file** resolves the credential only, with no organization lookup: the run names its own, and a diff reads one file per task.
 - **`diff.py`** is its own module beside `compare.py`: it shares the instrument check's idea but not its inputs, since `compare` reads raw JSON of any schema and `diff` reads typed results.
 - **The CLI** prints a table by default and the JSON with `--json`, and exits 2 on a refusal, as `compare` does.
 
 ## 5. Known gaps
 
-- The visibility check and the upload are two requests, and the tracker keeps no mark on the files: a project made public during or after the upload serves the private predictions to anyone. Closing this needs the tracker to remember which files are private and refuse outsiders, or refuse to make such a project public.
+- The visibility check and the upload are two requests, and the tracker keeps no mark on the files: a project made public during or after the upload serves the private predictions to anyone. The same holds when a run is moved to a public project. Closing this needs the tracker to remember which files are private and refuse outsiders, or refuse to make such a project public or move such a run.
+- A live run with private predictions contacts Flock for the check even under `WANDB_MODE=disabled`, and refuses without a sign-in. Passing `--wandb-project` while the SDK is disabled asks for both at once.
 - A schema 8 file reads every dataset as not private. It is never uploaded with its predictions, so this only matters to a caller that reads `dataset.private` from an old file.
 - `read_run_file` needs a Flock sign-in, even for a public project.
 - The multiple-choice task hash covers requests and gold indexes, not doc ids. The diff closes the gap for itself by requiring both runs' ids in the same order, but the hash alone doesn't say two runs named their docs alike. Covering ids would change every hash and every bank.
