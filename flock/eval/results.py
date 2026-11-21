@@ -281,7 +281,7 @@ class WrittenResults:
         suites (`list[SuiteResult]`):
             Each suite's score.
         read_file (`Callable[[str], str | None]`):
-            Reads one of the run's files by its name in the folder, such as `predictions/arc_easy.jsonl`, or returns `None` if there is no such file.
+            Reads one of the run's files by its name in the folder or on the run, such as `predictions/arc_easy.jsonl`, or returns `None` if there is no such file.
     """
 
     source: str
@@ -293,12 +293,18 @@ class WrittenResults:
 
     def predictions(self, task: str) -> list[dict[str, Any]] | None:
         """
-        Returns `task`'s prediction rows, or `None` if the run has no predictions file for it.
+        Returns `task`'s prediction rows, or `None` if the run has no predictions file for it. On a tracker run, a task on a private dataset is read from `private/predictions/<task>.jsonl`.
 
         Raises:
             `ValueError`: if `task` isn't a single file name, so a name read from a file can't reach outside `predictions/`.
         """
-        text = self.read_file(predictions_name(task))
+        name = predictions_name(task)
+        # A tracker run holds a private dataset's rows under `private/`, which only the
+        # organization's members read; a folder keeps every task's rows in `predictions/`.
+        private = any(t.task == task and t.dataset.private for t in self.tasks)
+        if self.source.startswith("run:") and private:
+            name = f"private/{name}"
+        text = self.read_file(name)
         return None if text is None else [json.loads(line) for line in text.splitlines()]
 
 

@@ -22,7 +22,7 @@ def log_to_tracker(
     host: str | None = None,
 ) -> None:
     """
-    Logs one `eval` run to `project`: the provenance, each task's hash (`task_hashes`) and each suite's members and hash (`suite_members`, `suite_hashes`) as its config, and each task's metrics and `docs_per_second` as its summary, named `<task>/<metric>`, with each scored suite's score as `suites/<suite>`. With `results_file`, the run also gets that file as `results.json` and, from schema 9 on, each task's `predictions/<task>.jsonl` found beside it.
+    Logs one `eval` run to `project`: the provenance, each task's hash (`task_hashes`) and each suite's members and hash (`suite_members`, `suite_hashes`) as its config, and each task's metrics and `docs_per_second` as its summary, named `<task>/<metric>`, with each scored suite's score as `suites/<suite>`. With `results_file`, the run also gets that file as `results.json` and, from schema 9 on, each task's `predictions/<task>.jsonl` found beside it, under `private/predictions/<task>.jsonl` for a task on a private dataset.
 
     The SDK's own settings decide where it goes (`wandb login --host` for the flock tracker), unless `entity` or `host` name it. A run that uploads predictions of a task on a private dataset goes to the signed-in Flock API and, without `entity`, its user's default organization, where the project's visibility can be read.
 
@@ -39,7 +39,7 @@ def log_to_tracker(
             The tracker's URL, logged to online as a new run, or `None` for the SDK's settings.
 
     Raises:
-        `ValueError`: if predictions of a task on a private dataset would go to a project that is public, or whose visibility can't be read (not signed in to Flock, or Flock refuses the query), before the run is created.
+        `ValueError`: if predictions of a task on a private dataset would go to a project that is public, or whose visibility can't be read (not signed in to Flock, or Flock refuses the query), or a `results_file` of schema 9 or later isn't named `results.json`, before the run is created.
         `click.ClickException`: if Flock can't be reached for that check.
     """
     summary: dict[str, Any] = {}
@@ -65,7 +65,7 @@ def log_to_tracker(
     }
 
     files = _run_files(results, results_file)
-    private = _private_tasks(results, files)
+    private = [name for name in files if name.startswith("private/")]
     # Only a backfill, which names its host, goes online whatever `WANDB_MODE` says; a live run
     # keeps the SDK's mode even when the check below names its host.
     backfill = host is not None
@@ -128,45 +128,48 @@ def log_to_tracker(
 
 
 def _run_files(results: dict[str, Any], results_file: Path | None) -> dict[str, Path]:
-    """The files the tracker shows a run's docs from, by their names on the run: `results_file` as `results.json` and, from schema 9 on, each task's predictions file found beside it. An older file's predictions have no outcome (`correct`) and its tasks no privacy mark, so only its results go."""
+    """The files the tracker shows a run's docs from, by their names on the run: `results_file` as `results.json` and, from schema 9 on, each task's predictions file found beside it, under `private/` when its dataset is private. An older file's predictions have no outcome (`correct`) and its tasks no privacy mark, so only its results go."""
     files = {}
     if results_file is None:
         return files
     files["results.json"] = results_file
-    for task in results["tasks"] if results["schema_version"] >= 9 else []:
+    if results["schema_version"] < 9:
+        return files
+
+    # The predictions are the ones beside `results.json`, so two renamed copies of results in
+    # one folder can't both claim them.
+    if results_file.name != "results.json":
+        raise ValueError(
+            f"{results_file} isn't named results.json, so the predictions beside it may belong "
+            "to another run: log it from its own folder as results.json"
+        )
+    for task in results["tasks"]:
         name = predictions_name(task["task"])
         path = results_file.parent / name
         # A link could send any local file under a task's name.
         if path.is_symlink() or path.parent.is_symlink():
             raise ValueError(f"{path} is a link; upload the predictions themselves")
-        if path.is_file():
-            files[name] = path
-    return files
-
-
-def _private_tasks(results: dict[str, Any], files: dict[str, Path]) -> list[str]:
-    """The tasks among `files`' predictions whose dataset is private. A mark that isn't a boolean refuses: a damaged file must not pass as public."""
-    private = []
-    for task in results["tasks"]:
-        if f"predictions/{task['task']}.jsonl" not in files:
+        if not path.is_file():
             continue
+        # A damaged mark must not pass as public.
         marked = task["dataset"].get("private")
         if not isinstance(marked, bool):
             raise ValueError(  # noqa: TRY004 - a damaged file, refused as a value
                 f"{task['task']}: dataset.private is {marked!r}, not true or false"
             )
-        if marked:
-            private.append(task["task"])
-    return private
+        # The tracker lists and serves a run's `private/` files to the organization's members
+        # only, whatever the project's visibility.
+        files[f"private/{name}" if marked else name] = path
+    return files
 
 
 def _private_destination(
     private: list[str], project: str, entity: str | None, host: str | None
 ) -> tuple[str, str]:
     """
-    The organization and host a run with the predictions of the `private` tasks goes to: `entity` (or the signed-in user's default organization) on the signed-in Flock API, once `project` there is known to be private.
+    The organization and host a run with the `private` predictions files goes to: `entity` (or the signed-in user's default organization) on the signed-in Flock API, once `project` there is known to be private.
 
-    A run in a project has the project's visibility, so a private dataset's per-doc rows go only to a project known to be private, checked before the run exists. A project the run creates is private (the tracker's default).
+    A run in a project has the project's visibility, so a private dataset's per-doc rows go only to a project known to be private, checked before the run exists. A project the run creates is private (the tracker's default). Their `private/` names keep them members-only if the project is made public later, on a tracker that enforces it.
     """
     api, default_org = _signed_in(host)
     entity = entity or default_org
@@ -180,8 +183,8 @@ def _private_destination(
         raise ValueError(f"{api.host} refused the project query ({error_of(answer)})")
     if visibility not in ("private", "new"):
         raise ValueError(
-            f"{entity}/{project} is {visibility}, and the predictions of {', '.join(private)} "
-            "read a private dataset: log to a private project"
+            f"{entity}/{project} is {visibility}, and {', '.join(private)} hold predictions "
+            "on a private dataset: log to a private project"
         )
     return entity, api.host
 
@@ -193,7 +196,7 @@ def log_results_file(path: Path, project: str) -> str:
     A field the file lacks stays absent from the run: an older file's missing `sdpa_backend` means an unknown kernel, not none. The tracker stamps the run with this machine's host, time and commit; the scoring job's are the config's `created_at` and `flock_commit`.
 
     Raises:
-        `ValueError`: if the file's schema isn't 6 to 10, Flock refuses the sign-in or the query, the project already has a run with the file's `model` and `created_at` that didn't fail or crash, or the project is public and the predictions of a task on a private dataset would go to it.
+        `ValueError`: if the file's schema isn't 6 to 10, Flock refuses the sign-in or the query, the project already has a run with the file's `model` and `created_at` that didn't fail or crash, the project is public and the predictions of a task on a private dataset would go to it, or the file is schema 9 or later and isn't named `results.json`.
         `click.ClickException`: if Flock can't be reached.
         `wandb.errors.Error`: if the tracker refuses the run, for example for a wandb key set for another server.
     """
