@@ -31,6 +31,7 @@
 			prefix={data.key}
 			listing={data.listing}
 			now={data.now}
+			projects={data.shell.projects}
 		/>
 	{:else}
 		<ObjectView org={params.org} bucket={params.bucket} object={data.object} />

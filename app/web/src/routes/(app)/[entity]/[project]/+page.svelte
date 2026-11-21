@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ProjectTabs from '#lib/components/ProjectTabs.svelte';
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { goto, refreshAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -314,6 +315,10 @@
 			{/if}
 		{/snippet}
 		{#snippet actions()}
+			<!-- The project's datasets and models, for its org's members when S3 is on (D169). -->
+			{#if data.shell.s3 && !readonly}
+				<ProjectTabs entity={ws.meta.entity} project={ws.meta.project} current="runs" />
+			{/if}
 			<LiveStatus />
 		{/snippet}
 		{#snippet toolbar()}

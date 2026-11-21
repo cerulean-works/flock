@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import GlobeIcon from '@lucide/svelte/icons/globe';
@@ -31,7 +32,7 @@
 	import VersionsTab from './VersionsTab.svelte';
 
 	interface Props {
-		org: string;
+		scope: Scope;
 		path: string;
 		/** The dataset at the version shown; null when Lance couldn't read it (`failed` says why). */
 		info: DatasetInfo | null;
@@ -40,6 +41,8 @@
 		requested: string | null;
 		/** The S3 proxy, for the Access in S3 dialog. */
 		s3: S3Config;
+		/** Where it is in flock-datasets (under `-projects/` for a project's, D160). */
+		objectKey?: string;
 		/**
 		 * What the viewer may do: admins also make it public or private; from outside the org
 		 * (`public`) it's read-only, with nothing of S3 (D115).
@@ -48,7 +51,17 @@
 		now: number;
 	}
 
-	let { org, path, info, failed, requested, s3, access = 'member', now }: Props = $props();
+	let {
+		scope,
+		path,
+		info,
+		failed,
+		requested,
+		s3,
+		objectKey = path,
+		access = 'member',
+		now
+	}: Props = $props();
 
 	const isPublic = $derived(!!info?.public);
 
@@ -95,7 +108,7 @@
 		if (!info) return;
 		try {
 			const got = await datasetCall<DatasetInfo>(
-				datasetsApi(org, 'info', { path, version: info.version })
+				datasetsApi(scope, 'info', { path, version: info.version })
 			);
 			freshTags = got.tags;
 		} catch {
@@ -122,7 +135,7 @@
 	</h1>
 	{#if isPublic}<PublicBadge what="every version of it" />{/if}
 	{#if info}
-		<VersionPicker {org} {path} version={info.version} {requested} tags={allTags} {versionHref} />
+		<VersionPicker {scope} {path} version={info.version} {requested} tags={allTags} {versionHref} />
 	{/if}
 </div>
 
@@ -161,7 +174,7 @@
 				variant="ghost"
 				size="sm"
 				class="text-muted-foreground"
-				href={objectHref(org, DATASETS_BUCKET, `${path}/`)}
+				href={objectHref(scope.org, DATASETS_BUCKET, `${objectKey}/`)}
 			>
 				<FolderOpenIcon /> Browse files
 			</Button>
@@ -182,7 +195,7 @@
 				<Trash2Icon /> Delete
 			</Button>
 		{/if}
-		{#if access === 'admin' && info}
+		{#if access === 'admin' && info && scope.project === null}
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger>
 					{#snippet child({ props })}
@@ -216,20 +229,20 @@
 
 <div class={tab === 'rows' ? 'mt-3' : 'mt-6'}>
 	{#if tab === 'about'}
-		<AboutTab {org} {path} {info} tags={tags.map((t) => t.name)} />
+		<AboutTab {scope} {path} {info} tags={tags.map((t) => t.name)} />
 	{:else if failed || !info}
 		<p class="bg-card px-4 py-6 text-[13px] text-destructive" role="alert">
 			{failed ?? 'This dataset couldn’t be read.'}
 		</p>
 	{:else if tab === 'rows'}
 		{#key info.version}
-			<RowsTab {org} {path} {info} {hidden} />
+			<RowsTab {scope} {path} {info} {hidden} />
 		{/key}
 	{:else if tab === 'schema'}
 		<SchemaTab {info} />
 	{:else}
 		<VersionsTab
-			{org}
+			{scope}
 			{path}
 			shown={info.version}
 			{versionHref}
@@ -241,11 +254,11 @@
 </div>
 
 {#if access !== 'public'}
-	<S3AccessDialog bind:open={accessing} {path} {s3} />
-	<RenameDialog bind:open={renaming} {org} {path} />
-	<DeleteDatasetDialog bind:open={deleting} {org} {path} />
+	<S3AccessDialog bind:open={accessing} {scope} {path} {objectKey} {s3} />
+	<RenameDialog bind:open={renaming} {scope} {path} />
+	<DeleteDatasetDialog bind:open={deleting} {scope} {path} />
 {/if}
-{#if access === 'admin'}
+{#if access === 'admin' && scope.project === null}
 	<ConfirmDialog
 		bind:open={publishing}
 		action="?/visibility"

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
@@ -20,7 +21,7 @@
 	import VersionsTab from './VersionsTab.svelte';
 
 	interface Props {
-		org: string;
+		scope: Scope;
 		info: ModelInfo;
 		/** The version shown; null while the model has none. */
 		version: ModelVersionDetail | null;
@@ -29,7 +30,7 @@
 		now: number;
 	}
 
-	let { org, info, version, requested, now }: Props = $props();
+	let { scope, info, version, requested, now }: Props = $props();
 
 	type Tab = 'overview' | 'versions' | 'files';
 	const TABS: { value: Tab; label: string }[] = [
@@ -76,7 +77,7 @@
 	</h1>
 	{#if version}
 		<VersionPicker
-			{org}
+			{scope}
 			name={info.name}
 			version={version.number}
 			{requested}
@@ -110,7 +111,7 @@
 				variant="ghost"
 				size="sm"
 				class="text-muted-foreground"
-				href={folderHref(org, version.prefix)}
+				href={folderHref(scope.org, version.prefix)}
 			>
 				<FolderOpenIcon /> Browse files
 			</Button>
@@ -137,7 +138,7 @@
 <div class="mt-6">
 	{#if tab === 'versions'}
 		<VersionsTab
-			{org}
+			{scope}
 			{info}
 			shown={version?.number ?? null}
 			{versionHref}
@@ -150,15 +151,15 @@
 		</p>
 	{:else if tab === 'overview'}
 		{#key version.number}
-			<OverviewTab {org} {info} {version} />
+			<OverviewTab {scope} {info} {version} />
 		{/key}
 	{:else}
-		<FilesTab {org} {version} />
+		<FilesTab {scope} {version} />
 	{/if}
 </div>
 
 {#if version}
-	<LoadDialog bind:open={loading} {org} name={info.name} number={version.number} />
+	<LoadDialog bind:open={loading} {scope} name={info.name} number={version.number} />
 {/if}
-<RenameModelDialog bind:open={renaming} {org} name={info.name} />
-<DeleteModelDialog bind:open={deleting} {org} {info} />
+<RenameModelDialog bind:open={renaming} {scope} name={info.name} />
+<DeleteModelDialog bind:open={deleting} {scope} {info} />

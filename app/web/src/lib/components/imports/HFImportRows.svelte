@@ -7,22 +7,24 @@
 	import { endedText, importsAt, progressText } from '#lib/hf.ts';
 	import type { HFImportList } from '#lib/hf.svelte.ts';
 	import { versionHref } from '#lib/models.ts';
+	import type { Scope } from '#lib/scope.ts';
 	import type { HFImport } from '#lib/types.ts';
 	import CopyBlock from '../CopyBlock.svelte';
 
 	// The org's Hugging Face imports into this folder, or into its models, each as a row above
 	// the listing: progress and Cancel while it runs, then how it ended.
 	interface Props {
-		org: string;
+		/** The scope shown: only its imports show (D159). */
+		scope: Scope;
 		list: HFImportList;
 		kind: 'dataset' | 'model';
 		/** The folder shown, for datasets. */
 		folder?: string;
 	}
 
-	let { org, list, kind, folder = '' }: Props = $props();
+	let { scope, list, kind, folder = '' }: Props = $props();
 
-	const rows = $derived(importsAt(list.shown, kind, folder));
+	const rows = $derived(importsAt(list.shown, kind, folder, scope.project));
 	let cancelling = $state<number | null>(null);
 
 	async function cancel(job: HFImport) {
@@ -38,9 +40,9 @@
 
 	function resultHref(job: HFImport) {
 		if (job.kind === 'model' && job.result?.version)
-			return versionHref(org, job.dest, job.result.version);
+			return versionHref(scope, job.dest, job.result.version);
 		const made = job.result?.datasets ?? [];
-		return datasetsHref(org, made.length === 1 ? made[0].path : job.dest);
+		return datasetsHref(scope, made.length === 1 ? made[0].path : job.dest);
 	}
 </script>
 

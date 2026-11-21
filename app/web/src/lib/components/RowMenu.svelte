@@ -1,5 +1,6 @@
 <script lang="ts">
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
+	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
@@ -8,10 +9,12 @@
 		/** The row's name, for the button's label. */
 		name: string;
 		onrename: () => void;
+		/** Lists whose rows move from their menu (models, D166) say so. */
+		onmove?: () => void;
 		ondelete: () => void;
 	}
 
-	let { name, onrename, ondelete }: Props = $props();
+	let { name, onrename, onmove, ondelete }: Props = $props();
 </script>
 
 <!-- A list row's ⋯ menu (D133): shown on row hover, always on touch screens, and while open. -->
@@ -26,6 +29,11 @@
 		<DropdownMenu.Item onSelect={onrename}>
 			<PencilIcon /> Rename…
 		</DropdownMenu.Item>
+		{#if onmove}
+			<DropdownMenu.Item onSelect={onmove}>
+				<FolderInputIcon /> Move…
+			</DropdownMenu.Item>
+		{/if}
 		<DropdownMenu.Separator />
 		<DropdownMenu.Item variant="destructive" onSelect={ondelete}>
 			<Trash2Icon /> Delete…

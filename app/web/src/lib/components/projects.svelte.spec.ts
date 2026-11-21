@@ -6,7 +6,9 @@ import { runWorkspace } from '#lib/data/run.ts';
 import { app, page, resetApp } from '#lib/testing/app.svelte.ts';
 import WorkspaceHarness from '#lib/testing/WorkspaceHarness.svelte';
 import type { ProjectInfo, RunDetail } from '#lib/types.ts';
+import DeleteProjectDialog from './DeleteProjectDialog.svelte';
 import MoveRunsDialog from './MoveRunsDialog.svelte';
+import ProjectTabs from './ProjectTabs.svelte';
 import ProjectDialog from './ProjectDialog.svelte';
 import RunsTable from './RunsTable.svelte';
 
@@ -184,6 +186,77 @@ describe('moving runs', () => {
 		await screen.getByLabelText('Project').click();
 		await screen.getByRole('option', { name: /gpt/ }).click();
 		await expect.element(warning).toBeVisible();
+	});
+});
+
+describe('deleting a project (D167)', () => {
+	const asked: string[] = [];
+	const answering = (storage: unknown, status = 200) => {
+		asked.length = 0;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (url: string) => {
+				asked.push(url);
+				return Response.json(storage, { status });
+			})
+		);
+	};
+
+	it('says which datasets and models go with it, linking to each tab', async () => {
+		viewing('member');
+		answering({ datasets: 3, models: 12, bytes: 412 * 1024 ** 3 });
+		render(DeleteProjectDialog, {
+			open: true,
+			entity: 'acme',
+			project: project('my run', 'private')
+		});
+		await expect
+			.element(screen.getByRole('status'))
+			.toHaveTextContent(
+				'3 datasets and 12 models (412 GB) are deleted with this project. Move anything you want to keep to Global first, from its Datasets and Models tabs.'
+			);
+		expect(asked).toEqual(['/api/projects/acme/my%20run/storage']);
+		const models = screen.getByRole('link', { name: 'Models' });
+		expect(models.element().getAttribute('href')).toBe('/acme/my run/models');
+	});
+
+	it('says one model in the singular, and nothing when there is none', async () => {
+		viewing('member');
+		answering({ datasets: 0, models: 1, bytes: 2048 });
+		const { unmount } = render(DeleteProjectDialog, {
+			open: true,
+			entity: 'acme',
+			project: project('bert', 'private')
+		});
+		await expect
+			.element(screen.getByRole('status'))
+			.toHaveTextContent(/^1 model \(2\.0 KB\) is deleted with this project\..* its Models tab\.$/);
+		unmount();
+		answering({ datasets: 0, models: 0, bytes: 0 });
+		render(DeleteProjectDialog, {
+			open: true,
+			entity: 'acme',
+			project: project('bert', 'private')
+		});
+		await expect.element(screen.getByText('Deletes its 3 runs', { exact: false })).toBeVisible();
+		expect(screen.getByRole('status').query()).toBeNull();
+	});
+});
+
+describe('a project’s tabs (D169)', () => {
+	it('links its runs, datasets and models, marking the one shown', async () => {
+		viewing('member');
+		render(ProjectTabs, { entity: 'acme', project: 'bert', current: 'datasets' });
+		const href = (name: string) =>
+			screen.getByRole('link', { name }).element().getAttribute('href');
+		expect([href('Runs'), href('Datasets'), href('Models')]).toEqual([
+			'/acme/bert',
+			'/acme/bert/datasets',
+			'/acme/bert/models'
+		]);
+		await expect
+			.element(screen.getByRole('link', { name: 'Datasets' }))
+			.toHaveAttribute('aria-current', 'page');
 	});
 });
 

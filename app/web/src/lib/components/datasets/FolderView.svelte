@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FileIcon from '@lucide/svelte/icons/file';
 	import FolderIcon from '@lucide/svelte/icons/folder';
@@ -28,7 +29,7 @@
 	import RenameDialog from './RenameDialog.svelte';
 
 	interface Props {
-		org: string;
+		scope: Scope;
 		/** The folder shown: empty for the bucket's root. */
 		path: string;
 		/** Its first page, from the server. */
@@ -39,9 +40,11 @@
 		 * page shows the selection bar, whose actions open this listing's dialogs.
 		 */
 		selection?: Selection;
+		/** The org's projects, for the Move dialog's scope picker (D166). */
+		projects?: readonly string[];
 	}
 
-	let { org, path, folder, now, selection }: Props = $props();
+	let { scope, path, folder, now, selection, projects = [] }: Props = $props();
 
 	// The server's first page, then pages loaded here with "Load more". Datasets come first in
 	// each page, then folders, then files (D87).
@@ -86,8 +89,10 @@
 		if (to.some((t) => within(parentOf(t), path))) await invalidateAll();
 	}
 
-	async function moved(results: MoveResult[]) {
+	/** Rows moved to another scope just leave; they're nowhere in this one. */
+	async function moved(results: MoveResult[], to: Scope) {
 		const done = results.filter((r) => r.moved);
+		if (to.project !== scope.project) return gone(done.map((r) => r.path));
 		await landed(
 			done.map((r) => r.path),
 			done.map((r) => r.to)
@@ -103,7 +108,7 @@
 		failed = null;
 		try {
 			const page = await datasetCall<DatasetFolder>(
-				datasetsApi(org, 'at', { path, cursor, details: 'true' })
+				datasetsApi(scope, 'at', { path, cursor, details: 'true' })
 			);
 			datasets = [...datasets, ...page.datasets];
 			folders = [...folders, ...page.folders];
@@ -120,11 +125,19 @@
 <div class="grid gap-3">
 	{#if empty && !path}
 		<div class="max-w-[68ch]">
-			<p class="text-[15px]">No datasets yet.</p>
-			<p class="mt-1 text-muted-foreground">
-				Write a Lance dataset into {DATASETS_BUCKET} and it shows up here.
-			</p>
-			<div class="mt-3"><CopyBlock code={writeSnippet(org)} /></div>
+			{#if scope.project !== null}
+				<p class="text-[15px]">No datasets in {scope.project} yet.</p>
+				<p class="mt-1 text-muted-foreground">
+					Write a Lance dataset where <code class="font-mono text-[0.9em]">location</code> says and it
+					shows up here. It’s deleted with the project.
+				</p>
+			{:else}
+				<p class="text-[15px]">No datasets yet.</p>
+				<p class="mt-1 text-muted-foreground">
+					Write a Lance dataset into {DATASETS_BUCKET} and it shows up here.
+				</p>
+			{/if}
+			<div class="mt-3"><CopyBlock code={writeSnippet(scope)} /></div>
 			<p class="mt-3 text-[13px] text-muted-foreground">
 				For tools that can’t run <code class="font-mono text-[0.9em]">flock</code>, create a
 				long-lived key on your
@@ -166,7 +179,7 @@
 						<td class="truncate px-2">
 							<a
 								class="flex items-center gap-2 underline-offset-3 hover:text-link hover:underline"
-								href={datasetsHref(org, d.path)}
+								href={datasetsHref(scope, d.path)}
 							>
 								<DatabaseIcon class="size-4 flex-none text-muted-foreground" />
 								<span class="truncate">{d.name}</span>
@@ -189,6 +202,7 @@
 								<RowMenu
 									name={d.name}
 									onrename={() => selection.act('rename', [d.path])}
+									onmove={() => selection.act('move', [d.path])}
 									ondelete={() => selection.act('delete', [d.path])}
 								/>
 							</td>
@@ -210,7 +224,7 @@
 						<td class="truncate px-2">
 							<a
 								class="flex items-center gap-2 underline-offset-3 hover:text-link hover:underline"
-								href={datasetsHref(org, f.path)}
+								href={datasetsHref(scope, f.path)}
 							>
 								<FolderIcon class="size-4 flex-none text-muted-foreground" />
 								<span class="truncate">{f.name}/</span>
@@ -224,6 +238,7 @@
 								<RowMenu
 									name="{f.name}/"
 									onrename={() => selection.act('rename', [f.path])}
+									onmove={() => selection.act('move', [f.path])}
 									ondelete={() => selection.act('delete', [f.path])}
 								/>
 							</td>
@@ -236,7 +251,7 @@
 						<td class="truncate px-2">
 							<a
 								class="flex items-center gap-2 underline-offset-3 hover:text-link hover:underline"
-								href={fileHref(org, file.key)}
+								href={fileHref(scope.org, file.key)}
 							>
 								<FileIcon class="size-4 flex-none text-muted-foreground" />
 								<span class="truncate">{file.name}</span>
@@ -274,20 +289,21 @@
 	{@const one = targets[0] ?? { path: '', folder: false }}
 	<MoveDatasetsDialog
 		bind:open={() => selection.action === 'move', (o) => o || selection.close('move')}
-		{org}
+		{scope}
 		from={path}
 		items={targets}
+		{projects}
 		onmoved={moved}
 	/>
 	<DeleteDatasetsDialog
 		bind:open={() => selection.action === 'delete', (o) => o || selection.close('delete')}
-		{org}
+		{scope}
 		items={targets}
 		ondeleted={deleted}
 	/>
 	<RenameDialog
 		bind:open={() => selection.action === 'rename', (o) => o || selection.close('rename')}
-		{org}
+		{scope}
 		path={one.path}
 		folder={one.folder}
 		onrenamed={(to) => landed([one.path], [to])}

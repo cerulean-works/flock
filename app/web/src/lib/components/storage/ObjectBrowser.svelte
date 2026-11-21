@@ -19,7 +19,8 @@
 		s3Uri,
 		typeLabel
 	} from '#lib/storage.ts';
-	import type { Listing, Presigned } from '#lib/types.ts';
+	import { DATASETS_BUCKET, PROJECTS, datasetsHref } from '#lib/datasets.ts';
+	import type { Listing, Presigned, ProjectInfo } from '#lib/types.ts';
 	import {
 		UploadQueue,
 		browserTransport,
@@ -42,9 +43,26 @@
 		/** Its first page, from the server. */
 		listing: Listing;
 		now: number;
+		/** The org's projects, to link each `-projects/{id}/` folder to its project (D169). */
+		projects?: readonly ProjectInfo[];
 	}
 
-	let { org, bucket, prefix, listing, now }: Props = $props();
+	let { org, bucket, prefix, listing, now, projects = [] }: Props = $props();
+
+	// In `-projects/` of flock-datasets and flock-models each folder is a project's, by its id
+	// (D160): it links to that project's Datasets or Models tab.
+	const projectFolders = $derived(
+		prefix === `${PROJECTS}/` && (bucket === DATASETS_BUCKET || bucket === MODELS_BUCKET)
+	);
+	const byId = $derived(new Map(projects.map((p) => [String(p.id), p.name])));
+	function projectLink(key: string) {
+		const name = projectFolders ? byId.get(nameOf(key)) : undefined;
+		if (name === undefined) return null;
+		const scope = { org, project: name };
+		const tab = bucket === MODELS_BUCKET ? 'Models' : 'Datasets';
+		const href = bucket === MODELS_BUCKET ? modelsHref(scope) : datasetsHref(scope);
+		return { name, tab, href };
+	}
 
 	/** flock-models changes only through `flock models push` and the Models tab (D97). */
 	const readOnly = $derived(bucket === MODELS_BUCKET);
@@ -250,6 +268,7 @@
 			<tbody>
 				{#each rows as row (row.key)}
 					{@const on = selected.has(row.key)}
+					{@const link = row.kind === 'folder' ? projectLink(row.key) : null}
 					<tr
 						class={['h-10 border-b border-divider', on ? 'bg-selection/45' : 'hover:bg-muted']}
 						aria-selected={on}
@@ -261,20 +280,28 @@
 								aria-label="Select {nameOf(row.key)}"
 							/>
 						</td>
-						<td class="truncate px-2">
-							<a
-								class="flex min-w-0 items-center gap-2 underline-offset-3 hover:text-link hover:underline"
-								href={objectHref(org, bucket, row.key)}
-								title={row.key}
-							>
-								{#if row.kind === 'folder'}
-									<FolderIcon class="size-4 flex-none text-muted-foreground" />
-									<span class="truncate">{nameOf(row.key)}/</span>
-								{:else}
-									<FileIcon class="size-4 flex-none text-muted-foreground" />
-									<span class="truncate">{nameOf(row.key)}</span>
+						<td class="px-2">
+							<div class="flex min-w-0 items-center gap-3">
+								<a
+									class="flex min-w-0 items-center gap-2 underline-offset-3 hover:text-link hover:underline"
+									href={objectHref(org, bucket, row.key)}
+									title={row.key}
+								>
+									{#if row.kind === 'folder'}
+										<FolderIcon class="size-4 flex-none text-muted-foreground" />
+										<span class="truncate">{nameOf(row.key)}/</span>
+									{:else}
+										<FileIcon class="size-4 flex-none text-muted-foreground" />
+										<span class="truncate">{nameOf(row.key)}</span>
+									{/if}
+								</a>
+								{#if link}
+									<a
+										class="min-w-0 truncate text-[12.5px] text-muted-foreground underline-offset-3 hover:text-link hover:underline"
+										href={link.href}>{link.name} · {link.tab}</a
+									>
 								{/if}
-							</a>
+							</div>
 						</td>
 						<td class="hidden px-2 text-right text-muted-foreground tabular-nums sm:table-cell">
 							{row.kind === 'folder' ? '—' : bytes(row.size)}

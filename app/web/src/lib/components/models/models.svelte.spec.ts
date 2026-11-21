@@ -5,6 +5,7 @@ import '../../../routes/layout.css';
 import { app, goto, invalidateAll, resetApp } from '#lib/testing/app.svelte.ts';
 import type {
 	ModelEntry,
+	ModelFolder,
 	ModelInfo,
 	ModelTrashEntry,
 	ModelVersion,
@@ -127,8 +128,15 @@ describe('ModelList', () => {
 		updated_at: NOW - 3600
 	};
 
+	const listing = (
+		models: ModelEntry[],
+		folders: ModelFolder['folders'] = [],
+		project: string | null = null
+	): ModelFolder => ({ kind: 'folder', folder: '', project, models, folders, cursor: null });
+	const global = { org: 'acme', project: null };
+
 	it('lists models with their latest and primary versions, size and age', async () => {
-		render(ModelList, { org: 'acme', models: [entry], now: NOW });
+		render(ModelList, { scope: global, path: '', folder: listing([entry]), now: NOW });
 		const link = screen.getByRole('link', { name: 'olmo2-1b' });
 		expect(link.element().getAttribute('href')).toBe('/models/acme/olmo2-1b');
 		await expect.element(screen.getByText('Version 14')).toBeInTheDocument();
@@ -138,10 +146,37 @@ describe('ModelList', () => {
 	});
 
 	it('shows how to save a model when there are none', async () => {
-		render(ModelList, { org: 'acme', models: [], now: NOW });
+		render(ModelList, { scope: global, path: '', folder: listing([]), now: NOW });
 		await expect.element(screen.getByText('No models yet.')).toBeVisible();
 		await expect.element(screen.getByText(/save_to_hub\(model, "acme\/my-model"\)/)).toBeVisible();
 		await expect.element(screen.getByText('flock models pull acme/my-model')).toBeVisible();
+	});
+
+	it('lists a project’s models by their last segment, then folders with their counts', async () => {
+		const scope = { org: 'acme', project: 'pretrain' };
+		const nested = { ...entry, name: 'eval/olmo2-1b', model: 'pretrain:eval/olmo2-1b' };
+		const folder = {
+			...listing([nested], [{ name: 'sweeps', path: 'eval/sweeps', models: 4 }], 'pretrain'),
+			folder: 'eval'
+		};
+		render(ModelList, { scope, path: 'eval', folder, now: NOW });
+		const model = screen.getByRole('link', { name: 'olmo2-1b' });
+		expect(model.element().getAttribute('href')).toBe('/acme/pretrain/models/eval/olmo2-1b');
+		const sub = screen.getByRole('link', { name: 'sweeps/' });
+		expect(sub.element().getAttribute('href')).toBe('/acme/pretrain/models/eval/sweeps');
+		await expect.element(screen.getByText('4 models')).toBeVisible();
+	});
+
+	it('shows how to save into the project when it has none', async () => {
+		const scope = { org: 'acme', project: 'pretrain' };
+		render(ModelList, { scope, path: '', folder: listing([], [], 'pretrain'), now: NOW });
+		await expect.element(screen.getByText('No models in pretrain yet.')).toBeVisible();
+		await expect
+			.element(screen.getByText(/save_to_hub\(model, "my-model", project="pretrain"\)/))
+			.toBeVisible();
+		await expect
+			.element(screen.getByText('flock models pull my-model --project pretrain'))
+			.toBeVisible();
 	});
 });
 
@@ -153,7 +188,13 @@ describe('ModelView', () => {
 		requested = null
 	) => {
 		resetApp(url);
-		render(ModelView, { org: 'acme', info, version: shown, requested, now: NOW });
+		render(ModelView, {
+			scope: { org: 'acme', project: null },
+			info,
+			version: shown,
+			requested,
+			now: NOW
+		});
 	};
 	// The Overview tab reads README.md, config.json and flock.json through presigned URLs.
 	const files: Record<string, string> = {
@@ -246,7 +287,7 @@ describe('ModelView', () => {
 	});
 
 	it('picks versions and tags, with checkpoint tags in step order and the primary first', async () => {
-		serve({ ...storage(), [`${API}/olmo2-1b/versions`]: () => page(versions) });
+		serve({ ...storage(), [`${API}/olmo2-1b/-/versions`]: () => page(versions) });
 		view();
 		await screen.getByRole('button', { name: /^Version 12/ }).click();
 		const menu = screen.getByRole('menu');
@@ -270,7 +311,7 @@ describe('ModelView', () => {
 	});
 
 	it('keeps the tab in the URL', async () => {
-		serve({ ...storage(), [`${API}/olmo2-1b/versions`]: () => page(versions) });
+		serve({ ...storage(), [`${API}/olmo2-1b/-/versions`]: () => page(versions) });
 		view();
 		await screen.getByRole('tab', { name: 'Files' }).click();
 		await vi.waitFor(() =>
@@ -286,7 +327,7 @@ describe('ModelView', () => {
 	});
 
 	it('lists the Versions with the Primary badge, run, step and row menu', async () => {
-		serve({ [`${API}/olmo2-1b/versions`]: () => page(versions) });
+		serve({ [`${API}/olmo2-1b/-/versions`]: () => page(versions) });
 		view('http://flock.test/models/acme/olmo2-1b?tab=versions');
 		const row = screen.getByRole('row').filter({ hasText: 'checkpoint-12000' });
 		// (The run column shows on wider screens.)
@@ -317,8 +358,8 @@ describe('ModelView', () => {
 
 	it('makes a version primary from the row menu and keeps the version shown', async () => {
 		const calls = serve({
-			[`${API}/olmo2-1b/versions`]: () => page(versions),
-			[`${API}/olmo2-1b/primary`]: () => ({ ...detail(versions[0]), previous: 12 })
+			[`${API}/olmo2-1b/-/versions`]: () => page(versions),
+			[`${API}/olmo2-1b/-/primary`]: () => ({ ...detail(versions[0]), previous: 12 })
 		});
 		view('http://flock.test/models/acme/olmo2-1b?tab=versions');
 		await screen.getByRole('button', { name: 'Version 14 actions' }).click();
@@ -345,7 +386,7 @@ describe('ModelView', () => {
 	});
 
 	it('can’t make the primary version primary again', async () => {
-		serve({ [`${API}/olmo2-1b/versions`]: () => page(versions) });
+		serve({ [`${API}/olmo2-1b/-/versions`]: () => page(versions) });
 		view('http://flock.test/models/acme/olmo2-1b?tab=versions');
 		await screen.getByRole('button', { name: 'Version 12 actions' }).click();
 		await expect
@@ -357,7 +398,7 @@ describe('ModelView', () => {
 		serve({});
 		resetApp('http://flock.test/models/acme/olmo2-1b');
 		render(ModelView, {
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			info: { ...info, versions: 0, latest: null, primary: null, tags: [] },
 			version: null,
 			requested: null,
@@ -378,13 +419,19 @@ describe('ModelView', () => {
 describe('the tag dialogs', () => {
 	it('tags a version, offering to move a tag that is elsewhere', async () => {
 		const calls = serve({
-			[`${API}/olmo2-1b/tags/release`]: (init) =>
+			[`${API}/olmo2-1b/-/tags/release`]: (init) =>
 				body(init).move
 					? { tag: 'release', version: 14 }
 					: refuse(409, 'release is on version 13.', { version: 13 })
 		});
 		const ontagged = vi.fn();
-		render(TagDialog, { open: true, org: 'acme', name: 'olmo2-1b', version: 14, ontagged });
+		render(TagDialog, {
+			open: true,
+			scope: { org: 'acme', project: null },
+			name: 'olmo2-1b',
+			version: 14,
+			ontagged
+		});
 		await screen.getByLabelText('Name').fill('release');
 		await screen.getByRole('button', { name: 'Add tag' }).click();
 		await expect
@@ -400,14 +447,14 @@ describe('the tag dialogs', () => {
 
 	it('shows the refusal for a checkpoint tag on another version, without offering a move', async () => {
 		serve({
-			[`${API}/olmo2-1b/tags/checkpoint-900`]: () =>
+			[`${API}/olmo2-1b/-/tags/checkpoint-900`]: () =>
 				refuse(409, "checkpoint-900 is on version 13. Checkpoint tags don't move.", {
 					version: 13
 				})
 		});
 		render(TagDialog, {
 			open: true,
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			name: 'olmo2-1b',
 			version: 14,
 			ontagged: vi.fn()
@@ -424,7 +471,7 @@ describe('the tag dialogs', () => {
 		const calls = serve({});
 		render(TagDialog, {
 			open: true,
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			name: 'olmo2-1b',
 			version: 14,
 			ontagged: vi.fn()
@@ -442,12 +489,12 @@ describe('the tag dialogs', () => {
 
 	it('warns before removing a tag', async () => {
 		const calls = serve({
-			[`${API}/olmo2-1b/tags/release`]: () => new Response(null, { status: 204 })
+			[`${API}/olmo2-1b/-/tags/release`]: () => new Response(null, { status: 204 })
 		});
 		const onremoved = vi.fn();
 		render(RemoveTagDialog, {
 			open: true,
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			name: 'olmo2-1b',
 			tag: 'release',
 			version: 13,
@@ -468,11 +515,11 @@ describe('the tag dialogs', () => {
 
 describe('the delete dialogs', () => {
 	it('deletes a version after its name is typed', async () => {
-		const calls = serve({ [`${API}/olmo2-1b/versions/11`]: () => ({ kind: 'version', id: 1 }) });
+		const calls = serve({ [`${API}/olmo2-1b/-/versions/11`]: () => ({ kind: 'version', id: 1 }) });
 		const ondeleted = vi.fn();
 		render(DeleteVersionDialog, {
 			open: true,
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			version: version(11, { tags: ['checkpoint-100'] }),
 			shown: false,
 			ondeleted
@@ -487,10 +534,10 @@ describe('the delete dialogs', () => {
 	});
 
 	it('goes to the primary after deleting the version shown', async () => {
-		serve({ [`${API}/olmo2-1b/versions/11`]: () => ({ kind: 'version', id: 1 }) });
+		serve({ [`${API}/olmo2-1b/-/versions/11`]: () => ({ kind: 'version', id: 1 }) });
 		render(DeleteVersionDialog, {
 			open: true,
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			version: version(11),
 			shown: true,
 			ondeleted: vi.fn()
@@ -506,7 +553,7 @@ describe('the delete dialogs', () => {
 		const calls = serve({});
 		const { rerender } = render(DeleteVersionDialog, {
 			open: true,
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			version: version(12, { primary: true }),
 			shown: false,
 			ondeleted: vi.fn()
@@ -526,12 +573,12 @@ describe('the delete dialogs', () => {
 
 	it('shows the API’s refusal when the version changed meanwhile', async () => {
 		serve({
-			[`${API}/olmo2-1b/versions/11`]: () =>
+			[`${API}/olmo2-1b/-/versions/11`]: () =>
 				refuse(409, 'Version 11 is the primary version. Make another version primary first.')
 		});
 		render(DeleteVersionDialog, {
 			open: true,
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			version: version(11),
 			shown: false,
 			ondeleted: vi.fn()
@@ -544,8 +591,8 @@ describe('the delete dialogs', () => {
 	});
 
 	it('deletes a model after its name is typed, then goes to the models', async () => {
-		const calls = serve({ [`${API}/olmo2-1b`]: () => ({ kind: 'model', id: 1 }) });
-		render(DeleteModelDialog, { open: true, org: 'acme', info });
+		const calls = serve({ [`${API}/olmo2-1b/-`]: () => ({ kind: 'model', id: 1 }) });
+		render(DeleteModelDialog, { open: true, scope: { org: 'acme', project: null }, info });
 		await expect
 			.element(
 				screen.getByText('This deletes all 3 versions. Org admins can restore it for 14 days.')
@@ -556,18 +603,18 @@ describe('the delete dialogs', () => {
 		await screen.getByLabelText('Type acme/olmo2-1b to confirm').fill('acme/olmo2-1b');
 		await confirm.click();
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/models/acme', { replace: true }));
-		expect([calls[0].url, calls[0].init?.method]).toEqual([`${API}/olmo2-1b`, 'DELETE']);
+		expect([calls[0].url, calls[0].init?.method]).toEqual([`${API}/olmo2-1b/-`, 'DELETE']);
 	});
 });
 
 describe('MakePrimaryDialog', () => {
 	it('shows a refusal in place', async () => {
 		serve({
-			[`${API}/olmo2-1b/primary`]: () => refuse(404, 'version 14 of acme/olmo2-1b not found')
+			[`${API}/olmo2-1b/-/primary`]: () => refuse(404, 'version 14 of acme/olmo2-1b not found')
 		});
 		render(MakePrimaryDialog, {
 			open: true,
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			name: 'olmo2-1b',
 			number: 14,
 			current: 12,
@@ -718,5 +765,19 @@ describe('RunModels', () => {
 		await expect
 			.element(screen.getByText('primary · step 900 · release · checkpoint-900'))
 			.toBeVisible();
+	});
+
+	it('names a project’s checkpoint by its project, linked into it (D169)', async () => {
+		const project = {
+			model: 'pretrain:sweeps/lr-3e-4',
+			name: 'sweeps/lr-3e-4',
+			org: 'acme',
+			project: 'pretrain'
+		};
+		render(RunModels, { versions: [version(7, project)] });
+		const link = screen.getByRole('link', { name: 'pretrain:sweeps/lr-3e-4@7' });
+		expect(link.element().getAttribute('href')).toBe(
+			'/acme/pretrain/models/sweeps/lr-3e-4?version=7'
+		);
 	});
 });

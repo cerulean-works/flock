@@ -65,7 +65,13 @@ const names = () =>
 
 function list(f = folder()) {
 	const selection = new Selection();
-	render(FolderView, { org: 'acme', path: 'eval', folder: f, now: 1_790_000_100, selection });
+	render(FolderView, {
+		scope: { org: 'acme', project: null },
+		path: 'eval',
+		folder: f,
+		now: 1_790_000_100,
+		selection
+	});
 	return selection;
 }
 
@@ -117,7 +123,12 @@ describe('selecting datasets and folders', () => {
 	});
 
 	it('shows no checkboxes or menus without a selection to fill', async () => {
-		render(FolderView, { org: 'acme', path: 'eval', folder: folder(), now: 0 });
+		render(FolderView, {
+			scope: { org: 'acme', project: null },
+			path: 'eval',
+			folder: folder(),
+			now: 0
+		});
 		await expect.element(screen.getByRole('link', { name: 'a', exact: true })).toBeVisible();
 		expect(document.querySelectorAll('[role="checkbox"]').length).toBe(0);
 		await expect

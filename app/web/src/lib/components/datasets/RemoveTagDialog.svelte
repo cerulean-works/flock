@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import { toast } from 'svelte-sonner';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -7,7 +8,7 @@
 
 	interface Props {
 		open: boolean;
-		org: string;
+		scope: Scope;
 		path: string;
 		tag: string;
 		/** The version it's on. */
@@ -15,7 +16,7 @@
 		onremoved: () => void;
 	}
 
-	let { open = $bindable(), org, path, tag, version, onremoved }: Props = $props();
+	let { open = $bindable(), scope, path, tag, version, onremoved }: Props = $props();
 
 	let pending = $state(false);
 	let error = $state<string | null>(null);
@@ -24,7 +25,7 @@
 		pending = true;
 		error = null;
 		try {
-			await datasetCall(datasetsApi(org, `tags/${encodeURIComponent(tag)}`, { path }), {
+			await datasetCall(datasetsApi(scope, `tags/${encodeURIComponent(tag)}`, { path }), {
 				method: 'DELETE'
 			});
 			toast.success(`Removed ${tag}`);

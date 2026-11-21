@@ -59,7 +59,21 @@ const names = () =>
 
 function list(models = ['a', 'b', 'c'].map(entry)) {
 	const selection = new Selection();
-	render(ModelList, { org: 'acme', models, now: NOW, selection });
+	const folder = {
+		kind: 'folder' as const,
+		folder: '',
+		project: null,
+		models,
+		folders: [],
+		cursor: null
+	};
+	render(ModelList, {
+		scope: { org: 'acme', project: null },
+		path: '',
+		folder,
+		now: NOW,
+		selection
+	});
 	return selection;
 }
 
@@ -81,9 +95,9 @@ describe('selecting models', () => {
 
 	it('deletes several after their number is typed, showing those that weren’t', async () => {
 		const calls = serve({
-			[`${API}/a`]: () => ({ kind: 'model', id: 1 }),
-			[`${API}/b`]: () => Response.json({ message: 'An upload to b is open.' }, { status: 409 }),
-			[`${API}/c`]: () => ({ kind: 'model', id: 3 })
+			[`${API}/a/-`]: () => ({ kind: 'model', id: 1 }),
+			[`${API}/b/-`]: () => Response.json({ message: 'An upload to b is open.' }, { status: 409 }),
+			[`${API}/c/-`]: () => ({ kind: 'model', id: 3 })
 		});
 		const selection = list();
 		await screen.getByRole('checkbox', { name: 'Select all' }).click();
@@ -97,9 +111,9 @@ describe('selecting models', () => {
 		await expect.element(screen.getByText('1 model wasn’t deleted.')).toBeVisible();
 		await expect.element(screen.getByText('An upload to b is open.')).toBeVisible();
 		expect(calls.map((c) => [c.url, c.init?.method])).toEqual([
-			[`${API}/a`, 'DELETE'],
-			[`${API}/b`, 'DELETE'],
-			[`${API}/c`, 'DELETE']
+			[`${API}/a/-`, 'DELETE'],
+			[`${API}/b/-`, 'DELETE'],
+			[`${API}/c/-`, 'DELETE']
 		]);
 		expect(names()).toEqual(['b']);
 		expect(selection.chosen).toEqual(['b']);
@@ -107,7 +121,7 @@ describe('selecting models', () => {
 	});
 
 	it('deletes one checked model with its own dialog, by its name', async () => {
-		const calls = serve({ [`${API}/b`]: () => ({ kind: 'model', id: 2 }) });
+		const calls = serve({ [`${API}/b/-`]: () => ({ kind: 'model', id: 2 }) });
 		const selection = list();
 		await box('b').click();
 		selection.act('delete');
@@ -123,7 +137,7 @@ describe('selecting models', () => {
 
 describe('the model row menu', () => {
 	it('renames a model in place', async () => {
-		const calls = serve({ [`${API}/b`]: () => ({ ...entry('bert'), prefix: 'b/' }) });
+		const calls = serve({ [`${API}/b/-`]: () => ({ ...entry('bert'), prefix: 'b/' }) });
 		list();
 		await screen.getByRole('button', { name: 'Actions for b' }).click();
 		await screen.getByRole('menuitem', { name: 'Rename…' }).click();
@@ -155,12 +169,16 @@ describe('RenameModelDialog', () => {
 	it('shows a refusal, then opens the model’s new page', async () => {
 		let taken = true;
 		const calls = serve({
-			[`${API}/olmo2-1b`]: () =>
+			[`${API}/olmo2-1b/-`]: () =>
 				taken
 					? Response.json({ message: 'A model named olmo2 already exists.' }, { status: 409 })
 					: { ...entry('olmo2'), prefix: 'olmo2-1b/' }
 		});
-		render(RenameModelDialog, { open: true, org: 'acme', name: 'olmo2-1b' });
+		render(RenameModelDialog, {
+			open: true,
+			scope: { org: 'acme', project: null },
+			name: 'olmo2-1b'
+		});
 		await expect
 			.element(
 				screen.getByText(

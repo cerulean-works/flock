@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import EllipsisVerticalIcon from '@lucide/svelte/icons/ellipsis-vertical';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import type { ResolvedPathname } from '$app/types';
@@ -13,7 +14,7 @@
 	import TagDialog from './TagDialog.svelte';
 
 	interface Props {
-		org: string;
+		scope: Scope;
 		path: string;
 		/** The version the page shows. */
 		shown: number;
@@ -26,7 +27,7 @@
 		now: number;
 	}
 
-	let { org, path, shown, versionHref, ontags, readonly = false, now }: Props = $props();
+	let { scope, path, shown, versionHref, ontags, readonly = false, now }: Props = $props();
 
 	// The history, newest first, 50 a page (D89).
 	let versions = $state<DatasetVersion[]>([]);
@@ -40,7 +41,7 @@
 		failed = null;
 		try {
 			const page = await datasetCall<VersionsPage>(
-				datasetsApi(org, 'versions', { path, cursor: more ? cursor : null })
+				datasetsApi(scope, 'versions', { path, cursor: more ? cursor : null })
 			);
 			versions = more ? [...versions, ...page.versions] : page.versions;
 			cursor = page.cursor;
@@ -197,14 +198,14 @@
 {#if !readonly}
 	<TagDialog
 		bind:open={tagging.open}
-		{org}
+		{scope}
 		{path}
 		version={tagging.value ?? 0}
 		ontagged={changed}
 	/>
 	<RemoveTagDialog
 		bind:open={removing.open}
-		{org}
+		{scope}
 		{path}
 		tag={removing.value?.tag ?? ''}
 		version={removing.value?.version ?? 0}

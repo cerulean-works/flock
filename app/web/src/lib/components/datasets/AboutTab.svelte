@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import { DatasetError, datasetCall, datasetsApi } from '#lib/datasets.ts';
 	import type { DatasetInfo } from '#lib/types.ts';
 	import { bytes, dateTime } from '#lib/utils.ts';
@@ -6,7 +7,7 @@
 	import TagChip from '../TagChip.svelte';
 
 	interface Props {
-		org: string;
+		scope: Scope;
 		path: string;
 		/** The version shown; null when Lance couldn't read it, and only the README shows. */
 		info: DatasetInfo | null;
@@ -14,7 +15,7 @@
 		tags: string[];
 	}
 
-	let { org, path, info, tags }: Props = $props();
+	let { scope, path, info, tags }: Props = $props();
 
 	let readme = $state<{ text: string; truncated: boolean } | null>(null);
 	let missing = $state(false);
@@ -26,7 +27,7 @@
 		readme = null;
 		missing = false;
 		failed = null;
-		datasetCall<{ text: string; truncated: boolean }>(datasetsApi(org, 'readme', { path }), {
+		datasetCall<{ text: string; truncated: boolean }>(datasetsApi(scope, 'readme', { path }), {
 			signal: controller.signal
 		})
 			.then((got) => (readme = got))

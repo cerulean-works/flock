@@ -74,7 +74,7 @@ describe('a delete dialog with ConfirmField', () => {
 	it('asks for the number of items when there are several', async () => {
 		render(DeleteDatasetsDialog, {
 			open: true,
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			items: [
 				{ path: 'eval/a', folder: false },
 				{ path: 'eval/b', folder: true }

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
@@ -11,14 +12,14 @@
 
 	interface Props {
 		open: boolean;
-		org: string;
+		scope: Scope;
 		/** The model, as its page or the list has it. */
 		info: Pick<ModelInfo, 'name' | 'model' | 'versions'>;
 		/** Once deleted, in place of going to the list (the list's row menu). */
 		ondeleted?: () => void | Promise<void>;
 	}
 
-	let { open = $bindable(), org, info, ondeleted }: Props = $props();
+	let { open = $bindable(), scope, info, ondeleted }: Props = $props();
 
 	// Typing the name is the confirmation. Reset once the dialog has closed, so its text stays
 	// put while it animates closed.
@@ -30,11 +31,11 @@
 		pending = true;
 		error = null;
 		try {
-			await modelCall(modelApi(org, info.name), { method: 'DELETE' });
+			await modelCall(modelApi(scope, info.name), { method: 'DELETE' });
 			toast.success(`Deleted ${info.model}`);
 			open = false;
 			if (ondeleted) await ondeleted();
-			else await goto(modelsHref(org), { replace: true });
+			else await goto(modelsHref(scope), { replace: true });
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {

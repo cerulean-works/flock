@@ -2,25 +2,37 @@
 
 import { resolve } from '$app/paths';
 import type { ResolvedPathname } from '$app/types';
+import { type Scope, asScope, scopeQuery } from './scope.ts';
 import { objectHref } from './storage.ts';
 import type { Cell } from './types.ts';
 import { bytes } from './utils.ts';
+import { projectHref } from './workspace/url.ts';
 
 /** The org's managed bucket, as S3 clients name it. */
 export const DATASETS_BUCKET = 'flock-datasets';
+/** Where projects' datasets live in it, `-projects/{project id}/` (D160). */
+export const PROJECTS = '-projects';
 /** How long a deleted dataset waits in the trash. */
 export const TRASH_DAYS = 14;
 
 const segments = (path: string) => path.split('/').map(encodeURIComponent).join('/');
 
 // ----------------------------------------------------------------------------------------------
-// URLs: `/datasets/{org}` and `/datasets/{org}/{path…}`, a folder or a dataset (the API decides).
+// URLs: `/datasets/{org}/{path…}` for global, `/{org}/{project}/datasets/{path…}` for a
+// project's (D169); a folder or a dataset (the API decides).
 
-/** The bucket's root, or a folder or dataset in it. Each part of the path is encoded on its own. */
-export const datasetsHref = (org: string, path = '') =>
-	`${resolve('/(app)/datasets/[org]/[...path]', { org, path: '' }).replace(/\/$/, '')}${
-		path ? `/${segments(path)}` : ''
-	}` as ResolvedPathname;
+/**
+ * A scope's root (an org alone is its global scope), or a folder or dataset in it. Each part of
+ * the path is encoded on its own.
+ */
+export function datasetsHref(scope: Scope | string, path = '') {
+	const { org, project } = asScope(scope);
+	const root =
+		project === null
+			? resolve('/(app)/datasets/[org]/[...path]', { org, path: '' }).replace(/\/$/, '')
+			: `${projectHref(org, project)}/datasets`;
+	return `${root}${path ? `/${segments(path)}` : ''}` as ResolvedPathname;
+}
 
 /** A file of flock-datasets, in the Storage tab. */
 export const fileHref = (org: string, key: string) => objectHref(org, DATASETS_BUCKET, key);
@@ -34,16 +46,37 @@ export interface Crumb {
 	href: ResolvedPathname;
 }
 
-/** Datasets › org › folders › dataset (the last one the page itself); none at the root. */
-export function crumbs(org: string, orgLabel: string, path: string): Crumb[] {
-	if (!path) return [];
-	const out: Crumb[] = [
-		{ label: 'Datasets', href: datasetsHref(org) },
-		{ label: orgLabel, href: datasetsHref(org) }
-	];
-	const parts = path.split('/');
+/**
+ * Datasets › org › folders › dataset (the last one the page itself), none at the root; in a
+ * project, Project › Datasets › folders › dataset, at its root too.
+ */
+export function crumbs(scope: Scope | string, orgLabel: string, path: string): Crumb[] {
+	return scopeCrumbs(scope, orgLabel, 'Datasets', path, datasetsHref);
+}
+
+/** The breadcrumbs of a scope's datasets or models, which `href` links to. */
+export function scopeCrumbs(
+	scope: Scope | string,
+	orgLabel: string,
+	tab: string,
+	path: string,
+	href: (scope: Scope, path?: string) => ResolvedPathname
+): Crumb[] {
+	const s = asScope(scope);
+	if (s.project === null && !path) return [];
+	const out: Crumb[] =
+		s.project === null
+			? [
+					{ label: tab, href: href(s) },
+					{ label: orgLabel, href: href(s) }
+				]
+			: [
+					{ label: s.project, href: projectHref(s.org, s.project) },
+					{ label: tab, href: href(s) }
+				];
+	const parts = path ? path.split('/') : [];
 	for (let i = 0; i < parts.length; i++) {
-		out.push({ label: parts[i], href: datasetsHref(org, parts.slice(0, i + 1).join('/')) });
+		out.push({ label: parts[i], href: href(s, parts.slice(0, i + 1).join('/')) });
 	}
 	return out;
 }
@@ -85,14 +118,18 @@ export class DatasetError extends Error {
 	}
 }
 
-/** The dashboard's endpoint for one of an org's dataset routes, with its query. */
+/**
+ * The dashboard's endpoint for one of an org's dataset routes, with its query and the scope's
+ * `project` (D163).
+ */
 export function datasetsApi(
-	org: string,
+	scope: Scope | string,
 	op: string,
 	query: Record<string, string | number | string[] | null | undefined> = {}
 ): string {
+	const { org } = asScope(scope);
 	const search = new URLSearchParams();
-	for (const [name, value] of Object.entries(query)) {
+	for (const [name, value] of Object.entries({ ...query, ...scopeQuery(scope) })) {
 		if (value === null || value === undefined) continue;
 		for (const v of Array.isArray(value) ? value : [value]) search.append(name, String(v));
 	}
@@ -184,9 +221,24 @@ export function cellText(cell: Cell): string {
 /** Whether a cell was cut short, so an opened row reads it in full. */
 export const cellCut = (cell: Cell) => (cell.k === 'str' || cell.k === 'json') && !!cell.len;
 
-/** The snippet that writes a dataset into the org's flock-datasets (section 1 of 013). */
-export const writeSnippet = (org: string) =>
-	[
+/** A string as Python writes it (project names may hold quotes and spaces). */
+export const pyString = (text: string) => JSON.stringify(text);
+
+/**
+ * The snippet that writes a dataset: into the org's flock-datasets (section 1 of 013), or into
+ * a project's datasets, found by name with `location` (D164).
+ */
+export function writeSnippet(scope: Scope | string) {
+	const { org, project } = asScope(scope);
+	if (project !== null)
+		return [
+			'import lance',
+			'from flock.hub import datasets',
+			'',
+			`where = datasets.location("eval/mmlu", project=${pyString(project)})`,
+			'lance.write_dataset(table, where.uri, storage_options=where.storage_options)'
+		].join('\n');
+	return [
 		'import lance',
 		'from flock.hub import s3',
 		'',
@@ -195,9 +247,18 @@ export const writeSnippet = (org: string) =>
 		`    table, creds.uri("${DATASETS_BUCKET}", "eval", "mmlu"), storage_options=creds.storage_options()`,
 		')'
 	].join('\n');
+}
 
-/** The snippet that opens a dataset with Lance, with a long-lived key filled in by hand. */
-export function readSnippet(path: string, endpoint: string, region: string): string {
+/**
+ * The snippet that opens a dataset with Lance, with a long-lived key filled in by hand. `uri` is
+ * where it really is, which for a project's dataset only the API knows (D160).
+ */
+export function readSnippet(
+	path: string,
+	endpoint: string,
+	region: string,
+	uri = datasetUri(path)
+): string {
 	const options: [string, string][] = [
 		['aws_endpoint', endpoint],
 		['aws_access_key_id', 'YOUR_ACCESS_KEY_ID'],
@@ -210,7 +271,7 @@ export function readSnippet(path: string, endpoint: string, region: string): str
 		'import lance',
 		'',
 		'ds = lance.dataset(',
-		`    "${datasetUri(path)}",`,
+		`    "${uri}",`,
 		'    storage_options={',
 		...options.map(([k, v]) => `        "${k}": "${v}",`),
 		'    },',
