@@ -3,6 +3,8 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+import subprocess
+import sys
 from pathlib import PureWindowsPath
 from typing import TYPE_CHECKING
 
@@ -16,7 +18,13 @@ from flock.eval import run, tracking
 from flock.eval.cli import main
 from flock.eval.diff import diff
 from flock.eval.model import ScoringModel
-from flock.eval.results import Results, predictions_name, read_results, stays_inside
+from flock.eval.results import (
+    Results,
+    WrittenResults,
+    predictions_name,
+    read_results,
+    stays_inside,
+)
 from flock.eval.run import EvalConfig, evaluate
 
 from .toy import PROMPT_PATHS, PROVENANCE, task_result
@@ -391,3 +399,37 @@ def test_an_unreachable_tracker_exits_2(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
     assert refused.exit_code == 2
     assert "refused: Couldn't reach" in refused.output
+
+
+def test_the_reader_and_the_diff_import_no_torch() -> None:
+    # The Flock app runs the diff, and its image has no torch (the app's stage 023, D175).
+    code = "import sys, flock.eval.diff; print(sorted(sys.modules.keys() & set(sys.argv[1:])))"
+    heavy = ["torch", "transformers", "datasets", "tokenizers", "wandb", "lance"]
+    found = subprocess.run(
+        [sys.executable, "-c", code, *heavy], capture_output=True, text=True, check=True
+    )
+    assert found.stdout.strip() == "[]"
+
+
+def test_a_run_read_from_any_store_of_its_files_is_the_same_run(tmp_path: Path) -> None:
+    folder = tmp_path / "a"
+    write_run(folder, {"t": ("h", [True, False, True]), "u": ("h", None)})
+    files = {
+        path.relative_to(folder).as_posix(): path.read_text()
+        for path in folder.rglob("*")
+        if path.is_file()
+    }
+
+    stored, read = WrittenResults.read("store", files.get), read_results(str(folder))
+
+    assert stored.source == "store"
+    assert (stored.schema_version, stored.provenance, stored.tasks, stored.suites) == (
+        read.schema_version,
+        read.provenance,
+        read.tasks,
+        read.suites,
+    )
+    assert stored.predictions("t") == read.predictions("t")
+    assert stored.predictions("u") is None
+    with pytest.raises(FileNotFoundError, match="store has no results.json"):
+        WrittenResults.read("store", {}.get)

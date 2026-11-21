@@ -8,15 +8,44 @@ from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from types import NoneType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import torch
-
-from flock.eval.metrics import ChoiceScores
+from flock.eval.dataset import Dataset
 from flock.eval.provenance import Provenance
-from flock.eval.requests import Scores
-from flock.eval.tasks.base import Dataset, MCDoc, Truncation
-from flock.eval.tasks.perplexity import TextDoc
+
+# Written rows are built from these; reading a results file needs none of them, so the Flock app
+# reads one without torch.
+if TYPE_CHECKING:
+    import torch
+
+    from flock.eval.metrics import ChoiceScores
+    from flock.eval.requests import Scores
+    from flock.eval.tasks.base import MCDoc
+    from flock.eval.tasks.perplexity import TextDoc
+
+
+def scale(metric: str) -> str:
+    """Returns the scale a metric's scores average on: `accuracy` for every `acc_*` metric, otherwise the metric's own name, such as `bpb`. A mean over two scales, an accuracy (higher is better) and a `bpb` (lower is better), has no meaning."""
+    return "accuracy" if metric.startswith("acc_") else metric
+
+
+@dataclass(frozen=True, slots=True)
+class Truncation:
+    """
+    How much of a task's scoring saw contexts cut from the left to fit the model's `max_length`.
+
+    Args:
+        requests (`int`):
+            Requests whose context lost tokens, conditional and unconditional alike.
+        docs (`int`):
+            Docs with at least one such request, whose metrics may have changed.
+        max_tokens_cut (`int`):
+            The most tokens cut from any one request.
+    """
+
+    requests: int
+    docs: int
+    max_tokens_cut: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,6 +330,65 @@ class WrittenResults:
         text = self.read_file(predictions_name(task))
         return None if text is None else [json.loads(line) for line in text.splitlines()]
 
+    @classmethod
+    def read(cls, source: str, read_file: Callable[[str], str | None]) -> WrittenResults:
+        """
+        Reads a written run's `results.json` with `read_file`, which reads one of the run's files by name. [`read_results`] calls it for a folder or a tracker run; the Flock app calls it with its own store of run files.
+
+        Raises:
+            `FileNotFoundError`: if `read_file` finds no `results.json`.
+            `ValueError`: if `results.json` isn't a results file of schema 8 or 9.
+        """
+        text = read_file("results.json")
+        if text is None:
+            raise FileNotFoundError(f"{source} has no results.json")
+        try:
+            data = json.loads(text)
+            # Schema 8 holds every field these types have but `dataset.private`; older files lack
+            # provenance fields.
+            if data.get("schema_version") not in (8, 9):
+                raise ValueError(f"schema {data.get('schema_version')}; only 8 and 9 are read")
+            # An object or a string would iterate as nothing, and a diff would read every task as
+            # missing from this run.
+            if not isinstance(data["tasks"], list) or not isinstance(data["suites"], list):
+                raise TypeError("tasks and suites must be arrays")
+            tasks = [_read_task(entry, data["schema_version"]) for entry in data["tasks"]]
+            # The fields that name the model and the instrument a diff compares. A null on both
+            # sides would pass as equal.
+            provenance = data["provenance"]
+            _check_types(
+                provenance,
+                {
+                    "model": (str,),
+                    "dtype": (str,),
+                    "attention": (str,),
+                    "batch_tokens": (int,),
+                    "sdpa_backend": (str, NoneType),
+                },
+                "provenance.",
+            )
+            # Tasks are looked up by name, so a repeated one would drop or double a task.
+            names = [task.task for task in tasks]
+            if len(set(names)) != len(names):
+                raise ValueError(
+                    f"a task name repeats: {sorted({n for n in names if names.count(n) > 1})}"
+                )
+            written = cls(
+                source=source,
+                schema_version=data["schema_version"],
+                provenance=Provenance(**provenance),
+                tasks=tasks,
+                suites=[SuiteResult(**entry) for entry in data["suites"]],
+                read_file=read_file,
+            )
+        # Not JSON, a missing key, a field these types don't have, or a value of the wrong type.
+        except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as error:
+            raise ValueError(f"{source} is not a results file: {error!r}") from None
+        except ValueError as error:
+            raise ValueError(f"{source}: {error}") from None
+
+        return written
+
 
 def read_results(source: str) -> WrittenResults:
     """
@@ -323,55 +411,7 @@ def read_results(source: str) -> WrittenResults:
     else:
         read_file = partial(_read_folder_file, Path(source))
 
-    text = read_file("results.json")
-    if text is None:
-        raise FileNotFoundError(f"{source} has no results.json")
-    try:
-        data = json.loads(text)
-        # Schema 8 holds every field these types have but `dataset.private`; older files lack
-        # provenance fields.
-        if data.get("schema_version") not in (8, 9):
-            raise ValueError(f"schema {data.get('schema_version')}; only 8 and 9 are read")
-        # An object or a string would iterate as nothing, and a diff would read every task as
-        # missing from this run.
-        if not isinstance(data["tasks"], list) or not isinstance(data["suites"], list):
-            raise TypeError("tasks and suites must be arrays")
-        tasks = [_read_task(entry, data["schema_version"]) for entry in data["tasks"]]
-        # The fields that name the model and the instrument a diff compares. A null on both
-        # sides would pass as equal.
-        provenance = data["provenance"]
-        _check_types(
-            provenance,
-            {
-                "model": (str,),
-                "dtype": (str,),
-                "attention": (str,),
-                "batch_tokens": (int,),
-                "sdpa_backend": (str, NoneType),
-            },
-            "provenance.",
-        )
-        # Tasks are looked up by name, so a repeated one would drop or double a task.
-        names = [task.task for task in tasks]
-        if len(set(names)) != len(names):
-            raise ValueError(
-                f"a task name repeats: {sorted({n for n in names if names.count(n) > 1})}"
-            )
-        written = WrittenResults(
-            source=source,
-            schema_version=data["schema_version"],
-            provenance=Provenance(**provenance),
-            tasks=tasks,
-            suites=[SuiteResult(**entry) for entry in data["suites"]],
-            read_file=read_file,
-        )
-    # Not JSON, a missing key, a field these types don't have, or a value of the wrong type.
-    except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as error:
-        raise ValueError(f"{source} is not a results file: {error!r}") from None
-    except ValueError as error:
-        raise ValueError(f"{source}: {error}") from None
-
-    return written
+    return WrittenResults.read(source, read_file)
 
 
 def _read_task(entry: dict[str, Any], schema_version: int) -> TaskResult:

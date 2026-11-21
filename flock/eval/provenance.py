@@ -6,11 +6,11 @@ import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import datasets
-import tokenizers
-import torch
-import transformers
+# Only `collect` needs torch and the libraries it records, so reading a results file doesn't.
+if TYPE_CHECKING:
+    import torch
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +83,11 @@ class Provenance:
         model_digest: str | None = None,
     ) -> Provenance:
         """Collects provenance for a run on this machine, now."""
+        import datasets
+        import tokenizers
+        import torch
+        import transformers
+
         return cls(
             model=model,
             model_digest=model_digest,

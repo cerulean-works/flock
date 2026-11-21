@@ -5,8 +5,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
-from flock.eval.metrics import scale
-from flock.eval.results import WrittenResults
+from flock.eval.results import WrittenResults, scale
 
 
 @dataclass(frozen=True, slots=True)
