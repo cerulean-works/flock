@@ -129,7 +129,9 @@ You can combine tasks and suites; overlapping tasks run once. A suite can report
 
 [Sign in](../cli/sign-in) and accept the wandb SDK setup. Add `--wandb-project model-evals` to the evaluation command. The SDK uses your default organization, just as a training script does.
 
-Open `model-evals` in [Cerulean's dashboard](https://flock.cerulean.works) and find the run with job type `eval`. Its summary contains task metrics and suite scores, while config records the evaluation provenance. The local `results.json` is still written. [Tracker fields](commands#tracker-runs) lists the details.
+Open `model-evals` in [Cerulean's dashboard](https://flock.cerulean.works) and find the run with job type `eval`. Its summary contains task metrics and suite scores, while config records the evaluation provenance. Its files hold `results.json` and the predictions, so each doc's outcome can be read back. The local `results.json` is still written. [Tracker fields](commands#tracker-runs) lists the details, including why a task on a private dataset needs a private project.
+
+To see which docs two models disagree on, run [`flock eval diff`](commands#flock-eval-diff) on their two runs.
 
 To log a `results.json` scored without `--wandb-project`, run `flock eval log` on it. See [`flock eval log`](commands#flock-eval-log).
 

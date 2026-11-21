@@ -101,6 +101,8 @@ class PerplexityTask:
         # leaving it out keeps the hashes of tasks defined before the field existed.
         definition = dataclasses.asdict(self)
         del definition["primary_metric"]
+        # Who may read the rows changes no request either.
+        del definition["dataset"]["private"]
         digest = hashlib.sha256(json.dumps(definition, sort_keys=True).encode())
         for doc in docs:
             digest.update(json.dumps([doc.id, doc.text]).encode())

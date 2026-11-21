@@ -17,7 +17,7 @@ A run with an output directory writes `results.json` and one predictions file pe
     {
       "task": "arc_easy",
       "task_hash": "<sha256>",
-      "dataset": {"repo": "allenai/ai2_arc", "revision": "210d026f...", "subset": "ARC-Easy", "split": "test", "row_index": false},
+      "dataset": {"repo": "allenai/ai2_arc", "revision": "210d026f...", "subset": "ARC-Easy", "split": "test", "row_index": false, "private": false},
       "primary_metric": "acc_per_char",
       "metrics": {"acc_raw": ..., "acc_per_token": ..., "acc_per_char": ..., "acc_per_byte": ..., "acc_uncond": ..., "bpb": ...},
       "num_docs": 2376,
@@ -42,11 +42,13 @@ A run with an output directory writes `results.json` and one predictions file pe
       "score": null
     }
   ],
-  "schema_version": 8
+  "schema_version": 9
 }
 ```
 
 `flock eval run` prints only a summary of this file (each suite's score and the primary metric of each task outside a scored suite, or every metric with `--verbose`), so read the file for the rest. The file is a [`~eval.results.Results`]. Each entry of `tasks` is a [`~eval.results.TaskResult`] plus its `docs_per_second`, which is `null` if the clock measured no time. A metric or suite score that isn't finite, such as a diverged checkpoint's `perplexity`, is written as `null`, since JSON has no infinity (RFC 8259, sec. 6). Each entry of `suites` is a [`~eval.results.SuiteResult`], and `provenance` is described below. The class docstrings at the end of this page define every field.
+
+`dataset.private` says whether the dataset's repository is private, such as the Taiwanese exam sets. A run never uploads a private dataset's predictions to a public tracker project (see [Tracker runs](commands#tracker-runs)). Task hashes leave it out, since it changes no request. Files written before schema version 9 have no `private`.
 
 ### The task hash
 
@@ -80,6 +82,7 @@ Each line of `predictions/<task>.jsonl` is one doc, with enough to recompute eve
 |---|---|
 | `id` | The doc's id in the dataset. |
 | `gold` | The index of the correct choice. |
+| `correct` | Whether the doc counts as right under the task's primary metric, for a task whose primary metric is an accuracy. It is the value that metric averages, so the rows' count of `true` over the doc count is the metric in `results.json`. Tasks read first by `bpb` have no `correct`, and neither do files written before schema version 9. |
 | `logprob` | Each choice's summed log-probability. |
 | `num_tokens` | Each choice's token count. |
 | `num_chars` | Each choice's character count, leading space included. |
@@ -102,6 +105,20 @@ A perplexity task's line has other fields, enough to recompute each of its metri
 | `windows` | How many windows the text was scored in. |
 | `is_greedy` | Whether every token of the text is its position's most likely next token. |
 
+## Reading a run back
+
+[`~eval.results.read_results`] reads a written run from its folder, or from a tracker run that uploaded its files (see [Tracker runs](commands#tracker-runs)) as `run:<entity>/<project>/<id>`. It reads schema versions 8 and 9, and reads a task's predictions only when you ask for them:
+
+```python
+from flock.eval.results import read_results
+
+run = read_results("results/olmo2-1b")
+print(run.provenance.model, [task.task for task in run.tasks][:3])
+rows = run.predictions("arc_easy")  # None if the run has no predictions file for it
+```
+
+A tracker run is read as the user signed in with `flock login`, on that server. [`flock eval diff`](commands#flock-eval-diff) compares two runs read this way.
+
 ## Classes
 
 [[autodoc]] eval.results.Results
@@ -113,3 +130,7 @@ A perplexity task's line has other fields, enough to recompute each of its metri
 [[autodoc]] eval.tasks.Truncation
 
 [[autodoc]] eval.provenance.Provenance
+
+[[autodoc]] eval.results.read_results
+
+[[autodoc]] eval.results.WrittenResults

@@ -72,7 +72,7 @@ SOURCES_V1: dict[str, tuple[str, ...]] = {
 
 
 def tw_text_suite(
-    name: str, repo: str, revision: str, sources: dict[str, tuple[str, ...]]
+    name: str, repo: str, revision: str, sources: dict[str, tuple[str, ...]], *, private: bool
 ) -> Suite:
     """
     Returns a revision of the Taiwan text set as a suite of its sources, each a `source_suite` of its domains in the `test` split.
@@ -84,7 +84,7 @@ def tw_text_suite(
         tuple(
             source_suite(
                 name,
-                Dataset(repo=repo, revision=revision, subset=source, split="test"),
+                Dataset(repo=repo, revision=revision, subset=source, split="test", private=private),
                 domains,
             )
             for source, domains in sources.items()
@@ -94,11 +94,16 @@ def tw_text_suite(
 
 
 TW_TEXT = tw_text_suite(
-    "tw_text", "cerulean-works/tw-text-v0", "1786e787a4ab786d1ed021994007ef3c9590e497", SOURCES
+    "tw_text",
+    "cerulean-works/tw-text-v0",
+    "1786e787a4ab786d1ed021994007ef3c9590e497",
+    SOURCES,
+    private=True,
 )
 TW_TEXT_V1 = tw_text_suite(
     "tw_text_v1",
     "cerulean-works/tw-text-v1",
     "b60d46e622d3c9ce7f022831004aab0bef91b32d",
     SOURCES_V1,
+    private=True,
 )

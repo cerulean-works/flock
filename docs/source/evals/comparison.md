@@ -54,3 +54,58 @@ A difference in score only means something if both runs used the same settings. 
 - a file isn't JSON, a field it reads is missing, or a value there has the wrong type
 
 The message names the field and both values. Two runs that differ in a setting need a new bank, not a looser check. A file that isn't a complete results file, such as one from a job killed while writing, needs a new run instead.
+
+## Doc-by-doc diff
+
+`flock eval diff` and [`~eval.diff.diff`] compare two runs, usually of two different models, doc by doc rather than score by score. Each task's docs fall into four cells: both runs right, both wrong, only run A right, and only run B right. A doc's outcome is its `correct` field in the [predictions](results#predictions), the value the task's primary metric averages, so each run's right docs add up to its accuracy.
+
+### Which tasks are compared
+
+A task is compared when both runs scored it under the same `task_hash`, its primary metric is an accuracy, and both runs have its predictions with `correct`. Every other task is listed in `not_compared` with the reason:
+
+| Reason | The task |
+|---|---|
+| `only_a`, `only_b` | was scored by one run only. |
+| `task_hash` | has another hash in the other run, so it scored other requests: it's a different task. |
+| `not_accuracy` | is read first by a metric with no per-doc outcome, such as `bpb` or `perplexity`. |
+| `no_predictions` | has no predictions file in one of the runs. |
+| `no_outcome` | comes from a run whose file is older than schema version 9, so its rows have no `correct`. A schema 9 row without `correct` is damaged, and refuses the diff. |
+
+The diff gives counts only. No significance test comes with it.
+
+### Refusals
+
+The models may differ, and so may `max_length` and `add_bos`, which belong to the model (OLMES adds BOS for Gemma only). The diff refuses runs with another `dtype`, `batch_tokens`, `attention` or `sdpa_backend`, since a doc could then flip because of the instrument rather than the model. It also refuses a compared task whose predictions don't match its results: another row count than the task's `num_docs`, a row without a string `id` or a boolean `correct`, a predictions file that is a link, other doc ids or another order of them, a repeated id, or a share of right docs that isn't the task's accuracy (a missing or non-finite accuracy refuses too).
+
+### JSON
+
+`flock eval diff --json` prints [`~eval.diff.ItemDiff.to_dict`]:
+
+```text
+{
+  "a": "allenai/OLMo-2-0425-1B@a1847dff35000b4271fa70afc5db10fd29fedbdf",
+  "b": "meta-llama/Llama-3.2-1B@4e20de362430cd3b72f300e6b0f18e50e7166e08",
+  "tasks": [
+    {
+      "task": "arc_easy",
+      "task_hash": "<sha256>",
+      "metric": "acc_per_char",
+      "num_docs": 2376,
+      "both_right": ...,
+      "both_wrong": ...,
+      "only_a": ["<doc id>", ...],
+      "only_b": ["<doc id>", ...]
+    },
+    ...
+  ],
+  "not_compared": [["fineweb_en", "not_accuracy"], ...],
+  "schema_version": 1
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `a`, `b` | Each run's `provenance.model`. |
+| `tasks` | One entry per compared task, in run A's order. `only_a` and `only_b` hold doc ids in A's doc order, and their lengths are the two disagreement counts. |
+| `not_compared` | `[task, reason]` pairs, A's tasks first, then B's. |
+| `schema_version` | The layout of this JSON, bumped when a field changes. |

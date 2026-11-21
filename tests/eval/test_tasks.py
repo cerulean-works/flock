@@ -294,6 +294,29 @@ def test_hash_tracks_what_is_scored(change: Callable[..., Any]) -> None:
     assert change(docs, shots).hash != TASK.requests(docs, shots).hash
 
 
+def test_hash_leaves_out_whether_the_dataset_is_private() -> None:
+    # Who may read the rows changes no request, so marking a dataset private keeps every hash.
+    docs, shots = TASK.load()
+    private = dataclasses.replace(TASK, dataset=dataclasses.replace(TASK.dataset, private=True))
+    assert private.requests(docs, shots).hash == TASK.requests(docs, shots).hash
+
+
+def test_tasks_reading_one_repo_agree_on_whether_it_is_private() -> None:
+    private_by_repo = {}
+    for task in TASKS.values():
+        private = private_by_repo.setdefault(task.dataset.repo, task.dataset.private)
+        assert task.dataset.private == private, task.name
+    # The repos that answer an anonymous read with 401 on the Hugging Face Hub (2026-11-21).
+    assert {repo for repo, private in private_by_repo.items() if private} == {
+        "cerulean-works/cmmlu",
+        "cerulean-works/fineweb-2-zh-dev",
+        "cerulean-works/tc-edu-exams",
+        "cerulean-works/tw-mock-exams",
+        "cerulean-works/tw-text-v0",
+        "cerulean-works/tw-text-v1",
+    }
+
+
 def test_registry_has_arc_easy_with_olmes_shots() -> None:
     assert TASKS["arc_easy"] is ARC_EASY
     assert ARC_EASY.fewshot is not None
