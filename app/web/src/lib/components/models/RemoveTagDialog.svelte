@@ -1,13 +1,14 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import { toast } from 'svelte-sonner';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { modelApi, modelCall } from '#lib/models.ts';
+	import { modelApi, modelCall, modelRef } from '#lib/models.ts';
 	import FormError from '../FormError.svelte';
 
 	interface Props {
 		open: boolean;
-		org: string;
+		scope: Scope;
 		name: string;
 		tag: string;
 		/** The version it's on. */
@@ -15,7 +16,7 @@
 		onremoved: () => void;
 	}
 
-	let { open = $bindable(), org, name, tag, version, onremoved }: Props = $props();
+	let { open = $bindable(), scope, name, tag, version, onremoved }: Props = $props();
 
 	let pending = $state(false);
 	let error = $state<string | null>(null);
@@ -24,7 +25,7 @@
 		pending = true;
 		error = null;
 		try {
-			await modelCall(modelApi(org, name, `tags/${encodeURIComponent(tag)}`), {
+			await modelCall(modelApi(scope, name, `tags/${encodeURIComponent(tag)}`), {
 				method: 'DELETE'
 			});
 			toast.success(`Removed ${tag}`);
@@ -43,8 +44,8 @@
 		<AlertDialog.Header>
 			<AlertDialog.Title>Remove the tag {tag}?</AlertDialog.Title>
 			<AlertDialog.Description>
-				Code that loads {org}/{name}@{tag} will stop working. Version {version} stays, and only the tag
-				is removed.
+				Code that loads {modelRef(scope, name)}@{tag} will stop working. Version {version} stays, and
+				only the tag is removed.
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<FormError {error} />

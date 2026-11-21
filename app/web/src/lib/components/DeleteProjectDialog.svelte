@@ -5,7 +5,10 @@
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
-	import type { ProjectInfo } from '#lib/types.ts';
+	import { datasetsHref } from '#lib/datasets.ts';
+	import { modelsHref } from '#lib/models.ts';
+	import type { ProjectInfo, ProjectStorage } from '#lib/types.ts';
+	import { bytes, count } from '#lib/utils.ts';
 	import { entityHref } from '#lib/workspace/url.ts';
 	import FormError from './FormError.svelte';
 	import ConfirmField from './ConfirmField.svelte';
@@ -35,6 +38,42 @@
 		return false;
 	});
 	const active = $derived(project.active_run_count);
+
+	// What goes with the project (D167): its datasets and models, read when the dialog opens.
+	// Without S3, or if the read fails, the dialog says nothing of them.
+	let storage = $state<ProjectStorage | null>(null);
+	$effect(() => {
+		if (!open) return;
+		let live = true;
+		storage = null;
+		const url = `/api/projects/${encodeURIComponent(entity)}/${encodeURIComponent(project.name)}/storage`;
+		fetch(url)
+			.then((res) => (res.ok ? (res.json() as Promise<ProjectStorage>) : null))
+			.then((found) => {
+				if (live) storage = found;
+			})
+			.catch(() => {});
+		return () => {
+			live = false;
+		};
+	});
+	const kept = $derived(
+		storage && (storage.datasets || storage.models)
+			? [
+					storage.datasets ? count(storage.datasets, 'dataset') : null,
+					storage.models ? count(storage.models, 'model') : null
+				]
+					.filter(Boolean)
+					.join(' and ')
+			: null
+	);
+	const tabs = $derived.by(() => {
+		const scope = { org: entity, project: project.name };
+		return [
+			storage?.datasets ? { label: 'Datasets', href: datasetsHref(scope) } : null,
+			storage?.models ? { label: 'Models', href: modelsHref(scope) } : null
+		].filter((t) => t !== null);
+	});
 	const ready = $derived(typed === project.name && (!active || force));
 </script>
 
@@ -50,6 +89,18 @@
 					It has no runs. There is no undo.
 				{/if}
 			</AlertDialog.Description>
+			{#if storage && kept}
+				<p class="text-sm text-muted-foreground" role="status">
+					{kept} ({bytes(storage.bytes)})
+					{storage.datasets + storage.models === 1 ? 'is' : 'are'} deleted with this project. Move anything
+					you want to keep to Workspace first, from its
+					{#each tabs as tab, i (tab.label)}{i ? ' and ' : ''}<a
+							class="text-link underline-offset-3 hover:underline"
+							href={tab.href}>{tab.label}</a
+						>{/each}
+					{tabs.length > 1 ? 'tabs' : 'tab'}.
+				</p>
+			{/if}
 		</AlertDialog.Header>
 		<form
 			method="POST"

@@ -76,6 +76,9 @@ describe('Hugging Face imports', () => {
 			'flock datasets import a/b b --config en --config de --split test --org acme\n' +
 				'flock datasets import a/b b --config fr --org acme'
 		);
+		expect(datasetCommand({ org: 'acme', project: 'my run' }, 'a/b', 'b', { default: null })).toBe(
+			"flock datasets import a/b b --config default --org acme --project 'my run'"
+		);
 	});
 
 	it('sends each config with its splits, and null when every split is chosen', () => {
@@ -103,15 +106,19 @@ describe('Hugging Face imports', () => {
 		expect(chosenSize(configs, { en: ['test'], fr: ['train'], de: null })).toBe(2200);
 	});
 
-	it('shows a dataset’s imports in the folder it lands in, and every model’s', () => {
+	it('shows an import in the folder and scope it lands in', () => {
 		const imports = [
 			job({ id: 1, dest: 'web/data' }),
 			job({ id: 2, dest: 'data' }),
-			job({ id: 3, kind: 'model', dest: 'qwen' })
+			job({ id: 3, kind: 'model', dest: 'qwen' }),
+			job({ id: 4, kind: 'model', dest: 'web/qwen' }),
+			job({ id: 5, dest: 'data', project: 'pretrain' })
 		];
 		expect(importsAt(imports, 'dataset', 'web').map((i) => i.id)).toEqual([1]);
 		expect(importsAt(imports, 'dataset').map((i) => i.id)).toEqual([2]);
-		expect(importsAt(imports, 'model', 'web').map((i) => i.id)).toEqual([3]);
+		expect(importsAt(imports, 'model').map((i) => i.id)).toEqual([3]);
+		expect(importsAt(imports, 'model', 'web').map((i) => i.id)).toEqual([4]);
+		expect(importsAt(imports, 'dataset', '', 'pretrain').map((i) => i.id)).toEqual([5]);
 	});
 
 	it('says how far an import is, in plain sentences', () => {

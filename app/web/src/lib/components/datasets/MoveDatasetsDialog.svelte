@@ -1,11 +1,8 @@
 <script lang="ts">
-	import CornerLeftUpIcon from '@lucide/svelte/icons/corner-left-up';
-	import FolderIcon from '@lucide/svelte/icons/folder';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
-	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import {
 		DATASETS_BUCKET,
@@ -19,26 +16,35 @@
 		pathError,
 		within
 	} from '#lib/datasets.ts';
-	import type { DatasetFolder, MoveResult } from '#lib/types.ts';
+	import { type Scope, scopeLabel } from '#lib/scope.ts';
+	import type { MoveResult } from '#lib/types.ts';
 	import { count } from '#lib/utils.ts';
 	import CopyBlock from '../CopyBlock.svelte';
+	import FolderPicker from '../FolderPicker.svelte';
 	import FormError from '../FormError.svelte';
 	import ItemFailures from '../ItemFailures.svelte';
+	import LeavingProject from '../LeavingProject.svelte';
+	import ScopePicker from '../ScopePicker.svelte';
 
 	interface Props {
 		open: boolean;
-		org: string;
+		/** The scope shown, where the items are. */
+		scope: Scope;
 		/** The folder shown, where the destination starts. */
 		from: string;
 		items: readonly DatasetItem[];
+		/** The org's projects, for the scope picker (D166). */
+		projects?: readonly string[];
 		/** Once the request answered: the items that moved leave the list. */
-		onmoved: (results: MoveResult[]) => void | Promise<void>;
+		onmoved: (results: MoveResult[], to: Scope) => void | Promise<void>;
 	}
 
-	let { open = $bindable(), org, from, items, onmoved }: Props = $props();
+	let { open = $bindable(), scope, from, items, projects = [], onmoved }: Props = $props();
 
 	// Reset once the dialog has closed, so its text stays put while it animates closed.
 	let to = $derived(from);
+	/** The destination's project, the scope shown at first; null for global. */
+	let toProject = $derived(scope.project);
 	let error = $state<string | null>(null);
 	let command = $state<string | null>(null);
 	let failures = $state<MoveResult[]>([]);
@@ -46,6 +52,7 @@
 
 	function reset() {
 		to = from;
+		toProject = scope.project;
 		error = null;
 		command = null;
 		failures = [];
@@ -53,50 +60,15 @@
 
 	/** The destination as typed, without slashes at either end. */
 	const target = $derived(to.trim().replace(/^\/+|\/+$/g, ''));
-
-	// The folder picker lists the folders in the destination, read as it's typed.
-	let browsing = $state<string | null>(null);
-	let folders = $state<{ name: string; path: string }[] | null>(null);
-	$effect(() => {
-		if (!open) return;
-		const at = target;
-		if (at && pathError(at)) {
-			folders = [];
-			return;
-		}
-		const controller = new AbortController();
-		const timer = setTimeout(() => void list(at, controller.signal), at === browsing ? 0 : 200);
-		return () => {
-			clearTimeout(timer);
-			controller.abort();
-		};
-	});
-
-	// Folders come after a page's datasets, so a few pages are read to find them.
-	const PAGES = 5;
-	async function list(at: string, signal: AbortSignal) {
-		const found: { name: string; path: string }[] = [];
-		let cursor: string | null = null;
-		try {
-			for (let n = 0; n < PAGES; n++) {
-				const page: DatasetFolder = await datasetCall<DatasetFolder>(
-					datasetsApi(org, 'at', { path: at, cursor }),
-					{ signal }
-				);
-				if (page.kind !== 'folder') break;
-				found.push(...page.folders);
-				cursor = page.cursor;
-				if (!cursor) break;
-			}
-		} catch (e) {
-			if ((e as Error).name === 'AbortError') return;
-		}
-		browsing = at;
-		// A folder can't move into itself.
-		folders = found.filter((f) => !items.some((i) => i.folder && within(f.path, i.path)));
-	}
+	const dest = $derived<Scope>({ org: scope.org, project: toProject });
+	const across = $derived(toProject !== scope.project);
+	const picking = $derived(projects.length > 0 || scope.project !== null);
 
 	const name = $derived(items.length === 1 ? itemName(items[0]) : count(items.length, 'item'));
+	/** Where they land, as the toast says it. */
+	const where = $derived(
+		`${target || (toProject ?? DATASETS_BUCKET)}${across && target ? ` in ${scopeLabel(toProject)}` : ''}`
+	);
 
 	async function submit() {
 		const invalid = target ? pathError(target) : null;
@@ -104,7 +76,7 @@
 			error = invalid;
 			return;
 		}
-		if (items.every((i) => parentOf(i.path) === target)) {
+		if (!across && items.every((i) => parentOf(i.path) === target)) {
 			error = items.length === 1 ? 'It’s already in this folder' : 'They’re already in this folder';
 			return;
 		}
@@ -112,17 +84,19 @@
 		command = null;
 		pending = true;
 		try {
-			const { results } = await datasetCall<{ results: MoveResult[] }>(datasetsApi(org, 'move'), {
+			const { results } = await datasetCall<{ results: MoveResult[] }>(datasetsApi(scope, 'move'), {
 				method: 'POST',
-				body: { paths: items.map((i) => i.path), to: target }
+				body: {
+					paths: items.map((i) => i.path),
+					to: target,
+					...(across ? { to_project: toProject } : {})
+				}
 			});
 			const moved = results.filter((r) => r.moved).length;
 			failures = results.filter((r) => !r.moved);
-			await onmoved(results);
+			await onmoved(results, dest);
 			if (moved)
-				toast.success(
-					`Moved ${moved === items.length ? name : count(moved, 'item')} to ${target || DATASETS_BUCKET}`
-				);
+				toast.success(`Moved ${moved === items.length ? name : count(moved, 'item')} to ${where}`);
 			if (!failures.length) open = false;
 		} catch (e) {
 			error = (e as Error).message;
@@ -147,7 +121,11 @@
 	>
 		<Dialog.Header>
 			<Dialog.Title class="break-all">Move {name}</Dialog.Title>
-			<Dialog.Description>To another folder in {DATASETS_BUCKET}.</Dialog.Description>
+			<Dialog.Description>
+				{picking
+					? 'To another folder, here or in another project.'
+					: `To another folder in ${DATASETS_BUCKET}.`}
+			</Dialog.Description>
 		</Dialog.Header>
 		<form
 			class="grid gap-4"
@@ -159,52 +137,35 @@
 			{#if failures.length}
 				<ItemFailures {failures} summary="{count(failures.length, 'item')} didn’t move." />
 			{:else}
+				{#if picking}
+					<div class="grid gap-2">
+						<Label for="move-datasets-scope">Project</Label>
+						<ScopePicker
+							id="move-datasets-scope"
+							bind:value={toProject}
+							{projects}
+							disabled={pending}
+						/>
+					</div>
+				{/if}
 				<div class="grid gap-2">
 					<Label for="move-datasets-to">Folder</Label>
-					<Input
+					<FolderPicker
 						id="move-datasets-to"
-						class="font-mono text-[13px]"
 						bind:value={to}
-						placeholder="The top of {DATASETS_BUCKET}"
+						scope={dest}
+						kind="dataset"
+						exclude={(path) => !across && items.some((i) => i.folder && within(path, i.path))}
 						disabled={pending}
-						autocomplete="off"
-						spellcheck="false"
 					/>
-					<div
-						class="h-44 overflow-y-auto rounded-lg border border-input py-1 text-[13px]"
-						role="group"
-						aria-label="Folders"
-					>
-						{#if target}
-							<button
-								type="button"
-								class="flex h-8 w-full items-center gap-2 px-2.5 text-left text-muted-foreground hover:bg-muted"
-								disabled={pending}
-								onclick={() => (to = parentOf(target))}
-							>
-								<CornerLeftUpIcon class="size-4 flex-none" />
-								<span class="truncate"
-									>{parentOf(target) ? nameOf(parentOf(target)) : DATASETS_BUCKET}</span
-								>
-							</button>
-						{/if}
-						{#each folders ?? [] as f (f.path)}
-							<button
-								type="button"
-								class="flex h-8 w-full items-center gap-2 px-2.5 text-left hover:bg-muted"
-								disabled={pending}
-								onclick={() => (to = f.path)}
-							>
-								<FolderIcon class="size-4 flex-none text-muted-foreground" />
-								<span class="truncate">{f.name}/</span>
-							</button>
-						{:else}
-							<p class="px-2.5 py-1.5 text-muted-foreground">
-								{folders === null ? 'Loading folders…' : 'No folders here.'}
-							</p>
-						{/each}
-					</div>
 				</div>
+				{#if scope.project !== null && toProject === null}
+					<LeavingProject
+						org={scope.org}
+						paths={items.map((i) => (target ? `${target}/${nameOf(i.path)}` : nameOf(i.path)))}
+						folder={target}
+					/>
+				{/if}
 			{/if}
 			<FormError {error} />
 			{#if command}<CopyBlock code={command} />{/if}

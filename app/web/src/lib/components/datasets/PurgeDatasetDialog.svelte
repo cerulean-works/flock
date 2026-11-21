@@ -25,7 +25,9 @@
 		pending = true;
 		error = null;
 		try {
-			await datasetCall(datasetsApi(org, `trash/${entry.id}`), { method: 'DELETE' });
+			await datasetCall(datasetsApi({ org, project: entry.project ?? null }, `trash/${entry.id}`), {
+				method: 'DELETE'
+			});
 			toast.success(`Deleted ${entry.path} for good`);
 			open = false;
 			await invalidateAll();

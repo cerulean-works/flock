@@ -11,7 +11,8 @@
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
-	import { datasetCall, datasetsApi, pathError } from '#lib/datasets.ts';
+	import { datasetCall, datasetRef, datasetsApi, pathError, refScope } from '#lib/datasets.ts';
+	import type { Scope } from '#lib/scope.ts';
 	import { type BlendStart, DEFAULT_SEED, allMatch, randomSeed } from '#lib/forks.ts';
 	import type { BlendColumn, BlendPreview, DatasetJob } from '#lib/types.ts';
 	import FormError from '../FormError.svelte';
@@ -21,14 +22,15 @@
 
 	interface Props {
 		open: boolean;
-		org: string;
+		/** Where the blend is made: its sources are browsed and it goes there (022). */
+		scope: Scope;
 		/** The folder shown, where the blend goes by default. */
 		folder: string;
 		start?: BlendStart | null;
 		onstarted: (job: DatasetJob) => void;
 	}
 
-	let { open = $bindable(), org, folder, start = null, onstarted }: Props = $props();
+	let { open = $bindable(), scope, folder, start = null, onstarted }: Props = $props();
 
 	interface Row {
 		path: string;
@@ -37,6 +39,11 @@
 	}
 
 	const blank = (): Row => ({ path: '', version: '', amount: '' });
+	/** A source as forks and blends name it (`project:path`), as a path here when it's in this scope. */
+	function inScope(ref: string) {
+		const where = refScope(scope.org, ref);
+		return where.scope.project === scope.project ? where.path : ref;
+	}
 	/** A path's folder and last segment, for the destination's two fields. */
 	const split = (path: string): [string, string] => {
 		const at = path.lastIndexOf('/');
@@ -62,7 +69,11 @@
 	function reset() {
 		const s = start;
 		rows = s?.sources.length
-			? s.sources.map((r) => ({ path: r.path, version: r.version ?? '', amount: r.amount ?? '' }))
+			? s.sources.map((r) => ({
+					path: inScope(r.path),
+					version: r.version ?? '',
+					amount: r.amount ?? ''
+				}))
 			: [blank(), blank()];
 		while (rows.length < 2) rows.push(blank());
 		mode = s?.mode ?? 'rows';
@@ -105,9 +116,15 @@
 		return { rows: Math.round(Number(suffix[1]) * scale) };
 	}
 
+	const toPath = $derived(
+		[toFolder, toName.trim()]
+			.filter(Boolean)
+			.join('/')
+			.replace(/^\/+|\/+$/g, '')
+	);
 	const body = $derived({
 		sources: rows.map((r, i) => ({
-			path: paths[i],
+			path: datasetRef(scope, paths[i]),
 			version: r.version.trim() || null,
 			...amountOf(r)
 		})),
@@ -115,10 +132,7 @@
 		seed: /^\d+$/.test(seed.trim()) ? Number(seed.trim()) : null,
 		columns,
 		replace,
-		to: [toFolder, toName.trim()]
-			.filter(Boolean)
-			.join('/')
-			.replace(/^\/+|\/+$/g, '')
+		to: datasetRef(scope, toPath)
 	});
 	const ready = $derived(
 		paths.filter(Boolean).length >= 2 && paths.every((p) => p && !pathError(p))
@@ -127,8 +141,8 @@
 		...(body.seed === null ? ['The seed is a whole number.'] : []),
 		...(!toName.trim()
 			? ['Name the blend.']
-			: pathError(body.to)
-				? [`Name: ${pathError(body.to)}`]
+			: pathError(toPath)
+				? [`Name: ${pathError(toPath)}`]
 				: []),
 		...(body.sources.some((s) => Number.isNaN(s.rows ?? 0) || Number.isNaN(s.fraction ?? 0))
 			? ['Amounts are numbers, such as 100000, 100k or 66%.']
@@ -160,7 +174,7 @@
 		const timer = setTimeout(async () => {
 			checking = true;
 			try {
-				preview = await datasetCall<BlendPreview>(datasetsApi(org, 'blend/preview'), {
+				preview = await datasetCall<BlendPreview>(datasetsApi(scope.org, 'blend/preview'), {
 					method: 'POST',
 					body: JSON.parse(sent),
 					signal: controller.signal
@@ -186,7 +200,7 @@
 		pending = true;
 		error = null;
 		try {
-			const job = await datasetCall<DatasetJob>(datasetsApi(org, 'blend'), {
+			const job = await datasetCall<DatasetJob>(datasetsApi(scope.org, 'blend'), {
 				method: 'POST',
 				body: { ...body, columns: columns ?? preview.columns }
 			});
@@ -273,7 +287,7 @@
 							<!-- Until a dataset is chosen it has no version, so the picker takes that space too. -->
 							<div class={!chosen ? 'col-span-2' : undefined}>
 								<DatasetPicker
-									{org}
+									{scope}
 									{folder}
 									aria-label="Source {i + 1}"
 									bind:value={row.path}
@@ -282,7 +296,7 @@
 							</div>
 							{#if chosen}
 								<VersionSelect
-									{org}
+									{scope}
 									path={paths[i]}
 									aria-label="Version of source {i + 1}"
 									bind:value={row.version}
@@ -338,7 +352,7 @@
 					<div class="grid gap-2">
 						<Label>In folder</Label>
 						<DatasetPicker
-							{org}
+							{scope}
 							pick="folder"
 							aria-label="In folder"
 							bind:value={toFolder}

@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import * as Select from '#lib/components/ui/select/index.js';
 	import { datasetCall, datasetsApi } from '#lib/datasets.ts';
+	import type { Scope } from '#lib/scope.ts';
 	import type { DatasetVersion, VersionsPage } from '#lib/types.ts';
 
 	// A dataset's version, for a blend source or a fork: the latest (an empty value), or one of
@@ -9,7 +10,8 @@
 
 	interface Props {
 		value: string;
-		org: string;
+		/** The scope of the dataset chosen. */
+		scope: Scope;
 		/** The dataset chosen; its versions are read when it changes. */
 		path: string;
 		disabled?: boolean;
@@ -19,7 +21,7 @@
 
 	let {
 		value = $bindable(''),
-		org,
+		scope,
 		path,
 		disabled = false,
 		id,
@@ -33,18 +35,19 @@
 	/** The select's value for the latest; not a tag, since tags can't start with `:`. */
 	const LATEST = ':latest';
 	/** The dataset the value was chosen for; another one resets it. */
-	let chosenFor = untrack(() => path);
+	let chosenFor = untrack(() => `${scope.project ?? ''}:${path}`);
 
 	$effect(() => {
 		const at = path;
-		if (at !== chosenFor) {
-			chosenFor = at;
+		const chosen = `${scope.project ?? ''}:${at}`;
+		if (chosen !== chosenFor) {
+			chosenFor = chosen;
 			value = '';
 		}
 		versions = null;
 		failed = null;
 		const controller = new AbortController();
-		datasetCall<VersionsPage>(datasetsApi(org, 'versions', { path: at }), {
+		datasetCall<VersionsPage>(datasetsApi(scope, 'versions', { path: at }), {
 			signal: controller.signal
 		})
 			.then((page) => {
@@ -60,7 +63,7 @@
 
 	async function older() {
 		if (cursor === null) return;
-		const page = await datasetCall<VersionsPage>(datasetsApi(org, 'versions', { path, cursor }));
+		const page = await datasetCall<VersionsPage>(datasetsApi(scope, 'versions', { path, cursor }));
 		versions = [...(versions ?? []), ...page.versions];
 		cursor = page.cursor;
 	}

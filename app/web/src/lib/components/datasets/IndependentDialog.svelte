@@ -4,7 +4,8 @@
 	import { invalidateAll } from '$app/navigation';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { DatasetError, datasetCall, datasetsApi } from '#lib/datasets.ts';
+	import { DatasetError, datasetCall, datasetRef, datasetsApi } from '#lib/datasets.ts';
+	import type { Scope } from '#lib/scope.ts';
 	import type { DatasetJob } from '#lib/types.ts';
 	import { bytes } from '#lib/utils.ts';
 	import ConfirmField from '../ConfirmField.svelte';
@@ -14,13 +15,13 @@
 	// Making a fork or blend independent (D178): a full copy, and its history goes.
 	interface Props {
 		open: boolean;
-		org: string;
+		scope: Scope;
 		path: string;
 		/** Its data size now, which is roughly what gets copied. */
 		size: number | null;
 	}
 
-	let { open = $bindable(), org, path, size }: Props = $props();
+	let { open = $bindable(), scope, path, size }: Props = $props();
 
 	let typed = $state('');
 	let error = $state<string | null>(null);
@@ -33,13 +34,13 @@
 		error = null;
 		command = null;
 		try {
-			job = await datasetCall<DatasetJob>(datasetsApi(org, 'independent'), {
+			job = await datasetCall<DatasetJob>(datasetsApi(scope.org, 'independent'), {
 				method: 'POST',
-				body: { path }
+				body: { path: datasetRef(scope, path) }
 			});
 			while (job.state === 'running') {
 				await new Promise((r) => setTimeout(r, 1000));
-				job = await datasetCall<DatasetJob>(datasetsApi(org, `jobs/${job.id}`));
+				job = await datasetCall<DatasetJob>(datasetsApi(scope.org, `jobs/${job.id}`));
 			}
 			if (job.state !== 'finished') throw new Error(job.error ?? `It ${job.state}.`);
 			toast.success(`${path} is now independent`);

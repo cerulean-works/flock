@@ -8,6 +8,7 @@
 	import { Input } from '#lib/components/ui/input/index.js';
 	import * as Popover from '#lib/components/ui/popover/index.js';
 	import { datasetCall, datasetsApi } from '#lib/datasets.ts';
+	import type { Scope } from '#lib/scope.ts';
 	import type { DatasetAt, DatasetEntry, DatasetFolder } from '#lib/types.ts';
 
 	// A dropdown choosing a dataset of flock-datasets by browsing it a folder at a time, as the
@@ -17,7 +18,8 @@
 
 	interface Props {
 		value: string;
-		org: string;
+		/** The scope browsed: the workspace's datasets, or a project's. */
+		scope: Scope;
 		/** Where browsing starts when nothing is picked yet. */
 		folder?: string;
 		/** What's chosen: a dataset (the default) or a folder. */
@@ -29,7 +31,7 @@
 
 	let {
 		value = $bindable(''),
-		org,
+		scope,
 		folder = '',
 		pick = 'dataset',
 		disabled = false,
@@ -64,7 +66,7 @@
 		}
 		try {
 			const page = await datasetCall<DatasetFolder | DatasetAt>(
-				datasetsApi(org, 'at', { path, cursor: more ? cursor : null }),
+				datasetsApi(scope, 'at', { path, cursor: more ? cursor : null }),
 				{ signal: mine.signal }
 			);
 			if (page.kind === 'dataset') {

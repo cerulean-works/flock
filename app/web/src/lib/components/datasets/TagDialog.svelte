@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
@@ -9,7 +10,7 @@
 
 	interface Props {
 		open: boolean;
-		org: string;
+		scope: Scope;
 		path: string;
 		/** The version to tag. */
 		version: number;
@@ -17,7 +18,7 @@
 		ontagged: () => void;
 	}
 
-	let { open = $bindable(), org, path, version, ontagged }: Props = $props();
+	let { open = $bindable(), scope, path, version, ontagged }: Props = $props();
 
 	// Reset once the dialog has closed, so its text stays put while it animates closed.
 	let name = $state('');
@@ -41,7 +42,7 @@
 		error = null;
 		pending = true;
 		try {
-			await datasetCall(datasetsApi(org, `tags/${encodeURIComponent(name)}`), {
+			await datasetCall(datasetsApi(scope, `tags/${encodeURIComponent(name)}`), {
 				method: 'PUT',
 				body: { path, version, move }
 			});

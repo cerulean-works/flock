@@ -6,30 +6,39 @@
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
-	import { datasetCall, datasetsApi, datasetsHref, pathError } from '#lib/datasets.ts';
+	import { datasetCall, datasetRef, datasetsApi, pathError, refHref } from '#lib/datasets.ts';
 	import { forkPath } from '#lib/forks.ts';
+	import type { Scope } from '#lib/scope.ts';
 	import FormError from '../FormError.svelte';
+	import ScopePicker from '../ScopePicker.svelte';
 	import VersionSelect from './VersionSelect.svelte';
 
 	interface Props {
 		open: boolean;
-		org: string;
+		/** The dataset's scope. */
+		scope: Scope;
 		/** The dataset to fork. */
 		path: string;
 		/** The version to fork: the one shown on its page, or null for the latest. */
 		version?: number | null;
+		/** The org's projects: a fork may go to another scope (023 with 022). */
+		projects?: readonly string[];
 	}
 
-	let { open = $bindable(), org, path, version = null }: Props = $props();
+	let { open = $bindable(), scope, path, version = null, projects = [] }: Props = $props();
 
 	let to = $derived(forkPath(path));
+	/** Where the fork goes: the dataset's own scope unless another is picked. */
+	let toProject = $derived(scope.project);
+	const picking = $derived(projects.length > 0 || scope.project !== null);
 	let at = $derived(version === null ? '' : String(version));
 	let error = $state<string | null>(null);
 	let pending = $state(false);
 
 	async function submit() {
 		const target = to.trim().replace(/^\/+|\/+$/g, '');
-		const invalid = target === path ? 'Choose a new path for the fork' : pathError(target);
+		const same = toProject === scope.project && target === path;
+		const invalid = same ? 'Choose a new path for the fork' : pathError(target);
 		if (invalid) {
 			error = invalid;
 			return;
@@ -37,13 +46,18 @@
 		error = null;
 		pending = true;
 		try {
-			const made = await datasetCall<{ path: string }>(datasetsApi(org, 'fork'), {
+			// Both by their names across scopes (`project:path` for a project's).
+			const made = await datasetCall<{ path: string }>(datasetsApi(scope.org, 'fork'), {
 				method: 'POST',
-				body: { path, version: at.trim() || null, to: target }
+				body: {
+					path: datasetRef(scope, path),
+					version: at.trim() || null,
+					to: datasetRef({ org: scope.org, project: toProject }, target)
+				}
 			});
 			toast.success(`Forked to ${made.path}`);
 			open = false;
-			await goto(datasetsHref(org, made.path));
+			await goto(refHref(scope.org, made.path));
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {
@@ -57,6 +71,7 @@
 	onOpenChangeComplete={(o) => {
 		if (o) return;
 		to = forkPath(path);
+		toProject = scope.project;
 		at = version === null ? '' : String(version);
 		error = null;
 	}}
@@ -77,8 +92,14 @@
 		>
 			<div class="grid gap-2">
 				<Label for="fork-version">Version</Label>
-				<VersionSelect id="fork-version" {org} {path} bind:value={at} disabled={pending} />
+				<VersionSelect id="fork-version" {scope} {path} bind:value={at} disabled={pending} />
 			</div>
+			{#if picking}
+				<div class="grid gap-2">
+					<Label for="fork-scope">Project</Label>
+					<ScopePicker id="fork-scope" bind:value={toProject} {projects} disabled={pending} />
+				</div>
+			{/if}
 			<div class="grid gap-2">
 				<Label for="fork-path">New path</Label>
 				<Input

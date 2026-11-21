@@ -1,18 +1,13 @@
 <script lang="ts">
-	import {
-		DatasetError,
-		datasetCall,
-		datasetsApi,
-		datasetsHref,
-		datasetVersionHref
-	} from '#lib/datasets.ts';
+	import type { Scope } from '#lib/scope.ts';
+	import { DatasetError, datasetCall, datasetsApi, refHref } from '#lib/datasets.ts';
 	import type { DatasetInfo } from '#lib/types.ts';
 	import { bytes, dateTime } from '#lib/utils.ts';
 	import Markdown from '../Markdown.svelte';
 	import TagChip from '../TagChip.svelte';
 
 	interface Props {
-		org: string;
+		scope: Scope;
 		path: string;
 		/** The version shown; null when Lance couldn't read it, and only the README shows. */
 		info: DatasetInfo | null;
@@ -24,7 +19,7 @@
 		onindependent?: () => void;
 	}
 
-	let { org, path, info, tags, onblendagain, onindependent }: Props = $props();
+	let { scope, path, info, tags, onblendagain, onindependent }: Props = $props();
 
 	const origin = $derived(info?.origin ?? null);
 	const fmt = (n: number) => n.toLocaleString('en-US');
@@ -60,7 +55,7 @@
 		readme = null;
 		missing = false;
 		failed = null;
-		datasetCall<{ text: string; truncated: boolean }>(datasetsApi(org, 'readme', { path }), {
+		datasetCall<{ text: string; truncated: boolean }>(datasetsApi(scope, 'readme', { path }), {
 			signal: controller.signal
 		})
 			.then((got) => (readme = got))
@@ -116,7 +111,7 @@
 							Forked from
 							<a
 								class="font-mono text-link underline-offset-3 hover:underline"
-								href={datasetVersionHref(org, origin.source.path, origin.source.version)}
+								href={refHref(scope.org, origin.source.path, origin.source.version)}
 								>{origin.source.path}</a
 							>
 							at version {origin.source.version}.
@@ -142,7 +137,7 @@
 								<li>
 									<a
 										class="font-mono break-all text-link underline-offset-3 hover:underline"
-										href={datasetVersionHref(org, s.path, s.version)}>{s.path}</a
+										href={refHref(scope.org, s.path, s.version)}>{s.path}</a
 									>
 									<p class="text-xs text-muted-foreground tabular-nums">
 										{[
@@ -225,7 +220,7 @@
 						<li>
 							<a
 								class="font-mono text-link underline-offset-3 hover:underline"
-								href={datasetsHref(org, p)}>{p}</a
+								href={refHref(scope.org, p)}>{p}</a
 							>
 						</li>
 					{/each}

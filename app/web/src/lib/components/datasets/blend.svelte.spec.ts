@@ -166,7 +166,13 @@ const start = {
 describe('the blend dialog', () => {
 	it('starts with seed 42 and sends the map, counts and seed it shows', async () => {
 		const onstarted = vi.fn();
-		render(BlendDialog, { open: true, org: 'acme', folder: 'mixes', start, onstarted });
+		render(BlendDialog, {
+			open: true,
+			scope: { org: 'acme', project: null },
+			folder: 'mixes',
+			start,
+			onstarted
+		});
 		await expect.element(screen.getByLabelText('Seed', { exact: true })).toHaveValue('42');
 		await expect.element(screen.getByLabelText('Name')).toHaveValue('blend');
 		await expect
@@ -200,7 +206,13 @@ describe('the blend dialog', () => {
 
 	it('maps a column from another name, and adds one from "Not in the blend"', async () => {
 		await screen.viewport(1280, 900);
-		render(BlendDialog, { open: true, org: 'acme', folder: 'mixes', start, onstarted: vi.fn() });
+		render(BlendDialog, {
+			open: true,
+			scope: { org: 'acme', project: null },
+			folder: 'mixes',
+			start,
+			onstarted: vi.fn()
+		});
 		await screen.getByRole('button', { name: 'Next' }).click();
 		await screen.getByLabelText('text from code').click();
 		await screen.getByRole('option', { name: /content/ }).click();
@@ -230,7 +242,12 @@ describe('the blend dialog', () => {
 	});
 
 	it('picks sources from a dropdown browsing flock-datasets', async () => {
-		render(BlendDialog, { open: true, org: 'acme', folder: 'mixes', onstarted: vi.fn() });
+		render(BlendDialog, {
+			open: true,
+			scope: { org: 'acme', project: null },
+			folder: 'mixes',
+			onstarted: vi.fn()
+		});
 		// No version until a dataset is chosen.
 		await expect
 			.element(screen.getByRole('button', { name: 'Version of source 1' }))
@@ -277,7 +294,13 @@ describe('the blend dialog', () => {
 
 	it('shows one source at a time on a small screen', async () => {
 		await screen.viewport(400, 800);
-		render(BlendDialog, { open: true, org: 'acme', folder: 'mixes', start, onstarted: vi.fn() });
+		render(BlendDialog, {
+			open: true,
+			scope: { org: 'acme', project: null },
+			folder: 'mixes',
+			start,
+			onstarted: vi.fn()
+		});
 		await screen.getByRole('button', { name: 'Next' }).click();
 		await expect.element(screen.getByLabelText('text from web')).toBeVisible();
 		await expect.element(screen.getByLabelText('text from code')).not.toBeVisible();
@@ -289,7 +312,7 @@ describe('the blend dialog', () => {
 	it('reads percentages as fractions of the total', async () => {
 		render(BlendDialog, {
 			open: true,
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			folder: '',
 			start: {
 				sources: [
@@ -314,7 +337,7 @@ describe('the blend dialog', () => {
 	it('refuses percentages off 100% on the first step, within 0.1%', async () => {
 		render(BlendDialog, {
 			open: true,
-			org: 'acme',
+			scope: { org: 'acme', project: null },
 			folder: '',
 			start: {
 				sources: [

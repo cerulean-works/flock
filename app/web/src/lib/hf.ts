@@ -2,6 +2,7 @@
  * dialogs fill in, and how an import reads in its row. */
 
 import { nameOf, parentOf } from './datasets.ts';
+import { type Scope, asScope } from './scope.ts';
 import type { HFDatasetPreview, HFImport } from './types.ts';
 import { bytes } from './utils.ts';
 
@@ -89,11 +90,12 @@ export function chosenSize(configs: Configs, choice: SplitChoice): number {
 /** The `flock datasets import` command for what the dataset dialog asks, as the API writes it.
  * Configs whose splits differ need a command each, one per line. */
 export function datasetCommand(
-	org: string,
+	scope: Scope | string,
 	repo: string,
 	dest: string,
 	configs: Record<string, string[] | null>
 ): string {
+	const { org, project } = asScope(scope);
 	const groups = new Map<string, { names: string[]; splits: string[] | null }>();
 	for (const [name, splits] of Object.entries(configs)) {
 		const key = JSON.stringify(splits);
@@ -107,15 +109,24 @@ export function datasetCommand(
 			for (const name of names) words.push('--config', name);
 			for (const split of splits ?? []) words.push('--split', split);
 			words.push('--org', org);
+			if (project !== null) words.push('--project', project);
 			return words.map(quote).join(' ');
 		})
 		.join('\n');
 }
 
-/** The imports a page shows: a dataset's in the folder it lands in, every model's. */
-export function importsAt(imports: HFImport[], kind: 'dataset' | 'model', folder = '') {
+/**
+ * The imports a page of a scope shows (D159): a dataset's in the folder it lands in, a model's
+ * in the folder its name is in.
+ */
+export function importsAt(
+	imports: HFImport[],
+	kind: 'dataset' | 'model',
+	folder = '',
+	project: string | null = null
+) {
 	return imports.filter(
-		(i) => i.kind === kind && (kind === 'model' || parentOf(i.dest) === folder)
+		(i) => i.kind === kind && (i.project ?? null) === project && parentOf(i.dest) === folder
 	);
 }
 

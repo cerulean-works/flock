@@ -1,21 +1,38 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
-	import { datasetUri, readSnippet } from '#lib/datasets.ts';
+	import { datasetUri, pyString, readSnippet } from '#lib/datasets.ts';
+	import type { Scope } from '#lib/scope.ts';
 	import type { S3Config } from '#lib/types.ts';
 	import CopyBlock from '../CopyBlock.svelte';
 	import CopyButton from '../CopyButton.svelte';
 
 	interface Props {
 		open: boolean;
+		scope: Scope;
+		/** Relative to the scope. */
 		path: string;
+		/** Where it really is in flock-datasets (under `-projects/` in a project, D160). */
+		objectKey?: string;
 		/** The S3 proxy clients connect to. */
 		s3: S3Config;
 	}
 
-	let { open = $bindable(), path, s3 }: Props = $props();
+	let { open = $bindable(), scope, path, objectKey = path, s3 }: Props = $props();
 
-	const uri = $derived(datasetUri(path));
+	const uri = $derived(datasetUri(objectKey));
+	// A project's dataset is found by name, so code never holds its project's number (D160).
+	const locate = $derived(
+		scope.project === null
+			? null
+			: [
+					'import lance',
+					'from flock.hub import datasets',
+					'',
+					`where = datasets.location(${pyString(path)}, project=${pyString(scope.project)})`,
+					'ds = lance.dataset(where.uri, storage_options=where.storage_options)'
+				].join('\n')
+	);
 </script>
 
 <!-- Where the dataset lives in S3, and how to open it with Lance from outside Flock. -->
@@ -41,7 +58,7 @@
 		</dl>
 		<div class="grid min-w-0 gap-1.5">
 			<p class="text-[13px] text-muted-foreground">Python</p>
-			<CopyBlock code={readSnippet(path, s3.endpoint, s3.region)} />
+			<CopyBlock code={locate ?? readSnippet(path, s3.endpoint, s3.region, uri)} />
 		</div>
 		<p class="text-[13px] text-muted-foreground">
 			You can create S3 keys on your
