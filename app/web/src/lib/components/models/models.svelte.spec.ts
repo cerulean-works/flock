@@ -3,6 +3,7 @@ import { page as screen } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../routes/layout.css';
 import { app, goto, invalidateAll, resetApp } from '#lib/testing/app.svelte.ts';
+import { Selection } from '#lib/selection.svelte.ts';
 import type {
 	ModelEntry,
 	ModelFolder,
@@ -184,6 +185,52 @@ describe('ModelList', () => {
 		render(ModelList, { scope: global, path: 'eval', folder, now: NOW });
 		await expect.element(screen.getByText('This folder is empty.')).toBeVisible();
 		await expect.element(screen.getByText('No models yet.')).not.toBeInTheDocument();
+	});
+});
+
+describe('a folder row\u2019s menu', () => {
+	const listing: ModelFolder = {
+		kind: 'folder',
+		folder: '',
+		project: null,
+		models: [],
+		folders: [
+			{ name: 'eval', path: 'eval', models: 2 },
+			{ name: 'empty', path: 'empty', models: 0 }
+		],
+		cursor: null
+	};
+	const scope = { org: 'acme', project: null };
+
+	it('renames a folder with its models', async () => {
+		invalidateAll.mockClear();
+		const calls = serve({ [`${API}/-/folders`]: () => ({ path: 'bench', project: null }) });
+		render(ModelList, { scope, path: '', folder: listing, now: NOW, selection: new Selection() });
+		await screen.getByRole('button', { name: 'Actions for eval/' }).click();
+		await screen.getByRole('menuitem', { name: 'Rename…' }).click();
+		await screen.getByLabelText('New name').fill('bench');
+		await screen.getByRole('button', { name: 'Rename', exact: true }).click();
+		await expect.poll(() => invalidateAll).toHaveBeenCalled();
+		expect(calls[0].init?.method).toBe('PATCH');
+		expect(body(calls[0].init)).toEqual({ path: 'eval', to: 'bench' });
+	});
+
+	it('deletes only an empty folder', async () => {
+		invalidateAll.mockClear();
+		const calls = serve({ [`${API}/-/folders`]: () => new Response(null, { status: 204 }) });
+		render(ModelList, { scope, path: '', folder: listing, now: NOW, selection: new Selection() });
+		await screen.getByRole('button', { name: 'Actions for eval/' }).click();
+		await screen.getByRole('menuitem', { name: 'Delete…' }).click();
+		await expect
+			.element(screen.getByRole('button', { name: 'Delete', exact: true }))
+			.toBeDisabled();
+		await screen.getByRole('button', { name: 'Cancel' }).click();
+		await screen.getByRole('button', { name: 'Actions for empty/' }).click();
+		await screen.getByRole('menuitem', { name: 'Delete…' }).click();
+		await screen.getByRole('button', { name: 'Delete', exact: true }).click();
+		await expect.poll(() => invalidateAll).toHaveBeenCalled();
+		expect(calls[0].url).toBe(`${API}/-/folders?path=empty`);
+		expect(calls[0].init?.method).toBe('DELETE');
 	});
 });
 

@@ -22,6 +22,7 @@
 	import RowMenu from '../RowMenu.svelte';
 	import DeleteModelDialog from './DeleteModelDialog.svelte';
 	import DeleteModelsDialog from './DeleteModelsDialog.svelte';
+	import FolderDialog from './FolderDialog.svelte';
 	import MoveModelsDialog from './MoveModelsDialog.svelte';
 	import RenameModelDialog from './RenameModelDialog.svelte';
 
@@ -54,6 +55,14 @@
 	$effect.pre(() => {
 		if (selection) selection.keys = rows.map((m) => m.name);
 	});
+
+	/** The folder whose ⋯ menu was used, and what for. */
+	let folderAction = $state<'rename' | 'move' | 'delete' | null>(null);
+	let folderOf = $state.raw<{ path: string; models: number }>({ path: '', models: 0 });
+	function onFolder(f: { path: string; models: number }, action: 'rename' | 'move' | 'delete') {
+		folderOf = f;
+		folderAction = action;
+	}
 
 	/** How refs name a model of this scope (D162). */
 	const refOf = (name: string) =>
@@ -216,7 +225,7 @@
 					</tr>
 				{/each}
 				{#each folders as f (`f:${f.path}`)}
-					<tr class="h-10 border-b border-divider hover:bg-muted">
+					<tr class="group/row h-10 border-b border-divider hover:bg-muted">
 						{#if selection}<td></td>{/if}
 						<td class="truncate px-2">
 							<a
@@ -231,7 +240,16 @@
 						<td class="px-2 text-muted-foreground tabular-nums">{count(f.models, 'model')}</td>
 						<td class="hidden px-2 text-muted-foreground sm:table-cell">—</td>
 						<td class="px-2 text-muted-foreground">—</td>
-						{#if selection}<td></td>{/if}
+						{#if selection}
+							<td class="pr-1 text-right">
+								<RowMenu
+									name="{f.name}/"
+									onrename={() => onFolder(f, 'rename')}
+									onmove={() => onFolder(f, 'move')}
+									ondelete={() => onFolder(f, 'delete')}
+								/>
+							</td>
+						{/if}
 					</tr>
 				{/each}
 			</tbody>
@@ -251,6 +269,14 @@
 
 {#if selection}
 	{@const many = selection.targets.length > 1}
+	<FolderDialog
+		bind:open={() => folderAction !== null, (o) => o || (folderAction = null)}
+		action={folderAction ?? 'rename'}
+		{scope}
+		path={folderOf.path}
+		models={folderOf.models}
+		{projects}
+	/>
 	<MoveModelsDialog
 		bind:open={() => selection.action === 'move', (o) => o || selection.close('move')}
 		{scope}

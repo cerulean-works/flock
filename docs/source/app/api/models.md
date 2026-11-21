@@ -28,6 +28,7 @@ Members and admins make and delete empty folders, so a scope can have its layout
 | Request | Does |
 | --- | --- |
 | `POST -/folders?project` | Makes the folder `{"path"}`, such as `eval/sweeps`. Answers 201 with `{"path", "project"}`. A folder that exists, a model's name (live or in the trash), or a path under a model answers 409 with `"taken": true`. The folder stays when the models in it are moved or deleted. |
+| `PATCH -/folders?project` | Renames or moves the folder `{"path", "to"}` with every model and made folder under it, in one step, and into another scope with `"project"` (a project's name, or `null` for the organization's). Answers `{"path", "project", "models"}`, where `models` counts the models moved. A taken `to` answers 409 with `"taken": true`, as for a model's rename, and so does an open upload or a running import into one of its models. A `to` inside the folder answers 422. |
 | `DELETE -/folders?path&project` | Deletes the folder made at `path`, with the folders made under it. A live model under it answers 409, so move or delete those first. A path nobody made a folder at answers 404. Answers 204. |
 
 A made folder's path is taken the same way a model's is: pushing a model or renaming one to that exact path answers 409. Saving a model inside it, such as `eval/sweeps/lr-3e-4`, works.

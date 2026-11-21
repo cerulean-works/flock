@@ -178,6 +178,33 @@ async def create_folder(
     return JSONResponse(made, status_code=201)
 
 
+class MoveFolderBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=255, description="the folder's path")
+    to: str = Field(min_length=1, max_length=255, description="its new path")
+    project: str | None = Field(
+        None, max_length=128, description="the scope to move to: a project, or null for global"
+    )
+
+
+@router.patch("/-/folders")
+async def move_folder(
+    org: OrgDep, body: MoveFolderBody, store: StoreDep, project: ProjectQuery = None
+) -> Response:
+    """Rename or move a folder with every model in it, to another scope with ``project``
+    (null: global; absent keeps it). 409 with ``taken`` as for a model's new path."""
+    source = await scope_of(store, org, project)
+    target = (
+        await scope_of(store, org, body.project) if "project" in body.model_fields_set else None
+    )
+    try:
+        moved = await models(store).move_folder(org, body.path, body.to, source, target)
+    except Taken as e:
+        raise APIError(409, e.message, taken=True) from None
+    return JSONResponse(moved)
+
+
 @router.delete("/-/folders", status_code=204)
 async def delete_folder(
     org: OrgDep,

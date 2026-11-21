@@ -2,7 +2,7 @@
 
 Use the dashboard's **Models** tab to see your organization's stored models, choose which version loads by default, tag versions, rename models and delete the ones you no longer need. To push and load models, see [Store and load models](../hub/store-models).
 
-**Models** is in the sidebar when the Flock server has S3 storage. It lists each model with its latest version, its primary version, the primary version's size and when it last changed, then the folders, with how many models each holds. Open a folder to see the models in it. To set up folders before you have models in them, click **New folder** and enter a name: the folder is made inside the one shown and stays, even empty, until it's deleted through the [API](api/models#folders). A model appears once its first upload starts, and its first version once that upload finishes.
+**Models** is in the sidebar when the Flock server has S3 storage. It lists each model with its latest version, its primary version, the primary version's size and when it last changed, then the folders, with how many models each holds. Open a folder to see the models in it. To set up folders before you have models in them, click **New folder** and enter a name: the folder is made inside the one shown and stays, even empty, until it's deleted. A folder's **⋯** menu renames it, moves it with its models (to a project too), or deletes it once it has no models in it. A model appears once its first upload starts, and its first version once that upload finishes.
 
 ## A project's models
 

@@ -642,6 +642,110 @@ class Models:
             if deleted == "DELETE 0":
                 raise NotFound(f"folder {path} not found")
 
+    async def move_folder(
+        self,
+        org: Org,
+        path: str,
+        to: str,
+        scope: Scope = GLOBAL,
+        to_scope: Scope | None = None,
+    ) -> dict[str, Any]:
+        """Rename or move the folder at ``path`` to ``to``, into ``to_scope`` if given (D158,
+        D166): every live model under it is renamed as ``rename`` renames one, with the empty
+        folders made in it, in one transaction. ``Taken`` as for a model's new path; ``Conflict``
+        while an upload to one of its models is open or an import into one is running.
+        ``NotFound`` when nothing is at ``path``."""
+        path, to = path.strip("/"), to.strip("/")
+        check_name(path)
+        check_name(to)
+        target = scope if to_scope is None else to_scope
+        if target == scope and (to == path or to.startswith(f"{path}/")):
+            raise Invalid("The new path can't be the folder or inside it.")
+        async with self.store.db.pool.acquire() as conn, conn.transaction():
+            await self._lock_scopes(conn, org, scope, target)
+            inside = await conn.fetch(
+                "SELECT pk, name FROM models WHERE org_pk = $1 "
+                "AND project_pk IS NOT DISTINCT FROM $2 AND deleted_at IS NULL "
+                "AND left(name, length($3) + 1) = $3 || '/' FOR UPDATE",
+                org.pk,
+                scope.pk,
+                path,
+            )
+            made = await conn.fetch(
+                "SELECT pk FROM model_folders WHERE org_pk = $1 "
+                "AND project_pk IS NOT DISTINCT FROM $2 "
+                "AND (path = $3 OR left(path, length($3) + 1) = $3 || '/') FOR UPDATE",
+                org.pk,
+                scope.pk,
+                path,
+            )
+            if not inside and not made:
+                raise NotFound(f"folder {path} not found")
+            # Free of everything but the folder itself, when it moves up into its own scope.
+            pks = [r["pk"] for r in inside]
+            records = await conn.fetch(
+                "SELECT name FROM models WHERE org_pk = $1 AND project_pk IS NOT DISTINCT FROM $2 "
+                "AND NOT (pk = ANY($4)) AND (name = $3 OR left(name, length($3) + 1) = $3 || '/' "
+                "OR left($3, length(name) + 1) = name || '/') ORDER BY length(name) LIMIT 1",
+                org.pk,
+                target.pk,
+                to,
+                pks,
+            )
+            if records:
+                other = records[0]["name"]
+                raise Taken(
+                    f"{to} is a folder of models."
+                    if other.startswith(f"{to}/")
+                    else f"{other} is a model."
+                )
+            if await conn.fetchval(
+                "SELECT 1 FROM model_folders WHERE org_pk = $1 "
+                "AND project_pk IS NOT DISTINCT FROM $2 AND NOT (pk = ANY($4)) "
+                "AND (path = $3 OR left(path, length($3) + 1) = $3 || '/')",
+                org.pk,
+                target.pk,
+                to,
+                [r["pk"] for r in made],
+            ):
+                raise Taken(f"{to} is a folder.")
+            what = display(org.name, scope.name, path)
+            if pks and await conn.fetchval(
+                "SELECT 1 FROM model_uploads WHERE model_pk = ANY($1) AND state = 'open'", pks
+            ):
+                raise Conflict(f"A model in {what} has an upload open. Move it once it's done.")
+            if pks and await conn.fetchval(
+                "SELECT 1 FROM hf_imports WHERE org_pk = $1 AND kind = 'model' "
+                "AND project_pk IS NOT DISTINCT FROM $2 AND state = 'running' "
+                "AND left(dest, length($3) + 1) = $3 || '/'",
+                org.pk,
+                scope.pk,
+                path,
+            ):
+                raise Conflict(f"An import into {what} is running. Move it after.")
+            try:
+                await conn.execute(
+                    "UPDATE models SET name = $2 || substr(name, length($3) + 1), project_pk = $4 "
+                    "WHERE pk = ANY($1)",
+                    pks,
+                    to,
+                    path,
+                    target.pk,
+                )
+                await conn.execute(
+                    "UPDATE model_folders SET path = $2 || substr(path, length($3) + 1), "
+                    "project_pk = $4 WHERE pk = ANY($1)",
+                    [r["pk"] for r in made],
+                    to,
+                    path,
+                    target.pk,
+                )
+            except Exception as e:  # asyncpg's UniqueViolationError: a deleted model's name
+                if type(e).__name__ == "UniqueViolationError":
+                    raise Taken(f"A model under {to} exists already.") from None
+                raise
+        return {"path": to, "project": target.name, "models": len(pks)}
+
     async def model_info(self, org: Org, name: str, scope: Scope = GLOBAL) -> dict[str, Any]:
         """A model: its primary version and who set it (D107), its latest and its tags."""
         async with self.store.db.pool.acquire() as conn:

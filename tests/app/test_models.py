@@ -1330,3 +1330,39 @@ def test_empty_model_folders(flock: S3Flock) -> None:
     assert api.delete(f"{folders}?path=eval").status == 404
     assert api.get(MODELS, project="pretrain").json()["folders"][0]["path"] == "eval"
     assert api.delete(f"{folders}?path=eval&project=pretrain").status == 204
+
+
+def test_folders_rename_and_move_with_their_models(flock: S3Flock) -> None:
+    api = flock.client()
+    project(flock)
+    folders = f"{MODELS}/-/folders"
+    scoped = ScopedPusher(flock)
+    first = scoped.push("eval/sweeps/a")
+    scoped.push("eval/b")
+    scoped.push("evals")  # a sibling whose name starts the same stays put
+    assert api.post(folders, {"path": "eval/empty"}).status == 201
+
+    renamed = api.patch(folders, {"path": "eval", "to": "bench/eval"})
+    assert renamed.status == 200, renamed.body
+    assert renamed.json() == {"path": "bench/eval", "project": None, "models": 2}
+    names = sorted(r[0] for r in sql(flock, "SELECT name FROM models"))
+    assert names == ["bench/eval/b", "bench/eval/sweeps/a", "evals"]
+    level = api.get(MODELS, folder="bench/eval").json()
+    assert [f["path"] for f in level["folders"]] == ["bench/eval/empty", "bench/eval/sweeps"]
+    # The files stay where they are, as for a model's rename.
+    resolved = api.get(f"{MODELS}/bench/eval/sweeps/a/-/resolve").json()
+    assert resolved["prefix"] == first["prefix"]
+
+    # Refused: onto a model, inside itself, or nothing there.
+    assert api.patch(folders, {"path": "bench", "to": "evals"}).status == 409
+    assert api.patch(folders, {"path": "bench", "to": "bench/x"}).status == 422
+    assert api.patch(folders, {"path": "nope", "to": "x"}).status == 404
+
+    # Into a project, keeping its last name, and back.
+    moved = api.patch(folders, {"path": "bench/eval", "to": "eval", "project": "pretrain"})
+    assert moved.status == 200 and moved.json()["project"] == "pretrain", moved.body
+    assert api.get(MODELS).json()["folders"] == []
+    inside = api.get(MODELS, project="pretrain", folder="eval").json()
+    assert [m["name"] for m in inside["models"]] == ["eval/b"]
+    assert [f["path"] for f in inside["folders"]] == ["eval/empty", "eval/sweeps"]
+    assert api.get(f"{MODELS}/eval/sweeps/a/-/resolve", project="pretrain").status == 200
