@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | proposed |
+| Status | implemented, pending review |
 | Date | 2026-11-21 |
 | Builds on | [002](002-projects-and-crud.md), [013](013-datasets-tab.md), [014](014-model-registry.md), [019](019-bulk-select.md), [021](021-public-access-checks.md) |
 | Amends | D86 and D108 (routes), D98 (model names have folders, and models have a scope), D99 and D134 (where a new model's folder goes), D104 to D106 (refs), D109 and D93 (trash entries know their project), D131 and D134 (models can move, and anything can move between scopes) |
@@ -363,7 +363,7 @@ the deploy:
   wrongly: its routes read and write by name, and the old unique index (below) keeps names
   apart.
 - **The old unique index stays until the contract.** `models_org_name` on `(org_pk, name)` is
-  dropped by `0023_models_scope.contract.sql`, once no old replica is left. Until then a project
+  dropped by `0024_models_scope.contract.sql`, once no old replica is left. Until then a project
   model can't take a name a global model has (409). The new indexes are added in the expand
   file, so both hold during the window.
 
@@ -378,7 +378,7 @@ One doc PR first, then the code on its own branch.
 Before deploying, list `-projects/` (one LIST, `max-keys=1`) in every org's `flock-datasets` and
 `flock-models`. Any org that already has the folder gets it renamed by hand first (D160).
 
-`0022_project_scopes.sql`:
+`0023_project_scopes.sql`:
 
 ```sql
 -- Model folders and project scopes (022): models get a project, and dataset trash entries too.
@@ -394,7 +394,7 @@ CREATE INDEX models_folders ON models (org_pk, project_pk, name text_pattern_ops
 ALTER TABLE dataset_trash ADD COLUMN project_pk bigint REFERENCES projects ON DELETE CASCADE;
 ```
 
-`0023_models_scope.contract.sql` drops `models_org_name` (D170).
+`0024_models_scope.contract.sql` drops `models_org_name` (D170).
 
 ### Part 2. API
 
@@ -474,7 +474,7 @@ ALTER TABLE dataset_trash ADD COLUMN project_pk bigint REFERENCES projects ON DE
 - **No per-project permissions** (D165). Anyone in the org can change any project's data.
 - **Project datasets and models are never public** (D165).
 - **No storage usage per project,** beyond the delete dialog's counts.
-- **Empty model folders** can't exist (D158).
+- **Empty model folders** can't be renamed or moved, only made and deleted (section 6).
 - **Deleting a project deletes its data for good** (D167), with no trash.
 - **Raw S3 paths of project datasets** use the project's pk (D160), so S3 clients and the
   Storage tab show numbers rather than names. Refs hide this everywhere else.
@@ -496,3 +496,53 @@ ALTER TABLE dataset_trash ADD COLUMN project_pk bigint REFERENCES projects ON DE
    button like the Datasets tab's?
 6. **"Database" in the request is read as "dataset".** If a per-project database of something
    else (run metadata, eval results) was meant, this doc covers only datasets and models.
+
+## 6. How it was built
+
+The plan above was followed, with these differences and details:
+
+- **Model routes are registered twice.** A `both()` decorator in `api/models.py` puts each
+  handler at the old one-segment route (`/{name}`, `/{name}/versions`, ...) and at
+  `/{name:path}/-...`, so old clients keep working and nested paths need the `/-` separator.
+- **Names stay unique in the org until the contract runs.** `0023_project_scopes.sql` adds the
+  per-scope partial unique indexes, but `models_org_name` stays until
+  `0024_models_scope.contract.sql` drops it (D170). Until then, a project model can't take the
+  name of a global model or of another project's, and the API answers 409 `taken`.
+- **`list_models` returns the folder listing** (a dict with `kind`, `models` and `folders`)
+  rather than a list of models, since a folder's subfolders have to come back too.
+- **The model cache moved** to `~/.cache/flock/models/{org}/{digest}/`, so two orgs' models
+  never share a folder. Earlier downloads are fetched again once.
+- **Project answers gain `id`,** the project's pk, so the Storage tab can link each
+  `-projects/{id}/` folder to its project.
+- **Hugging Face imports into a project** carry `project`, and the `command` a refused import
+  answers names the project with `--project`.
+- **A project's pages are in the sidebar,** not in a row of links in the project's header. On
+  any page of a project the sidebar slides over to its own panel: Home to go back, the
+  project's name, then Runs, Datasets and Models.
+- **Empty model folders exist after all,** answering open question 5: a `model_folders` table
+  holds the folders someone made, and the Models tab has a **New folder** button like the
+  Datasets tab's. `POST -/folders` makes one and `DELETE -/folders` deletes one with no live
+  model under it. A made folder's path is taken like a model's (D158), and a model can be saved
+  inside it. Folders with models under them stay implicit.
+- **The organization's scope is called "Workspace"** in the dashboard, such as in the Move
+  dialog's project picker, rather than "Global". The API's `project: null` is unchanged.
+- **`results.json` goes to schema 10** for the provenance's `model_org`, `model_project` and
+  `model_path`. Eval stage 041 (PR #138) reads results files back and refuses fields its types
+  don't have, so a file with the new fields must say it has a newer layout. `read_results`
+  reads 8 to 10, and `flock eval log` logs 6 to 10.
+- **Built on 023 (forks and blends, PR #139),** which landed its migration as `0022`, so this
+  stage's are `0023_project_scopes.sql` and `0024_models_scope.contract.sql`. Forks and blends
+  cross scopes as 023 says (D171): the API's fork, blend and make-independent routes take a
+  dataset as a path or `project:path`, as `flock.hub` names them (D162), and answer the same
+  way. The fork dialog has the Move dialog's project picker, and a blend is made in the scope
+  shown. Deleting a project is refused while a dataset outside it reads from one of its
+  datasets (D177); its own forks and blends go with it, releasing their pins (D173).
+- **The trash lists' Project column** is hidden on narrow screens, where it left no room for
+  the name.
+
+Checks run in the orb: `tests/app` and `tests/s3` (577 passed; the 6 `docker compose` tests in
+`test_settings.py` can't run without Docker), `tests/hub`, `tests/cli` and `tests/eval`, ruff,
+the web app's `pnpm check`, `pnpm lint` and `pnpm test`, and the docs build and link check.
+The web pages were looked at on a local stack (PostgreSQL, moto, the API and S3 proxy, Vite)
+with models pushed and Lance datasets written into a project and globally. The manual run in
+Tests (a short training run saving checkpoints into its project) wasn't done.
