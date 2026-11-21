@@ -20,9 +20,15 @@ class Provenance:
 
     Args:
         model (`str`):
-            The scored model as `repo@commit`, or as `flock:org/name@number` for a version in the Flock registry.
+            The scored model as `repo@commit`, or as `flock:org/path@number` or `flock:project:path@number` for a version in the Flock registry.
         model_digest (`str`, *optional*):
             The Flock version's digest, which names its exact files, or `None` for a Hugging Face model, whose commit in `model` already does. Results files written before it was added have no `model_digest`, and read as `None`.
+        model_org (`str`, *optional*):
+            The Flock model's org, so the result doesn't depend on whose default org read `model`. `None` for a Hugging Face model, and in results files written before it was added.
+        model_project (`str`, *optional*):
+            The project the Flock model belongs to, or `None` for a global one, a Hugging Face model, and results files written before it was added.
+        model_path (`str`, *optional*):
+            The Flock model's path in its scope, such as `eval/olmo2-1b`. `None` for a Hugging Face model, and in results files written before it was added.
         flock_commit (`str`):
             The flock commit that ran, from `FLOCK_COMMIT` or git, or `"unknown"`. A `-dirty` suffix means the checkout had uncommitted changes or new files under `flock/`.
         command (`str`, *optional*):
@@ -51,6 +57,9 @@ class Provenance:
     # Keyword-only with a default, so it sits beside `model` in the file and older results that
     # lack it still load.
     model_digest: str | None = field(default=None, kw_only=True)
+    model_org: str | None = field(default=None, kw_only=True)
+    model_project: str | None = field(default=None, kw_only=True)
+    model_path: str | None = field(default=None, kw_only=True)
     flock_commit: str
     command: str | None
     device: str
@@ -81,11 +90,17 @@ class Provenance:
         attention: str,
         sdpa_backend: str | None,
         model_digest: str | None = None,
+        model_org: str | None = None,
+        model_project: str | None = None,
+        model_path: str | None = None,
     ) -> Provenance:
         """Collects provenance for a run on this machine, now."""
         return cls(
             model=model,
             model_digest=model_digest,
+            model_org=model_org,
+            model_project=model_project,
+            model_path=model_path,
             flock_commit=flock_commit(),
             command=command,
             device=torch.cuda.get_device_name(device) if device.type == "cuda" else device.type,

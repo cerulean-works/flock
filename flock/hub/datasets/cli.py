@@ -1,4 +1,5 @@
-"""`flock datasets` (D122): import Hugging Face datasets to Flock, and list what's there."""
+"""`flock datasets` (D122): import Hugging Face datasets to Flock, and list and move what's
+there."""
 
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -18,6 +19,10 @@ REVISION_HELP = "A branch, tag or commit of the repo (default: main)."
 WORKERS_HELP = "Processes converting files at once (default: the CPUs this job may use)."
 MODE_HELP = "create refuses an existing dataset, overwrite replaces its rows, append adds them."
 ORG_HELP = "The org whose flock-datasets to write to (default: your default org)."
+PROJECT_HELP = (
+    "The project the datasets belong to, by name or as org/project (default: the org's global "
+    "datasets). Paths are then inside it."
+)
 
 
 @contextmanager
@@ -53,6 +58,7 @@ def datasets_group() -> None:
     "--mode", type=click.Choice(MODES), default="create", show_default=True, help=MODE_HELP
 )
 @click.option("--org", help=ORG_HELP)
+@click.option("--project", help=PROJECT_HELP)
 @click.option(
     "--keep",
     type=click.Path(file_okay=False, path_type=Path),
@@ -67,6 +73,7 @@ def import_command(
     workers: int | None,
     mode: Mode,
     org: str | None,
+    project: str | None,
     keep: Path | None,
 ) -> None:
     """Import the Hugging Face dataset REPO to DEST, a folder of flock-datasets.
@@ -87,6 +94,7 @@ def import_command(
             org=org,
             workers=workers,
             mode=mode,
+            project=project,
         )
     _report(converted)
 
@@ -131,33 +139,94 @@ def download_command(
     "--mode", type=click.Choice(MODES), default="create", show_default=True, help=MODE_HELP
 )
 @click.option("--org", help=ORG_HELP)
+@click.option("--project", help=PROJECT_HELP)
 def convert_command(
-    folder: Path, dest: str, workers: int | None, mode: Mode, org: str | None
+    folder: Path,
+    dest: str,
+    workers: int | None,
+    mode: Mode,
+    org: str | None,
+    project: str | None,
 ) -> None:
     """Convert FOLDER, which flock datasets download filled, to Lance datasets in DEST.
 
     This only needs Flock, so it runs on a compute node without internet.
     """
     with _failing():
-        converted = datasets.convert(folder, dest, org=org, workers=workers, mode=mode)
+        converted = datasets.convert(
+            folder, dest, org=org, workers=workers, mode=mode, project=project
+        )
     _report(converted)
 
 
 @datasets_group.command("list")
 @click.argument("path", default="")
 @click.option("--org", help="The org (default: your default org).")
-def list_command(path: str, org: str | None) -> None:
-    """List the datasets and folders at PATH in flock-datasets (default: the root)."""
+@click.option("--project", help=PROJECT_HELP)
+def list_command(path: str, org: str | None, project: str | None) -> None:
+    """List the datasets and folders at PATH in flock-datasets (default: the root), or in a
+    project's datasets with --project."""
     with _failing():
-        found = datasets.list_datasets(path, org=org)
+        try:
+            found = datasets.list_datasets(path, project=project, org=org)
+        except ValueError as error:
+            raise click.BadParameter(str(error)) from None
     if found["kind"] == "dataset":
         click.echo(f"{found['path']} is a dataset, at version {found['version']}.")
         return
     if not (found["folders"] or found["datasets"]):
-        where = f"{path.strip('/')} has" if path.strip("/") else "flock-datasets has"
+        scope = f"{project}'s datasets" if project is not None else "flock-datasets"
+        where = f"{path.strip('/')} has" if path.strip("/") else f"{scope} has"
         click.echo(f"{where} no datasets yet. Import one with: flock datasets import REPO DEST")
         return
     for folder in found["folders"]:
         click.echo(f"{folder['path']}/")
     for dataset in found["datasets"]:
         click.echo(f"{dataset['path']}\tversion {dataset['version']}")
+
+
+@datasets_group.command("move")
+@click.argument("paths", nargs=-1, required=True)
+@click.argument("to")
+@click.option("--project", help="The project the datasets belong to now (default: global).")
+@click.option("--to-project", help="Move them into this project of the org.")
+@click.option("--to-global", is_flag=True, help="Move them to the org's global datasets.")
+@click.option("--org", help="The org (default: your default org).")
+def move_command(
+    paths: tuple[str, ...],
+    to: str,
+    project: str | None,
+    to_project: str | None,
+    to_global: bool,
+    org: str | None,
+) -> None:
+    """Move the datasets and folders PATHS into the folder TO, each keeping its last name.
+
+    TO is a folder in the scope they end up in ("" for its root). With --to-project or
+    --to-global they change scope, which copies their objects. Above the size limits nothing
+    moves, and the aws s3 mv commands to run instead are printed.
+
+    \b
+    flock datasets move eval/mmlu-filtered eval --project pretrain --to-global
+    """
+    if to_project is not None and to_global:
+        raise click.UsageError("give --to-project or --to-global, not both")
+    try:
+        results = datasets.move(
+            paths, to, to_project=to_project, to_global=to_global, project=project, org=org
+        )
+    except S3Error as error:
+        command = error.body.get("command") if isinstance(error.body, dict) else None
+        message = f"{error}\n{command}" if command else str(error)
+        raise click.ClickException(message) from None
+    except ValueError as error:
+        raise click.BadParameter(str(error)) from None
+    failed = False
+    for result in results:
+        if result["moved"]:
+            click.echo(f"✓ Moved {result['path']} to {result['to']}")
+        else:
+            failed = True
+            click.echo(f"✗ {result['path']}: {result['error']}", err=True)
+    if failed:
+        raise SystemExit(1)
