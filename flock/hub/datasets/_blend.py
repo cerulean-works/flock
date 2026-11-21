@@ -267,7 +267,7 @@ class Plan:
     columns: list[dict[str, Any]]
     problems: list[str] = field(default_factory=list)
     # Per source path: output name → ("column", source name) | ("cast", source name) |
-    # ("null",) | ("value", value)
+    # ("copy", source name) | ("null",) | ("value", value)
     ways: dict[str, dict[str, tuple[Any, ...]]] = field(default_factory=dict)
 
 
@@ -281,6 +281,9 @@ def check_map(sources: Sequence[SourceInfo], columns: Sequence[Mapping[str, Any]
     ways: dict[str, dict[str, tuple[Any, ...]]] = {s.path: {} for s in sources}
     names: set[str] = set()
     schemas = [s.schema for s in sources]
+    # Each source column a data file already gives an output: a second output from it is
+    # written out as a copy, since one field id can only be one column.
+    read: set[tuple[str, str]] = set()
     if not columns:
         problems.append("A blend needs at least one column.")
     for column in columns:
@@ -329,8 +332,16 @@ def check_map(sources: Sequence[SourceInfo], columns: Sequence[Mapping[str, Any]
                     problems.append(f"{name}: {source.path} has no column {spec['column']}.")
                     continue
                 found = source.schema.field(index)
-                if found.type == out_type:
+                if found.nullable and not nullable:
+                    problems.append(
+                        f"{name} can't be null, but {found.name} in {source.path} can hold "
+                        "nulls. Make it nullable."
+                    )
+                if found.type == out_type and (source.path, found.name) in read:
+                    ways[source.path][name] = ("copy", found.name)
+                elif found.type == out_type:
                     ways[source.path][name] = ("column", found.name)
+                    read.add((source.path, found.name))
                 elif safe_cast(found.type, out_type):
                     ways[source.path][name] = ("cast", found.name)
                 else:
@@ -341,6 +352,13 @@ def check_map(sources: Sequence[SourceInfo], columns: Sequence[Mapping[str, Any]
             else:
                 problems.append(f"{name}: say where {source.path} gets it from.")
         fields.append(pa.field(name, out_type, nullable=nullable))
+    if columns and not problems:
+        for source in sources:
+            if all(way[0] == "null" for way in ways[source.path].values()):
+                problems.append(
+                    f"{source.path} gives the blend only nulls. Take at least one of its "
+                    "columns, or a value."
+                )
     return Plan(pa.schema(fields), [dict(c) for c in columns], problems, ways)
 
 
@@ -524,7 +542,7 @@ def build(
                         f"{out.name} in {source.path} doesn't line up with the output."
                     )
                 remap.update(zip(src_ids, dst_ids, strict=True))
-            elif way[0] in ("cast", "value"):
+            elif way[0] in ("cast", "copy", "value"):
                 filled.append(out.name)
         remaps.append(remap)
         fills.append(filled)

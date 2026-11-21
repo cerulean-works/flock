@@ -198,16 +198,18 @@ def test_blend_samples_each_source_and_maps_its_columns(
     sources = [{"path": "web", "rows": 100}, {"path": "code", "rows": 50}]
 
     preview = api.post(f"{DATASETS}/blend/preview", {"sources": sources}).json()
-    assert preview["automatic"] and preview["problems"] == []
+    assert preview["automatic"] and preview["problems"] == [
+        "code gives the blend only nulls. Take at least one of its columns, or a value."
+    ]
     assert [s["live"] for s in preview["sources"]] == [300, 180]
     auto = {c["name"]: c["from"]["code"] for c in preview["columns"]}
     assert auto == {"id": {"null": True}, "text": {"null": True}}
     assert [c["name"] for c in preview["unused"]["code"]] == ["doc_id", "content", "score"]
 
     columns = [
-        {"name": "id", "type": "int64", "nullable": False,
+        {"name": "id", "type": "int64", "nullable": True,
          "from": {"web": {"column": "id"}, "code": {"column": "doc_id"}}},
-        {"name": "text", "type": "string", "nullable": False,
+        {"name": "text", "type": "string", "nullable": True,
          "from": {"web": {"column": "text"}, "code": {"column": "content"}}},
         {"name": "score", "type": "int64", "nullable": True,
          "from": {"web": {"null": True}, "code": {"column": "score", "cast": True}}},
@@ -259,10 +261,14 @@ def test_blend_samples_each_source_and_maps_its_columns(
     # Within 0.1% of 100% is scaled to it; further off is refused, and isn't a column problem.
     # 66.6 / 100 in floating point is 0.6659999999999999, so the sum is just past 0.1% off.
     thirds = [{"path": "web", "fraction": 66.6 / 100}, {"path": "code", "fraction": 33.3 / 100}]
-    split = api.post(f"{DATASETS}/blend/preview", {"sources": thirds, "total": 300}).json()
+    split = api.post(
+        f"{DATASETS}/blend/preview", {"sources": thirds, "total": 300, "columns": columns}
+    ).json()
     assert [s["rows"] for s in split["sources"]] == [200, 100] and split["problems"] == []
     short = [{"path": "web", "fraction": 0.6}, {"path": "code", "fraction": 0.3}]
-    split = api.post(f"{DATASETS}/blend/preview", {"sources": short, "total": 300}).json()
+    split = api.post(
+        f"{DATASETS}/blend/preview", {"sources": short, "total": 300, "columns": columns}
+    ).json()
     assert split["problems"] == ["The percentages add up to 90%, not 100%."]
     assert split["column_problems"] == []
 
@@ -292,7 +298,11 @@ def test_blend_refusals_name_every_problem(
     no_seed = api.post(f"{DATASETS}/blend", {"sources": sources, "to": "m"})
     assert no_seed.status == 422
 
-    upsampled = {"sources": sources, "replace": True, "seed": 3, "to": "up"}
+    ids = [
+        {"name": "id", "type": "int64", "nullable": True,
+         "from": {"web": {"column": "id"}, "code": {"column": "doc_id"}}},
+    ]  # fmt: skip
+    upsampled = {"sources": sources, "columns": ids, "replace": True, "seed": 3, "to": "up"}
     assert api.post(f"{DATASETS}/blend/preview", upsampled).json()["problems"] == []
 
 

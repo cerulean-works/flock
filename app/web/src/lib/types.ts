@@ -343,7 +343,7 @@ export interface BlendPreview {
 	columns: BlendColumn[];
 	automatic: boolean;
 	unused: Record<string, { name: string; type: string }[]>;
-	writes: { column: string; source: string; kind: 'cast' | 'value' }[];
+	writes: { column: string; source: string; kind: 'cast' | 'copy' | 'value' }[];
 	/** Every problem refusing the blend. */
 	problems: string[];
 	/** Those of `problems` that are the column map's, for the Columns step. */

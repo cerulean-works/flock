@@ -569,7 +569,9 @@ class Forks:
         sources, problems = await self._sources(org, name, request)
 
         def read() -> dict[str, Any]:
-            columns = request.columns or _blend.automatic_map(sources)
+            columns = (
+                request.columns if request.columns is not None else _blend.automatic_map(sources)
+            )
             plan = _blend.check_map(sources, columns)
             live = [s.ds.count_rows() for s in sources]
             found = list(problems)
@@ -584,7 +586,7 @@ class Forks:
                 {"column": out, "source": path, "kind": way[0]}
                 for path, ways in plan.ways.items()
                 for out, way in ways.items()
-                if way[0] in ("cast", "value")
+                if way[0] in ("cast", "copy", "value")
             ]
             return {
                 "sources": [
