@@ -2,6 +2,7 @@
 	import type { Scope } from '#lib/scope.ts';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import TagIcon from '@lucide/svelte/icons/tag';
 	import type { ResolvedPathname } from '$app/types';
 	import { goto } from '$app/navigation';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -54,7 +55,12 @@
 	<DropdownMenu.Trigger>
 		{#snippet child({ props })}
 			<Button {...props} variant="outline" size="sm" class="gap-1.5 font-normal">
-				Version {version}{#if tagged}<span class="text-muted-foreground">· {tagged}</span>{/if}
+				<span class="tabular-nums">Version {version}</span>
+				{#if tagged}
+					<span class="ml-1 inline-flex items-center gap-1 text-muted-foreground">
+						<TagIcon class="size-3" />{tagged}
+					</span>
+				{/if}
 				<ChevronDownIcon class="text-muted-foreground" />
 			</Button>
 		{/snippet}

@@ -93,7 +93,7 @@
 						taken = fixed = null;
 						error = null;
 					}}
-					placeholder="release"
+					placeholder="e.g., release"
 					autocomplete="off"
 					spellcheck="false"
 				/>

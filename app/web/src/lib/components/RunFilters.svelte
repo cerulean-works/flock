@@ -231,7 +231,7 @@
 			value={d.key}
 			options={columns}
 			onValueChange={(key) => setKey(d, key)}
-			placeholder="config.lr"
+			placeholder="e.g., config.lr"
 			aria-label="Column"
 			class="font-mono text-[12.5px]"
 			mono

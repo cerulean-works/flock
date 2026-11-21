@@ -3,6 +3,7 @@
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import Page from '#lib/components/Page.svelte';
+	import PageHeader from '#lib/components/PageHeader.svelte';
 	import SelectionBar from '#lib/components/SelectionBar.svelte';
 	import Breadcrumbs from '#lib/components/storage/Breadcrumbs.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -69,42 +70,43 @@
 	>
 </svelte:head>
 
-<Page width="home">
-	{#if trail.length}
-		<div class="pt-5"><Breadcrumbs crumbs={trail} /></div>
+{#snippet trailCrumbs()}<Breadcrumbs crumbs={trail} />{/snippet}
+
+{#snippet actions()}
+	{#if selection?.size}
+		<SelectionBar {selection}>
+			<Button variant="outline" size="sm" onclick={() => blend(selection.chosen)}>
+				<BlendIcon /> Blend
+			</Button>
+			<Button variant="outline" size="sm" onclick={() => selection.act('move')}>
+				<FolderInputIcon /> Move
+			</Button>
+			<Button
+				variant="outline"
+				size="sm"
+				class="text-destructive"
+				onclick={() => selection.act('delete')}
+			>
+				<Trash2Icon /> Delete
+			</Button>
+		</SelectionBar>
+	{:else}
+		<!-- One filled action (the import), with the quieter ones beside it. -->
+		{#if writer}
+			<Button variant="ghost" onclick={() => blend()}>
+				<BlendIcon /> New blend
+			</Button>
+		{/if}
+		<NewFolderButton {scope} path={data.path} />
+		{#if writer}
+			<HFImportButton {scope} kind="dataset" list={imports} folder={data.path} />
+		{/if}
 	{/if}
+{/snippet}
+
+<Page width="home">
 	{#if data.kind === 'folder'}
-		<div class={['flex items-center gap-3 pb-5', trail.length ? 'pt-3' : 'pt-8']}>
-			<h1 class="min-w-0 flex-1 truncate text-[34px] leading-[1.15] tracking-[-0.025em]" {title}>
-				{title}
-			</h1>
-			{#if selection?.size}
-				<SelectionBar {selection}>
-					<Button variant="outline" size="sm" onclick={() => blend(selection.chosen)}>
-						<BlendIcon /> Blend
-					</Button>
-					<Button variant="outline" size="sm" onclick={() => selection.act('move')}>
-						<FolderInputIcon /> Move
-					</Button>
-					<Button
-						variant="outline"
-						size="sm"
-						class="text-destructive"
-						onclick={() => selection.act('delete')}
-					>
-						<Trash2Icon /> Delete
-					</Button>
-				</SelectionBar>
-			{:else}
-				{#if writer}
-					<Button variant="outline" size="sm" onclick={() => blend()}>
-						<BlendIcon /> New blend
-					</Button>
-					<HFImportButton {scope} kind="dataset" list={imports} folder={data.path} />
-				{/if}
-				<NewFolderButton {scope} path={data.path} />
-			{/if}
-		</div>
+		<PageHeader {title} layout="home" crumbs={trail.length ? trailCrumbs : undefined} {actions} />
 		<HFImportRows {scope} list={imports} kind="dataset" folder={data.path} />
 		<DatasetJobRows {scope} list={jobs} folder={data.path} />
 		{#key data.path}
@@ -127,7 +129,9 @@
 			/>
 		{/if}
 	{:else}
-		{#if !trail.length}<div class="pt-5"></div>{/if}
+		<div class="pt-5">
+			{#if trail.length}<Breadcrumbs crumbs={trail} />{/if}
+		</div>
 		{#key data.path}
 			<DatasetView
 				{scope}

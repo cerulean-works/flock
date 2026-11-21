@@ -1,4 +1,10 @@
 <script lang="ts">
+	import BoxIcon from '@lucide/svelte/icons/box';
+	import GitCommitVerticalIcon from '@lucide/svelte/icons/git-commit-vertical';
+	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
+	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import MetaItem from '#lib/components/MetaItem.svelte';
+	import MetaRow from '#lib/components/MetaRow.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { DialogSubject } from '#lib/data/dialog-subject.svelte.ts';
 	import { daysLeft } from '#lib/datasets.ts';
@@ -24,7 +30,7 @@
 		entry.kind === 'model' ? `Model with ${count(entry.versions, 'version')}` : 'Version';
 </script>
 
-<p class="mt-2 max-w-[62ch] text-muted-foreground">
+<p class="mt-2 text-muted-foreground">
 	Models and versions deleted from the Models tab stay here for {TRASH_DAYS} days, then they’re removed
 	for good.
 </p>
@@ -43,11 +49,15 @@
 				<tr class="h-14 border-b border-divider">
 					<td class="px-2 py-2">
 						<p class="truncate font-mono text-[13px]" title={label(entry)}>{label(entry)}</p>
-						<p class="truncate text-[13px] text-muted-foreground">
-							{what(entry)} · {bytes(entry.bytes)} · deleted {dateTime(
-								entry.deleted_at
-							)}{entry.deleted_by ? ` by ${entry.deleted_by.name}` : ''}
-						</p>
+						<MetaRow class="mt-0.5 flex-nowrap gap-x-3">
+							<MetaItem icon={entry.kind === 'model' ? BoxIcon : GitCommitVerticalIcon}>
+								{what(entry)}
+							</MetaItem>
+							<MetaItem icon={HardDriveIcon} title="Size">{bytes(entry.bytes)}</MetaItem>
+							<MetaItem icon={Trash2Icon} title="Deleted">
+								{dateTime(entry.deleted_at)}{entry.deleted_by ? ` by ${entry.deleted_by.name}` : ''}
+							</MetaItem>
+						</MetaRow>
 					</td>
 					<td
 						class="hidden truncate px-2 text-muted-foreground sm:table-cell"

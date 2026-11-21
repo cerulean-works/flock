@@ -45,7 +45,7 @@
 		<header class="flex items-end gap-4 border-b border-divider px-7 pt-5 pb-4">
 			<div class="min-w-0 flex-1">
 				<Dialog.Description class="text-[13px]">
-					{view.section} · {position} of {section.panels.length}
+					Panel {position} of {section.panels.length} in {view.section}
 				</Dialog.Description>
 				<Dialog.Title
 					class="mt-0.5 truncate text-[34px] leading-[1.15] font-normal tracking-[-0.025em]"
@@ -118,7 +118,7 @@
 					<LinePlot bind:this={plot} {panel} surface="fullscreen" active={true} />
 				</div>
 				<p class="mt-2.5 ml-16 text-xs text-faint">
-					Drag to zoom · double-click to reset · click a line to pin its run
+					Drag to zoom, double-click to reset, or click a line to pin its run
 				</p>
 			</div>
 			<!-- As wide as a run's overview, its text on the same 16px inset as its heading. -->

@@ -4,39 +4,59 @@
 
 	interface Props {
 		/**
-		 * `onboarding`: what to do on a page with nothing to show yet (no runs, none matching), a
-		 * reading column under a large title. `compact`: a line where a tab or pane has nothing
-		 * to show, on the page's gutters, in body type.
+		 * `onboarding`: what to do on a page with nothing to show yet (no runs, datasets or
+		 * models, none matching), a centred column of a fixed width. `compact`: a line where a tab
+		 * or pane has nothing to show, on the page's gutters, in body type.
 		 */
 		variant?: 'onboarding' | 'compact';
-		/** The onboarding title. */
+		/** The onboarding title, such as "No runs yet". */
 		title?: string;
-		/** Under an onboarding title, at reading size. */
+		/** One short line under the onboarding title. */
 		lead?: Snippet;
+		/** Under the lead: a code sample (`CopyBlock`) or steps, at the column's full width. */
+		children?: Snippet;
+		/** Under everything, centred and quieter: a secondary link or a button or two. */
+		actions?: Snippet;
 		/** A compact one is muted, or says something went wrong. */
 		tone?: 'muted' | 'error';
 		class?: ClassValue;
-		children?: Snippet;
 	}
 
 	let {
 		variant = 'compact',
 		title,
 		lead,
+		children,
+		actions,
 		tone = 'muted',
-		class: className,
-		children
+		class: className
 	}: Props = $props();
 </script>
 
 {#if variant === 'onboarding'}
-	<div class={['px-5 pt-[10vh] pb-16', className]}>
-		<div class="mx-auto max-w-160">
-			<h2 class="text-[28px] leading-tight tracking-[-0.02em]">{title}</h2>
-			{#if lead}
-				<div class="mt-3 text-[17px] leading-[1.45]">{@render lead()}</div>
+	<!-- One look for every empty page: centred, the same width whatever the window. -->
+	<div class={['px-5 pt-[12vh] pb-16', className]}>
+		<div class="mx-auto w-full max-w-[36rem]">
+			<div class="text-center">
+				<h2 class="text-[28px] leading-[1.15] tracking-[-0.02em] text-balance">{title}</h2>
+				{#if lead}
+					<p
+						class="mx-auto mt-3 max-w-[30rem] text-[17px] leading-[1.45] text-balance text-muted-foreground"
+					>
+						{@render lead()}
+					</p>
+				{/if}
+			</div>
+			{#if children}
+				<div class="mt-7 text-left">{@render children()}</div>
 			{/if}
-			{@render children?.()}
+			{#if actions}
+				<div
+					class="mt-6 flex flex-wrap items-center justify-center gap-2 text-center text-[13px] text-balance text-muted-foreground"
+				>
+					{@render actions()}
+				</div>
+			{/if}
 		</div>
 	</div>
 {:else}

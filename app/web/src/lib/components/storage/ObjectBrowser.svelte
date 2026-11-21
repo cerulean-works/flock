@@ -158,7 +158,7 @@
 				oninput={filtered}
 			/>
 		</div>
-		<div class="ml-auto flex items-center gap-1">
+		<div class="ml-auto flex items-center gap-2">
 			<span class="flex items-center gap-1 text-[13px] text-muted-foreground max-sm:hidden">
 				<span class="max-w-60 truncate font-mono text-[12.5px]">{s3Uri(bucket, prefix)}</span>
 				<CopyButton text={s3Uri(bucket, prefix)} label="Copy S3 URI" />

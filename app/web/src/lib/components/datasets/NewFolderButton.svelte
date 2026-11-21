@@ -46,7 +46,7 @@
 	}
 </script>
 
-<Button variant="outline" size="sm" disabled={pending} onclick={show}>
+<Button variant="ghost" disabled={pending} onclick={show}>
 	<FolderPlusIcon /> New folder
 </Button>
 <CreateFolderDialog

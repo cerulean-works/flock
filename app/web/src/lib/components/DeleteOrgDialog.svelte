@@ -35,10 +35,10 @@
 			<AlertDialog.Title>Delete {org.display_name}?</AlertDialog.Title>
 			<AlertDialog.Description>
 				{#if org.project_count}
-					Deletes its {count(org.project_count, 'project')} and their runs. Members keep their accounts.
-					There is no undo.
+					This deletes its {count(org.project_count, 'project')} and their runs. Members keep their accounts.
+					There’s no undo.
 				{:else}
-					It has no projects. Members keep their accounts. There is no undo.
+					It has no projects. Members keep their accounts. There’s no undo.
 				{/if}
 			</AlertDialog.Description>
 		</AlertDialog.Header>
@@ -47,8 +47,8 @@
 				id="delete-org-name"
 				text={org.name}
 				bind:value={typed}
-				before="Type its ID,"
-				after=", to confirm"
+				before="Type its ID"
+				after=" to confirm"
 			/>
 			{#if active}
 				<div class="flex items-start gap-2.5">

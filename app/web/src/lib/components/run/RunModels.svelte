@@ -1,5 +1,8 @@
 <script lang="ts">
 	import BoxIcon from '@lucide/svelte/icons/box';
+	import TagIcon from '@lucide/svelte/icons/tag';
+	import MetaItem from '#lib/components/MetaItem.svelte';
+	import MetaRow from '#lib/components/MetaRow.svelte';
 	import { sortTags, versionHref } from '#lib/models.ts';
 	import type { ModelVersion } from '#lib/types.ts';
 
@@ -35,15 +38,13 @@
 				>
 					{v.project ? v.model : v.name}@{v.number}
 				</a>
-				<span class="ml-auto min-w-0 truncate text-right text-xs text-muted-foreground">
-					{[
-						v.primary ? 'primary' : null,
-						v.step !== null ? `step ${v.step.toLocaleString('en-US')}` : null,
-						...tags
-					]
-						.filter(Boolean)
-						.join(' · ')}
-				</span>
+				<MetaRow class="ml-auto flex-nowrap justify-end gap-x-2.5 overflow-hidden text-xs">
+					{#if v.primary}<MetaItem chip class="h-4.5 px-1.5 text-[11px]">Primary</MetaItem>{/if}
+					{#if v.step !== null}<MetaItem class="flex-none"
+							>step {v.step.toLocaleString('en-US')}</MetaItem
+						>{/if}
+					{#if tags.length}<MetaItem icon={TagIcon}>{tags.join(', ')}</MetaItem>{/if}
+				</MetaRow>
 			</li>
 		{/each}
 	</ul>

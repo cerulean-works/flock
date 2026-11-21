@@ -149,9 +149,10 @@ describe('ModelList', () => {
 
 	it('shows how to save a model when there are none', async () => {
 		render(ModelList, { scope: global, path: '', folder: listing([]), now: NOW });
-		await expect.element(screen.getByText('No models yet.')).toBeVisible();
-		await expect.element(screen.getByText(/save_to_hub\(model, "acme\/my-model"\)/)).toBeVisible();
-		await expect.element(screen.getByText('flock models pull acme/my-model')).toBeVisible();
+		await expect.element(screen.getByRole('heading', { name: 'No models yet' })).toBeVisible();
+		const code = screen.getByRole('code').first();
+		await expect.element(code).toHaveTextContent('model, "acme/my-model", tags');
+		await expect.element(screen.getByText('flock models push ./model acme/my-model')).toBeVisible();
 	});
 
 	it('lists a project’s models by their last segment, then folders with their counts', async () => {
@@ -172,19 +173,23 @@ describe('ModelList', () => {
 	it('shows how to save into the project when it has none', async () => {
 		const scope = { org: 'acme', project: 'pretrain' };
 		render(ModelList, { scope, path: '', folder: listing([], [], 'pretrain'), now: NOW });
-		await expect.element(screen.getByText('No models in pretrain yet.')).toBeVisible();
 		await expect
-			.element(screen.getByText(/save_to_hub\(model, "my-model", project="pretrain"\)/))
+			.element(screen.getByRole('heading', { name: 'No models in pretrain yet' }))
 			.toBeVisible();
 		await expect
-			.element(screen.getByText('flock models pull my-model --project pretrain'))
+			.element(screen.getByRole('code').first())
+			.toHaveTextContent('model, "my-model", project="pretrain", tags');
+		await expect
+			.element(screen.getByText('flock models push ./model my-model --project pretrain'))
 			.toBeVisible();
 	});
 	it('says an empty folder is empty, not how to save a first model', async () => {
 		const folder = { ...listing([]), folder: 'eval' };
 		render(ModelList, { scope: global, path: 'eval', folder, now: NOW });
-		await expect.element(screen.getByText('This folder is empty.')).toBeVisible();
-		await expect.element(screen.getByText('No models yet.')).not.toBeInTheDocument();
+		await expect
+			.element(screen.getByRole('heading', { name: 'This folder is empty' }))
+			.toBeVisible();
+		await expect.element(screen.getByText('No models yet')).not.toBeInTheDocument();
 	});
 });
 
@@ -299,11 +304,14 @@ describe('ModelView', () => {
 		await expect.element(screen.getByRole('heading', { name: 'olmo2-1b', level: 1 })).toBeVisible();
 		await expect.element(screen.getByRole('button', { name: /^Version 12/ })).toBeVisible();
 		await expect.element(screen.getByText('Primary', { exact: true })).toBeVisible();
-		expect(screen.getByRole('link', { name: 'Browse files' }).element().getAttribute('href')).toBe(
-			'/storage/acme/flock-models/olmo2-1b/u/ULID12/'
-		);
+		await expect.element(screen.getByRole('button', { name: 'Load' })).toBeVisible();
 		await expect.element(screen.getByRole('button', { name: 'Rename' })).toBeVisible();
-		await expect.element(screen.getByRole('button', { name: 'Delete' })).toBeVisible();
+		// Browsing the files and deleting are in the overflow menu.
+		await screen.getByRole('button', { name: 'More model actions' }).click();
+		expect(
+			screen.getByRole('menuitem', { name: 'Browse files' }).element().getAttribute('href')
+		).toBe('/storage/acme/flock-models/olmo2-1b/u/ULID12/');
+		await expect.element(screen.getByRole('menuitem', { name: 'Delete…' })).toBeVisible();
 	});
 
 	it('shows the README, config.json and flock.json in the Overview', async () => {
@@ -417,7 +425,7 @@ describe('ModelView', () => {
 		await expect.element(row).toBeInTheDocument();
 		const run = row.element().querySelector('a[href="/acme/pretrain/runs/3k9x2"]');
 		expect(run?.textContent).toBe('3k9x2');
-		expect(row.element().textContent).toContain('· step 12,000');
+		expect(row.element().textContent).toContain('step 12,000');
 		const tags = screen.getByRole('list', { name: 'Tags of version 13' }).getByRole('listitem');
 		expect(tags.all().map((t) => t.element().textContent!.trim())).toEqual([
 			'release',
@@ -495,7 +503,11 @@ describe('ModelView', () => {
 			)
 			.toBeVisible();
 		await expect.element(screen.getByRole('button', { name: 'Load' })).not.toBeInTheDocument();
-		await expect.element(screen.getByRole('button', { name: 'Delete' })).toBeVisible();
+		await screen.getByRole('button', { name: 'More model actions' }).click();
+		await expect.element(screen.getByRole('menuitem', { name: 'Delete…' })).toBeVisible();
+		await expect
+			.element(screen.getByRole('menuitem', { name: 'Browse files' }))
+			.not.toBeInTheDocument();
 	});
 });
 
@@ -745,9 +757,9 @@ describe('DeletedModels', () => {
 			now: NOW
 		});
 		await expect.element(screen.getByText('acme/old')).toBeVisible();
-		await expect
-			.element(screen.getByText(/Model with 2 versions · 3\.0 MB · deleted .* by Alice/))
-			.toBeVisible();
+		await expect.element(screen.getByText('Model with 2 versions')).toBeVisible();
+		await expect.element(screen.getByText('3.0 MB', { exact: true }).first()).toBeVisible();
+		await expect.element(screen.getByText(/ by Alice$/).first()).toBeVisible();
 		await expect.element(screen.getByText('acme/olmo2-1b@7')).toBeVisible();
 		await expect.element(screen.getByText('13 days left')).toBeVisible();
 		await expect.element(screen.getByText('1 day left')).toBeVisible();
@@ -845,9 +857,9 @@ describe('RunModels', () => {
 		await expect.element(screen.getByRole('heading', { name: /Checkpoints/ })).toBeVisible();
 		const link = screen.getByRole('link', { name: 'olmo2-1b@13' });
 		expect(link.element().getAttribute('href')).toBe('/models/acme/olmo2-1b?version=13');
-		await expect
-			.element(screen.getByText('primary · step 900 · release · checkpoint-900'))
-			.toBeVisible();
+		await expect.element(screen.getByText('Primary', { exact: true })).toBeVisible();
+		await expect.element(screen.getByText('step 900')).toBeVisible();
+		await expect.element(screen.getByText('release, checkpoint-900')).toBeVisible();
 	});
 
 	it('names a project’s checkpoint by its project, linked into it (D169)', async () => {

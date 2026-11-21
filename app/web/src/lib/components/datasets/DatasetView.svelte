@@ -173,24 +173,40 @@
 	let unpublish = $state<HTMLFormElement>();
 </script>
 
-<div class="flex flex-wrap items-center gap-x-3 gap-y-2 pt-3">
+<div class="pt-3">
 	<h1 class="min-w-0 truncate text-[34px] leading-[1.15] tracking-[-0.025em]" title={path}>
 		{nameOf(path)}
 	</h1>
-	{#if isPublic}<PublicBadge what="every version of it" />{/if}
-	{#if info}
-		<VersionPicker {scope} {path} version={info.version} {requested} tags={allTags} {versionHref} />
+	{#if info || isPublic}
+		<!-- The version and visibility, all at the picker's height so the row sits level. -->
+		<div class="mt-3 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-2">
+			{#if info}
+				<VersionPicker
+					{scope}
+					{path}
+					version={info.version}
+					{requested}
+					tags={allTags}
+					{versionHref}
+				/>
+			{/if}
+			{#if isPublic}
+				<PublicBadge
+					what="every version of it"
+					class="h-7 px-2.5 text-[13px] font-normal [&>svg]:size-3.5!"
+				/>
+			{/if}
+			{#if newer !== null}
+				<p class="ml-1 text-[13px] text-muted-foreground" role="status">
+					New version available.
+					<a class="text-link underline-offset-3 hover:underline" href={versionHref(String(newer))}>
+						View version {newer}
+					</a>
+				</p>
+			{/if}
+		</div>
 	{/if}
 </div>
-
-{#if newer !== null}
-	<p class="mt-3 text-[13px] text-muted-foreground" role="status">
-		New version available.
-		<a class="text-link underline-offset-3 hover:underline" href={versionHref(String(newer))}>
-			View version {newer}
-		</a>
-	</p>
-{/if}
 
 <div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
 	<Tabs.Root value={tab} onValueChange={(v) => setTab(v as Tab)}>
@@ -206,22 +222,6 @@
 			<span class="mx-1 h-5 w-px bg-border" aria-hidden="true"></span>
 		{/if}
 		{#if access !== 'public'}
-			<Button
-				variant="ghost"
-				size="sm"
-				class="text-muted-foreground"
-				onclick={() => (accessing = true)}
-			>
-				<PlugIcon /> Access in S3
-			</Button>
-			<Button
-				variant="ghost"
-				size="sm"
-				class="text-muted-foreground"
-				href={objectHref(scope.org, DATASETS_BUCKET, `${objectKey}/`)}
-			>
-				<FolderOpenIcon /> Browse files
-			</Button>
 			{#if info}
 				<Button
 					variant="ghost"
@@ -242,18 +242,7 @@
 			>
 				<PencilIcon /> Rename
 			</Button>
-			<Button
-				variant="ghost"
-				size="sm"
-				class="text-muted-foreground hover:text-destructive"
-				disabled={!!held}
-				title={held ?? undefined}
-				onclick={() => (deleting = true)}
-			>
-				<Trash2Icon /> Delete
-			</Button>
-		{/if}
-		{#if access === 'admin' && info && scope.project === null}
+			<!-- Reaching the files, visibility and deletion: less often, so tucked away. -->
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger>
 					{#snippet child({ props })}
@@ -269,16 +258,38 @@
 						</Button>
 					{/snippet}
 				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end" class="w-44">
-					{#if isPublic}
-						<DropdownMenu.Item onSelect={() => unpublish?.requestSubmit()}>
-							<LockIcon /> Make private
-						</DropdownMenu.Item>
-					{:else}
-						<DropdownMenu.Item onSelect={() => (publishing = true)}>
-							<GlobeIcon /> Make public…
-						</DropdownMenu.Item>
+				<DropdownMenu.Content align="end" class="w-48">
+					<DropdownMenu.Item onSelect={() => (accessing = true)}>
+						<PlugIcon /> Access in S3
+					</DropdownMenu.Item>
+					<DropdownMenu.Item>
+						{#snippet child({ props })}
+							<a {...props} href={objectHref(scope.org, DATASETS_BUCKET, `${objectKey}/`)}>
+								<FolderOpenIcon /> Browse files
+							</a>
+						{/snippet}
+					</DropdownMenu.Item>
+					{#if access === 'admin' && info && scope.project === null}
+						<DropdownMenu.Separator />
+						{#if isPublic}
+							<DropdownMenu.Item onSelect={() => unpublish?.requestSubmit()}>
+								<LockIcon /> Make private
+							</DropdownMenu.Item>
+						{:else}
+							<DropdownMenu.Item onSelect={() => (publishing = true)}>
+								<GlobeIcon /> Make public…
+							</DropdownMenu.Item>
+						{/if}
 					{/if}
+					<DropdownMenu.Separator />
+					<DropdownMenu.Item
+						variant="destructive"
+						disabled={!!held}
+						title={held ?? undefined}
+						onSelect={() => (deleting = true)}
+					>
+						<Trash2Icon /> Delete…
+					</DropdownMenu.Item>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
 		{/if}

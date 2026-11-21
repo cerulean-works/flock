@@ -15,13 +15,14 @@
 		datasetsHref,
 		fileHref,
 		parentOf,
-		within,
-		writeSnippet
+		within
 	} from '#lib/datasets.ts';
+	import { datasetSnippet } from '#lib/snippets.ts';
 	import type { Selection } from '#lib/selection.svelte.ts';
 	import type { DatasetFolder, DeleteResult, MoveResult } from '#lib/types.ts';
 	import { bytes, dateTime, relativeTime } from '#lib/utils.ts';
 	import CopyBlock from '../CopyBlock.svelte';
+	import EmptyState from '../EmptyState.svelte';
 	import RowCheckbox from '../RowCheckbox.svelte';
 	import RowMenu from '../RowMenu.svelte';
 	import DeleteDatasetsDialog from './DeleteDatasetsDialog.svelte';
@@ -125,29 +126,30 @@
 
 <div class="grid gap-3">
 	{#if empty && !path}
-		<div class="max-w-[68ch]">
-			{#if scope.project !== null}
-				<p class="text-[15px]">No datasets in {scope.project} yet.</p>
-				<p class="mt-1 text-muted-foreground">
-					Write a Lance dataset where <code class="font-mono text-[0.9em]">location</code> says and it
-					shows up here. It’s deleted with the project.
-				</p>
-			{:else}
-				<p class="text-[15px]">No datasets yet.</p>
-				<p class="mt-1 text-muted-foreground">
-					Write a Lance dataset into {DATASETS_BUCKET} and it shows up here.
-				</p>
-			{/if}
-			<div class="mt-3"><CopyBlock code={writeSnippet(scope)} /></div>
-			<p class="mt-3 text-[13px] text-muted-foreground">
-				For tools that can’t run <code class="font-mono text-[0.9em]">flock</code>, create a
-				long-lived key on your
-				<a
-					class="text-link underline-offset-3 hover:underline"
-					href="{resolve('/(app)/account')}#s3-keys">account page</a
-				>.
-			</p>
-		</div>
+		<EmptyState
+			variant="onboarding"
+			title={scope.project === null ? 'No datasets yet' : `No datasets in ${scope.project} yet`}
+		>
+			{#snippet lead()}
+				{#if scope.project === null}
+					Write a Lance dataset into <span class="font-mono text-[0.9em]">{DATASETS_BUCKET}</span> and
+					it shows up here.
+				{:else}
+					Write a Lance dataset where <code class="font-mono text-[0.9em]">location</code> says.
+				{/if}
+			{/snippet}
+			<CopyBlock lang="python" code={datasetSnippet(scope)} />
+			{#snippet actions()}
+				<span>
+					Tools that can’t run <code class="font-mono text-[0.9em]">flock</code> can use a
+					long-lived key from your
+					<a
+						class="text-link underline-offset-3 hover:underline"
+						href="{resolve('/(app)/account')}#s3-keys">account page</a
+					>.
+				</span>
+			{/snippet}
+		</EmptyState>
 	{:else if empty}
 		<p class="text-muted-foreground">This folder is empty.</p>
 	{:else}

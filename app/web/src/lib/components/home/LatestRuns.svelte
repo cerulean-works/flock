@@ -1,5 +1,10 @@
 <script lang="ts">
+	import LayersIcon from '@lucide/svelte/icons/layers';
+	import TagIcon from '@lucide/svelte/icons/tag';
+	import WorkflowIcon from '@lucide/svelte/icons/workflow';
 	import Avatar from '#lib/components/Avatar.svelte';
+	import MetaItem from '#lib/components/MetaItem.svelte';
+	import MetaRow from '#lib/components/MetaRow.svelte';
 	import StateBadge from '#lib/components/StateBadge.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { FeedPager } from '#lib/data/feed.svelte.ts';
@@ -65,9 +70,15 @@
 						{/if}
 					</div>
 					{#if run.tags.length || run.job_type || run.group}
-						<p class="mt-0.5 truncate text-[13px] text-muted-foreground">
-							{[run.job_type, run.group, ...run.tags].filter(Boolean).join(' · ')}
-						</p>
+						<MetaRow class="mt-0.5 flex-nowrap gap-x-3 overflow-hidden">
+							{#if run.job_type}<MetaItem icon={WorkflowIcon} title="Job type"
+									>{run.job_type}</MetaItem
+								>{/if}
+							{#if run.group}<MetaItem icon={LayersIcon} title="Group">{run.group}</MetaItem>{/if}
+							{#if run.tags.length}<MetaItem icon={TagIcon} title="Tags"
+									>{run.tags.join(', ')}</MetaItem
+								>{/if}
+						</MetaRow>
 					{/if}
 				</div>
 				<span class="truncate text-muted-foreground">{item.project}</span>

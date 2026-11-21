@@ -8,12 +8,14 @@
 	import FullscreenPanel from '#lib/components/FullscreenPanel.svelte';
 	import PanelEditor from '#lib/components/PanelEditor.svelte';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
+	import PinIcon from '@lucide/svelte/icons/pin';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { toast } from 'svelte-sonner';
 	import DeleteRunsDialog from '#lib/components/DeleteRunsDialog.svelte';
+	import CopyBlock from '#lib/components/CopyBlock.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import EditRunDialog from '#lib/components/EditRunDialog.svelte';
 	import MoveRunsDialog from '#lib/components/MoveRunsDialog.svelte';
@@ -29,6 +31,7 @@
 	import ResizeHandle from '#lib/components/ResizeHandle.svelte';
 	import RunsTable from '#lib/components/RunsTable.svelte';
 	import { NAME_W, saveWidth } from '#lib/widths.ts';
+	import { wandbSnippet } from '#lib/snippets.ts';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
@@ -261,11 +264,8 @@
 
 	let table = $state<RunsTable>();
 
-	const focusLabel = $derived.by(() => {
-		const f = ws.focus;
-		if (f == null) return '';
-		return `${ws.pinned === f && ws.hover == null ? 'Pinned · ' : ''}${ws.page.runs[f].name}`;
-	});
+	const focusLabel = $derived(ws.focus == null ? '' : ws.page.runs[ws.focus].name);
+	const focusPinned = $derived(ws.focus != null && ws.pinned === ws.focus && ws.hover == null);
 
 	/** The runs shown are a search's or a filter's, not all of the project's. */
 	const narrowed = $derived(!!ws.page.query.search || ws.page.query.filters.length > 0);
@@ -362,10 +362,11 @@
 			{#if view === 'charts' && focusLabel}
 				<Badge
 					variant="secondary"
-					class="focus-label max-w-[46%] truncate text-muted-foreground"
-					title={focusLabel}
+					class="focus-label max-w-[46%] text-muted-foreground"
+					title={focusPinned ? `${focusLabel} (pinned)` : focusLabel}
 				>
-					{focusLabel}
+					{#if focusPinned}<PinIcon aria-label="Pinned" />{/if}
+					<span class="truncate">{focusLabel}</span>
 				</Badge>
 			{/if}
 		{/snippet}
@@ -382,43 +383,41 @@
 		{#if ws.page.total === 0 && narrowed}
 			<EmptyState
 				variant="onboarding"
-				class="empty absolute inset-0 z-4 bg-background"
+				class="empty absolute inset-0 z-4 overflow-y-auto bg-background"
 				title="No matching runs"
 			>
 				{#snippet lead()}{noMatch}{/snippet}
-				<Button
-					class="mt-4"
-					variant="outline"
-					href={hrefWith({ q: null, filters: null, page: null })}
-				>
-					Show every run
-				</Button>
+				{#snippet actions()}
+					<Button variant="outline" href={hrefWith({ q: null, filters: null, page: null })}>
+						Show every run
+					</Button>
+				{/snippet}
+			</EmptyState>
+		{:else if ws.page.total === 0 && readonly}
+			<EmptyState
+				variant="onboarding"
+				class="empty absolute inset-0 z-4 overflow-y-auto bg-background"
+				title="No runs yet"
+			>
+				{#snippet lead()}Nothing has been logged to this project.{/snippet}
 			</EmptyState>
 		{:else if ws.page.total === 0}
 			<EmptyState
 				variant="onboarding"
-				class="empty absolute inset-0 z-4 bg-background"
+				class="empty absolute inset-0 z-4 overflow-y-auto bg-background"
 				title="No runs yet"
 			>
-				{#snippet lead()}
-					{#if readonly}
-						Nothing has been logged to this project.
-					{:else}
-						The SDK needs a wandb key: <a
+				{#snippet lead()}Log one from Python with the wandb SDK and it shows up here.{/snippet}
+				<CopyBlock lang="python" code={wandbSnippet(ws.meta.entity, ws.meta.project)} />
+				{#snippet actions()}
+					<span>
+						Sign in with your wandb key, or
+						<a
 							class="text-link underline-offset-3 hover:underline"
-							href={resolve('/(app)/account')}>create one</a
+							href="{resolve('/(app)/account')}#keys">create one</a
 						>.
-					{/if}
+					</span>
 				{/snippet}
-				{#if !readonly}
-					<pre
-						class="mt-4 overflow-x-auto rounded-lg bg-muted px-4 py-3.5 font-mono text-[13px] leading-relaxed"><code
-							>import wandb
-
-run = wandb.init(entity="{ws.meta.entity}", project="{ws.meta.project}")
-run.log(&lbrace;"loss": 0.5&rbrace;)</code
-						></pre>
-				{/if}
 			</EmptyState>
 		{:else}
 			<Pager />

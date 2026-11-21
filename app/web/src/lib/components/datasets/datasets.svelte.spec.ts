@@ -112,9 +112,11 @@ describe('FolderView', () => {
 	it('shows how to write a dataset when the bucket is empty', async () => {
 		const empty = { ...folder, path: '', datasets: [], folders: [], files: [], cursor: null };
 		render(FolderView, { scope: { org: 'acme', project: null }, path: '', folder: empty, now: 0 });
-		await expect.element(screen.getByText('No datasets yet.')).toBeVisible();
+		await expect.element(screen.getByRole('heading', { name: 'No datasets yet' })).toBeVisible();
 		await expect.element(screen.getByText('s3://flock-datasets/')).not.toBeInTheDocument();
-		await expect.element(screen.getByText(/s3\.credentials\("acme"\)/)).toBeVisible();
+		await expect
+			.element(screen.getByText(/datasets\.location\("eval\/mmlu", org="acme"\)/))
+			.toBeVisible();
 		await expect.element(screen.getByRole('link', { name: 'account page' })).toBeVisible();
 	});
 
@@ -240,9 +242,6 @@ describe('DatasetView', () => {
 		await expect.element(screen.getByText('1,234')).toBeVisible();
 		await expect.element(screen.getByText('5.0 MB')).toBeVisible();
 		await expect.element(screen.getByText('s3://flock-datasets/eval/mmlu')).not.toBeInTheDocument();
-		expect(screen.getByRole('link', { name: 'Browse files' }).element().getAttribute('href')).toBe(
-			'/storage/acme/flock-datasets/eval/mmlu/'
-		);
 		await expect.element(screen.getByText('New version available.')).toBeVisible();
 		expect(
 			screen.getByRole('link', { name: 'View version 5' }).element().getAttribute('href')
@@ -250,12 +249,20 @@ describe('DatasetView', () => {
 		// The README is the default tab.
 		await expect.element(screen.getByRole('heading', { name: 'MMLU' })).toBeVisible();
 		await expect.element(screen.getByRole('tab', { name: 'Viewer' })).toBeVisible();
+		await expect.element(screen.getByRole('button', { name: 'Rename' })).toBeVisible();
+		// Reaching the files and deleting are in the overflow menu.
+		await screen.getByRole('button', { name: 'More dataset actions' }).click();
+		expect(
+			screen.getByRole('menuitem', { name: 'Browse files' }).element().getAttribute('href')
+		).toBe('/storage/acme/flock-datasets/eval/mmlu/');
+		await expect.element(screen.getByRole('menuitem', { name: 'Delete…' })).toBeVisible();
 	});
 
 	it('shows how to reach the dataset in S3', async () => {
 		serve({ '/api/datasets/acme/readme': () => ({ text: '', truncated: false }) });
 		view();
-		await screen.getByRole('button', { name: 'Access in S3' }).click();
+		await screen.getByRole('button', { name: 'More dataset actions' }).click();
+		await screen.getByRole('menuitem', { name: 'Access in S3' }).click();
 		const dialog = screen.getByRole('dialog');
 		await expect
 			.element(dialog.getByText('s3://flock-datasets/eval/mmlu', { exact: true }))
@@ -549,7 +556,8 @@ describe('DatasetView', () => {
 		await expect
 			.element(screen.getByRole('alert'))
 			.toHaveTextContent('Lance couldn’t read the dataset: missing data file');
-		await expect.element(screen.getByRole('button', { name: 'Delete' })).toBeVisible();
+		await screen.getByRole('button', { name: 'More dataset actions' }).click();
+		await expect.element(screen.getByRole('menuitem', { name: 'Delete…' })).toBeVisible();
 	});
 });
 
@@ -625,7 +633,11 @@ describe('a dataset’s visibility', () => {
 	it('isn’t offered to members', async () => {
 		view('member', false);
 		await expect.element(screen.getByRole('button', { name: 'Rename' })).toBeVisible();
-		await expect.element(more()).not.toBeInTheDocument();
+		await more().click();
+		await expect.element(screen.getByRole('menuitem', { name: 'Access in S3' })).toBeVisible();
+		await expect
+			.element(screen.getByRole('menuitem', { name: 'Make public…' }))
+			.not.toBeInTheDocument();
 	});
 
 	it('leaves outsiders the dataset to read, and nothing to change or reach in S3', async () => {
@@ -819,7 +831,8 @@ describe('DeletedDatasets', () => {
 		});
 		await expect.element(screen.getByText('13 days left')).toBeVisible();
 		await expect.element(screen.getByText('1 day left')).toBeVisible();
-		await expect.element(screen.getByText(/3\.0 MB · deleted .* by Alice/).first()).toBeVisible();
+		await expect.element(screen.getByText('3.0 MB', { exact: true }).first()).toBeVisible();
+		await expect.element(screen.getByText(/ by Alice$/).first()).toBeVisible();
 		await expect.element(screen.getByText('Still being moved')).toBeVisible();
 		expect(screen.getByRole('button', { name: 'Restore' }).all()).toHaveLength(2);
 	});

@@ -80,6 +80,7 @@
 				<Label for="rename-model-name">New name</Label>
 				<Input
 					id="rename-model-name"
+					placeholder="e.g., olmo2-1b-sft"
 					class="font-mono text-[13px]"
 					bind:value={to}
 					disabled={pending}

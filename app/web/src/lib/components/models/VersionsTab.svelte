@@ -2,6 +2,7 @@
 	import type { Scope } from '#lib/scope.ts';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import EyeIcon from '@lucide/svelte/icons/eye';
+	import FootprintsIcon from '@lucide/svelte/icons/footprints';
 	import StarIcon from '@lucide/svelte/icons/star';
 	import TagIcon from '@lucide/svelte/icons/tag';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
@@ -137,7 +138,10 @@
 								{v.run}
 							{/if}
 							{#if v.step !== null}
-								<span class="tabular-nums">· step {v.step.toLocaleString('en-US')}</span>
+								<span class="ml-2.5 inline-flex items-center gap-1 align-top tabular-nums">
+									<FootprintsIcon class="size-3.5 text-faint" aria-hidden="true" />
+									step {v.step.toLocaleString('en-US')}
+								</span>
 							{/if}
 						{:else if v.step !== null}
 							<span class="tabular-nums">Step {v.step.toLocaleString('en-US')}</span>

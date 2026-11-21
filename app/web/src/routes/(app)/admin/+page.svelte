@@ -1,10 +1,16 @@
 <script lang="ts">
+	import Building2Icon from '@lucide/svelte/icons/building-2';
+	import LogInIcon from '@lucide/svelte/icons/log-in';
+	import MailIcon from '@lucide/svelte/icons/mail';
 	import PlusIcon from '@lucide/svelte/icons/plus';
+	import UsersIcon from '@lucide/svelte/icons/users';
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import OrgMark from '#lib/components/shell/OrgMark.svelte';
 	import FormError from '#lib/components/FormError.svelte';
+	import MetaItem from '#lib/components/MetaItem.svelte';
+	import MetaRow from '#lib/components/MetaRow.svelte';
 	import OrgIdentityFields from '#lib/components/OrgIdentityFields.svelte';
 	import UserMenu from '#lib/components/UserMenu.svelte';
 	import WandbImportFields from '#lib/components/WandbImportFields.svelte';
@@ -57,9 +63,10 @@
 
 <Page width="home">
 	<h1 class="pt-8 text-[34px] leading-[1.15] tracking-[-0.025em]">Super admin</h1>
-	<p class="mt-1 text-muted-foreground">
-		{count(data.orgs.length, 'organization')} · {count(data.users.length, 'account')}
-	</p>
+	<MetaRow class="mt-2 text-[14px]">
+		<MetaItem icon={Building2Icon}>{count(data.orgs.length, 'organization')}</MetaItem>
+		<MetaItem icon={UsersIcon}>{count(data.users.length, 'account')}</MetaItem>
+	</MetaRow>
 
 	<section class="mt-10">
 		<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -125,14 +132,15 @@
 					<div class="min-w-0 flex-1">
 						<p class="flex items-center gap-2">
 							<span class="truncate font-medium">{user.name}</span>
-							{#if user.id === me}<span class="text-muted-foreground">· you</span>{/if}
+							{#if user.id === me}<span class="text-[13px] text-muted-foreground">(you)</span>{/if}
 							{#if user.is_superadmin}
 								<Badge variant="secondary" class="text-foreground">Super admin</Badge>
 							{/if}
 						</p>
-						<p class="truncate text-[13px] text-muted-foreground">
-							{user.email}{#if user.google}<span> · Google</span>{/if}
-						</p>
+						<MetaRow class="mt-0.5">
+							<MetaItem icon={MailIcon}>{user.email}</MetaItem>
+							{#if user.google}<MetaItem icon={LogInIcon}>Google sign-in</MetaItem>{/if}
+						</MetaRow>
 					</div>
 					<p
 						class="hidden w-48 truncate text-[13px] text-muted-foreground md:block"

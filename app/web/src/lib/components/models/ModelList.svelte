@@ -4,20 +4,15 @@
 	import { untrack } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import {
-		folderApi,
-		modelCall,
-		modelsHref,
-		pullSnippet,
-		pushSnippet,
-		saveSnippet
-	} from '#lib/models.ts';
+	import { folderApi, modelCall, modelsHref, pushSnippet } from '#lib/models.ts';
 	import { nameOf, parentOf } from '#lib/datasets.ts';
 	import type { Scope } from '#lib/scope.ts';
+	import { modelSnippet } from '#lib/snippets.ts';
 	import type { Selection } from '#lib/selection.svelte.ts';
 	import type { ModelEntry, ModelFolder, ModelMove } from '#lib/types.ts';
 	import { bytes, count, dateTime, relativeTime } from '#lib/utils.ts';
 	import CopyBlock from '../CopyBlock.svelte';
+	import EmptyState from '../EmptyState.svelte';
 	import RowCheckbox from '../RowCheckbox.svelte';
 	import RowMenu from '../RowMenu.svelte';
 	import DeleteModelDialog from './DeleteModelDialog.svelte';
@@ -130,38 +125,28 @@
 			loading = false;
 		}
 	}
-
-	/** How the snippets name an example model: by `org/` for global, with `--project` else. */
-	const example = $derived(scope.project === null ? `${scope.org}/my-model` : 'my-model');
 </script>
 
 {#if !rows.length && !folders.length && path}
-	<div class="max-w-[68ch]">
-		<p class="text-muted-foreground">This folder is empty.</p>
-		<p class="mt-1 text-[13px] text-muted-foreground">
-			Move a model here, or save one under
-			<code class="font-mono text-[0.9em]">{path}/</code>.
-		</p>
-	</div>
+	<EmptyState variant="onboarding" title="This folder is empty">
+		{#snippet lead()}
+			Move a model here, or save one under <code class="font-mono text-[0.9em]">{path}/</code>.
+		{/snippet}
+	</EmptyState>
 {:else if !rows.length && !folders.length}
-	<div class="max-w-[68ch]">
-		{#if scope.project !== null}
-			<p class="text-[15px]">No models in {scope.project} yet.</p>
-			<p class="mt-1 text-muted-foreground">
-				Save a model from Python and it shows up here. It’s deleted with the project.
-			</p>
-		{:else}
-			<p class="text-[15px]">No models yet.</p>
-			<p class="mt-1 text-muted-foreground">Save a model from Python and it shows up here.</p>
-		{/if}
-		<div class="mt-3"><CopyBlock code={saveSnippet(scope)} /></div>
-		<p class="mt-3 text-[13px] text-muted-foreground">
-			Or push a folder with <code class="font-mono text-[0.9em]">{pushSnippet(scope)}</code>, and
-			load it back with
-			<code class="font-mono text-[0.9em]">{pullSnippet(example, scope.project)}</code>. Names can
-			have folders, like <code class="font-mono text-[0.9em]">sweeps/lr-3e-4</code>.
-		</p>
-	</div>
+	<EmptyState
+		variant="onboarding"
+		title={scope.project === null ? 'No models yet' : `No models in ${scope.project} yet`}
+	>
+		{#snippet lead()}Save a model from Python and it shows up here.{/snippet}
+		<CopyBlock lang="python" code={modelSnippet(scope)} />
+		{#snippet actions()}
+			<span class="w-full">
+				You can also push a folder with
+				<code class="font-mono text-[0.9em] whitespace-nowrap">{pushSnippet(scope)}</code>.
+			</span>
+		{/snippet}
+	</EmptyState>
 {:else}
 	<div class="grid gap-3">
 		<table class="group/table w-full table-fixed border-collapse text-[13.5px]">

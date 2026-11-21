@@ -16,6 +16,8 @@
 	import { objectHref } from '#lib/storage.ts';
 	import { count, dateTime, relativeTime } from '#lib/utils.ts';
 	import Page from '#lib/components/Page.svelte';
+	import PageHeader from '#lib/components/PageHeader.svelte';
+	import SectionHeader from '#lib/components/SectionHeader.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, params }: PageProps = $props();
@@ -32,27 +34,23 @@
 </svelte:head>
 
 <Page width="home">
-	<h1 class="pt-8 text-[34px] leading-[1.15] tracking-[-0.025em]">Storage</h1>
-	<p class="mt-1 max-w-[62ch] text-muted-foreground">
-		S3 buckets shared by everyone in {data.shell.orgName}.
-	</p>
+	<PageHeader title="Storage" layout="home">
+		{#snippet description()}S3 buckets shared by everyone in {data.shell.orgName}.{/snippet}
+	</PageHeader>
 
-	<section class="mt-8" aria-labelledby="buckets-title">
-		<div class="flex items-baseline gap-3">
-			<h2 id="buckets-title" class="text-2xl tracking-[-0.01em]">Buckets</h2>
-			<span class="text-[13px] text-muted-foreground tabular-nums">
-				{count(live.length, 'bucket')}
-			</span>
-		</div>
-		<div class="mt-3"><CreateBucket nameLimit={data.nameLimit} /></div>
+	<section class="mt-3" aria-labelledby="buckets-title">
+		<SectionHeader id="buckets-title" title="Buckets">
+			{#snippet meta()}{count(live.length, 'bucket')}{/snippet}
+			{#snippet actions()}<CreateBucket nameLimit={data.nameLimit} />{/snippet}
+		</SectionHeader>
 
 		{#if data.buckets.length}
-			<table class="mt-5 w-full table-fixed border-collapse text-[13.5px]">
+			<table class="mt-3 w-full table-fixed border-collapse text-[13.5px]">
 				<thead>
 					<tr class="h-10 border-b text-left text-xs font-medium text-muted-foreground">
 						<th class="px-2 font-medium">Name</th>
-						<th class="hidden w-44 px-2 font-medium sm:table-cell">Created</th>
-						<th class="hidden w-44 px-2 font-medium md:table-cell">By</th>
+						<th class="hidden w-32 px-2 font-medium sm:table-cell">Created</th>
+						<th class="hidden w-44 px-2 font-medium md:table-cell">Created by</th>
 						<th class="w-10"><span class="sr-only">Actions</span></th>
 					</tr>
 				</thead>
@@ -153,16 +151,17 @@
 				</tbody>
 			</table>
 		{:else}
-			<p class="mt-5 text-muted-foreground">No buckets yet. Create the first one above.</p>
+			<p class="mt-5 text-muted-foreground">No buckets yet. Create one to start uploading.</p>
 		{/if}
 	</section>
 
 	<section class="mt-10" aria-labelledby="connect-title">
-		<h2 id="connect-title" class="text-2xl tracking-[-0.01em]">Connect</h2>
-		<p class="mt-1 text-muted-foreground">
-			Any S3 client can connect to this endpoint with path-style addressing. The commands below sign
-			in with your Flock account and renew their keys automatically.
-		</p>
+		<SectionHeader id="connect-title" title="Connect">
+			{#snippet description()}
+				Any S3 client can connect to this endpoint with path-style addressing. The commands below
+				sign in with your Flock account and renew their keys automatically.
+			{/snippet}
+		</SectionHeader>
 		<div class="mt-3">
 			<ConnectPanel
 				org={params.org}

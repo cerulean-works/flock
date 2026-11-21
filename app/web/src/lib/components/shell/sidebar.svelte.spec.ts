@@ -87,7 +87,7 @@ describe('the sidebar from outside the org', () => {
 		for (const name of ['Runs', 'Datasets', 'Models', 'Storage', 'Sign in'])
 			await expect.element(link(name)).not.toBeInTheDocument();
 		// The switcher names their own orgs, not the one visited.
-		const menu = screen.getByRole('button', { name: 'No organization · Ada' });
+		const menu = screen.getByRole('button', { name: 'No organization, signed in as Ada' });
 		await expect.element(menu).toBeVisible();
 		await expect.element(menu.getByText('ada@other.test')).toBeVisible();
 		await menu.click();

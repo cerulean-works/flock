@@ -133,7 +133,7 @@
 				/>
 			{/if}
 			<FormError {error} />
-			{#if command}<CopyBlock code={command} />{/if}
+			{#if command}<CopyBlock code={command} lang="bash" />{/if}
 			<AlertDialog.Footer>
 				{#if failures.length}
 					<Button type="button" onclick={() => (open = false)}>Close</Button>

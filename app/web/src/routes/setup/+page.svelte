@@ -39,8 +39,9 @@
 				<span class={['h-1 flex-1 rounded-full', i <= step ? 'bg-foreground' : 'bg-border']}></span>
 			{/each}
 		</div>
-		<p class="mt-2.5 text-[13px] text-muted-foreground">
-			Step {step + 1} of {STEPS.length} · {STEPS[step]}
+		<p class="mt-2.5 flex items-baseline gap-2 text-[13px] text-muted-foreground">
+			<span class="text-foreground">{STEPS[step]}</span>
+			<span class="tabular-nums">Step {step + 1} of {STEPS.length}</span>
 		</p>
 	</div>
 

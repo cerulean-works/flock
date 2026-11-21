@@ -312,9 +312,11 @@
 								bind:value={row.amount}
 								disabled={pending}
 							/>
+							<!-- Out of the tab order, so Tab goes from one input to the next. -->
 							<Button
 								variant="ghost"
 								size="icon-sm"
+								tabindex={-1}
 								aria-label="Remove source {i + 1}"
 								disabled={pending || rows.length <= 2}
 								onclick={() => (rows = rows.filter((_, j) => j !== i))}><XIcon /></Button
