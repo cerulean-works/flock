@@ -1256,6 +1256,7 @@ def test_a_project_s_models(flock: S3Flock) -> None:
     other = scoped.push("scratch")
     storage = api.get("/api/v1/projects/flock/pre%20train/storage").json()
     assert storage["models"] == 1 and storage["bytes"] == other["total_bytes"]
+    assert storage["items"] == [{"kind": "model", "path": "scratch", "bytes": other["total_bytes"]}]
     assert api.delete("/api/v1/projects/flock/pre%20train", force="true").status == 204
     flock.call(flock.store.flush())
     assert keys(flock, bucket, f"-projects/{pk}/scratch/") == []

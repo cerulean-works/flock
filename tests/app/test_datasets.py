@@ -1787,6 +1787,9 @@ def test_a_project_s_trash_and_purge(flock: S3Flock, writer: Writer) -> None:
 
     storage = api.get("/api/v1/projects/flock/pretrain/storage").json()
     assert storage["datasets"] == 2 and storage["models"] == 0 and storage["bytes"] > 0
+    items = storage["items"]
+    assert [(i["kind"], i["path"]) for i in items] == [("dataset", "a"), ("dataset", "b")]
+    assert all(i["bytes"] > 0 for i in items) and sum(i["bytes"] for i in items) == storage["bytes"]
 
     # Deleting the project deletes its datasets, and its trash, for good (D167).
     trashed = api.post(query(f"{DATASETS}/delete", project="pretrain"), {"path": "b"}).json()

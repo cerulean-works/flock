@@ -97,13 +97,22 @@ async def list_owners(project: ReadableProjectDep, store: StoreDep, viewer: View
 @router.get("/projects/{entity}/{project}/storage")
 async def project_storage(project: MemberProjectDep, store: StoreDep) -> Response:
     """What deleting the project deletes with it (D167): how many datasets and models it has,
-    and their bytes. Zeros when S3 is off."""
+    their bytes, and each one by path with its own bytes (``items``, datasets first, for the
+    delete dialog's list). Zeros and no items when S3 is off."""
     if store.s3.upstream is None:
-        return JSONResponse({"datasets": 0, "models": 0, "bytes": 0})
+        return JSONResponse({"datasets": 0, "models": 0, "bytes": 0, "items": []})
     datasets, dataset_bytes = await store.datasets.project_storage(project.org, project.pk)
-    models, model_bytes = await store.models.project_storage(project.pk)
+    models = await store.models.project_storage(project.pk)
+    items = [{"kind": "dataset", "path": p, "bytes": b} for p, b in datasets] + [
+        {"kind": "model", "path": p, "bytes": b} for p, b in models
+    ]
     return JSONResponse(
-        {"datasets": datasets, "models": models, "bytes": dataset_bytes + model_bytes}
+        {
+            "datasets": len(datasets),
+            "models": len(models),
+            "bytes": dataset_bytes + sum(b for _, b in models),
+            "items": items,
+        }
     )
 
 

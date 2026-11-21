@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { page as screen } from 'vitest/browser';
+import { page as screen, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../routes/layout.css';
 import { runWorkspace } from '#lib/data/run.ts';
@@ -217,6 +217,43 @@ describe('deleting a project (D167)', () => {
 		expect(asked).toEqual(['/api/projects/acme/my%20run/storage']);
 		const models = screen.getByRole('link', { name: 'Models' });
 		expect(models.element().getAttribute('href')).toBe('/acme/my run/models');
+	});
+
+	it('lists what goes with the project on a second screen before deleting', async () => {
+		viewing('member');
+		answering({
+			datasets: 1,
+			models: 1,
+			bytes: 3072,
+			items: [
+				{ kind: 'dataset', path: 'eval/mmlu', bytes: 1024 },
+				{ kind: 'model', path: 'my-model', bytes: 2048 }
+			]
+		});
+		render(DeleteProjectDialog, {
+			open: true,
+			entity: 'acme',
+			project: project('bert', 'private')
+		});
+		await expect.element(screen.getByRole('status')).toBeVisible();
+		const next = screen.getByRole('button', { name: 'Continue' });
+		await expect.element(next).toBeDisabled();
+		await screen.getByRole('textbox').fill('bert');
+		await next.click();
+		const list = screen.getByRole('list', { name: 'Datasets and models deleted with the project' });
+		await expect.element(list).toHaveTextContent('eval/mmlu');
+		await expect.element(list).toHaveTextContent('my-model');
+		await expect
+			.element(screen.getByRole('button', { name: 'Delete project and 2 items' }))
+			.toBeEnabled();
+		await screen.getByRole('button', { name: 'Back' }).click();
+		await expect.element(screen.getByRole('textbox')).toHaveValue('bert');
+		// Enter in the name field moves on to the list too, rather than deleting.
+		await screen.getByRole('textbox').click();
+		await userEvent.keyboard('{Enter}');
+		await expect
+			.element(screen.getByRole('list', { name: 'Datasets and models deleted with the project' }))
+			.toBeVisible();
 	});
 
 	it('says one model in the singular, and nothing when there is none', async () => {
