@@ -210,6 +210,8 @@ export interface DatasetEntry {
 	version: number | null;
 	updated_at: number | null;
 	size?: number | null;
+	/** Made by Flock as a fork or a blend (023), for the listing's label. */
+	origin?: 'fork' | 'blend' | null;
 }
 
 /** A file in a folder's listing of flock-datasets. */
@@ -273,6 +275,97 @@ export interface DatasetInfo {
 	tags: { name: string; version: number }[];
 	/** Anyone with the link can open it (D115). */
 	public?: boolean;
+	/** Where it came from, when Flock made it as a fork or a blend (023, D179). */
+	origin?: DatasetOrigin | null;
+	/** The datasets reading it (D177), for members; null from outside the org. */
+	dependents?: { count: number; trashed: number; paths: string[] } | null;
+}
+
+/** A source of a blend, as its lineage records it. */
+export interface BlendSourceRecord {
+	path: string;
+	version: number;
+	rows: number;
+	live: number;
+	fraction?: number;
+}
+
+/** Where a fork or blend came from (`info.origin`). */
+export type DatasetOrigin = (
+	| { kind: 'fork'; source: { path: string; version: number } }
+	| {
+			kind: 'blend';
+			seed: number;
+			spec: { mode: 'rows' } | { mode: 'fraction'; total: number };
+			replace: boolean;
+			columns: BlendColumn[];
+			sources: BlendSourceRecord[];
+			version?: number;
+	  }
+) & {
+	/** Rewritten into its own files (D178): it reads no other dataset any more. */
+	independent?: boolean;
+	created_by: Person | null;
+	created_at: number;
+};
+
+/** Where an output column of a blend comes from in one source (D175). */
+export type ColumnFrom =
+	{ column: string; cast?: boolean } | { null: true } | { value: string | number | boolean };
+
+/** An output column of a blend and how each source gives it, keyed by the source's path. */
+export interface BlendColumn {
+	name: string;
+	type: string;
+	nullable: boolean;
+	from: Record<string, ColumnFrom>;
+}
+
+/** A source of a blend as the dialog asks for it. */
+export interface BlendSourceRequest {
+	path: string;
+	version?: string | number | null;
+	rows?: number;
+	fraction?: number;
+}
+
+/** What `POST …/datasets/blend/preview` answers. */
+export interface BlendPreview {
+	sources: {
+		path: string;
+		version: number;
+		live: number;
+		rows: number;
+		share: number | null;
+		schema: { name: string; type: string; nullable: boolean }[];
+	}[];
+	total: number;
+	columns: BlendColumn[];
+	automatic: boolean;
+	unused: Record<string, { name: string; type: string }[]>;
+	writes: { column: string; source: string; kind: 'cast' | 'value' }[];
+	/** Every problem refusing the blend. */
+	problems: string[];
+	/** Those of `problems` that are the column map's, for the Columns step. */
+	column_problems: string[];
+}
+
+/** A blend or a dataset made independent, run by the API (D176). */
+export interface DatasetJob {
+	id: number;
+	kind: 'blend' | 'independent';
+	dest: string;
+	options: Record<string, unknown>;
+	state: 'running' | 'finished' | 'failed' | 'cancelled' | 'interrupted';
+	phase: string | null;
+	rows_total: number;
+	rows_done: number;
+	progress: number;
+	result: { path: string; version: number; rows: number } | null;
+	error: string | null;
+	started_by: Person | null;
+	started_at: number;
+	finished_at: number | null;
 }
 
 /** A cell, rendered by the API for display (D90). */
@@ -318,6 +411,8 @@ export interface DatasetVersion {
 	rows_delta: number | null;
 	/** `transaction_properties` the writer set, such as a message. */
 	properties: Record<string, string>;
+	/** How many forks and blends read this version, which keeps it from cleanup (D173). */
+	kept_for?: number;
 }
 
 export interface VersionsPage {

@@ -22,6 +22,10 @@ export const datasetsHref = (org: string, path = '') =>
 		path ? `/${segments(path)}` : ''
 	}` as ResolvedPathname;
 
+/** A dataset at one version (forks and blends link to their sources' versions, 023). */
+export const datasetVersionHref = (org: string, path: string, version: number) =>
+	`${datasetsHref(org, path)}?version=${version}` as ResolvedPathname;
+
 /** A file of flock-datasets, in the Storage tab. */
 export const fileHref = (org: string, key: string) => objectHref(org, DATASETS_BUCKET, key);
 
