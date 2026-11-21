@@ -30,10 +30,15 @@ HOST = "https://flock.test"
 class FakeRun:
     """A run that records its summary, the files it saves and how it was finished, as `wandb.Run` does on leaving a `with` block (`Run.__exit__` in wandb 0.31.0)."""
 
-    def __init__(self, calls: dict, summary: object, folder: Path | None = None) -> None:
+    def __init__(
+        self, calls: dict, summary: object, folder: Path | None = None, **init: Any
+    ) -> None:
         self.calls = calls
         self.summary = summary
         self.dir = str(folder)
+        # Where the run went: where it was asked to go, unless a test overrides it.
+        self.entity = calls.get("override", init).get("entity")
+        self.project = calls.get("override", init).get("project")
 
     def save(self, glob_str: str, base_path: str, policy: str, glob: bool) -> None:
         assert glob is False  # a task name may hold `[`
@@ -60,7 +65,7 @@ def logged(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
 
     def init(**kwargs: Any) -> FakeRun:
         calls["init"] = kwargs
-        return FakeRun(calls, calls["summary"], tmp_path / "wandb-files")
+        return FakeRun(calls, calls["summary"], tmp_path / "wandb-files", **kwargs)
 
     monkeypatch.setattr(wandb, "init", init)
     return calls
@@ -473,6 +478,32 @@ def test_private_predictions_are_refused_before_any_run_unless_the_project_is_pr
         log_to_tracker(json.loads(path.read_text()), "model-evals", results_file=path)
 
     assert "init" not in logged  # no half-uploaded run
+
+
+def test_private_predictions_never_follow_a_run_sent_elsewhere(
+    logged: dict[str, Any], hub: FakeHub, tmp_path: Path
+) -> None:
+    # As a sweep agent's settings would send it.
+    logged["override"] = {"entity": "acme", "project": "public-sweep"}
+    path = written_run(tmp_path / "run", private=True)
+
+    with pytest.raises(ValueError, match="went to acme/public-sweep, not the checked"):
+        log_to_tracker(json.loads(path.read_text()), "model-evals", results_file=path)
+
+    assert "files" not in logged
+    assert logged["exit_code"] == 1  # finished as failed
+
+
+def test_a_live_private_run_keeps_the_sdk_mode(
+    logged: dict[str, Any], hub: FakeHub, tmp_path: Path
+) -> None:
+    # Only a backfill is forced online; a live run under WANDB_MODE=offline stays offline.
+    path = written_run(tmp_path / "run", private=True)
+
+    log_to_tracker(json.loads(path.read_text()), "model-evals", results_file=path)
+
+    assert logged["init"]["settings"].base_url == HOST
+    assert "mode" not in logged["init"]["settings"].model_fields_set  # left to WANDB_MODE
 
 
 def test_private_predictions_may_create_a_project_which_starts_private(

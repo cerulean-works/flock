@@ -96,6 +96,9 @@ def log_to_tracker(
             )
         if marked:
             private.append(task["task"])
+    # Only a backfill, which names its host, goes online whatever `WANDB_MODE` says; a live run
+    # keeps the SDK's mode even when the check below names its host.
+    backfill = host is not None
     if private:
         api, default_org = _signed_in(host)
         # The run goes where the visibility was read.
@@ -119,13 +122,15 @@ def log_to_tracker(
 
     # Leaving the block finishes the run, with exit code 1 if the update raised, so a failed log
     # isn't left running on the tracker.
-    # Online even where `WANDB_MODE` says offline, so a backfill never reports a run it didn't
-    # log, and never resumed, so a `WANDB_RUN_ID` left in the environment can't overwrite a run.
+    # A backfill is online even where `WANDB_MODE` says offline, so it never reports a run it
+    # didn't log. Never resumed, so a `WANDB_RUN_ID` left in the environment can't overwrite a run.
     # Always a new run, even inside a training script's active run, which `wandb.init` would
     # otherwise return (`reinit`'s default outside notebooks), with its own project.
     settings = None
-    if host is not None:
+    if backfill:
         settings = wandb.Settings(base_url=host, mode="online", resume="never")
+    elif host is not None:
+        settings = wandb.Settings(base_url=host, resume="never")
     with wandb.init(
         entity=entity,
         project=project,
@@ -134,6 +139,13 @@ def log_to_tracker(
         settings=settings,
         reinit="create_new",
     ) as run:
+        # A sweep or launch agent can replace the entity and project `wandb.init` was given, so
+        # private predictions go only to the project whose visibility was read.
+        if private and (run.entity, run.project) != (entity, project):
+            raise ValueError(
+                f"the run went to {run.entity}/{run.project}, not the checked {entity}/{project}: "
+                "private predictions are not uploaded"
+            )
         run.summary.update(summary)
         # Copied under their names on the run, so a banked copy named otherwise still arrives as
         # results.json. `now`: each starts uploading at once, and leaving the block waits for it.

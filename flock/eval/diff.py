@@ -100,14 +100,16 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
         if scale(task.primary_metric) != "accuracy" or task.primary_metric != other.primary_metric:
             not_compared.append((task.task, "not_accuracy"))
             continue
-        rows_a, rows_b = a.predictions(task.task), b.predictions(task.task)
-        if rows_a is None or rows_b is None:
-            not_compared.append((task.task, "no_predictions"))
-            continue
-        # Rows older than schema 9 have no outcome. A schema 9 accuracy row without one is
-        # damaged, and the checks below refuse it.
+        # Rows older than schema 9 have no outcome, so they aren't read. A schema 9 accuracy row
+        # without one is damaged, and the checks below refuse it.
         if a.schema_version < 9 or b.schema_version < 9:
             not_compared.append((task.task, "no_outcome"))
+            continue
+        # B's file is read only when A has one: a run's files may be downloads.
+        rows_a = a.predictions(task.task)
+        rows_b = b.predictions(task.task) if rows_a is not None else None
+        if rows_a is None or rows_b is None:
+            not_compared.append((task.task, "no_predictions"))
             continue
 
         # Each run's outcome by doc id. Equal hashes mean the same docs, so any other set of ids,
