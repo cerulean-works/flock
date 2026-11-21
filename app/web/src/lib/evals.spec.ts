@@ -21,7 +21,13 @@ const results = (suites: [string, number | null][], tasks: Task[]) =>
 			primary_metric,
 			metrics: { [primary_metric]: value, bpb: 9 },
 			num_docs: 2,
-			dataset: { repo: 'allenai/ai2_arc' },
+			dataset: {
+				repo: 'allenai/ai2_arc',
+				revision: 'r',
+				subset: null,
+				split: 'test',
+				private: false
+			},
 			truncation: { requests: 0, docs: 0, max_tokens_cut: 0 }
 		}))
 	}) as unknown as EvalResults;
@@ -85,6 +91,12 @@ describe('reading a results file', () => {
 			{ ...good, suites: undefined },
 			{ ...good, tasks: [{ ...good.tasks[0], task_hash: 1 }] },
 			{ ...good, tasks: [{ ...good.tasks[0], dataset: null }] },
+			// Schema 9 without the private mark, which eval's reader refuses too.
+			{
+				...good,
+				tasks: [{ ...good.tasks[0], dataset: { ...good.tasks[0].dataset, private: undefined } }]
+			},
+			{ ...good, tasks: [{ ...good.tasks[0], metrics: { acc_raw: '0.5' } }] },
 			{ ...good, tasks: [good.tasks[0], good.tasks[0]] }, // a repeated name
 			{ ...good, suites: [{ ...good.suites[0], score: 'high' }] },
 			{ ...good, provenance: {} }

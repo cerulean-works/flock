@@ -736,16 +736,24 @@ class Store:
         found = await self.files.get(run.pk, name)
         if found is None:
             return None
+        too_big = Invalid(f"{name} is more than the {max_bytes} bytes read here")
         if isinstance(found, Path):
-            size = (await asyncio.to_thread(found.stat)).st_size
-        else:
-            chunks, size = found
+            # One bounded read of one handle: an upload renamed in meanwhile can't slip past.
+            def read() -> bytes:
+                with found.open("rb") as file:
+                    return file.read(-1 if max_bytes is None else max_bytes + 1)
+
+            data = await asyncio.to_thread(read)
+            if max_bytes is not None and len(data) > max_bytes:
+                raise too_big
+            return data
+        chunks, size = found
         if max_bytes is not None and size > max_bytes:
-            if not isinstance(found, Path):
-                await chunks.aclose()  # lets the S3 response go
-            raise Invalid(f"{name} is {size} bytes, more than the {max_bytes} read here")
-        if isinstance(found, Path):
-            return await asyncio.to_thread(found.read_bytes)
+            # Started, then closed: only a started generator runs the `finally` that releases
+            # its S3 response.
+            await anext(chunks, None)
+            await chunks.aclose()
+            raise too_big
         return b"".join([chunk async for chunk in chunks])
 
     # ------------------------------------------------------------------ locks (D80)

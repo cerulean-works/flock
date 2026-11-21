@@ -3,7 +3,10 @@
 import asyncio
 import dataclasses
 
+import pytest
+
 from app.api.scripts.migrate_files import migrate_files
+from app.api.src.core.errors import Invalid
 from tests.app.conftest import Flocks
 from tests.app.utils import history_rows
 from tests.conftest import S3Server
@@ -67,3 +70,20 @@ def test_files_move_to_the_bucket_while_served(make_flock: Flocks, s3_server: S3
     assert asyncio.run(migrate_files(removed, remove=True, report=lambda _: None)) == (0, 2)
     assert not (moved.files_dir / str(run.pk)).exists()
     assert api.get(f"{FILES}/media/a.txt").body == b"a"  # from the bucket
+
+
+def test_a_refused_read_releases_its_s3_response(make_flock: Flocks, s3_server: S3Server) -> None:
+    """A file over ``read_file``'s limit is refused before it's read (023, D174), and the S3
+    response is let go: more refusals than the upstream pool has connections still leave room
+    for a read."""
+    bucket = f"{s3_server.bucket_prefix()}files"
+    flock = make_flock.s3(s3_server, files_backend="s3", files_bucket=bucket)
+    store = flock.store
+    flock.client().create_run("p", "r1")
+    run = flock.call(store.get_run("flock", "p", "r1"))
+    flock.call(store.save_file(run, "predictions/t.jsonl", b"x" * 100))
+
+    for _ in range(70):  # the upstream pool holds 64
+        with pytest.raises(Invalid, match="more than the 99 bytes"):
+            flock.call(store.read_file(run, "predictions/t.jsonl", max_bytes=99))
+    assert flock.call(store.read_file(run, "predictions/t.jsonl", max_bytes=100)) == b"x" * 100

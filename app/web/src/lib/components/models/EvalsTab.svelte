@@ -65,7 +65,7 @@
 		{#if pair.length === 2}
 			<Button
 				variant="outline"
-				data-sveltekit-preload-data="off"
+				data-sveltekit-preload-data="tap"
 				href={compareHref(pair[0].entity, pair[0].project, pair[0].id, pair[1].path)}
 			>
 				<GitCompareArrowsIcon /> Compare items

@@ -30,6 +30,11 @@ export function isEvalResults(value: unknown): value is EvalResults {
 			!Object.values(t.metrics).every((v) => typeof v === 'number' || v === null) ||
 			!object(t.dataset) ||
 			typeof t.dataset.repo !== 'string' ||
+			typeof t.dataset.revision !== 'string' ||
+			typeof t.dataset.split !== 'string' ||
+			!(typeof t.dataset.subset === 'string' || t.dataset.subset === null) ||
+			// Schema 9 always writes the private mark (eval's reader refuses a file without it).
+			(value.schema_version >= 9 && typeof t.dataset.private !== 'boolean') ||
 			!object(t.truncation)
 		)
 			return false;
@@ -58,7 +63,7 @@ export function evalScores(results: EvalResults): EvalScores {
 	const rows: EvalRow[] = [];
 	const values: Record<string, number | null> = {};
 	for (const suite of results.suites) {
-		if (suite.score === null) continue; // a suite that only groups others
+		if (suite.score === null) continue; // a suite that only groups others, or no finite mean
 		const key = `suites/${suite.suite}@${suite.suite_hash}`;
 		rows.push({
 			key,

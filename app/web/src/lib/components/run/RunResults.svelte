@@ -68,7 +68,9 @@
 									<td class="px-3 py-1.5 font-mono text-[12.5px]">{s.suite}</td>
 									<td
 										class={['px-3 py-1.5 text-right tabular-nums', s.score == null && 'text-faint']}
-										title={s.score == null ? 'Groups other suites' : String(s.score)}
+										title={s.score == null
+											? 'No score: it groups other suites, or its mean isn’t finite'
+											: String(s.score)}
 									>
 										{s.score == null ? '–' : formatNumber(s.score)}
 									</td>

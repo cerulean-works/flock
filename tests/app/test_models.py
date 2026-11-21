@@ -638,6 +638,7 @@ def test_eval_configs_that_name_no_live_version_link_nothing(
         {"model": "flock:flock/m@2", "model_digest": two["digest"]},  # deleted
         {"model": "flock:flock/gone@1", "model_digest": gone["digest"]},  # a deleted model
         {"model": "flock:lab/m@1", "model_digest": one["digest"]},  # another org's, same bytes
+        {"model": "flock:flock/Not A Name@1", "model_digest": one["digest"]},
         {"model": "allenai/OLMo-2-0425-1B@main", "model_digest": one["digest"]},
         {"model": 12, "model_digest": one["digest"]},
         {"model": {"nested": "flock:flock/m@1"}, "model_digest": one["digest"]},

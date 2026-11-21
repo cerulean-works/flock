@@ -133,5 +133,5 @@ def test_a_file_over_the_limit_is_refused_before_it_is_read(
     run = flock.call(flock.store.project_run(project, "r"))
 
     assert flock.call(flock.store.read_file(run, "predictions/t.jsonl", max_bytes=10)) == b"x" * 10
-    with pytest.raises(Invalid, match="10 bytes, more than the 9"):
+    with pytest.raises(Invalid, match="more than the 9 bytes"):
         flock.call(flock.store.read_file(run, "predictions/t.jsonl", max_bytes=9))

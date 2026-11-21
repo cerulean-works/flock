@@ -559,8 +559,9 @@ class Models:
         ref = EVAL_MODEL.fullmatch(model) if isinstance(model, str) else None
         if ref is None or not isinstance(digest, str) or not SHA256.fullmatch(digest):
             return
-        # Another org's ref never links to a copy here, even the only one.
-        if ref[1] != org.name:
+        # Another org's ref never links to a copy here, even the only one, and a name the registry
+        # can't hold names no model, renamed or not.
+        if ref[1] != org.name or not NAME.fullmatch(ref[2]):
             return
         # Locked, so retention can't delete a version between this check and the insert (D109).
         candidates = await conn.fetch(

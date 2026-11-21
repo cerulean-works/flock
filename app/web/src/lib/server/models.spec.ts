@@ -15,7 +15,7 @@ const task = (name: string, metric: string, value: number | null) => ({
 	primary_metric: metric,
 	metrics: { [metric]: value, bpb: 1 },
 	num_docs: 2,
-	dataset: { repo: 'allenai/ai2_arc' },
+	dataset: { repo: 'allenai/ai2_arc', revision: 'r', subset: null, split: 'test', private: false },
 	truncation: { requests: 0, docs: 0, max_tokens_cut: 0 }
 });
 

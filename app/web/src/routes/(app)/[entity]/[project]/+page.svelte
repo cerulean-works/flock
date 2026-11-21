@@ -337,7 +337,7 @@
 					<!-- Two eval runs, doc by doc (023 D174); the page says if they can't be compared. -->
 					<Button
 						variant="outline"
-						data-sveltekit-preload-data="off"
+						data-sveltekit-preload-data="tap"
 						href={compareHref(
 							ws.meta.entity,
 							ws.meta.project,
