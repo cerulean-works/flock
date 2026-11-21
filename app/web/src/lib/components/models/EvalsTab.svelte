@@ -32,7 +32,8 @@
 	const rows = $derived(runs ? evalRows(runs) : []);
 	// A name on two rows was scored two ways: its hash tells the rows apart.
 	const uses = $derived.by(() => {
-		const count: Record<string, number> = {};
+		// No prototype, so a task named `constructor` starts at 0 like any other.
+		const count: Record<string, number> = Object.create(null);
 		for (const row of rows) count[row.name] = (count[row.name] ?? 0) + 1;
 		return count;
 	});
