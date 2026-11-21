@@ -393,6 +393,20 @@ def test_a_task_name_that_leaves_the_predictions_folder_is_refused(
     assert "init" not in logged
 
 
+def test_a_linked_predictions_file_is_refused(logged: dict[str, Any], tmp_path: Path) -> None:
+    path = written_run(tmp_path / "run")
+    secret = tmp_path / "secret.txt"
+    secret.write_text("not a prediction")
+    linked = tmp_path / "run" / "predictions" / "toy.jsonl"
+    linked.unlink()
+    linked.symlink_to(secret)
+
+    with pytest.raises(ValueError, match="is a link"):
+        log_to_tracker(json.loads(path.read_text()), "project", results_file=path)
+
+    assert "init" not in logged
+
+
 def test_a_schema_9_task_without_a_privacy_mark_is_refused(
     logged: dict[str, Any], tmp_path: Path
 ) -> None:

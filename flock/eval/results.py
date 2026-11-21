@@ -291,7 +291,14 @@ class WrittenResults:
     read_file: Callable[[str], str | None]
 
     def predictions(self, task: str) -> list[dict[str, Any]] | None:
-        """Returns `task`'s prediction rows, or `None` if the run has no predictions file for it."""
+        """
+        Returns `task`'s prediction rows, or `None` if the run has no predictions file for it.
+
+        Raises:
+            `ValueError`: if `task` isn't a single file name, so a name read from a file can't reach outside `predictions/`.
+        """
+        if not task or Path(task).name != task or task in (".", ".."):
+            raise ValueError(f"task name {task!r} can't name a predictions file")
         text = self.read_file(f"predictions/{task}.jsonl")
         return None if text is None else [json.loads(line) for line in text.splitlines()]
 
@@ -328,10 +335,13 @@ def read_results(source: str) -> WrittenResults:
             entry["dataset"] = Dataset(**entry["dataset"])
             entry["truncation"] = Truncation(**entry["truncation"])
             # `Results.write` writes a non-finite metric as null.
-            entry["metrics"] = {
-                name: math.nan if value is None else value
-                for name, value in entry["metrics"].items()
-            }
+            metrics = {}
+            for name, value in entry["metrics"].items():
+                # A bool is an int to Python but no score.
+                if value is not None and type(value) not in (int, float):
+                    raise ValueError(f"{entry['task']}: metric {name} is {value!r}, not a number")
+                metrics[name] = math.nan if value is None else value
+            entry["metrics"] = metrics
             tasks.append(TaskResult(**entry))
         written = WrittenResults(
             source=source,
@@ -351,6 +361,8 @@ def read_results(source: str) -> WrittenResults:
 
 
 def _read_folder_file(folder: Path, name: str) -> str | None:
-    """Reads `folder/name`, or returns `None` if it doesn't exist."""
+    """Reads `folder/name`, or returns `None` if it doesn't exist. A link is refused, so a run's files come from its own folder."""
     path = folder / name
+    if path.is_symlink() or path.parent.is_symlink():
+        raise ValueError(f"{path} is a link; a run's files must be in its folder")
     return path.read_text() if path.is_file() else None

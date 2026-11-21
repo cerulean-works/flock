@@ -79,14 +79,14 @@ Before the run is created, a log that would upload predictions of a private task
 - **`tracking.py`** imports the Flock API client at the top now: reading a run and checking a project need it, and `wandb` already costs more. `_signed_in` resolves the `flock login` credential, asks `me` for the default organization, and returns a fresh client, because an `httpx` client can't be opened again once closed. A file is read from `projects/{entity}/{project}/runs/{id}/files/{name}`; a 404 saying `file not found` is a missing file, and any other refusal raises.
 - **Uploads** are copied into `run.dir` and saved with `policy="now"`, so each starts at once, and leaving the run's block waits for them.
 - **Always a new run.** `wandb.init` returns an active run by default outside notebooks (`reinit="return_previous"`), so inside a training script the eval summary and files would have gone to the training run, in its project, past the visibility check. `log_to_tracker` passes `reinit="create_new"`.
-- **Names and marks from a file are checked.** A task name must be one file name, so a results file can't point the upload outside `predictions/` or the run's folder. A schema 9 task with predictions must have a boolean `dataset.private`; anything else refuses rather than passing as public.
+- **Names, links and marks from a file are checked.** A task name must be one file name, on upload and on read, so a results file can't point outside `predictions/` or the run's folder, and a predictions file or folder that is a link is refused, so no other local file goes up or is read under a task's name. A non-numeric metric refuses the read. A schema 9 task with predictions must have a boolean `dataset.private`; anything else refuses rather than passing as public.
 - **Reading a run file** resolves the credential only, with no organization lookup: the run names its own, and a diff reads one file per task.
 - **`diff.py`** is its own module beside `compare.py`: it shares the instrument check's idea but not its inputs, since `compare` reads raw JSON of any schema and `diff` reads typed results.
 - **The CLI** prints a table by default and the JSON with `--json`, and exits 2 on a refusal, as `compare` does.
 
 ## 5. Known gaps
 
-- The visibility check and the upload are two requests, so a project made public between them would receive private predictions.
+- The visibility check and the upload are two requests, and the tracker keeps no mark on the files: a project made public during or after the upload serves the private predictions to anyone. Closing this needs the tracker to remember which files are private and refuse outsiders, or refuse to make such a project public.
 - A schema 8 file reads every dataset as not private. It is never uploaded with its predictions, so this only matters to a caller that reads `dataset.private` from an old file.
 - `read_run_file` needs a Flock sign-in, even for a public project.
 - Doc ids are listed in full. A task with many thousands of disagreements makes a long JSON; the app may page it.

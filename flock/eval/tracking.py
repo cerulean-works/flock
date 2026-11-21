@@ -75,6 +75,9 @@ def log_to_tracker(
             if not name or Path(name).name != name or name in (".", ".."):
                 raise ValueError(f"task name {name!r} can't name a predictions file")
             path = results_file.parent / "predictions" / f"{name}.jsonl"
+            # A link could send any local file under a task's name.
+            if path.is_symlink() or path.parent.is_symlink():
+                raise ValueError(f"{path} is a link; upload the predictions themselves")
             if path.is_file():
                 files[f"predictions/{name}.jsonl"] = path
 

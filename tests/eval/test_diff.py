@@ -200,6 +200,25 @@ def test_predictions_that_disagree_with_their_results_are_refused(tmp_path: Path
     rows.write_text('{"correct": true}\n{"id": "d-1", "correct": false}\n')
     with pytest.raises(ValueError, match="malformed row"):
         diff(read_results(a), read_results(b))
+    # Schema 9 rows always have an outcome, so one without is damaged, not legacy.
+    rows.write_text('{"id": "d-0"}\n{"id": "d-1", "correct": false}\n')
+    with pytest.raises(ValueError, match="malformed row"):
+        diff(read_results(a), read_results(b))
+
+    # A link could bring in rows from anywhere.
+    elsewhere = tmp_path / "elsewhere.jsonl"
+    elsewhere.write_text('{"id": "d-0", "correct": true}\n{"id": "d-1", "correct": false}\n')
+    rows.unlink()
+    rows.symlink_to(elsewhere)
+    with pytest.raises(ValueError, match="is a link"):
+        diff(read_results(a), read_results(b))
+
+
+def test_a_task_name_from_a_file_cannot_leave_the_predictions_folder(tmp_path: Path) -> None:
+    run_a = read_results(write_run(tmp_path / "a", {"t": ("h", [True])}))
+
+    with pytest.raises(ValueError, match="can't name a predictions file"):
+        run_a.predictions("../a/predictions/t")
 
 
 def test_a_null_accuracy_cannot_vouch_for_its_rows(tmp_path: Path) -> None:
@@ -226,6 +245,13 @@ def test_reading_a_folder_refuses_what_is_not_a_results_file(tmp_path: Path) -> 
     (tmp_path / "b" / "results.json").write_text('{"schema_version": 9}')
     with pytest.raises(ValueError, match="is not a results file: KeyError"):
         read_results(str(tmp_path / "b"))
+
+    c = write_run(tmp_path / "c", {"t": ("h", [True])})
+    data = json.loads((tmp_path / "c" / "results.json").read_text())
+    data["tasks"][0]["metrics"]["acc_raw"] = "1.0"
+    (tmp_path / "c" / "results.json").write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="t: metric acc_raw is '1.0', not a number"):
+        read_results(c)
 
 
 def test_a_null_metric_reads_back_as_nan(tmp_path: Path) -> None:

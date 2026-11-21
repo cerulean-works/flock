@@ -69,13 +69,13 @@ A task is compared when both runs scored it under the same `task_hash`, its prim
 | `task_hash` | has another hash in the other run, so it scored other requests: it's a different task. |
 | `not_accuracy` | is read first by a metric with no per-doc outcome, such as `bpb` or `perplexity`. |
 | `no_predictions` | has no predictions file in one of the runs. |
-| `no_outcome` | has predictions without `correct`, as a file older than schema version 9 does. |
+| `no_outcome` | comes from a run whose file is older than schema version 9, so its rows have no `correct`. A schema 9 row without `correct` is damaged, and refuses the diff. |
 
 The diff gives counts only. No significance test comes with it.
 
 ### Refusals
 
-The models may differ, and so may `max_length` and `add_bos`, which belong to the model (OLMES adds BOS for Gemma only). The diff refuses runs with another `dtype`, `batch_tokens`, `attention` or `sdpa_backend`, since a doc could then flip because of the instrument rather than the model. It also refuses a compared task whose predictions don't match its results: another row count than the task's `num_docs`, a row without a string `id` or a boolean `correct`, another set of doc ids, a repeated id, or a count of right docs that isn't the task's accuracy over its docs (a missing or non-finite accuracy refuses too).
+The models may differ, and so may `max_length` and `add_bos`, which belong to the model (OLMES adds BOS for Gemma only). The diff refuses runs with another `dtype`, `batch_tokens`, `attention` or `sdpa_backend`, since a doc could then flip because of the instrument rather than the model. It also refuses a compared task whose predictions don't match its results: another row count than the task's `num_docs`, a row without a string `id` or a boolean `correct`, a predictions file that is a link, another set of doc ids, a repeated id, or a count of right docs that isn't the task's accuracy over its docs (a missing or non-finite accuracy refuses too).
 
 ### JSON
 

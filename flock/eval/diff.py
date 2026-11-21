@@ -52,7 +52,7 @@ class ItemDiff:
         tasks (`list[TaskDiff]`):
             The compared tasks, in A's run order.
         not_compared (`list[tuple[str, str]]`):
-            Every other task of either run, with why: `only_a` or `only_b` (scored by one run), `task_hash` (scored differently), `not_accuracy` (a primary metric such as `bpb`, with no per-doc outcome), `no_predictions` (a run has no predictions file for it) or `no_outcome` (its rows have no `correct`, as files older than schema 9). A's tasks first, in its order, then B's.
+            Every other task of either run, with why: `only_a` or `only_b` (scored by one run), `task_hash` (scored differently), `not_accuracy` (a primary metric such as `bpb`, with no per-doc outcome), `no_predictions` (a run has no predictions file for it) or `no_outcome` (a run's file is older than schema 9, so its rows have no `correct`). A's tasks first, in its order, then B's.
     """
 
     a: str
@@ -104,7 +104,9 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
         if rows_a is None or rows_b is None:
             not_compared.append((task.task, "no_predictions"))
             continue
-        if any(isinstance(row, dict) and "correct" not in row for row in rows_a + rows_b):
+        # Rows older than schema 9 have no outcome. A schema 9 accuracy row without one is
+        # damaged, and the checks below refuse it.
+        if a.schema_version < 9 or b.schema_version < 9:
             not_compared.append((task.task, "no_outcome"))
             continue
 
@@ -122,7 +124,7 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
                 if not (
                     isinstance(row, dict)
                     and isinstance(row.get("id"), str)
-                    and isinstance(row["correct"], bool)
+                    and isinstance(row.get("correct"), bool)
                 ):
                     # A damaged file, refused as every other mismatch is.
                     raise ValueError(  # noqa: TRY004
