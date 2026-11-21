@@ -758,6 +758,9 @@ class Store:
         received, parts = 0, []
         try:
             if limit >= 0 and size > limit:
+                # Only a started generator runs the `finally` that releases its S3 response, so
+                # one refused unread is started (one chunk) before it is closed.
+                await anext(chunks, None)
                 raise too_big
             async for chunk in chunks:
                 received += len(chunk)
@@ -765,9 +768,6 @@ class Store:
                     raise too_big
                 parts.append(chunk)
         finally:
-            # Started, then closed: only a started generator runs the `finally` that releases
-            # its S3 response.
-            await anext(chunks, None)
             await chunks.aclose()
         return b"".join(parts)
 

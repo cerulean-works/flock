@@ -112,8 +112,9 @@ branch; whichever stage merges second takes the next stage and migration number.
   (only the tasks both runs can compare), so nothing goes through the client. It runs in a pool
   of four threads of its own: a file read needs the default executor's threads, so a diff
   waiting in one of them could deadlock the server, and four at a time bound the memory held.
-  A file over 64 MiB, or a pair over 1 GiB read in all, is refused (409) before it is read:
-  Base Easy's biggest file is a few MiB and a pair reads about 80 MiB.
+  A file over 64 MiB, a pair over 1 GiB read in all, or a pair asking for over 2,000 files is
+  refused (409): Base Easy's biggest file is a few MiB, and a pair reads about 80 MiB in 222
+  files.
 - **The page:** `/{entity}/{project}/runs/{run}/compare?with={entity}/{project}/{run}`. A header
   names both runs and their models; a table has one row per compared task (task, hash, docs, the
   four counts); a row opens to the two id lists; tasks not compared are listed with eval's
@@ -217,4 +218,7 @@ merges.
 - Doc ids aren't linked to dataset rows (D176).
 - Each comparison reads both runs' prediction files again; nothing is cached.
 - Public visitors have no selection in the runs table, so they open a comparison by its link.
+- A version's Evals tab shows a run's scores only when its results file names the version as it
+  is called now, so a model renamed after its runs were scored shows dashes there (the runs'
+  own Results tabs still show them). Keeping the ref each link was made with would fix it.
 

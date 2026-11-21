@@ -155,7 +155,7 @@
 			<OverviewTab {org} {info} {version} />
 		{/key}
 	{:else if tab === 'evals'}
-		{#key version.number}
+		{#key `${org}/${version.model}@${version.number}`}
 			<EvalsTab {org} {version} />
 		{/key}
 	{:else}

@@ -31,11 +31,15 @@
 
 	const rows = $derived(runs ? evalRows(runs) : []);
 	// A name on two rows was scored two ways: its hash tells the rows apart.
-	const repeated = $derived(
-		new Set(
-			rows.filter((r, i) => rows.findIndex((o) => o.name === r.name) !== i).map((r) => r.name)
-		)
-	);
+	const repeated = $derived.by(() => {
+		const seen = new Set<string>();
+		const twice = new Set<string>();
+		for (const row of rows) {
+			if (seen.has(row.name)) twice.add(row.name);
+			seen.add(row.name);
+		}
+		return twice;
+	});
 	const ref = $derived(`flock:${version.model}@${version.number}`);
 
 	// Two checked runs, in the table's order, are compared doc by doc (023 D174).

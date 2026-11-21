@@ -586,11 +586,15 @@ async def diff_runs(
     # The diff runs in a thread of its own pool and reads a file only when a task needs it, each
     # through this loop, so two runs' hundreds of files never travel to the client. Base Easy's
     # biggest file is a few MiB and a pair reads about 80 MiB, so a file over 64 MiB or a pair
-    # over 1 GiB is refused (409) rather than held or worked through.
-    left = 1 << 30
+    # over 1 GiB is refused (409) rather than held or worked through; so is a pair asking for
+    # more than 2,000 files (Base Easy asks for 222), found or not.
+    left, lookups = 1 << 30, 2000
 
     def read_file(of: Run, file: str) -> str | None:
-        nonlocal left
+        nonlocal left, lookups
+        lookups -= 1
+        if lookups < 0:
+            raise ValueError("the runs have more files than one comparison reads")
         read = store.read_file(of, file, max_bytes=min(64 << 20, left))
         data = asyncio.run_coroutine_threadsafe(read, loop).result()
         if data is None:
