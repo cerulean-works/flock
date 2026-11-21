@@ -143,10 +143,9 @@ def _run_files(results: dict[str, Any], results_file: Path | None) -> dict[str, 
             f"{results_file} isn't a file named results.json, so the predictions beside it may "
             "belong to another run: log it from its own folder as results.json"
         )
-    # A repeated task with another privacy mark would send one file under both names.
-    names = [task["task"] for task in results["tasks"]]
-    if len(set(names)) != len(names):
-        raise ValueError(f"a task name repeats: {sorted({n for n in names if names.count(n) > 1})}")
+    # Two tasks reading one file (a repeated name, or names a case-insensitive disk takes as
+    # one) with different privacy marks would send it under both names.
+    seen = set()
     for task in results["tasks"]:
         name = predictions_name(task["task"])
         path = results_file.parent / name
@@ -155,6 +154,10 @@ def _run_files(results: dict[str, Any], results_file: Path | None) -> dict[str, 
             raise ValueError(f"{path} is a link; upload the predictions themselves")
         if not path.is_file():
             continue
+        identity = (path.stat().st_dev, path.stat().st_ino)
+        if identity in seen:
+            raise ValueError(f"{path} is the predictions file of two tasks")
+        seen.add(identity)
         # A damaged mark must not pass as public.
         marked = task["dataset"].get("private")
         if not isinstance(marked, bool):
