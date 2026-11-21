@@ -71,7 +71,7 @@ uv run flock eval log results/olmo2-1b/results.json --project model-evals
 
 | Argument or flag | Default | Meaning |
 |---|---|---|
-| `RESULTS` | required | The `results.json` to log. It must have `schema_version` 6, 7, 8 or 9. It goes on the run as `results.json`, whatever its name, and for schema version 9 so do the predictions in the `predictions/` folder beside it. |
+| `RESULTS` | required | The `results.json` to log. It must have `schema_version` 6, 7, 8 or 9. It goes on the run as `results.json`, whatever its name, and for schema version 9 so do the predictions in the `predictions/` folder beside it. A schema version 9 file must be named `results.json`, so the predictions beside it are its own. |
 | `--project` | required | The tracker project. |
 
 It needs both sign-ins: `flock login` for the duplicate check, and the wandb SDK's key for the same server to log the run. [Sign in](../cli/sign-in) sets up both. The run goes to the server you signed in to with `flock login` and to your default organization, online, whatever the SDK's own settings and `WANDB_MODE` say. A `WANDB_API_KEY` set for another server fails with HTTP 401.
@@ -111,8 +111,13 @@ uv run flock eval hub pull acme/allenai/ai2_arc@210d026faf9955653af8916fad021475
 |---|---|
 | config | The [provenance](results#provenance), plus `task_hashes` (each task's hash by name), `suite_members` (each suite's members by name) and `suite_hashes` (each suite's hash by name). |
 | summary | `<task>/<metric>` for each metric, `<task>/docs_per_second` unless the clock measured no time, and `suites/<suite>` for each scored suite's score. |
-| files | `results.json`, and `predictions/<task>.jsonl` for each task that has one. A file older than schema version 9 sends only `results.json`: its predictions have no `correct`. |
+| files | `results.json`, and `predictions/<task>.jsonl` for each task that has one, or `private/predictions/<task>.jsonl` for a task on a private dataset. A file older than schema version 9 sends only `results.json`: its predictions have no `correct`. |
 
 `flock eval run` writes `results.json` whether or not it logs. It uploads files only when `--out` is set.
 
-A run has its project's visibility, so anyone can read the predictions of a run in a public project. A task on a private dataset (`dataset.private` in [`results.json`](results#resultsjson)) therefore sends its predictions only to a project that is private, or that the run creates, which starts private. To check, the command reads the project from the server you signed in to with `flock login`, and the run goes there, to your default organization unless one is named. It refuses before creating the run if the project is public, if you aren't signed in to Flock, or if Flock refuses the query, and uploads nothing if the run ends up in another project, as a sweep agent can arrange. A live run keeps `WANDB_MODE`, but an offline run with private predictions is refused, since a later sync can send it to any project: log its folder afterwards with `flock eval log`. Log such runs to a private project, such as `model-evals` in your organization.
+A run has its project's visibility, so anyone can read the predictions of a run in a public project. A task on a private dataset (`dataset.private` in [`results.json`](results#resultsjson)) therefore sends its predictions under `private/`, which Flock shows to your organization's members only, even after the project is made public ([Run files](../app/api/projects#run-files)). They go only to a project that is private, or that the run creates, which starts private. To check, the command reads the project from the server you signed in to with `flock login`, and the run goes there, to your default organization unless one is named. It refuses before creating the run if the project is public, if you aren't signed in to Flock, or if Flock refuses the query, and uploads nothing if the run ends up in another project, as a sweep agent can arrange. A live run keeps `WANDB_MODE`, but an offline run with private predictions is refused, since a later sync can send it to any project: log its folder afterwards with `flock eval log`. Log such runs to a private project, such as `model-evals` in your organization.
+
+> [!WARNING]
+> A Flock server older than this release serves `private/` files like any other run file. On such a server, the private project is the only protection: don't make it public, and don't move its runs into a public project.
+
+`read_results` and `flock eval diff` read a private task's predictions from `private/predictions/<task>.jsonl` on a run, and from `predictions/` in a folder.
