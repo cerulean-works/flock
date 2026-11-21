@@ -19,7 +19,9 @@ PROJECTS = "/api/v1/projects"
 def test_create_list_get_and_update(api: Client) -> None:
     created = api.post(PROJECTS, {"entity": "flock", "name": "vision", "description": "cnns"})
     assert created.status == 201, created.body
-    assert created.json() | {"created_at": 0, "updated_at": 0} == {
+    assert created.json()["id"] > 0
+    assert created.json() | {"id": 0, "created_at": 0, "updated_at": 0} == {
+        "id": 0,
         "entity": "flock",
         "name": "vision",
         "description": "cnns",

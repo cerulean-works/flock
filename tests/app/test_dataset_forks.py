@@ -402,3 +402,40 @@ def test_python_forks_and_blends_through_the_api(
     with pytest.raises(datasets.DatasetError, match="exists"):
         datasets.blend(sources, "mix", total=40, columns=columns, org="flock")
     assert datasets.make_independent("mix", org="flock")["rows"] == 40
+
+
+# ---------------------------------------------------------------------- across scopes (022)
+
+
+def test_forks_cross_into_a_project_and_keep_it_from_being_deleted(
+    flock: S3Flock,  # noqa: F811
+    writer: Writer,  # noqa: F811
+) -> None:
+    api = flock.client()
+    made = api.post("/api/v1/projects", {"entity": "flock", "name": "pretrain"})
+    assert made.status == 201, made.body
+    writer.write("web/edu", table(0, 40))
+
+    # Into the project: named project:path both ways, and listed in the project's scope.
+    fork = api.post(f"{DATASETS}/fork", {"path": "web/edu", "to": "pretrain:exp/edu"})
+    assert fork.status == 201, fork.body
+    assert fork.json()["path"] == "pretrain:exp/edu"
+    at = get(api, f"{DATASETS}/info", path="exp/edu", project="pretrain").json()
+    assert at["origin"]["source"]["path"] == "web/edu"
+    assert get(api, f"{DATASETS}/info", path="web/edu").json()["dependents"]["paths"] == [
+        "pretrain:exp/edu"
+    ]
+
+    # Out of the project: the global fork reads the project's dataset, so the project stays.
+    back = api.post(f"{DATASETS}/fork", {"path": "pretrain:exp/edu", "to": "kept/edu"})
+    assert back.status == 201, back.body
+    refused = api.delete("/api/v1/projects/flock/pretrain")
+    assert refused.status == 409 and "kept/edu" in refused.json()["error"], refused.body
+    entry = api.post(f"{DATASETS}/delete", {"path": "kept/edu"}).json()
+    assert delete(api, f"{DATASETS}/trash/{entry['id']}").status == 204
+
+    # Its own fork goes with it: the project's pin on web/edu is released once it's purged.
+    assert api.delete("/api/v1/projects/flock/pretrain").status == 204
+    flock.call(flock.store.flush())
+    assert pins(writer, "web/edu") == {}
+    assert api.post(f"{DATASETS}/rename", {"path": "web/edu", "to": "web/moved"}).status == 200

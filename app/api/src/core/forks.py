@@ -338,6 +338,46 @@ class Forks:
             "DELETE FROM dataset_origins WHERE org_pk = $1 AND trash_pk = $2", org_pk, pk
         )
 
+    async def refuse_project(self, conn: asyncpg.Connection, org: Org, prefix: str) -> None:
+        """Raises ``Conflict`` when a dataset outside the project whose datasets are under
+        ``prefix`` (022, D160) reads from one of them, since deleting the project deletes them
+        for good (D167, D177). Its own forks and blends go with it."""
+        records = await conn.fetch(
+            "SELECT DISTINCT dependent_path FROM dataset_links WHERE org_pk = $1 "
+            "AND left(source_path, length($2)) = $2 AND left(dependent_path, length($2)) <> $2 "
+            "ORDER BY 1",
+            org.pk,
+            prefix,
+        )
+        if not records:
+            return
+        dependents = [r[0] for r in records]
+        shown = ", ".join(dependents[:2])
+        more = f" and {len(dependents) - 2} more" if len(dependents) > 2 else ""
+        count = f"{len(dependents)} dataset{'s' if len(dependents) != 1 else ''}"
+        reads = "reads" if len(dependents) == 1 else "read"
+        raise Conflict(
+            f"The project can't be deleted while {count} outside it {reads} from its datasets: "
+            f"{shown}{more}. Delete them or make them independent first."
+        )
+
+    async def project_purged(self, org_pk: int, prefix: str) -> None:
+        """The datasets under ``prefix``, a deleted project's (022, D167), are going for good:
+        the pins their forks and blends hold are released (D173), live or in the trash."""
+        records = await self.store.db.fetch(
+            "SELECT ulid, source_path FROM dataset_links WHERE org_pk = $1 "
+            "AND left(dependent_path, length($2)) = $2",
+            org_pk,
+            prefix,
+        )
+        await self._unpin(org_pk, records)
+        for table, column in (("dataset_links", "dependent_path"), ("dataset_origins", "path")):
+            await self.store.db.execute(
+                f"DELETE FROM {table} WHERE org_pk = $1 AND left({column}, length($2)) = $2",
+                org_pk,
+                prefix,
+            )
+
     # ------------------------------------------------------------------ pins
 
     async def _bucket(self, org: Org) -> str:
