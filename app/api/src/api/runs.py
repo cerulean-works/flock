@@ -584,13 +584,19 @@ async def diff_runs(
     loop = asyncio.get_running_loop()
 
     # The diff runs in a thread of its own pool and reads a file only when a task needs it, each
-    # through this loop, so two runs' hundreds of files never travel to the client.
+    # through this loop, so two runs' hundreds of files never travel to the client. Base Easy's
+    # biggest file is a few MiB and a pair reads about 80 MiB, so a file over 64 MiB or a pair
+    # over 1 GiB is refused (409) rather than held or worked through.
+    left = 1 << 30
+
     def read_file(of: Run, file: str) -> str | None:
-        # 64 MiB: Base Easy's largest predictions file is a few MiB; a bigger one is refused
-        # (409) rather than held whole in memory.
-        read = store.read_file(of, file, max_bytes=64 << 20)
+        nonlocal left
+        read = store.read_file(of, file, max_bytes=min(64 << 20, left))
         data = asyncio.run_coroutine_threadsafe(read, loop).result()
-        return None if data is None else data.decode()
+        if data is None:
+            return None
+        left -= len(data)
+        return data.decode()
 
     def compare() -> dict[str, Any]:
         a = WrittenResults.read(

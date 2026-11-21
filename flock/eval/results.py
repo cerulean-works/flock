@@ -3,6 +3,7 @@
 import dataclasses
 import json
 import math
+from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from functools import partial
@@ -368,11 +369,10 @@ class WrittenResults:
                 "provenance.",
             )
             # Tasks are looked up by name, so a repeated one would drop or double a task.
-            names = [task.task for task in tasks]
-            if len(set(names)) != len(names):
-                raise ValueError(
-                    f"a task name repeats: {sorted({n for n in names if names.count(n) > 1})}"
-                )
+            # One pass, since the Flock app reads files anyone in a project uploads.
+            repeated = [n for n, count in Counter(task.task for task in tasks).items() if count > 1]
+            if repeated:
+                raise ValueError(f"a task name repeats: {sorted(repeated)}")
             written = cls(
                 source=source,
                 schema_version=data["schema_version"],

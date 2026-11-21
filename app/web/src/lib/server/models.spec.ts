@@ -21,7 +21,22 @@ const task = (name: string, metric: string, value: number | null) => ({
 
 const RESULTS = {
 	schema_version: 9,
-	provenance: { model: 'flock:acme/olmo2-1b@12' },
+	provenance: {
+		model: 'flock:acme/olmo2-1b@12',
+		model_digest: 'd12',
+		flock_commit: 'abc',
+		device: 'cpu',
+		dtype: 'float32',
+		attention: 'eager',
+		created_at: '2026-11-21T00:00:00+00:00',
+		torch: '2',
+		transformers: '5',
+		tokenizers: '0',
+		datasets: '5',
+		python: '3.14',
+		batch_tokens: 64,
+		max_length: 128
+	},
 	suites: [
 		{ suite: 'core', suite_hash: 's', members: ['arc', 'mmlu'], metric: null, score: 0.4 },
 		{ suite: 'group', suite_hash: 'g', members: ['core'], metric: null, score: null }
@@ -33,9 +48,23 @@ describe('a version’s eval runs', () => {
 	it('reads each run’s scores from its results file, leaving out runs that can’t be read', async () => {
 		vi.mocked(flockAnswer).mockImplementation(async (url) => {
 			if (url.endsWith('/versions/12'))
-				return Response.json({ evals: ['acme/evals/e1', 'acme/evals/old', 'acme/evals/gone'] });
+				return Response.json({
+					number: 12,
+					digest: 'd12',
+					evals: ['acme/evals/e1', 'acme/evals/old', 'acme/evals/gone', 'acme/evals/v11']
+				});
 			if (url.includes('/runs/gone')) return Response.json({ error: 'no' }, { status: 404 });
 			if (url.endsWith('/e1/files/results.json')) return Response.json(RESULTS);
+			// A run whose config later named this version, but whose file scored version 11.
+			if (url.endsWith('/v11/files/results.json'))
+				return Response.json({
+					...RESULTS,
+					provenance: {
+						...RESULTS.provenance,
+						model: 'flock:acme/olmo2-1b@11',
+						model_digest: 'd11'
+					}
+				});
 			if (url.endsWith('/files/results.json'))
 				return Response.json({ error: 'file not found' }, { status: 404 });
 			return Response.json({ display_name: 'base easy', state: 'finished', created_at: 1 });
@@ -83,6 +112,15 @@ describe('a version’s eval runs', () => {
 					state: 'finished',
 					created_at: 1,
 					scores: null
+				},
+				// Linked, but its results file names another version: no scores shown here.
+				{
+					...run,
+					path: 'acme/evals/v11',
+					id: 'v11',
+					state: 'finished',
+					created_at: 1,
+					scores: null
 				}
 			]
 		});
@@ -98,7 +136,9 @@ describe('a version’s eval runs', () => {
 			'/api/v1/projects/acme/evals/runs/e1/files/results.json',
 			'/api/v1/projects/acme/evals/runs/gone',
 			'/api/v1/projects/acme/evals/runs/old',
-			'/api/v1/projects/acme/evals/runs/old/files/results.json'
+			'/api/v1/projects/acme/evals/runs/old/files/results.json',
+			'/api/v1/projects/acme/evals/runs/v11',
+			'/api/v1/projects/acme/evals/runs/v11/files/results.json'
 		]);
 	});
 

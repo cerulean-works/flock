@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import dataclasses
 import json
 import os
 import socket
@@ -187,8 +188,9 @@ def test_eval_results_comparisons_and_model_evals_follow_the_projects_access(
     api = flock.client()
     version = Pusher(flock).push("m")
     scored = {"model": "flock:flock/m@1", "model_digest": version["digest"]}
-    a = write_run(tmp_path / "a", {"secret_task": ("h", [True, False])}, PROVENANCE)
-    b = write_run(tmp_path / "b", {"secret_task": ("h", [False, True])}, PROVENANCE)
+    scorer = dataclasses.replace(PROVENANCE, model=scored["model"], model_digest=version["digest"])
+    a = write_run(tmp_path / "a", {"secret_task": ("h", [True, False])}, scorer)
+    b = write_run(tmp_path / "b", {"secret_task": ("h", [False, True])}, scorer)
     log_run(api, "p", "a", a)
     log_run(api, "p", "b", b)
     for run in ("a", "b"):

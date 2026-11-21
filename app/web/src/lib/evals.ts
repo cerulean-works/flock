@@ -16,7 +16,14 @@ export function isEvalResults(value: unknown): value is EvalResults {
 	if (!object(value) || typeof value.schema_version !== 'number') return false;
 	if (!RESULT_SCHEMAS.includes(value.schema_version)) return true;
 	const { provenance, tasks, suites } = value;
-	if (!object(provenance) || typeof provenance.model !== 'string') return false;
+	if (!object(provenance)) return false;
+	// The fields the Results tab shows; `model_digest`, `add_bos` and `sdpa_backend` came later
+	// and may be missing.
+	const strings = ['model', 'flock_commit', 'device', 'dtype', 'attention', 'created_at'];
+	const versions = ['torch', 'transformers', 'tokenizers', 'datasets', 'python'];
+	if (![...strings, ...versions].every((key) => typeof provenance[key] === 'string')) return false;
+	if (typeof provenance.batch_tokens !== 'number' || typeof provenance.max_length !== 'number')
+		return false;
 	if (!Array.isArray(tasks) || !Array.isArray(suites)) return false;
 	for (const t of tasks)
 		if (

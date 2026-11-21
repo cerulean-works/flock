@@ -167,7 +167,7 @@ The SDK uploads files such as `config.yaml`, `requirements.txt`, `wandb-metadata
 |---|---|
 | 200 | eval's `ItemDiff` JSON: `a` and `b` (each run's model), `tasks` (per task both scored under the same task hash: `task`, `task_hash`, `metric`, `num_docs`, `both_right`, `both_wrong`, `only_a`, `only_b`), `not_compared` (`[task, reason]` pairs) and `schema_version`. |
 | 404 | Either run is unknown, or you can't read its project. Both cases give the same answer, so a private project's runs aren't revealed. Also when either run has no `results.json`. |
-| 409 | The diff refuses the pair: the runs used another instrument (`dtype`, `batch_tokens`, `attention` or `sdpa_backend`), or a run's predictions don't match its results. `error` says which. |
+| 409 | The diff refuses the pair: the runs used another instrument (`dtype`, `batch_tokens`, `attention` or `sdpa_backend`), a run's predictions don't match its results, or a file is over 64 MiB or the pair over 1 GiB. `error` says which. |
 
 Anyone may call it on two public projects. Item text isn't returned, only doc ids.
 
@@ -189,4 +189,4 @@ Anyone may call it on two public projects. Item text isn't returned, only doc id
 
 Each list is sorted by model name, then number. A version has the fields of a version in the model routes (`model`, `number`, `digest`, `tags`, `primary`, `step`, `run`, `total_bytes`, `created_by`, `created_at` and the rest), plus `evals`, the runs that evaluated it as `entity/project/id`. Deleted versions and models aren't listed, and deleted runs aren't in `evals`.
 
-The eval link is made when the SDK sends the run's config. It matches the version by its number and digest in the run's own organization, not by the model's name, so a model renamed since still gets the link. A `model` that names a tag, `primary` or no version, a missing or different `model_digest`, or a version that doesn't exist or is deleted links nothing, and the run is stored as usual. A link stays if the config later names another version.
+The eval link is made when the SDK sends the run's config. A `model` that names a tag, `primary` or no version, another organization's model, a missing or different `model_digest`, or a model or version that doesn't exist or is deleted links nothing, and the run is stored as usual. A link stays if the config later names another version.

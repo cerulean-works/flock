@@ -7,7 +7,22 @@ type Task = [name: string, metric: string, value: number | null, hash?: string];
 const results = (suites: [string, number | null][], tasks: Task[]) =>
 	({
 		schema_version: 9,
-		provenance: { model: 'tiny@0' },
+		provenance: {
+			model: 'tiny@0',
+			model_digest: null,
+			flock_commit: 'abc',
+			device: 'cpu',
+			dtype: 'float32',
+			attention: 'eager',
+			created_at: '2026-11-21T00:00:00+00:00',
+			torch: '2',
+			transformers: '5',
+			tokenizers: '0',
+			datasets: '5',
+			python: '3.14',
+			batch_tokens: 64,
+			max_length: 128
+		},
 		suites: suites.map(([suite, score]) => ({
 			suite,
 			suite_hash: `s-${suite}`,
@@ -99,7 +114,8 @@ describe('reading a results file', () => {
 			{ ...good, tasks: [{ ...good.tasks[0], metrics: { acc_raw: '0.5' } }] },
 			{ ...good, tasks: [good.tasks[0], good.tasks[0]] }, // a repeated name
 			{ ...good, suites: [{ ...good.suites[0], score: 'high' }] },
-			{ ...good, provenance: {} }
+			{ ...good, provenance: {} },
+			{ ...good, provenance: { ...good.provenance, torch: undefined } }
 		];
 		for (const value of broken) expect(isEvalResults(value), JSON.stringify(value)).toBe(false);
 	});

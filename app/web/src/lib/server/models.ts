@@ -17,7 +17,7 @@ const RUNS_AT_ONCE = 8;
 /**
  * The eval runs of version `number` of a model, each with the scores its results file gives
  * (023 D172), for the Evals tab. A run that can't be read (deleted since) is left out; one with
- * no results file has no scores.
+ * no results file, or one that names another version, has no scores.
  */
 export async function evalRuns(org: string, name: string, number: number): Promise<Response> {
 	const res = await flockAnswer(
@@ -48,8 +48,15 @@ export async function evalRuns(org: string, name: string, number: number): Promi
 				display_name: run.display_name,
 				state: run.state,
 				created_at: run.created_at,
+				// A run linked to two versions (its config changed) has one results file: its
+				// scores show only on the version that file names.
 				scores:
-					results && RESULT_SCHEMAS.includes(results.schema_version) ? evalScores(results) : null
+					results &&
+					RESULT_SCHEMAS.includes(results.schema_version) &&
+					results.provenance.model_digest === version.digest &&
+					results.provenance.model.endsWith(`@${version.number}`)
+						? evalScores(results)
+						: null
 			};
 		}
 	}

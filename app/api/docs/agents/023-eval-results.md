@@ -43,14 +43,16 @@ branch; whichever stage merges second takes the next stage and migration number.
   link is written once, in the transaction that stores the config, and answered by an index. It
   also lets retention see a version's eval runs (below), which a page-time query can't.
 - **The match.** When a run's config is stored and its `model` is `flock:{org}/{name}@N` (a
-  version number, never a tag) and its `model_digest` is 64 hex characters, the candidates are
-  the live versions numbered `N` of live models in the run's own org whose digest is that one.
-  The named model's version links if it is one of them. Otherwise the run links only when there
-  is a single candidate: a model renamed or moved since the run (D134, and 022's folders) still
-  gets its link, and the same bytes saved as two models never link to the one the run didn't
-  name. A ref that matches nothing links nothing, and the run is stored as usual. 014's other rules stay: an insert that exists changes nothing, a
-  config that later names another version adds a second link, imported runs aren't linked, and
-  links aren't gated on `job_type`.
+  version number, never a tag) of the run's own org and its `model_digest` is that version's
+  digest, the run links to version `N` of the live model `name`, if that version is live. The
+  digest is checked so a run never links to other bytes than it scored. The name is matched as
+  written: a run scored before a rename (D134) keeps its link, since links stay, but a config
+  sent after it under the old name links nothing. Matching by number and digest alone was tried
+  and dropped in review: the same bytes saved as two models, or a model deleted while a copy
+  lives on, made it link a run to a model it never named. A ref that matches nothing links
+  nothing, and the run is stored as usual. 014's other rules stay: an insert that exists changes
+  nothing, a config that later names another version adds a second link, imported runs aren't
+  linked, and links aren't gated on `job_type`.
 - **The migration** is an expand file. A database that applied the old 0015 still has an empty
   `model_version_runs` (7.5), so it creates the table and its index `IF NOT EXISTS`.
 - **Older runs.** A run whose config was stored before this release links the next time its
@@ -70,7 +72,9 @@ branch; whichever stage merges second takes the next stage and migration number.
   A row is one name under one hash: a task two runs scored under different task hashes gets two
   rows, each showing its hash, so numbers side by side are always comparable (principle 3).
   **Columns:** the eval runs, linked to their pages. A run without a usable results file shows
-  dashes; one the viewer can't read (deleted since) is left out, as in 014.
+  dashes, and so does one whose file names another version (a run whose config changed is
+  linked to both, but its one file scored only one); one the viewer can't read (deleted since)
+  is left out, as in 014.
 - **The dashboard's server** reads the version and then each run's `results.json`, eight at a
   time, as 7.4 did with summaries, with the viewer's own credentials.
 - **Compare:** checking two runs' columns offers **Compare items** (D174).
@@ -108,6 +112,8 @@ branch; whichever stage merges second takes the next stage and migration number.
   (only the tasks both runs can compare), so nothing goes through the client. It runs in a pool
   of four threads of its own: a file read needs the default executor's threads, so a diff
   waiting in one of them could deadlock the server, and four at a time bound the memory held.
+  A file over 64 MiB, or a pair over 1 GiB read in all, is refused (409) before it is read:
+  Base Easy's biggest file is a few MiB and a pair reads about 80 MiB.
 - **The page:** `/{entity}/{project}/runs/{run}/compare?with={entity}/{project}/{run}`. A header
   names both runs and their models; a table has one row per compared task (task, hash, docs, the
   four counts); a row opens to the two id lists; tasks not compared are listed with eval's

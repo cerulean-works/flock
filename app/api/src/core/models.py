@@ -45,7 +45,7 @@ NAME = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}")
 CHECKPOINT = re.compile(r"checkpoint-\d+")
 # The model an eval run's config names (D106, 023's D171), as eval's provenance writes it:
 # `flock:{org}/{name}@{number}`, a number, never a tag, which a later move would make name another
-# version. The name may be out of date (a rename, a move), so the number and digest decide.
+# version.
 EVAL_MODEL = re.compile(r"flock:([^/@]+)/([^@]+)@([1-9][0-9]{0,8})")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 # A ULID's alphabet (Crockford's base32), and the folder of an upload under flock-models.
@@ -546,11 +546,11 @@ class Models:
     async def link_eval(
         conn: asyncpg.Connection, org: Org, run_pk: int, config: dict[str, Any]
     ) -> None:
-        """Links the run as an eval run to the live version of a live model in the run's org whose
-        number and digest its config's ``model`` (``flock:{org}/{name}@{number}``) and
-        ``model_digest`` name (023, D171): the named model's, or else the only one. Anything else,
-        a tag included, links nothing, and the run is stored as usual. A link stays when the
-        config changes again."""
+        """Links the run as an eval run to the version its config's ``model``
+        (``flock:{org}/{name}@{number}``) names, a live version of a live model in the run's org,
+        when its digest is the config's ``model_digest`` (023, D171). Anything else, a tag or
+        other bytes included, links nothing, and the run is stored as usual. A link stays when
+        the config changes again."""
         model, digest = config.get("model"), config.get("model_digest")
         if isinstance(model, dict):  # how the wandb SDK sends config: {"value": ..., "desc": ...}
             model = model.get("value")
@@ -559,29 +559,21 @@ class Models:
         ref = EVAL_MODEL.fullmatch(model) if isinstance(model, str) else None
         if ref is None or not isinstance(digest, str) or not SHA256.fullmatch(digest):
             return
-        # Another org's ref never links to a copy here, even the only one, and a name the registry
-        # can't hold names no model, renamed or not.
-        if ref[1] != org.name or not NAME.fullmatch(ref[2]):
+        if ref[1] != org.name:
             return
-        # Locked, so retention can't delete a version between this check and the insert (D109).
-        candidates = await conn.fetch(
-            "SELECT v.pk, m.name FROM model_versions v JOIN models m ON m.pk = v.model_pk "
-            "WHERE m.org_pk = $1 AND m.deleted_at IS NULL AND v.number = $2 AND v.digest = $3 "
-            "AND v.deleted_at IS NULL FOR SHARE OF v",
+        # Locked, so retention can't delete the version between this check and the insert (D109).
+        await conn.execute(
+            "INSERT INTO model_version_runs (version_pk, run_pk, kind) "
+            "SELECT v.pk, $5, 'eval' FROM model_versions v JOIN models m ON m.pk = v.model_pk "
+            "WHERE m.org_pk = $1 AND m.name = $2 AND m.deleted_at IS NULL AND v.number = $3 "
+            "AND v.digest = $4 AND v.deleted_at IS NULL "
+            "FOR SHARE OF v ON CONFLICT DO NOTHING",
             org.pk,
+            ref[2],
             int(ref[3]),
             digest,
+            run_pk,
         )
-        # The same bytes can be a version of two models. The one the ref names wins; a renamed
-        # model's version links only when nothing else could be meant.
-        named = [pk for pk, name in candidates if name == ref[2]]
-        if named or len(candidates) == 1:
-            await conn.execute(
-                "INSERT INTO model_version_runs (version_pk, run_pk, kind) "
-                "VALUES ($1, $2, 'eval') ON CONFLICT DO NOTHING",
-                named[0] if named else candidates[0][0],
-                run_pk,
-            )
 
     async def run_versions(self, run: Run) -> dict[str, Any]:
         """The live versions ``run`` made (``made``, D108's Checkpoints section) and those it

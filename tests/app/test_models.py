@@ -589,11 +589,10 @@ def test_eval_runs_are_linked_from_their_config(flock: S3Flock, pusher: Pusher) 
     variables = {"name": "e2", "project": "evals", "config": json.dumps(bare)}
     assert "errors" not in api.graphql(query, variables).json()
     assert eval_links(flock) == [("e1", 1), ("e1", 2), ("e2", 1)]
-    # The name isn't read: a model renamed since its run was scored still links, by number and
-    # digest.
+    # A name the org has no model by links nothing, even with a version's number and bytes.
     renamed = {"model": "flock:flock/before-rename@2", "model_digest": two["digest"]}
     api.create_run("evals", "e3", config=renamed)
-    assert eval_links(flock) == [("e1", 1), ("e1", 2), ("e2", 1), ("e3", 2)]
+    assert eval_links(flock) == [("e1", 1), ("e1", 2), ("e2", 1)]
 
 
 def test_the_same_bytes_in_two_models_link_only_the_named_one(
@@ -604,7 +603,7 @@ def test_the_same_bytes_in_two_models_link_only_the_named_one(
     assert a["digest"] == b["digest"]  # one file list, so one digest
 
     api.create_run("evals", "e1", config={"model": "flock:flock/b@1", "model_digest": b["digest"]})
-    # A name that is neither leaves two candidates, so nothing is linked rather than a guess.
+    # Another name links nothing, rather than a guess at one of the two.
     api.create_run("evals", "e2", config={"model": "flock:flock/c@1", "model_digest": b["digest"]})
 
     linked = sql(
@@ -613,6 +612,11 @@ def test_the_same_bytes_in_two_models_link_only_the_named_one(
         "JOIN model_versions v ON v.pk = e.version_pk JOIN models m ON m.pk = v.model_pk",
     )
     assert [(row[0], row[1]) for row in linked] == [("e1", "b")]
+
+    # Nor after the named model is deleted: its run's config sent again doesn't move to the copy.
+    assert api.delete(f"{MODELS}/a").status == 200
+    api.create_run("evals", "e3", config={"model": "flock:flock/a@1", "model_digest": a["digest"]})
+    assert len(sql(flock, "SELECT 1 FROM model_version_runs")) == 1
 
 
 def test_eval_configs_that_name_no_live_version_link_nothing(
