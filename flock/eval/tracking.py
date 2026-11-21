@@ -137,12 +137,16 @@ def _run_files(results: dict[str, Any], results_file: Path | None) -> dict[str, 
         return files
 
     # The predictions are the ones beside `results.json`, so two renamed copies of results in
-    # one folder can't both claim them.
-    if results_file.name != "results.json":
+    # one folder can't both claim them, and a link can't pair one folder's tasks with another's.
+    if results_file.name != "results.json" or results_file.is_symlink():
         raise ValueError(
-            f"{results_file} isn't named results.json, so the predictions beside it may belong "
-            "to another run: log it from its own folder as results.json"
+            f"{results_file} isn't a file named results.json, so the predictions beside it may "
+            "belong to another run: log it from its own folder as results.json"
         )
+    # A repeated task with another privacy mark would send one file under both names.
+    names = [task["task"] for task in results["tasks"]]
+    if len(set(names)) != len(names):
+        raise ValueError(f"a task name repeats: {sorted({n for n in names if names.count(n) > 1})}")
     for task in results["tasks"]:
         name = predictions_name(task["task"])
         path = results_file.parent / name

@@ -522,7 +522,7 @@ async def list_run_files(run: ReadableRunDep, store: StoreDep, viewer: ViewerDep
     for name, size, updated_at in await store.list_files(run):
         # Not even its name, size or time: a name can say which private dataset a run read.
         parts = store.file_parts(name)
-        if public and parts and parts[0] == PRIVATE_FOLDER:
+        if public and parts and parts[0].casefold() == PRIVATE_FOLDER:
             continue
         files.append({"name": name, "size": size, "updated_at": updated_at})
     return JSONResponse({"files": files})
@@ -539,10 +539,11 @@ async def get_run_file(
 ) -> Response:
     """A file the run uploaded. Outsiders reading a public project get 404 for a file under ``private/``, and ``wandb-metadata.json`` without ``email`` and ``username`` (404 if it isn't a JSON object)."""
     # Checked on the validated parts, as D152 does for the metadata file, so `./private/x` and
-    # `private//x` are refused too, and before storage is opened.
+    # `private//x` are refused too, and before storage is opened. In any case: a local volume
+    # may be case-insensitive and serve `Private/x` from the same folder.
     parts = store.file_parts(name)
     public = store.accounts.access(viewer, run.project) == "public"
-    if public and parts and parts[0] == PRIVATE_FOLDER:
+    if public and parts and parts[0].casefold() == PRIVATE_FOLDER:
         raise APIError(404, "file not found")
 
     if parts == (Store.METADATA_FILE,) and public:

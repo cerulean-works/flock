@@ -465,8 +465,28 @@ def test_a_renamed_schema_9_file_is_refused_since_the_predictions_beside_it_may_
     renamed = path.with_name("olmo2-1b-results.json")
     path.rename(renamed)
 
-    with pytest.raises(ValueError, match="isn't named results.json"):
+    with pytest.raises(ValueError, match="isn't a file named results.json"):
         log_results_file(renamed, "model-evals")
+
+    assert "init" not in logged
+
+
+def test_a_linked_results_file_or_a_repeated_task_is_refused_before_any_run(
+    logged: dict[str, Any], hub: FakeHub, tmp_path: Path
+) -> None:
+    # A link would pair the target's privacy marks with the predictions beside the link.
+    path = written_run(tmp_path / "run", private=True)
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "results.json").symlink_to(path)
+    with pytest.raises(ValueError, match="isn't a file named results.json"):
+        log_results_file(other / "results.json", "model-evals")
+
+    # Repeated with another mark, one file would go up under both names.
+    results = json.loads(path.read_text())
+    results["tasks"].append({**results["tasks"][1], "dataset": {"private": False}})
+    with pytest.raises(ValueError, match=r"a task name repeats: \['exam'\]"):
+        log_to_tracker(results, "model-evals", results_file=path)
 
     assert "init" not in logged
 
