@@ -179,6 +179,49 @@ def test_metadata_aliases_do_not_expose_private_fields(
     assert call(member, "GET", "/p/runs/r1/files/wandb-metadata.json").json() == metadata
 
 
+def test_private_run_files_stay_with_members_whatever_the_projects_visibility(
+    setup: tuple[Client, Client, Client, Client],
+) -> None:
+    api, member, outsider, anon = setup
+    rows = b'{"id": "q-1", "gold": 0, "correct": true}\n'
+    api.upload("p", "r1", "private/predictions/exam.jsonl", rows)
+    api.upload("p", "r1", "predictions/toy.jsonl", rows)
+    # Only the first path component counts: a name that merely starts with it is public.
+    api.upload("p", "r1", "private-notes.txt", b"public")
+    publish(api)
+
+    every = {"config.yaml", "private/predictions/exam.jsonl", "predictions/toy.jsonl"}
+    every.add("private-notes.txt")
+    for client in (api, member):  # the super admin and a member
+        assert {f["name"] for f in call(client, "GET", "/p/runs/r1/files").json()["files"]} == every
+        assert call(client, "GET", "/p/runs/r1/files/private/predictions/exam.jsonl").body == rows
+    for client in (outsider, anon):
+        listed = {f["name"] for f in call(client, "GET", "/p/runs/r1/files").json()["files"]}
+        assert listed == every - {"private/predictions/exam.jsonl"}
+        assert call(client, "GET", "/p/runs/r1/files/predictions/toy.jsonl").body == rows
+        assert call(client, "GET", "/p/runs/r1/files/private-notes.txt").body == b"public"
+        # The same answer as a file the run doesn't have, for every spelling of the path.
+        missing = call(client, "GET", "/p/runs/r1/files/private/predictions/nope.jsonl")
+        for name in (
+            "private/predictions/exam.jsonl",
+            "./private/predictions/exam.jsonl",
+            "private//predictions/exam.jsonl",
+            "%2e/private/predictions/exam.jsonl",
+            "%70rivate/predictions/exam.jsonl",
+        ):
+            response = call(client, "GET", f"/p/runs/r1/files/{name}")
+            assert (response.status, response.body) == (404, missing.body), name
+
+    # Moved into another public project, the run's private files stay with members.
+    api.create_run("q", "r2")
+    api.upload("q", "r2", "private/predictions/exam.jsonl", rows)
+    api.stream("q", "r2", complete=0)
+    assert api.post(f"{P}/q/runs/move", {"runs": ["r2"], "to": "p"}).status == 200
+    assert call(anon, "GET", "/p/runs/r2/files/private/predictions/exam.jsonl").status == 404
+    assert call(anon, "GET", "/p/runs/r2/files").json()["files"] == []
+    assert call(member, "GET", "/p/runs/r2/files/private/predictions/exam.jsonl").body == rows
+
+
 def test_admins_change_visibility_of_projects_they_didnt_create(
     setup: tuple[Client, Client, Client, Client], flock: FlockServer
 ) -> None:
