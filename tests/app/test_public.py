@@ -188,16 +188,20 @@ def test_private_run_files_stay_with_members_whatever_the_projects_visibility(
     api.upload("p", "r1", "predictions/toy.jsonl", rows)
     # Only the first path component counts: a name that merely starts with it is public.
     api.upload("p", "r1", "private-notes.txt", b"public")
+    # In any case: a case-insensitive volume would serve it from the same folder.
+    api.upload("p", "r1", "Private/x.jsonl", rows)
     publish(api)
 
     every = {"config.yaml", "private/predictions/exam.jsonl", "predictions/toy.jsonl"}
-    every.add("private-notes.txt")
+    every |= {"private-notes.txt", "Private/x.jsonl"}
     for client in (api, member):  # the super admin and a member
         assert {f["name"] for f in call(client, "GET", "/p/runs/r1/files").json()["files"]} == every
         assert call(client, "GET", "/p/runs/r1/files/private/predictions/exam.jsonl").body == rows
+        assert call(client, "GET", "/p/runs/r1/files/Private/x.jsonl").body == rows
     for client in (outsider, anon):
         listed = {f["name"] for f in call(client, "GET", "/p/runs/r1/files").json()["files"]}
-        assert listed == every - {"private/predictions/exam.jsonl"}
+        assert listed == every - {"private/predictions/exam.jsonl", "Private/x.jsonl"}
+        assert call(client, "GET", "/p/runs/r1/files/Private/x.jsonl").status == 404
         assert call(client, "GET", "/p/runs/r1/files/predictions/toy.jsonl").body == rows
         assert call(client, "GET", "/p/runs/r1/files/private-notes.txt").body == b"public"
         # The same answer as a file the run doesn't have, for every spelling of the path.
