@@ -25,17 +25,12 @@
 	const mutation = new Mutation({ success: () => 'Key lifetimes saved' });
 </script>
 
-<p class="mt-2 max-w-[62ch] text-muted-foreground">
-	Keys from <code class="font-mono text-[0.9em]">flock s3 credentials</code> and Python renew themselves,
-	so they can be short. Keys made on account pages last longer, up to the maximum. Lowering the maximum
-	also cuts off older keys at once.
+<p class="mt-2 text-muted-foreground">
+	Keys from <code class="font-mono text-[0.9em]">flock s3 credentials</code> and the Python client renew
+	themselves, so they can be short-lived. Keys made on the account page last up to the maximum, and lowering
+	it also expires older keys that outlive it.
 </p>
-<form
-	method="POST"
-	action="?/s3Lifetimes"
-	class="mt-4 grid max-w-120 gap-3"
-	use:enhance={mutation.enhance}
->
+<form method="POST" action="?/s3Lifetimes" class="mt-4 grid gap-3" use:enhance={mutation.enhance}>
 	<input type="hidden" name="max" value={max} />
 	<input type="hidden" name="ephemeral" value={ephemeral} />
 	<div class="flex flex-wrap items-end gap-2">

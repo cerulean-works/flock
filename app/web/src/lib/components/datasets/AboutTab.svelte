@@ -4,6 +4,8 @@
 	import type { DatasetInfo } from '#lib/types.ts';
 	import { bytes, dateTime } from '#lib/utils.ts';
 	import Markdown from '../Markdown.svelte';
+	import MetaItem from '../MetaItem.svelte';
+	import MetaRow from '../MetaRow.svelte';
 	import TagChip from '../TagChip.svelte';
 
 	interface Props {
@@ -139,16 +141,14 @@
 										class="font-mono break-all text-link underline-offset-3 hover:underline"
 										href={refHref(scope.org, s.path, s.version)}>{s.path}</a
 									>
-									<p class="text-xs text-muted-foreground tabular-nums">
-										{[
-											s.fraction !== undefined ? `${Math.round(s.fraction * 1000) / 10}%` : null,
-											`v${s.version}`,
-											`${fmt(s.rows)} rows`,
-											share(s.rows, s.live)
-										]
-											.filter(Boolean)
-											.join(' · ')}
-									</p>
+									<MetaRow class="gap-x-3 text-xs">
+										{#if s.fraction !== undefined}
+											<MetaItem>{Math.round(s.fraction * 1000) / 10}%</MetaItem>
+										{/if}
+										<MetaItem>v{s.version}</MetaItem>
+										<MetaItem>{fmt(s.rows)} rows</MetaItem>
+										<MetaItem>{share(s.rows, s.live)}</MetaItem>
+									</MetaRow>
 								</li>
 							{/each}
 						</ul>

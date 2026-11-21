@@ -49,7 +49,7 @@
 			Join {invite.org_display_name}
 		</h1>
 		<p class="mt-3 leading-relaxed text-muted-foreground">
-			As {as}, with <span class="text-foreground">{invite.email}</span>.
+			You’ll join as {as} with <span class="text-foreground">{invite.email}</span>.
 		</p>
 
 		{#if data.user && data.user.email === invite.email}

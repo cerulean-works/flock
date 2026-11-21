@@ -88,7 +88,7 @@
 				</p>
 			{/if}
 			<FormError {error} />
-			{#if command}<CopyBlock code={command} />{/if}
+			{#if command}<CopyBlock code={command} lang="bash" />{/if}
 			<AlertDialog.Footer>
 				<AlertDialog.Cancel disabled={pending}>Cancel</AlertDialog.Cancel>
 				<Button type="submit" disabled={typed !== path || pending}>

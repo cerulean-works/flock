@@ -8,7 +8,7 @@
 	import HFDatasetDialog from './HFDatasetDialog.svelte';
 	import HFModelDialog from './HFModelDialog.svelte';
 
-	// "Import from Hugging Face" on the Datasets and Models tabs (D124), for members and admins.
+	// "Import from HF" on the Datasets and Models tabs (D124), for members and admins.
 	interface Props {
 		/** Where the import lands: the org's global scope or one of its projects (D159). */
 		scope: Scope;
@@ -28,8 +28,9 @@
 	}
 </script>
 
-<Button variant="outline" size="sm" onclick={() => (open = true)}>
-	<DownloadIcon /> Import from Hugging Face
+<!-- The page's one filled action. "HF" keeps it short; the hover text spells it out. -->
+<Button title="Import from Hugging Face" onclick={() => (open = true)}>
+	<DownloadIcon /><span class="max-sm:sr-only">Import from HF</span>
 </Button>
 {#if kind === 'dataset'}
 	<HFDatasetDialog bind:open {scope} {folder} onstarted={started} />

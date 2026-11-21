@@ -164,7 +164,7 @@
 					<Input
 						id="hf-dataset-repo"
 						class="font-mono text-[13px]"
-						placeholder="HuggingFaceFW/fineweb-edu"
+						placeholder="e.g., HuggingFaceFW/fineweb-edu"
 						bind:value={repo}
 						disabled={pending || !!preview}
 						autocomplete="off"
@@ -183,6 +183,7 @@
 					<Input
 						id="hf-dataset-token"
 						type="password"
+						placeholder="e.g., hf_…"
 						bind:value={token}
 						disabled={pending}
 						autocomplete="off"
@@ -236,6 +237,7 @@
 					<Input
 						id="hf-dataset-dest"
 						class="font-mono text-[13px]"
+						placeholder="e.g., web/fineweb-edu"
 						bind:value={dest}
 						disabled={pending}
 						autocomplete="off"
@@ -250,7 +252,7 @@
 				{/if}
 			{/if}
 			<FormError {error} />
-			{#if shownCommand}<CopyBlock code={shownCommand} />{/if}
+			{#if shownCommand}<CopyBlock lang="bash" code={shownCommand} />{/if}
 			<Dialog.Footer>
 				<Button type="button" variant="outline" disabled={pending} onclick={() => (open = false)}>
 					Cancel

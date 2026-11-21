@@ -255,31 +255,6 @@ export const cellCut = (cell: Cell) => (cell.k === 'str' || cell.k === 'json') &
 export const pyString = (text: string) => JSON.stringify(text);
 
 /**
- * The snippet that writes a dataset: into the org's flock-datasets (section 1 of 013), or into
- * a project's datasets, found by name with `location` (D164).
- */
-export function writeSnippet(scope: Scope | string) {
-	const { org, project } = asScope(scope);
-	if (project !== null)
-		return [
-			'import lance',
-			'from flock.hub import datasets',
-			'',
-			`where = datasets.location("eval/mmlu", project=${pyString(project)})`,
-			'lance.write_dataset(table, where.uri, storage_options=where.storage_options)'
-		].join('\n');
-	return [
-		'import lance',
-		'from flock.hub import s3',
-		'',
-		`creds = s3.credentials("${org}")`,
-		'lance.write_dataset(',
-		`    table, creds.uri("${DATASETS_BUCKET}", "eval", "mmlu"), storage_options=creds.storage_options()`,
-		')'
-	].join('\n');
-}
-
-/**
  * The snippet that opens a dataset with Lance, with a long-lived key filled in by hand. `uri` is
  * where it really is, which for a project's dataset only the API knows (D160).
  */

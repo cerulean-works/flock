@@ -2,8 +2,8 @@
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import Page from '#lib/components/Page.svelte';
-	import SelectionBar from '#lib/components/SelectionBar.svelte';
-	import Breadcrumbs from '#lib/components/storage/Breadcrumbs.svelte';
+	import ListPage from '#lib/components/ListPage.svelte';
+	import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import HFImportButton from '#lib/components/imports/HFImportButton.svelte';
 	import HFImportRows from '#lib/components/imports/HFImportRows.svelte';
@@ -30,10 +30,11 @@
 	let { scope, data, shell }: Props = $props();
 
 	const project = $derived(scope.project);
-	const title = $derived(data.path ? nameOf(data.path) : 'Models');
 	const trail = $derived(
 		scopeCrumbs(scope, shell.orgName ?? scope.org, 'Models', data.path, modelsHref)
 	);
+	// The subtitle's trail, under the title "Models": an org's leaves out its own "Models".
+	const subtrail = $derived(scope.project === null ? trail.slice(1) : trail);
 	// Members and admins import from Hugging Face (D124); the imports show in their folder.
 	const writer = $derived(shell.access === 'admin' || shell.access === 'member');
 	const imports = $derived(new HFImportList(scope.org));
@@ -48,39 +49,50 @@
 
 <svelte:head>
 	<title
-		>{data.path ? `${title} · Models` : 'Models'}{project === null ? '' : ` · ${project}`} · {shell.orgName}</title
+		>{data.path ? `${nameOf(data.path)} · Models` : 'Models'}{project === null
+			? ''
+			: ` · ${project}`} · {shell.orgName}</title
 	>
 </svelte:head>
 
-<Page width="home">
-	{#if trail.length}
-		<div class="pt-5"><Breadcrumbs crumbs={trail} /></div>
+{#snippet trailLine()}<Breadcrumbs crumbs={subtrail} />{/snippet}
+
+<!-- One filled action (the import), with the quieter one beside it. -->
+{#snippet actions()}
+	<NewFolderButton {scope} path={data.path} />
+	<HFImportButton {scope} kind="model" list={imports} />
+{/snippet}
+
+<!-- While models are checked (D130): what to do with them. -->
+{#snippet selected()}
+	{#if selection}
+		<Button variant="outline" size="sm" onclick={() => selection.act('move')}>
+			<FolderInputIcon /> Move
+		</Button>
+		<Button
+			variant="outline"
+			size="sm"
+			class="text-destructive"
+			onclick={() => selection.act('delete')}
+		>
+			<Trash2Icon /> Delete
+		</Button>
 	{/if}
-	{#if data.kind === 'folder'}
-		<div class={['flex items-center gap-3 pb-5', trail.length ? 'pt-3' : 'pt-8']}>
-			<h1 class="min-w-0 flex-1 truncate text-[34px] leading-[1.15] tracking-[-0.025em]" {title}>
-				{title}
-			</h1>
-			{#if selection?.size}
-				<SelectionBar {selection}>
-					<Button variant="outline" size="sm" onclick={() => selection.act('move')}>
-						<FolderInputIcon /> Move
-					</Button>
-					<Button
-						variant="outline"
-						size="sm"
-						class="text-destructive"
-						onclick={() => selection.act('delete')}
-					>
-						<Trash2Icon /> Delete
-					</Button>
-				</SelectionBar>
-			{:else if writer}
-				<HFImportButton {scope} kind="model" list={imports} />
-				<NewFolderButton {scope} path={data.path} />
-			{/if}
+{/snippet}
+
+{#if data.kind === 'folder'}
+	<ListPage
+		title="Models"
+		heading="All models"
+		location={subtrail.length ? trailLine : undefined}
+		actions={writer ? actions : undefined}
+		{selection}
+		{selected}
+	>
+		<!-- Imports writing into this folder, over its listing. -->
+		<div class="px-5 has-[li]:pt-4">
+			<HFImportRows {scope} list={imports} kind="model" folder={data.path} />
 		</div>
-		<HFImportRows {scope} list={imports} kind="model" folder={data.path} />
 		{#key data.path}
 			<ModelList
 				{scope}
@@ -91,7 +103,13 @@
 				{projects}
 			/>
 		{/key}
-	{:else}
+	</ListPage>
+{:else}
+	<!-- A model: its own title, version picker and tabs, at Home's width. -->
+	<Page width="home">
+		{#if trail.length}
+			<div class="pt-5"><Breadcrumbs crumbs={trail} /></div>
+		{/if}
 		{#key data.path}
 			<ModelView
 				{scope}
@@ -101,5 +119,5 @@
 				now={data.now}
 			/>
 		{/key}
-	{/if}
-</Page>
+	</Page>
+{/if}

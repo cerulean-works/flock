@@ -88,6 +88,7 @@
 				<Label for="rename-path">New path</Label>
 				<Input
 					id="rename-path"
+					placeholder="e.g., eval/mmlu-v2"
 					class="font-mono text-[13px]"
 					bind:value={to}
 					disabled={pending}

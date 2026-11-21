@@ -77,4 +77,19 @@ describe('the Storage overview', () => {
 			.element(page.getByRole('menuitem', { name: 'Open in Datasets' }))
 			.not.toBeInTheDocument();
 	});
+
+	it('opens the connection details from the header, beside Create bucket', async () => {
+		// @ts-expect-error -- a page's props: only what the overview reads
+		render(Page, { data, params: { org: 'acme' } });
+		const buttons = [...document.querySelectorAll('header button')].map((b) =>
+			b.textContent!.trim()
+		);
+		expect(buttons.slice(-2)).toEqual(['Connect', 'Create bucket']);
+		await page.getByRole('button', { name: 'Connect' }).click();
+		const dialog = page.getByRole('dialog');
+		await expect.element(dialog.getByText('https://s3.flock.test')).toBeVisible();
+		await expect.element(dialog.getByText('us-east-1')).toBeVisible();
+		await expect.element(dialog.getByText(/flock s3 configure --org acme/)).toBeVisible();
+		await expect.element(dialog.getByText(/aws s3 ls s3:\/\/checkpoints\//).first()).toBeVisible();
+	});
 });

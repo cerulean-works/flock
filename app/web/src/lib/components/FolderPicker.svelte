@@ -1,22 +1,15 @@
 <script lang="ts">
-	import CornerLeftUpIcon from '@lucide/svelte/icons/corner-left-up';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import FolderIcon from '@lucide/svelte/icons/folder';
-	import { Input } from '#lib/components/ui/input/index.js';
-	import {
-		DATASETS_BUCKET,
-		datasetCall,
-		datasetsApi,
-		nameOf,
-		parentOf,
-		pathError
-	} from '#lib/datasets.ts';
+	import FolderPlusIcon from '@lucide/svelte/icons/folder-plus';
+	import { DATASETS_BUCKET, datasetCall, datasetsApi, pathError } from '#lib/datasets.ts';
 	import { folderApi, modelNameError } from '#lib/models.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import type { DatasetFolder, ModelAt, ModelFolder } from '#lib/types.ts';
 
 	interface Props {
 		id: string;
-		/** The folder typed or picked, relative to the scope. */
+		/** The folder picked, relative to the scope. */
 		value: string;
 		/** The scope browsed: the move's destination. */
 		scope: Scope;
@@ -28,7 +21,7 @@
 
 	let { id, value = $bindable(), scope, kind, exclude, disabled = false }: Props = $props();
 
-	/** The folder as typed, without slashes at either end. */
+	/** The folder picked, without slashes at either end. */
 	const target = $derived(value.trim().replace(/^\/+|\/+$/g, ''));
 	const invalid = (path: string) => (kind === 'dataset' ? pathError(path) : modelNameError(path));
 	/** What the top of the scope is called. */
@@ -81,46 +74,126 @@
 		browsing = at;
 		folders = found.filter((f) => !exclude?.(f.path));
 	}
+
+	/** Each folder on the way down, for the breadcrumbs. */
+	const crumbs = $derived(
+		target
+			? target.split('/').map((name, i, all) => ({ name, path: all.slice(0, i + 1).join('/') }))
+			: []
+	);
+
+	// A folder that doesn't exist yet is named in place, then picked like any other.
+	let naming = $state(false);
+	let draft = $state('');
+	let draftError = $state<string | null>(null);
+	function addFolder() {
+		const name = draft.trim().replace(/^\/+|\/+$/g, '');
+		if (!name) {
+			naming = false;
+			return;
+		}
+		const path = target ? `${target}/${name}` : name;
+		draftError = name.includes('/') ? 'One folder at a time' : invalid(path);
+		if (draftError) return;
+		value = path;
+		naming = false;
+		draft = '';
+	}
 </script>
 
-<Input
-	{id}
-	class="font-mono text-[13px]"
-	bind:value
-	placeholder="The top of {root}"
-	{disabled}
-	autocomplete="off"
-	spellcheck="false"
-/>
-<div
-	class="h-44 overflow-y-auto rounded-lg border border-input py-1 text-[13px]"
-	role="group"
-	aria-label="Folders"
->
-	{#if target}
+<div class="overflow-hidden rounded-lg border border-input text-[13px]">
+	<!-- Where the items go: each step back up is a click away. -->
+	<div
+		{id}
+		class="flex min-h-9 flex-wrap items-center gap-0.5 border-b border-input bg-muted/40 px-1.5 py-1"
+		role="group"
+		aria-label="Folder"
+	>
 		<button
 			type="button"
-			class="flex h-8 w-full items-center gap-2 px-2.5 text-left text-muted-foreground hover:bg-muted"
+			class={[
+				'rounded px-1.5 py-0.5 hover:bg-muted',
+				target ? 'text-muted-foreground' : 'font-medium text-foreground'
+			]}
 			{disabled}
-			onclick={() => (value = parentOf(target))}
+			aria-current={target ? undefined : 'location'}
+			onclick={() => (value = '')}
 		>
-			<CornerLeftUpIcon class="size-4 flex-none" />
-			<span class="truncate">{parentOf(target) ? nameOf(parentOf(target)) : root}</span>
+			{root}
 		</button>
-	{/if}
-	{#each folders ?? [] as f (f.path)}
-		<button
-			type="button"
-			class="flex h-8 w-full items-center gap-2 px-2.5 text-left hover:bg-muted"
-			{disabled}
-			onclick={() => (value = f.path)}
-		>
-			<FolderIcon class="size-4 flex-none text-muted-foreground" />
-			<span class="truncate">{f.name}/</span>
-		</button>
-	{:else}
-		<p class="px-2.5 py-1.5 text-muted-foreground">
-			{folders === null ? 'Loading folders…' : 'No folders here.'}
-		</p>
-	{/each}
+		{#each crumbs as crumb, i (crumb.path)}
+			<ChevronRightIcon class="size-3.5 flex-none text-faint" aria-hidden="true" />
+			<button
+				type="button"
+				class={[
+					'rounded px-1.5 py-0.5 hover:bg-muted',
+					i === crumbs.length - 1 ? 'font-medium text-foreground' : 'text-muted-foreground'
+				]}
+				{disabled}
+				aria-current={i === crumbs.length - 1 ? 'location' : undefined}
+				onclick={() => (value = crumb.path)}
+			>
+				{crumb.name}
+			</button>
+		{/each}
+	</div>
+	<div class="h-44 overflow-y-auto py-1" role="group" aria-label="Folders">
+		{#each folders ?? [] as f (f.path)}
+			<button
+				type="button"
+				class="flex h-8 w-full items-center gap-2 px-2.5 text-left hover:bg-muted"
+				{disabled}
+				onclick={() => (value = f.path)}
+			>
+				<FolderIcon class="size-4 flex-none text-muted-foreground" />
+				<span class="truncate">{f.name}/</span>
+			</button>
+		{:else}
+			<p class="px-2.5 py-1.5 text-muted-foreground">
+				{folders === null ? 'Loading folders…' : 'No folders here.'}
+			</p>
+		{/each}
+		{#if naming}
+			<div class="flex h-8 items-center gap-2 px-2.5">
+				<FolderPlusIcon class="size-4 flex-none text-muted-foreground" />
+				<!-- svelte-ignore a11y_autofocus -->
+				<input
+					class="h-6 min-w-0 flex-1 rounded border border-input bg-transparent px-1.5 outline-none focus-visible:border-ring"
+					aria-label="New folder name"
+					placeholder="e.g., archive"
+					autocomplete="off"
+					spellcheck="false"
+					autofocus
+					bind:value={draft}
+					oninput={() => (draftError = null)}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') {
+							e.preventDefault();
+							addFolder();
+						} else if (e.key === 'Escape') {
+							e.preventDefault();
+							e.stopPropagation();
+							naming = false;
+						}
+					}}
+					onblur={addFolder}
+				/>
+			</div>
+			{#if draftError}<p class="px-2.5 text-xs text-destructive" role="alert">{draftError}</p>{/if}
+		{:else}
+			<button
+				type="button"
+				class="flex h-8 w-full items-center gap-2 px-2.5 text-left text-muted-foreground hover:bg-muted"
+				{disabled}
+				onclick={() => {
+					draft = '';
+					draftError = null;
+					naming = true;
+				}}
+			>
+				<FolderPlusIcon class="size-4 flex-none" />
+				New folder
+			</button>
+		{/if}
+	</div>
 </div>

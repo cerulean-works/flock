@@ -15,14 +15,15 @@
 		datasetsHref,
 		fileHref,
 		parentOf,
-		within,
-		writeSnippet
+		within
 	} from '#lib/datasets.ts';
+	import { datasetSnippet } from '#lib/snippets.ts';
 	import type { Selection } from '#lib/selection.svelte.ts';
 	import type { DatasetFolder, DeleteResult, MoveResult } from '#lib/types.ts';
 	import { bytes, dateTime, relativeTime } from '#lib/utils.ts';
 	import CopyBlock from '../CopyBlock.svelte';
-	import RowCheckbox from '../RowCheckbox.svelte';
+	import EmptyState from '../EmptyState.svelte';
+	import DataTable, { type Column, ROW_LINK } from '../DataTable.svelte';
 	import RowMenu from '../RowMenu.svelte';
 	import DeleteDatasetsDialog from './DeleteDatasetsDialog.svelte';
 	import MoveDatasetsDialog from './MoveDatasetsDialog.svelte';
@@ -56,6 +57,54 @@
 	let loading = $state(false);
 	let failed = $state<string | null>(null);
 	const empty = $derived(!datasets.length && !folders.length && !files.length);
+
+	/** One line of the listing: a dataset, a folder or a loose file. */
+	interface Row {
+		kind: 'dataset' | 'folder' | 'file';
+		/** A dataset's or folder's path, its selection key; a file's object key, prefixed. */
+		key: string;
+		name: string;
+		href: string;
+		origin?: string | null;
+		/** Undefined for what has no version. */
+		version?: number | null;
+		size?: number | null;
+		updated?: number | null;
+	}
+	const rows = $derived<Row[]>([
+		...datasets.map((d) => ({
+			kind: 'dataset' as const,
+			key: d.path,
+			name: d.name,
+			href: datasetsHref(scope, d.path),
+			origin: d.origin,
+			version: d.version,
+			size: d.size,
+			updated: d.updated_at
+		})),
+		...folders.map((f) => ({
+			kind: 'folder' as const,
+			key: f.path,
+			name: `${f.name}/`,
+			href: datasetsHref(scope, f.path)
+		})),
+		...files.map((f) => ({
+			kind: 'file' as const,
+			key: `o:${f.key}`,
+			name: f.name,
+			href: fileHref(scope.org, f.key),
+			size: f.size,
+			updated: f.last_modified
+		}))
+	]);
+	const ICONS = { dataset: DatabaseIcon, folder: FolderIcon, file: FileIcon };
+	// Version and size show from small windows up.
+	const COLUMNS: Column[] = [
+		{ id: 'name', label: 'Name' },
+		{ id: 'version', label: 'Version', from: 'sm', align: 'end' },
+		{ id: 'size', label: 'Size', from: 'sm', align: 'end' },
+		{ id: 'updated', label: 'Updated', align: 'end' }
+	];
 
 	// Datasets and folders can be checked; loose files can't (D130).
 	const keys = $derived([...datasets.map((d) => d.path), ...folders.map((f) => f.path)]);
@@ -123,174 +172,103 @@
 	}
 </script>
 
-<div class="grid gap-3">
-	{#if empty && !path}
-		<div class="max-w-[68ch]">
-			{#if scope.project !== null}
-				<p class="text-[15px]">No datasets in {scope.project} yet.</p>
-				<p class="mt-1 text-muted-foreground">
-					Write a Lance dataset where <code class="font-mono text-[0.9em]">location</code> says and it
-					shows up here. It’s deleted with the project.
-				</p>
+{#if empty && !path}
+	<EmptyState
+		variant="onboarding"
+		title={scope.project === null ? 'No datasets yet' : `No datasets in ${scope.project} yet`}
+	>
+		{#snippet lead()}
+			{#if scope.project === null}
+				Write a Lance dataset into <span class="font-mono text-[0.9em]">{DATASETS_BUCKET}</span> and it
+				shows up here.
 			{:else}
-				<p class="text-[15px]">No datasets yet.</p>
-				<p class="mt-1 text-muted-foreground">
-					Write a Lance dataset into {DATASETS_BUCKET} and it shows up here.
-				</p>
+				Write a Lance dataset where <code class="font-mono text-[0.9em]">location</code> says.
 			{/if}
-			<div class="mt-3"><CopyBlock code={writeSnippet(scope)} /></div>
-			<p class="mt-3 text-[13px] text-muted-foreground">
-				For tools that can’t run <code class="font-mono text-[0.9em]">flock</code>, create a
-				long-lived key on your
+		{/snippet}
+		<CopyBlock lang="python" code={datasetSnippet(scope)} />
+		{#snippet actions()}
+			<span>
+				Tools that can’t run <code class="font-mono text-[0.9em]">flock</code> can use a long-lived
+				key from your
 				<a
 					class="text-link underline-offset-3 hover:underline"
 					href="{resolve('/(app)/account')}#s3-keys">account page</a
 				>.
-			</p>
-		</div>
-	{:else if empty}
-		<p class="text-muted-foreground">This folder is empty.</p>
-	{:else}
-		<table class="group/table w-full table-fixed border-collapse text-[13.5px]">
-			<thead>
-				<tr class="h-10 border-b text-left text-xs font-medium text-muted-foreground">
-					{#if selection}
-						<th class="w-8 pl-2"><RowCheckbox {selection} /></th>
+			</span>
+		{/snippet}
+	</EmptyState>
+{:else}
+	<DataTable
+		columns={COLUMNS}
+		{rows}
+		key={(row) => row.key}
+		label="Datasets"
+		dense
+		{selection}
+		selectable={(row) => row.kind !== 'file'}
+		name={(row) => row.name}
+		menu={selection ? rowMenu : undefined}
+		empty={nothing}
+		footer={cursor || failed ? pager : undefined}
+	>
+		{#snippet lead(row)}
+			{@const Icon = ICONS[row.kind]}
+			<Icon />
+		{/snippet}
+		{#snippet cell(row, column)}
+			{#if column === 'name'}
+				<span class="flex min-w-0 items-center gap-2">
+					<a
+						class={['truncate underline-offset-3 hover:text-link hover:underline', ROW_LINK]}
+						href={row.href}
+					>
+						{row.name}
+					</a>
+					{#if row.origin}
+						<span class="flex-none rounded bg-muted px-1.5 text-[11px] text-muted-foreground">
+							{row.origin}
+						</span>
 					{/if}
-					<th class="px-2 font-medium">Name</th>
-					<th class="hidden w-36 px-2 font-medium sm:table-cell">Version</th>
-					<th class="hidden w-36 px-2 font-medium sm:table-cell">Size</th>
-					<th class="w-36 px-2 font-medium">Updated</th>
-					{#if selection}<th class="w-9"><span class="sr-only">Actions</span></th>{/if}
-				</tr>
-			</thead>
-			<tbody>
-				{#each datasets as d (`d:${d.path}`)}
-					{@const on = !!selection?.has(d.path)}
-					<tr
-						class={[
-							'group/row h-10 border-b border-divider',
-							on ? 'bg-selection/45' : 'hover:bg-muted'
-						]}
-						aria-selected={selection ? on : undefined}
-					>
-						{#if selection}
-							<td class="pl-2"><RowCheckbox {selection} key={d.path} name={d.name} /></td>
-						{/if}
-						<td class="truncate px-2">
-							<a
-								class="flex items-center gap-2 underline-offset-3 hover:text-link hover:underline"
-								href={datasetsHref(scope, d.path)}
-							>
-								<DatabaseIcon class="size-4 flex-none text-muted-foreground" />
-								<span class="truncate">{d.name}</span>
-								{#if d.origin}
-									<span class="flex-none rounded bg-muted px-1.5 text-[11px] text-muted-foreground">
-										{d.origin}
-									</span>
-								{/if}
-							</a>
-						</td>
-						<td class="hidden px-2 text-muted-foreground tabular-nums sm:table-cell">
-							{d.version === null ? 'Unknown' : `v${d.version}`}
-						</td>
-						<td class="hidden px-2 text-muted-foreground tabular-nums sm:table-cell">
-							{d.size == null ? '—' : bytes(d.size)}
-						</td>
-						<td
-							class="px-2 text-muted-foreground tabular-nums"
-							title={d.updated_at ? dateTime(d.updated_at) : undefined}
-						>
-							{d.updated_at ? relativeTime(d.updated_at, now) : '—'}
-						</td>
-						{#if selection}
-							<td class="pr-1 text-right">
-								<RowMenu
-									name={d.name}
-									onfork={() => selection.act('fork', [d.path])}
-									onrename={() => selection.act('rename', [d.path])}
-									onmove={() => selection.act('move', [d.path])}
-									ondelete={() => selection.act('delete', [d.path])}
-								/>
-							</td>
-						{/if}
-					</tr>
-				{/each}
-				{#each folders as f (`f:${f.path}`)}
-					{@const on = !!selection?.has(f.path)}
-					<tr
-						class={[
-							'group/row h-10 border-b border-divider',
-							on ? 'bg-selection/45' : 'hover:bg-muted'
-						]}
-						aria-selected={selection ? on : undefined}
-					>
-						{#if selection}
-							<td class="pl-2"><RowCheckbox {selection} key={f.path} name="{f.name}/" /></td>
-						{/if}
-						<td class="truncate px-2">
-							<a
-								class="flex items-center gap-2 underline-offset-3 hover:text-link hover:underline"
-								href={datasetsHref(scope, f.path)}
-							>
-								<FolderIcon class="size-4 flex-none text-muted-foreground" />
-								<span class="truncate">{f.name}/</span>
-							</a>
-						</td>
-						<td class="hidden px-2 text-muted-foreground sm:table-cell">—</td>
-						<td class="hidden px-2 text-muted-foreground sm:table-cell">—</td>
-						<td class="px-2 text-muted-foreground">—</td>
-						{#if selection}
-							<td class="pr-1 text-right">
-								<RowMenu
-									name="{f.name}/"
-									onrename={() => selection.act('rename', [f.path])}
-									onmove={() => selection.act('move', [f.path])}
-									ondelete={() => selection.act('delete', [f.path])}
-								/>
-							</td>
-						{/if}
-					</tr>
-				{/each}
-				{#each files as file (`o:${file.key}`)}
-					<tr class="h-10 border-b border-divider hover:bg-muted">
-						{#if selection}<td></td>{/if}
-						<td class="truncate px-2">
-							<a
-								class="flex items-center gap-2 underline-offset-3 hover:text-link hover:underline"
-								href={fileHref(scope.org, file.key)}
-							>
-								<FileIcon class="size-4 flex-none text-muted-foreground" />
-								<span class="truncate">{file.name}</span>
-							</a>
-						</td>
-						<td class="hidden px-2 text-muted-foreground sm:table-cell">—</td>
-						<td class="hidden px-2 text-muted-foreground tabular-nums sm:table-cell">
-							{bytes(file.size)}
-						</td>
-						<td
-							class="px-2 text-muted-foreground tabular-nums"
-							title={dateTime(file.last_modified)}
-						>
-							{relativeTime(file.last_modified, now)}
-						</td>
-						{#if selection}<td></td>{/if}
-					</tr>
-				{/each}
-			</tbody>
-		</table>
-		{#if failed}
-			<p class="text-[13px] text-destructive" role="alert">{failed}</p>
-		{/if}
-		{#if cursor}
-			<div>
-				<Button variant="outline" size="sm" disabled={loading} onclick={more}>
-					{loading ? 'Loading…' : 'Load more'}
-				</Button>
-			</div>
-		{/if}
+				</span>
+			{:else if column === 'version'}
+				<span class="text-muted-foreground">
+					{row.version === undefined ? '—' : row.version === null ? 'Unknown' : `v${row.version}`}
+				</span>
+			{:else if column === 'size'}
+				<span class="text-muted-foreground">{row.size == null ? '—' : bytes(row.size)}</span>
+			{:else}
+				<span class="text-muted-foreground" title={row.updated ? dateTime(row.updated) : undefined}>
+					{row.updated ? relativeTime(row.updated, now) : '—'}
+				</span>
+			{/if}
+		{/snippet}
+	</DataTable>
+{/if}
+
+{#snippet nothing()}This folder is empty.{/snippet}
+
+{#snippet rowMenu(row: Row)}
+	{#if selection && row.kind !== 'file'}
+		<RowMenu
+			name={row.name}
+			onfork={row.kind === 'dataset' ? () => selection.act('fork', [row.key]) : undefined}
+			onrename={() => selection.act('rename', [row.key])}
+			onmove={() => selection.act('move', [row.key])}
+			ondelete={() => selection.act('delete', [row.key])}
+		/>
 	{/if}
-</div>
+{/snippet}
+
+{#snippet pager()}
+	{#if cursor}
+		<Button variant="outline" disabled={loading} onclick={more}>
+			{loading ? 'Loading…' : 'Load more'}
+		</Button>
+	{/if}
+	{#if failed}
+		<span class="text-[13px] text-destructive" role="alert">{failed}</span>
+	{/if}
+{/snippet}
 
 {#if selection}
 	{@const one = targets[0] ?? { path: '', folder: false }}

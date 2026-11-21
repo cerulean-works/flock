@@ -47,7 +47,7 @@
 		{
 			value: 'public',
 			label: 'Public',
-			hint: 'Anyone with the link can see its runs, without signing in.'
+			hint: 'Anyone with the link can see its runs.'
 		}
 	]);
 	let visibility = $derived<Visibility>(project?.visibility ?? 'private');
@@ -61,7 +61,9 @@
 		// make a project private whose visibility this dialog never knew.
 		if (formData.get('visibility') === (project?.visibility ?? 'private'))
 			formData.delete('visibility');
-		const going = project?.visibility !== 'public' && formData.get('visibility') === 'public';
+		// A new project has no runs to leak yet, so creating it public needs no confirmation.
+		const going =
+			!!project && project.visibility !== 'public' && formData.get('visibility') === 'public';
 		if (!going || projectNameError(formText(formData, 'name'))) return mutation.enhance(input);
 		cancel();
 		fields = Object.fromEntries([...formData].map(([k, v]) => [k, String(v)]));
@@ -73,13 +75,9 @@
 	<Dialog.Content class="sm:max-w-md">
 		<Dialog.Header>
 			<Dialog.Title>{project ? 'Edit project' : 'New project'}</Dialog.Title>
-			<Dialog.Description>
-				{#if project}
-					{entity} / {project.name}
-				{:else}
-					In {entity}.
-				{/if}
-			</Dialog.Description>
+			{#if project}
+				<Dialog.Description>{entity} / {project.name}</Dialog.Description>
+			{/if}
 		</Dialog.Header>
 		<form
 			method="POST"
@@ -101,6 +99,7 @@
 					id="project-name"
 					name={renamable ? 'name' : undefined}
 					value={project?.name ?? ''}
+					placeholder="e.g., llama-finetune"
 					autocomplete="off"
 					spellcheck="false"
 					required
@@ -127,11 +126,13 @@
 					id="project-description"
 					name="description"
 					value={project?.description ?? ''}
+					placeholder="e.g., Fine-tuning Llama on support transcripts"
 					rows={3}
 					disabled={!editable}
 				/>
 			</div>
-			{#if project && publisher}
+			<!-- Whoever creates a project may publish it, as its creator (D118). -->
+			{#if !project || publisher}
 				<fieldset class="grid gap-2">
 					<legend class="mb-2 text-sm leading-none font-medium">Visibility</legend>
 					{#each visibilities as v (v.value)}

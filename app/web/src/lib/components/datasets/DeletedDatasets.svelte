@@ -1,6 +1,10 @@
 <script lang="ts">
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FolderIcon from '@lucide/svelte/icons/folder';
+	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
+	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import MetaItem from '#lib/components/MetaItem.svelte';
+	import MetaRow from '#lib/components/MetaRow.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { DialogSubject } from '#lib/data/dialog-subject.svelte.ts';
 	import { TRASH_DAYS, daysLeft } from '#lib/datasets.ts';
@@ -21,7 +25,7 @@
 	};
 </script>
 
-<p class="mt-2 max-w-[62ch] text-muted-foreground">
+<p class="mt-2 text-muted-foreground">
 	Datasets and folders deleted from the Datasets tab stay here for {TRASH_DAYS} days, then they’re removed
 	for good.
 </p>
@@ -49,11 +53,14 @@
 								<p class="truncate font-mono text-[13px]" title={entry.path}>
 									{entry.path}{entry.kind === 'folder' ? '/' : ''}
 								</p>
-								<p class="truncate text-[13px] text-muted-foreground">
-									{bytes(entry.bytes)} · deleted {dateTime(entry.deleted_at)}{entry.deleted_by
-										? ` by ${entry.deleted_by.name}`
-										: ''}
-								</p>
+								<MetaRow class="mt-0.5 flex-nowrap">
+									<MetaItem icon={HardDriveIcon} title="Size">{bytes(entry.bytes)}</MetaItem>
+									<MetaItem icon={Trash2Icon} title="Deleted">
+										{dateTime(entry.deleted_at)}{entry.deleted_by
+											? ` by ${entry.deleted_by.name}`
+											: ''}
+									</MetaItem>
+								</MetaRow>
 							</div>
 						</div>
 					</td>

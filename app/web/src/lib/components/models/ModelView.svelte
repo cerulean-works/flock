@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Scope } from '#lib/scope.ts';
 	import DownloadIcon from '@lucide/svelte/icons/download';
+	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
@@ -8,6 +9,7 @@
 	import { page } from '$app/state';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { folderHref } from '#lib/models.ts';
 	import type { ModelInfo, ModelVersionDetail } from '#lib/types.ts';
@@ -66,26 +68,33 @@
 		return goto(pinned, { replace: true, reset: false, invalidateAll: true });
 	}
 
+	const filesHref = $derived(version ? folderHref(scope.org, version.prefix) : null);
+
 	let loading = $state(false);
 	let renaming = $state(false);
 	let deleting = $state(false);
 </script>
 
-<div class="flex flex-wrap items-center gap-x-3 gap-y-2 pt-3">
+<div class="pt-3">
 	<h1 class="min-w-0 truncate text-[34px] leading-[1.15] tracking-[-0.025em]" title={info.model}>
 		{info.name}
 	</h1>
 	{#if version}
-		<VersionPicker
-			{scope}
-			name={info.name}
-			version={version.number}
-			{requested}
-			primary={info.primary}
-			tags={info.tags}
-			{versionHref}
-		/>
-		{#if version.primary}<Badge variant="secondary">Primary</Badge>{/if}
+		<!-- The version and whether it's the primary, all at the picker's height so the row sits level. -->
+		<div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2">
+			<VersionPicker
+				{scope}
+				name={info.name}
+				version={version.number}
+				{requested}
+				primary={info.primary}
+				tags={info.tags}
+				{versionHref}
+			/>
+			{#if version.primary}
+				<Badge variant="secondary" class="h-7 px-2.5 text-[13px] font-normal">Primary</Badge>
+			{/if}
+		</div>
 	{/if}
 </div>
 
@@ -107,14 +116,6 @@
 			>
 				<DownloadIcon /> Load
 			</Button>
-			<Button
-				variant="ghost"
-				size="sm"
-				class="text-muted-foreground"
-				href={folderHref(scope.org, version.prefix)}
-			>
-				<FolderOpenIcon /> Browse files
-			</Button>
 		{/if}
 		<Button
 			variant="ghost"
@@ -124,14 +125,37 @@
 		>
 			<PencilIcon /> Rename
 		</Button>
-		<Button
-			variant="ghost"
-			size="sm"
-			class="text-muted-foreground hover:text-destructive"
-			onclick={() => (deleting = true)}
-		>
-			<Trash2Icon /> Delete
-		</Button>
+		<!-- Reaching the files and deletion: less often, so tucked away. -->
+		<DropdownMenu.Root>
+			<DropdownMenu.Trigger>
+				{#snippet child({ props })}
+					<Button
+						{...props}
+						variant="ghost"
+						size="icon-sm"
+						class="text-muted-foreground"
+						aria-label="More model actions"
+					>
+						<EllipsisIcon />
+					</Button>
+				{/snippet}
+			</DropdownMenu.Trigger>
+			<DropdownMenu.Content align="end" class="w-48">
+				{#if filesHref}
+					<DropdownMenu.Item>
+						{#snippet child({ props })}
+							<a {...props} href={filesHref}>
+								<FolderOpenIcon /> Browse files
+							</a>
+						{/snippet}
+					</DropdownMenu.Item>
+					<DropdownMenu.Separator />
+				{/if}
+				<DropdownMenu.Item variant="destructive" onSelect={() => (deleting = true)}>
+					<Trash2Icon /> Delete…
+				</DropdownMenu.Item>
+			</DropdownMenu.Content>
+		</DropdownMenu.Root>
 	</div>
 </div>
 

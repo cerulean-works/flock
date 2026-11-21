@@ -1808,15 +1808,24 @@ class Datasets:
         if bucket is not None:
             await self._remove_prefix(bucket, Scope(project_pk).root)
 
-    async def project_storage(self, org: Org, project_pk: int) -> tuple[int, int]:
-        """How many datasets a project has, and the bytes under its folder (D167)."""
+    async def project_storage(self, org: Org, project_pk: int) -> tuple[list[tuple[str, int]], int]:
+        """A project's datasets with the bytes of each, by path, and the bytes under its
+        folder (D167). An object counts toward the deepest dataset it's in."""
         bucket = await self.store.s3.managed_bucket(org)
         if bucket is None:
-            return 0, 0
+            return [], 0
         root = Scope(project_pk).root
         objects = await self._call(self._upstream().list_all(bucket.upstream_name, root))
         found = dataset_folders((o.key for o in objects), root)
-        return len(found), sum(o.size for o in objects)
+        sizes = dict.fromkeys(found, 0)
+        deepest = sorted(found, key=len, reverse=True)
+        for o in objects:
+            key = o.key.removeprefix(root)
+            folder = next((f for f in deepest if key.startswith(f)), None)
+            if folder is not None:
+                sizes[folder] += o.size
+        datasets = [(f.removesuffix("/"), size) for f, size in sizes.items()]
+        return datasets, sum(o.size for o in objects)
 
     async def location(self, org: Org, path: str, scope: Scope = GLOBAL) -> dict[str, Any]:
         """Where the dataset at ``path`` is, or would be (D163): what a writer needs."""

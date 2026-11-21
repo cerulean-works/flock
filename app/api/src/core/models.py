@@ -1990,16 +1990,16 @@ class Models:
                 await self._remove(trash, self._trash_prefix(org_pk, pk))
         await self.store.db.execute("DELETE FROM models WHERE project_pk = $1", project_pk)
 
-    async def project_storage(self, project_pk: int) -> tuple[int, int]:
-        """How many live models a project has, and the bytes of their live versions."""
-        # An aggregate always answers one row.
-        count, size = await self.store.db.pool.fetchrow(
-            "SELECT count(DISTINCT m.pk)::int, coalesce(sum(v.total_bytes), 0)::bigint "
+    async def project_storage(self, project_pk: int) -> list[tuple[str, int]]:
+        """A project's live models by name, with the bytes of their live versions."""
+        rows = await self.store.db.pool.fetch(
+            "SELECT m.name, coalesce(sum(v.total_bytes), 0)::bigint AS bytes "
             "FROM models m LEFT JOIN model_versions v ON v.model_pk = m.pk "
-            "AND v.deleted_at IS NULL WHERE m.project_pk = $1 AND m.deleted_at IS NULL",
+            "AND v.deleted_at IS NULL WHERE m.project_pk = $1 AND m.deleted_at IS NULL "
+            "GROUP BY m.pk, m.name ORDER BY m.name",
             project_pk,
         )
-        return count, size
+        return [(r["name"], r["bytes"]) for r in rows]
 
     async def delete_org(self, conn: asyncpg.Connection, org: Org) -> None:
         """In the org's deletion's transaction: forget its models. Their objects go with its

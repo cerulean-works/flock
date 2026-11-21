@@ -71,7 +71,7 @@
 			{/each}
 			<div class="grid gap-2">
 				<Label for="tag-add">Add tags</Label>
-				<Input id="tag-add" name="add" placeholder="baseline, lr-sweep" autocomplete="off" />
+				<Input id="tag-add" name="add" placeholder="e.g., baseline, lr-sweep" autocomplete="off" />
 				<p class="text-xs text-muted-foreground">Separate tags with commas or spaces.</p>
 			</div>
 			{#if current.length}

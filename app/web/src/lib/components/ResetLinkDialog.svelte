@@ -37,11 +37,10 @@
 			<Dialog.Title>Reset {user.name}’s password</Dialog.Title>
 			<Dialog.Description>
 				{#if link}
-					Send it to {user.email}: it isn’t shown again. Works once, until {dateTime(
-						link.expires_at
-					)}.
+					Send this link to {user.email} yourself. It works once, until {dateTime(link.expires_at)},
+					and won’t be shown again.
 				{:else}
-					A one-time link for {user.email} to set a new password. Flock sends no email: pass it on yourself.
+					Create a one-time link for {user.email} to set a new password. You send it to them yourself.
 				{/if}
 			</Dialog.Description>
 		</Dialog.Header>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import type { Selection } from '#lib/selection.svelte.ts';
 
@@ -12,6 +13,9 @@
 
 	let { selection, key, name }: Props = $props();
 
+	let mounted = $state(false);
+	onMount(() => (mounted = true));
+
 	// Hidden until its row (or the header, the table) is hovered or focused; all of them show
 	// once anything is checked, and always on touch screens (D130).
 	const hidden = $derived(
@@ -24,11 +28,15 @@
 </script>
 
 {#if key === undefined}
+	<!--
+		Never disabled on the server: a listing that knows its rows before it hydrates would keep
+		the server’s `disabled` (hydration doesn't correct attributes), so it applies once mounted.
+	-->
 	<Checkbox
 		class={hidden}
 		checked={selection.all}
 		indeterminate={selection.some}
-		disabled={!selection.keys.length}
+		disabled={mounted && !selection.keys.length}
 		onCheckedChange={selection.toggleAll}
 		aria-label={selection.all ? 'Deselect all' : 'Select all'}
 	/>

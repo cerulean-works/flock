@@ -135,7 +135,13 @@
 			{#if creating}
 				<div class="grid gap-2">
 					<Label for="move-new-name">New project name</Label>
-					<Input id="move-new-name" bind:value={newName} autocomplete="off" spellcheck="false" />
+					<Input
+						id="move-new-name"
+						bind:value={newName}
+						placeholder="e.g., lr-sweep"
+						autocomplete="off"
+						spellcheck="false"
+					/>
 				</div>
 			{/if}
 			{#if publishes}

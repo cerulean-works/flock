@@ -47,8 +47,8 @@
 	}
 </script>
 
-<Button variant="outline" size="sm" onclick={() => (open = true)}>
-	<FolderPlusIcon /> New folder
+<Button variant="ghost" onclick={() => (open = true)}>
+	<FolderPlusIcon /> <span class="max-sm:sr-only">New folder</span>
 </Button>
 <Dialog.Root
 	bind:open

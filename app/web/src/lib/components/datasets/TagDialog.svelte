@@ -80,7 +80,7 @@
 					id="tag-name"
 					bind:value={name}
 					oninput={() => (taken = null)}
-					placeholder="v1.0"
+					placeholder="e.g., v1.0"
 					autocomplete="off"
 					spellcheck="false"
 				/>

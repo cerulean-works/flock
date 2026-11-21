@@ -35,7 +35,7 @@
 		id="{prefix}-display-name"
 		name="display_name"
 		autocomplete="organization"
-		placeholder="e.g. Cerulean Research"
+		placeholder="e.g., Cerulean Research"
 		value={displayName}
 		oninput={(e) => {
 			displayName = e.currentTarget.value;
@@ -46,14 +46,14 @@
 		aria-invalid={invalid}
 		required
 	/>
-	<p class="text-xs leading-relaxed text-muted-foreground">What people see. You can change it.</p>
+	<p class="text-xs leading-relaxed text-muted-foreground">You can change it later.</p>
 </div>
 <div class="grid gap-2">
 	<Label for="{prefix}-id">ID</Label>
 	<Input
 		id="{prefix}-id"
 		name="id"
-		placeholder="e.g. cerulean-research"
+		placeholder="e.g., cerulean-research"
 		autocomplete="off"
 		spellcheck="false"
 		value={id}
@@ -67,8 +67,8 @@
 		required
 	/>
 	<p class="text-xs leading-relaxed text-muted-foreground">
-		It appears in links, and the wandb SDK logs to it as the <code
-			class="rounded bg-muted px-1 py-px font-mono text-[11px]">entity</code
+		Used in links and as the wandb <code class="rounded bg-muted px-1 py-px font-mono text-[11px]"
+			>entity</code
 		>. It can’t be changed later.
 	</p>
 </div>

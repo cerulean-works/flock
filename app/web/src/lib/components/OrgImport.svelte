@@ -1,13 +1,39 @@
+<script lang="ts" module>
+	import type { OrgImport as Job } from '#lib/types.ts';
+
+	/** How long an import that stopped short stays on the page, for someone to resume it. */
+	const ATTENTION = 3 * 86_400;
+
+	/**
+	 * Whether the import is worth showing: while it runs, or for a few days after it failed or was
+	 * interrupted. A finished or cancelled import leaves nothing behind.
+	 */
+	export function importShown(job: Job | null, now: number): job is Job {
+		if (!job) return false;
+		if (job.state === 'running') return true;
+		if (job.state !== 'failed' && job.state !== 'interrupted') return false;
+		return now - (job.finished_at ?? job.started_at) < ATTENTION;
+	}
+</script>
+
 <script lang="ts">
+	import ActivityIcon from '@lucide/svelte/icons/activity';
+	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import DownloadIcon from '@lucide/svelte/icons/download';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
+	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
+	import { toast } from 'svelte-sonner';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import FormError from '#lib/components/FormError.svelte';
+	import MetaItem from '#lib/components/MetaItem.svelte';
+	import MetaRow from '#lib/components/MetaRow.svelte';
 	import WandbImportFields from '#lib/components/WandbImportFields.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
-	import type { ImportState, OrgImport } from '#lib/types.ts';
+	import type { ImportState } from '#lib/types.ts';
 	import { count, dateTime, relativeTime } from '#lib/utils.ts';
 	import { pollImport, wandbImport } from '#lib/wandb.ts';
 
@@ -16,8 +42,8 @@
 		org: string;
 		/** What people call it. */
 		label: string;
-		/** The org's latest import, or null if it never had one. */
-		job: OrgImport | null;
+		/** The org's latest import, or null if it never had one. Shown only while it matters. */
+		job: Job | null;
 		/** Only super admins start and cancel imports. */
 		superadmin: boolean;
 		now: number;
@@ -26,16 +52,23 @@
 	let { org, label, job, superadmin, now }: Props = $props();
 
 	const running = $derived(job?.state === 'running');
+	// The import on show: none once it has finished, been cancelled, or failed a while ago.
+	const shown = $derived(importShown(job, now) ? job : null);
 	$effect(() => {
 		if (running) return pollImport();
 	});
 
 	// Polling reloads this page only. When the import moves on to another project, or ends,
-	// reload the sidebar too, which lists the org's projects.
+	// reload the sidebar too, which lists the org's projects. A finished import leaves the page,
+	// so a toast says it finished.
 	let seen: string | null = null;
 	$effect(() => {
 		const mark = job ? `${job.state}/${job.current_project}/${job.projects_done}` : null;
-		if (seen !== null && mark !== seen) invalidateAll();
+		if (seen !== null && mark !== seen) {
+			if (seen.startsWith('running/') && job?.state === 'finished')
+				toast.success(`Imported ${count(job.runs_done, 'run')} from ${job.entity}`);
+			invalidateAll();
+		}
 		seen = mark;
 	});
 
@@ -48,14 +81,11 @@
 	};
 
 	// Copied and skipped runs are both done with; the total can grow as runs are listed.
-	const handled = $derived(job ? job.runs_done + job.runs_skipped + job.runs_failed : 0);
+	const handled = $derived(shown ? shown.runs_done + shown.runs_skipped + shown.runs_failed : 0);
 	const share = $derived(
-		job && job.runs_total > 0
-			? Math.min(1, handled / job.runs_total)
-			: job?.state === 'finished'
-				? 1
-				: 0
+		shown && shown.runs_total > 0 ? Math.min(1, handled / shown.runs_total) : 0
 	);
+	const n = (v: number) => v.toLocaleString('en-US');
 
 	let resuming = $state(false);
 	const starting = new Mutation({
@@ -67,31 +97,31 @@
 		done: () => (resuming = false)
 	});
 	// It may have ended on its own just before the cancel arrived.
-	const cancelling = new Mutation<{ import: OrgImport }>({
+	const cancelling = new Mutation<{ import: Job }>({
 		toastErrors: true,
 		success: (data) =>
 			data.import.state === 'cancelled' ? 'Import cancelled' : 'The import had already ended'
 	});
 </script>
 
-{#if job}
+{#if shown}
 	<div class="mt-4 grid gap-3 rounded-lg border border-divider p-4">
 		<div class="flex flex-wrap items-center gap-x-3 gap-y-1">
 			<Badge variant="secondary" class="gap-1.5 text-foreground">
-				<span class={['size-1.5 rounded-full', STATES[job.state].tone]}></span>
-				{STATES[job.state].label}
+				<span class={['size-1.5 rounded-full', STATES[shown.state].tone]}></span>
+				{STATES[shown.state].label}
 			</Badge>
 			<span class="min-w-0 truncate">
-				From <span class="font-medium">{job.entity}</span>
-				{#if job.base_url !== 'https://api.wandb.ai'}
-					<span class="text-muted-foreground">on {job.base_url}</span>
+				From <span class="font-medium">{shown.entity}</span>
+				{#if shown.base_url !== 'https://api.wandb.ai'}
+					<span class="text-muted-foreground">on {shown.base_url}</span>
 				{/if}
 			</span>
-			<span class="ml-auto text-[13px] text-muted-foreground" title={dateTime(job.started_at)}>
-				{#if job.finished_at}
-					Ended {relativeTime(job.finished_at, now)}
+			<span class="ml-auto text-[13px] text-muted-foreground" title={dateTime(shown.started_at)}>
+				{#if shown.finished_at}
+					Ended {relativeTime(shown.finished_at, now)}
 				{:else}
-					Started {relativeTime(job.started_at, now)}
+					Started {relativeTime(shown.started_at, now)}
 				{/if}
 			</span>
 		</div>
@@ -101,39 +131,47 @@
 			role="progressbar"
 			aria-label="Runs imported"
 			aria-valuemin={0}
-			aria-valuemax={job.runs_total}
+			aria-valuemax={shown.runs_total}
 			aria-valuenow={handled}
 		>
 			<div
-				class={['h-full rounded-full transition-[width]', STATES[job.state].tone]}
+				class={['h-full rounded-full transition-[width]', STATES[shown.state].tone]}
 				style:width="{share * 100}%"
 			></div>
 		</div>
 
-		<p class="text-[13px] text-muted-foreground">
-			<span class="text-foreground tabular-nums">
-				{handled.toLocaleString('en-US')} of {count(job.runs_total, 'run')}
-			</span>
-			· {job.projects_done.toLocaleString('en-US')} of {count(job.projects_total, 'project')}
-			{#if running && job.current_project}
-				· copying <span class="text-foreground">{job.current_project}</span>
+		<MetaRow>
+			<MetaItem icon={ActivityIcon} class="text-foreground">
+				{n(handled)} of {count(shown.runs_total, 'run')}
+			</MetaItem>
+			<MetaItem icon={FolderIcon}>
+				{n(shown.projects_done)} of {count(shown.projects_total, 'project')}
+			</MetaItem>
+			{#if running && shown.current_project}
+				<MetaItem icon={FolderInputIcon}>
+					Copying <span class="text-foreground">{shown.current_project}</span>
+				</MetaItem>
 			{/if}
-			{#if job.runs_skipped}· {job.runs_skipped.toLocaleString('en-US')} already here{/if}
-			{#if job.runs_failed}
-				· <span class="text-destructive">{job.runs_failed.toLocaleString('en-US')} failed</span>
+			{#if shown.runs_skipped}
+				<MetaItem icon={CircleCheckIcon}>{n(shown.runs_skipped)} already here</MetaItem>
 			{/if}
-		</p>
+			{#if shown.runs_failed}
+				<MetaItem icon={TriangleAlertIcon} class="text-destructive">
+					{n(shown.runs_failed)} failed
+				</MetaItem>
+			{/if}
+		</MetaRow>
 
-		{#if job.error}
+		{#if shown.error}
 			<p class="text-[13px] break-words text-destructive">
-				{job.state === 'failed' ? 'Stopped:' : 'Last failure:'}
-				{job.error}
+				{shown.state === 'failed' ? 'Stopped by an error.' : 'Last error.'}
+				{shown.error}
 			</p>
 		{/if}
-		{#if job.state === 'interrupted'}
+		{#if shown.state === 'interrupted'}
 			<p class="text-[13px] text-muted-foreground">
-				Flock restarted during the import. Flock doesn’t keep the API key, so resume it with the
-				key: the runs already copied are skipped.
+				Flock restarted during the import and doesn’t keep the API key. Resume it with the key and
+				the runs already copied are skipped.
 			</p>
 		{/if}
 
@@ -147,16 +185,15 @@
 			{:else if !resuming}
 				<div>
 					<Button variant="outline" onclick={() => (resuming = true)}>
-						<DownloadIcon />
-						{job.state === 'finished' ? 'Import again' : 'Resume import'}
+						<DownloadIcon /> Resume import
 					</Button>
 				</div>
 			{/if}
 		{/if}
 	</div>
 {:else if superadmin && !resuming}
-	<p class="mt-2 max-w-[62ch] text-muted-foreground">
-		Copy every project and run of a W&B team or user into {label}.
+	<p class="mt-2 text-muted-foreground">
+		Copy every project and run from a W&B team or user into {label}.
 	</p>
 	<div class="mt-4">
 		<Button variant="outline" onclick={() => (resuming = true)}>
@@ -166,12 +203,7 @@
 {/if}
 
 {#if superadmin && resuming && !running}
-	<form
-		method="POST"
-		action="?/startImport"
-		class="mt-4 grid max-w-md gap-4"
-		use:enhance={starting.enhance}
-	>
+	<form method="POST" action="?/startImport" class="mt-4 grid gap-4" use:enhance={starting.enhance}>
 		<WandbImportFields
 			id="org-wandb"
 			{org}
@@ -179,19 +211,11 @@
 			url={job?.base_url ?? ''}
 			always
 		/>
-		<p class="text-[13px] text-muted-foreground">
-			Runs {label} already has are skipped, so only what’s missing is copied.
-		</p>
+		<p class="text-[13px] text-muted-foreground">Runs already in {label} are skipped.</p>
 		<FormError error={starting.error} />
 		<div class="flex gap-2">
 			<Button type="submit" disabled={starting.pending}>
-				{starting.pending
-					? 'Starting…'
-					: !job
-						? 'Start import'
-						: job.state === 'finished'
-							? 'Import again'
-							: 'Resume import'}
+				{starting.pending ? 'Starting…' : shown ? 'Resume import' : 'Start import'}
 			</Button>
 			<Button variant="outline" onclick={() => (resuming = false)}>Cancel</Button>
 		</div>

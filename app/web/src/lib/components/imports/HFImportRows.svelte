@@ -99,7 +99,7 @@
 							{#if job.state === 'failed'}
 								{#if job.error}<p class="text-destructive">{job.error}</p>{/if}
 								<p class="text-muted-foreground">You can run it with flock instead.</p>
-								<CopyBlock code={job.command} />
+								<CopyBlock lang="bash" code={job.command} />
 							{/if}
 						</div>
 						<Button

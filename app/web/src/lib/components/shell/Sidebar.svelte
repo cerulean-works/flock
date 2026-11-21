@@ -234,7 +234,7 @@
 						<!-- svelte-ignore a11y_autofocus -->
 						<input
 							class="mx-2 mt-2 h-7 w-[calc(100%-1rem)] rounded-md border border-input bg-background px-2 text-[13px] outline-none placeholder:text-faint focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-							placeholder="Find a project…"
+							placeholder="Find a project"
 							aria-label="Find a project"
 							bind:value={query}
 							autofocus
@@ -318,10 +318,11 @@
 						<ChevronLeftIcon />
 						{signedIn ? 'Home' : (orgName ?? org)}
 					</a>
-					<!-- The project, as the switcher shows the org: a tile, its name, and what it's in. -->
-					<div class="mt-3 mb-2 flex items-center gap-2.5 rounded-lg px-1 py-1">
+					<!-- The project, as the switcher shows the org: a tile and its name, lined up with the links
+						below (the tile centred on their icons, the name on their labels). -->
+					<div class="mt-3 mb-2 flex items-center gap-2 rounded-lg px-0.5 py-1">
 						<span
-							class="grid size-8 flex-none place-items-center rounded-lg border border-divider bg-background text-muted-foreground shadow-xs [&_svg]:size-4"
+							class="grid size-7 flex-none place-items-center rounded-lg border border-divider bg-background text-muted-foreground shadow-xs [&_svg]:size-4"
 							aria-hidden="true"
 						>
 							<FolderIcon />
@@ -333,16 +334,14 @@
 							>
 								{shownProject}
 							</h2>
-							<p class="flex items-center gap-1.5 truncate text-xs leading-4 text-muted-foreground">
-								<span class="truncate">{orgName ?? org}</span>
-								{#if info?.active_run_count}
-									<span aria-hidden="true">·</span>
+							{#if info?.active_run_count}
+								<p class="flex items-center gap-1.5 text-xs leading-4 text-muted-foreground">
 									<span
 										class="size-1.5 flex-none animate-live rounded-full bg-state-running text-state-running motion-reduce:animate-none"
 									></span>
 									<span class="tabular-nums">{info.active_run_count} running</span>
-								{/if}
-							</p>
+								</p>
+							{/if}
 						</div>
 						{#if info && !outside}
 							<ProjectMenu

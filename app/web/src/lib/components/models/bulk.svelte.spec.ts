@@ -55,7 +55,9 @@ afterEach(() => {
 
 const box = (name: string) => screen.getByRole('checkbox', { name: `Select ${name}`, exact: true });
 const names = () =>
-	[...document.querySelectorAll('tbody tr td:nth-child(2)')].map((td) => td.textContent!.trim());
+	[...document.querySelectorAll('[role=rowgroup] [role=row] [role=cell]:first-child')].map((td) =>
+		td.textContent!.trim()
+	);
 
 function list(models = ['a', 'b', 'c'].map(entry)) {
 	const selection = new Selection();

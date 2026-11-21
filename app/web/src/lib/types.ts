@@ -1165,4 +1165,6 @@ export interface ProjectStorage {
 	datasets: number;
 	models: number;
 	bytes: number;
+	/** Each dataset and model by path with its bytes, datasets first. */
+	items: { kind: 'dataset' | 'model'; path: string; bytes: number }[];
 }

@@ -96,8 +96,8 @@
 		fields={{ user: member.id }}
 		title={self ? `Leave ${org}?` : `Remove ${member.name} from ${org}?`}
 		description={self
-			? `You lose access to its projects; your runs stay. Rejoining needs a new invite.`
-			: `They lose access to its projects; their runs stay.`}
+			? `You’ll lose access to its projects, but your runs stay. Rejoining takes a new invite.`
+			: `They’ll lose access to its projects, but their runs stay.`}
 		confirm={self ? 'Leave' : 'Remove'}
 		pending={self ? 'Leaving…' : 'Removing…'}
 		success={self ? `You left ${org}` : `Removed ${member.name}`}
