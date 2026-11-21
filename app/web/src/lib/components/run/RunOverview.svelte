@@ -199,7 +199,8 @@
 	{#if models?.made.length}
 		<RunModelsList title="Checkpoints" versions={models.made} />
 	{/if}
-	{#if models?.scored.length}
+	<!-- An API from before 023 answers no `scored`. -->
+	{#if models?.scored?.length}
 		<RunModelsList title="Models scored" versions={models.scored} />
 	{/if}
 

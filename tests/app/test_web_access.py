@@ -215,6 +215,6 @@ def test_eval_results_comparisons_and_model_evals_follow_the_projects_access(
         found = inside.get(evals)
         assert found.status_code == 200, found.text
         assert [run["id"] for run in found.json()["runs"]] == ["a", "b"]
-        assert "secret_task/acc_raw" in found.json()["runs"][0]["scores"]["values"]
+        assert found.json()["runs"][0]["scores"]["values"]["secret_task/acc_raw@h"] == 0.5
         assert anon.get(evals).status_code == 401
         assert outside.get(evals).status_code == 404

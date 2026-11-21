@@ -559,6 +559,9 @@ class Models:
         ref = EVAL_MODEL.fullmatch(model) if isinstance(model, str) else None
         if ref is None or not isinstance(digest, str) or not SHA256.fullmatch(digest):
             return
+        # Another org's ref never links to a copy here, even the only one.
+        if ref[1] != org.name:
+            return
         # Locked, so retention can't delete a version between this check and the insert (D109).
         candidates = await conn.fetch(
             "SELECT v.pk, m.name FROM model_versions v JOIN models m ON m.pk = v.model_pk "
@@ -570,7 +573,7 @@ class Models:
         )
         # The same bytes can be a version of two models. The one the ref names wins; a renamed
         # model's version links only when nothing else could be meant.
-        named = [pk for pk, name in candidates if ref[1] == org.name and name == ref[2]]
+        named = [pk for pk, name in candidates if name == ref[2]]
         if named or len(candidates) == 1:
             await conn.execute(
                 "INSERT INTO model_version_runs (version_pk, run_pk, kind) "

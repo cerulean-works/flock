@@ -26,6 +26,8 @@ export function isEvalResults(value: unknown): value is EvalResults {
 			typeof t.primary_metric !== 'string' ||
 			typeof t.num_docs !== 'number' ||
 			!object(t.metrics) ||
+			// Scores are numbers, or null where eval wrote a non-finite one.
+			!Object.values(t.metrics).every((v) => typeof v === 'number' || v === null) ||
 			!object(t.dataset) ||
 			typeof t.dataset.repo !== 'string' ||
 			!object(t.truncation)

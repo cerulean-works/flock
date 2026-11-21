@@ -8,6 +8,9 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pytest
+
+from app.api.src.core.errors import Invalid
 from flock.eval.diff import diff
 from flock.eval.results import read_results
 from tests.eval.toy import PROVENANCE, write_run
@@ -118,3 +121,17 @@ def test_runs_without_results_or_not_comparable_are_refused(api: Client, tmp_pat
         refused = api.get(route, **{"with": bad})
         assert refused.status == 404, bad
     assert api.get(f"{P}/p/runs/nope/diff", **{"with": "flock/p/b"}).status == 404
+
+
+def test_a_file_over_the_limit_is_refused_before_it_is_read(
+    flock: FlockServer, api: Client
+) -> None:
+    """The diff reads files of at most 64 MiB, so one comparison can't hold any size in memory."""
+    api.create_run("p", "r")
+    api.upload("p", "r", "predictions/t.jsonl", b"x" * 10)
+    project = flock.call(flock.store.project("flock", "p"))
+    run = flock.call(flock.store.project_run(project, "r"))
+
+    assert flock.call(flock.store.read_file(run, "predictions/t.jsonl", max_bytes=10)) == b"x" * 10
+    with pytest.raises(Invalid, match="10 bytes, more than the 9"):
+        flock.call(flock.store.read_file(run, "predictions/t.jsonl", max_bytes=9))

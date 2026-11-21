@@ -25,7 +25,7 @@ export async function evalRuns(org: string, name: string, number: number): Promi
 	);
 	if (!res.ok) return relayRefusal(res);
 	const version = (await res.json()) as ModelVersionDetail;
-	const paths = version.evals;
+	const paths = version.evals ?? []; // none from an API before 023
 	const runs: (ModelEvalRun | null)[] = paths.map(() => null);
 	let next = 0;
 	async function work() {

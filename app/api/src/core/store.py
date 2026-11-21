@@ -18,7 +18,7 @@ from app.api.src.core.avatars import Avatars
 from app.api.src.core.budgets import Budgets
 from app.api.src.core.bus import Bus
 from app.api.src.core.datasets import Datasets
-from app.api.src.core.errors import Conflict, Discarded, Forbidden, NotFound
+from app.api.src.core.errors import Conflict, Discarded, Forbidden, Invalid, NotFound
 from app.api.src.core.feed import Feed
 from app.api.src.core.files import file_store
 from app.api.src.core.hf_imports import HFImports
@@ -728,16 +728,24 @@ class Store:
         parts = self.file_parts(name)
         return None if parts is None else self.files_dir / str(run.pk) / Path(*parts)
 
-    async def read_file(self, run: Run, name: str) -> bytes | None:
-        """A run file's bytes (for small files the server reads itself)."""
+    async def read_file(self, run: Run, name: str, max_bytes: int | None = None) -> bytes | None:
+        """A run file's bytes (for small files the server reads itself). A file over
+        ``max_bytes`` is ``Invalid``, refused before any of it is read."""
         if self.file_parts(name) is None:
             return None
         found = await self.files.get(run.pk, name)
         if found is None:
             return None
         if isinstance(found, Path):
+            size = (await asyncio.to_thread(found.stat)).st_size
+        else:
+            chunks, size = found
+        if max_bytes is not None and size > max_bytes:
+            if not isinstance(found, Path):
+                await chunks.aclose()  # lets the S3 response go
+            raise Invalid(f"{name} is {size} bytes, more than the {max_bytes} read here")
+        if isinstance(found, Path):
             return await asyncio.to_thread(found.read_bytes)
-        chunks, _ = found
         return b"".join([chunk async for chunk in chunks])
 
     # ------------------------------------------------------------------ locks (D80)

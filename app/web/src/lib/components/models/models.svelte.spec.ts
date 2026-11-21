@@ -453,7 +453,7 @@ describe('ModelView', () => {
 		await expect
 			.element(
 				screen.getByText(
-					'flock eval run --model flock:acme/olmo2-1b@12 --wandb-project model-evals'
+					'flock eval run --model flock:acme/olmo2-1b@12 --suite base_easy --wandb-project model-evals --out results'
 				)
 			)
 			.toBeVisible();

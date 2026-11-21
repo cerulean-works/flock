@@ -16,7 +16,7 @@
 
 	// The eval runs of this version with their scores, read once the tab opens.
 	$effect(() => {
-		if (!version.evals.length) return;
+		if (!version.evals?.length) return;
 		const controller = new AbortController();
 		modelCall<{ runs: ModelEvalRun[] }>(
 			modelApi(org, version.name, `versions/${version.number}/evals`),
@@ -43,12 +43,12 @@
 	const pair = $derived(runs?.filter((r) => checked.has(r.path)) ?? []);
 </script>
 
-{#if !version.evals.length}
+{#if !version.evals?.length}
 	<div class="max-w-[68ch] bg-card px-4 py-6 text-[13px] text-muted-foreground">
 		<p>No eval runs have scored this version yet.</p>
 		<p class="mt-1">
 			Score it with <code class="font-mono text-[0.95em] text-foreground"
-				>flock eval run --model {ref} --wandb-project model-evals</code
+				>flock eval run --model {ref} --suite base_easy --wandb-project model-evals --out results</code
 			>.
 		</p>
 	</div>
@@ -65,6 +65,7 @@
 		{#if pair.length === 2}
 			<Button
 				variant="outline"
+				data-sveltekit-preload-data="off"
 				href={compareHref(pair[0].entity, pair[0].project, pair[0].id, pair[1].path)}
 			>
 				<GitCompareArrowsIcon /> Compare items
