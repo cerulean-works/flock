@@ -42,7 +42,8 @@ export function isEvalResults(value: unknown): value is EvalResults {
 			!(typeof t.dataset.subset === 'string' || t.dataset.subset === null) ||
 			// Schema 9 always writes the private mark (eval's reader refuses a file without it).
 			(value.schema_version >= 9 && typeof t.dataset.private !== 'boolean') ||
-			!object(t.truncation)
+			!object(t.truncation) ||
+			!(Number.isInteger(t.truncation.docs) && (t.truncation.docs as number) >= 0)
 		)
 			return false;
 	for (const s of suites)

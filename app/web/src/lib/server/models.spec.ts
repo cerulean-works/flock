@@ -49,6 +49,7 @@ describe('a version’s eval runs', () => {
 		vi.mocked(flockAnswer).mockImplementation(async (url) => {
 			if (url.endsWith('/versions/12'))
 				return Response.json({
+					model: 'acme/olmo2-1b',
 					number: 12,
 					digest: 'd12',
 					evals: ['acme/evals/e1', 'acme/evals/old', 'acme/evals/gone', 'acme/evals/v11']

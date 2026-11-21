@@ -115,6 +115,7 @@ describe('reading a results file', () => {
 			{ ...good, tasks: [good.tasks[0], good.tasks[0]] }, // a repeated name
 			{ ...good, suites: [{ ...good.suites[0], score: 'high' }] },
 			{ ...good, provenance: {} },
+			{ ...good, tasks: [{ ...good.tasks[0], truncation: {} }] },
 			{ ...good, provenance: { ...good.provenance, torch: undefined } }
 		];
 		for (const value of broken) expect(isEvalResults(value), JSON.stringify(value)).toBe(false);

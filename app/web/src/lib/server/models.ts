@@ -53,8 +53,8 @@ export async function evalRuns(org: string, name: string, number: number): Promi
 				scores:
 					results &&
 					RESULT_SCHEMAS.includes(results.schema_version) &&
-					results.provenance.model_digest === version.digest &&
-					results.provenance.model.endsWith(`@${version.number}`)
+					results.provenance.model === `flock:${version.model}@${version.number}` &&
+					results.provenance.model_digest === version.digest
 						? evalScores(results)
 						: null
 			};
