@@ -23,6 +23,7 @@
 	import RunFiles from '#lib/components/run/RunFiles.svelte';
 	import RunLogs from '#lib/components/run/RunLogs.svelte';
 	import RunOverview from '#lib/components/run/RunOverview.svelte';
+	import RunResults from '#lib/components/run/RunResults.svelte';
 	import StateBadge from '#lib/components/StateBadge.svelte';
 	import TagRunsDialog from '#lib/components/TagRunsDialog.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -73,12 +74,14 @@
 	const runState = $derived(ws.stateOf(0));
 	const name = $derived(ws.nameOf(0));
 
-	type Tab = 'charts' | 'logs' | 'files';
-	const TABS: { value: Tab; label: string }[] = [
+	type Tab = 'charts' | 'results' | 'logs' | 'files';
+	// Results only for an eval run with a results file (023 D173).
+	const TABS: { value: Tab; label: string }[] = $derived([
 		{ value: 'charts', label: 'Charts' },
+		...(data.results ? [{ value: 'results' as const, label: 'Results' }] : []),
 		{ value: 'logs', label: 'Logs' },
 		{ value: 'files', label: 'Files' }
-	];
+	]);
 	// In the URL, so a tab can be linked to; switching never re-runs the load.
 	let tabOverride = $state<Tab | null>(null);
 	const urlTab = $derived<Tab>(
@@ -255,6 +258,10 @@
 				{:else}
 					<EmptyState>This run hasn’t logged any metrics.</EmptyState>
 				{/if}
+			{:else if tab === 'results' && data.results}
+				{#key data.run.id}
+					<RunResults run={data.run} results={data.results} />
+				{/key}
 			{:else if tab === 'logs'}
 				{#key data.run.id}
 					<RunLogs

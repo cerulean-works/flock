@@ -1,4 +1,5 @@
 import { isHttpError } from '@sveltejs/kit';
+import { readEvalResults } from '#lib/server/evals.ts';
 import { projectPath, flock } from '#lib/server/flock.ts';
 import { runActions } from '#lib/server/runs.ts';
 import type { Billing, RunDetail, RunHistory, RunModels } from '#lib/types.ts';
@@ -41,12 +42,14 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 					)
 				: null
 		),
-		// The model versions it made (D108), for the Checkpoints section.
+		// The model versions it made and those it scored (D108, 023 D172), for the Overview.
 		member.then((yes) =>
 			yes ? optional(flock(`${path}/models`).then((res) => res.json() as Promise<RunModels>)) : null
 		)
 	]);
 	const run = (await (await flock(path)).json()) as RunDetail;
+	// An eval run's results file, for its Results tab (023 D173).
+	const results = run.job_type === 'eval' ? await readEvalResults(path) : null;
 	const owner = run.owner_user ?? null;
 	return {
 		run,
@@ -55,6 +58,7 @@ export const load: PageServerLoad = async ({ params, parent }) => {
 		owner: owner && { id: owner.id, name: owner.name, avatar_url: owner.avatar_url },
 		currency: billing?.currency ?? null,
 		models,
+		results,
 		/** Relative times are from the server's clock, so SSR and hydration agree. */
 		now: Date.now() / 1000
 	};
