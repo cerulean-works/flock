@@ -91,7 +91,7 @@ class Results:
     """
     Every task's scores from one run, and its provenance.
 
-    `schema_version`, 9, is the version of the file's layout, bumped when a field changes. It isn't an argument, so a file can't claim a layout it doesn't have.
+    `schema_version`, 10, is the version of the file's layout, bumped when a field changes. It isn't an argument, so a file can't claim a layout it doesn't have.
 
     Args:
         provenance (`Provenance`):
@@ -105,7 +105,7 @@ class Results:
     provenance: Provenance
     tasks: list[TaskResult]
     suites: list[SuiteResult] = field(default_factory=list)
-    schema_version: int = field(default=9, init=False)
+    schema_version: int = field(default=10, init=False)
 
     def to_dict(self) -> dict[str, Any]:
         """Returns the results as plain JSON-ready data, with each task's `docs_per_second` added."""
@@ -273,7 +273,7 @@ class WrittenResults:
         source (`str`):
             Where it was read: a folder, or a tracker run as `run:entity/project/id`.
         schema_version (`int`):
-            The file's layout, 8 or 9. Only schema 9 rows hold `correct`, and only schema 9 records `dataset.private`: an older file's datasets read as not private.
+            The file's layout, 8 to 10. Only rows from schema 9 on hold `correct`, and only schema 9 on records `dataset.private`: an older file's datasets read as not private. Schema 10 adds the provenance's `model_org`, `model_project` and `model_path`, which read as `None` before it.
         provenance (`Provenance`):
             What produced the run.
         tasks (`list[TaskResult]`):
@@ -308,7 +308,7 @@ def read_results(source: str) -> WrittenResults:
 
     Raises:
         `FileNotFoundError`: if the folder or run has no `results.json`.
-        `ValueError`: if `results.json` isn't a results file of schema 8 or 9, `run:` isn't followed by `entity/project/id`, or Flock refuses the read.
+        `ValueError`: if `results.json` isn't a results file of schema 8 to 10, `run:` isn't followed by `entity/project/id`, or Flock refuses the read.
         `click.ClickException`: if Flock can't be reached.
     """
     if source.startswith("run:"):
@@ -328,10 +328,10 @@ def read_results(source: str) -> WrittenResults:
         raise FileNotFoundError(f"{source} has no results.json")
     try:
         data = json.loads(text)
-        # Schema 8 holds every field these types have but `dataset.private`; older files lack
-        # provenance fields.
-        if data.get("schema_version") not in (8, 9):
-            raise ValueError(f"schema {data.get('schema_version')}; only 8 and 9 are read")
+        # Schema 8 holds every field these types have but `dataset.private` and schema 10's
+        # provenance fields, which default; older files lack other provenance fields.
+        if data.get("schema_version") not in (8, 9, 10):
+            raise ValueError(f"schema {data.get('schema_version')}; only 8 to 10 are read")
         # An object or a string would iterate as nothing, and a diff would read every task as
         # missing from this run.
         if not isinstance(data["tasks"], list) or not isinstance(data["suites"], list):

@@ -22,7 +22,7 @@ def log_to_tracker(
     host: str | None = None,
 ) -> None:
     """
-    Logs one `eval` run to `project`: the provenance, each task's hash (`task_hashes`) and each suite's members and hash (`suite_members`, `suite_hashes`) as its config, and each task's metrics and `docs_per_second` as its summary, named `<task>/<metric>`, with each scored suite's score as `suites/<suite>`. With `results_file`, the run also gets that file as `results.json` and, for schema 9, each task's `predictions/<task>.jsonl` found beside it.
+    Logs one `eval` run to `project`: the provenance, each task's hash (`task_hashes`) and each suite's members and hash (`suite_members`, `suite_hashes`) as its config, and each task's metrics and `docs_per_second` as its summary, named `<task>/<metric>`, with each scored suite's score as `suites/<suite>`. With `results_file`, the run also gets that file as `results.json` and, from schema 9 on, each task's `predictions/<task>.jsonl` found beside it.
 
     The SDK's own settings decide where it goes (`wandb login --host` for the flock tracker), unless `entity` or `host` name it. A run that uploads predictions of a task on a private dataset goes to the signed-in Flock API and, without `entity`, its user's default organization, where the project's visibility can be read.
 
@@ -128,7 +128,7 @@ def log_to_tracker(
 
 
 def _run_files(results: dict[str, Any], results_file: Path | None) -> dict[str, Path]:
-    """The files the tracker shows a run's docs from, by their names on the run: `results_file` as `results.json` and, for schema 9, each task's predictions file found beside it. An older file's predictions have no outcome (`correct`) and its tasks no privacy mark, so only its results go."""
+    """The files the tracker shows a run's docs from, by their names on the run: `results_file` as `results.json` and, from schema 9 on, each task's predictions file found beside it. An older file's predictions have no outcome (`correct`) and its tasks no privacy mark, so only its results go."""
     files = {}
     if results_file is None:
         return files
@@ -188,20 +188,20 @@ def _private_destination(
 
 def log_results_file(path: Path, project: str) -> str:
     """
-    Logs a written `results.json` to `project` as written, in the default organization of the signed-in Flock user, on the Flock API that user signed in to, and returns `entity/project`. The file goes on the run, with the predictions beside it for schema 9, as [`log_to_tracker`] uploads them.
+    Logs a written `results.json` to `project` as written, in the default organization of the signed-in Flock user, on the Flock API that user signed in to, and returns `entity/project`. The file goes on the run, with the predictions beside it from schema 9 on, as [`log_to_tracker`] uploads them.
 
     A field the file lacks stays absent from the run: an older file's missing `sdpa_backend` means an unknown kernel, not none. The tracker stamps the run with this machine's host, time and commit; the scoring job's are the config's `created_at` and `flock_commit`.
 
     Raises:
-        `ValueError`: if the file's schema isn't 6 to 9, Flock refuses the sign-in or the query, the project already has a run with the file's `model` and `created_at` that didn't fail or crash, or the project is public and the predictions of a task on a private dataset would go to it.
+        `ValueError`: if the file's schema isn't 6 to 10, Flock refuses the sign-in or the query, the project already has a run with the file's `model` and `created_at` that didn't fail or crash, or the project is public and the predictions of a task on a private dataset would go to it.
         `click.ClickException`: if Flock can't be reached.
         `wandb.errors.Error`: if the tracker refuses the run, for example for a wandb key set for another server.
     """
     results = json.loads(path.read_text())
-    # Schemas 6 to 9 hold every field the run is built from. Older files lack suite hashes, and
+    # Schemas 6 to 10 hold every field the run is built from. Older files lack suite hashes, and
     # some lack suites.
-    if results.get("schema_version") not in (6, 7, 8, 9):
-        raise ValueError(f"{path} has schema {results.get('schema_version')}; only 6 to 9 log")
+    if results.get("schema_version") not in (6, 7, 8, 9, 10):
+        raise ValueError(f"{path} has schema {results.get('schema_version')}; only 6 to 10 log")
     provenance = results["provenance"]
 
     api, entity = _signed_in()

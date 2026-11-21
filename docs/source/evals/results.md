@@ -42,7 +42,7 @@ A run with an output directory writes `results.json` and one predictions file pe
       "score": null
     }
   ],
-  "schema_version": 9
+  "schema_version": 10
 }
 ```
 
@@ -68,7 +68,7 @@ A context too long for the model loses tokens from the left, and the continuatio
 
 `provenance` records what produced the run, so a number can be traced to the exact model, code and settings: [`~eval.provenance.Provenance`] at the end of this page defines each field. It is collected once the model has loaded and before any task is scored, so `created_at` is when scoring started, as lm-evaluation-harness records its start date. `command` is the command line that started the run, the program's name followed by its arguments (for example `flock eval run --model ... --task arc_easy --out ...`), and `null` for a Python API call that passes none. Older files record the CLI's former name instead: `flock-eval run ...` from the standalone script, and `flock-eval eval run ...` from `flock eval` before the provenance caught up. `flock_commit` is `"unknown"` when the installed package isn't a flock checkout, and ends in `-dirty` when tracked files changed or new files appeared under `flock/`.
 
-`model` is `repo@commit` for a Hugging Face model, and `flock:org/name@{number}` for a version stored in Flock. `model_digest` is that version's digest, the sha256 of its file list, which names its exact files. It's `null` for a Hugging Face model, whose commit already names the files. Files written before `model_digest` was added, including some at schema version 6, have no `model_digest`, and read as `null`.
+`model` is `repo@commit` for a Hugging Face model, and `flock:org/path@{number}` or `flock:project:path@{number}` for a version stored in Flock. `model_digest` is that version's digest, the sha256 of its file list, which names its exact files. It's `null` for a Hugging Face model, whose commit already names the files. Files written before `model_digest` was added, including some at schema version 6, have no `model_digest`, and read as `null`. For a Flock model, `model_org`, `model_project` and `model_path` name it whatever the default organization of whoever reads the file: `flock:pretrain:sweeps/lr-3e-4@12` records `"acme"`, `"pretrain"` and `"sweeps/lr-3e-4"`. `model_project` is `null` for an organization's model. All three are `null` for a Hugging Face model, and in files written before schema version 10.
 
 `attention` is the model's attention implementation, and `sdpa_backend` the SDPA kernel scoring was pinned to: `"EFFICIENT_ATTENTION"` on CUDA with `sdpa` attention, `null` on the CPU or another non-CUDA device, where PyTorch still picks the kernel, or with other attention (see [Batching and precision](scoring#batching-and-precision)). Files written before schema version 7 have no `sdpa_backend`: PyTorch chose the kernel for each batch, so their BF16 scores don't repeat exactly.
 
@@ -107,7 +107,7 @@ A perplexity task's line has other fields, enough to recompute each of its metri
 
 ## Reading a run back
 
-[`~eval.results.read_results`] reads a written run from its folder, or from a tracker run that uploaded its files (see [Tracker runs](commands#tracker-runs)) as `run:<entity>/<project>/<id>`. It reads schema versions 8 and 9, and reads a task's predictions only when you ask for them:
+[`~eval.results.read_results`] reads a written run from its folder, or from a tracker run that uploaded its files (see [Tracker runs](commands#tracker-runs)) as `run:<entity>/<project>/<id>`. It reads schema versions 8 to 10, and reads a task's predictions only when you ask for them:
 
 ```python
 from flock.eval.results import read_results

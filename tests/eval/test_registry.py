@@ -97,6 +97,12 @@ def test_evaluate_scores_a_saved_version_and_records_its_number_and_digest(
     provenance = json.loads((tmp_path / "a" / "results.json").read_text())["provenance"]
     assert provenance["model"] == "flock:flock/tiny@1"
     assert provenance["model_digest"] == first.digest
+    # The ref's parts, so the file means the same whichever default org reads it (D162).
+    assert (provenance["model_org"], provenance["model_project"], provenance["model_path"]) == (
+        "flock",
+        None,
+        "tiny",
+    )
     assert (provenance["attention"], provenance["max_length"]) == ("sdpa", 128)
     # The same scores as the model in memory, scored as a training loop would.
     in_memory = ScoringModel(FlockCausalLM(olmo.eval()), tokenizer, name="tiny")

@@ -34,7 +34,7 @@ def write_run(
     folder: Path,
     tasks: dict[str, tuple[str, list[bool] | None]],
     provenance: Provenance = PROVENANCE,
-    schema: int = 9,
+    schema: int = 10,
 ) -> str:
     """Writes a run whose tasks are read by `acc_raw`, each as `name: (task_hash, outcomes)`, with docs `d-0`, `d-1`, ..., and returns its folder. Outcomes of `None` write no predictions file."""
     results = []
@@ -151,6 +151,19 @@ def test_a_schema_8_run_reads_but_its_rows_have_no_outcome(tmp_path: Path) -> No
     old = read_results(a)
     assert old.schema_version == 8
     assert diff(old, read_results(b)).not_compared == [("t", "no_outcome")]
+
+
+def test_a_project_models_run_reads_back_with_its_scope(tmp_path: Path) -> None:
+    scoped = dataclasses.replace(
+        PROVENANCE,
+        model="flock:pretrain:sweeps/lr-3e-4@12",
+        model_org="acme",
+        model_project="pretrain",
+        model_path="sweeps/lr-3e-4",
+    )
+    written = read_results(write_run(tmp_path / "a", {"t": ("h", [True])}, provenance=scoped))
+    assert written.schema_version == 10
+    assert written.provenance == scoped
 
 
 @pytest.mark.parametrize("key", ["dtype", "batch_tokens", "attention", "sdpa_backend"])
@@ -279,7 +292,7 @@ def test_reading_a_folder_refuses_what_is_not_a_results_file(tmp_path: Path) -> 
         read_results(str(tmp_path))
 
     a = write_run(tmp_path / "a", {"t": ("h", [True])}, schema=7)
-    with pytest.raises(ValueError, match="schema 7; only 8 and 9 are read"):
+    with pytest.raises(ValueError, match="schema 7; only 8 to 10 are read"):
         read_results(a)
 
     (tmp_path / "b").mkdir()

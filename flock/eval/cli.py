@@ -23,7 +23,11 @@ def main() -> None:
 
 
 @main.command()
-@click.option("--model", required=True, help="Model as repo@revision or flock:org/name[@version].")
+@click.option(
+    "--model",
+    required=True,
+    help="Model as repo@revision, flock:org/path[@version] or flock:project:path[@version].",
+)
 @click.option(
     "--task",
     "tasks",
@@ -150,7 +154,7 @@ def diff_command(a: str, b: str, as_json: bool) -> None:
 @click.argument("results", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--project", required=True, help="The tracker project to log to.")
 def log_command(results: Path, project: str) -> None:
-    """Log a written results.json to the tracker as written, in your default organization, with the predictions beside it for schema 9. Refuses a file whose model and start time already have a run in the project, and a private dataset's predictions for a public project."""
+    """Log a written results.json to the tracker as written, in your default organization, with the predictions beside it from schema 9 on. Refuses a file whose model and start time already have a run in the project, and a private dataset's predictions for a public project."""
     # Imported here so the other commands don't import wandb.
     from wandb.errors import Error as WandbError
 

@@ -503,6 +503,9 @@ def test_a_file_without_model_digest_compares_with_one_whose_digest_is_none(
     bank = write("bank", BANK)
     data = json.loads(bank.read_text())
     del data["provenance"]["model_digest"]
+    # Nor do they have the Flock ref's parts (022).
+    for key in ("model_org", "model_project", "model_path"):
+        del data["provenance"][key]
     bank.write_text(json.dumps(data))
 
     assert compare(bank, write("new", BANK)).breaches == []
