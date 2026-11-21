@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
@@ -9,11 +10,11 @@
 
 	interface Props {
 		open: boolean;
-		org: string;
+		scope: Scope;
 		path: string;
 	}
 
-	let { open = $bindable(), org, path }: Props = $props();
+	let { open = $bindable(), scope, path }: Props = $props();
 
 	// Typing the path is the confirmation. Reset once the dialog has closed, so its text stays
 	// put while it animates closed.
@@ -25,18 +26,18 @@
 		pending = true;
 		error = null;
 		try {
-			await datasetCall(datasetsApi(org, 'delete'), { method: 'POST', body: { path } });
+			await datasetCall(datasetsApi(scope, 'delete'), { method: 'POST', body: { path } });
 			toast.success(`Deleted ${nameOf(path)}`);
 			open = false;
 			// S3 has no folders: one that only held this dataset is gone with it, so go up to the
 			// nearest that's left (the root always is).
 			let to = parentOf(path);
 			while (to) {
-				const res = await fetch(datasetsApi(org, 'at', { path: to }));
+				const res = await fetch(datasetsApi(scope, 'at', { path: to }));
 				if (res.ok) break;
 				to = parentOf(to);
 			}
-			await goto(datasetsHref(org, to), { replace: true });
+			await goto(datasetsHref(scope, to), { replace: true });
 		} catch (e) {
 			error = (e as Error).message;
 		} finally {

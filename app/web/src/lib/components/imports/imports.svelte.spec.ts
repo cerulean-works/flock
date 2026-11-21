@@ -73,7 +73,12 @@ describe('HFImportRows', () => {
 		});
 		const list = new HFImportList('acme');
 		const stop = list.watch();
-		render(HFImportRows, { org: 'acme', list, kind: 'dataset', folder: 'web' });
+		render(HFImportRows, {
+			scope: { org: 'acme', project: null },
+			list,
+			kind: 'dataset',
+			folder: 'web'
+		});
 		await expect.element(screen.getByText('Downloading. 1.0 MB of 4.0 MB')).toBeVisible();
 		await expect.element(screen.getByText('other')).not.toBeInTheDocument();
 		const bar = screen.getByRole('progressbar');
@@ -99,7 +104,12 @@ describe('HFImportRows', () => {
 		});
 		const list = new HFImportList('acme');
 		const stop = list.watch();
-		render(HFImportRows, { org: 'acme', list, kind: 'dataset', folder: 'web' });
+		render(HFImportRows, {
+			scope: { org: 'acme', project: null },
+			list,
+			kind: 'dataset',
+			folder: 'web'
+		});
 		await expect.element(screen.getByRole('progressbar')).toBeVisible();
 		state = 'finished';
 		await list.refresh();
@@ -131,7 +141,7 @@ describe('HFImportRows', () => {
 		});
 		const list = new HFImportList('acme');
 		const stop = list.watch();
-		render(HFImportRows, { org: 'acme', list, kind: 'model' });
+		render(HFImportRows, { scope: { org: 'acme', project: null }, list, kind: 'model' });
 		await expect.element(screen.getByText('The import of acme/data failed.')).toBeVisible();
 		await expect.element(screen.getByText('The Hub refused the access token.')).toBeVisible();
 		await expect.element(screen.getByText('flock models import acme/data acme/qwen')).toBeVisible();
@@ -165,7 +175,12 @@ describe('HFDatasetDialog', () => {
 			'/api/imports/acme/hf/preview': () => preview,
 			'/api/imports/acme/hf': () => job()
 		});
-		render(HFDatasetDialog, { open: true, org: 'acme', folder: 'web', onstarted: started });
+		render(HFDatasetDialog, {
+			open: true,
+			scope: { org: 'acme', project: 'pretrain' },
+			folder: 'web',
+			onstarted: started
+		});
 		await screen.getByLabelText('Repository').fill('acme');
 		await screen.getByRole('button', { name: 'Continue' }).click();
 		await expect.element(screen.getByText('Enter the repository as owner/name')).toBeVisible();
@@ -192,6 +207,7 @@ describe('HFDatasetDialog', () => {
 		await screen.getByLabelText('train of fr').click();
 		await screen.getByRole('button', { name: 'Import' }).click();
 		expect(body(calls.at(-1)?.init)).toEqual({
+			project: 'pretrain',
 			kind: 'dataset',
 			repo: 'acme/data',
 			configs: { en: ['test'], fr: null },
@@ -203,7 +219,12 @@ describe('HFDatasetDialog', () => {
 
 	it('needs a split chosen before it imports', async () => {
 		serve({ '/api/imports/acme/hf/preview': () => ({ ...preview, max_bytes: 10 ** 9 }) });
-		render(HFDatasetDialog, { open: true, org: 'acme', folder: '', onstarted: vi.fn() });
+		render(HFDatasetDialog, {
+			open: true,
+			scope: { org: 'acme', project: null },
+			folder: '',
+			onstarted: vi.fn()
+		});
 		await screen.getByLabelText('Repository').fill('acme/data');
 		await screen.getByRole('button', { name: 'Continue' }).click();
 		await expect.element(screen.getByLabelText('Folder')).toHaveValue('data');
@@ -230,7 +251,12 @@ describe('HFDatasetDialog', () => {
 					{ status: 409 }
 				)
 		});
-		render(HFDatasetDialog, { open: true, org: 'acme', folder: 'web', onstarted: vi.fn() });
+		render(HFDatasetDialog, {
+			open: true,
+			scope: { org: 'acme', project: null },
+			folder: 'web',
+			onstarted: vi.fn()
+		});
 		await screen.getByLabelText('Repository').fill('acme/data');
 		await screen.getByRole('button', { name: 'Continue' }).click();
 		await screen.getByRole('button', { name: 'Import' }).click();
@@ -247,13 +273,18 @@ describe('HFModelDialog', () => {
 	it('imports a model as a new version, named after its repository', async () => {
 		const started = vi.fn();
 		const calls = serve({ '/api/imports/acme/hf': () => job({ kind: 'model' }) });
-		render(HFModelDialog, { open: true, org: 'acme', onstarted: started });
+		render(HFModelDialog, {
+			open: true,
+			scope: { org: 'acme', project: null },
+			onstarted: started
+		});
 		await screen.getByLabelText('Repository').fill('Qwen/Qwen3-0.6B');
 		await expect.element(screen.getByLabelText('Model name')).toHaveValue('qwen3-0.6b');
 		await screen.getByLabelText('Tags').fill('base, qwen');
 		await screen.getByLabelText('Make it the primary version').click();
 		await screen.getByRole('button', { name: 'Import' }).click();
 		expect(body(calls[0].init)).toEqual({
+			project: null,
 			kind: 'model',
 			repo: 'Qwen/Qwen3-0.6B',
 			revision: 'main',
@@ -276,7 +307,11 @@ describe('HFModelDialog', () => {
 					{ status: 409 }
 				)
 		});
-		render(HFModelDialog, { open: true, org: 'acme', onstarted: vi.fn() });
+		render(HFModelDialog, {
+			open: true,
+			scope: { org: 'acme', project: null },
+			onstarted: vi.fn()
+		});
 		await screen.getByLabelText('Repository').fill('Qwen/Big');
 		await screen.getByLabelText('Model name').fill('big');
 		await screen.getByRole('button', { name: 'Import' }).click();

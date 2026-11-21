@@ -1,23 +1,24 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import BoxIcon from '@lucide/svelte/icons/box';
 	import { toast } from 'svelte-sonner';
 	import * as AlertDialog from '#lib/components/ui/alert-dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { TRASH_DAYS, modelApi, modelCall } from '#lib/models.ts';
+	import { TRASH_DAYS, modelApi, modelCall, modelRef } from '#lib/models.ts';
 	import { count } from '#lib/utils.ts';
 	import ConfirmField from '../ConfirmField.svelte';
 	import ItemFailures from '../ItemFailures.svelte';
 
 	interface Props {
 		open: boolean;
-		org: string;
+		scope: Scope;
 		/** The models' names, two or more (one is DeleteModelDialog's). */
 		names: readonly string[];
 		/** Once done: the models deleted leave the list. */
 		ondeleted: (names: string[]) => void | Promise<void>;
 	}
 
-	let { open = $bindable(), org, names, ondeleted }: Props = $props();
+	let { open = $bindable(), scope, names, ondeleted }: Props = $props();
 
 	/** The names listed; the rest are counted. */
 	const LISTED = 10;
@@ -41,7 +42,7 @@
 		const failed: { path: string; error: string | null }[] = [];
 		for (const name of names) {
 			try {
-				await modelCall(modelApi(org, name), { method: 'DELETE' });
+				await modelCall(modelApi(scope, name), { method: 'DELETE' });
 				done.push(name);
 			} catch (e) {
 				failed.push({ path: name, error: (e as Error).message });
@@ -88,7 +89,7 @@
 					{#each names.slice(0, LISTED) as name (name)}
 						<li class="flex items-center gap-2 py-0.5">
 							<BoxIcon class="size-4 flex-none text-muted-foreground" />
-							<span class="truncate font-mono text-[12.5px]">{org}/{name}</span>
+							<span class="truncate font-mono text-[12.5px]">{modelRef(scope, name)}</span>
 						</li>
 					{/each}
 					{#if names.length > LISTED}

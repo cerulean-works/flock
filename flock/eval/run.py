@@ -52,7 +52,7 @@ class EvalConfig:
 
     Args:
         model (`str`):
-            The model as `repo@revision`, or a version in the Flock registry as `flock:org/name`, `flock:org/name@{number}`, `flock:org/name@{tag}` or `flock:org/name@primary`.
+            The model as `repo@revision`, or a version in the Flock registry as `flock:org/path`, `flock:org/path@{number}`, `flock:org/path@{tag}` or `flock:org/path@primary`, with folders in the path, or for a project's model in your default org `flock:project:path[@version]`.
         tasks (`tuple[str, ...]`, *optional*):
             Registry names of the tasks to run, in order.
         out (`Path`, *optional*):
@@ -175,6 +175,9 @@ def evaluate(config: EvalConfig) -> Results:
     provenance = Provenance.collect(
         model=model.name,
         model_digest=model.digest,
+        model_org=model.flock_ref.org if model.flock_ref else None,
+        model_project=model.flock_ref.project if model.flock_ref else None,
+        model_path=model.flock_ref.path if model.flock_ref else None,
         command=config.command,
         device=model.device,
         dtype=model.dtype,

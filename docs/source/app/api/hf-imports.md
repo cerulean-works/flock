@@ -29,6 +29,7 @@ The body has these fields:
 | `name` | required for models | The model to add a version to, created if it's new. |
 | `tags` | `[]` | The new version's tags. |
 | `primary` | `false` | Make the new version primary once it's committed. |
+| `project` | `null` | A project of the organization to import into, by name. `dest` and `name` are then inside the project. `null` imports into the organization's datasets or models. |
 
 The server asks the Hub before it answers, so these are refused at once:
 
@@ -46,6 +47,7 @@ The server asks the Hub before it answers, so these are refused at once:
 | `id`, `kind`, `repo`, `revision` | What was asked for. |
 | `sha` | The commit the files come from. |
 | `dest` | The dataset folder, or the model's name. |
+| `project` | The project it imports into, or `null`. |
 | `configs` | A dataset's configs, each with the splits imported, such as `{"en": ["test"], "fr": ["train"]}`. |
 | `tags`, `primary` | A model version's tags, and whether it becomes primary. |
 | `state` | `running`, `finished`, `failed`, `cancelled` or `interrupted`. |

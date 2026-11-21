@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
@@ -16,11 +17,12 @@
 	// before it starts.
 	interface Props {
 		open: boolean;
-		org: string;
+		/** Where the import lands (D159). */
+		scope: Scope;
 		onstarted: (job: HFImport) => void;
 	}
 
-	let { open = $bindable(), org, onstarted }: Props = $props();
+	let { open = $bindable(), scope, onstarted }: Props = $props();
 
 	let repo = $state('');
 	let revision = $state('main');
@@ -46,9 +48,10 @@
 		pending = true;
 		command = null;
 		try {
-			const job = await hfCall<HFImport>(hfApi(org), {
+			const job = await hfCall<HFImport>(hfApi(scope.org), {
 				method: 'POST',
 				body: {
+					project: scope.project,
 					kind: 'model',
 					repo: target,
 					revision: revision.trim() || 'main',

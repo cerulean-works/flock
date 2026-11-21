@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
@@ -26,13 +27,14 @@
 	// write to (D124, D129).
 	interface Props {
 		open: boolean;
-		org: string;
+		/** Where the import lands (D159). */
+		scope: Scope;
 		/** The folder shown, where the dataset lands by default. */
 		folder: string;
 		onstarted: (job: HFImport) => void;
 	}
 
-	let { open = $bindable(), org, folder, onstarted }: Props = $props();
+	let { open = $bindable(), scope, folder, onstarted }: Props = $props();
 
 	type Config = HFDatasetPreview['configs'][number];
 
@@ -53,7 +55,9 @@
 	const tooLarge = $derived(!!preview && size > preview.max_bytes);
 	const shownCommand = $derived(
 		command ??
-			(tooLarge && !empty ? datasetCommand(org, preview?.repo ?? repo, dest.trim(), chosen) : null)
+			(tooLarge && !empty
+				? datasetCommand(scope, preview?.repo ?? repo, dest.trim(), chosen)
+				: null)
 	);
 
 	const allSplits = (config: Config) => config.splits?.map((s) => s.name) ?? null;
@@ -87,7 +91,7 @@
 		pending = true;
 		try {
 			const found = await hfCall<HFDatasetPreview>(
-				hfApi(org, 'preview', { kind: 'dataset', repo: target }),
+				hfApi(scope.org, 'preview', { kind: 'dataset', repo: target }),
 				{ token: token.trim() || undefined }
 			);
 			preview = found;
@@ -109,9 +113,10 @@
 		pending = true;
 		command = null;
 		try {
-			const job = await hfCall<HFImport>(hfApi(org), {
+			const job = await hfCall<HFImport>(hfApi(scope.org), {
 				method: 'POST',
 				body: {
+					project: scope.project,
 					kind: 'dataset',
 					repo: preview.repo,
 					configs: chosen,

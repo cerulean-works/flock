@@ -118,13 +118,13 @@ def test_model_ref_parses_flock_models(model_id: str, repo: str, revision: str) 
         "flock:acme",
         "flock:acme/",
         "flock:/m",
-        "flock:a/b/c",
+        "flock:a/b:c",
         "flock:a/b@",
         "flock:a/b@1@2",
     ],
 )
 def test_model_ref_refuses_malformed_flock_models(model_id: str) -> None:
-    with pytest.raises(ValueError, match=r"flock:org/name\[@version\]"):
+    with pytest.raises(ValueError, match=r"flock:org/path\[@version\]"):
         ModelRef.parse(model_id)
 
 
@@ -140,7 +140,7 @@ def test_model_ref_resolves_a_flock_version_to_its_number_and_digest(
     monkeypatch.setattr(model, "_flock_hub", lambda: SimpleNamespace(resolve=resolve))
     resolved = ModelRef.parse("flock:acme/olmo2-1b@checkpoint-12000").resolve()
     assert asked == ["acme/olmo2-1b@checkpoint-12000"]
-    assert resolved == ModelRef("acme/olmo2-1b", "12", "flock", "d" * 64)
+    assert resolved == ModelRef("acme/olmo2-1b", "12", "flock", "d" * 64, org="acme")
     assert str(resolved) == "flock:acme/olmo2-1b@12"
 
 

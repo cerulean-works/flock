@@ -1,5 +1,6 @@
 <script lang="ts">
 	import BoxIcon from '@lucide/svelte/icons/box';
+	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import HardDriveIcon from '@lucide/svelte/icons/hard-drive';
@@ -19,6 +20,7 @@
 	import { modelsHref } from '#lib/models.ts';
 	import { storageHref } from '#lib/storage.ts';
 	import type { Access, OrgEntry, ProjectInfo } from '#lib/types.ts';
+	import { cn } from '#lib/utils.ts';
 	import { entityHref, loginHref, projectHref } from '#lib/workspace/url.ts';
 	import OrgMark from './OrgMark.svelte';
 	import WorkspaceSwitcher from './WorkspaceSwitcher.svelte';
@@ -69,6 +71,24 @@
 	);
 	const route = $derived(page.route.id);
 
+	/**
+	 * The project in view (D169). On its pages the sidebar slides over to the project's own:
+	 * the way back, then its runs, datasets and models.
+	 */
+	const project = $derived(
+		org && page.params.project && route?.startsWith('/(app)/[entity]/[project]')
+			? page.params.project
+			: null
+	);
+	// The project panel keeps the last project while it slides back out. It reads `project` first,
+	// since effects don't run in server rendering: the page arrives with the panel filled.
+	let lastProject = $state<string | null>(null);
+	$effect.pre(() => {
+		if (project) lastProject = project;
+	});
+	const shownProject = $derived(project ?? lastProject);
+	const projectRoute = '/(app)/[entity]/[project]';
+
 	const SHOWN = 12;
 	let showAll = $state(false);
 	let searching = $state(false);
@@ -110,167 +130,260 @@
 		{/if}
 	</div>
 
-	<nav class="min-h-0 flex-1 overflow-y-auto px-2 py-3" aria-label="Main">
-		{#if outside && org}
-			<!-- The org being visited, in place of the switcher's: it isn't one of the viewer's. -->
-			<a
-				class="mb-2 flex items-center gap-2.5 rounded-lg px-1 py-1 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 aria-[current=page]:bg-muted"
-				href={entityHref(org)}
-				aria-current={route === '/(app)/[entity]' ? 'page' : undefined}
-				title={org}
-			>
-				<OrgMark name={orgName ?? org} src={orgAvatar} />
-				<span class="min-w-0 flex-1 truncate text-[13.5px] font-medium">{orgName ?? org}</span>
-			</a>
-		{/if}
-		<div class="grid gap-0.5">
-			{#if signedIn}
-				<a
-					class={ITEM}
-					href={resolve('/(app)')}
-					aria-current={route === '/(app)' ? 'page' : undefined}
-				>
-					<HouseIcon /> Home
-				</a>
-			{/if}
-			{#if org && !outside}
-				<a
-					class={ITEM}
-					href={entityHref(org)}
-					aria-current={route === '/(app)/[entity]' ? 'page' : undefined}
-				>
-					<ActivityIcon /> Runs
-				</a>
-				{#if s3}
+	<nav class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto" aria-label="Main">
+		<!-- Two panels side by side: the org's, and on a project's pages the project's, slid in
+		     from the right. The one out of view is inert, so focus never lands in it. -->
+		<div
+			class={[
+				'flex w-[200%] items-start transition-transform duration-200 ease-out motion-reduce:transition-none',
+				project && '-translate-x-1/2'
+			]}
+		>
+			<div class="w-1/2 min-w-0 px-2 py-3" inert={!!project}>
+				{#if outside && org}
+					<!-- The org being visited, in place of the switcher's: it isn't one of the viewer's. -->
 					<a
-						class={ITEM}
-						href={datasetsHref(org)}
-						aria-current={route?.startsWith('/(app)/datasets/') ? 'page' : undefined}
+						class="mb-2 flex items-center gap-2.5 rounded-lg px-1 py-1 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 aria-[current=page]:bg-muted"
+						href={entityHref(org)}
+						aria-current={route === '/(app)/[entity]' ? 'page' : undefined}
+						title={org}
 					>
-						<DatabaseIcon /> Datasets
-					</a>
-					<a
-						class={ITEM}
-						href={modelsHref(org)}
-						aria-current={route?.startsWith('/(app)/models/') ? 'page' : undefined}
-					>
-						<BoxIcon /> Models
-					</a>
-					<a
-						class={ITEM}
-						href={storageHref(org)}
-						aria-current={route?.startsWith('/(app)/storage/') ? 'page' : undefined}
-					>
-						<HardDriveIcon /> Storage
+						<OrgMark name={orgName ?? org} src={orgAvatar} />
+						<span class="min-w-0 flex-1 truncate text-[13.5px] font-medium">{orgName ?? org}</span>
 					</a>
 				{/if}
-			{/if}
-		</div>
-
-		{#if org}
-			<div class="mx-2 mt-4 border-t border-divider pt-3">
-				<div class="flex h-7 items-center gap-1">
-					<h2 class="flex-1 text-xs font-medium text-muted-foreground">
-						{outside ? 'Public projects' : 'Projects'}
-					</h2>
-					<Button
-						variant="ghost"
-						size="icon-xs"
-						class={['text-muted-foreground', searching && 'bg-muted']}
-						aria-label="Find a project"
-						title="Find a project"
-						aria-pressed={searching}
-						onclick={() => {
-							searching = !searching;
-							query = '';
-						}}
-					>
-						<SearchIcon />
-					</Button>
-					{#if !outside}
-						<Button
-							variant="ghost"
-							size="icon-xs"
-							class="text-muted-foreground"
-							aria-label="New project"
-							title="New project"
-							onclick={() => (creating = true)}
-						>
-							<PlusIcon />
-						</Button>
-					{/if}
-				</div>
-			</div>
-			{#if searching}
-				<!-- svelte-ignore a11y_autofocus -->
-				<input
-					class="mx-2 mt-2 h-7 w-[calc(100%-1rem)] rounded-md border border-input bg-background px-2 text-[13px] outline-none placeholder:text-faint focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-					placeholder="Find a project…"
-					aria-label="Find a project"
-					bind:value={query}
-					autofocus
-					onkeydown={(e) => {
-						if (e.key === 'Escape') {
-							searching = false;
-							query = '';
-						}
-					}}
-				/>
-			{/if}
-			<!-- One column no wider than the sidebar, so a long name truncates instead of widening every row. -->
-			<ul class="mt-2 grid grid-cols-1 gap-0.5">
-				{#each shown as p (p.name)}
-					{@const here = page.params.project === p.name}
-					<!-- The project's menu shows over the row's end while it's hovered, focused or
-							     open, in place of the running dot: both sit in one 24px slot, 4px in. -->
-					<li class="group/project relative">
+				<div class="grid gap-0.5">
+					{#if signedIn}
 						<a
 							class={ITEM}
-							href={projectHref(org, p.name)}
-							aria-current={here ? 'page' : undefined}
-							title={p.description ?? p.name}
+							href={resolve('/(app)')}
+							aria-current={route === '/(app)' ? 'page' : undefined}
+						>
+							<HouseIcon /> Home
+						</a>
+					{/if}
+					{#if org && !outside}
+						<a
+							class={ITEM}
+							href={entityHref(org)}
+							aria-current={route === '/(app)/[entity]' ? 'page' : undefined}
+						>
+							<ActivityIcon /> Runs
+						</a>
+						{#if s3}
+							<a
+								class={ITEM}
+								href={datasetsHref(org)}
+								aria-current={route?.startsWith('/(app)/datasets/') ? 'page' : undefined}
+							>
+								<DatabaseIcon /> Datasets
+							</a>
+							<a
+								class={ITEM}
+								href={modelsHref(org)}
+								aria-current={route?.startsWith('/(app)/models/') ? 'page' : undefined}
+							>
+								<BoxIcon /> Models
+							</a>
+							<a
+								class={ITEM}
+								href={storageHref(org)}
+								aria-current={route?.startsWith('/(app)/storage/') ? 'page' : undefined}
+							>
+								<HardDriveIcon /> Storage
+							</a>
+						{/if}
+					{/if}
+				</div>
+
+				{#if org}
+					<div class="mx-2 mt-4 border-t border-divider pt-3">
+						<div class="flex h-7 items-center gap-1">
+							<h2 class="flex-1 text-xs font-medium text-muted-foreground">
+								{outside ? 'Public projects' : 'Projects'}
+							</h2>
+							<Button
+								variant="ghost"
+								size="icon-xs"
+								class={['text-muted-foreground', searching && 'bg-muted']}
+								aria-label="Find a project"
+								title="Find a project"
+								aria-pressed={searching}
+								onclick={() => {
+									searching = !searching;
+									query = '';
+								}}
+							>
+								<SearchIcon />
+							</Button>
+							{#if !outside}
+								<Button
+									variant="ghost"
+									size="icon-xs"
+									class="text-muted-foreground"
+									aria-label="New project"
+									title="New project"
+									onclick={() => (creating = true)}
+								>
+									<PlusIcon />
+								</Button>
+							{/if}
+						</div>
+					</div>
+					{#if searching}
+						<!-- svelte-ignore a11y_autofocus -->
+						<input
+							class="mx-2 mt-2 h-7 w-[calc(100%-1rem)] rounded-md border border-input bg-background px-2 text-[13px] outline-none placeholder:text-faint focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+							placeholder="Find a project…"
+							aria-label="Find a project"
+							bind:value={query}
+							autofocus
+							onkeydown={(e) => {
+								if (e.key === 'Escape') {
+									searching = false;
+									query = '';
+								}
+							}}
+						/>
+					{/if}
+					<!-- One column no wider than the sidebar, so a long name truncates instead of widening every row. -->
+					<ul class="mt-2 grid grid-cols-1 gap-0.5">
+						{#each shown as p (p.name)}
+							{@const here = page.params.project === p.name}
+							<!-- The project's menu shows over the row's end while it's hovered, focused or
+							     open, in place of the running dot: both sit in one 24px slot, 4px in. -->
+							<li class="group/project relative">
+								<a
+									class={ITEM}
+									href={projectHref(org, p.name)}
+									aria-current={here ? 'page' : undefined}
+									title={p.description ?? p.name}
+								>
+									<FolderIcon />
+									<span class="min-w-0 flex-1 truncate">{p.name}</span>
+									<span class="grid size-6 flex-none place-items-center">
+										{#if p.active_run_count}
+											<span
+												class="size-1.5 animate-live rounded-full bg-state-running text-state-running group-focus-within/project:invisible group-hover/project:invisible motion-reduce:animate-none"
+												title="{p.active_run_count} running"
+											></span>
+										{/if}
+									</span>
+								</a>
+								{#if !outside}
+									<div class="absolute inset-y-0 right-1 flex items-center">
+										<ProjectMenu
+											entity={org}
+											project={p}
+											from={here ? 'project' : 'list'}
+											class="text-muted-foreground opacity-0 group-focus-within/project:opacity-100 group-hover/project:opacity-100 aria-expanded:opacity-100"
+										/>
+									</div>
+								{/if}
+							</li>
+						{:else}
+							<li class="px-2 py-1 text-[13px] text-muted-foreground">
+								{query.trim()
+									? 'No matching projects'
+									: outside
+										? 'No public projects'
+										: 'No projects yet'}
+							</li>
+						{/each}
+					</ul>
+					{#if matches.length > shown.length}
+						<button
+							class="mt-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+							onclick={() => (showAll = true)}
+						>
+							Show {matches.length - shown.length} more
+						</button>
+					{/if}
+				{/if}
+			</div>
+			<div
+				class="w-1/2 min-w-0 px-2 py-3"
+				inert={!project}
+				role="group"
+				aria-label={shownProject ? `Project ${shownProject}` : undefined}
+			>
+				{#if org && shownProject}
+					{@const scope = { org, project: shownProject }}
+					{@const info = projects.find((p) => p.name === shownProject)}
+					<!-- Where Home sits in the org's panel, so the way back is under the pointer. -->
+					<a
+						class={cn(ITEM, 'text-muted-foreground hover:text-foreground')}
+						href={signedIn ? resolve('/(app)') : entityHref(org)}
+					>
+						<ChevronLeftIcon />
+						{signedIn ? 'Home' : (orgName ?? org)}
+					</a>
+					<!-- The project, as the switcher shows the org: a tile, its name, and what it's in. -->
+					<div class="mt-3 mb-2 flex items-center gap-2.5 rounded-lg px-1 py-1">
+						<span
+							class="grid size-8 flex-none place-items-center rounded-lg border border-divider bg-background text-muted-foreground shadow-xs [&_svg]:size-4"
+							aria-hidden="true"
 						>
 							<FolderIcon />
-							<span class="min-w-0 flex-1 truncate">{p.name}</span>
-							<span class="grid size-6 flex-none place-items-center">
-								{#if p.active_run_count}
+						</span>
+						<div class="min-w-0 flex-1">
+							<h2
+								class="truncate text-[14px] leading-5 font-medium text-foreground"
+								title={info?.description ?? shownProject}
+							>
+								{shownProject}
+							</h2>
+							<p class="flex items-center gap-1.5 truncate text-xs leading-4 text-muted-foreground">
+								<span class="truncate">{orgName ?? org}</span>
+								{#if info?.active_run_count}
+									<span aria-hidden="true">·</span>
 									<span
-										class="size-1.5 animate-live rounded-full bg-state-running text-state-running group-focus-within/project:invisible group-hover/project:invisible motion-reduce:animate-none"
-										title="{p.active_run_count} running"
+										class="size-1.5 flex-none animate-live rounded-full bg-state-running text-state-running motion-reduce:animate-none"
 									></span>
+									<span class="tabular-nums">{info.active_run_count} running</span>
 								{/if}
-							</span>
-						</a>
-						{#if !outside}
-							<div class="absolute inset-y-0 right-1 flex items-center">
-								<ProjectMenu
-									entity={org}
-									project={p}
-									from={here ? 'project' : 'list'}
-									class="text-muted-foreground opacity-0 group-focus-within/project:opacity-100 group-hover/project:opacity-100 aria-expanded:opacity-100"
-								/>
-							</div>
+							</p>
+						</div>
+						{#if info && !outside}
+							<ProjectMenu
+								entity={org}
+								project={info}
+								from="project"
+								class="text-muted-foreground"
+							/>
 						{/if}
-					</li>
-				{:else}
-					<li class="px-2 py-1 text-[13px] text-muted-foreground">
-						{query.trim()
-							? 'No matching projects'
-							: outside
-								? 'No public projects'
-								: 'No projects yet'}
-					</li>
-				{/each}
-			</ul>
-			{#if matches.length > shown.length}
-				<button
-					class="mt-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-					onclick={() => (showAll = true)}
-				>
-					Show {matches.length - shown.length} more
-				</button>
-			{/if}
-		{/if}
+					</div>
+					<div class="grid gap-0.5">
+						<a
+							class={ITEM}
+							href={projectHref(org, shownProject)}
+							aria-current={route === projectRoute || route?.startsWith(`${projectRoute}/runs`)
+								? 'page'
+								: undefined}
+						>
+							<ActivityIcon /> Runs
+						</a>
+						<!-- A project's datasets and models are its org's members' only (D165). -->
+						{#if s3 && !outside}
+							<a
+								class={ITEM}
+								href={datasetsHref(scope)}
+								aria-current={route?.startsWith(`${projectRoute}/datasets`) ? 'page' : undefined}
+							>
+								<DatabaseIcon /> Datasets
+							</a>
+							<a
+								class={ITEM}
+								href={modelsHref(scope)}
+								aria-current={route?.startsWith(`${projectRoute}/models`) ? 'page' : undefined}
+							>
+								<BoxIcon /> Models
+							</a>
+						{/if}
+					</div>
+				{/if}
+			</div>
+		</div>
 	</nav>
 
 	<div class="flex-none border-t border-divider p-2">

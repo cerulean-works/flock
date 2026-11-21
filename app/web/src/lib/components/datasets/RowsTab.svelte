@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
@@ -13,7 +14,7 @@
 	import ImageDialog from './ImageDialog.svelte';
 
 	interface Props {
-		org: string;
+		scope: Scope;
 		path: string;
 		/** The dataset at the version shown: every read asks for that version. */
 		info: DatasetInfo;
@@ -21,7 +22,7 @@
 		hidden: SvelteSet<string>;
 	}
 
-	let { org, path, info, hidden }: Props = $props();
+	let { scope, path, info, hidden }: Props = $props();
 
 	// Pages by offset, kept in the URL (D90): 50 rows, or 10 with binary columns.
 	const size = $derived(info.binary ? 10 : 50);
@@ -51,7 +52,7 @@
 		const controller = new AbortController();
 		loading = true;
 		failed = null;
-		datasetCall<RowsPage>(datasetsApi(org, 'rows', query), { signal: controller.signal })
+		datasetCall<RowsPage>(datasetsApi(scope, 'rows', query), { signal: controller.signal })
 			.then((got) => (rows = got))
 			.catch((e: Error) => {
 				if (!controller.signal.aborted) failed = e.message;
@@ -156,7 +157,7 @@
 			const key = `${row}:${column.name}`;
 			if (!cell || !isCut(cell) || full.has(key)) return;
 			datasetCall<FullCell>(
-				datasetsApi(org, 'cell', { path, version: info.version, row, column: column.name })
+				datasetsApi(scope, 'cell', { path, version: info.version, row, column: column.name })
 			)
 				.then((got) => full.set(key, cell.k === 'vec' ? asVector(cell, got.cell) : got.cell))
 				.catch((e: Error) => full.set(key, e));

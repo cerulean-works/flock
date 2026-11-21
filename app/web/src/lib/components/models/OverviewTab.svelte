@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import { flatten } from '#lib/data/run.ts';
 	import { readText, runPathHref, sortTags } from '#lib/models.ts';
 	import type { ModelInfo, ModelVersionDetail } from '#lib/types.ts';
@@ -7,12 +8,12 @@
 	import TagChip from '../TagChip.svelte';
 
 	interface Props {
-		org: string;
+		scope: Scope;
 		info: ModelInfo;
 		version: ModelVersionDetail;
 	}
 
-	let { org, info, version }: Props = $props();
+	let { scope, info, version }: Props = $props();
 
 	/** A file of the version read from storage: its text, or why it couldn't be read. */
 	type Read = { text: string } | { error: string } | null;
@@ -27,7 +28,7 @@
 		let stale = false;
 		const read = (path: string, set: (r: Read) => void) => {
 			if (!has(path)) return;
-			readText(org, `${version.prefix}${path}`)
+			readText(scope.org, `${version.prefix}${path}`)
 				.then((text) => stale || set({ text }))
 				.catch((e: Error) => stale || set({ error: e.message }));
 		};

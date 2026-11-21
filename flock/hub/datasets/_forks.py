@@ -178,9 +178,11 @@ def fork(
 
     Args:
         path (`str`):
-            The dataset to fork, such as `web/fineweb-edu/train`.
+            The dataset to fork, such as `web/fineweb-edu/train`, or `project:path` for a
+            project's dataset (022).
         to (`str`):
-            Where the fork goes. Refused when something is there.
+            Where the fork goes, as a path or `project:path`, so a global dataset can be forked
+            into a project. Refused when something is there.
         version (`str` or `int`, *optional*):
             A version number or tag. Defaults to the latest.
         org (`str`, *optional*):
@@ -250,9 +252,9 @@ def blend(
     Args:
         sources (`Mapping[str, int | float]`):
             Each source, as `path` or `path@version` (a number or tag), to a row count (`int`)
-            or a fraction of `total` (`float`).
+            or a fraction of `total` (`float`). A project's dataset is `project:path` (022).
         to (`str`):
-            Where the blend goes. Refused when something is there.
+            Where the blend goes, as a path or `project:path`. Refused when something is there.
         total (`int`, *optional*):
             The blend's rows, when the amounts are fractions.
         seed (`int`, *optional*, defaults to `42`):

@@ -24,11 +24,11 @@ from flock.hub.models._common import (
     ModelFile,
     ModelVersion,
     Progress,
-    Ref,
     Registry,
     TransferPool,
     cache_root,
     concurrency,
+    parse_ref,
     s3_client,
     sha256_file,
 )
@@ -50,6 +50,13 @@ type LoadedModel = BaseModel
 
 
 def version_folder(version: ModelVersion) -> Path:
+    """Where a version's files are cached: `models/{org}/{digest}/`, since the digest names
+    the bytes whatever the model's scope or path (D164)."""
+    return cache_root() / "models" / version.org / version.digest
+
+
+def old_version_folder(version: ModelVersion) -> Path:
+    """Where clients before 022 cached a global version: `models/{org}/{name}/{digest}/`."""
     return cache_root() / "models" / version.org / version.name / version.digest
 
 
@@ -177,6 +184,9 @@ def fetch(
     wanted = {f.path for f in files}
     if wanted <= _verified_paths(folder):
         return folder
+    # A copy an older client downloaded is still used, when it has every file wanted.
+    if version.project is None and wanted <= _verified_paths(old := old_version_folder(version)):
+        return old
     folder.mkdir(parents=True, exist_ok=True)
     with _locked(folder):
         verified = _verified_paths(folder)
@@ -189,10 +199,11 @@ def fetch(
     return folder
 
 
-def resolve(ref: str) -> ModelVersion:
+def resolve(ref: str, *, project: str | None = None, org: str | None = None) -> ModelVersion:
     """The version `ref` names, with its files."""
+    parsed = parse_ref(ref, project=project, org=org)
     with Registry() as registry:
-        return registry.resolve(Ref.parse(ref))
+        return registry.resolve(parsed)
 
 
 def download(
@@ -201,10 +212,14 @@ def download(
     allow: str | Sequence[str] | None = None,
     ignore: str | Sequence[str] | None = None,
     include_training_state: bool = False,
+    project: str | None = None,
+    org: str | None = None,
 ) -> Path:
     """
     Downloads a version's files into the cache and returns its folder,
-    `~/.cache/flock/models/{org}/{name}/{digest}/` (`FLOCK_CACHE` replaces `~/.cache/flock`).
+    `~/.cache/flock/models/{org}/{digest}/` (`FLOCK_CACHE` replaces `~/.cache/flock`). A
+    complete copy that an older client cached at `~/.cache/flock/models/{org}/{name}/{digest}/`
+    is returned instead of downloading again.
 
     Files already in the cache aren't downloaded again, and a download that stopped partway
     continues from where it stopped. Every file is checked against its sha256 before it's put
@@ -213,14 +228,20 @@ def download(
 
     Args:
         ref (`str`):
-            The version: `org/name@12`, `org/name@checkpoint-12000`, `org/name@primary`, or
-            `org/name` for the primary.
+            The version: `org/path@12`, `org/path@checkpoint-12000`, `org/path@primary`, or
+            `org/path` for the primary. A project's model is `project:path@12`, or a path with
+            `project`.
         allow (`str` or `Sequence[str]`, *optional*):
             Glob patterns of the files to download. Defaults to every file.
         ignore (`str` or `Sequence[str]`, *optional*):
             Glob patterns of files to skip.
         include_training_state (`bool`, *optional*, defaults to `False`):
             Also download `training_state/`, which is skipped otherwise.
+        project (`str`, *optional*):
+            The project the model belongs to, by name or as `org/project`. `ref` is then a path
+            inside it.
+        org (`str`, *optional*):
+            The project's org. Defaults to your default org.
 
     Returns:
         `Path`: the version's folder in the cache.
@@ -228,7 +249,7 @@ def download(
     Raises:
         [`~hub.models.ModelError`]: when the version doesn't exist, or a file didn't match its sha256.
     """
-    version = resolve(ref)
+    version = resolve(ref, project=project, org=org)
     assert version.files is not None
     return fetch(version, select(version.files, allow, ignore, include_training_state))
 
@@ -246,6 +267,8 @@ def load_from_hub(
     *,
     device: Device = None,
     dtype: DType = None,
+    project: str | None = None,
+    org: str | None = None,
 ) -> LoadedModel:
     """
     Downloads a version and builds the model with its weights.
@@ -257,12 +280,18 @@ def load_from_hub(
 
     Args:
         ref (`str`):
-            The version: `org/name@12`, `org/name@checkpoint-12000`, `org/name@primary`, or
-            `org/name` for the primary.
+            The version: `org/path@12`, `org/path@checkpoint-12000`, `org/path@primary`, or
+            `org/path` for the primary. A project's model is `project:path@12`, or a path with
+            `project`.
         device (`str` or `torch.device`, *optional*):
             Where the weights go. Defaults to CUDA when it's available, else the CPU.
         dtype (`torch.dtype`, *optional*):
             The floating-point weights' dtype. Defaults to the dtype they were saved in.
+        project (`str`, *optional*):
+            The project the model belongs to, by name or as `org/project`. `ref` is then a path
+            inside it.
+        org (`str`, *optional*):
+            The project's org. Defaults to your default org.
 
     Returns:
         `BaseModel`: the model, such as an `Olmo2`.
@@ -277,17 +306,21 @@ def load_from_hub(
     from flock.hub import models
 
     model = models.load_from_hub("acme/olmo2-1b", device="cuda")  # the primary version
-    model = models.load_from_hub("acme/olmo2-1b@checkpoint-12000")
+    model = models.load_from_hub("acme/eval/olmo2-1b@checkpoint-12000")
+    model = models.load_from_hub("sweeps/lr-3e-4@checkpoint-12000", project="pretrain")
+    model = models.load_from_hub("pretrain:sweeps/lr-3e-4@checkpoint-12000")  # the same
     ```
     """
     from flock.hub.models.files import build
 
-    version = resolve(ref)
+    version = resolve(ref, project=project, org=org)
     assert version.files is not None
     return build(fetch(version, select(version.files, None, None, False)), device, dtype)
 
 
-def load_training_state(ref: str, *, device: str | None = None) -> dict[str, Any]:
+def load_training_state(
+    ref: str, *, device: str | None = None, project: str | None = None, org: str | None = None
+) -> dict[str, Any]:
     """
     Downloads a version's `training_state/` and returns it as [`~hub.models.save_to_hub`] was given it:
     names mapped to their state dicts, such as `{"optimizer": ...}`.
@@ -297,6 +330,10 @@ def load_training_state(ref: str, *, device: str | None = None) -> dict[str, Any
             The version, as for [`~hub.models.download`].
         device (`str`, *optional*, defaults to `"cpu"`):
             Where the tensors go.
+        project (`str`, *optional*):
+            The project the model belongs to, as for [`~hub.models.download`].
+        org (`str`, *optional*):
+            The project's org. Defaults to your default org.
 
     Example:
 
@@ -307,7 +344,7 @@ def load_training_state(ref: str, *, device: str | None = None) -> dict[str, Any
     """
     from flock.hub.models.files import read_training_state
 
-    version = resolve(ref)
+    version = resolve(ref, project=project, org=org)
     assert version.files is not None
     files = [
         f

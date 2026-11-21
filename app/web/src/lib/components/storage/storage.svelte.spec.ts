@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../routes/layout.css';
-import type { Listing, ObjectDetails } from '#lib/types.ts';
+import type { Listing, ObjectDetails, ProjectInfo } from '#lib/types.ts';
 import Breadcrumbs from './Breadcrumbs.svelte';
 import DeleteObjectsDialog from './DeleteObjectsDialog.svelte';
 import ObjectBrowser from './ObjectBrowser.svelte';
@@ -154,6 +154,47 @@ describe('ObjectBrowser in flock-models', () => {
 		await expect
 			.element(page.getByRole('toolbar').getByRole('button', { name: 'Delete' }))
 			.not.toBeInTheDocument();
+	});
+});
+
+describe('ObjectBrowser in -projects/ (D169)', () => {
+	const projects = [
+		{ id: 412, name: 'pretrain' },
+		{ id: 7, name: 'old' }
+	] as ProjectInfo[];
+	const listing: Listing = {
+		prefix: '-projects/',
+		folders: ['-projects/412/', '-projects/9/'],
+		objects: [],
+		cursor: null
+	};
+
+	it('links each project’s folder to its tab, and leaves unknown ids plain', async () => {
+		serve({});
+		const props = { org: 'acme', prefix: '-projects/', listing, now: 0, projects };
+		const { unmount } = render(ObjectBrowser, { ...props, bucket: 'flock-datasets' });
+		const link = page.getByRole('link', { name: 'pretrain · Datasets' });
+		expect(link.element().getAttribute('href')).toBe('/acme/pretrain/datasets');
+		await expect.element(page.getByText('9/')).toBeVisible();
+		expect(page.getByRole('link', { name: /old/ }).query()).toBeNull();
+		unmount();
+		render(ObjectBrowser, { ...props, bucket: 'flock-models' });
+		const models = page.getByRole('link', { name: 'pretrain · Models' });
+		expect(models.element().getAttribute('href')).toBe('/acme/pretrain/models');
+	});
+
+	it('links nothing in other buckets', async () => {
+		serve({});
+		render(ObjectBrowser, {
+			org: 'acme',
+			bucket: 'data',
+			prefix: '-projects/',
+			listing,
+			now: 0,
+			projects
+		});
+		await expect.element(page.getByText('412/')).toBeVisible();
+		expect(page.getByRole('link', { name: /pretrain/ }).query()).toBeNull();
 	});
 });
 
