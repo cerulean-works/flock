@@ -293,10 +293,16 @@ def test_reading_a_folder_refuses_what_is_not_a_results_file(tmp_path: Path) -> 
     with pytest.raises(ValueError, match="a task name repeats: \\['t'\\]"):
         read_results(c)
 
-    for key in ("model", "dtype", "attention", "batch_tokens"):
-        damaged = {**data, "provenance": {**data["provenance"], key: None}}
+    for key, value in [
+        ("model", None),
+        ("dtype", None),
+        ("attention", None),
+        ("batch_tokens", None),
+        ("sdpa_backend", False),
+    ]:
+        damaged = {**data, "provenance": {**data["provenance"], key: value}}
         (tmp_path / "c" / "results.json").write_text(json.dumps(damaged))
-        with pytest.raises(ValueError, match=f"provenance.{key} is None"):
+        with pytest.raises(ValueError, match=f"provenance.{key} is {value}"):
             read_results(c)
 
     del data["tasks"][0]["dataset"]["private"]

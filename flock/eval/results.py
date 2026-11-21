@@ -360,6 +360,8 @@ def read_results(source: str) -> WrittenResults:
                 raise TypeError(f"provenance.{key} is {provenance[key]!r}, not a string")
         if type(provenance["batch_tokens"]) is not int:
             raise TypeError(f"provenance.batch_tokens is {provenance['batch_tokens']!r}")
+        if not isinstance(provenance["sdpa_backend"], str | None):
+            raise TypeError(f"provenance.sdpa_backend is {provenance['sdpa_backend']!r}")
         # Tasks are looked up by name, so a repeated one would drop or double a task.
         names = [task.task for task in tasks]
         if len(set(names)) != len(names):
