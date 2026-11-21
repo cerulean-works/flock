@@ -127,10 +127,12 @@ def log_to_tracker(
     # Always a new run, even inside a training script's active run, which `wandb.init` would
     # otherwise return (`reinit`'s default outside notebooks), with its own project.
     settings = None
-    if backfill:
-        settings = wandb.Settings(base_url=host, mode="online", resume="never")
-    elif host is not None:
-        settings = wandb.Settings(base_url=host, resume="never")
+    if host is not None:
+        settings = (
+            wandb.Settings(base_url=host, mode="online", resume="never")
+            if backfill
+            else wandb.Settings(base_url=host, resume="never")
+        )
     with wandb.init(
         entity=entity,
         project=project,
@@ -139,6 +141,9 @@ def log_to_tracker(
         settings=settings,
         reinit="create_new",
     ) as run:
+        # `WANDB_MODE=disabled` gives a run that logs nothing, so nothing is staged for it either.
+        if run.disabled:
+            return
         # A sweep or launch agent can replace the entity and project `wandb.init` was given, so
         # private predictions go only to the project whose visibility was read.
         if private and (run.entity, run.project) != (entity, project):

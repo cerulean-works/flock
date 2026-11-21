@@ -188,6 +188,10 @@ def test_predictions_that_disagree_with_their_results_are_refused(tmp_path: Path
     rows.write_text('{"id": "d-0", "correct": true}\n{"id": "d-9", "correct": false}\n')
     with pytest.raises(ValueError, match="same hash .* but other doc ids"):
         diff(read_results(a), read_results(b))
+    # The same ids in another order would pair different questions.
+    rows.write_text('{"id": "d-1", "correct": false}\n{"id": "d-0", "correct": true}\n')
+    with pytest.raises(ValueError, match="or another order"):
+        diff(read_results(a), read_results(b))
 
     # A lost wrong row would still match the right-doc count.
     rows.write_text('{"id": "d-0", "correct": true}\n')

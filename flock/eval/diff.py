@@ -71,7 +71,7 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
     Compares two runs doc by doc on every task both scored under the same `task_hash` with an accuracy as its primary metric, from each doc's `correct` in the predictions. The runs may score different models; that is the point.
 
     Raises:
-        `ValueError`: if the runs are different instruments (another `dtype`, `batch_tokens` or `attention`, or another `sdpa_backend`), or a compared task's predictions don't match its results: another row count than its `num_docs`, a row without a string `id` or a boolean `correct`, another set of doc ids, a repeated id, or a count of right docs that isn't its finite accuracy over its docs.
+        `ValueError`: if the runs are different instruments (another `dtype`, `batch_tokens` or `attention`, or another `sdpa_backend`), or a compared task's predictions don't match its results: another row count than its `num_docs`, a row without a string `id` or a boolean `correct`, another sequence of doc ids, a repeated id, or a count of right docs that isn't its finite accuracy over its docs.
     """
     # Settings of the instrument, not of the model: two models scored under different ones
     # aren't compared (principle 3, as `compare` refuses them). `max_length` and `add_bos` belong
@@ -146,9 +146,12 @@ def diff(a: WrittenResults, b: WrittenResults) -> ItemDiff:
                     f"over {result.num_docs} docs"
                 )
             outcomes.append(by_id)
-        if outcomes[0].keys() != outcomes[1].keys():
+        # In order: rows follow the scored requests, which the hash covers, so the same ids in
+        # another order would join different questions.
+        if list(outcomes[0]) != list(outcomes[1]):
             raise ValueError(
-                f"{task.task} has the same hash in {a.source} and {b.source} but other doc ids"
+                f"{task.task} has the same hash in {a.source} and {b.source} but other doc ids, "
+                "or another order"
             )
 
         cells = {(True, True): 0, (False, False): 0}

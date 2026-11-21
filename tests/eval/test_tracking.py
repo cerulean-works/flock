@@ -36,6 +36,7 @@ class FakeRun:
         self.calls = calls
         self.summary = summary
         self.dir = str(folder)
+        self.disabled = calls.get("disabled", False)
         # Where the run went: where it was asked to go, unless a test overrides it.
         self.entity = calls.get("override", init).get("entity")
         self.project = calls.get("override", init).get("project")
@@ -397,6 +398,16 @@ def test_a_task_name_that_leaves_the_predictions_folder_is_refused(
         log_to_tracker(results, "project", results_file=path)
 
     assert "init" not in logged
+
+
+def test_a_disabled_sdk_stages_no_files(logged: dict[str, Any], tmp_path: Path) -> None:
+    logged["disabled"] = True  # as WANDB_MODE=disabled gives
+    path = written_run(tmp_path / "run")
+
+    log_to_tracker(json.loads(path.read_text()), "project", results_file=path)
+
+    assert "files" not in logged
+    assert not (tmp_path / "wandb-files").exists()
 
 
 def test_a_linked_predictions_file_is_refused(logged: dict[str, Any], tmp_path: Path) -> None:
