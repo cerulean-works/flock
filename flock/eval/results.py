@@ -3,10 +3,13 @@
 import dataclasses
 import json
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import Any
+
+import torch
 
 from flock.eval.metrics import ChoiceScores
 from flock.eval.provenance import Provenance
@@ -87,7 +90,7 @@ class Results:
     """
     Every task's scores from one run, and its provenance.
 
-    `schema_version`, 8, is the version of the file's layout, bumped when a field changes. It isn't an argument, so a file can't claim a layout it doesn't have.
+    `schema_version`, 9, is the version of the file's layout, bumped when a field changes. It isn't an argument, so a file can't claim a layout it doesn't have.
 
     Args:
         provenance (`Provenance`):
@@ -101,7 +104,7 @@ class Results:
     provenance: Provenance
     tasks: list[TaskResult]
     suites: list[SuiteResult] = field(default_factory=list)
-    schema_version: int = field(default=8, init=False)
+    schema_version: int = field(default=9, init=False)
 
     def to_dict(self) -> dict[str, Any]:
         """Returns the results as plain JSON-ready data, with each task's `docs_per_second` added."""
@@ -138,7 +141,9 @@ class Results:
         return path
 
 
-def write_predictions(path: Path, docs: Sequence[MCDoc], scores: ChoiceScores) -> None:
+def write_predictions(
+    path: Path, docs: Sequence[MCDoc], scores: ChoiceScores, correct: torch.Tensor | None = None
+) -> None:
     """
     Writes `prediction_rows` to `path` as JSON lines, creating its directory if needed.
 
@@ -146,7 +151,7 @@ def write_predictions(path: Path, docs: Sequence[MCDoc], scores: ChoiceScores) -
         `FileExistsError`: if `path` exists, so two runs never write one file.
     """
     # Built before the file is created, so a failed check leaves no empty file to block a rerun.
-    _write_rows(path, prediction_rows(docs, scores))
+    _write_rows(path, prediction_rows(docs, scores, correct))
 
 
 def write_perplexity_predictions(
@@ -170,16 +175,28 @@ def _write_rows(path: Path, rows: Sequence[dict[str, Any]]) -> None:
             f.write(json.dumps(row) + "\n")
 
 
-def prediction_rows(docs: Sequence[MCDoc], scores: ChoiceScores) -> list[dict[str, Any]]:
+def prediction_rows(
+    docs: Sequence[MCDoc], scores: ChoiceScores, correct: torch.Tensor | None = None
+) -> list[dict[str, Any]]:
     """
-    Returns one row per doc with its id, gold index and each choice's scores and lengths, enough to recompute every metric and the truncation counts, dropping the padding past each doc's last choice.
+    Returns one row per doc with its id, gold index, whether the doc counts as right, and each choice's scores and lengths, enough to recompute every metric and the truncation counts, dropping the padding past each doc's last choice.
+
+    Args:
+        docs (`Sequence[MCDoc]`):
+            The scored docs, in order.
+        scores (`ChoiceScores`):
+            Their choice scores.
+        correct (`torch.Tensor`, *optional*):
+            `[docs]`, each doc's value of the task's primary metric when that is an accuracy, written as the row's `correct`. Rows have no `correct` if not given.
 
     Raises:
-        `ValueError`: if `scores` doesn't hold one row per doc.
+        `ValueError`: if `scores` or `correct` doesn't hold one row per doc.
     """
     # Rows are read by doc position, so extra score rows would be dropped without a word.
     if len(docs) != len(scores.gold):
         raise ValueError(f"{len(docs)} docs but scores for {len(scores.gold)}")
+    if correct is not None and len(docs) != len(correct):
+        raise ValueError(f"{len(docs)} docs but outcomes for {len(correct)}")
 
     # One host copy per field, not per doc.
     fields = {
@@ -193,10 +210,15 @@ def prediction_rows(docs: Sequence[MCDoc], scores: ChoiceScores) -> list[dict[st
         "tokens_cut_uncond": scores.tokens_cut_uncond,
     }
     values = {name: tensor.tolist() for name, tensor in fields.items() if tensor is not None}
+    # The scorer's own per-doc values, which results.json averages, so a row's outcome and the
+    # task's accuracy can't disagree.
+    outcomes = correct.bool().tolist() if correct is not None else None
 
     rows = []
     for i, doc in enumerate(docs):
         row: dict[str, Any] = {"id": doc.id, "gold": doc.gold}
+        if outcomes is not None:
+            row["correct"] = outcomes[i]
         for name, per_doc in values.items():
             row[name] = per_doc[i][: len(doc.choices)]
         rows.append(row)
@@ -239,3 +261,96 @@ def perplexity_prediction_rows(
         )
 
     return rows
+
+
+@dataclass(frozen=True, slots=True)
+class WrittenResults:
+    """
+    A run's `results.json` as read back by [`read_results`], with access to the per-doc predictions beside it.
+
+    Args:
+        source (`str`):
+            Where it was read: a folder, or a tracker run as `run:entity/project/id`.
+        schema_version (`int`):
+            The file's layout, 8 or 9. Only schema 9 rows hold `correct`, and only schema 9 records `dataset.private`: an older file's datasets read as not private.
+        provenance (`Provenance`):
+            What produced the run.
+        tasks (`list[TaskResult]`):
+            Each task's scores, in run order. A metric written as null (non-finite) reads as NaN.
+        suites (`list[SuiteResult]`):
+            Each suite's score.
+        read_file (`Callable[[str], str | None]`):
+            Reads one of the run's files by its name in the folder, such as `predictions/arc_easy.jsonl`, or returns `None` if there is no such file.
+    """
+
+    source: str
+    schema_version: int
+    provenance: Provenance
+    tasks: list[TaskResult]
+    suites: list[SuiteResult]
+    read_file: Callable[[str], str | None]
+
+    def predictions(self, task: str) -> list[dict[str, Any]] | None:
+        """Returns `task`'s prediction rows, or `None` if the run has no predictions file for it."""
+        text = self.read_file(f"predictions/{task}.jsonl")
+        return None if text is None else [json.loads(line) for line in text.splitlines()]
+
+
+def read_results(source: str) -> WrittenResults:
+    """
+    Reads a written run: a folder holding `results.json` and `predictions/`, or `run:entity/project/id`, a tracker run whose files [`~eval.tracking.log_to_tracker`] uploaded, read as the signed-in Flock user. Predictions are read only when asked for.
+
+    Raises:
+        `FileNotFoundError`: if the folder or run has no `results.json`.
+        `ValueError`: if `results.json` isn't a results file of schema 8 or 9, `run:` isn't followed by `entity/project/id`, or Flock refuses the read.
+        `click.ClickException`: if Flock can't be reached.
+    """
+    if source.startswith("run:"):
+        # Imported here so reading a folder doesn't import wandb.
+        from flock.eval.tracking import read_run_file
+
+        read_file = partial(read_run_file, source.removeprefix("run:"))
+    else:
+        read_file = partial(_read_folder_file, Path(source))
+
+    text = read_file("results.json")
+    if text is None:
+        raise FileNotFoundError(f"{source} has no results.json")
+    try:
+        data = json.loads(text)
+        # Schema 8 holds every field these types have but `dataset.private`; older files lack
+        # provenance fields.
+        if data.get("schema_version") not in (8, 9):
+            raise ValueError(f"schema {data.get('schema_version')}; only 8 and 9 are read")
+        tasks = []
+        for entry in data["tasks"]:
+            entry = {key: value for key, value in entry.items() if key != "docs_per_second"}
+            entry["dataset"] = Dataset(**entry["dataset"])
+            entry["truncation"] = Truncation(**entry["truncation"])
+            # `Results.write` writes a non-finite metric as null.
+            entry["metrics"] = {
+                name: math.nan if value is None else value
+                for name, value in entry["metrics"].items()
+            }
+            tasks.append(TaskResult(**entry))
+        written = WrittenResults(
+            source=source,
+            schema_version=data["schema_version"],
+            provenance=Provenance(**data["provenance"]),
+            tasks=tasks,
+            suites=[SuiteResult(**entry) for entry in data["suites"]],
+            read_file=read_file,
+        )
+    # Not JSON, a missing key, or a field these types don't have.
+    except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as error:
+        raise ValueError(f"{source} is not a results file: {error!r}") from None
+    except ValueError as error:
+        raise ValueError(f"{source}: {error}") from None
+
+    return written
+
+
+def _read_folder_file(folder: Path, name: str) -> str | None:
+    """Reads `folder/name`, or returns `None` if it doesn't exist."""
+    path = folder / name
+    return path.read_text() if path.is_file() else None

@@ -12,8 +12,8 @@ from click.testing import CliRunner
 
 from flock.cli import api
 from flock.eval.cli import main
-from flock.eval.results import Results, SuiteResult
-from flock.eval.tracking import log_results_file, log_to_tracker
+from flock.eval.results import Results, SuiteResult, read_results
+from flock.eval.tracking import log_results_file, log_to_tracker, read_run_file
 
 from .toy import PROVENANCE, task_result
 
@@ -28,11 +28,17 @@ HOST = "https://flock.test"
 
 
 class FakeRun:
-    """A run that records its summary and how it was finished, as `wandb.Run` does on leaving a `with` block (`Run.__exit__` in wandb 0.31.0)."""
+    """A run that records its summary, the files it saves and how it was finished, as `wandb.Run` does on leaving a `with` block (`Run.__exit__` in wandb 0.31.0)."""
 
-    def __init__(self, calls: dict, summary: object) -> None:
+    def __init__(self, calls: dict, summary: object, folder: Path | None = None) -> None:
         self.calls = calls
         self.summary = summary
+        self.dir = str(folder)
+
+    def save(self, glob_str: str, base_path: str, policy: str) -> None:
+        # What the tracker would receive: each file by its name on the run, and its contents.
+        name = str(Path(glob_str).relative_to(base_path))
+        self.calls.setdefault("files", {})[name] = (Path(glob_str).read_text(), policy)
 
     def __enter__(self) -> Self:
         return self
@@ -47,13 +53,13 @@ class FakeRun:
 
 
 @pytest.fixture
-def logged(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+def logged(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     """Captures what `wandb.init` and the run receive, without the SDK."""
     calls = {"summary": {}}
 
     def init(**kwargs: Any) -> FakeRun:
         calls["init"] = kwargs
-        return FakeRun(calls, calls["summary"])
+        return FakeRun(calls, calls["summary"], tmp_path / "wandb-files")
 
     monkeypatch.setattr(wandb, "init", init)
     return calls
@@ -61,17 +67,32 @@ def logged(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
 @dataclasses.dataclass
 class FakeHub:
-    """A Flock API whose run query finds the runs in `found`, or answers `status` with `error`, and records each query."""
+    """A Flock API whose run query finds the runs in `found`, or answers `status` with `error`, and records each query. Its project `acme/model-evals` answers `project` (its visibility, or an error as a status and body), and its run `acme/model-evals/run-1` holds `files`."""
 
     found: list[str] = dataclasses.field(default_factory=list)
     status: int = 200
     error: dict = dataclasses.field(default_factory=lambda: {"error": "refused"})
     queries: list[dict] = dataclasses.field(default_factory=list)
+    project: str | tuple[int, dict] = "private"
+    files: dict[str, str] = dataclasses.field(default_factory=dict)
 
     def answer(self, request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/api/v1/me":
+        path = request.url.path
+        if path == "/api/v1/me":
             return httpx.Response(200, json={"default_org": "acme"})
-        assert request.url.path == "/api/v1/projects/acme/model-evals/runs/query"
+        if path == "/api/v1/projects/acme/model-evals":
+            if isinstance(self.project, tuple):
+                return httpx.Response(self.project[0], json=self.project[1])
+            return httpx.Response(200, json={"visibility": self.project})
+        prefix = "/api/v1/projects/acme/model-evals/runs/run-1/files/"
+        if path.startswith(prefix):
+            name = path.removeprefix(prefix)
+            if name in self.files:
+                return httpx.Response(200, text=self.files[name])
+            return httpx.Response(404, json={"error": "file not found"})
+        if path.startswith("/api/v1/projects/acme/model-evals/runs/") and "/files/" in path:
+            return httpx.Response(404, json={"error": "run not found"})
+        assert path == "/api/v1/projects/acme/model-evals/runs/query"
         self.queries.append(json.loads(request.content))
         if self.status != 200:
             return httpx.Response(self.status, json=self.error)
@@ -284,7 +305,7 @@ def test_schemas_before_6_are_refused_before_any_query(
     written = json.loads((LOGGED / "schema6.json").read_text())
     path.write_text(json.dumps({**written, "schema_version": 5}))
 
-    with pytest.raises(ValueError, match="schema 5; only 6 to 8 log"):
+    with pytest.raises(ValueError, match="schema 5; only 6 to 9 log"):
         log_results_file(path, "model-evals")
 
     assert hub.queries == []
@@ -319,3 +340,139 @@ def test_the_log_command_reports_a_tracker_refusal_in_one_line(
 
     assert result.exit_code == 1
     assert result.output == "Error: API key is invalid\n"
+
+
+def written_run(folder: Path, private: bool = False) -> Path:
+    """Writes a schema 9 run of two tasks with their predictions into `folder`, `exam` on a dataset that is private if `private` is set, and returns its results.json."""
+    exam = task_result("exam", {"acc_per_char": 0.5})
+    exam = dataclasses.replace(exam, dataset=dataclasses.replace(exam.dataset, private=private))
+    path = Results(PROVENANCE, [task_result("toy", {"acc_raw": 0.5}), exam]).write(folder)
+    for name in ("toy", "exam"):
+        rows = [
+            {"id": "q-1", "gold": 0, "correct": True},
+            {"id": "q-2", "gold": 1, "correct": False},
+        ]
+        (folder / "predictions").mkdir(exist_ok=True)
+        (folder / "predictions" / f"{name}.jsonl").write_text(
+            "".join(json.dumps(row) + "\n" for row in rows)
+        )
+    return path
+
+
+def test_a_live_run_uploads_its_results_and_predictions(
+    logged: dict[str, Any], tmp_path: Path
+) -> None:
+    path = written_run(tmp_path / "run")
+    results = json.loads(path.read_text())
+
+    log_to_tracker(results, "project", results_file=path)
+
+    # Every file under its name in the folder, as written, uploading at once.
+    assert logged["files"] == {
+        "results.json": (path.read_text(), "now"),
+        "predictions/toy.jsonl": ((tmp_path / "run/predictions/toy.jsonl").read_text(), "now"),
+        "predictions/exam.jsonl": ((tmp_path / "run/predictions/exam.jsonl").read_text(), "now"),
+    }
+    # Nothing private, so the SDK's own settings still decide where the run goes.
+    assert logged["init"]["entity"] is None
+    assert logged["init"]["settings"] is None
+
+
+def test_a_banked_copy_arrives_as_results_json_and_an_older_schema_without_predictions(
+    logged: dict[str, Any], hub: FakeHub, tmp_path: Path
+) -> None:
+    # A schema 8 file beside predictions: they have no outcome, so only the results go.
+    folder = tmp_path / "bank"
+    written_run(folder)
+    banked = folder / "olmo2-1b-results.json"
+    banked.write_text((LOGGED / "schema8.json").read_text())
+
+    log_results_file(banked, "model-evals")
+
+    assert list(logged["files"]) == ["results.json"]
+    assert logged["files"]["results.json"][0] == banked.read_text()
+
+
+def test_private_predictions_go_only_to_a_private_project(
+    logged: dict[str, Any], hub: FakeHub, tmp_path: Path
+) -> None:
+    path = written_run(tmp_path / "run", private=True)
+    results = json.loads(path.read_text())
+
+    log_to_tracker(results, "model-evals", results_file=path)
+
+    # The run goes to the API and organization whose project was read as private.
+    assert logged["init"]["entity"] == "acme"
+    assert logged["init"]["settings"].base_url == HOST
+    assert "predictions/exam.jsonl" in logged["files"]
+
+
+@pytest.mark.parametrize(
+    ("project", "match"),
+    [
+        ("public", "acme/model-evals is public, and the predictions of exam read a private"),
+        ((403, {"error": "forbidden"}), "refused the project query \\(forbidden\\)"),
+        ((404, {"detail": "Not Found"}), "refused the project query"),
+    ],
+)
+def test_private_predictions_are_refused_before_any_run_unless_the_project_is_private(
+    logged: dict[str, Any],
+    hub: FakeHub,
+    tmp_path: Path,
+    project: str | tuple[int, dict],
+    match: str,
+) -> None:
+    hub.project = project
+    path = written_run(tmp_path / "run", private=True)
+
+    with pytest.raises(ValueError, match=match):
+        log_to_tracker(json.loads(path.read_text()), "model-evals", results_file=path)
+
+    assert "init" not in logged  # no half-uploaded run
+
+
+def test_private_predictions_may_create_a_project_which_starts_private(
+    logged: dict[str, Any], hub: FakeHub, tmp_path: Path
+) -> None:
+    hub.project = (404, {"error": "project acme/model-evals not found"})
+    path = written_run(tmp_path / "run", private=True)
+
+    log_to_tracker(json.loads(path.read_text()), "model-evals", results_file=path)
+
+    assert logged["init"]["project"] == "model-evals"
+
+
+def test_private_predictions_need_a_flock_sign_in(
+    logged: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("FLOCK_TOKEN", raising=False)
+    monkeypatch.setattr("flock.cli.credentials.load", lambda: None)
+    path = written_run(tmp_path / "run", private=True)
+
+    with pytest.raises(ValueError, match="Not logged in"):
+        log_to_tracker(json.loads(path.read_text()), "project", results_file=path)
+
+    assert "init" not in logged
+
+
+def test_a_run_reads_back_as_its_folder_does(hub: FakeHub, tmp_path: Path) -> None:
+    path = written_run(tmp_path / "run")
+    for name in ("results.json", "predictions/toy.jsonl"):
+        hub.files[name] = (tmp_path / "run" / name).read_text()
+
+    remote = read_results("run:acme/model-evals/run-1")
+    local = read_results(str(tmp_path / "run"))
+
+    assert (remote.provenance, remote.tasks) == (local.provenance, local.tasks)
+    assert remote.predictions("toy") == local.predictions("toy")
+    assert remote.predictions("exam") is None  # not uploaded
+    assert read_run_file("acme/model-evals/run-1", "results.json") == path.read_text()
+
+
+def test_reading_a_run_refuses_a_bad_path_and_an_unknown_run(hub: FakeHub) -> None:
+    with pytest.raises(ValueError, match="expected a run as entity/project/id"):
+        read_run_file("acme/model-evals", "results.json")
+    with pytest.raises(ValueError, match="run not found"):
+        read_run_file("acme/model-evals/run-2", "results.json")
+    with pytest.raises(FileNotFoundError, match="has no results.json"):
+        read_results("run:acme/model-evals/run-1")

@@ -12,7 +12,7 @@ from typing import Literal, get_args
 import torch
 
 from flock.eval import hub
-from flock.eval.metrics import bits_per_byte, multiple_choice
+from flock.eval.metrics import bits_per_byte, multiple_choice, scale
 from flock.eval.model import DEFAULT_BATCH_TOKENS, Encoded, ScoringModel
 from flock.eval.provenance import Provenance
 from flock.eval.results import (
@@ -216,7 +216,11 @@ def evaluate(config: EvalConfig) -> Results:
         # `score_prepared`, doesn't import wandb.
         from flock.eval.tracking import log_to_tracker
 
-        log_to_tracker(results.to_dict(), config.wandb_project)
+        log_to_tracker(
+            results.to_dict(),
+            config.wandb_project,
+            results_file=config.out / "results.json" if config.out is not None else None,
+        )
 
     return results
 
@@ -412,7 +416,11 @@ def score_prepared(
     truncation = requests.truncation(request_scores)
 
     if predictions is not None:
-        write_predictions(predictions, requests.docs, scores)
+        # Each doc's outcome under the primary metric, when it is an accuracy, from the values
+        # just averaged, so models can be compared doc by doc.
+        primary = per_doc[task.primary_metric]
+        correct = primary if scale(task.primary_metric) == "accuracy" else None
+        write_predictions(predictions, requests.docs, scores, correct)
 
     return TaskResult(
         task=task.name,
