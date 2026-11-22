@@ -65,18 +65,7 @@ jobs:
 
       - name: Run tests
         timeout-minutes: 10
-        run: uv run --no-sync python -m pytest -v tests -n 6 -rA --durations=20
-
-      # TEMPORARY: find out why an xdist worker dies on the self-hosted runners.
-      - name: Runner resource usage
-        if: always()
-        run: |
-          cd /sys/fs/cgroup
-          for f in memory.max memory.peak memory.events memory.stat pids.max pids.peak pids.events cpu.max; do
-            echo "== $f"; cat "$f" || true
-          done
-          nproc; python3 -c 'import os; print(os.process_cpu_count())' || true
-          df -h /tmp /home/runner
+        run: uv run --no-sync python -m pytest -q tests -n 6
 
   Snapshot:
     name: Eval task snapshot
