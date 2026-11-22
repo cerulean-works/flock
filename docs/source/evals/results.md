@@ -160,7 +160,16 @@ A multiple-choice task's `predictions/<task>.tokens.parquet` holds what the mode
 
 A `greedy` row has no values. A Flock model has no `greedy` rows: it keeps no key-value cache, and decoding without one would read each context 32 times over. A `context` row covers every token of the context but its first, which nothing predicts, after the context loses tokens from the left to leave room for 32 decoded ones.
 
-Context values and greedy tokens come from a pass of their own over each doc's distinct contexts, once per context, not once per choice. Each is off by default, for its cost: on OLMo 2 1B over all of MMLU, HellaSwag and ARC-Easy on one H200, the choices' values alone write 35.5 MB beside 35.1 MB of predictions, and 32 greedy tokens, decoded one step at a time, took scoring from 355 s to 539 s. Scoring itself runs as it does without the file, so every score and every prediction row is the same, bit for bit, with or without it.
+Context values and greedy tokens come from a pass of their own over each doc's distinct contexts, once per context, not once per choice. Each is off by default, for its cost. Measured on one H200 with OLMo 2 1B in BF16 at `--batch-tokens 16384`:
+
+| Run | Scoring time | Per-token files |
+|---|---|---|
+| Base Easy and one exam task (100,457 docs), no per-token values | 1527 s | none, beside 138 MB of predictions |
+| The same, default per-token values | 1560 s (1.02x) | 101 MB, about 1 KB per doc |
+| The same, with `--context-tokens`, `--greedy-tokens` and `--perplexity-tokens` | 3138 s (2.06x) | 306 MB, about 3 KB per doc |
+| All of MMLU, HellaSwag and ARC-Easy, default values, then with `--greedy-tokens` | 372 s, then 539 s (1.05x, then 1.52x of 353 s) | 35 MB |
+
+Greedy tokens cost the most: 32 decoding steps run one after another for every batch. Scoring itself runs as it does without the file, so every score and every prediction row is the same, bit for bit, with or without it.
 
 A private dataset's per-token file is readable by its owner only, and goes under `private/` on a tracker run, as its predictions do: token ids are the dataset's text. A training loop that scores between steps writes none unless it asks (`score_prepared(..., tokens=True)`).
 
