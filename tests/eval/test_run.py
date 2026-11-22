@@ -398,6 +398,16 @@ def test_prediction_rows_drop_padded_choices_and_carry_the_text(tmp_path: Path) 
         write_predictions(path, requests, scores)
 
 
+def test_a_private_tasks_predictions_are_readable_by_their_owner_only(
+    scorer: ScoringModel, tmp_path: Path
+) -> None:
+    private = dataclasses.replace(TASK, dataset=dataclasses.replace(TASK.dataset, private=True))
+    score_task(scorer, private, out=tmp_path)
+
+    # They hold the dataset's text from schema 11 on. A public task's file keeps the umask's mode.
+    assert (tmp_path / "predictions/toy.jsonl").stat().st_mode & 0o777 == 0o600
+
+
 def test_score_task_refuses_an_existing_predictions_file(
     scorer: ScoringModel, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

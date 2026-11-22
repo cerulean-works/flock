@@ -3,6 +3,7 @@
 import dataclasses
 import json
 import math
+import os
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -182,9 +183,10 @@ def write_predictions(
     scores: ChoiceScores,
     correct: torch.Tensor | None = None,
     pick: torch.Tensor | None = None,
+    private: bool = False,
 ) -> None:
     """
-    Writes a multiple-choice task's predictions to `path` as JSON lines, creating its directory if needed: first a header, `{"prompt": {"description": ..., "shots": [{"id": ..., "text": ...}, ...]}}`, the text every doc's context starts with, written once, then `prediction_rows`.
+    Writes a multiple-choice task's predictions to `path` as JSON lines, creating its directory if needed: first a header, `{"prompt": {"description": ..., "shots": [{"id": ..., "text": ...}, ...]}}`, the text every doc's context starts with, written once, then `prediction_rows`. With `private`, for a task on a private dataset, the file is readable by its owner only, since it holds the dataset's text.
 
     Raises:
         `FileExistsError`: if `path` exists, so two runs never write one file.
@@ -195,7 +197,8 @@ def write_predictions(
         "shots": [{"id": shot.id, "text": shot.example_text} for shot in requests.shots],
     }
     # Built before the file is created, so a failed check leaves no empty file to block a rerun.
-    _write_rows(path, [{"prompt": prompt}, *prediction_rows(requests, scores, correct, pick)])
+    rows = [{"prompt": prompt}, *prediction_rows(requests, scores, correct, pick)]
+    _write_rows(path, rows, mode=0o600 if private else 0o666)
 
 
 def write_perplexity_predictions(
@@ -210,14 +213,15 @@ def write_perplexity_predictions(
     _write_rows(path, perplexity_prediction_rows(docs, scores, num_bytes, window))
 
 
-def _write_rows(path: Path, rows: Sequence[dict[str, Any]]) -> None:
-    """Writes `rows` to `path` as JSON lines, refusing a file that exists."""
+def _write_rows(path: Path, rows: Sequence[dict[str, Any]], mode: int = 0o666) -> None:
+    """Writes `rows` to `path` as JSON lines, refusing a file that exists, created with `mode` under the umask."""
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    # UTF-8 as itself, so the text of a Chinese task reads as written and takes fewer bytes.
-    with path.open("x", encoding="utf-8") as f:
-        for row in rows:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    # Created with its mode, so no other user can open it before a later chmod. UTF-8 as itself,
+    # so the text of a Chinese task reads as written and takes fewer bytes.
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+    with open(descriptor, "w", encoding="utf-8") as f:
+        f.writelines(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
 
 
 def prediction_rows(
@@ -372,7 +376,10 @@ class WrittenResults:
         text = self.read_file(name)
         if text is None:
             return None
-        rows = [json.loads(line) for line in text.splitlines()]
+        # Split at newlines only: `splitlines` also splits at U+2028 and the like, which text
+        # written unescaped may hold.
+        lines = text.removesuffix("\n").split("\n") if text else []
+        rows = [json.loads(line) for line in lines]
         # From schema 11 a multiple-choice file opens with the prompt every doc's context starts
         # with; a perplexity file has none. A row always has an id, a header never.
         if self.schema_version >= 11 and rows and isinstance(rows[0], dict) and "prompt" in rows[0]:

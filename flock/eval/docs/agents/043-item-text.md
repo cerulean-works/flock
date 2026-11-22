@@ -61,8 +61,14 @@ A row whose primary metric ranks choices (every accuracy but `acc_greedy`) gains
 - Only Winogrande, in Base Easy, has per-choice contexts, and only the six `basic_skills` tasks show a doc fewer examples.
 - `MultipleChoiceTask._shots_for` returns indices into the examples rather than the examples, so the requests and the rows come from one list.
 - A training loop that scores between steps writes no predictions unless it passes an output folder, so it pays nothing for the text.
+- Text written as itself may hold U+2028, U+2029 or U+0085, which `str.splitlines` takes as line ends, so the reader splits rows at `\n` only.
+- A private task's predictions file is created readable by its owner only (mode 600 under the umask), since it now holds the dataset's questions.
+- `items` checks every row of both runs whatever it keeps: equal text, gold and examples shown, numeric scores and lengths, a pick in range that explains `correct`, finite values. A file mixed up in one doc is refused in every view.
+- The text output escapes control, format and line-separator characters in every field read from a run, so a run's text can't move the cursor or reorder a line. JSON keeps the strings as written.
 
 ## 5. Known gaps
 
 - The header is not checked against the task hash: a header from another file would read without complaint. Rows are, through the ids and the outcomes.
 - Passages that repeat across a task's questions are stored once per question.
+- `share` is computed from the rows in double precision, while the scorer ranks in FP32, so at an exact FP32 tie its largest value can sit on another choice than `pick`. `pick` is the scorer's.
+- The pick costs one more pass over the ranking scores per task, when predictions are written.

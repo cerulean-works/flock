@@ -161,19 +161,87 @@ def test_runs_without_text_or_outside_the_diffs_rules_are_refused(tmp_path: Path
 
 def test_damaged_or_mixed_up_rows_are_refused(tmp_path: Path) -> None:
     a = read_results(write_run(tmp_path / "a", {"t": ("h", [True, False])}))
-    for change, match in [
-        ({"choices": [" yes", " maybe"]}, "differing text"),
-        ({"pick": 1}, "is damaged"),  # a pick that doesn't explain `correct`
-        ({"logprob": [-1.0]}, "is damaged"),
-    ]:
-        folder = tmp_path / f"b-{len(match)}-{next(iter(change))}"
+    for case, (change, match) in enumerate(
+        [
+            ({"choices": [" yes", " maybe"]}, "other text or gold"),
+            ({"gold": 1, "pick": 1}, "other text or gold"),  # right in both, by other choices
+            ({"pick": 1}, "is damaged"),  # a pick that doesn't explain `correct`
+            ({"pick": None}, "is damaged"),  # acc_raw ranks choices, so it has a pick
+            ({"logprob": [-1.0]}, "is damaged"),
+            ({"logprob": [float("nan"), -1.0]}, "is damaged"),
+            ({"logprob": [True, -1.0]}, "is damaged"),  # a bool is no score
+            ({"logprob": [-2.0, -1.0]}, "is damaged"),  # acc_raw picks the top log-probability
+            ({"num_bytes": []}, "is damaged"),  # one value per choice
+            ({"num_chars": [-1, 3]}, "is damaged"),
+            ({"logprob": [-(10**400), -1.0]}, "is damaged"),  # too large for a float
+            ({"shots": [0]}, "other text or gold"),  # shown other examples than the other run
+        ]
+    ):
+        folder = tmp_path / f"b-{case}"
         b_path = write_run(folder, {"t": ("h", [True, False])})
         lines = (folder / "predictions/t.jsonl").read_text().splitlines()
         row = json.loads(lines[1]) | change
         lines[1] = json.dumps(row)
         (folder / "predictions/t.jsonl").write_text("\n".join(lines) + "\n")
+        # Checked whichever docs are kept: here none is, since both runs agree on every doc.
         with pytest.raises(ValueError, match=match):
-            items([a, read_results(b_path)], "t", "both_right")
+            items([a, read_results(b_path)], "t", "only_a")
+
+    # Damaged text is refused in one run too: a pick past the choices, a context per choice
+    # missing, a choice that isn't a string.
+    for case, change in enumerate(
+        (
+            {"pick": 5, "correct": False},
+            {"question": None, "contexts": ["only one"]},
+            {"choices": [" yes", 2]},
+        )
+    ):
+        folder = tmp_path / f"one-{case}"
+        write_run(folder, {"t": ("h", [True, False])})
+        lines = (folder / "predictions/t.jsonl").read_text().splitlines()
+        lines[2] = json.dumps(json.loads(lines[2]) | change)
+        (folder / "predictions/t.jsonl").write_text("\n".join(lines) + "\n")
+        with pytest.raises(ValueError, match="damaged"):
+            items([read_results(str(folder))], "t", "all")
+
+
+def test_text_with_unicode_line_separators_reads_back(tmp_path: Path) -> None:
+    folder = tmp_path / "a"
+    write_run(folder, {"t": ("h", [True, False])})
+    path = folder / "predictions/t.jsonl"
+    lines = path.read_text().splitlines()
+    # Written unescaped, U+2028, U+2029 and U+0085 sit inside a JSON line as themselves.
+    question = "第一行\u2028第二行\u2029第三行\x85完"
+    lines[1] = json.dumps(json.loads(lines[1]) | {"question": question}, ensure_ascii=False)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    [item] = items([read_results(str(folder))], "t", "right")
+
+    assert item.question == question
+
+
+def test_a_metric_that_differs_between_two_runs_or_a_limit_below_one_is_refused(
+    tmp_path: Path,
+) -> None:
+    a = read_results(write_run(tmp_path / "a", {"t": ("h", [True, False])}))
+    folder = tmp_path / "b"
+    write_run(folder, {"t": ("h", [True, False])})
+    results = json.loads((folder / "results.json").read_text())
+    results["tasks"][0]["primary_metric"] = "acc_per_char"
+    results["tasks"][0]["metrics"] = {"acc_per_char": 0.5}
+    (folder / "results.json").write_text(json.dumps(results))
+
+    with pytest.raises(ValueError, match="read by acc_raw in .* but by acc_per_char"):
+        items([a, read_results(str(folder))], "t", "both_right")
+    # An accuracy this reader can't say how it ranks choices is refused, not read as greedy.
+    results["tasks"][0]["primary_metric"] = "acc_per_word"
+    results["tasks"][0]["metrics"] = {"acc_per_word": 0.5}
+    (folder / "results.json").write_text(json.dumps(results))
+    with pytest.raises(ValueError, match="primary metric acc_per_word has no outcome"):
+        items([read_results(str(folder))], "t", "all")
+    for seed in (None, 3):
+        with pytest.raises(ValueError, match="limit must be at least 1, not 0"):
+            items([a], "t", "all", limit=0, seed=seed)
 
 
 def test_the_items_command_prints_text_or_json_lines(tmp_path: Path) -> None:
@@ -193,6 +261,27 @@ def test_the_items_command_prints_text_or_json_lines(tmp_path: Path) -> None:
         "   1   0.731  0.731 <  no",
     ]
     assert shown.output.count("acc_raw") == 2  # the two wrong docs
+
+    # Text from a run's files can't move the cursor or reorder the line: controls and format
+    # characters are escaped. Chinese text, its ideographic space included, prints as itself.
+    folder = tmp_path / "c"
+    write_run(folder, {"t": ("h", [True])})
+    lines = (folder / "predictions/t.jsonl").read_text().splitlines()
+    row = (
+        json.loads(lines[1])
+        | {"id": "d-0\x1b[2J"}
+        | {
+            "question": "問題：\u3000甲\x1b[2J\nAnswer:",
+            "choices": ["\u202e否", " 是\n二"],
+        }
+    )
+    (folder / "predictions/t.jsonl").write_text(lines[0] + "\n" + json.dumps(row) + "\n")
+    shown = runner.invoke(main, ["items", str(folder), "--task", "t", "--only", "all"])
+    assert shown.exit_code == 0, shown.output
+    assert "問題：\u3000甲\\x1b[2J\nAnswer:" in shown.output
+    assert "\\u202e否" in shown.output and "是\\n二" in shown.output
+    assert "t  d-0\\x1b[2J  acc_raw" in shown.output
+    assert "\x1b" not in shown.output and "\u202e" not in shown.output
 
     pair = runner.invoke(main, ["items", a, b, "--task", "t", "--cell", "only_b", "--json"])
     assert pair.exit_code == 0, pair.output
