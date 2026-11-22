@@ -51,6 +51,7 @@ def _check_distributed_metrics(rank: int, rendezvous: str, logging_steps: int) -
         reference_optimizer = torch.optim.SGD(reference.parameters(), lr=0.1)
         trainer = object.__new__(Trainer)
         trainer.runtime = DistributedRuntime(rank, rank, 2, torch.device("cpu"))
+        trainer.torch_compile = False
         state = TrainerState()
         inputs = torch.linspace(-1, 2, 12).reshape(2, 3, 2)
         # Unequal counts, each rank empty in turn, and an entirely ignored batch.

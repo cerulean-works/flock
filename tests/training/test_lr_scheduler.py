@@ -37,6 +37,21 @@ def cosine_schedule(warmup_steps: int, minimum: float) -> LRSchedulerConfig:
     return LRSchedulerConfig(schedule=segments)
 
 
+def test_tensor_learning_rates_are_updated_in_place() -> None:
+    optimizer, reference_optimizer = make_optimizer(), make_optimizer()
+    for group in optimizer.param_groups:
+        group["lr"] = torch.tensor(group["lr"])
+    tensors = [group["lr"] for group in optimizer.param_groups]
+    scheduler = StepLRScheduler(optimizer, cosine_schedule(2, 0.1), 8)
+    reference = StepLRScheduler(reference_optimizer, cosine_schedule(2, 0.1), 8)
+    for _ in range(8):
+        # A compiled optimizer step keeps reading the same tensors.
+        assert all(group["lr"] is tensor for group, tensor in zip(optimizer.param_groups, tensors))
+        assert scheduler.get_last_lr() == pytest.approx(reference.get_last_lr())
+        scheduler.step()
+        reference.step()
+
+
 @pytest.mark.parametrize("warmup_steps", [0, 2])
 @pytest.mark.parametrize("minimum", [0.0, 0.1])
 def test_cosine_matches_huggingface_through_last_update(warmup_steps: int, minimum: float) -> None:
