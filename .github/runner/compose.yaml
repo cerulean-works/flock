@@ -1,0 +1,57 @@
+# Flock's self-hosted CI runners, deployed as a Dokploy Compose service. See README.md.
+#
+# Each replica takes one job at a time, so `RUNNER_REPLICAS` is how many jobs run at once.
+
+services:
+  runner:
+    build:
+      context: .
+    image: flock-ci-runner:local
+    init: true
+    restart: unless-stopped
+    # Let a running job finish its current step after a redeploy asks it to stop.
+    stop_grace_period: 2m
+    environment:
+      GITHUB_APP_ID: ${GITHUB_APP_ID:?Set GITHUB_APP_ID}
+      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:?Set GITHUB_APP_PRIVATE_KEY_B64}
+      RUNNER_REPOSITORY: ${RUNNER_REPOSITORY:-cerulean-works/flock}
+      RUNNER_LABELS: ${RUNNER_LABELS:-flock-ci}
+
+    # Jobs run pull request code. They get no Docker socket, no host paths, no capabilities beyond
+    # switching to the `runner` user (which the entrypoint does once), and no way to gain more.
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID]
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    # The only writable places, both wiped by the entrypoint before every job.
+    volumes:
+      - /home/runner
+    tmpfs:
+      - /tmp:size=2g,mode=1777,exec
+
+    # The runners share the server with production, so cap what each one can take, and have the
+    # kernel kill a job before anything else when memory runs out.
+    oom_score_adj: 800
+    ulimits:
+      nofile: 65536
+    deploy:
+      replicas: ${RUNNER_REPLICAS:-2}
+      resources:
+        limits:
+          cpus: "${RUNNER_CPUS:-8}"
+          memory: ${RUNNER_MEMORY:-14g}
+          pids: 4096
+    memswap_limit: ${RUNNER_MEMORY:-14g}
+
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+    # Their own network, away from dokploy-network and every other stack.
+    networks: [runners]
+
+networks:
+  runners: {}

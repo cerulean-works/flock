@@ -1,7 +1,10 @@
 """Batched loglikelihood scoring with a causal language model, kept on the model's device."""
 
+import hashlib
 import itertools
+import json
 import logging
+import posixpath
 import re
 from collections.abc import Generator, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
@@ -26,8 +29,9 @@ from flock.eval.requests import Request, Scores
 from flock.eval.tokenizer import SentencePieceTokenizer, Tokenizer
 
 DEFAULT_BATCH_TOKENS = 32768
-# What a model id starts with when it names a version in the Flock registry.
+# What a model id starts with when it names a version in the Flock registry, or a local folder.
 FLOCK = "flock:"
+LOCAL = "local:"
 
 logger = logging.getLogger(__name__)
 
@@ -42,37 +46,48 @@ class Encoded(NamedTuple):
 @dataclass(frozen=True, slots=True)
 class ModelRef:
     """
-    A model to score: a Hugging Face model repo pinned to a revision, written `repo@revision`, or a version of a model in the Flock registry, written `flock:org/path@version` for a global model, such as `flock:acme/eval/olmo2-1b@12`, or `flock:project:path@version` for a project's, such as `flock:pretrain:sweeps/lr-3e-4@12`, which is in your default org.
+    A model to score: a Hugging Face model repo pinned to a revision, written `repo@revision`, or a version of a model in the Flock registry, written `flock:org/path@version` for a global model, such as `flock:acme/eval/olmo2-1b@12`, or `flock:project:path@version` for a project's, such as `flock:pretrain:sweeps/lr-3e-4@12`, which is in your default org. A local folder pinned to its file digest is written `local:folder@digest`.
 
     Args:
         repo (`str`):
-            The Hugging Face repo, or the Flock model as `org/path` or `project:path`.
+            The Hugging Face repo, the Flock model as `org/path` or `project:path`, or the local folder.
         revision (`str`):
-            The Hugging Face revision, or the Flock version: a number, a tag or `primary`.
+            The Hugging Face revision, the Flock version (a number, a tag or `primary`), or the local folder's digest as given.
         kind (`str`, *optional*, defaults to `"hf"`):
-            `"hf"` for a Hugging Face model, `"flock"` for a Flock one.
+            `"hf"` for a Hugging Face model, `"flock"` for a Flock one, `"local"` for a folder.
         digest (`str`, *optional*):
-            The Flock version's digest, which names its exact files. Set by [`resolve`], and `None` for a Hugging Face model, whose commit hash already does that.
+            The digest of the Flock version or local folder, which names its exact files. Set by [`resolve`], and `None` for a Hugging Face model, whose commit hash already does that.
         org (`str`, *optional*):
-            The Flock model's org. A project's model has none until [`resolve`] finds it, in your default org. `None` for a Hugging Face model.
+            The Flock model's org. A project's model has none until [`resolve`] finds it, in your default org. `None` for a Hugging Face model or a local folder.
     """
 
     repo: str
     revision: str
-    kind: Literal["hf", "flock"] = "hf"
+    kind: Literal["hf", "flock", "local"] = "hf"
     digest: str | None = None
     org: str | None = field(default=None, kw_only=True)
 
     @classmethod
     def parse(cls, model_id: str) -> ModelRef:
         """
-        Parses `repo@revision`, or `flock:org/path` or `flock:project:path` with an optional `@version`. A Flock model without a version means its primary version.
+        Parses `repo@revision`, or `flock:org/path` or `flock:project:path` with an optional `@version`, or `local:folder@digest`. A Flock model without a version means its primary version.
 
         A Flock id with a `:` before any `/` names a project of your default org: the project is everything before that `:`, so it may hold `@` and spaces. The version is everything after the path's first `@`, and paths can't hold `:` or `@`, as the hub's refs (D162).
 
         Raises:
-            `ValueError`: if a Hugging Face id has no revision, so an unpinned model can't be scored, or more than one `@`, or a Flock id isn't `org/path[@version]` or `project:path[@version]`.
+            `ValueError`: if a Hugging Face id has no revision, so an unpinned model can't be scored, or more than one `@`, or a Flock id isn't `org/path[@version]` or `project:path[@version]`, or a local id's digest is not 64 lowercase hex characters.
         """
+        if model_id.startswith(LOCAL):
+            # The digest is the last `@`'s part, so a folder whose name has an `@` still parses.
+            folder, _, digest = model_id.removeprefix(LOCAL).rpartition("@")
+            if not folder or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                raise ValueError(
+                    f"model id {model_id!r} must be local:folder@digest, with the digest "
+                    "`flock eval digest folder` prints"
+                )
+
+            return cls(folder, digest, "local")
+
         if model_id.startswith(FLOCK):
             parts = _flock_parts(model_id.removeprefix(FLOCK))
             if parts is None:
@@ -86,11 +101,18 @@ class ModelRef:
 
         repo, _, revision = model_id.partition("@")
         if not repo or not revision or "@" in revision:
-            raise ValueError(f"model id {model_id!r} must be repo@revision or flock:org/name")
+            raise ValueError(
+                f"model id {model_id!r} must be repo@revision, flock:org/path[@version], "
+                "flock:project:path[@version] or local:folder@digest"
+            )
 
         return cls(repo, revision)
 
     def __str__(self) -> str:
+        # A folder's path isn't part of what was scored: the same files moved or copied are the
+        # same model, and the command in the provenance still says where they were.
+        if self.kind == "local":
+            return f"{LOCAL}{self.revision}"
         prefix = FLOCK if self.kind == "flock" else ""
         return f"{prefix}{self.repo}@{self.revision}"
 
@@ -108,12 +130,12 @@ class ModelRef:
 
     def resolve(self) -> ModelRef:
         """
-        Returns this ref with its revision resolved to a commit hash, or its Flock version to a number and digest.
+        Returns this ref with its revision resolved to a commit hash, its Flock version to a number and digest, or its local folder checked against its digest.
 
-        A full hash is returned as is, without asking the Hub, so pinned models load offline from the cache. A Flock version is always resolved through the registry, which also gives its digest.
+        A full hash is returned as is, without asking the Hub, so pinned models load offline from the cache. A Flock version is always resolved through the registry, which also gives its digest. A local folder's files are hashed with [`folder_digest`] and must match the digest given.
 
         Raises:
-            `ValueError`: if the Hub doesn't report a commit hash for the revision.
+            `ValueError`: if the Hub doesn't report a commit hash for the revision, a local folder's files don't match its digest, or a Hugging Face id names a local folder, which only `local:folder@digest` scores.
             [`~hub.models.ModelError`]: if the registry has no such Flock version.
         """
         if self.kind == "flock":
@@ -123,6 +145,25 @@ class ModelRef:
                 f"{version.org}/{version.name}" if project is None else f"{project}:{version.name}"
             )
             return ModelRef(repo, str(version.number), "flock", version.digest, org=version.org)
+
+        if self.kind == "local":
+            # The real path, so a link moved to another export after this check can't be loaded.
+            folder = Path(self.repo).resolve()
+            digest = folder_digest(folder)
+            if digest != self.revision:
+                raise ValueError(
+                    f"{self.repo} has the digest {digest}, not {self.revision}: its files changed, "
+                    "or the id names other weights"
+                )
+            return ModelRef(str(folder), self.revision, "local", digest)
+
+        # Transformers loads a folder of that name before the Hub, and a folder has no commit
+        # for the revision to pin, so nothing would say which weights were scored.
+        if Path(self.repo).is_dir():
+            raise ValueError(
+                f"{self.repo} is a local folder: score it as "
+                f"local:{self.repo}@{folder_digest(Path(self.repo))}"
+            )
 
         # 40 lowercase hex characters is how the Hub writes a full commit hash.
         if re.fullmatch(r"[0-9a-f]{40}", self.revision):
@@ -155,13 +196,78 @@ def _flock_parts(ref: str) -> tuple[str | None, str | None, str, str] | None:
     return org, project, path, version
 
 
+def folder_digest(folder: Path) -> str:
+    """
+    The digest of every file in `folder`, computed as the Flock registry computes a version's: the sha256 of `{path}\t{size}\t{sha256}\n` per file, sorted by its path in the folder.
+
+    Raises:
+        `ValueError`: if `folder` isn't a folder, holds no files, holds a link or another file that isn't a regular file, has a file name with a control character, such as a tab, which the registry refuses too, names a weights shard or tokenizer file outside itself, or is an adapter, whose base model loads from elsewhere.
+        `OSError`: if a folder in it can't be read.
+    """
+    if not folder.is_dir():
+        raise ValueError(f"{folder} isn't a folder")
+
+    # A link can point outside the folder and change there under the same digest, an unreadable
+    # folder would drop out of the list unnoticed, and a pipe would hang the read. Exports have
+    # none of them.
+    errors: list[OSError] = []
+    files = {}
+    for root, folders, names in folder.walk(on_error=errors.append):
+        for name in [*folders, *names]:
+            if (root / name).is_symlink():
+                raise ValueError(f"{folder}: {root / name} is a link, which the digest can't pin")
+        for name in names:
+            if not (root / name).is_file():
+                raise ValueError(f"{folder}: {root / name} isn't a regular file")
+            files[(root / name).relative_to(folder).as_posix()] = root / name
+    if errors:
+        raise errors[0]
+    if not files:
+        raise ValueError(f"{folder} holds no files")
+    # Transformers loads an adapter's base model from wherever its config says.
+    if "adapter_config.json" in files:
+        raise ValueError(f"{folder} is an adapter, whose base model the digest can't pin")
+
+    # Transformers opens the shards a weights index names, and the tokenizer file a tokenizer
+    # config names, by joining them to the folder, so `../` or an absolute path reaches out. A
+    # missing name inside is left to the loader: a tokenizer lists versions it never saved.
+    named = []
+    for index in ("model.safetensors.index.json", "pytorch_model.bin.index.json"):
+        if index in files:
+            named += json.loads(files[index].read_bytes())["weight_map"].values()
+    if "tokenizer_config.json" in files:
+        config = json.loads(files["tokenizer_config.json"].read_bytes())
+        named += config.get("fast_tokenizer_files", [])
+    outside = []
+    for name in sorted(set(named)):
+        if posixpath.isabs(name) or posixpath.normpath(name).split("/")[0] == "..":
+            outside.append(name)
+    if outside:
+        raise ValueError(f"{folder}: its configs name {outside}, outside the folder")
+
+    lines = []
+    # Sorted as strings, as the registry sorts, which isn't `Path` order: `a-b` comes before `a/c`.
+    for name in sorted(files):
+        # A tab or newline in a name would let two file lists write the same lines. The
+        # registry refuses the same characters.
+        if any(ord(c) < 32 or ord(c) == 127 for c in name):
+            raise ValueError(f"{folder}: the file name {name!r} has a control character")
+        file_digest = hashlib.sha256()
+        with files[name].open("rb") as file:
+            while chunk := file.read(8 * 2**20):
+                file_digest.update(chunk)
+        lines.append(f"{name}\t{files[name].stat().st_size}\t{file_digest.hexdigest()}\n")
+
+    return hashlib.sha256("".join(lines).encode()).hexdigest()
+
+
 def _flock_hub() -> Any:
     """`flock.hub.models.cache`, which resolves and loads Flock models, imported only when one is scored."""
     try:
         from flock.hub.models import cache
     except ImportError as error:
         raise ImportError(
-            f"scoring a flock: model needs flock-hub[models] and flock-training: {error}"
+            f"scoring a flock: model needs torch, safetensors and flock.training: {error}"
         ) from error
 
     return cache
@@ -171,14 +277,13 @@ def _repo_file(ref: ModelRef, filename: str) -> Path | None:
     """
     The path of `filename` at the pinned revision, downloading it if needed, or `None` if the repo doesn't have it.
 
-    `ref.repo` is a local folder if one exists there, as for `AutoTokenizer`. Only the Hub's answer, or the cache's record of it, counts as "doesn't have it": a file that merely isn't cached doesn't.
+    A local model's files are read from its folder. Only the Hub's answer, or the cache's record of it, counts as "doesn't have it": a file that merely isn't cached doesn't.
 
     Raises:
         `LocalEntryNotFoundError`: if the Hub can't be reached and the cache doesn't know.
     """
-    folder = Path(ref.repo)
-    if folder.is_dir():
-        path = folder / filename
+    if ref.kind == "local":
+        path = Path(ref.repo) / filename
         return path if path.exists() else None
 
     if try_to_load_from_cache(ref.repo, filename, revision=ref.revision) is _CACHED_NO_EXIST:
@@ -197,7 +302,7 @@ def load_tokenizer(ref: ModelRef) -> Tokenizer:
 
     Args:
         ref (`ModelRef`):
-            The model, already resolved. Its repo can be a local folder.
+            The model, already resolved. A local one's repo is its folder.
 
     Raises:
         `ValueError`: if the repo has no `tokenizer.json` and `AutoTokenizer` gives a tokenizer class built on a SentencePiece model, which is a conversion, and whose ids the raw model may not match.
@@ -219,7 +324,11 @@ def load_tokenizer(ref: ModelRef) -> Tokenizer:
     if model_file is not None:
         return SentencePieceTokenizer(model_file)
 
-    tokenizer = AutoTokenizer.from_pretrained(ref.repo, revision=ref.revision)
+    # Code from another repo, which an `auto_map` can name, is pinned by neither the revision
+    # nor a digest, so it is never run.
+    tokenizer = AutoTokenizer.from_pretrained(
+        ref.repo, revision=ref.revision, trust_remote_code=False
+    )
     assert tokenizer is not None  # The stubs allow None; loading raises instead.
 
     if tokenizer_json is None and any(
@@ -296,13 +405,13 @@ class ScoringModel:
         tokenizer (`PreTrainedTokenizerBase` or `SentencePieceTokenizer`):
             The model's tokenizer.
         name (`str`):
-            Labels the model in log messages. [`~eval.run.evaluate`] records it as the provenance's `model`, `repo@commit` or `flock:org/path@number`.
+            Labels the model in log messages. [`~eval.run.evaluate`] records it as the provenance's `model`, `repo@commit`, `flock:org/path@number`, `flock:project:path@number` or `local:digest`.
         max_length (`int`, *optional*):
             The longest input the model sees. Defaults to the `max_position_embeddings` of the config's text config, which for a multimodal model, such as Gemma 4, is a sub-config.
         batch_tokens (`int`, *optional*, defaults to 32768):
             The most padded tokens in one forward pass.
         digest (`str`, *optional*):
-            The digest of the Flock version the weights are, which [`~eval.run.evaluate`] records as the provenance's `model_digest`. `None` for any other model.
+            The digest of the Flock version or local folder the weights are, which [`~eval.run.evaluate`] records as the provenance's `model_digest`. `None` for a Hugging Face model.
         flock_ref (`ModelRef`, *optional*):
             The resolved Flock version the weights are, whose org, project and path [`~eval.run.evaluate`] records in the provenance. `None` for any other model.
         add_bos (`bool`, *optional*, defaults to `False`):
@@ -360,15 +469,15 @@ class ScoringModel:
         add_bos: bool = False,
     ) -> ScoringModel:
         """
-        Loads `repo@revision` from the Hugging Face Hub, or `flock:org/path@version` from the Flock registry.
+        Loads `repo@revision` from the Hugging Face Hub, `flock:org/path@version` or `flock:project:path@version` from the Flock registry, or `local:folder@digest` from a folder in the Hugging Face format.
 
-        The revision is resolved to its commit hash, which becomes the model's `name`, so a branch or tag in `model_id` is recorded as the exact weights that were scored. A Flock version (a tag, `primary`, or none for the primary) is resolved to its number, so the model's `name` is `flock:org/path@number`, and its `digest` is the version's.
+        The revision is resolved to its commit hash, which becomes the model's `name`, so a branch or tag in `model_id` is recorded as the exact weights that were scored. A Flock version (a tag, `primary`, or none for the primary) is resolved to its number, so the model's `name` is `flock:org/path@number` or `flock:project:path@number`, and its `digest` is the version's. A local folder is loaded only if [`folder_digest`] matches the digest given, and its `name` is `local:digest`, with that `digest`.
 
-        A Hugging Face model's tokenizer comes from [`load_tokenizer`]. A Flock model is loaded with [`~hub.models.load_from_hub`] and wrapped in [`FlockCausalLM`]. Its tokenizer is the Hugging Face one its config's `hf_repo` names, through `AutoTokenizer`.
+        A Hugging Face model's or local folder's tokenizer comes from [`load_tokenizer`]. A Flock model is loaded with [`~hub.models.load_from_hub`] and wrapped in [`FlockCausalLM`]. Its tokenizer is the Hugging Face one its config's `hf_repo` names, through `AutoTokenizer`.
 
         Args:
             model_id (`str`):
-                The model as `repo@revision`, for example `allenai/OLMo-2-0425-1B@main`, or as `flock:org/path[@version]` or `flock:project:path[@version]`, for example `flock:acme/olmo2-1b@12`. Pin a full 40-character commit hash to load a Hugging Face model offline from the cache. A repo with `tokenizer.model` needs one earlier online load, which records whether it has `tokenizer.json`.
+                The model as `repo@revision`, for example `allenai/OLMo-2-0425-1B@main`, as `flock:org/path[@version]` or `flock:project:path[@version]`, for example `flock:acme/olmo2-1b@12`, or as `local:folder@digest`. Pin a full 40-character commit hash to load a Hugging Face model offline from the cache. A repo with `tokenizer.model` needs one earlier online load, which records whether it has `tokenizer.json`.
             device (`str` or `torch.device`, *optional*):
                 Where to put the weights. Defaults to CUDA when available, else the CPU.
             dtype (`torch.dtype`, *optional*, defaults to `torch.bfloat16`):
@@ -379,7 +488,7 @@ class ScoringModel:
                 Passed to [`ScoringModel`].
 
         Raises:
-            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision` or `flock:org/path[@version]` or `flock:project:path[@version]`, or a Flock model's config has no `hf_repo` to load its tokenizer from or names a repo whose tokenizer `AutoTokenizer` would convert from a SentencePiece model, [`load_tokenizer`] refuses the repo, or `add_bos` is set and the tokenizer has no BOS token, before a Hugging Face model's weights load.
+            `ValueError`: if `batch_tokens` is less than 1, before anything downloads, or `model_id` isn't `repo@revision`, `flock:org/path[@version]`, `flock:project:path[@version]` or `local:folder@digest`, a local folder's files don't match its digest, before or after loading, or a Hugging Face id names a local folder, or a Flock model's config has no `hf_repo` to load its tokenizer from or names a repo whose tokenizer `AutoTokenizer` would convert from a SentencePiece model, [`load_tokenizer`] refuses the repo, or `add_bos` is set and the tokenizer has no BOS token, before a Hugging Face model's weights load.
             [`~hub.models.ModelError`]: if the Flock registry has no such version, or refuses to load it.
         """
         # `__init__` checks it too, but only after the weights have loaded.
@@ -412,10 +521,20 @@ class ScoringModel:
         if add_bos and tokenizer.bos_token_id is None:
             raise ValueError(f"{ref}: add_bos is set, but the tokenizer has no BOS token")
         model = AutoModelForCausalLM.from_pretrained(
-            ref.repo, revision=ref.revision, dtype=dtype, device_map=device
+            ref.repo, revision=ref.revision, dtype=dtype, device_map=device, trust_remote_code=False
         )
+        # Files rewritten between the check and the load would be scored under the old digest.
+        if ref.kind == "local" and folder_digest(Path(ref.repo)) != ref.digest:
+            raise ValueError(f"{ref.repo} changed while it loaded; score it again")
 
-        return cls(model, tokenizer, name=str(ref), batch_tokens=batch_tokens, add_bos=add_bos)
+        return cls(
+            model,
+            tokenizer,
+            name=str(ref),
+            batch_tokens=batch_tokens,
+            digest=ref.digest,
+            add_bos=add_bos,
+        )
 
     @property
     def device(self) -> torch.device:

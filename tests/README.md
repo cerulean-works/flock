@@ -42,10 +42,15 @@ Run GPU tests on a CUDA machine:
 uv run --no-sync python -m pytest -q tests/training -m gpu -n 0
 ```
 
-CI runs them on a Modal H100 (`tests/modal_gpu.py`). Run the same thing from your machine
-once `modal` is logged in, passing other pytest arguments if you like:
+CI runs them on a Modal H100 (`tests/modal_gpu.py`) with eight pytest workers sharing the
+GPU. Run the same thing from your machine once `modal` is logged in, passing other pytest
+arguments or a worker count if you like:
 
 ```sh
 uv run --no-sync modal run tests/modal_gpu.py
-uv run --no-sync modal run tests/modal_gpu.py --pytest-args "-q tests/training -m 'gpu and fa4' -n 0"
+uv run --no-sync modal run tests/modal_gpu.py --pytest-args "-q tests/training -m 'gpu and fa4'" --workers 4
 ```
+
+Compiled Inductor, Triton and FlashAttention-4 kernels persist between runs in the
+`flock-gpu-compile-cache` Modal Volume. Delete it with `modal volume delete
+flock-gpu-compile-cache` to compile everything from scratch.
