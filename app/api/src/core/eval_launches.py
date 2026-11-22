@@ -209,19 +209,27 @@ class EvalLaunches:
     # ------------------------------------------------------------------ lifecycle
 
     async def sweep(self) -> None:
-        """Take over the launches whose replica stopped heartbeating (a deploy, a crash): their
-        calls are still running on Modal. A server that no longer launches can't ask Modal, so
-        it ends those past their longest life (a day in Modal's queue, their time limit and the
-        overhead), whose calls can't be running any more, and their keys go."""
+        """End the launches past their longest life (a day in Modal's queue, their time limit and
+        the overhead), and take over those whose replica stopped heartbeating (a deploy, a
+        crash): their calls are still running on Modal."""
+        # A call that old can't be running, unless Modal can't tell us (a server that no longer
+        # launches, a rotated token): it is cancelled where Modal can be asked, and the launch
+        # ends keeping its cap in the month's count, since what it cost is unknown. Its key goes.
+        records = await self.store.db.fetch(
+            f"SELECT {COLUMNS} FROM eval_launches WHERE state = 'running' AND started_at + "
+            "make_interval(secs => cap_usd / usd_per_hour * 3600 + $1) < now()",
+            self.QUEUE_SECONDS + self.OVERHEAD_SECONDS,
+        )
+        for record in records:
+            job = EvalLaunch(*record)
+            if self.modal is not None and job.call_id is not None:
+                try:
+                    await self.modal.cancel(job.call_id)
+                except Exception:
+                    log.exception(f"could not cancel eval launch {job.pk} past its longest life")
+            error = "The launch outlived its time limit without Modal saying how it ended."
+            await self._end(job, "failed", error=error, unconfirmed=True)
         if self.modal is None:
-            records = await self.store.db.fetch(
-                f"SELECT {COLUMNS} FROM eval_launches WHERE state = 'running' AND started_at + "
-                "make_interval(secs => cap_usd / usd_per_hour * 3600 + $1) < now()",
-                self.QUEUE_SECONDS + self.OVERHEAD_SECONDS,
-            )
-            for record in records:
-                error = "The launch outlived its time limit while no server could watch it."
-                await self._end(EvalLaunch(*record), "failed", error=error)
             return
         records = await self.store.db.fetch(
             "UPDATE eval_launches SET heartbeat_at = now() WHERE pk IN ("
@@ -347,6 +355,9 @@ class EvalLaunches:
         # dollars. A running launch counts at its cap until it ends.
         async with self.store.db.pool.acquire() as conn, conn.transaction():
             await conn.execute("SELECT pg_advisory_xact_lock(hashtext('eval_launches'))")
+            # The org first, then the project, as catalog changes lock them (no deadlock with
+            # a deletion); a deleted org is refused here.
+            await self.store._lock_org(conn, org)
             # Its project's row, if it exists, is held until the launch is in, so a rename or a
             # delete either sees the launch and refuses, or happened first (then the run makes a
             # new project of this name).
@@ -453,6 +464,10 @@ class EvalLaunches:
         try:
             await self.require().cancel(job.call_id)
         except Exception as e:
+            # Not cancelled after all: a failure it meets later is its own.
+            await self.store.db.execute(
+                "UPDATE eval_launches SET cancel_requested = false WHERE pk = $1", pk
+            )
             raise BadGateway(f"Modal couldn't cancel the launch: {e}") from e
         await self._end(job, "cancelled")
         return await self.get(org, pk)
@@ -490,10 +505,24 @@ class EvalLaunches:
     async def _watch(self, job: EvalLaunch) -> None:
         try:
             if job.call_id is None:  # its replica stopped between the insert and the spawn
-                # Its call may have started unseen, so the launch keeps its whole cap.
-                error = "The launch was cut short while its call was being made."
-                await self._end(job, "failed", error=error, unconfirmed=True)
-                return
+                # Only if it still has no call: its maker may have attached one since this
+                # replica read the row, and then that call is watched.
+                ended = await self.store.db.fetchval(
+                    "UPDATE eval_launches SET unconfirmed = true WHERE pk = $1 "
+                    "AND state = 'running' AND call_id IS NULL RETURNING pk",
+                    job.pk,
+                )
+                if ended is not None:
+                    # Its call may have started unseen, so the launch keeps its whole cap.
+                    error = "The launch was cut short while its call was being made."
+                    await self._end(job, "failed", error=error, unconfirmed=True)
+                    return
+                job.call_id = await self.store.db.fetchval(
+                    "SELECT call_id FROM eval_launches WHERE pk = $1 AND state = 'running'",
+                    job.pk,
+                )
+                if job.call_id is None:
+                    return
             while True:
                 try:
                     commit = await self.modal.wait(job.call_id, self.HEARTBEAT)

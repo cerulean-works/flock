@@ -7,6 +7,8 @@ export const launchesApi = (org: string, op = '') =>
 
 /** How often running launches are asked about, in milliseconds. */
 const POLL = 5000;
+/** How often the list is asked about while nothing runs, in milliseconds. */
+const IDLE_POLL = 30000;
 /** How long a launch that ended keeps its row, in seconds. */
 const KEEP = 86_400;
 
@@ -72,10 +74,15 @@ export class LaunchList {
 
 	#schedule(retry = false) {
 		if (this.#stopped || this.#timer) return;
-		if (!retry && !this.launches.some((l) => l.state === 'running')) return;
-		this.#timer = setTimeout(() => {
-			this.#timer = null;
-			void this.refresh();
-		}, POLL);
+		// Slower while nothing runs, so a launch started elsewhere (another member, another
+		// tab) still shows up with its Cancel.
+		const running = this.launches.some((l) => l.state === 'running');
+		this.#timer = setTimeout(
+			() => {
+				this.#timer = null;
+				void this.refresh();
+			},
+			running || retry ? POLL : IDLE_POLL
+		);
 	}
 }

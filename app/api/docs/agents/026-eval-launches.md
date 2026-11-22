@@ -124,11 +124,14 @@ The numbering continues from 025 (D182 to D187).
   Modal's `FunctionTimeoutError` is the call's time limit and fails it. A failed question to
   Modal (its `ConnectionError`, or any of its RPC errors, which are `GRPCError`s) is asked again
   at the next heartbeat.
-- **A server that can't ask Modal ends launches by time.** When launches are off (no token, say),
-  the sweep ends a running launch older than a day in Modal's queue plus its time limit and the
-  overhead, whose call can't be running any more, and deletes its key. A server that can ask
-  Modal never ends a launch by time: Modal's time limit starts only when the call leaves the
-  queue, so only the call's own end counts.
+- **A launch past its longest life ends.** The sweep ends a running launch older than a day in
+  Modal's queue plus its time limit and the overhead (Modal's limit starts only when the call
+  leaves its queue). Its call can't be running then, unless Modal can't tell (launches turned
+  off, a rotated token): the call is cancelled where Modal can be asked, the key goes, and the
+  launch keeps its cap in the month's count (`unconfirmed`), since what it cost is unknown.
+- **A takeover of a launch with no call** ends it only if the row still has none; its maker may
+  have attached the call meanwhile, and then the call is watched.
+- **Locks** follow the catalog's order: the org's row, then the project's.
 - **Its project stays put.** The worker logs to the project by name when it finishes, so a
   project with a running launch can't be renamed or deleted (409), as one with active runs can't
   be renamed. A launch holds its project's row (`FOR SHARE`) while it is registered, so a rename
