@@ -10,7 +10,7 @@ import wandb
 
 from flock.cli import credentials
 from flock.cli.api import Api, error_of
-from flock.eval.results import predictions_name, stays_inside
+from flock.eval.results import predictions_name, stays_inside, tokens_name
 
 
 def log_to_tracker(
@@ -128,7 +128,7 @@ def log_to_tracker(
 
 
 def _run_files(results: dict[str, Any], results_file: Path | None) -> dict[str, Path]:
-    """The files the tracker shows a run's docs from, by their names on the run: `results_file` as `results.json` and, from schema 9 on, each task's predictions file found beside it, under `private/` when its dataset is private. An older file's predictions have no outcome (`correct`) and its tasks no privacy mark, so only its results go."""
+    """The files the tracker shows a run's docs from, by their names on the run: `results_file` as `results.json` and, from schema 9 on, each task's predictions file and per-token values found beside it, under `private/` when its dataset is private. An older file's predictions have no outcome (`correct`) and its tasks no privacy mark, so only its results go."""
     files = {}
     if results_file is None:
         return files
@@ -168,6 +168,14 @@ def _run_files(results: dict[str, Any], results_file: Path | None) -> dict[str, 
         # The tracker lists and serves a run's `private/` files to the organization's members
         # only, whatever the project's visibility.
         files[f"private/{name}" if marked else name] = path
+        # The per-token values beside them, from schema 12 on, go where they go: token ids of a
+        # private dataset are its text.
+        name = tokens_name(task["task"])
+        tokens = results_file.parent / name
+        if tokens.is_symlink():
+            raise ValueError(f"{tokens} is a link; upload the per-token values themselves")
+        if tokens.is_file():
+            files[f"private/{name}" if marked else name] = tokens
     return files
 
 
@@ -253,7 +261,21 @@ def read_run_file(
     run: str, name: str, credential: credentials.Credentials | None = None
 ) -> str | None:
     """
-    Returns a file the tracker run `run`, as `entity/project/id`, uploaded, such as `results.json`, or `None` if it has no file of that name. Reads with `credential`, on its server, or as the signed-in Flock user if not given.
+    Returns a file the tracker run `run`, as `entity/project/id`, uploaded, such as `results.json`, as UTF-8 text whatever the server says, or `None` if it has no file of that name. Reads as [`read_run_bytes`] does.
+
+    Raises:
+        `ValueError`, `click.ClickException`: as [`read_run_bytes`].
+    """
+    data = read_run_bytes(run, name, credential)
+    # Rows hold text from schema 11 on.
+    return data.decode() if data is not None else None
+
+
+def read_run_bytes(
+    run: str, name: str, credential: credentials.Credentials | None = None
+) -> bytes | None:
+    """
+    Returns a file the tracker run `run`, as `entity/project/id`, uploaded, such as a task's per-token values, or `None` if it has no file of that name. Reads with `credential`, on its server, or as the signed-in Flock user if not given.
 
     Raises:
         `ValueError`: if `run` isn't `entity/project/id`, you aren't signed in, or Flock refuses the read for another reason than a missing file (an unknown run, a project you can't read).
@@ -272,8 +294,7 @@ def read_run_file(
     with api.client:
         answer = api.get(f"projects/{entity}/{project}/runs/{run_id}/files/{quote(name)}")
     if answer.status_code == 200:
-        # UTF-8 whatever the server says: rows hold text from schema 11 on.
-        return answer.content.decode()
+        return answer.content
     if answer.status_code == 404 and error_of(answer) == "file not found":
         return None
     raise ValueError(f"{api.host} refused {run}'s {name} ({error_of(answer)})")
