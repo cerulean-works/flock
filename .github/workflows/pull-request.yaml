@@ -3,8 +3,8 @@ name: Automatic Code Quality Tests
 on:
   pull_request:
 
-# These jobs run pull request code on our self-hosted runners (.github/runner/), so they get a
-# read-only token. A new push cancels the run still testing the old one, to free the runners.
+# The pytest job runs pull request code on our self-hosted runners (.github/runner/), so every job
+# gets a read-only token. A new push cancels the run still testing the old one, to free the runners.
 permissions:
   contents: read
 
@@ -15,8 +15,7 @@ concurrency:
 jobs:
   Lint:
     name: Lint, Format and Type Check
-    runs-on: [self-hosted, flock-ci]
-    timeout-minutes: 30
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v7.0.1
@@ -65,12 +64,23 @@ jobs:
         run: uv sync --all-extras --all-packages --dev --no-group gpu --group cpu-tests --frozen
 
       - name: Run tests
-        run: uv run --no-sync python -m pytest -q tests -n 6
+        timeout-minutes: 10
+        run: uv run --no-sync python -m pytest -v tests -n 6 -rA --durations=20
+
+      # TEMPORARY: find out why an xdist worker dies on the self-hosted runners.
+      - name: Runner resource usage
+        if: always()
+        run: |
+          cd /sys/fs/cgroup
+          for f in memory.max memory.peak memory.events memory.stat pids.max pids.peak pids.events cpu.max; do
+            echo "== $f"; cat "$f" || true
+          done
+          nproc; python3 -c 'import os; print(os.process_cpu_count())' || true
+          df -h /tmp /home/runner
 
   Snapshot:
     name: Eval task snapshot
-    runs-on: [self-hosted, flock-ci]
-    timeout-minutes: 30
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v7.0.1
@@ -93,8 +103,7 @@ jobs:
 
   GPU:
     name: Run GPU tests on Modal
-    runs-on: [self-hosted, flock-ci]
-    timeout-minutes: 30
+    runs-on: ubuntu-latest
     # Pull requests from forks get no secrets, so they cannot reach Modal.
     if: github.event.pull_request.head.repo.full_name == github.repository
     concurrency:
