@@ -29,8 +29,8 @@ The numbering continues from 025 (D182 to D187).
   `eval_launch_monthly_usd` for the month over the whole server (300), with the H100 price as
   `eval_launch_usd_per_hour`. Modal bills one workspace, so the month is counted over every org.
 - **The per-launch cap is enforced by Modal,** as the call's `timeout`: cap over price, less ten
-  minutes for the container to start and stop (billed, but outside the call's own limit), at most
-  Modal's 24 hours. Containers scale down 2 s after their call instead of Modal's default minute,
+  minutes for the container to start and stop (billed, but outside the call's own limit; the
+  worker's `startup_timeout` is 8 of them), at most Modal's 24 hours. Containers scale down 2 s after their call instead of Modal's default minute,
   since each launch's environment gives it containers of its own. A launch can't overrun its cap,
   whatever happens to the server.
 - **The monthly count never undercounts.** A running launch counts at its full cap, whenever it
@@ -87,8 +87,9 @@ The numbering continues from 025 (D182 to D187).
 ### D191. The server's own Modal token, and a wandb key per launch that ends with it
 
 - **Modal token.** `modal_token_id` and `modal_token_secret` in the API's environment, a token for
-  the server only, not CI's. Launches are off (404) without them, the price, or
-  `api_public_url`: without that URL the worker's wandb SDK would send the key to W&B itself.
+  the server only, not CI's. Launches are off (404) without them, the price, or a non-loopback
+  `api_public_url`: without that URL the worker's wandb SDK would send the key to W&B itself,
+  and with Compose's default (`localhost`) it would log to itself on Modal.
 - **Logging.** The server makes a wandb key for the launcher (`eval launch {id}`) and passes it to
   the call in its environment with the tracker's URL, the org and the run's name. A wandb key
   reaches tracking only (D72): the REST API and the S3 key exchange refuse it. It is deleted

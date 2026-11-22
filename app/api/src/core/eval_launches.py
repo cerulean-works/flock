@@ -13,6 +13,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
+from urllib.parse import urlsplit
 
 from app.api.src.core.errors import BadGateway, Conflict, Forbidden, Invalid, NotFound
 from app.api.src.core.hf_imports import Hub, HubError
@@ -183,8 +184,9 @@ class EvalLaunches:
         "WHEN call_id IS NULL THEN 0 "
         "ELSE least(cap_usd, (extract(epoch FROM finished_at - started_at) + $1) / 3600 "
         "* usd_per_hour) END), 0) FROM eval_launches WHERE state = 'running' "
-        "OR finished_at >= date_trunc('month', now()) OR (unconfirmed AND started_at "
-        "+ make_interval(secs => $2) >= date_trunc('month', now()))"
+        "OR finished_at + make_interval(secs => $1) >= date_trunc('month', now()) "
+        "OR (unconfirmed AND started_at + make_interval(secs => $2) "
+        ">= date_trunc('month', now()))"
     )
 
     def __init__(self, store: Store) -> None:
@@ -193,10 +195,15 @@ class EvalLaunches:
         s = store.settings
         self.modal: Any = None
         # Without the public API URL the worker's wandb SDK would send the key to W&B itself.
+        # A loopback URL (Compose's default) would leave the worker logging to itself on Modal.
+        host = urlsplit(s.api_public_url or "").hostname
+        public = host is not None and host not in ("localhost", "127.0.0.1", "::1")
         token_id, secret = s.modal_token_id, s.modal_token_secret
-        if token_id and secret and s.api_public_url and s.eval_launch_usd_per_hour > 0:
+        if token_id and secret and public and s.eval_launch_usd_per_hour > 0:
             self.modal = Modal(token_id, secret)
         self._catalogue: tuple[float, dict[str, list[str]]] | None = None
+        # One cold Modal call fills the cache, however many pages ask at once.
+        self._catalogue_lock = asyncio.Lock()
         # Stands in for the Hub in tests.
         self.transport: Any = None
 
@@ -298,14 +305,15 @@ class EvalLaunches:
         """The suites and tasks a launch may run, from the deployed worker, kept for an hour:
         the list changes only with a deploy."""
         modal = self.require()
-        now = time.monotonic()
-        if self._catalogue is None or self._catalogue[0] < now:
-            try:
-                found = await modal.catalogue()
-            except Exception as e:
-                raise BadGateway(f"Modal couldn't list the suites and tasks: {e}") from e
-            self._catalogue = (now + self.CATALOGUE_TTL, found)
-        return self._catalogue[1]
+        async with self._catalogue_lock:
+            now = time.monotonic()
+            if self._catalogue is None or self._catalogue[0] < now:
+                try:
+                    found = await modal.catalogue()
+                except Exception as e:
+                    raise BadGateway(f"Modal couldn't list the suites and tasks: {e}") from e
+                self._catalogue = (now + self.CATALOGUE_TTL, found)
+            return self._catalogue[1]
 
     # ------------------------------------------------------------------ launching
 
@@ -481,41 +489,40 @@ class EvalLaunches:
         error: str | None = None,
         commit: str | None = None,
         unconfirmed: bool = False,
-    ) -> None:
-        """Record how ``job`` ended, unless another replica already did, and delete its key.
-        ``unconfirmed``: its call may be running unseen, so it keeps its whole cap (D188)."""
+        no_call: bool = False,
+    ) -> bool:
+        """Record how ``job`` ended, unless another replica already did, and delete its key;
+        False if it is still running. ``unconfirmed``: its call may be running unseen, so it
+        keeps its whole cap (D188). ``no_call``: only while the row has no call."""
         async with self.store.db.pool.acquire() as conn, conn.transaction():
             await conn.execute(
                 "UPDATE eval_launches SET state = CASE WHEN cancel_requested AND $2 = 'failed' "
                 "THEN 'cancelled' ELSE $2 END, error = $3, flock_commit = $4, unconfirmed = $5, "
-                "finished_at = now() WHERE pk = $1 AND state = 'running'",
+                "finished_at = now() WHERE pk = $1 AND state = 'running' "
+                "AND (NOT $6 OR call_id IS NULL)",
                 job.pk,
                 state,
                 error,
                 commit,
                 unconfirmed,
+                no_call,
             )
-            # Whoever ended it, the key goes: the worker is done with it.
-            await conn.execute(
-                "DELETE FROM api_keys WHERE pk = (SELECT api_key_pk FROM eval_launches "
-                "WHERE pk = $1)",
+            # Whoever ended it, the key goes once it has: the worker is done with it.
+            return await conn.fetchval(
+                "WITH ended AS (DELETE FROM api_keys WHERE pk = (SELECT api_key_pk "
+                "FROM eval_launches WHERE pk = $1 AND state <> 'running')) "
+                "SELECT state <> 'running' FROM eval_launches WHERE pk = $1",
                 job.pk,
             )
 
     async def _watch(self, job: EvalLaunch) -> None:
         try:
             if job.call_id is None:  # its replica stopped between the insert and the spawn
-                # Only if it still has no call: its maker may have attached one since this
-                # replica read the row, and then that call is watched.
-                ended = await self.store.db.fetchval(
-                    "UPDATE eval_launches SET unconfirmed = true WHERE pk = $1 "
-                    "AND state = 'running' AND call_id IS NULL RETURNING pk",
-                    job.pk,
-                )
-                if ended is not None:
-                    # Its call may have started unseen, so the launch keeps its whole cap.
-                    error = "The launch was cut short while its call was being made."
-                    await self._end(job, "failed", error=error, unconfirmed=True)
+                # Only if it still has no call, in one statement: its maker may have attached
+                # one since this replica read the row, and then that call is watched. Its call
+                # may have started unseen, so an ended launch keeps its whole cap.
+                error = "The launch was cut short while its call was being made."
+                if await self._end(job, "failed", error=error, unconfirmed=True, no_call=True):
                     return
                 job.call_id = await self.store.db.fetchval(
                     "SELECT call_id FROM eval_launches WHERE pk = $1 AND state = 'running'",
