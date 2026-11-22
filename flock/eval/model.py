@@ -631,6 +631,8 @@ class ScoringModel:
         num_tokens = min(num_tokens, self.max_length - 1)
         if not isinstance(self.model, PreTrainedModel):
             num_tokens = 0
+        if num_tokens == 0 and not values:
+            return ContextScores(greedy=None, values=None)
 
         kept = [context[-(self.max_length - num_tokens) :] for context in contexts]
         greedy = None
@@ -692,6 +694,8 @@ class ScoringModel:
                 )
                 step_ids = output.logits[:, -1].argmax(-1, keepdim=True)
                 greedy[index, step] = step_ids[:, 0].to(self.device)
+                if step == num_tokens - 1:
+                    break
                 cache = output.past_key_values
                 # The next input is the token just written, one position on.
                 mask = torch.cat([mask, mask.new_ones(len(batch), 1)], dim=-1)
