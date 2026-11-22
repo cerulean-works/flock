@@ -740,6 +740,16 @@ export interface ItemDiff {
 	schema_version: number;
 }
 
+/** An eval run the compare page's picker offers (`GET /api/projects/…/eval-runs`). */
+export interface EvalRunChoice {
+	id: string;
+	display_name: string | null;
+	created_at: number;
+	state: string;
+	/** The model its config names, `flock:org/path@N`, if any. */
+	model: string | null;
+}
+
 /** A deleted model or version in the trash (`GET …/models/-/trash`), for org admins. */
 interface ModelTrashBase {
 	id: number;

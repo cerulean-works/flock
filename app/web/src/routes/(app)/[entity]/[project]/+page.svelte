@@ -332,9 +332,10 @@
 				<span class="selection-count mr-1 text-[13px] font-medium tabular-nums" role="status">
 					{ws.selectedRows.length} selected
 				</span>
-				{#if ws.selectedRows.length === 2}
+				<!-- Two eval runs, doc by doc (025 D185): not offered for a run known not to be one. A
+				pair without results files reaches the page, which says why. -->
+				{#if ws.selectedRows.length === 2 && ws.selectedRows.every( (r) => [undefined, 'eval'].includes(ws.cell(r, 'job_type') as string | undefined) )}
 					{@const [a, b] = ws.selectedRows.map((r) => ws.page.runs[r].id)}
-					<!-- Two eval runs, doc by doc (025 D185); the page says if they can't be compared. -->
 					<Button
 						variant="outline"
 						data-sveltekit-preload-data="tap"

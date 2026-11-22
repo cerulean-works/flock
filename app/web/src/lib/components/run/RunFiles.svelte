@@ -40,8 +40,8 @@
 	{:else if !files.length}
 		<EmptyState>No files uploaded</EmptyState>
 	{:else}
-		<div class="px-5 pt-6 pb-16">
-			<div class="max-w-200 border-t border-divider">
+		<div class="px-5 pt-5 pb-16">
+			<div class="border-t border-divider">
 				<table class="w-full text-[13.5px]">
 					<thead class="border-b text-xs text-muted-foreground">
 						<tr>

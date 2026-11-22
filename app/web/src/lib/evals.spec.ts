@@ -67,7 +67,7 @@ describe('eval scores', () => {
 		expect(scores.values).toEqual({ 'mmlu/acc_raw@h-mmlu': null });
 	});
 
-	it('lists every run’s rows once, suites first, and a task scored two ways twice', () => {
+	it('lists every run’s rows once, suites first, and a task scored two ways twice, together', () => {
 		const run = (r: EvalResults | null) => ({ scores: r && evalScores(r) }) as ModelEvalRun;
 		const rows = evalRows([
 			run(results([], [['b', 'acc_raw', 1]])),
@@ -85,8 +85,8 @@ describe('eval scores', () => {
 		expect(rows.map((r) => r.key)).toEqual([
 			'suites/core@s-core',
 			'b/acc_raw@h-b',
-			'a/acc_raw@h-a',
-			'b/acc_raw@other'
+			'b/acc_raw@other',
+			'a/acc_raw@h-a'
 		]);
 	});
 });

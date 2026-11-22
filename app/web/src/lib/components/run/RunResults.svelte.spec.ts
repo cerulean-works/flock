@@ -115,7 +115,7 @@ describe('the compare page', () => {
 		await expect.element(screen.getByText('Mercury_1 Mercury_2')).toBeVisible();
 		await expect.element(screen.getByText('Mercury_3')).toBeVisible();
 		await expect.element(screen.getByText('Scored by A only')).toBeVisible();
-		await expect.element(screen.getByRole('link', { name: 'olmo' })).toBeVisible();
+		await expect.element(screen.getByRole('button', { name: /olmo/ })).toBeVisible();
 	});
 
 	it('says why a pair can’t be compared', async () => {
