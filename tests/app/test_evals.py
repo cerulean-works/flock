@@ -3,7 +3,6 @@ with eval's own diff."""
 
 from __future__ import annotations
 
-import asyncio
 import dataclasses
 import json
 import re
@@ -203,13 +202,12 @@ def test_a_file_the_caller_may_not_read_still_counts_against_the_budget(
     api.create_run("p", "r")
     project = flock.call(flock.store.project("flock", "p"))
     run = flock.call(flock.store.project_run(project, "r"))
-    loop = asyncio.new_event_loop()
-    files = PairFiles(flock.store, loop, lookups=1)
+    # The server's running loop, so a read the budget should have refused fails the test.
+    files = PairFiles(flock.store, flock.loop, lookups=1)
 
     assert files.read(run, "private/predictions/t.jsonl", readable=False) is None
     with pytest.raises(ValueError, match="more files than one comparison reads"):
         files.read(run, "predictions/t.jsonl")
-    loop.close()
 
 
 def test_the_dashboard_reads_the_schemas_eval_reads() -> None:

@@ -84,7 +84,7 @@ export async function evalRuns(scope: Scope, name: string, number: number): Prom
 	let failed: Response | null = null;
 	let next = 0;
 	async function work() {
-		while (next < paths.length) {
+		while (next < paths.length && !failed) {
 			const i = next++;
 			const [entity, project, id] = paths[i].split('/');
 			const path = `${projectPath(entity, project)}/runs/${encodeURIComponent(id)}`;
@@ -94,7 +94,8 @@ export async function evalRuns(scope: Scope, name: string, number: number): Prom
 				continue;
 			}
 			if (!got.ok) {
-				failed ??= got;
+				if (failed) await got.body?.cancel();
+				else failed = got;
 				return;
 			}
 			const run = (await got.json()) as RunDetail;
