@@ -25,19 +25,20 @@ An expected file appears only if the client uploaded it. Imported W&B runs inclu
 
 ## Eval results[[eval-results]]
 
-An eval run that `flock eval run --wandb-project` logged carries its `results.json` and one predictions file per task. Its page then has a **Results** tab:
+An eval run that `flock eval run --wandb-project` logged carries its `results.json` and one predictions file per task. Every eval run's page has a **Results** tab and opens on it; a run without the file says so there:
 
 - **Suites:** each suite's score, its metric, how many members it has and its suite hash.
-- **Tasks:** each task's primary metric and score, its number of docs, its task hash, its dataset (with a lock on a private one) and how many docs had their context cut to fit the model.
+- **Tasks:** each task's primary metric and score, its number of docs, its task hash, its dataset (with a lock on a private one) and, when any task lost tokens, how many docs had their context cut to fit the model.
 - **Provenance:** the model and its digest, the instrument (dtype, batch tokens, attention, SDPA kernel), the libraries, the flock commit and the command.
 
-Hashes show their first 12 characters. Hover one for the whole value, or copy it. Two scores are comparable only when their hashes are equal, as [comparing results](../evals/comparison) explains.
+Scores show four decimals; hover one for its exact value. Hashes show their first 12 characters. Hover one for the whole value, or copy it. Two scores are comparable only when their hashes are equal, as [comparing results](../evals/comparison) explains.
 
 ### Compare two eval runs[[compare-two-eval-runs]]
 
-1. In **Table**, check exactly two eval runs and click **Compare items**. From a model version, open **Evals**, check two runs and click the same button.
+1. In **Table**, check exactly two eval runs and click **Compare items**. From a model version, open **Evals**, check two runs and click the same button. From an eval run, click **Compare with…** on its **Results** tab or in its **⋯** menu, then pick the other run.
 2. The page lists every task both runs scored under the same task hash, with four counts: docs both got right, both got wrong, only A got right and only B got right.
 3. Click a task to see the ids of the docs only one run got right. **Copy ids** puts a list on the clipboard.
+4. To compare another pair, click either run, or press <kbd>A</kbd> or <kbd>B</kbd>. Type to search the project's eval runs, use the arrow keys and press <kbd>Enter</kbd>. Press <kbd>Backspace</kbd> in the empty search box to pick another project.
 
 Tasks that can't be compared are listed below with the reason, such as another task hash or a primary metric that isn't an accuracy. Runs scored with another instrument aren't compared at all, and the page says why. The counts are those of `flock eval diff`, computed by Flock from the runs' files, and the page shows ids only, never a doc's text. A task on a private dataset is compared for your organization's members only: anyone else sees it among the tasks not compared, with no predictions.
 

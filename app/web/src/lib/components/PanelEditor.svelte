@@ -6,6 +6,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
+	import InfoHint from '#lib/components/InfoHint.svelte';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import * as Select from '#lib/components/ui/select/index.js';
 	import { Slider } from '#lib/components/ui/slider/index.js';
@@ -291,7 +292,14 @@
 									Data
 								</h3>
 								<div class="grid gap-2">
-									<Label for="panel-add-metric">Metrics</Label>
+									<div class="flex items-center gap-1.5">
+										<Label for="panel-add-metric">Metrics</Label>
+										<InfoHint label="About metrics">
+											Plot several metrics on one chart. Only {def.stream === 'system'
+												? 'system metrics'
+												: 'logged metrics'} share this x axis.
+										</InfoHint>
+									</div>
 									<ul class="flex flex-wrap gap-1.5" aria-label="Metrics plotted">
 										{#each draft.metrics as key, k (key)}
 											<li
@@ -330,27 +338,23 @@
 									/>
 									{#if errors.metrics}
 										<p class="text-xs text-destructive">{errors.metrics}</p>
-									{:else}
-										<p class="text-xs text-muted-foreground">
-											Plot several metrics on one chart. Only {def.stream === 'system'
-												? 'system metrics'
-												: 'logged metrics'} share this x axis.
-										</p>
 									{/if}
 								</div>
 								<div class="grid gap-2">
-									<Label>X axis</Label>
+									<div class="flex items-center gap-1.5">
+										<Label>X axis</Label>
+										{#if def.stream === 'system'}
+											<InfoHint label="About the x axis">
+												System metrics are sampled on a timer, so they plot against time.
+											</InfoHint>
+										{/if}
+									</div>
 									<XAxisPicker
 										value={draft.xAxis}
 										stream={def.stream}
 										inherit="Workspace ({workspaceAxis})"
 										onchange={setAxis}
 									/>
-									{#if def.stream === 'system'}
-										<p class="text-xs text-muted-foreground">
-											System metrics are sampled on a timer, so they plot against time.
-										</p>
-									{/if}
 								</div>
 								{@render range(
 									'x',

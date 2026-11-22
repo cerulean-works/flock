@@ -97,14 +97,25 @@ export function evalScores(results: EvalResults): EvalScores {
 
 /**
  * The Evals tab's rows over several runs: every row any run has, suites before tasks, each in
- * the order of the first run that has it.
+ * the order of the first run that has it. A name scored under two hashes keeps its rows
+ * together, so the two are read one above the other.
  */
 export function evalRows(runs: ModelEvalRun[]): EvalRow[] {
 	const rows = new Map<string, EvalRow>();
 	for (const run of runs)
 		for (const row of run.scores?.rows ?? []) if (!rows.has(row.key)) rows.set(row.key, row);
-	const all = [...rows.values()];
+	const byName = new Map<string, EvalRow[]>();
+	for (const row of rows.values()) byName.set(row.name, [...(byName.get(row.name) ?? []), row]);
+	const all = [...byName.values()].flat();
 	return [...all.filter((r) => r.kind === 'suite'), ...all.filter((r) => r.kind === 'task')];
+}
+
+/**
+ * A score as the eval pages show it: four decimals, so a column of scores lines up and two runs
+ * read digit by digit. The exact value is the cell's hover text.
+ */
+export function formatScore(value: number | null | undefined): string {
+	return value == null || !Number.isFinite(value) ? '–' : value.toFixed(4);
 }
 
 /** Why eval's diff didn't compare a task, in words. */
@@ -117,6 +128,11 @@ export const NOT_COMPARED: Record<string, string> = {
 	no_outcome: 'A run’s predictions are older than schema 9, with no right or wrong per doc'
 };
 
-/** The page comparing run A doc by doc with run B, given as `entity/project/id` (025 D185). */
-export const compareHref = (entity: string, project: string, run: string, other: string) =>
-	`${resolve('/(app)/[entity]/[project]/runs/[run]/compare', { entity, project, run })}?with=${encodeURIComponent(other)}`;
+/**
+ * The page comparing run A doc by doc with run B, given as `entity/project/id` (025 D185). With
+ * no B, the page has A only and asks for B.
+ */
+export function compareHref(entity: string, project: string, run: string, other = '') {
+	const page = resolve('/(app)/[entity]/[project]/runs/[run]/compare', { entity, project, run });
+	return other ? `${page}?with=${encodeURIComponent(other)}` : page;
+}

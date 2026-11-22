@@ -3,11 +3,10 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
-	import { compareHref, evalRows } from '#lib/evals.ts';
+	import { compareHref, evalRows, formatScore } from '#lib/evals.ts';
 	import { modelApi, modelCall, shellWord } from '#lib/models.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import type { ModelEvalRun, ModelVersionDetail } from '#lib/types.ts';
-	import { formatNumber } from '#lib/utils.ts';
 	import { runHref } from '#lib/workspace/url.ts';
 
 	let { scope, version }: { scope: Scope; version: ModelVersionDetail } = $props();
@@ -120,7 +119,7 @@
 								class={['px-2 text-right tabular-nums', value == null && 'text-faint']}
 								title={value == null ? undefined : String(value)}
 							>
-								{value == null ? '–' : formatNumber(value)}
+								{formatScore(value)}
 							</td>
 						{/each}
 					</tr>

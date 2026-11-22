@@ -6,11 +6,16 @@ import type { PageServerLoad } from './$types';
 /**
  * Two eval runs compared doc by doc (025 D185): this run as A, and `?with=entity/project/id` as
  * B. Flock runs eval's own diff on the two runs' files. A pair it can't compare (a run with no
- * results file, another instrument, files that don't match their results) shows why.
+ * results file, another instrument, files that don't match their results) shows why. Without
+ * `?with=` there's only A, and the page asks for B (the run page's **Compare with…**).
  */
 export const load: PageServerLoad = async ({ params, url }) => {
 	const other = url.searchParams.get('with') ?? '';
 	const path = `${projectPath(params.entity, params.project)}/runs/${encodeURIComponent(params.run)}`;
+	if (!other) {
+		const a = (await (await flock(path)).json()) as RunDetail;
+		return { a, b: null, diff: null, refusal: null };
+	}
 	// Both runs first, so one the viewer can't read is the usual 404 (or sign-in), as on its page.
 	const parts = other.split('/');
 	const [entity, project, run] = parts;
