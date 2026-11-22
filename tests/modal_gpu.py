@@ -19,7 +19,6 @@ from pathlib import Path
 import modal
 
 ROOT = Path(__file__).parent.parent
-MEMBERS = ["flock/cli", "flock/eval", "flock/hub", "flock/training", "app/api", "tests"]
 REPO = "/repo"
 # Compiled kernels persist between runs as one archive in a Volume, since reading thousands of
 # small files from a Volume is slow; each run unpacks it to local disk and saves it again.
@@ -42,6 +41,15 @@ def cuda_pins() -> dict[str, list[str]]:
     return pins
 
 
+def members() -> list[str]:
+    """The workspace members, whose pyproject files `uv sync` needs next to the lockfile. Inside a
+    container the image is already built."""
+    pyproject = ROOT / "pyproject.toml"
+    if not pyproject.exists():
+        return []
+    return tomllib.loads(pyproject.read_text())["tool"]["uv"]["workspace"]["members"]
+
+
 # The CUDA wheels are several GB, so they get their own layers keyed only on their pinned
 # versions: a lockfile change that leaves them alone reuses those layers, and `uv sync` keeps
 # the installed wheels because they match the lock. The remaining dependencies are keyed on
@@ -61,7 +69,7 @@ image = (
     .add_local_file(ROOT / "pyproject.toml", f"{REPO}/pyproject.toml", copy=True)
     .add_local_file(ROOT / "uv.lock", f"{REPO}/uv.lock", copy=True)
 )
-for member in MEMBERS:
+for member in members():
     image = image.add_local_file(
         ROOT / member / "pyproject.toml", f"{REPO}/{member}/pyproject.toml", copy=True
     )

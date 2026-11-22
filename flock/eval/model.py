@@ -267,7 +267,7 @@ def _flock_hub() -> Any:
         from flock.hub.models import cache
     except ImportError as error:
         raise ImportError(
-            f"scoring a flock: model needs flock-hub[models] and flock-training: {error}"
+            f"scoring a flock: model needs torch, safetensors and flock.training: {error}"
         ) from error
 
     return cache

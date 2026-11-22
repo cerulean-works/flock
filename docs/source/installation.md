@@ -30,10 +30,22 @@ You need Git, Python 3.14 and [uv](https://docs.astral.sh/uv/). Model evaluation
 
 Run the commands in these docs from the repository root. `uv run flock` uses the workspace environment; after activating `.venv`, you can use `flock` directly.
 
+## Use Flock from another project
+
+A project of your own can depend on Flock straight from Git. Pin a commit:
+
+```toml
+[project]
+dependencies = ["flock"]
+
+[tool.uv.sources]
+flock = { git = "https://github.com/cerulean-works/flock.git", rev = "<commit>" }
+```
+
+`uv sync` then installs the `flock` command and the `flock.eval`, `flock.hub` and `flock.training` modules, with everything they need. The app is not part of the package: [run it from the repository](app/run-locally).
+
 ## Choose your next task
 
 - [Sign in](cli/sign-in) for account and storage commands.
 - [Run an evaluation](evals/run-evaluation) for local model scoring. A Flock account is needed only if you also log results to its tracker.
 - [Run the app locally](app/run-locally) only when developing Flock itself.
-
-S3 clients are optional dependencies of the examples that use them. Install boto3 with `uv pip install boto3`; for the Lance example, install `pylance` and `pyarrow` with `uv pip install pylance pyarrow`.

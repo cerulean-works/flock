@@ -12,13 +12,7 @@ The helper uses your default organization. `s3.credentials("organization-id")` s
 
 ## Read and write objects with boto3
 
-[Sign in](sign-in) and install boto3:
-
-```bash
-uv pip install boto3
-```
-
-Use an existing bucket or [create one](s3-access#work-with-buckets). This example uses `checkpoints` and a small test object:
+[Sign in](sign-in). boto3 comes with Flock. Use an existing bucket or [create one](s3-access#work-with-buckets). This example uses `checkpoints` and a small test object:
 
 ```python
 from flock.hub import s3
