@@ -6,6 +6,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import re
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,7 +14,7 @@ import pytest
 
 from app.api.src.core.errors import Invalid
 from flock.eval.diff import diff
-from flock.eval.results import READ_SCHEMAS, Results, read_results
+from flock.eval.results import READ_SCHEMAS, Results, WrittenResults, read_results
 from tests.eval.toy import PROVENANCE, write_run
 
 if TYPE_CHECKING:
@@ -102,6 +103,62 @@ def test_either_private_run_is_the_same_404_to_outsiders(
         assert client.get(route, **{"with": "flock/q/b"}).status == 200
 
 
+def folder_file(folder: str, name: str) -> str | None:
+    """A written run's file as text, or None if the folder has no such file."""
+    path = Path(folder) / name
+    return path.read_text() if path.is_file() else None
+
+
+def keep_private(folder: str, task: str) -> None:
+    """Marks `task`'s dataset private and moves its predictions under `private/`, as
+    `log_to_tracker` uploads a task on a private dataset."""
+    path = Path(folder) / "results.json"
+    data = json.loads(path.read_text())
+    for entry in data["tasks"]:
+        if entry["task"] == task:
+            entry["dataset"]["private"] = True
+    path.write_text(json.dumps(data))
+    (Path(folder) / "private" / "predictions").mkdir(parents=True)
+    rows = Path(folder) / "predictions" / f"{task}.jsonl"
+    rows.rename(Path(folder) / "private" / "predictions" / f"{task}.jsonl")
+
+
+def test_private_predictions_are_compared_for_members_only(
+    flock: FlockServer, api: Client, tmp_path: Path
+) -> None:
+    """A task on a private dataset keeps its rows under `private/` (D181): the org's members
+    compare them, and anyone else gets the task as `no_predictions`, with no count or doc id."""
+    a = write_run(tmp_path / "a", {"t": ("h", [True, False]), "exam": ("e", [True, False])})
+    b = write_run(tmp_path / "b", {"t": ("h", [True, True]), "exam": ("e", [False, True])})
+    for folder in (a, b):
+        keep_private(folder, "exam")
+    log_run(api, "p", "a", a)
+    log_run(api, "p", "b", b)
+    assert api.patch(f"{P}/p", {"visibility": "public"}).status == 200
+    member = flock.add_user("m@x.io").api
+    assert api.post("/api/v1/orgs", {"name": "lab"}).status == 201
+    outsider = flock.add_user("o@x.io", org="lab").api
+    route = f"{P}/p/runs/a/diff"
+    # What `flock eval diff` prints for the two runs as their org's members read them.
+    on_run = [
+        WrittenResults.read(f"run:flock/p/{name}", partial(folder_file, folder))
+        for name, folder in (("a", a), ("b", b))
+    ]
+    expected = diff(*on_run).to_dict()
+
+    for client in (api, member):
+        found = client.get(route, **{"with": "flock/p/b"})
+        assert found.status == 200, found.body
+        assert found.json() == json.loads(json.dumps(expected))
+        exam = found.json()["tasks"][1]
+        assert (exam["task"], exam["only_a"], exam["only_b"]) == ("exam", ["d-0"], ["d-1"])
+    for client in (outsider, flock.anonymous()):
+        found = client.get(route, **{"with": "flock/p/b"})
+        assert found.status == 200, found.body
+        assert [task["task"] for task in found.json()["tasks"]] == ["t"]
+        assert found.json()["not_compared"] == [["exam", "no_predictions"]]
+
+
 def test_runs_without_results_or_not_comparable_are_refused(api: Client, tmp_path: Path) -> None:
     a = write_run(tmp_path / "a", {"t": ("h", [True, False])})
     bf16 = dataclasses.replace(PROVENANCE, dtype="bfloat16")
@@ -117,7 +174,7 @@ def test_runs_without_results_or_not_comparable_are_refused(api: Client, tmp_pat
 
     missing = api.get(route, **{"with": "flock/p/train"})
     assert missing.status == 404
-    assert missing.json()["error"] == "flock/p/train has no results.json"
+    assert missing.json()["error"] == "run:flock/p/train has no results.json"
     for bad in ("flock/p", "flock/p/b/x", "flock//b", "flock/p/nope"):
         refused = api.get(route, **{"with": bad})
         assert refused.status == 404, bad
