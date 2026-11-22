@@ -170,12 +170,19 @@ def _run_files(results: dict[str, Any], results_file: Path | None) -> dict[str, 
         files[f"private/{name}" if marked else name] = path
         # The per-token values beside them, from schema 12 on, go where they go: token ids of a
         # private dataset are its text.
+        # Only schema 12 on writes them, so an older run's neighbour of that name isn't its own.
         name = tokens_name(task["task"])
         tokens = results_file.parent / name
+        if results["schema_version"] < 12 or not (tokens.is_file() or tokens.is_symlink()):
+            continue
         if tokens.is_symlink():
             raise ValueError(f"{tokens} is a link; upload the per-token values themselves")
-        if tokens.is_file():
-            files[f"private/{name}" if marked else name] = tokens
+        # Hard links too: one file under a private and a public name would go out under both.
+        stat = tokens.stat()
+        if (stat.st_dev, stat.st_ino) in seen:
+            raise ValueError(f"{tokens} is the file of two tasks")
+        seen.add((stat.st_dev, stat.st_ino))
+        files[f"private/{name}" if marked else name] = tokens
     return files
 
 
