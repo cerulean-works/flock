@@ -36,13 +36,13 @@ services:
     ulimits:
       nofile: 65536
     deploy:
-      replicas: ${RUNNER_REPLICAS:-4}
+      replicas: ${RUNNER_REPLICAS:-2}
       resources:
         limits:
           cpus: "${RUNNER_CPUS:-3}"
-          memory: ${RUNNER_MEMORY:-8g}
+          memory: ${RUNNER_MEMORY:-12g}
           pids: 4096
-    memswap_limit: ${RUNNER_MEMORY:-8g}
+    memswap_limit: ${RUNNER_MEMORY:-12g}
 
     logging:
       driver: json-file
