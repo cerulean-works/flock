@@ -112,7 +112,7 @@ export const NOT_COMPARED: Record<string, string> = {
 	only_b: 'Scored by B only',
 	task_hash: 'Scored differently: another task hash',
 	not_accuracy: 'Its primary metric isn’t an accuracy, so its docs have no right or wrong',
-	no_predictions: 'A run has no predictions file for it',
+	no_predictions: 'A run has no predictions file you can read for it',
 	no_outcome: 'A run’s predictions are older than schema 9, with no right or wrong per doc'
 };
 

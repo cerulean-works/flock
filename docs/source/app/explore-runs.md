@@ -39,7 +39,7 @@ Hashes show their first 12 characters. Hover one for the whole value, or copy it
 2. The page lists every task both runs scored under the same task hash, with four counts: docs both got right, both got wrong, only A got right and only B got right.
 3. Click a task to see the ids of the docs only one run got right. **Copy ids** puts a list on the clipboard.
 
-Tasks that can't be compared are listed below with the reason, such as another task hash or a primary metric that isn't an accuracy. Runs scored with another instrument aren't compared at all, and the page says why. The counts are those of `flock eval diff`, computed by Flock from the runs' files, and the page shows ids only, never a doc's text.
+Tasks that can't be compared are listed below with the reason, such as another task hash or a primary metric that isn't an accuracy. Runs scored with another instrument aren't compared at all, and the page says why. The counts are those of `flock eval diff`, computed by Flock from the runs' files, and the page shows ids only, never a doc's text. A task on a private dataset is compared for your organization's members only: anyone else sees it among the tasks not compared, with no predictions.
 
 ## Organize projects and runs
 

@@ -30,8 +30,7 @@ adds three things:
 
 ## 2. Design decisions
 
-The numbering continues from 023 (D171 to D180). 024 (private run files, D181) is on another
-branch, so this stage takes the numbers after it and the two merge in either order.
+The numbering continues from 023 (D171 to D180) and 024 (private run files, D181).
 
 ### D182. An eval run links to the version it names, by scope, path, number and digest
 
@@ -122,6 +121,12 @@ branch, so this stage takes the numbers after it and the two merge in either ord
   A file over 64 MiB, a pair over 1 GiB read in all, or a pair asking for over 2,000 files is
   refused (409): Base Easy's biggest file is a few MiB, and a pair reads about 80 MiB in 222
   files. `core/evals.py`'s `PairFiles` holds that budget for one comparison.
+- **Private predictions (D181).** The two runs are read as tracker runs (`run:entity/project/id`),
+  so a task on a private dataset is read from `private/predictions/`, as `flock eval diff` reads
+  it. Each run's `private/` files are read under 024's rule, with the files route's own check: a
+  caller whose access to that run's project is `public` reads none of them, so the task lands
+  in `not_compared` as `no_predictions`, with no count or doc id. The org's members compare it.
+  The reason is eval's frozen one; a run that never uploaded the file reads the same.
 - **The page:** `/{entity}/{project}/runs/{run}/compare?with={entity}/{project}/{run}`. A header
   names both runs and their models; a table has one row per compared task (task, hash, docs, the
   four counts); a row opens to the two id lists; tasks not compared are listed with eval's
@@ -187,7 +192,8 @@ merged, then rebased on `main` after 022 and 023.
   not a global model with the same bytes), `evals`, `eval_runs`, `scored`, retention.
 - `tests/app/test_evals.py`: the diff route against `flock eval diff` on the same files; 404 for
   an unknown run, for an anonymous caller on a private project (either side), and for a run with
-  no `results.json`; 409 for another instrument.
+  no `results.json`; 409 for another instrument; a public project's private task compared for
+  the super admin and a member, and `no_predictions` for an outsider and an anonymous caller.
 - `tests/app/test_web_access.py`: the compare page and a private run's Results tab answer an
   anonymous visitor as every private page does.
 - Web specs for `src/lib/evals.ts` and the three components.
@@ -221,6 +227,10 @@ merged, then rebased on `main` after 022 and 023.
   `eval_runs`, the Evals tab and its route take the model's scope and path, and the results
   reader and the dashboard accept schema 10. The diff route's budget moved from two counters in
   the route to `PairFiles`, and the dashboard's schema list is tested against eval's.
+- **Rebase on 024.** The diff route read its runs as `entity/project/id`, so `predictions()`
+  never built the `private/` name and a private dataset's task was `no_predictions` for members
+  too. It now reads them as `run:` sources, and 024's check moved into `members_only` in
+  `api/runs.py`, shared by the files list, the file route and the diff.
 - **Tests.** As planned, plus: a database that kept the early `model_version_runs`
   (`test_migrations.py`), two models with the same bytes, and the built dashboard's answers to
   a member, an outsider and a signed-out visitor for the run page, the compare page and the
@@ -236,7 +246,5 @@ merged, then rebased on `main` after 022 and 023.
   is called now (path and scope), so a model renamed after its runs were scored shows dashes
   there (the runs' own Results tabs still show them). Keeping the ref each link was made with
   would fix it.
-- The diff route reads both runs' files with `Store.read_file`, which doesn't apply 024's rule
-  that a public project's outsiders never read files under `private/`. Today no prediction
-  file is named so on this branch; once 024 merges, the route must refuse those names to a
-  caller whose access is `public`.
+- An outsider sees a private dataset's task as `no_predictions`, the reason a run without the
+  file gets: `ItemDiff` schema 1 has no reason of its own for it.

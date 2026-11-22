@@ -173,7 +173,7 @@ Files in a top-level `private/` folder, such as `private/predictions/exam.jsonl`
 | 404 | Either run is unknown, or you can't read its project. Both cases give the same answer, so a private project's runs aren't revealed. Also when either run has no `results.json`. |
 | 409 | The diff refuses the pair: the runs used another instrument (`dtype`, `batch_tokens`, `attention` or `sdpa_backend`), a run's predictions don't match its results, or a file is over 64 MiB or the pair over 1 GiB. `error` says which. |
 
-Anyone may call it on two public projects. Item text isn't returned, only doc ids.
+Anyone may call it on two public projects. Item text isn't returned, only doc ids. A task on a private dataset is compared from the runs' `private/predictions/` files for the organization's members only: to anyone else reading a public project it's in `not_compared` as `no_predictions`, as [Run files](#run-files) keep those files from them.
 
 ## Run models[[run-models]]
 

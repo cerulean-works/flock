@@ -526,6 +526,15 @@ async def get_run_models(run: MemberRunDep, store: StoreDep) -> Response:
 PRIVATE_FOLDER = "private"
 
 
+def members_only(name: str) -> bool:
+    """Whether the run file ``name`` is under ``private/``, which outsiders reading a public project never see (D181)."""
+    # Checked on the validated parts, as D152 does for the metadata file, so `./private/x` and
+    # `private//x` count too. In any case: a local volume may be case-insensitive and serve
+    # `Private/x` from the same folder.
+    parts = Store.file_parts(name)
+    return parts is not None and parts[0].casefold() == PRIVATE_FOLDER
+
+
 @public.get("/projects/{entity}/{project}/runs/{run}/files")
 async def list_run_files(run: ReadableRunDep, store: StoreDep, viewer: ViewerDep) -> Response:
     """Files uploaded by the run (config.yaml, wandb-metadata.json, requirements.txt, ...). Outsiders reading a public project don't see those under ``private/``."""
@@ -533,8 +542,7 @@ async def list_run_files(run: ReadableRunDep, store: StoreDep, viewer: ViewerDep
     files = []
     for name, size, updated_at in await store.list_files(run):
         # Not even its name, size or time: a name can say which private dataset a run read.
-        parts = store.file_parts(name)
-        if public and parts and parts[0].casefold() == PRIVATE_FOLDER:
+        if public and members_only(name):
             continue
         files.append({"name": name, "size": size, "updated_at": updated_at})
     return JSONResponse({"files": files})
@@ -550,14 +558,12 @@ async def get_run_file(
     run: ReadableRunDep, name: str, store: StoreDep, viewer: ViewerDep
 ) -> Response:
     """A file the run uploaded. Outsiders reading a public project get 404 for a file under ``private/``, and ``wandb-metadata.json`` without ``email`` and ``username`` (404 if it isn't a JSON object)."""
-    # Checked on the validated parts, as D152 does for the metadata file, so `./private/x` and
-    # `private//x` are refused too, and before storage is opened. In any case: a local volume
-    # may be case-insensitive and serve `Private/x` from the same folder.
-    parts = store.file_parts(name)
+    # Before storage is opened.
     public = store.accounts.access(viewer, run.project) == "public"
-    if public and parts and parts[0].casefold() == PRIVATE_FOLDER:
+    if public and members_only(name):
         raise APIError(404, "file not found")
 
+    parts = store.file_parts(name)
     if parts == (Store.METADATA_FILE,) and public:
         data = await store.read_file(run, name)
         try:
@@ -599,11 +605,19 @@ async def diff_runs(
     # through this loop, so two runs' hundreds of files never travel to the client.
     files = PairFiles(store, loop)
 
+    def read(of: Run, public: bool, name: str) -> str | None:
+        # A private dataset's rows, under `private/` (D181), are read for the run's org members
+        # only. To anyone else its task has no predictions, so no count or doc id of it leaves.
+        return None if public and members_only(name) else files.read(of, name)
+
+    # As tracker runs (`run:`), so a private dataset's task is read from `private/`.
+    pair = []
+    for of, source in ((run, f"{run.entity}/{run.project.name}/{run.name}"), (found, other)):
+        public = store.accounts.access(viewer, of.project) == "public"
+        pair.append((f"run:{source}", partial(read, of, public)))
+
     def compare() -> dict[str, Any]:
-        a = WrittenResults.read(
-            f"{run.entity}/{run.project.name}/{run.name}", partial(files.read, run)
-        )
-        b = WrittenResults.read(other, partial(files.read, found))
+        a, b = (WrittenResults.read(source, reader) for source, reader in pair)
         return diff(a, b).to_dict()
 
     try:
