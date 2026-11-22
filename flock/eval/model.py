@@ -736,16 +736,16 @@ class ScoringModel:
             contexts (`Sequence[list[int]]`):
                 Token ids, as [`encode_requests`] gives a request's context.
             num_tokens (`int`, *optional*, defaults to 32):
-                How many tokens to decode.
+                How many tokens to decode. 0 decodes none, for the values alone.
             values (`bool`, *optional*, defaults to `False`):
                 Also return each context's per-token values.
 
         Raises:
-            `ValueError`: if `num_tokens` is below 1, or `max_length` is 1, which leaves no room for a context.
+            `ValueError`: if `num_tokens` is below 0, or `max_length` is 1, which leaves no room for a context.
         """
-        if num_tokens < 1 or self.max_length < 2:
-            raise ValueError(f"no tokens to decode: {num_tokens} after up to {self.max_length}")
-        decodes = isinstance(self.model, PreTrainedModel)
+        if num_tokens < 0 or self.max_length < 2:
+            raise ValueError(f"can't decode {num_tokens} tokens after up to {self.max_length}")
+        decodes = num_tokens > 0 and isinstance(self.model, PreTrainedModel)
         num_tokens = min(num_tokens, self.max_length - 1)
 
         kept = [context[-(self.max_length - num_tokens) :] for context in contexts]

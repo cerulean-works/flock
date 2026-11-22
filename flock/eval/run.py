@@ -77,12 +77,14 @@ class EvalConfig:
         add_bos (`bool`, *optional*, defaults to `False`):
             Passed to [`~eval.model.ScoringModel`]. Set it for Gemma models, as OLMES does.
         tokens (`bool`, *optional*, defaults to `True`):
-            With `out`, write each multiple-choice task's per-token values beside its predictions, as `predictions/<task>.tokens.parquet`: each choice's tokens with their values, and the first 32 tokens greedy decoding writes after each context (see [`~eval.results.write_tokens`]).
+            With `out`, write each multiple-choice task's per-token values beside its predictions, as `predictions/<task>.tokens.parquet`: each choice's tokens with their values (see [`~eval.results.write_tokens`]).
         context_tokens (`bool`, *optional*, defaults to `False`):
-            Also write the per-token values of each doc's context, few-shot examples included, as contamination checks such as Min-K%++ read them. It needs `tokens`. They are read from each distinct context once, in the pass that starts greedy decoding, which then keeps the logits of every position.
+            Also write the per-token values of each doc's context, few-shot examples included, as contamination checks such as Min-K%++ read them. It needs `tokens`. They are read from each distinct context once, in a pass apart from scoring that keeps the logits of every position.
+        greedy_tokens (`bool`, *optional*, defaults to `False`):
+            Also write the first 32 tokens greedy decoding writes after each distinct context, for first-divergence views. It needs `tokens`. Off by default: decoding 32 tokens one step at a time took a run about half as long again as scoring it.
 
     Raises:
-        `ValueError`: if no task or suite is given, a task or suite repeats, `limit` or `batch_tokens` is less than 1, `dtype` is not `"bfloat16"` or `"float32"`, or `context_tokens` is set without `tokens`, before any model loads.
+        `ValueError`: if no task or suite is given, a task or suite repeats, `limit` or `batch_tokens` is less than 1, `dtype` is not `"bfloat16"` or `"float32"`, or `context_tokens` or `greedy_tokens` is set without `tokens`, before any model loads.
     """
 
     model: str
@@ -98,6 +100,7 @@ class EvalConfig:
     add_bos: bool = False
     tokens: bool = True
     context_tokens: bool = False
+    greedy_tokens: bool = False
 
     def __post_init__(self) -> None:
         if not self.tasks and not self.suites:
@@ -116,6 +119,8 @@ class EvalConfig:
             raise ValueError(f"dtype must be bfloat16 or float32, got {self.dtype}")
         if self.context_tokens and not self.tokens:
             raise ValueError("context_tokens writes into the per-token values, so it needs tokens")
+        if self.greedy_tokens and not self.tokens:
+            raise ValueError("greedy_tokens writes into the per-token values, so it needs tokens")
 
 
 def evaluate(config: EvalConfig) -> Results:
@@ -201,7 +206,15 @@ def evaluate(config: EvalConfig) -> Results:
         sdpa_backend=model.sdpa_backend,
     )
     task_results = [
-        score_task(model, task, config.limit, config.out, config.tokens, config.context_tokens)
+        score_task(
+            model,
+            task,
+            config.limit,
+            config.out,
+            config.tokens,
+            config.context_tokens,
+            config.greedy_tokens,
+        )
         for task in tasks
     ]
 
@@ -327,6 +340,7 @@ def score_task(
     out: Path | None = None,
     tokens: bool = False,
     context_tokens: bool = False,
+    greedy_tokens: bool = False,
 ) -> TaskResult:
     """
     Scores one task with an already loaded model. A training loop that scores the same task at many steps calls [`prepare_task`] once and [`score_prepared`] at each step instead, which gives the same result.
@@ -344,12 +358,15 @@ def score_task(
             With `out`, also write a multiple-choice task's per-token values, as [`EvalConfig`]'s `tokens`.
         context_tokens (`bool`, *optional*, defaults to `False`):
             With `tokens`, also write its contexts' values, as [`EvalConfig`]'s `context_tokens`.
+        greedy_tokens (`bool`, *optional*, defaults to `False`):
+            With `tokens`, also write its greedy tokens, as [`EvalConfig`]'s `greedy_tokens`.
 
     Raises:
         `ValueError`: if `limit` is less than 1, or a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
         `FileExistsError`: if the predictions file already exists, before anything is scored.
     """
-    return score_prepared(model, prepare_task(model, task, limit), out, tokens, context_tokens)
+    prepared = prepare_task(model, task, limit)
+    return score_prepared(model, prepared, out, tokens, context_tokens, greedy_tokens)
 
 
 def prepare_task(model: ScoringModel, task: Task, limit: int | None = None) -> PreparedTask:
@@ -396,6 +413,7 @@ def score_prepared(
     out: Path | None = None,
     tokens: bool = False,
     context_tokens: bool = False,
+    greedy_tokens: bool = False,
 ) -> TaskResult:
     """
     Scores a task from [`prepare_task`] with an already loaded model, as training loops do between steps. The result is the one [`score_task`] gives.
@@ -411,6 +429,8 @@ def score_prepared(
             With `out`, also write a multiple-choice task's per-token values, as [`EvalConfig`]'s `tokens`. Off by default, so a training loop pays for them only when it asks.
         context_tokens (`bool`, *optional*, defaults to `False`):
             With `tokens`, also write its contexts' values, as [`EvalConfig`]'s `context_tokens`.
+        greedy_tokens (`bool`, *optional*, defaults to `False`):
+            With `tokens`, also write its greedy tokens, as [`EvalConfig`]'s `greedy_tokens`.
 
     Raises:
         `ValueError`: if `model`'s tokenizer isn't the one the task was prepared with, or a multiple-choice task was prepared with another `add_bos`.
@@ -449,9 +469,10 @@ def score_prepared(
     # Each distinct context is read once, inside the timed span, so `seconds` counts what the
     # per-token values cost.
     contexts = None
-    if token_values is not None:
+    if token_values is not None and (context_tokens or greedy_tokens):
         contexts = model.score_contexts(
             [prepared.encoded[i].context for i in requests.context_requests],
+            num_tokens=32 if greedy_tokens else 0,
             values=context_tokens,
         )
     scores = requests.choice_scores(request_scores)

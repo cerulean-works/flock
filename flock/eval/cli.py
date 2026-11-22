@@ -87,6 +87,11 @@ def main() -> None:
     is_flag=True,
     help="Also write the per-token values of each doc's context, as Min-K%++ reads them.",
 )
+@click.option(
+    "--greedy-tokens",
+    is_flag=True,
+    help="Also write the first 32 tokens greedy decoding writes after each doc's context.",
+)
 @click.option("--device", help="Torch device (default: cuda if available).")
 @click.option(
     "--wandb-project",
@@ -108,6 +113,7 @@ def run(
     add_bos: bool,
     no_tokens: bool,
     context_tokens: bool,
+    greedy_tokens: bool,
     device: str | None,
     wandb_project: str | None,
     verbose: bool,
@@ -125,6 +131,7 @@ def run(
             add_bos=add_bos,
             tokens=not no_tokens,
             context_tokens=context_tokens,
+            greedy_tokens=greedy_tokens,
             device=device,
             wandb_project=wandb_project,
             # The program's name as invoked (`flock` for the script) and its arguments.
