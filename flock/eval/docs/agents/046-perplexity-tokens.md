@@ -27,7 +27,7 @@ A perplexity row sums a document's loss, so which tokens or which parts of a tex
 
 ### 046.D2. Byte ends come from the tokenizer's own offsets, made non-decreasing
 
-A Tokenizers tokenizer gives character offsets, which go to bytes; SentencePiece gives each piece's byte offsets. Byte-level merges can place a token's end inside a character, and byte-fallback pieces of one character get empty spans, so the ends are made non-decreasing and a token can span no bytes. The offsets come from tokenizing again, checked to give the scored token ids.
+A Tokenizers tokenizer gives character offsets, which go to bytes; SentencePiece gives each piece's byte offsets. Byte-level merges can place a token's end inside a character, and byte-fallback pieces of one character get empty spans, so the ends are made non-decreasing and a token can span no bytes. The offsets come from tokenizing again before scoring, checked against the token ids scored, so a tokenizer that cannot place its tokens fails before any GPU time.
 
 ---
 
