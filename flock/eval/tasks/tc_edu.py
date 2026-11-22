@@ -1,5 +1,6 @@
 """Taiwanese junior-high and senior-high questions from publishers' question banks (tc-edu): nine subjects of single-answer questions in the mock exams' format, one task each, read from a private dataset."""
 
+from flock.eval.tasks.base import Fewshot, MultipleChoiceTask
 from flock.eval.tasks.suite import Suite
 from flock.eval.tasks.tw_mock_exams import Subject, exam_task
 
@@ -128,3 +129,31 @@ TC_EDU_BPB = Suite("tc_edu:bpb", TC_EDU_TASKS, metric="bpb")
 TC_EDU_JH_BPB = Suite("tc_edu:jh:bpb", JUNIOR_HIGH_TASKS, metric="bpb")
 # An accuracy and a `bpb` don't average, so the group that runs both has no score.
 TC_EDU_ALL = Suite("tc_edu:all", (TC_EDU, TC_EDU_JH, TC_EDU_BPB, TC_EDU_JH_BPB), scored=False)
+
+# Many-shot tasks (stage 043): the same subjects, targets and format, with the shots a prefix of
+# the subject's `long_context` split, a fixed ordered list added in a later revision whose other
+# splits are unchanged. Each count is the most shots for which every complete request fits the
+# budget under all nine bank tokenizers (043.D2); a budget below 10 shots names no task (043.D3).
+# `5shot` is each subject's baseline from the head of the same list (043.D4). Subjects differ by
+# budget, so no suite averages them (043.D5).
+MANYSHOT_SHOTS = {
+    "hs_chinese": {"5shot": 5, "32k": 91},
+    "jh_chinese": {"5shot": 5, "8k": 17, "32k": 114},
+    "jh_english": {"5shot": 5, "4k": 80},
+    "jh_math": {"5shot": 5, "4k": 42},
+    "jh_science": {"5shot": 5, "4k": 22, "8k": 61, "32k": 228},
+    "jh_social": {"5shot": 5, "4k": 19, "8k": 46, "32k": 192},
+}
+TC_EDU_MANYSHOT_TASKS: list[MultipleChoiceTask] = []
+for subject in SUBJECTS:
+    for budget, num_shots in MANYSHOT_SHOTS.get(subject.name, {}).items():
+        TC_EDU_MANYSHOT_TASKS.append(
+            exam_task(
+                subject,
+                prefix=f"tc_edu_manyshot_{budget}",
+                repo="cerulean-works/tc-edu-exams",
+                revision="83677842ba8bd843c1163338a12af07eb6f4b095",
+                private=True,
+                fewshot=Fewshot(split="long_context", num_shots=num_shots),
+            )
+        )
