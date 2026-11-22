@@ -1,7 +1,5 @@
 <script lang="ts">
-	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { onMount } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
@@ -9,16 +7,27 @@
 	import Page from '#lib/components/Page.svelte';
 	import PageHeader from '#lib/components/PageHeader.svelte';
 	import InfoHint from '#lib/components/InfoHint.svelte';
+	import EvalItems from '#lib/components/run/EvalItems.svelte';
 	import EvalRunPicker from '#lib/components/run/EvalRunPicker.svelte';
 	import { NOT_COMPARED, compareHref } from '#lib/evals.ts';
-	import type { RunDetail } from '#lib/types.ts';
+	import type { ItemKeep, RunDetail } from '#lib/types.ts';
 	import { projectHref } from '#lib/workspace/url.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 
-	// Tasks whose doc ids are shown, by name.
-	const open = new SvelteSet<string>();
+	// The items' filters: each task with its four cells' counts.
+	const tasks = $derived(
+		(data.diff?.tasks ?? []).map((t) => ({
+			task: t.task,
+			counts: {
+				only_a: t.only_a.length,
+				only_b: t.only_b.length,
+				both_wrong: t.both_wrong,
+				both_right: t.both_right
+			}
+		}))
+	);
 
 	const totals = $derived.by(() => {
 		const sum = { docs: 0, both_right: 0, both_wrong: 0, only_a: 0, only_b: 0 };
@@ -52,8 +61,9 @@
 	function onkeydown(e: KeyboardEvent) {
 		if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
 		const target = e.target as HTMLElement | null;
-		if (target?.closest('input, textarea, select, [contenteditable=""], [contenteditable=true]'))
-			return;
+		// A select's own keys (the task select's typeahead) aren't the page's.
+		const own = 'input, textarea, select, [role=combobox], [role=listbox], [contenteditable=""]';
+		if (target?.closest(`${own}, [contenteditable=true]`)) return;
 		if (pickingA || pickingB) return;
 		const key = e.key.toLowerCase();
 		if (key === 'a') pickingA = true;
@@ -116,16 +126,21 @@
 	{/if}
 {/snippet}
 
-{#snippet ids(label: string, list: string[])}
-	<div class="min-w-0">
-		<p class="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
-			{label} ({list.length})
-			{#if list.length}<CopyButton text={list.join('\n')} label="Copy ids" class="size-6" />{/if}
-		</p>
-		<p class="max-h-40 overflow-y-auto font-mono text-[12px] break-all">
-			{list.length ? list.join(' ') : '–'}
-		</p>
-	</div>
+<!-- Without text (a run before schema 11), a cell's doc ids, where the diff lists them. -->
+{#snippet ids(task: string, keep: ItemKeep)}
+	{@const t = data.diff?.tasks.find((d) => d.task === task)}
+	{#if t && (keep === 'only_a' || keep === 'only_b')}
+		{@const list = t[keep]}
+		<div class="min-w-0 px-3">
+			<p class="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
+				Doc ids ({list.length})
+				{#if list.length}<CopyButton text={list.join('\n')} label="Copy ids" class="size-6" />{/if}
+			</p>
+			<p class="max-h-40 overflow-y-auto font-mono text-[12px] break-all">
+				{list.length ? list.join(' ') : '–'}
+			</p>
+		</div>
+	{/if}
 {/snippet}
 
 <!-- The task column takes what the five counts leave, in both tables, so they line up. -->
@@ -169,7 +184,33 @@
 			<p class="bg-card px-3 py-2.5" role="alert">
 				These runs can’t be compared doc by doc: {refusal}
 			</p>
-		{:else if data.diff}
+		{:else if data.diff && data.b}
+			<!-- A pair with no task in common has nothing to list: the reasons below say why. -->
+			{#if tasks.length}
+				<section aria-labelledby="items">
+					<h2 id="items" class="mb-2 text-[22px] tracking-[-0.01em]">Items</h2>
+					<!-- Another pair starts the items over. -->
+					{#key `${pathOf(data.a)} ${pathOf(data.b)}`}
+						<EvalItems
+							entity={data.a.entity}
+							project={data.a.project}
+							run={data.a.id}
+							other={pathOf(data.b)}
+							sides={['A', 'B']}
+							{tasks}
+							keeps={[
+								{ keep: 'only_a', label: 'Only A right' },
+								{ keep: 'only_b', label: 'Only B right' },
+								{ keep: 'both_wrong', label: 'Both wrong' },
+								{ keep: 'both_right', label: 'Both right' }
+							]}
+							fallback={ids}
+							bleed
+						/>
+					{/key}
+				</section>
+			{/if}
+
 			<section aria-labelledby="compared">
 				<h2 id="compared" class="mb-2 flex items-center gap-2 text-[22px] tracking-[-0.01em]">
 					{data.diff.tasks.length} tasks compared
@@ -193,21 +234,10 @@
 						</thead>
 						<tbody>
 							{#each data.diff.tasks as t (t.task)}
-								{@const shown = open.has(t.task)}
 								<tr class="border-b border-divider hover:bg-muted">
 									<td class="truncate px-3 py-1.5">
-										<button
-											type="button"
-											class="flex max-w-full items-center gap-1 font-mono text-[12.5px]"
-											aria-expanded={shown}
-											onclick={() => (shown ? open.delete(t.task) : open.add(t.task))}
-										>
-											<ChevronRightIcon
-												class={['size-3.5 flex-none transition-transform', shown && 'rotate-90']}
-											/>
-											<span class="truncate">{t.task}</span>
-										</button>
-										<span class="ml-5 text-xs text-faint" title={t.task_hash}>
+										<span class="block truncate font-mono text-[12.5px]">{t.task}</span>
+										<span class="text-xs text-faint" title={t.task_hash}>
 											{t.metric} · {t.task_hash.slice(0, 12)}
 										</span>
 									</td>
@@ -217,16 +247,6 @@
 									<td class="px-3 py-1.5 text-right tabular-nums">{t.only_a.length}</td>
 									<td class="px-3 py-1.5 text-right tabular-nums">{t.only_b.length}</td>
 								</tr>
-								{#if shown}
-									<tr class="border-b border-divider">
-										<td colspan="6" class="px-3 py-3">
-											<div class="grid gap-4 sm:grid-cols-2">
-												{@render ids('Only A right', t.only_a)}
-												{@render ids('Only B right', t.only_b)}
-											</div>
-										</td>
-									</tr>
-								{/if}
 							{/each}
 						</tbody>
 						{#if data.diff.tasks.length > 1}
@@ -256,8 +276,7 @@
 							<tbody>
 								{#each data.diff.not_compared as [task, reason] (task)}
 									<tr class="border-b border-divider">
-										<td class="truncate px-3 py-1.5 pl-8 font-mono text-[12.5px]" title={task}
-											>{task}</td
+										<td class="truncate px-3 py-1.5 font-mono text-[12.5px]" title={task}>{task}</td
 										>
 										<td colspan="5" class="px-3 py-1.5 text-muted-foreground"
 											>{NOT_COMPARED[reason] ?? reason}</td

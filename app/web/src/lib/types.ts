@@ -740,6 +740,52 @@ export interface ItemDiff {
 	schema_version: number;
 }
 
+/** One run's answer to a doc (eval's `Answer`, in `GET …/runs/{run}/items`). */
+export interface ItemAnswer {
+	/** The run's `provenance.model`. */
+	model: string;
+	/** The choice the primary metric picks; null for `acc_greedy`, which ranks none. */
+	pick: number | null;
+	correct: boolean;
+	/** Each choice's summed log-probability after its context. */
+	logprob: number[];
+	/** Each choice's probability renormalized over the choices. */
+	prob: number[];
+	/**
+	 * The softmax of the scores the primary metric ranks by: a share, not a probability, under a
+	 * length-normalized metric; null for `acc_greedy`.
+	 */
+	share: number[] | null;
+}
+
+/** A doc with its text and each run's answer (eval's `Item`, `flock eval items --json`). */
+export interface EvalItem {
+	task: string;
+	/** The primary metric, which `pick`, `correct` and `share` follow. */
+	metric: string;
+	id: string;
+	/** The context the choices share, or null when each has its own (`contexts`). */
+	question: string | null;
+	contexts: string[] | null;
+	/** Each choice's continuation as scored, leading space included. */
+	choices: string[];
+	gold: number;
+	/** One answer per run, in the order the runs were asked for. */
+	runs: ItemAnswer[];
+}
+
+/** A page of a task's items (`GET …/runs/{run}/items`). */
+export interface ItemsPage {
+	/** How many items the filter keeps in all. */
+	total: number;
+	offset: number;
+	items: EvalItem[];
+}
+
+/** What an items page keeps: one run's docs by outcome, or a cell of two runs' diff. */
+export type ItemKeep =
+	'wrong' | 'right' | 'all' | 'only_a' | 'only_b' | 'both_wrong' | 'both_right';
+
 /** An eval run the compare page's picker offers (`GET /api/projects/…/eval-runs`). */
 export interface EvalRunChoice {
 	id: string;

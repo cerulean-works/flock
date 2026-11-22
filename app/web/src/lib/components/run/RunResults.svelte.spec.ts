@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page as screen } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../../routes/layout.css';
@@ -53,8 +53,22 @@ const RESULTS = {
 	]
 } as EvalResults;
 
+// The items ask Flock through the dashboard; these tests answer that no run has text.
+function noText() {
+	const message = 'run:acme/evals/r1 is schema 10, whose predictions hold no text';
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () => new Response(JSON.stringify({ message }), { status: 409 }))
+	);
+}
+
+afterEach(() => {
+	vi.unstubAllGlobals();
+});
+
 describe('the Results tab', () => {
 	it('shows suites, each task’s primary metric with its hash and dataset, and the provenance', async () => {
+		noText();
 		render(RunResults, { run: run('r1'), results: RESULTS });
 		const task = screen.getByRole('row').filter({ hasText: 'tw_exam' });
 		await expect.element(task).toBeVisible();
@@ -68,7 +82,24 @@ describe('the Results tab', () => {
 			.toBeVisible();
 	});
 
+	it('offers its items, wrong ones by default, counted from the accuracy and the docs', async () => {
+		noText();
+		render(RunResults, { run: run('r1'), results: { ...RESULTS, schema_version: 11 } });
+		// 0.1786 of 571 docs right is 102.
+		await expect.element(screen.getByRole('radio', { name: /Wrong/ })).toHaveTextContent('469');
+		await expect.element(screen.getByRole('radio', { name: /Right/ })).toHaveTextContent('102');
+		await expect.element(screen.getByRole('radio', { name: /All/ })).toHaveTextContent('571');
+		await expect.element(screen.getByRole('alert')).toHaveTextContent(/schema 10/);
+	});
+
+	it('says how to read the items of a run scored before predictions held text', async () => {
+		render(RunResults, { run: run('r1'), results: RESULTS });
+		await expect.element(screen.getByText(/hold no text \(results schema 9\)/)).toBeVisible();
+		expect(screen.getByRole('radio').all()).toHaveLength(0);
+	});
+
 	it('says which schemas it reads instead of guessing at another', async () => {
+		noText();
 		render(RunResults, { run: run('r1'), results: { ...RESULTS, schema_version: 12 } });
 		await expect
 			.element(screen.getByText(/has schema 12; the dashboard reads schemas\s+8, 9, 10, 11\./))
@@ -99,7 +130,8 @@ const DIFF: ItemDiff = {
 };
 
 describe('the compare page', () => {
-	it('shows the four counts per task and the ids behind a row', async () => {
+	it('shows the four counts per task, and the ids of a cell when the runs have no text', async () => {
+		noText();
 		render(ComparePage, {
 			data: { a: run('r1', 'olmo'), b: run('r2'), diff: DIFF, refusal: null }
 		} as never);
@@ -111,8 +143,10 @@ describe('the compare page', () => {
 				.slice(1)
 				.map((c) => c.element().textContent!.trim())
 		).toEqual(['5', '1', '1', '2', '1']);
-		await row.getByRole('button', { name: /arc_easy/ }).click();
+		// The items start on the first task with docs only A got right.
+		await expect.element(screen.getByRole('alert')).toHaveTextContent(/schema 10/);
 		await expect.element(screen.getByText('Mercury_1 Mercury_2')).toBeVisible();
+		await screen.getByRole('radio', { name: /Only B right/ }).click();
 		await expect.element(screen.getByText('Mercury_3')).toBeVisible();
 		await expect.element(screen.getByText('Scored by A only')).toBeVisible();
 		await expect.element(screen.getByRole('button', { name: /olmo/ })).toBeVisible();
