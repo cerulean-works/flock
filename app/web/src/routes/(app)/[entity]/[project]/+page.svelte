@@ -8,6 +8,7 @@
 	import FullscreenPanel from '#lib/components/FullscreenPanel.svelte';
 	import PanelEditor from '#lib/components/PanelEditor.svelte';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
+	import GitCompareArrowsIcon from '@lucide/svelte/icons/git-compare-arrows';
 	import PinIcon from '@lucide/svelte/icons/pin';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import TagIcon from '@lucide/svelte/icons/tag';
@@ -37,6 +38,7 @@
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { clearRunPages, prefetchRunPage } from '#lib/data/cache.ts';
+	import { compareHref } from '#lib/evals.ts';
 	import { LiveConnection, type ProjectEvent } from '#lib/data/live.ts';
 	import { leftWorkspace, rememberFilters, showingProject } from '#lib/workspace/remembered.ts';
 	import { entityHref, workspaceHrefWith } from '#lib/workspace/url.ts';
@@ -330,6 +332,22 @@
 				<span class="selection-count mr-1 text-[13px] font-medium tabular-nums" role="status">
 					{ws.selectedRows.length} selected
 				</span>
+				{#if ws.selectedRows.length === 2}
+					{@const [a, b] = ws.selectedRows.map((r) => ws.page.runs[r].id)}
+					<!-- Two eval runs, doc by doc (025 D185); the page says if they can't be compared. -->
+					<Button
+						variant="outline"
+						data-sveltekit-preload-data="tap"
+						href={compareHref(
+							ws.meta.entity,
+							ws.meta.project,
+							a,
+							`${ws.meta.entity}/${ws.meta.project}/${b}`
+						)}
+					>
+						<GitCompareArrowsIcon /> Compare items
+					</Button>
+				{/if}
 				<Button variant="outline" onclick={() => ws.openDialog('tag')}><TagIcon /> Tags</Button>
 				<Button variant="outline" onclick={() => ws.openDialog('move')}>
 					<FolderInputIcon /> Move

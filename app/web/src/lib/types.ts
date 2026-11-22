@@ -596,6 +596,8 @@ export interface ModelVersion {
 	run: string | null;
 	created_by: Person | null;
 	created_at: number;
+	/** Eval runs that scored it, deleted runs left out. */
+	eval_runs: number;
 	bucket: string;
 	/** Its folder in flock-models, ending in `/`. */
 	prefix: string;
@@ -607,14 +609,135 @@ export interface ModelFile {
 	sha256: string;
 }
 
-/** A version with its files (`GET …/versions/{number}`, `…/resolve`). */
+/** A version with its files and eval runs (`GET …/versions/{number}`, `…/resolve`). */
 export interface ModelVersionDetail extends ModelVersion {
 	files: ModelFile[];
+	/** The eval runs that scored it, as `entity/project/id`. */
+	evals: string[];
 }
 
 export interface ModelVersionsPage {
 	versions: ModelVersion[];
 	cursor: number | null;
+}
+
+/** An eval run of a version, with its scores (the dashboard's `…/evals`, 025 D183). */
+export interface ModelEvalRun {
+	/** `entity/project/id`. */
+	path: string;
+	entity: string;
+	project: string;
+	id: string;
+	display_name: string | null;
+	state: string;
+	created_at: number;
+	/** Its scores by row (`evalScores`), or null when it has no results file to read them from. */
+	scores: EvalScores | null;
+}
+
+/** One task of an eval run's `results.json` (eval's results file, schemas 8 to 10). */
+export interface EvalTask {
+	task: string;
+	task_hash: string;
+	dataset: {
+		repo: string;
+		revision: string;
+		subset: string | null;
+		split: string;
+		/** Schema 9 only. */
+		private?: boolean;
+	};
+	primary_metric: string;
+	/** A non-finite score is written as null. */
+	metrics: Record<string, number | null>;
+	num_docs: number;
+	limit: number | null;
+	truncation: { requests: number; docs: number; max_tokens_cut: number };
+}
+
+/** One suite of an eval run's `results.json`. */
+export interface EvalSuite {
+	suite: string;
+	suite_hash: string;
+	members: string[];
+	/** The metric read from each member, or null for each task's primary metric. */
+	metric: string | null;
+	/** Null for a suite that only groups others. */
+	score: number | null;
+}
+
+/** What produced an eval run (`results.json`'s `provenance`). */
+export interface EvalProvenance {
+	model: string;
+	model_digest?: string | null;
+	/** Schema 10 on: a Flock model's org, project (null when global) and path. */
+	model_org?: string | null;
+	model_project?: string | null;
+	model_path?: string | null;
+	flock_commit: string;
+	command: string | null;
+	device: string;
+	dtype: string;
+	batch_tokens: number;
+	max_length: number;
+	add_bos?: boolean;
+	attention: string;
+	sdpa_backend?: string | null;
+	torch: string;
+	transformers: string;
+	tokenizers: string;
+	datasets: string;
+	python: string;
+	created_at: string;
+}
+
+/** An eval run's `results.json`, as the Results tab reads it (025 D184). */
+export interface EvalResults {
+	schema_version: number;
+	provenance: EvalProvenance;
+	tasks: EvalTask[];
+	suites: EvalSuite[];
+}
+
+/** A row of the Evals tab: a suite's score, or a task's primary metric. */
+export interface EvalRow {
+	/** `suites/{suite}@{suite_hash}` or `{task}/{metric}@{task_hash}`. */
+	key: string;
+	kind: 'suite' | 'task';
+	name: string;
+	metric: string | null;
+	/** The suite or task hash its scores were made under. */
+	hash: string;
+}
+
+/** An eval run's scores, rows in its results file's order. */
+export interface EvalScores {
+	rows: EvalRow[];
+	values: Record<string, number | null>;
+}
+
+/** One task two eval runs both scored the same way (eval's `TaskDiff`). */
+export interface TaskDiff {
+	task: string;
+	task_hash: string;
+	metric: string;
+	num_docs: number;
+	both_right: number;
+	both_wrong: number;
+	/** Ids of the docs only run A got right, in A's order. */
+	only_a: string[];
+	only_b: string[];
+}
+
+/** Two eval runs compared doc by doc (`GET …/runs/{run}/diff`, eval's `ItemDiff` schema 1). */
+export interface ItemDiff {
+	/** Each run's model. */
+	a: string;
+	b: string;
+	tasks: TaskDiff[];
+	/** Every other task, with why: `only_a`, `only_b`, `task_hash`, `not_accuracy`, `no_predictions` or `no_outcome`. */
+	not_compared: [string, string][];
+	schema_version: number;
 }
 
 /** A deleted model or version in the trash (`GET …/models/-/trash`), for org admins. */
@@ -643,13 +766,15 @@ export interface ModelTrashVersion extends ModelTrashBase {
 	number: number;
 	/** The checkpoint tags that went with it. */
 	tags: string[];
+	eval_runs: number;
 }
 
 export type ModelTrashEntry = ModelTrashModel | ModelTrashVersion;
 
-/** The versions a run made (`GET …/runs/{run}/models`). */
+/** The versions a run made and those it scored (`GET …/runs/{run}/models`). */
 export interface RunModels {
-	made: ModelVersion[];
+	made: (ModelVersion & { evals: string[] })[];
+	scored: (ModelVersion & { evals: string[] })[];
 }
 
 /** Where an organization's W&B import is: `interrupted` means Flock restarted during it. */

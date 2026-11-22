@@ -6,6 +6,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { TRASH_DAYS, isCheckpoint, modelApi, modelCall, modelsHref } from '#lib/models.ts';
 	import type { ModelVersion } from '#lib/types.ts';
+	import { count } from '#lib/utils.ts';
 	import FormError from '../FormError.svelte';
 	import ConfirmField from '../ConfirmField.svelte';
 
@@ -86,6 +87,12 @@
 					if (typed === ref) void remove();
 				}}
 			>
+				{#if version?.eval_runs}
+					<p class="bg-card px-3 py-2.5 text-[13px]" role="status">
+						{count(version.eval_runs, 'eval run')} scored this version. Their results stay, but the version
+						they name can’t be loaded after it’s deleted.
+					</p>
+				{/if}
 				<ConfirmField id="delete-version-ref" text={ref} bind:value={typed} disabled={pending} />
 				<FormError {error} />
 				<AlertDialog.Footer>
