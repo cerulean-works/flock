@@ -1,5 +1,7 @@
 import asyncio
 import mimetypes
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -20,15 +22,24 @@ from app.api.src.api.deps import (
     UserDep,
     ViewerDep,
     check_owner,
+    find_run,
+    get_readable_project,
     rest_user,
 )
 from app.api.src.api.home import GpuType
 from app.api.src.api.models import with_users
 from app.api.src.core import query
 from app.api.src.core.errors import NotFound
+from app.api.src.core.evals import PairFiles
 from app.api.src.core.store import RUN_COLUMNS, Project, Run, Store
+from flock.eval.diff import diff
+from flock.eval.results import WrittenResults
 
 router = APIRouter(prefix="/api/v1", tags=["flock"], dependencies=[Depends(rest_user)])
+# Item comparisons (025, D185) run here, never in the default executor: each waits on file reads
+# that need the default executor's threads, so sharing it could deadlock. Four at a time also
+# bound the files held in memory.
+DIFFS = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diff")
 # Reads that answer outsiders too, on public projects (D112): they need no credential.
 public = APIRouter(prefix="/api/v1", tags=["flock"])
 
@@ -504,7 +515,8 @@ async def get_run_logs(
 
 @router.get("/projects/{entity}/{project}/runs/{run}/models")
 async def get_run_models(run: MemberRunDep, store: StoreDep) -> Response:
-    """The model versions the run made (``made``), by model name and number."""
+    """The model versions the run made (``made``) and those it scored as an eval run
+    (``scored``), each with its eval runs (``evals``), by model name and number."""
     found = await store.models.run_versions(run)
     return JSONResponse({key: await with_users(store, items) for key, items in found.items()})
 
@@ -563,3 +575,40 @@ async def get_run_file(
     chunks, size = found  # from the s3 backend (D82), served as FileResponse would
     media_type = mimetypes.guess_type(name)[0] or "text/plain"
     return StreamingResponse(chunks, media_type=media_type, headers={"content-length": str(size)})
+
+
+@public.get("/projects/{entity}/{project}/runs/{run}/diff")
+async def diff_runs(
+    run: ReadableRunDep,
+    store: StoreDep,
+    viewer: ViewerDep,
+    other: Annotated[str, Query(alias="with", description="the other run, as entity/project/id")],
+) -> Response:
+    """The run compared doc by doc with another eval run, as ``flock eval diff --json`` prints
+    it: eval's ``ItemDiff`` (025, D185). The other run must be readable too; either one unknown
+    or unreadable is the same 404. 404 if either has no ``results.json``, and 409 with eval's
+    reason if the diff refuses the pair."""
+    parts = other.split("/")
+    if len(parts) != 3 or not all(parts):
+        raise APIError(404, f"run {other} not found")
+    entity, project, name = parts
+    found = await find_run(store, await get_readable_project(entity, project, store, viewer), name)
+    loop = asyncio.get_running_loop()
+
+    # The diff runs in a thread of its own pool and reads a file only when a task needs it, each
+    # through this loop, so two runs' hundreds of files never travel to the client.
+    files = PairFiles(store, loop)
+
+    def compare() -> dict[str, Any]:
+        a = WrittenResults.read(
+            f"{run.entity}/{run.project.name}/{run.name}", partial(files.read, run)
+        )
+        b = WrittenResults.read(other, partial(files.read, found))
+        return diff(a, b).to_dict()
+
+    try:
+        return JSONResponse(await loop.run_in_executor(DIFFS, compare))
+    except FileNotFoundError as exc:
+        raise APIError(404, str(exc)) from exc
+    except ValueError as exc:  # another instrument, or files that don't match their results
+        raise APIError(409, str(exc)) from exc
