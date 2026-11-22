@@ -35,7 +35,7 @@ Each perplexity row gains `source` (the dataset subset, a Paloma source) and `do
 
 ### 044.D4. The provenance names the tokenizer and hashes its definition
 
-`tokenizer` is the tokenizer's `name_or_path`, or the SentencePiece model file, and `tokenizer_hash` the sha256 of `backend_tokenizer.to_str()` (the whole `tokenizer.json`, normalizer and added tokens included) or of the SentencePiece model's bytes. Token ids are meaningless without the tokenizer that made them; the Open LLM Leaderboard v1 kept hashes of its input tokens for the same reason. Older files read both as `None`.
+`tokenizer` is the tokenizer's `name_or_path`, or the SentencePiece model file, and `tokenizer_hash` the sha256 of `backend_tokenizer.to_str()` (the whole `tokenizer.json`, normalizer and added tokens included) or of the SentencePiece model's bytes, and `None` for a tokenizer written in Python, whose vocabulary alone would not identify it. Token ids are meaningless without the tokenizer that made them; the Open LLM Leaderboard v1 kept hashes of its input tokens for the same reason. Older files read both as `None`.
 
 ---
 

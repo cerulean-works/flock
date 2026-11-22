@@ -74,7 +74,7 @@ A context too long for the model loses tokens from the left, and the continuatio
 
 `add_bos` says whether every non-empty context started with the tokenizer's BOS token (see [Tokenizing a request](scoring#tokenizing-a-request)). Files written before schema version 8 have no `add_bos`: none of them added BOS.
 
-`tokenizer` says where the tokenizer was loaded from: the Hugging Face repo or folder, or the `tokenizer.model` file of a repo tokenized by SentencePiece. `tokenizer_hash` is the sha256 of the tokenizer's whole definition: its `tokenizer.json` as the Tokenizers library writes it, or the SentencePiece model's bytes. Token ids in a run's files mean nothing without the tokenizer that made them, so two runs whose `tokenizer_hash` differs can't be compared token by token. Files written before schema version 12 have neither, and read as `null`.
+`tokenizer` says where the tokenizer was loaded from: the Hugging Face repo or folder, or the `tokenizer.model` file of a repo tokenized by SentencePiece. `tokenizer_hash` is the sha256 of the tokenizer's whole definition: its `tokenizer.json` as the Tokenizers library writes it, or the SentencePiece model's bytes. Token ids in a run's files mean nothing without the tokenizer that made them, so two runs whose `tokenizer_hash` differs can't be compared token by token. A tokenizer written in Python, with no Tokenizers backend, has no `tokenizer_hash`. Files written before schema version 12 have neither, and read as `null`.
 
 ## Predictions
 

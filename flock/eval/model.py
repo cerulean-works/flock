@@ -2,7 +2,6 @@
 
 import hashlib
 import itertools
-import json
 import logging
 import re
 from collections.abc import Generator, Iterator, Sequence
@@ -446,15 +445,14 @@ class ScoringModel:
         return self.tokenizer.name_or_path
 
     @property
-    def tokenizer_hash(self) -> str:
-        """The sha256 of the tokenizer's whole definition, so token ids written by a run can be checked against the tokenizer that made them: its `tokenizer.json` as the Tokenizers library serializes it, or the SentencePiece model's bytes. A tokenizer written in Python, with no Tokenizers backend, is hashed by its vocabulary, special tokens included, as JSON sorted by id."""
+    def tokenizer_hash(self) -> str | None:
+        """The sha256 of the tokenizer's whole definition, so token ids written by a run can be checked against the tokenizer that made them: its `tokenizer.json` as the Tokenizers library serializes it, or the SentencePiece model's bytes. `None` for a tokenizer written in Python, with no Tokenizers backend: its vocabulary alone would not tell two tokenizations apart."""
         if isinstance(self.tokenizer, SentencePieceTokenizer):
             data = self.tokenizer.processor.serialized_model_proto()
         elif hasattr(self.tokenizer, "backend_tokenizer"):
             data = self.tokenizer.backend_tokenizer.to_str().encode()
         else:
-            vocab = sorted(self.tokenizer.get_vocab().items(), key=lambda item: item[1])
-            data = json.dumps(vocab, ensure_ascii=False).encode()
+            return None
         return hashlib.sha256(data).hexdigest()
 
     @property
