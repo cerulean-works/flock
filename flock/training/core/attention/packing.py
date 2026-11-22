@@ -2,9 +2,22 @@ import torch
 from torch import Tensor
 
 
+def flatten(x: Tensor) -> Tensor:
+    """Reshape `[batch, heads, seq_len, head_dim]` into `[batch * seq_len, heads, head_dim]`."""
+    return x.transpose(1, 2).flatten(0, 1)
+
+
+def unflatten(x: Tensor, batch: int, seq_len: int) -> Tensor:
+    """Reshape `[batch * seq_len, heads, head_dim]` back to `[batch, heads, seq_len, head_dim]`.
+
+    This inverts `flatten`.
+    """
+    return x.unflatten(0, (batch, seq_len)).transpose(1, 2)
+
+
 def pack(x: Tensor, indices: Tensor) -> Tensor:
     """Gather real tokens from `[batch, heads, seq_len, head_dim]` into `[total_tokens, heads, head_dim]`."""
-    return x.transpose(1, 2).flatten(0, 1).index_select(0, indices)
+    return flatten(x).index_select(0, indices)
 
 
 def unpack(x: Tensor, indices: Tensor, batch: int, seq_len: int) -> Tensor:

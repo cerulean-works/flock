@@ -74,3 +74,49 @@ def prepare_varlen_metadata(
         batch_size=batch,
         seq_len=sequence,
     )
+
+
+def prepare_packed_sdpa_mask(
+    cu_seq_lens: torch.Tensor, *, batch_size: int, seq_len: int, is_causal: bool = True
+) -> torch.Tensor:
+    """Build a boolean [batch, 1, seq_len, seq_len] SDPA mask on the boundaries' device.
+
+    The collator supplies cumulative boundaries covering every position in the flattened
+    batch, with each row's padding in a separate segment. Each query sees keys in its own
+    segment, up to and including its own position when causal.
+    """
+    positions = torch.arange(
+        batch_size * seq_len, dtype=cu_seq_lens.dtype, device=cu_seq_lens.device
+    )
+    # A token at an exclusive end belongs to the next segment.
+    segment_ids = torch.bucketize(positions, cu_seq_lens[1:], right=True, out_int32=True)
+    segment_ids = segment_ids.view(batch_size, seq_len)
+    mask = segment_ids[:, :, None] == segment_ids[:, None, :]
+    if is_causal:
+        mask.tril_()
+    return mask[:, None]
+
+
+def prepare_packed_varlen_metadata(
+    cu_seq_lens: torch.Tensor, *, batch_size: int, seq_len: int, is_causal: bool = True
+) -> VarlenMetadata:
+    """Return `VarlenMetadata` for a packed batch without reading from its device.
+
+    `cu_seq_lens` holds int32 document boundaries in the flattened
+    `[batch_size * seq_len]` axis, from 0 to `batch_size * seq_len`. The documents
+    cover every position, including each row's padding segment, so the backend
+    reshapes instead of gathering. The collator builds the boundaries on the CPU.
+    Documents never span rows, so `seq_len` bounds every document's length. The
+    bound is static, so the kernel's integer arguments never wait for the device.
+    FlashAttention applies `is_causal` at attention time, so both directions use
+    the same metadata.
+    """
+    return VarlenMetadata(
+        cu_seq_lens_q=cu_seq_lens,
+        cu_seq_lens_k=cu_seq_lens,
+        max_length_q=seq_len,
+        max_length_k=seq_len,
+        indices=None,
+        batch_size=batch_size,
+        seq_len=seq_len,
+    )

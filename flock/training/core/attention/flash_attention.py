@@ -109,13 +109,16 @@ def _flash_attention(
         not isinstance(attention_metadata, VarlenMetadata)
         or attention_metadata.batch_size != q.shape[0]
         or attention_metadata.seq_len != q.shape[2]
-        or attention_metadata.indices.device != q.device
+        # After the type check: a tensor also has an `indices` attribute.
+        or (
+            attention_metadata.indices is not None and attention_metadata.indices.device != q.device
+        )
         or attention_metadata.cu_seq_lens_q.device != q.device
         or attention_metadata.cu_seq_lens_k.device != q.device
     ):
         raise ValueError(
             f"{name} expects VarlenMetadata matching Q's batch size, sequence length and device; "
-            "call prepare_varlen_metadata first"
+            "call prepare_varlen_metadata or prepare_packed_varlen_metadata first"
         )
 
     with _flash_context(implementation, q.device):
@@ -125,7 +128,11 @@ def _flash_attention(
             return sdpa_attention(q, k, v, is_causal=is_causal)
 
         indices = attention_metadata.indices
-        query, key, value = (packing.pack(tensor, indices) for tensor in (q, k, v))
+        if indices is None:
+            # Packed documents cover every position, so flatten instead of gathering.
+            query, key, value = (packing.flatten(tensor) for tensor in (q, k, v))
+        else:
+            query, key, value = (packing.pack(tensor, indices) for tensor in (q, k, v))
 
         # varlen custom op does not perform SDPA's autocast dispatch.
         if torch.is_autocast_enabled(device_type="cuda"):
@@ -138,7 +145,7 @@ def _flash_attention(
             query, key, value = packed_tensors
 
         # Keep the empty output connected to Q/K/V so backward produces zero gradients.
-        if indices.numel() == 0:
+        if indices is not None and indices.numel() == 0:
             output = query + key.sum() + value.sum()
         else:
             max_length_k = attention_metadata.max_length_k
@@ -153,7 +160,6 @@ def _flash_attention(
                 query,
                 key,
                 value,
-                # Sequence boundaries for Q and K/V in the packed batch.
                 attention_metadata.cu_seq_lens_q,
                 attention_metadata.cu_seq_lens_k,
                 attention_metadata.max_length_q,
@@ -165,6 +171,8 @@ def _flash_attention(
             )
             output = cast(Tensor, output)
 
+        if indices is None:
+            return packing.unflatten(output, q.shape[0], q.shape[2])
         return packing.unpack(output, indices, q.shape[0], q.shape[2])
 
 
@@ -192,7 +200,8 @@ def flash_attention_3(
         v (`torch.Tensor`):
             Values with the same shape as `k`.
         attention_metadata (`VarlenMetadata`, *optional*):
-            From `prepare_varlen_metadata`, on Q's device. `None` means no padding.
+            From `prepare_varlen_metadata` or `prepare_packed_varlen_metadata`, on Q's
+            device. `None` means one unpadded sequence per row.
         is_causal (`bool`, *optional*, defaults to `False`):
             Whether to prevent attention to future tokens.
 
@@ -227,7 +236,8 @@ def flash_attention_4(
         v (`torch.Tensor`):
             Values with the same shape as `k`.
         attention_metadata (`VarlenMetadata`, *optional*):
-            From `prepare_varlen_metadata`, on Q's device. `None` means no padding.
+            From `prepare_varlen_metadata` or `prepare_packed_varlen_metadata`, on Q's
+            device. `None` means one unpadded sequence per row.
         is_causal (`bool`, *optional*, defaults to `False`):
             Whether to prevent attention to future tokens.
 
