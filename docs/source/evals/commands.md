@@ -121,3 +121,5 @@ A run has its project's visibility, so anyone can read the predictions of a run 
 > A Flock server older than this release serves `private/` files like any other run file. On such a server, the private project is the only protection: don't make it public, and don't move its runs into a public project.
 
 `read_results` and `flock eval diff` read a private task's predictions from `private/predictions/<task>.jsonl` on a run, and from `predictions/` in a folder.
+
+When the config's `model` is a version stored in Flock (`flock:org/path@{number}`, or `flock:project:path@{number}` for a project's model) and its `model_digest` is that version's digest, Flock lists the run among the version's eval runs, in the run's own organization. A project's model is found by the config's `model_org`, `model_project` and `model_path`. See [Score a model stored in Flock](run-evaluation#score-a-model-stored-in-flock). The run's page shows its scores in a **Results** tab, and two runs can be compared doc by doc in the dashboard as `flock eval diff` compares them (see [Eval results in the dashboard](../app/explore-runs#eval-results)).

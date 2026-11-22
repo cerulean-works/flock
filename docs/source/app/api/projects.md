@@ -163,14 +163,34 @@ The SDK uploads files such as `config.yaml`, `requirements.txt`, `wandb-metadata
 
 Files in a top-level `private/` folder, such as `private/predictions/exam.jsonl`, are for the organization's members only, whatever the project's visibility. On a public project, outsiders don't see them in the list, and reading one answers the same 404 as a missing file. A run that uploads such files keeps them members-only when its project is made public or the run is moved into a public project.
 
+## Comparing eval runs[[run-diff]]
+
+`GET .../runs/{run}/diff?with={entity}/{project}/{run}` compares two eval runs doc by doc, as [`flock eval diff --json`](../../evals/comparison#doc-by-doc-diff) does for the same runs. Flock runs that same diff on the two runs' `results.json` and `predictions/` files, so the dashboard and the CLI never disagree. The run in the path is A and `with` is B, which may be in another project.
+
+| Answer | When |
+|---|---|
+| 200 | eval's `ItemDiff` JSON: `a` and `b` (each run's model), `tasks` (per task both scored under the same task hash: `task`, `task_hash`, `metric`, `num_docs`, `both_right`, `both_wrong`, `only_a`, `only_b`), `not_compared` (`[task, reason]` pairs) and `schema_version`. |
+| 404 | Either run is unknown, or you can't read its project. Both cases give the same answer, so a private project's runs aren't revealed. Also when either run has no `results.json`. |
+| 409 | The diff refuses the pair: the runs used another instrument (`dtype`, `batch_tokens`, `attention` or `sdpa_backend`), a run's predictions don't match its results, or a file is over 64 MiB or the pair over 1 GiB. `error` says which. |
+
+Anyone may call it on two public projects. Item text isn't returned, only doc ids.
+
 ## Run models[[run-models]]
 
-`GET .../runs/{run}/models` returns the model versions the run saved, in its own organization, as `save_to_hub` with `run` records them:
+`GET .../runs/{run}/models` returns the model versions the run is linked to, in its own organization:
 
 ```json
 {
-  "made": [{"model": "flock/olmo2-1b", "number": 2, "step": 12000, "tags": ["checkpoint-12000"], "run": "flock/llm-pretrain/3k9x2", ...}]
+  "made": [{"model": "flock/olmo2-1b", "number": 2, "step": 12000, "tags": ["checkpoint-12000"], "run": "flock/llm-pretrain/3k9x2", "evals": ["flock/evals/8f2kq1zr"], ...}],
+  "scored": []
 }
 ```
 
-`made` is sorted by model name, then number. A version has the fields of a version in the model routes (`model`, `number`, `digest`, `tags`, `primary`, `step`, `run`, `total_bytes`, `created_by`, `created_at` and the rest). Deleted versions and models aren't listed.
+| Field | Meaning |
+|---|---|
+| `made` | The versions the run saved, as `save_to_hub` with `run` records them. |
+| `scored` | The versions the run evaluated. A run is linked as an eval when its config's `model` is `flock:…@{number}` and its `model_digest` is that version's digest, as `flock eval run --wandb-project` logs them. A project's model is matched by the config's `model_org`, `model_project` and `model_path` too. |
+
+Each list is sorted by model name, then number. A version has the fields of a version in the model routes (`model`, `number`, `digest`, `tags`, `primary`, `step`, `run`, `total_bytes`, `created_by`, `created_at` and the rest), plus `evals`, the runs that evaluated it as `entity/project/id`. Deleted versions and models aren't listed, and deleted runs aren't in `evals`.
+
+The eval link is made when the SDK sends the run's config. A `model` that names a tag, `primary` or no version, another organization's model, a missing or different `model_digest`, or a model or version that doesn't exist or is deleted links nothing, and the run is stored as usual. A link stays if the config later names another version.
