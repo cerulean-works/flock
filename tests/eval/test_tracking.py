@@ -46,7 +46,10 @@ class FakeRun:
         assert glob is False  # a task name may hold `[`
         # What the tracker would receive: each file by its name on the run, and its contents.
         name = str(Path(glob_str).relative_to(base_path))
-        self.calls.setdefault("files", {})[name] = (Path(glob_str).read_text(), policy)
+        # Per-token values are Parquet, not text.
+        path = Path(glob_str)
+        data = path.read_bytes() if name.endswith(".parquet") else path.read_text()
+        self.calls.setdefault("files", {})[name] = (data, policy)
 
     def __enter__(self) -> Self:
         return self
@@ -82,7 +85,7 @@ class FakeHub:
     error: dict = dataclasses.field(default_factory=lambda: {"error": "refused"})
     queries: list[dict] = dataclasses.field(default_factory=list)
     project: str | tuple[int, dict] = "private"
-    files: dict[str, str] = dataclasses.field(default_factory=dict)
+    files: dict[str, str | bytes] = dataclasses.field(default_factory=dict)
 
     def answer(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -96,7 +99,7 @@ class FakeHub:
         if path.startswith(prefix):
             name = path.removeprefix(prefix)
             if name in self.files:
-                return httpx.Response(200, text=self.files[name])
+                return httpx.Response(200, content=self.files[name])
             return httpx.Response(404, json={"error": "file not found"})
         if path.startswith("/api/v1/projects/acme/model-evals/runs/") and "/files/" in path:
             return httpx.Response(404, json={"error": "run not found"})
@@ -702,3 +705,39 @@ def test_reading_a_run_refuses_a_bad_path_and_an_unknown_run(hub: FakeHub) -> No
         read_run_file("acme/model-evals/run-2", "results.json")
     with pytest.raises(FileNotFoundError, match="has no results.json"):
         read_results("run:acme/model-evals/run-1")
+
+
+def test_per_token_values_go_beside_their_predictions_and_read_back_from_the_run(
+    logged: dict[str, Any], hub: FakeHub, tmp_path: Path
+) -> None:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    path = written_run(tmp_path / "run", private=True)
+    folder = tmp_path / "run"
+    for name in ("toy", "exam"):
+        table = pa.table(
+            {"id": ["q-1", "q-2"], "part": ["continuation"] * 2, "token_ids": [[1], [2]]}
+        )
+        pq.write_table(table, folder / "predictions" / f"{name}.tokens.parquet")
+
+    log_to_tracker(json.loads(path.read_text()), "model-evals", results_file=path)
+
+    # Token ids of a private dataset are its text, so they go under `private/` too.
+    assert set(logged["files"]) == {
+        "results.json",
+        "predictions/toy.jsonl",
+        "predictions/toy.tokens.parquet",
+        "private/predictions/exam.jsonl",
+        "private/predictions/exam.tokens.parquet",
+    }
+
+    hub.files["results.json"] = path.read_text()
+    hub.files["private/predictions/exam.tokens.parquet"] = (
+        folder / "predictions" / "exam.tokens.parquet"
+    ).read_bytes()
+    remote = read_results("run:acme/model-evals/run-1")
+    assert remote.tokens("exam", ids=["q-2"]) == [
+        {"id": "q-2", "part": "continuation", "token_ids": [2]}
+    ]
+    assert remote.tokens("toy") is None  # not on the run
