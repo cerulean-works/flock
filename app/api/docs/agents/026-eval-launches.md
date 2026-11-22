@@ -28,11 +28,17 @@ The numbering continues from 025 (D182 to D187).
 - **Two caps, in US dollars,** as server settings: `eval_launch_max_usd` per launch (25) and
   `eval_launch_monthly_usd` for the month over the whole server (300), with the H100 price as
   `eval_launch_usd_per_hour`. Modal bills one workspace, so the month is counted over every org.
-- **The per-launch cap is enforced by Modal,** as the call's `timeout` (cap over price, at most
-  Modal's 24 hours). A launch can't overrun it, whatever happens to the server.
+- **The per-launch cap is enforced by Modal,** as the call's `timeout`: cap over price, less ten
+  minutes for the container to start and stop (billed, but outside the call's own limit), at most
+  Modal's 24 hours. Containers scale down 2 s after their call instead of Modal's default minute,
+  since each launch's environment gives it containers of its own. A launch can't overrun its cap,
+  whatever happens to the server.
 - **The monthly count never undercounts.** A running launch counts at its full cap, whenever it
-  started. An ended one counts at its time from launch to end, which includes any wait for a GPU
-  that Modal doesn't bill, in every month it ran in. A purged org's launches stay as rows with no
+  started, and so does one that ended while its call may have started unseen (`unconfirmed`: a
+  lost answer to the spawn, or a replica that stopped while making the call). An ended one counts
+  at its time from launch to end plus the ten minutes, which includes any wait for a GPU that
+  Modal doesn't bill, in every month it ran in. Only a spawn Modal surely refused (no such app,
+  a bad token) ends at no cost. A purged org's launches stay as rows with no
   org (`ON DELETE SET NULL`), so they still count. A launch is refused (409) when its cap doesn't
   fit under what is left.
 - **Launches are serialized** by a transaction-scoped advisory lock around the count and the
@@ -53,7 +59,7 @@ The numbering continues from 025 (D182 to D187).
   a private dataset or model can't be read even if both checks were wrong.
 - **Models** are public Hugging Face repositories, checked without a token at launch (gated or
   private: 403 or 404) and resolved to a commit, which the worker scores. A moving branch can't
-  change what a finished launch scored.
+  change what a finished launch scored. The worker reads the same Hub (`HF_ENDPOINT`).
 
 ### D190. The worker is a deployed Modal app at the server's release, scoring with fixed settings
 
@@ -65,8 +71,11 @@ The numbering continues from 025 (D182 to D187).
   web app, so an ignored file such as `app/.env` or `flock-files/` never leaves the machine it
   is deployed from. Everything that reads the checkout runs only there (`modal.is_local()`): in
   the container the file sits alone in `/root`.
-- Each function runs the same file again inside the workspace's environment (`uv run`), as the
-  GPU tests run pytest, because Modal runs functions with the image's own Python.
+- Each function runs `app/api/eval_score.py` inside the workspace's environment (`uv run`), as
+  the GPU tests run pytest, because Modal runs functions with the image's own Python. It's a file
+  of its own: a function's child process counts as local to Modal (`modal.is_local()`), so
+  running the deploy module again there would try to build the image from a checkout that
+  isn't there.
 - **The instrument is not the launcher's choice:** BF16 weights at 16,384 batch tokens, the eval
   bank's settings. Only `add_bos` is offered, because Gemma models are scored with it.
 - **Another GPU is another device.** The run's provenance records `NVIDIA H100`. The bank was
@@ -81,8 +90,9 @@ The numbering continues from 025 (D182 to D187).
   the call in its environment with the tracker's URL, the org and the run's name. A wandb key
   reaches tracking only (D72): the REST API and the S3 key exchange refuse it. It is deleted
   when the launch ends, whoever ends it (the trigger of migration 0013 drops it from every
-  replica's cache), so it works only while the launch runs. It is deleted by its name as well,
-  so a key made just before its replica stopped, before the row named it, goes too.
+  replica's cache), so it works only while the launch runs. It is made in the transaction that
+  inserts the row and names it there, so no key exists that the row doesn't name, and only that
+  key is deleted (key names are free text, so never by name).
 - **Never stored.** The row keeps the key's `pk` only. The key is not in the database, a
   response or a log line, and the launcher can see it in their key list while it lives.
 - **The run is named before it starts** (`eval-launch-{id}`, as `WANDB_RUN_ID`), so the launch
@@ -108,8 +118,15 @@ The numbering continues from 025 (D182 to D187).
   replica watching each of its launches sees the org's `deleted_at` at its next heartbeat and
   cancels the call, retrying every heartbeat until Modal confirms.
 - **Only the call's own end ends a launch.** A poll's deadline is Python's `TimeoutError`;
-  Modal's `FunctionTimeoutError` is the call's time limit and fails it. Modal's own trouble
-  (`ConnectionError`, `ServiceError`, `InternalError`) is retried at the next heartbeat.
+  Modal's `FunctionTimeoutError` is the call's time limit and fails it. A failed question to
+  Modal (its `ConnectionError`, or any of its RPC errors, which are `GRPCError`s) is asked again
+  at the next heartbeat.
+- **A launch past its longest life ends.** Every replica's sweep ends a running launch older than
+  its time limit plus the ten minutes and a minute more, whose call can't be running, and deletes
+  its key, even on a server that no longer launches evals.
+- **Its project stays put.** The worker logs to the project by name when it finishes, so a
+  project with a running launch can't be renamed or deleted (409), as one with active runs can't
+  be renamed.
 
 ---
 

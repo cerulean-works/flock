@@ -14,7 +14,7 @@ import asyncpg
 import httpx
 import pytest
 
-from app.api.src.core.eval_launches import EvalLaunches
+from app.api.src.core.eval_launches import EvalLaunches, Refused
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -38,13 +38,21 @@ class FakeModal:
     cancelled: list[str] = field(default_factory=list)
     outcomes: dict[str, str | Exception] = field(default_factory=dict)
     refuse: bool = False
+    lose: bool = False  # the spawn's answer is lost: the call may have started
+    down: bool = False  # cancelling fails, as when Modal can't be reached
+    # A spawn waits for this, when set.
+    gate: threading.Event | None = None
 
     async def catalogue(self) -> dict[str, list[str]]:
         return CATALOGUE
 
     async def spawn(self, timeout: int, env: dict[str, str | None], **kwargs: Any) -> str:
         if self.refuse:
-            raise RuntimeError("no such app")
+            raise Refused("no such app")
+        if self.lose:
+            raise RuntimeError("connection reset")
+        while self.gate is not None and not self.gate.is_set():
+            await asyncio.sleep(0.02)
         call_id = f"fc-{len(self.spawned)}"
         self.spawned.append({"id": call_id, "timeout": timeout, "env": env, **kwargs})
         return call_id
@@ -58,6 +66,8 @@ class FakeModal:
         return outcome
 
     async def cancel(self, call_id: str) -> None:
+        if self.down:
+            raise RuntimeError("Modal is down")
         self.cancelled.append(call_id)
 
 
@@ -133,10 +143,12 @@ def test_a_launch_scores_the_pinned_model_and_its_key_ends_with_it(
     assert call["model"] == f"acme/tiny@{SHA}"
     assert (call["suites"], call["tasks"], call["add_bos"]) == (["base_easy"], ["drcd"], True)
     assert call["project"] == "evals"
-    assert call["timeout"] == 25 * 3600 // 2  # $25 at $2 an hour
+    # $25 at $2 an hour, less ten minutes for the container to start and stop.
+    assert call["timeout"] == 25 * 3600 // 2 - 600
     env = call["env"]
     assert env["WANDB_BASE_URL"] == PUBLIC_URL and env["WANDB_ENTITY"] == "flock"
     assert env["WANDB_RUN_ID"] == job["run"]
+    assert env["HF_ENDPOINT"] == HUB  # the Hub the model was checked on
     key = env["WANDB_API_KEY"]
     assert key and server.call(server.store.accounts.api_key(key)) is not None
 
@@ -275,8 +287,12 @@ def test_a_failed_launch_says_why_and_its_key_is_deleted(
     modal.refuse = True
     refused = api.post(LAUNCHES, body())
     assert refused.status == 502 and "no such app" in refused.json()["error"]
-    rows = sql(server, "SELECT state, error, api_key_pk FROM eval_launches ORDER BY pk")
-    assert rows[1]["state"] == "failed" and rows[1]["api_key_pk"] is None
+    # A lost answer may hide a call that started: that launch keeps its whole cap.
+    modal.refuse, modal.lose = False, True
+    lost = api.post(LAUNCHES, body())
+    assert lost.status == 502 and "answer to the launch was lost" in lost.json()["error"]
+    rows = sql(server, "SELECT state, api_key_pk, unconfirmed FROM eval_launches ORDER BY pk")
+    assert [tuple(r) for r in rows[1:]] == [("failed", None, False), ("failed", None, True)]
     assert sql(server, "SELECT count(*) FROM api_keys WHERE name LIKE 'eval launch%'")[0][0] == 0
 
 
@@ -347,12 +363,7 @@ def test_deleting_the_org_stops_its_launches_until_modal_confirms(
     assert modal.cancelled == []
 
     # Modal down at first: the watcher keeps asking, and ends the launch once it's cancelled.
-    failing = modal.cancel
-
-    async def down(call_id: str) -> None:
-        raise RuntimeError("Modal is down")
-
-    modal.cancel = down  # type: ignore[method-assign]
+    modal.down = True
     server.call(server.store.delete_org(org, force=True))
     wait_for(
         lambda: sql(server, "SELECT heartbeat_at > now() - interval '1 second' FROM eval_launches")[
@@ -360,7 +371,7 @@ def test_deleting_the_org_stops_its_launches_until_modal_confirms(
         ][0]
     )
     assert sql(server, "SELECT state FROM eval_launches")[0][0] == "running"
-    modal.cancel = failing  # type: ignore[method-assign]
+    modal.down = False
     wait_for(lambda: modal.cancelled == ["fc-0"])
     wait_for(lambda: sql(server, "SELECT state FROM eval_launches")[0][0] == "cancelled")
     assert sql(server, "SELECT count(*) FROM api_keys WHERE name LIKE 'eval launch%'")[0][0] == 0
@@ -374,15 +385,7 @@ def test_a_cancel_waits_for_the_call_and_a_slow_spawn_taken_over_is_stopped(
 ) -> None:
     server, modal = make_server()
     api = server.client()
-    gate = threading.Event()
-    spawn = modal.spawn
-
-    async def slow(timeout: int, env: dict[str, str | None], **kwargs: Any) -> str:
-        while not gate.is_set():
-            await asyncio.sleep(0.02)
-        return await spawn(timeout, env, **kwargs)
-
-    modal.spawn = slow  # type: ignore[method-assign]
+    gate = modal.gate = threading.Event()
     started: list[Any] = []
     thread = threading.Thread(target=lambda: started.append(api.post(LAUNCHES, body())))
     thread.start()
@@ -412,18 +415,53 @@ def test_a_project_lists_its_own_launches_and_every_running_one(
     assert [j["id"] for j in listed] == [old]  # running, so listed however old
 
 
-def test_a_key_made_before_its_row_named_it_is_deleted_with_the_launch(
+def test_only_the_launchs_own_key_is_deleted(
     make_server: Callable[..., tuple[FlockServer, FakeModal]], wait_for: Callable[..., Any]
 ) -> None:
     server, modal = make_server()
     api = server.client()
+    # A key of the user's own that happens to bear a launch's name.
+    own = api.post("/api/v1/me/wandb-keys", {"name": "eval launch 1"}).json()["key"]
     pk = api.post(LAUNCHES, body()).json()["id"]
-    sql(server, "UPDATE eval_launches SET api_key_pk = NULL")
+    assert pk == 1
     modal.outcomes["fc-0"] = "abc1234"
     wait_for(lambda: api.get(f"{LAUNCHES}/{pk}").json()["state"] == "finished")
-    assert (
-        server.call(server.store.accounts.api_key(modal.spawned[0]["env"]["WANDB_API_KEY"])) is None
-    )
+    assert server.call(server.store.accounts.api_key(own)) is not None
+    launch_key = modal.spawned[0]["env"]["WANDB_API_KEY"]
+    assert server.call(server.store.accounts.api_key(launch_key)) is None
+
+
+def test_a_project_with_a_running_launch_is_not_renamed_or_deleted(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]],
+) -> None:
+    server, _ = make_server()
+    api = server.client()
+    assert api.post("/api/v1/projects", {"entity": "flock", "name": "evals"}).status == 201
+    pk = api.post(LAUNCHES, body()).json()["id"]
+    renamed = api.patch("/api/v1/projects/flock/evals", {"name": "elsewhere"})
+    assert renamed.status == 409 and "eval launch" in renamed.json()["error"]
+    deleted = api.delete("/api/v1/projects/flock/evals", force="true")
+    assert deleted.status == 409
+    api.delete(f"{LAUNCHES}/{pk}")
+    assert api.patch("/api/v1/projects/flock/evals", {"name": "elsewhere"}).status == 200
+
+
+def test_a_launch_past_its_longest_life_ends_even_where_launches_are_off(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]],
+) -> None:
+    server, modal = make_server()
+    pk = server.client().post(LAUNCHES, body()).json()["id"]
+    key = modal.spawned[0]["env"]["WANDB_API_KEY"]
+    server.stop()
+
+    # Restarted without Modal: no new launch, but the old one's key can't live on.
+    restarted, _ = make_server(reuse=server, modal_token_secret=None)
+    assert restarted.client().get(f"{LAUNCHES}/{pk}").json()["state"] == "running"
+    sql(restarted, "UPDATE eval_launches SET started_at = now() - interval '13 hours'")
+    restarted.call(restarted.store.eval_launches.sweep())
+    job = restarted.client().get(f"{LAUNCHES}/{pk}").json()
+    assert job["state"] == "failed" and "time limit" in job["error"]
+    assert restarted.call(restarted.store.accounts.api_key(key)) is None
 
 
 def test_the_modal_adapter_tells_a_poll_deadline_from_the_calls_own_errors(
@@ -445,7 +483,11 @@ def test_the_modal_adapter_tells_a_poll_deadline_from_the_calls_own_errors(
     adapter = Modal("ak", "as")
     adapter._client = object()
     # Still running: the poll's deadline, or Modal itself unavailable for a while.
-    for error in (TimeoutError(), modal.exception.ServiceError("unavailable")):
+    for error in (
+        TimeoutError(),
+        modal.exception.ServiceError("unavailable"),
+        modal.exception.ResourceExhaustedError("rate limited"),
+    ):
         raised[:] = [error]
         assert asyncio.run(adapter.wait("fc-0", 0.01)) is None
     # The call's own end: its time limit, or what the worker raised.
@@ -456,10 +498,10 @@ def test_the_modal_adapter_tells_a_poll_deadline_from_the_calls_own_errors(
 
 
 def test_the_worker_runs_only_suites_and_tasks_on_public_datasets() -> None:
-    from app.api import eval_worker
+    from app.api import eval_score
     from flock.eval.tasks import SUITES, TASKS
 
-    public = eval_worker.public_names()
+    public = eval_score.public_names()
     assert {"base_easy", "paloma"} <= set(public["suites"])
     assert "drcd_bpb" in public["tasks"]
     # Each of these holds a task on a private dataset: the exams, tc-edu, CMMLU's mirror.
@@ -470,4 +512,4 @@ def test_the_worker_runs_only_suites_and_tasks_on_public_datasets() -> None:
         assert not any(task.dataset.private for task in SUITES[name].tasks)
 
     with pytest.raises(SystemExit, match="not public, or not a suite or task of this flock: zh_tw"):
-        eval_worker.score("acme/tiny@" + SHA, ["base_easy", "zh_tw"], [], False, "evals")
+        eval_score.score("acme/tiny@" + SHA, ["base_easy", "zh_tw"], [], False, "evals")
