@@ -17,6 +17,7 @@ from app.api.src.api import (
     avatars,
     dashboard,
     datasets,
+    eval_launches,
     hf_imports,
     home,
     models,
@@ -198,6 +199,7 @@ def create_app(store: Store) -> FastAPI:
     app.include_router(datasets.router)
     app.include_router(models.router)
     app.include_router(hf_imports.router)
+    app.include_router(eval_launches.router)
     return app
 
 
