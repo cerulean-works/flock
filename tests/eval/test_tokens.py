@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import stat
 from typing import TYPE_CHECKING, Any
 
@@ -309,13 +310,18 @@ def test_context_tokens_need_tokens_and_the_cli_takes_both_flags(
 
 def test_a_private_tasks_sidecar_is_its_owners_only(scorer: ScoringModel, tmp_path: Path) -> None:
     private = dataclasses.replace(TASK, dataset=dataclasses.replace(TASK.dataset, private=True))
-    score_task(scorer, private, out=tmp_path / "private", tokens=True)
-    score_task(scorer, TASK, out=tmp_path / "public", tokens=True)
+    # A known umask, so the public file's mode is the writer's and not the shell's.
+    previous = os.umask(0o022)
+    try:
+        score_task(scorer, private, out=tmp_path / "private", tokens=True)
+        score_task(scorer, TASK, out=tmp_path / "public", tokens=True)
+    finally:
+        os.umask(previous)
 
     path = tmp_path / "private" / "predictions" / "toy.tokens.parquet"
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     public = tmp_path / "public" / "predictions" / "toy.tokens.parquet"
-    assert stat.S_IMODE(public.stat().st_mode) != 0o600
+    assert stat.S_IMODE(public.stat().st_mode) == 0o644
     # A run's values are never replaced, as its predictions aren't.
     taken = tmp_path / "taken" / "predictions"
     taken.mkdir(parents=True)
