@@ -150,7 +150,7 @@ A multiple-choice task's `predictions/<task>.tokens.parquet` holds what the mode
 |---|---|
 | `id` | The doc's id, as in its prediction row. |
 | `choice` | The choice the sequence belongs to: for a `context` or `greedy` row, the first choice with that context. |
-| `part` | `continuation`: a choice's scored tokens, one row per choice. `greedy`: the first 32 tokens greedy decoding writes after the doc's context, one row per distinct context. `context`: the context's own tokens, with `--context-tokens`. |
+| `part` | `continuation`: a choice's scored tokens, one row per choice. `greedy`: the first 32 tokens greedy decoding writes after the doc's context, one row per distinct context, with `--greedy-tokens`. `context`: the context's own tokens, with `--context-tokens`. |
 | `token_ids` | The tokens, from the tokenizer the provenance names and hashes. |
 | `logprob` | Each token's natural-log probability. A continuation's add up to its `logprob` in the prediction row, to FP32 rounding. |
 | `rank` | 1 plus the number of tokens the model found more likely, so the model's own choice has rank 1. |
@@ -160,7 +160,7 @@ A multiple-choice task's `predictions/<task>.tokens.parquet` holds what the mode
 
 A `greedy` row has no values. A Flock model has no `greedy` rows: it keeps no key-value cache, and decoding without one would read each context 32 times over. A `context` row covers every token of the context but its first, which nothing predicts, after the context loses tokens from the left to leave room for 32 decoded ones.
 
-Context values and greedy tokens come from a pass of their own over each doc's distinct contexts, once per context, not once per choice. Scoring itself runs as it does without the file, so every score and every prediction row is the same, bit for bit, with or without it.
+Context values and greedy tokens come from a pass of their own over each doc's distinct contexts, once per context, not once per choice. Each is off by default, for its cost: on OLMo 2 1B over all of MMLU, HellaSwag and ARC-Easy on one H200, the choices' values alone write 35.5 MB beside 35.1 MB of predictions, and 32 greedy tokens, decoded one step at a time, took scoring from 355 s to 539 s. Scoring itself runs as it does without the file, so every score and every prediction row is the same, bit for bit, with or without it.
 
 A private dataset's per-token file is readable by its owner only, and goes under `private/` on a tracker run, as its predictions do: token ids are the dataset's text. A training loop that scores between steps writes none unless it asks (`score_prepared(..., tokens=True)`).
 

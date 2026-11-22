@@ -7,7 +7,7 @@
 | Builds on | [041](041-result-files.md) (041.D2 rows), [042](042-private-predictions.md) (042.D1 `private/`), [043](043-item-text.md) (043.D3 `pick` from the scorer), [044](044-row-sources.md) (044.D4 the tokenizer in the provenance) |
 | Amends | 041.D2 (a run also writes `predictions/<task>.tokens.parquet` per multiple-choice task), 042.D1 (the file follows its predictions' privacy) |
 | Keeps | every task hash, request, score and metric, every prediction row byte for byte, the training path's cost when it doesn't ask |
-| Result | `ScoringModel.loglikelihood(..., tokens=True)` returns each continuation's per-token values; `ScoringModel.score_contexts` decodes 32 greedy tokens after each distinct context and can read the context's values; `write_tokens` writes them as Parquet; `WrittenResults.tokens` reads them on demand |
+| Result | `ScoringModel.loglikelihood(..., tokens=True)` returns each continuation's per-token values; `ScoringModel.score_contexts` decodes 32 greedy tokens after each distinct context and reads the context's values, each by flag; `write_tokens` writes them as Parquet; `WrittenResults.tokens` reads them on demand |
 
 The decision numbers are provisional: `045.D1` to `045.D5` take the next free global numbers after every stage merged before it.
 
@@ -29,9 +29,9 @@ Per-token values are long numeric arrays: as JSON they would multiply the predic
 
 For each scored token: its log-probability, its rank (1 plus the count of strictly more likely tokens), and at its position the entropy, the top-1 log-probability and the standard deviation of the log-probability under the distribution. Min-K%++ normalizes a token's log-probability by the mean and standard deviation of log p under p at its position (its eq. 3); the mean is minus the entropy, so the file stores the entropy and the deviation. They are computed in `_target_logprobs`' FP32 chunks, which are the same chunks with or without values, so no reduction changes order and no score moves. On by default: they read only the positions scoring keeps.
 
-### 045.D3. Context values and greedy tokens come from a pass of their own
+### 045.D3. Context values and greedy tokens come from a pass of their own, each by flag
 
-Keeping every position's logits in the scoring pass would give context values for free, but a test showed it moves scores in the last bit: the LM head then runs at another shape. `score_contexts` instead reads each doc's distinct contexts once (`MCRequests.context_requests`: one per doc, one per choice where each has its own), decodes 32 tokens greedily with the key-value cache and no stop, and with `--context-tokens` keeps that first pass's logits at every position to read each context token's values. Thirty-two tokens follow the research answer's range of 16 to 32 for first-divergence views. A context loses tokens from the left to leave room for the decoded ones, as scoring cuts a long one.
+Keeping every position's logits in the scoring pass would give context values for free, but a test showed it moves scores in the last bit: the LM head then runs at another shape. `score_contexts` instead reads each doc's distinct contexts once (`MCRequests.context_requests`: one per doc, one per choice where each has its own), decodes 32 tokens greedily with the key-value cache and no stop, and with `--context-tokens` keeps that first pass's logits at every position to read each context token's values. Thirty-two tokens follow the research answer's range of 16 to 32 for first-divergence views. A context loses tokens from the left to leave room for the decoded ones, as scoring cuts a long one. Both are off by default (`--greedy-tokens`, `--context-tokens`): measured on OLMo 2 1B over all of MMLU, HellaSwag and ARC-Easy, the greedy tokens took scoring from 354.7 s to 539.4 s even in batches 8 times scoring's size, against a budget of 1.3 times for the default; the choices' values alone stay on.
 
 ### 045.D4. Token ids are text: the file follows its predictions' privacy
 
@@ -58,6 +58,7 @@ A private dataset's file is created owner-only and uploaded under `private/`, as
 - The first version read context values from the scoring pass with every position's logits kept. A CPU test comparing predictions with and without them failed in the last bits of `logprob`, so context values moved to `score_contexts` (045.D3). The scoring pass now runs exactly as without values, which the tests check byte for byte on the predictions file.
 - Greedy decoding is a loop over the model's forward pass with its key-value cache, not `generate`, so no generation config of the model (sampling, an end-of-sequence stop) applies. A Flock-registry model (`FlockCausalLM`) has no cache: it writes no greedy rows and reads context values in one pass.
 - A model whose `max_length` is 32 or less writes `max_length - 1` greedy tokens.
+- Greedy decoding was first on by default. Its 32 one-token steps per batch doubled scoring time (356.5 s to 710.7 s on the set above). Decoding in batches 8 times `batch_tokens`, which fits because the first pass keeps one position's logits, brought it to 1.52 times, still above the default's budget, so the tokens moved behind `--greedy-tokens`.
 - Reading a run's files as bytes became the base reader for folders and tracker runs (`read_run_bytes`), with text read as its UTF-8 decoding.
 
 ## 5. Known gaps
