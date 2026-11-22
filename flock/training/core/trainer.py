@@ -1,11 +1,12 @@
 import logging
 import math
 import random
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any, Literal, Self
 
 import torch
+import torch._functorch.config as functorch_config
 import torch.distributed as dist
 import torch.nn.functional as F
 import wandb
@@ -24,11 +25,12 @@ from flock.eval.run import PreparedTask, prepare_task, score_prepared
 from flock.eval.tasks import TASKS
 from flock.training.core.checkpoint import CheckpointManager
 from flock.training.core.chunks import TokenChunkDataset
+from flock.training.core.compilation import compile_if_enabled
 from flock.training.core.data_utils import Batch, LanceBatchCollator, ResumableBatchDataSampler
 from flock.training.core.distributed import DistributedRuntime, master_broadcast, master_only
 from flock.training.core.lr_scheduler import LRSchedulerConfig, LRSchedulerState, StepLRScheduler
 from flock.training.core.models import BaseModel
-from flock.training.core.optimizers import OptimizerConfig, OptimizerInterface
+from flock.training.core.optimizers import OptimizerConfig, OptimizerInterface, prepare_for_compile
 
 
 class TrainerConfig(PydanticBaseModel):
@@ -85,6 +87,13 @@ class TrainerConfig(PydanticBaseModel):
         model_dtype (`torch.dtype`, *optional*, defaults to `torch.bfloat16`):
             Autocast dtype. The trainer moves the model without changing its weight
             dtype; supply FP32 weights to retain FP32 master parameters.
+        torch_compile (`bool`, *optional*, defaults to `False`):
+            Compile the training model, the loss, gradient clipping with the optimizer
+            step, and the evaluation model. Learning rates become tensors, so schedules
+            do not recompile.
+        torch_compile_mode (`str`, *optional*, defaults to `"default"`):
+            PyTorch compilation mode: `"default"`, `"reduce-overhead"`,
+            `"max-autotune"` or `"max-autotune-no-cudagraphs"`.
         max_norm (`float`, *optional*, defaults to `1.0`):
             Finite, nonnegative gradient clipping threshold. Zero clips gradients to zero.
         logging_steps (`int`, *optional*, defaults to `10`):
@@ -127,6 +136,10 @@ class TrainerConfig(PydanticBaseModel):
 
     # Master weights are always stored in FP32, but the model can be trained in BF16.
     model_dtype: torch.dtype = torch.bfloat16
+    torch_compile: bool = False
+    torch_compile_mode: Literal[
+        "default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"
+    ] = "default"
     max_norm: float = Field(default=1.0, ge=0, allow_inf_nan=False)
     logging_steps: int = Field(default=10, gt=0)
     seed: int = 42
@@ -529,6 +542,16 @@ class Trainer:
             self.optimizer, config.lr_scheduler_config, self.total_steps
         )
 
+        # torch compile method
+        self.torch_compile: bool = config.torch_compile
+        self.torch_compile_mode = config.torch_compile_mode
+        # `compile_if_enabled` keeps the compiled `_calc_batch_loss` and `_clip_and_step` here.
+        self._compiled_methods: dict[Callable[..., Any], Callable[..., Any]] = {}
+        if self.torch_compile:
+            # Compile in place, so training, DDP and evaluation all call the compiled model.
+            self.model.compile(mode=self.torch_compile_mode)
+            prepare_for_compile(self.optimizer, self.device)
+
         self.validation_tasks = config.validation_tasks
         self.validation_steps = config.validation_steps
         self.validation_limit = config.validation_limit
@@ -604,6 +627,7 @@ class Trainer:
             generator=torch.Generator().manual_seed(self.seed),
         )
 
+    @compile_if_enabled
     def _calc_batch_loss(
         self, output: torch.Tensor, labels: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -643,29 +667,50 @@ class Trainer:
 
         return loss, losses, tokens
 
+    def _autocast(self) -> torch.autocast:
+        """Autocast to `model_dtype` on the training device; FP32 runs without autocast."""
+        return torch.autocast(
+            self.device.type,
+            dtype=self.model_dtype,
+            enabled=self.model_dtype != torch.float32,
+        )
+
     def _set_seed(self) -> None:
         """Seed Python and PyTorch before starting or restoring training."""
         random.seed(self.seed + self.runtime.rank)
         torch.manual_seed(self.seed + self.runtime.rank)
 
+    # `torch.compile` needs a function, so clipping and the optimizer step share this method.
+    # Compiling `self.optimizer.step` in place would replace another object's method, which ty
+    # rejects; moving this into the optimizer module would take much more work.
+    @compile_if_enabled
+    def _clip_and_step(self) -> torch.Tensor:
+        """Clip gradients, update the parameters and return the gradient norm before clipping."""
+        grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.max_norm)
+        self.optimizer.step()
+        return grad_norm
+
     def _inner_training_loop(self, dataloader: Iterable[Batch], start_step: int) -> None:
         """Update once per batch, then log, save and evaluate at configured intervals."""
         for step, batch in enumerate(dataloader, start=start_step + 1):
+            # Mark the step begin for CUDA Graphs if torch.compile is enabled.
+            if self.torch_compile:
+                torch.compiler.cudagraph_mark_step_begin()
             self.optimizer.zero_grad()
 
             batch = {k: v.to(self.device, non_blocking=True) for k, v in batch.items()}
 
-            with torch.autocast(self.device.type, dtype=self.model_dtype):
+            with (
+                self._autocast(),
+                # Ensure the compiled backward matches eager behavior by running backward outside autocast.
+                functorch_config.patch(backward_pass_autocast="off"),
+            ):
                 output: torch.Tensor = self.training_model(batch)
                 loss, losses, num_tokens = self._calc_batch_loss(output, batch["labels"])
 
+            # TODO: try compiled autograd to capture the whole backward once the forward has no graph breaks (right now it still does), but the total effect is uncertainty.
             loss.backward()
-            grad_norm = torch.nn.utils.clip_grad_norm_(
-                self.model.parameters(),
-                max_norm=self.max_norm,
-            )
-
-            self.optimizer.step()
+            grad_norm = self._clip_and_step()
             self.lr_scheduler.step()
 
             self.state.update(add_step=1, loss=losses, grad_norm=grad_norm, tokens=num_tokens)
@@ -802,11 +847,7 @@ class Trainer:
                         scorer, TASKS[task], limit=self.validation_limit
                     )
             # Match training precision without casting or copying the FP32 master weights.
-            with torch.autocast(
-                self.device.type,
-                dtype=self.model_dtype,
-                enabled=self.model_dtype != torch.float32,
-            ):
+            with self._autocast():
                 results = {
                     task: score_prepared(scorer, self._prepared_validation_tasks[task])
                     for task in self.validation_tasks
@@ -952,12 +993,10 @@ class Trainer:
                     f"Checkpoint optimizer parameter group {index} size does not match this run"
                 )
             # The current LR depends on progress; original LRs are checked by the scheduler.
-            saved_settings = {
-                key: value for key, value in saved.items() if key not in ("params", "lr")
-            }
-            current_settings = {
-                key: value for key, value in current.items() if key not in ("params", "lr")
-            }
+            # Compiled CUDA runs turn `capturable` on, so it may differ between runs.
+            ignored = ("params", "lr", "capturable")
+            saved_settings = {key: value for key, value in saved.items() if key not in ignored}
+            current_settings = {key: value for key, value in current.items() if key not in ignored}
             if saved_settings != current_settings:
                 raise ValueError(
                     f"Checkpoint optimizer parameter group {index} settings do not match this run"
