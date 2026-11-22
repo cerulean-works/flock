@@ -22,6 +22,7 @@ from flock.eval.results import (
     scale,
     tokens_name,
     write_perplexity_predictions,
+    write_perplexity_tokens,
     write_predictions,
     write_tokens,
 )
@@ -80,6 +81,8 @@ class EvalConfig:
             With `out`, write each multiple-choice task's per-token values beside its predictions, as `predictions/<task>.tokens.parquet`: each choice's tokens with their values, and the first 32 tokens greedy decoding writes after each context (see [`~eval.results.write_tokens`]).
         context_tokens (`bool`, *optional*, defaults to `False`):
             Also write the per-token values of each doc's context, few-shot examples included, as contamination checks such as Min-K%++ read them. It needs `tokens`. They are read from each distinct context once, in the pass that starts greedy decoding, which then keeps the logits of every position.
+        perplexity_tokens (`bool`, *optional*, defaults to `False`):
+            With `out`, write each perplexity task's per-token values beside its predictions, as `predictions/<task>.tokens.parquet`: each token's loss and where it ends in the text's bytes, but no token ids (see [`~eval.results.write_perplexity_tokens`]).
 
     Raises:
         `ValueError`: if no task or suite is given, a task or suite repeats, `limit` or `batch_tokens` is less than 1, `dtype` is not `"bfloat16"` or `"float32"`, or `context_tokens` is set without `tokens`, before any model loads.
@@ -98,6 +101,7 @@ class EvalConfig:
     add_bos: bool = False
     tokens: bool = True
     context_tokens: bool = False
+    perplexity_tokens: bool = False
 
     def __post_init__(self) -> None:
         if not self.tasks and not self.suites:
@@ -201,7 +205,15 @@ def evaluate(config: EvalConfig) -> Results:
         sdpa_backend=model.sdpa_backend,
     )
     task_results = [
-        score_task(model, task, config.limit, config.out, config.tokens, config.context_tokens)
+        score_task(
+            model,
+            task,
+            config.limit,
+            config.out,
+            config.tokens,
+            config.context_tokens,
+            config.perplexity_tokens,
+        )
         for task in tasks
     ]
 
@@ -327,6 +339,7 @@ def score_task(
     out: Path | None = None,
     tokens: bool = False,
     context_tokens: bool = False,
+    perplexity_tokens: bool = False,
 ) -> TaskResult:
     """
     Scores one task with an already loaded model. A training loop that scores the same task at many steps calls [`prepare_task`] once and [`score_prepared`] at each step instead, which gives the same result.
@@ -344,12 +357,15 @@ def score_task(
             With `out`, also write a multiple-choice task's per-token values, as [`EvalConfig`]'s `tokens`.
         context_tokens (`bool`, *optional*, defaults to `False`):
             With `tokens`, also write its contexts' values, as [`EvalConfig`]'s `context_tokens`.
+        perplexity_tokens (`bool`, *optional*, defaults to `False`):
+            With `out`, write a perplexity task's per-token values, as [`EvalConfig`]'s `perplexity_tokens`.
 
     Raises:
         `ValueError`: if `limit` is less than 1, or a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
         `FileExistsError`: if the predictions file already exists, before anything is scored.
     """
-    return score_prepared(model, prepare_task(model, task, limit), out, tokens, context_tokens)
+    prepared = prepare_task(model, task, limit)
+    return score_prepared(model, prepared, out, tokens, context_tokens, perplexity_tokens)
 
 
 def prepare_task(model: ScoringModel, task: Task, limit: int | None = None) -> PreparedTask:
@@ -396,6 +412,7 @@ def score_prepared(
     out: Path | None = None,
     tokens: bool = False,
     context_tokens: bool = False,
+    perplexity_tokens: bool = False,
 ) -> TaskResult:
     """
     Scores a task from [`prepare_task`] with an already loaded model, as training loops do between steps. The result is the one [`score_task`] gives.
@@ -411,6 +428,8 @@ def score_prepared(
             With `out`, also write a multiple-choice task's per-token values, as [`EvalConfig`]'s `tokens`. Off by default, so a training loop pays for them only when it asks.
         context_tokens (`bool`, *optional*, defaults to `False`):
             With `tokens`, also write its contexts' values, as [`EvalConfig`]'s `context_tokens`.
+        perplexity_tokens (`bool`, *optional*, defaults to `False`):
+            With `out`, write a perplexity task's per-token values, as [`EvalConfig`]'s `perplexity_tokens`. Off by default, as `tokens` is.
 
     Raises:
         `ValueError`: if `model`'s tokenizer isn't the one the task was prepared with, or a multiple-choice task was prepared with another `add_bos`.
@@ -434,12 +453,13 @@ def score_prepared(
     predictions = out / "predictions" / f"{task.name}.jsonl" if out is not None else None
     if predictions is not None and predictions.exists():
         raise FileExistsError(f"{predictions} exists: {_ONE_RUN}")
-    if isinstance(prepared, PreparedPerplexity):
-        return _score_perplexity(model, prepared, predictions)
-    # Per-token values are written only beside predictions.
-    token_values = out / tokens_name(task.name) if out is not None and tokens else None
+    # Per-token values are written only beside predictions, by each kind of task's own flag.
+    wanted = perplexity_tokens if isinstance(prepared, PreparedPerplexity) else tokens
+    token_values = out / tokens_name(task.name) if out is not None and wanted else None
     if token_values is not None and token_values.exists():
         raise FileExistsError(f"{token_values} exists: {_ONE_RUN}")
+    if isinstance(prepared, PreparedPerplexity):
+        return _score_perplexity(model, prepared, predictions, token_values)
 
     requests = prepared.requests
     start = time.perf_counter()
@@ -491,9 +511,12 @@ def score_prepared(
 
 
 def _score_perplexity(
-    model: ScoringModel, prepared: PreparedPerplexity, predictions: Path | None
+    model: ScoringModel,
+    prepared: PreparedPerplexity,
+    predictions: Path | None,
+    token_values: Path | None = None,
 ) -> TaskResult:
-    """[`score_prepared`] for a perplexity task, writing its rows to `predictions` if given."""
+    """[`score_prepared`] for a perplexity task, writing its rows to `predictions` and its per-token values to `token_values` if given."""
     task, docs = prepared.task, prepared.docs
     texts = [doc.text for doc in docs]
     # Each whole text's UTF-8 bytes, as OLMES's `num_bytes` (`loglikelihood_rolling_verbose` in
@@ -501,7 +524,11 @@ def _score_perplexity(
     num_bytes = [len(text.encode()) for text in texts]
 
     start = time.perf_counter()
-    scores = model.rolling_loglikelihood(texts, task.window, prepared.token_ids)
+    scores = model.rolling_loglikelihood(
+        texts, task.window, prepared.token_ids, tokens=token_values is not None
+    )
+    # Placed in the timed span, so `seconds` counts what the values cost.
+    byte_ends = model.byte_ends(texts) if token_values is not None else None
     # Summed over all of the task's docs before dividing, as Paloma defines bits per byte
     # (App. B) and OLMES computes it per domain (`PerplexityMetric`), so a doc counts by its
     # bytes, and the loss is averaged over tokens as a trainer averages it over a batch. Every
@@ -522,6 +549,10 @@ def _score_perplexity(
     if predictions is not None:
         write_perplexity_predictions(
             predictions, docs, scores, num_bytes, task.window, task.dataset.subset, task.domain
+        )
+    if token_values is not None and scores.continuation_tokens is not None and byte_ends:
+        write_perplexity_tokens(
+            token_values, docs, scores.continuation_tokens, byte_ends, task.dataset.private
         )
 
     return TaskResult(
