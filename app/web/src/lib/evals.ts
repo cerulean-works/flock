@@ -55,6 +55,7 @@ export function isEvalResults(value: unknown): value is EvalResults {
 			typeof s.suite !== 'string' ||
 			typeof s.suite_hash !== 'string' ||
 			!Array.isArray(s.members) ||
+			!s.members.every((m) => typeof m === 'string') ||
 			!(typeof s.score === 'number' || s.score === null)
 		)
 			return false;

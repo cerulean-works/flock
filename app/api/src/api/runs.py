@@ -608,7 +608,7 @@ async def diff_runs(
     def read(of: Run, public: bool, name: str) -> str | None:
         # A private dataset's rows, under `private/` (D181), are read for the run's org members
         # only. To anyone else its task has no predictions, so no count or doc id of it leaves.
-        return None if public and members_only(name) else files.read(of, name)
+        return files.read(of, name, readable=not (public and members_only(name)))
 
     # As tracker runs (`run:`), so a private dataset's task is read from `private/`.
     pair = []

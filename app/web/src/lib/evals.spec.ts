@@ -128,6 +128,7 @@ describe('reading a results file', () => {
 			{ ...good, tasks: [{ ...good.tasks[0], metrics: { acc_raw: '0.5' } }] },
 			{ ...good, tasks: [good.tasks[0], good.tasks[0]] }, // a repeated name
 			{ ...good, suites: [{ ...good.suites[0], score: 'high' }] },
+			{ ...good, suites: [{ ...good.suites[0], members: [{ toString: 1 }] }] },
 			{ ...good, provenance: {} },
 			{ ...good, tasks: [{ ...good.tasks[0], truncation: {} }] },
 			{ ...good, provenance: { ...good.provenance, torch: undefined } }

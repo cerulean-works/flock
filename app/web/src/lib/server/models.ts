@@ -80,6 +80,8 @@ export async function evalRuns(scope: Scope, name: string, number: number): Prom
 	const version = (await res.json()) as ModelVersionDetail;
 	const paths = version.evals ?? []; // none from an API before 025
 	const runs: (ModelEvalRun | null)[] = paths.map(() => null);
+	// A run the viewer can't read or that is gone is left out; any other failure is the answer.
+	let failed: Response | null = null;
 	let next = 0;
 	async function work() {
 		while (next < paths.length) {
@@ -87,9 +89,13 @@ export async function evalRuns(scope: Scope, name: string, number: number): Prom
 			const [entity, project, id] = paths[i].split('/');
 			const path = `${projectPath(entity, project)}/runs/${encodeURIComponent(id)}`;
 			const got = await flockAnswer(path);
-			if (!got.ok) {
+			if (got.status === 403 || got.status === 404) {
 				await got.body?.cancel();
 				continue;
+			}
+			if (!got.ok) {
+				failed ??= got;
+				return;
 			}
 			const run = (await got.json()) as RunDetail;
 			const results = await readEvalResults(path);
@@ -121,6 +127,7 @@ export async function evalRuns(scope: Scope, name: string, number: number): Prom
 		}
 	}
 	await Promise.all(Array.from({ length: Math.min(RUNS_AT_ONCE, paths.length) }, work));
+	if (failed) return relayRefusal(failed);
 	return Response.json(
 		{ runs: runs.filter((r) => r !== null) },
 		{ headers: { 'cache-control': 'no-store' } }

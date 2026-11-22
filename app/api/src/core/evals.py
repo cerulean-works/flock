@@ -23,11 +23,14 @@ class PairFiles:
     left: int = PAIR_BYTES
     lookups: int = PAIR_FILES
 
-    def read(self, run: Run, name: str) -> str | None:
-        """The run's file ``name`` as text, or None when the run has no such file."""
+    def read(self, run: Run, name: str, readable: bool = True) -> str | None:
+        """The run's file ``name`` as text, or None when the run has no such file or the caller
+        may not read it (``readable`` false), which counts as a lookup all the same."""
         self.lookups -= 1
         if self.lookups < 0:
             raise ValueError("the runs have more files than one comparison reads")
+        if not readable:
+            return None
         read = self.store.read_file(run, name, max_bytes=min(FILE_BYTES, self.left))
         data = asyncio.run_coroutine_threadsafe(read, self.loop).result()
         if data is None:

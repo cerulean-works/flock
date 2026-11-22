@@ -127,7 +127,7 @@
 				{:else}
 					<tr>
 						<td class="px-2 py-3 text-muted-foreground" colspan={runs.length + 1}>
-							These runs have no results file, so there are no scores to show.
+							No results file of these runs scores this version, so there are no scores to show.
 						</td>
 					</tr>
 				{/each}

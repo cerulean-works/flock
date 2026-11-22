@@ -186,6 +186,17 @@ describe('a version’s eval runs', () => {
 		);
 	});
 
+	it('passes on a failure to read a linked run rather than leave the run out', async () => {
+		vi.mocked(flockAnswer).mockImplementation(async (url) => {
+			if (url.endsWith('/-/versions/12'))
+				return Response.json({ model: 'acme/m', number: 12, digest: 'd', evals: ['acme/e/r'] });
+			return Response.json({ error: 'database unavailable' }, { status: 503 });
+		});
+		const res = await evalRuns({ org: 'acme', project: null }, 'm', 12);
+		expect(res.status).toBe(503);
+		expect(await res.json()).toEqual({ message: 'database unavailable' });
+	});
+
 	it('passes a refusal on as the dialogs read one', async () => {
 		vi.mocked(flockAnswer).mockResolvedValue(
 			Response.json({ error: 'version 9 of acme/m not found' }, { status: 404 })

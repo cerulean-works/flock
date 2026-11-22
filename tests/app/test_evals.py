@@ -3,6 +3,7 @@ with eval's own diff."""
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 import re
@@ -13,6 +14,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from app.api.src.core.errors import Invalid
+from app.api.src.core.evals import PairFiles
 from flock.eval.diff import diff
 from flock.eval.results import READ_SCHEMAS, Results, WrittenResults, read_results
 from tests.eval.toy import PROVENANCE, write_run
@@ -193,6 +195,21 @@ def test_a_file_over_the_limit_is_refused_before_it_is_read(
     assert flock.call(flock.store.read_file(run, "predictions/t.jsonl", max_bytes=10)) == b"x" * 10
     with pytest.raises(Invalid, match="more than the 9 bytes"):
         flock.call(flock.store.read_file(run, "predictions/t.jsonl", max_bytes=9))
+
+
+def test_a_file_the_caller_may_not_read_still_counts_against_the_budget(
+    flock: FlockServer, api: Client
+) -> None:
+    api.create_run("p", "r")
+    project = flock.call(flock.store.project("flock", "p"))
+    run = flock.call(flock.store.project_run(project, "r"))
+    loop = asyncio.new_event_loop()
+    files = PairFiles(flock.store, loop, lookups=1)
+
+    assert files.read(run, "private/predictions/t.jsonl", readable=False) is None
+    with pytest.raises(ValueError, match="more files than one comparison reads"):
+        files.read(run, "predictions/t.jsonl")
+    loop.close()
 
 
 def test_the_dashboard_reads_the_schemas_eval_reads() -> None:
