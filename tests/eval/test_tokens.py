@@ -12,6 +12,7 @@ from click.testing import CliRunner
 from flock.eval import run
 from flock.eval.cli import main
 from flock.eval.model import FlockCausalLM, ScoringModel
+from flock.eval.requests import ContextScores
 from flock.eval.results import read_results
 from flock.eval.run import EvalConfig, evaluate, prepare_task, score_prepared, score_task
 from flock.eval.tasks import Choice, Dataset, MCDoc, MultipleChoiceTask
@@ -335,3 +336,44 @@ def test_context_requests_name_each_docs_first_choice_per_distinct_context() -> 
         primary_metric="acc_raw",
     )
     assert task.requests(docs, []).context_requests == (0, 2, 3)
+
+
+def test_reads_of_some_docs_and_files_left_by_other_runs(
+    offline_model: None, scorer: ScoringModel, tmp_path: Path
+) -> None:
+    evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path / "run"))
+    written = read_results(str(tmp_path / "run"))
+    assert written.tokens("toy", ids=[]) == []  # an empty selection keeps no row
+
+    # A file of that name beside an older run isn't its own.
+    data = json.loads((tmp_path / "run" / "results.json").read_text())
+    data["schema_version"] = 11
+    (tmp_path / "run" / "results.json").write_text(json.dumps(data))
+    assert read_results(str(tmp_path / "run")).tokens("toy") is None
+
+    # A run never writes predictions beside values another run left, even without its own.
+    taken = tmp_path / "taken" / "predictions"
+    taken.mkdir(parents=True)
+    (taken / "toy.tokens.parquet").write_bytes(b"")
+    with pytest.raises(FileExistsError, match="toy.tokens.parquet exists"):
+        score_task(scorer, TASK, out=tmp_path / "taken")
+
+
+def test_a_flock_model_keeps_its_contexts_whole_and_skips_a_pass_it_doesnt_need(
+    tokenizer: PreTrainedTokenizerFast,
+) -> None:
+    torch.manual_seed(0)
+    config = Olmo2Config(
+        vocab_size=len(tokenizer),
+        hidden_size=32,
+        intermediate_size=64,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        max_position_embeddings=128,
+    )
+    scorer = ScoringModel(FlockCausalLM(Olmo2(config).eval()), tokenizer, name="flock:a/m@1")
+    context = list(range(3, 123))  # longer than max_length less 32
+    assert scorer.score_contexts([context]) == ContextScores(greedy=None, values=None)
+    read = scorer.score_contexts([context], values=True)
+    assert read.values is not None and read.values.lengths == (len(context) - 1,)

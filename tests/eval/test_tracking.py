@@ -741,3 +741,32 @@ def test_per_token_values_go_beside_their_predictions_and_read_back_from_the_run
         {"id": "q-2", "part": "continuation", "token_ids": [2]}
     ]
     assert remote.tokens("toy") is None  # not on the run
+
+
+def test_per_token_values_of_an_older_run_or_shared_by_two_tasks_are_refused(
+    logged: dict[str, Any], hub: FakeHub, tmp_path: Path
+) -> None:
+    import os
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    path = written_run(tmp_path / "run", private=True)
+    folder = tmp_path / "run"
+    table = pa.table({"id": ["q-1"], "part": ["continuation"], "token_ids": [[1]]})
+    pq.write_table(table, folder / "predictions" / "exam.tokens.parquet")
+
+    # Schema 11 never wrote one, so a file of that name beside it stays behind.
+    data = json.loads(path.read_text())
+    path.write_text(json.dumps(data | {"schema_version": 11}))
+    log_to_tracker(json.loads(path.read_text()), "model-evals", results_file=path)
+    assert not any(name.endswith(".parquet") for name in logged["files"])
+
+    # One file under a private and a public name would go out under both.
+    path.write_text(json.dumps(data))
+    os.link(
+        folder / "predictions" / "exam.tokens.parquet",
+        folder / "predictions" / "toy.tokens.parquet",
+    )
+    with pytest.raises(ValueError, match="is the file of two tasks"):
+        log_to_tracker(data, "model-evals", results_file=path)

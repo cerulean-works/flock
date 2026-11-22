@@ -495,7 +495,7 @@ class WrittenResults:
 
     def tokens(self, task: str, ids: Collection[str] | None = None) -> list[dict[str, Any]] | None:
         """
-        Returns the per-token rows of `task`'s docs, or of those in `ids`, as [`write_tokens`] wrote them, or `None` if the run has none for the task: it was scored before schema 12, without them, or this reader has no `read_bytes`. Read on demand, one task at a time, as a page shows one doc. On a tracker run, a task on a private dataset is read from under `private/`.
+        Returns the per-token rows of `task`'s docs, or of those in `ids`, as [`write_tokens`] wrote them, or `None` if the run has none for the task: it was written before schema 12, without them, or this reader has no `read_bytes`. Read on demand, one task at a time, as a page shows one doc. On a tracker run, a task on a private dataset is read from under `private/`.
 
         Raises:
             `ValueError`: if `task` isn't a single file name.
@@ -508,9 +508,15 @@ class WrittenResults:
         on_run = self.source.startswith("run:")
         if on_run and any(t.task == task and t.dataset.private for t in self.tasks):
             name = f"private/{name}"
-        data = self.read_bytes(name) if self.read_bytes is not None else None
+        # Only schema 12 on writes them: an older run's file of that name isn't its own.
+        if self.schema_version < 12 or self.read_bytes is None:
+            return None
+        data = self.read_bytes(name)
         if data is None:
             return None
+        # An empty selection keeps no row: pyarrow can't type an empty filter set.
+        if ids is not None and not ids:
+            return []
         chosen = [("id", "in", sorted(ids))] if ids is not None else None
         return pq.read_table(pa.BufferReader(data), filters=chosen).to_pylist()
 

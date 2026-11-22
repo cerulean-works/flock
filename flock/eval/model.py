@@ -745,8 +745,13 @@ class ScoringModel:
         """
         if num_tokens < 0 or self.max_length < 2:
             raise ValueError(f"can't decode {num_tokens} tokens after up to {self.max_length}")
-        decodes = num_tokens > 0 and isinstance(self.model, PreTrainedModel)
+        # A model without a key-value cache decodes nothing, so its contexts keep their room.
         num_tokens = min(num_tokens, self.max_length - 1)
+        if not isinstance(self.model, PreTrainedModel):
+            num_tokens = 0
+        decodes = num_tokens > 0
+        if not decodes and not values:
+            return ContextScores(greedy=None, values=None)
 
         kept = [context[-(self.max_length - num_tokens) :] for context in contexts]
         lengths = [len(context) + num_tokens for context in kept]
@@ -787,6 +792,8 @@ class ScoringModel:
                     logprob, _, stats = _target_logprobs(output.logits[:, :-1], targets, True)
                     assert stats is not None  # asked for
                     stats["logprob"] = logprob
+                    # With weights on several devices, the logits come out on the last one.
+                    stats = {k: v.to(self.device, non_blocking=True) for k, v in stats.items()}
                     buffer.write(batch, [width - 1] * len(batch), stats)
                 if not decodes:
                     continue

@@ -456,10 +456,11 @@ def score_prepared(
         raise FileExistsError(f"{predictions} exists: {_ONE_RUN}")
     if isinstance(prepared, PreparedPerplexity):
         return _score_perplexity(model, prepared, predictions)
-    # Per-token values are written only beside predictions.
+    # Per-token values are written only beside predictions. One left by another run is refused
+    # whether or not this one writes its own, so no reader pairs them with these predictions.
+    if out is not None and (out / tokens_name(task.name)).exists():
+        raise FileExistsError(f"{out / tokens_name(task.name)} exists: {_ONE_RUN}")
     token_values = out / tokens_name(task.name) if out is not None and tokens else None
-    if token_values is not None and token_values.exists():
-        raise FileExistsError(f"{token_values} exists: {_ONE_RUN}")
 
     requests = prepared.requests
     start = time.perf_counter()
