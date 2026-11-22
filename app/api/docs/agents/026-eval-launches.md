@@ -176,12 +176,36 @@ The numbering continues from 025 (D182 to D187).
 
 ## 4. How it was actually built
 
-To be completed with the review record.
+- **The design came first:** caps, which data may leave our storage, how H100 numbers relate to
+  the H200 bank, and the job's shape were settled before any code, with the defaults above.
+- **The registry can't be imported by the API** (torch, about 15 s), so the list of public
+  suites and tasks comes from the worker (`catalogue`), and the worker checks the list again.
+- **Five review rounds** changed the lifecycle more than the first draft did. Found and fixed:
+  - the worker's root path, which doesn't exist in the container;
+  - a poll's deadline is Python's `TimeoutError`, not Modal's, so every launch would have failed
+    after one heartbeat;
+  - the image took ignored files (`app/.env`), now only tracked ones;
+  - `modal.is_local()` is true in a function's child process, hence `eval_score.py`;
+  - keys deleted by name, now by identity, made in the row's transaction;
+  - cancels and takeovers racing a spawn;
+  - the month's count across month starts, purged orgs, lost spawn answers and container time
+    outside the call's limit;
+  - launches outliving a rotated token or a server without Modal settings;
+  - projects renamed or deleted under a running launch.
+- **The web side** reuses the import dialog's pieces (the relay, `datasetCall`, the rows' shape)
+  and asks the API for one project's launches, since the list is limited before it reaches the
+  page.
+- **Parity, measured once:** OLMo 2 1B and Qwen3.5 0.8B Base at their bank pins, `base_easy` and
+  `fineweb_en`, BF16 at 16,384 batch tokens with the same flock commit, scored once by the
+  deployed worker on a Modal H100 and once on an H200: all 521 metric values of each model are
+  bit-equal (110 tasks, equal hashes). Whether launched rows may then sit beside the bank's is
+  decided outside this stage. Llama 3.2 1B, the first choice, is gated on the Hub, so a public launch
+  can't load it.
 
 ## 5. Known gaps
 
 - Models in the Flock registry can't be launched: the worker would need a credential that reads
   `flock-models`, which today also reads private ones.
-- The parity of H100 and H200 scores is checked outside the repository, once; until then a
-  launched run is labelled with its device and kept out of comparisons with the bank by hand.
+- Parity is shown on two small models and one task set. A larger model, or a kernel that differs
+  between the two GPUs, isn't covered; a launched run still records its device.
 - A launch's cost is bounded, not measured: the row has no billed seconds from Modal.
