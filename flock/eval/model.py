@@ -608,7 +608,7 @@ class ScoringModel:
         """
         Reads each context alone: the first `num_tokens` tokens greedy decoding writes after it, and with `values` the per-token values of its tokens. A context is read once however many choices share it, apart from the scoring of requests, so neither changes a score.
 
-        Decoding has no stop: end-of-sequence tokens are written like any other. A model whose `max_length` isn't above `num_tokens` writes `max_length - 1`. A context longer than `max_length` less the tokens written loses tokens from the left, as scoring cuts one, and its values cover what is left but its first token, which nothing predicts. Batched as scoring is, longest first, under the same kernel pin. The values come from the first forward pass of decoding, which keeps every position's logits only when they are asked for.
+        Decoding has no stop: end-of-sequence tokens are written like any other. A model whose `max_length` isn't above `num_tokens` writes `max_length - 1`. A context longer than `max_length` less the tokens written loses tokens from the left, as scoring cuts one, and its values cover what is left but its first token, which nothing predicts. Batched longest first under scoring's kernel pin, in batches of up to 8 times `batch_tokens`, or `batch_tokens` with `values`. The values come from the first forward pass of decoding, which keeps every position's logits only when they are asked for.
 
         A [`FlockCausalLM`] keeps no key-value cache to decode with, and decoding without one would read each context `num_tokens` times over: it writes no greedy tokens, and its values take one forward pass.
 
@@ -637,7 +637,13 @@ class ScoringModel:
         backend = self.sdpa_backend
         pin = sdpa_kernel(getattr(SDPBackend, backend)) if backend else nullcontext()
         with _eval_mode(self.model), pin:
-            for batch in self._batches(order, lengths):
+            # Decoding spends its time on one-token steps, each costing about as much at any row
+            # count, so a batch takes 8 times scoring's tokens: without context values the first
+            # pass keeps one position's logits, and the cache and activations of that many tokens
+            # take less memory than scoring's full-vocabulary logits do. With them, the first pass
+            # keeps every position's logits, as scoring's budget allows.
+            budget = self.batch_tokens if values else 8 * self.batch_tokens
+            for batch in self._batches(order, lengths, budget):
                 # Left-padded, so every row's next token comes from its last position.
                 width = max(len(kept[i]) for i in batch)
                 padding = [width - len(kept[i]) for i in batch]
@@ -796,12 +802,15 @@ class ScoringModel:
 
         return prefix
 
-    def _batches(self, order: list[int], input_lengths: list[int]) -> Iterator[list[int]]:
-        """Splits `order` (longest first) into runs whose padded size fits `batch_tokens`, given each request's model-input length."""
+    def _batches(
+        self, order: list[int], input_lengths: list[int], budget: int | None = None
+    ) -> Iterator[list[int]]:
+        """Splits `order` (longest first) into runs whose padded size fits `budget` tokens, `batch_tokens` if not given, given each request's model-input length."""
+        budget = budget or self.batch_tokens
         batch: list[int] = []
         for i in order:
             # `batch[0]` is the batch's longest request, so every row pads to its length.
-            if batch and (len(batch) + 1) * input_lengths[batch[0]] > self.batch_tokens:
+            if batch and (len(batch) + 1) * input_lengths[batch[0]] > budget:
                 yield batch
                 batch = []
             batch.append(i)
@@ -991,7 +1000,7 @@ def _target_logprobs(
             continue
 
         # Min-K%++'s mu and sigma are the mean and standard deviation of log p under p itself
-        # (Zhang et al. 2024, arXiv 2404.02936, eq. 2); mu is minus the entropy. A token of
+        # (Zhang et al. 2024, arXiv 2404.02936, eq. 3); mu is minus the entropy. A token of
         # probability 0 adds nothing, where `0 * -inf` would be NaN.
         logprobs = chunk - normalizer[..., None]
         probs = logprobs.exp()

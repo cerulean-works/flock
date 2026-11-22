@@ -27,7 +27,7 @@ Per-token values are long numeric arrays: as JSON they would multiply the predic
 
 ### 045.D2. Five values per token, all from the distribution scoring already computes
 
-For each scored token: its log-probability, its rank (1 plus the count of strictly more likely tokens), and at its position the entropy, the top-1 log-probability and the standard deviation of the log-probability under the distribution. Min-K%++ normalizes a token's log-probability by the mean and standard deviation of log p under p at its position (its eq. 2); the mean is minus the entropy, so the file stores the entropy and the deviation. They are computed in `_target_logprobs`' FP32 chunks, which are the same chunks with or without values, so no reduction changes order and no score moves. On by default: they read only the positions scoring keeps.
+For each scored token: its log-probability, its rank (1 plus the count of strictly more likely tokens), and at its position the entropy, the top-1 log-probability and the standard deviation of the log-probability under the distribution. Min-K%++ normalizes a token's log-probability by the mean and standard deviation of log p under p at its position (its eq. 3); the mean is minus the entropy, so the file stores the entropy and the deviation. They are computed in `_target_logprobs`' FP32 chunks, which are the same chunks with or without values, so no reduction changes order and no score moves. On by default: they read only the positions scoring keeps.
 
 ### 045.D3. Context values and greedy tokens come from a pass of their own
 
