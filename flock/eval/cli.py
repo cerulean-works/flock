@@ -3,6 +3,7 @@
 import json
 import shlex
 import sys
+import unicodedata
 from pathlib import Path
 from typing import get_args
 
@@ -189,7 +190,8 @@ def items_command(
     # A missing or damaged file, another instrument, no text, or a refused or unreachable run.
     except (OSError, ValueError, click.ClickException) as error:
         message = error.format_message() if isinstance(error, click.ClickException) else error
-        click.echo(f"refused: {message}", err=True)
+        # The message may quote a run's files.
+        click.echo(f"refused: {_escaped(str(message))}", err=True)
         sys.exit(2)
 
     if as_json:
@@ -296,13 +298,13 @@ def format_diff(found: ItemDiff) -> str:
 def format_item(item: Item) -> str:
     """Formats a doc: its task, id and metric, each run's model and verdict, its question, then one line per choice with each run's probability and share, `*` on gold and `<` on each run's pick."""
     letters = "ab"[: len(item.runs)]
-    lines = [f"{item.task}  {item.id}  {item.metric}"]
+    lines = [f"{_escaped(item.task)}  {_escaped(item.id)}  {_escaped(item.metric)}"]
     for letter, answer in zip(letters, item.runs, strict=True):
         verdict = "right" if answer.correct else "wrong"
-        lines.append(f"{letter}  {answer.model}  {verdict}, picks {answer.pick}")
+        lines.append(f"{letter}  {_escaped(answer.model)}  {verdict}, picks {answer.pick}")
     # Each choice's own context stands in for a shared question.
     if item.question is not None:
-        lines.append(item.question)
+        lines.append(_escaped(item.question, keep="\n"))
 
     # Per run, the probability then the share; a share is `-` where the metric ranks no choices.
     header = "".join(f"  p {letter}    s {letter}  " for letter in letters)
@@ -315,9 +317,17 @@ def format_item(item: Item) -> str:
             cells += f"  {answer.prob[i]:.3f}  {share} {mark}"
         text = choice if item.contexts is None else item.contexts[i] + choice
         gold = "*" if i == item.gold else " "
-        # One line per choice: its own line breaks are shown as `\\n`.
-        lines.append(f"{gold}{i:>3} {cells}  {text.strip().replace(chr(10), '\\n')}")
+        # One line per choice, so its own line breaks are escaped too.
+        lines.append(f"{gold}{i:>3} {cells}  {_escaped(text.strip())}")
     return "\n".join(lines)
+
+
+def _escaped(text: str, keep: str = "") -> str:
+    """`text` with each control, format or line-separator character (`Cc`, `Cf`, `Zl`, `Zp`) but those in `keep` written as its escape, so text from a run's files can't move the cursor or reorder a line. Chinese text, its ideographic space included, stays as it is."""
+    hidden = ("Cc", "Cf", "Zl", "Zp")
+    return "".join(
+        repr(c)[1:-1] if c not in keep and unicodedata.category(c) in hidden else c for c in text
+    )
 
 
 def format_results(results: Results, verbose: bool = False) -> str:

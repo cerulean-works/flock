@@ -133,7 +133,7 @@ The diff says how many docs each model got right. [`flock eval items`](commands#
 | `runs[].prob` | Each choice's probability renormalized over the choices: the softmax of `logprob`. |
 | `runs[].share` | The softmax over the choices of the score the metric ranks them by: `logprob` for `acc_raw` (so it equals `prob`), `logprob` per token, character or byte (in bits) for the length-normalized accuracies, and `logprob` minus `logprob_uncond` for `acc_uncond`. `null` for `acc_greedy`. |
 
-`share` is not a probability under a length-normalized metric. It shows how the metric ranks the choices, and its values sit close together, since a score per character varies little between choices. OLMES and OLMo 3 define no per-choice share, so read `prob` for how likely the model found each choice, and `share` and `pick` for what the metric made of it. In the example, OLMo found choice 1 most likely but `acc_per_char` picked choice 3.
+`share` is not a probability under a length-normalized metric. It shows how the metric ranks the choices, and its values sit close together, since a score per character varies little between choices. OLMES and OLMo 3 define no per-choice share, so read `prob` for how likely the model found each choice, and `share` and `pick` for what the metric made of it. In the example, OLMo found choice 1 most likely but `acc_per_char` picked choice 3. `pick` is the scorer's own, from its FP32 scores, while `share` is computed from the rows in double precision, so at a tie or near tie its largest value can sit on another choice.
 
 ### Reading failures with an agent
 

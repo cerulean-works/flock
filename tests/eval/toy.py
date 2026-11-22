@@ -261,6 +261,9 @@ def write_run(
                     "question": f"Question: {name} {i}?\nAnswer:",
                     "choices": [" yes", " no"],
                     "logprob": [-1.0, -2.0] if right else [-2.0, -1.0],
+                    "num_tokens": [1, 1],
+                    "num_chars": [4, 3],
+                    "num_bytes": [4, 3],
                 }
             rows.append(row)
         text = "".join(json.dumps(row) + "\n" for row in rows)

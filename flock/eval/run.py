@@ -427,7 +427,7 @@ def score_prepared(
         # The choice that metric picks, when it ranks choices (`acc_greedy` and `bpb` don't).
         ranked = ranking_scores(scores).get(task.primary_metric)
         pick = best_choice(ranked, scores.valid) if ranked is not None else None
-        write_predictions(predictions, requests, scores, correct, pick)
+        write_predictions(predictions, requests, scores, correct, pick, task.dataset.private)
 
     return TaskResult(
         task=task.name,
