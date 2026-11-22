@@ -27,17 +27,16 @@ uv run --all-packages python -c "import flock.training; import flock.eval; impor
 
 ### Adding new dependencies
 
-Add each dependency to the module that uses it with `uv add --package`, choosing
-the package name from the commands below. Each module keeps its dependencies in
-its own `pyproject.toml`, while the workspace shares one lockfile and one `.venv`.
-For shared development tools, use `uv add --group dev <dependency>`.
+The dependencies of everything under `flock/` are listed once, in the root
+`pyproject.toml`, so a project that depends on `flock` gets all of them. The app's
+and the tests' dependencies stay in their own `pyproject.toml`, and shared
+development tools go in the `dev` group:
 
 ```sh
-uv add --package flock-training <dependency>
-uv add --package flock-eval <dependency>
-uv add --package flock-cli <dependency>
-uv add --package flock-app-api <dependency>
-uv add --package flock-tests <dependency>
+uv add <dependency>                              # flock.cli, flock.eval, flock.hub, flock.training
+uv add --package flock-app-api <dependency>      # app/api
+uv add --package flock-tests <dependency>        # tests
+uv add --group dev <dependency>
 ```
 
 ### Running tests

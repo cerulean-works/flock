@@ -34,7 +34,7 @@ def _torch() -> Any:
         import safetensors.torch  # noqa: F401
         import torch
     except ImportError:
-        raise ImportError("torch and safetensors aren't installed: pip install flock-hub[models]")
+        raise ImportError("torch and safetensors aren't installed: pip install torch safetensors")
     return torch
 
 
