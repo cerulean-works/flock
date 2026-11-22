@@ -188,19 +188,15 @@ def test_a_schema_11_run_still_reads_and_its_items_have_no_source(
     assert all(item.source == {} for item in items([written], "toy", "all"))
 
 
-def test_a_tokenizer_without_a_tokenizers_backend_is_hashed_by_its_vocabulary(
+def test_a_tokenizer_without_a_tokenizers_backend_has_no_hash(
     lm: LlamaForCausalLM, tokenizer: PreTrainedTokenizerFast
 ) -> None:
     class PythonTokenizer:
-        """Stands in for a transformers tokenizer written in Python: a vocabulary, no backend."""
+        """Stands in for a transformers tokenizer written in Python: no Tokenizers backend."""
 
         name_or_path = "python-tok"
         bos_token_id = None
 
-        def get_vocab(self) -> dict[str, int]:
-            return {"b": 1, "a": 0}
-
     scorer = ScoringModel(lm, tokenizer, name="tiny@0")
     scorer.tokenizer = PythonTokenizer()  # ty: ignore[invalid-assignment]
-    vocab = json.dumps([["a", 0], ["b", 1]]).encode()
-    assert scorer.tokenizer_hash == hashlib.sha256(vocab).hexdigest()
+    assert scorer.tokenizer_hash is None  # its vocabulary alone wouldn't identify it

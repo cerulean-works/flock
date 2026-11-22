@@ -45,7 +45,7 @@ class Provenance:
         tokenizer (`str`, *optional*):
             Where the tokenizer was loaded from: a Hugging Face repo or folder, or a SentencePiece model file. `None` in results files written before it was added.
         tokenizer_hash (`str`, *optional*):
-            The sha256 of the tokenizer's whole definition (see [`~eval.model.ScoringModel.tokenizer_hash`]), which token ids in a run's files are meaningless without. `None` in results files written before it was added.
+            The sha256 of the tokenizer's whole definition (see [`~eval.model.ScoringModel.tokenizer_hash`]), which token ids in a run's files are meaningless without. `None` for a tokenizer written in Python, and in results files written before it was added.
         add_bos (`bool`):
             Whether every non-empty context started with the tokenizer's BOS token. Results files written before it was added have no `add_bos`: none added one.
         attention (`str`):
