@@ -1,0 +1,351 @@
+"""Evals launched on Modal from the web app (026): who may launch, what may be launched, the
+caps, the per-launch wandb key, cancelling, failures and taking a launch over after a restart.
+Modal is a fake with the deployed worker's calls; the Hub is an httpx mock."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
+
+import asyncpg
+import httpx
+import pytest
+
+from app.api.src.core.eval_launches import EvalLaunches
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from tests.app.conftest import Flocks, FlockServer
+
+
+LAUNCHES = "/api/v1/orgs/flock/evals/launches"
+SHA = "d" * 40
+HUB = "https://hub.test"
+PUBLIC_URL = "http://api.flock.test"
+CATALOGUE = {"suites": ["base_easy", "paloma"], "tasks": ["arc_easy", "drcd"]}
+
+
+@dataclass
+class FakeModal:
+    """The deployed worker: each spawn is a call that runs until ``outcomes`` names its result,
+    a flock commit, or an exception it raised."""
+
+    spawned: list[dict[str, Any]] = field(default_factory=list)
+    cancelled: list[str] = field(default_factory=list)
+    outcomes: dict[str, str | Exception] = field(default_factory=dict)
+    refuse: bool = False
+
+    async def catalogue(self) -> dict[str, list[str]]:
+        return CATALOGUE
+
+    async def spawn(self, timeout: int, env: dict[str, str | None], **kwargs: Any) -> str:
+        if self.refuse:
+            raise RuntimeError("no such app")
+        call_id = f"fc-{len(self.spawned)}"
+        self.spawned.append({"id": call_id, "timeout": timeout, "env": env, **kwargs})
+        return call_id
+
+    async def wait(self, call_id: str, timeout: float) -> str | None:
+        outcome = self.outcomes.get(call_id)
+        if isinstance(outcome, Exception):
+            raise outcome
+        if outcome is None:
+            await asyncio.sleep(min(timeout, 0.05))
+        return outcome
+
+    async def cancel(self, call_id: str) -> None:
+        self.cancelled.append(call_id)
+
+
+def hub_transport() -> httpx.MockTransport:
+    """The Hub's model API: a public, a gated and a private model."""
+    flags = {"acme/tiny": {}, "acme/gated": {"gated": "manual"}, "acme/secret": None}
+
+    async def handle(request: httpx.Request) -> httpx.Response:
+        repo = request.url.path.removeprefix("/api/models/").partition("/revision/")[0]
+        found = flags.get(repo, None)
+        if found is None:  # missing, or private to an anonymous caller
+            return httpx.Response(401, headers={"x-error-code": "RepoNotFound"})
+        body = {"id": repo, "sha": SHA, "siblings": [], **found}
+        return httpx.Response(200, json=body)
+
+    return httpx.MockTransport(handle)
+
+
+@pytest.fixture(autouse=True)
+def quick(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(EvalLaunches, "HEARTBEAT", 0.05)
+    monkeypatch.setattr(EvalLaunches, "STALE_AFTER", 0.5)
+
+
+@pytest.fixture
+def make_server(make_flock: Flocks) -> Callable[..., tuple[FlockServer, FakeModal]]:
+    def make(reuse: FlockServer | None = None, **settings: Any) -> tuple[FlockServer, FakeModal]:
+        settings.setdefault("hf_endpoint", HUB)
+        settings.setdefault("api_public_url", PUBLIC_URL)
+        settings.setdefault("modal_token_id", "ak-test")
+        settings.setdefault("modal_token_secret", "as-test")
+        settings.setdefault("eval_launch_usd_per_hour", 2.0)
+        server = make_flock(reuse=reuse, **settings)
+        modal = FakeModal()
+        launches = server.store.eval_launches
+        if launches.modal is not None:
+            launches.modal = modal
+        launches.transport = hub_transport()
+        return server, modal
+
+    return make
+
+
+def sql(server: FlockServer, query: str, *args: Any) -> list[asyncpg.Record]:
+    async def run() -> list[asyncpg.Record]:
+        conn = await asyncpg.connect(server.database_url)
+        try:
+            return await conn.fetch(query, *args)
+        finally:
+            await conn.close()
+
+    return asyncio.run(run())
+
+
+def body(**fields: Any) -> dict[str, Any]:
+    return {"model": "acme/tiny", "suites": ["base_easy"], "project": "evals", **fields}
+
+
+def test_a_launch_scores_the_pinned_model_and_its_key_ends_with_it(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]], wait_for: Callable[..., Any]
+) -> None:
+    server, modal = make_server()
+    api = server.client()
+    started = api.post(LAUNCHES, body(tasks=["drcd"], add_bos=True))
+    assert started.status == 202, started.body
+    job = started.json()
+    assert job["state"] == "running" and job["sha"] == SHA
+    assert job["run"] == f"eval-launch-{job['id']}"
+    assert job["cap_usd"] == 25.0
+
+    # The worker gets the commit, never a moving revision, and the cap as its timeout.
+    [call] = modal.spawned
+    assert call["model"] == f"acme/tiny@{SHA}"
+    assert (call["suites"], call["tasks"], call["add_bos"]) == (["base_easy"], ["drcd"], True)
+    assert call["project"] == "evals"
+    assert call["timeout"] == 25 * 3600 // 2  # $25 at $2 an hour
+    env = call["env"]
+    assert env["WANDB_BASE_URL"] == PUBLIC_URL and env["WANDB_ENTITY"] == "flock"
+    assert env["WANDB_RUN_ID"] == job["run"]
+    key = env["WANDB_API_KEY"]
+    assert key and server.call(server.store.accounts.api_key(key)) is not None
+
+    modal.outcomes[call["id"]] = "abc1234"
+    done = wait_for(
+        lambda: (j := api.get(f"{LAUNCHES}/{job['id']}").json())["state"] != "running" and j
+    )
+    assert done["state"] == "finished" and done["flock_commit"] == "abc1234"
+    assert done["finished_at"] is not None
+    # Done with it, so the key is gone: it can't log or read anything any more.
+    assert server.call(server.store.accounts.api_key(key)) is None
+    assert sql(server, "SELECT api_key_pk FROM eval_launches")[0][0] is None
+    assert [j["id"] for j in api.get(LAUNCHES).json()["launches"]] == [job["id"]]
+
+
+def test_only_public_suites_tasks_and_models_are_launched(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]],
+) -> None:
+    server, modal = make_server()
+    api = server.client()
+    catalogue = api.get(f"{LAUNCHES}/catalogue").json()
+    assert catalogue == {**CATALOGUE, "max_usd": 25.0, "monthly_usd": 300.0}
+
+    refused = api.post(LAUNCHES, body(suites=["zh_tw"], tasks=["tc_edu_math", "drcd"]))
+    assert refused.status == 422
+    assert "zh_tw, tc_edu_math" in refused.json()["error"]
+    assert api.post(LAUNCHES, body(suites=[], tasks=[])).status == 422
+    assert api.post(LAUNCHES, body(suites=["base_easy", "base_easy"])).status == 422
+    assert api.post(LAUNCHES, body(model="acme/gated")).status == 403
+    assert api.post(LAUNCHES, body(model="acme/secret")).status == 404
+    assert api.post(LAUNCHES, body(project="a/b")).status == 422
+
+    # Nothing started and no key was made for any of them.
+    assert modal.spawned == []
+    assert sql(server, "SELECT count(*) FROM eval_launches")[0][0] == 0
+    assert sql(server, "SELECT count(*) FROM api_keys WHERE name LIKE 'eval launch%'")[0][0] == 0
+
+
+def test_launches_are_off_without_the_modal_token_price_and_public_url(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]],
+) -> None:
+    for missing in ("modal_token_secret", "eval_launch_usd_per_hour", "api_public_url"):
+        server, modal = make_server(
+            **{missing: None if missing != "eval_launch_usd_per_hour" else 0.0}
+        )
+        api = server.client()
+        assert api.get(f"{LAUNCHES}/catalogue").status == 404, missing
+        assert api.post(LAUNCHES, body()).status == 404, missing
+        assert modal.spawned == []
+
+
+def test_only_members_launch_and_only_the_launcher_or_an_admin_cancels(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]], wait_for: Callable[..., Any]
+) -> None:
+    server, modal = make_server()
+    member = server.add_user("member@flock.test")
+    other = server.add_user("other@flock.test")
+    server.call(server.store.create_org("rival"))
+    outsider = server.add_user("outsider@flock.test", org="rival")
+
+    assert server.anonymous().post(LAUNCHES, body()).status == 401
+    assert server.anonymous().get(LAUNCHES).status == 401
+    assert outsider.api.post(LAUNCHES, body()).status == 404
+    assert outsider.api.get(LAUNCHES).status == 404
+    assert outsider.api.get(f"{LAUNCHES}/catalogue").status == 404
+    # A wandb key reaches tracking only, so it can't launch (a launch's own key included).
+    assert server.client(api_key=member.api_key).post(LAUNCHES, body()).status == 401
+
+    started = member.api.post(LAUNCHES, body())
+    assert started.status == 202, started.body
+    pk = started.json()["id"]
+    assert started.json()["started_by"]["id"] == member.id
+    assert outsider.api.get(f"{LAUNCHES}/{pk}").status == 404
+    assert outsider.api.delete(f"{LAUNCHES}/{pk}").status == 404
+    assert other.api.delete(f"{LAUNCHES}/{pk}").status == 403
+    assert modal.cancelled == []
+
+    cancelled = server.client().delete(f"{LAUNCHES}/{pk}")  # the admin
+    assert cancelled.status == 200 and cancelled.json()["state"] == "cancelled"
+    assert modal.cancelled == [modal.spawned[0]["id"]]
+    key = modal.spawned[0]["env"]["WANDB_API_KEY"]
+    assert server.call(server.store.accounts.api_key(key)) is None
+    # The watcher sees it ended elsewhere and stops; a late result changes nothing.
+    modal.outcomes[modal.spawned[0]["id"]] = "abc1234"
+    wait_for(lambda: not server.store.eval_launches.jobs)
+    assert member.api.get(f"{LAUNCHES}/{pk}").json()["state"] == "cancelled"
+
+
+def test_the_monthly_cap_counts_running_launches_at_their_cap(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]],
+) -> None:
+    server, modal = make_server(eval_launch_monthly_usd=60.0)
+    api = server.client()
+    first = api.post(LAUNCHES, body()).json()
+    assert api.post(LAUNCHES, body()).status == 202
+    refused = api.post(LAUNCHES, body())
+    assert refused.status == 409 and "$50.00 of $60.00" in refused.json()["error"]
+    assert len(modal.spawned) == 2
+
+    # Once one ends it counts at its time, here an hour at $2, which leaves room again.
+    api.delete(f"{LAUNCHES}/{first['id']}")
+    sql(
+        server,
+        "UPDATE eval_launches SET started_at = finished_at - interval '1 hour' WHERE pk = $1",
+        first["id"],
+    )
+    assert api.post(LAUNCHES, body()).status == 202
+    # Launches of earlier months don't count.
+    sql(server, "UPDATE eval_launches SET started_at = now() - interval '40 days'")
+    assert api.post(LAUNCHES, body()).status == 202
+
+
+def test_a_failed_launch_says_why_and_its_key_is_deleted(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]], wait_for: Callable[..., Any]
+) -> None:
+    server, modal = make_server()
+    api = server.client()
+    pk = api.post(LAUNCHES, body()).json()["id"]
+    call = modal.spawned[0]
+    modal.outcomes[call["id"]] = RuntimeError("not public: tw_text")
+    done = wait_for(lambda: (j := api.get(f"{LAUNCHES}/{pk}").json())["state"] != "running" and j)
+    assert done["state"] == "failed" and done["error"] == "not public: tw_text"
+    assert server.call(server.store.accounts.api_key(call["env"]["WANDB_API_KEY"])) is None
+
+    # Modal refusing the call fails the launch at once, with its key.
+    modal.refuse = True
+    refused = api.post(LAUNCHES, body())
+    assert refused.status == 502 and "no such app" in refused.json()["error"]
+    rows = sql(server, "SELECT state, error, api_key_pk FROM eval_launches ORDER BY pk")
+    assert rows[1]["state"] == "failed" and rows[1]["api_key_pk"] is None
+    assert sql(server, "SELECT count(*) FROM api_keys WHERE name LIKE 'eval launch%'")[0][0] == 0
+
+
+def test_a_launch_goes_on_through_a_restart_and_another_replica_takes_it_over(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]], wait_for: Callable[..., Any]
+) -> None:
+    server, _ = make_server()
+    pk = server.client().post(LAUNCHES, body()).json()["id"]
+    server.stop()
+
+    # The call runs on Modal whatever happens to the replica: the launch stays running.
+    restarted, modal = make_server(reuse=server)
+    api = restarted.client()
+    assert api.get(f"{LAUNCHES}/{pk}").json()["state"] == "running"
+    wait_for(lambda: pk in restarted.store.eval_launches.jobs)
+    modal.outcomes["fc-0"] = "abc1234"
+    done = wait_for(lambda: (j := api.get(f"{LAUNCHES}/{pk}").json())["state"] != "running" and j)
+    assert done["state"] == "finished"
+
+    # One cut short between its row and its call ends failed, and its key goes.
+    sql(
+        restarted,
+        "INSERT INTO eval_launches (org_pk, project, model, revision, sha, run, state, cap_usd, "
+        "usd_per_hour, started_at, heartbeat_at) SELECT pk, 'evals', 'acme/tiny', 'main', $1, "
+        "'eval-launch-x', 'running', 25, 2, now(), now() - interval '1 hour' FROM orgs",
+        SHA,
+    )
+    rows = wait_for(
+        lambda: (
+            (r := sql(restarted, "SELECT state, error FROM eval_launches ORDER BY pk"))[1][0]
+            != "running"
+            and r
+        )
+    )
+    assert rows[1]["state"] == "failed" and "cut short" in rows[1]["error"]
+
+
+def test_the_key_never_reaches_the_database_responses_or_logs(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]],
+    wait_for: Callable[..., Any],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    server, modal = make_server()
+    api = server.client()
+    started = api.post(LAUNCHES, body())
+    key = modal.spawned[0]["env"]["WANDB_API_KEY"]
+    assert key not in started.body.decode()
+    assert key not in api.get(LAUNCHES).body.decode()
+    rows = sql(server, "SELECT row_to_json(t)::text FROM eval_launches t")
+    assert rows and all(key not in row[0] for row in rows)
+    modal.outcomes["fc-0"] = RuntimeError("boom")
+    wait_for(lambda: not server.store.eval_launches.jobs)
+    assert key not in caplog.text
+
+
+def test_deleting_the_org_cancels_its_launches(
+    make_server: Callable[..., tuple[FlockServer, FakeModal]],
+) -> None:
+    server, modal = make_server()
+    org = server.call(server.store.find_org("flock"))
+    server.client().post(LAUNCHES, body())
+    server.call(server.store.delete_org(org, force=True))
+    assert modal.cancelled == ["fc-0"]
+    assert sql(server, "SELECT count(*) FROM api_keys WHERE name LIKE 'eval launch%'")[0][0] == 0
+
+
+def test_the_worker_runs_only_suites_and_tasks_on_public_datasets() -> None:
+    from app.api import eval_worker
+    from flock.eval.tasks import SUITES, TASKS
+
+    public = eval_worker.public_names()
+    assert {"base_easy", "paloma"} <= set(public["suites"])
+    assert "drcd_bpb" in public["tasks"]
+    # Each of these holds a task on a private dataset: the exams, tc-edu, CMMLU's mirror.
+    assert not {"zh_tw", "zh_tw:bpb", "tc_edu", "tw_text", "zh_cn"} & set(public["suites"])
+    for name in public["tasks"]:
+        assert not TASKS[name].dataset.private
+    for name in public["suites"]:
+        assert not any(task.dataset.private for task in SUITES[name].tasks)
+
+    with pytest.raises(SystemExit, match="not public, or not a suite or task of this flock: zh_tw"):
+        eval_worker.score("acme/tiny@" + SHA, ["base_easy", "zh_tw"], [], False, "evals")

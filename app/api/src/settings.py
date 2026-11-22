@@ -96,6 +96,25 @@ class Settings:
         doc="processes converting a Hugging Face dataset at once, and files of a model "
         "uploaded at once, per import",
     )
+    modal_token_id: str | None = field(
+        default=None, doc="the Modal token id evals launched from the web app run with"
+    )
+    modal_token_secret: str | None = field(default=None, doc="that Modal token's secret")
+    eval_launch_usd_per_hour: float = field(
+        default=0.0,
+        doc="what Modal charges for an H100 hour, in US dollars; evals are launched from the "
+        "web app only once it and the Modal token are set",
+    )
+    eval_launch_max_usd: float = field(
+        default=25.0,
+        doc="the most one launched eval may cost, in US dollars: it is stopped when its time "
+        "at eval_launch_usd_per_hour reaches this",
+    )
+    eval_launch_monthly_usd: float = field(
+        default=300.0,
+        doc="the most this month's launched evals may cost together, in US dollars; a running "
+        "one counts at eval_launch_max_usd",
+    )
     crash_timeout: float = field(
         default=600.0, doc="seconds without heartbeats before a running run is marked crashed"
     )

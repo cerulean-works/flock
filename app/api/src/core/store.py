@@ -20,6 +20,7 @@ from app.api.src.core.budgets import Budgets
 from app.api.src.core.bus import Bus
 from app.api.src.core.datasets import Datasets, Scope
 from app.api.src.core.errors import Conflict, Discarded, Forbidden, Invalid, NotFound
+from app.api.src.core.eval_launches import EvalLaunches
 from app.api.src.core.feed import Feed
 from app.api.src.core.files import file_store
 from app.api.src.core.forks import Forks
@@ -396,6 +397,7 @@ class Store:
         self.forks = Forks(self)
         self.models = Models(self)
         self.hf_imports = HFImports(self)
+        self.eval_launches = EvalLaunches(self)
 
     @staticmethod
     async def _prefixed(conn: asyncpg.Connection, pk: int, prefix: str) -> dict[str, Any]:
@@ -451,6 +453,7 @@ class Store:
 
     async def close(self) -> None:
         await self.forks.close()
+        await self.eval_launches.close()
         await self.hf_imports.close()
         await self.models.close()
         await self.datasets.close()
@@ -1812,6 +1815,7 @@ class Store:
         # Its import stops first: it would wait on the locks taken below.
         await self.imports.cancel(org)
         await self.hf_imports.cancel_org(org)
+        await self.eval_launches.cancel_org(org)
         now = time.time()
         async with self.db.pool.acquire() as conn, conn.transaction():
             await self._lock_org(conn, org, update=True)
@@ -2183,6 +2187,7 @@ class Store:
         await self.accounts.sweep()
         await self.imports.sweep()
         await self.hf_imports.sweep()
+        await self.eval_launches.sweep()
 
     # ------------------------------------------------------------------ series
 
