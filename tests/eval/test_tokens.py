@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
+import shutil
 import stat
 from typing import TYPE_CHECKING, Any
 
@@ -350,6 +351,12 @@ def test_reads_of_some_docs_and_files_left_by_other_runs(
     evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path / "run"))
     written = read_results(str(tmp_path / "run"))
     assert written.tokens("toy", ids=[]) == []  # an empty selection keeps no row
+    # A file beside the run for a task it didn't score isn't its own.
+    shutil.copy(
+        tmp_path / "run/predictions/toy.tokens.parquet",
+        tmp_path / "run/predictions/x.tokens.parquet",
+    )
+    assert written.tokens("x") is None
 
     # A file of that name beside an older run isn't its own.
     data = json.loads((tmp_path / "run" / "results.json").read_text())

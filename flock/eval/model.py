@@ -989,7 +989,7 @@ def _target_logprobs(
     """
     The FP32 log-softmax of `logits` `[rows, positions, vocab]`, in any dtype, at the int64 `targets` `[rows, positions]`, and whether each target is its position's argmax, the first on a tie. With `values`, also each target's rank and each position's entropy, top-1 log-probability and standard deviation of the log-probability, by name.
 
-    OLMES runs `log_softmax` in the model's dtype and takes the argmax of its output (`oe_eval/models/eleuther_huggingface.py`). FP32 here is our choice, so BF16 rounding of the normalizer doesn't move scores, and the argmax is taken over the FP32 logits, which the normalizer doesn't reorder; in BF16 OLMES's rounded log-probabilities can tie where ours don't, so a near-tie can resolve differently. `logits` can hold `batch_tokens * vocab` values, so an FP32 copy of all of it would double peak memory: rows are converted a few at a time, at most `chunk_positions` positions (rows times positions per row) and at least one row, about 1.6 GB in FP32 for a 100k vocabulary. The values take about four more such copies at a time. The chunks are the same with or without them, so asking for them can't change a reduction's order, and with it a score's last bit.
+    OLMES runs `log_softmax` in the model's dtype and takes the argmax of its output (`oe_eval/models/eleuther_huggingface.py`). FP32 here is our choice, so BF16 rounding of the normalizer doesn't move scores, and the argmax is taken over the FP32 logits, which the normalizer doesn't reorder; in BF16 OLMES's rounded log-probabilities can tie where ours don't, so a near-tie can resolve differently. `logits` can hold `batch_tokens * vocab` values, so an FP32 copy of all of it would double peak memory: rows are converted a few at a time, at most `chunk_positions` positions (rows times positions per row) and at least one row, about 1.6 GB in FP32 for a 100k vocabulary. The values take about four more such copies, of at most `chunk_positions` positions however long a row is. The chunks are the same with or without them, so asking for them can't change a reduction's order, and with it a score's last bit.
     """
     rows_per_chunk = max(1, chunk_positions // logits.shape[1])
     token_logprob = torch.empty(targets.shape, dtype=torch.float32, device=logits.device)
@@ -1014,15 +1014,20 @@ def _target_logprobs(
 
         # Min-K%++'s mu and sigma are the mean and standard deviation of log p under p itself
         # (Zhang et al. 2024, arXiv 2404.02936, eq. 3); mu is minus the entropy. A token of
-        # probability 0 adds nothing, where `0 * -inf` would be NaN.
-        logprobs = chunk - normalizer[..., None]
-        probs = logprobs.exp()
-        entropy = -torch.where(probs > 0, probs * logprobs, 0.0).sum(-1)
-        deviation = (logprobs + entropy[..., None]).square()
-        stats["entropy"][rows] = entropy
-        stats["logprob_std"][rows] = torch.where(probs > 0, probs * deviation, 0.0).sum(-1).sqrt()
-        stats["top1_logprob"][rows] = chunk.amax(-1) - normalizer
-        stats["rank"][rows] = (chunk > target_logits[..., None]).sum(-1) + 1
+        # probability 0 adds nothing, where `0 * -inf` would be NaN. A few positions at a time,
+        # so the copies these take stay bounded however long one row is.
+        for start_position in range(0, chunk.shape[1], chunk_positions):
+            cut = slice(start_position, start_position + chunk_positions)
+            logprobs = chunk[:, cut] - normalizer[:, cut, None]
+            probs = logprobs.exp()
+            entropy = -torch.where(probs > 0, probs * logprobs, 0.0).sum(-1)
+            deviation = (logprobs + entropy[..., None]).square()
+            spread = torch.where(probs > 0, probs * deviation, 0.0).sum(-1).sqrt()
+            stats["entropy"][rows, cut] = entropy
+            stats["logprob_std"][rows, cut] = spread
+            stats["top1_logprob"][rows, cut] = chunk[:, cut].amax(-1) - normalizer[:, cut]
+            above = chunk[:, cut] > target_logits[:, cut, None]
+            stats["rank"][rows, cut] = above.sum(-1) + 1
 
     return token_logprob, token_is_argmax, stats
 

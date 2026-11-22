@@ -508,8 +508,10 @@ class WrittenResults:
         on_run = self.source.startswith("run:")
         if on_run and any(t.task == task and t.dataset.private for t in self.tasks):
             name = f"private/{name}"
-        # Only schema 12 on writes them: an older run's file of that name isn't its own.
-        if self.schema_version < 12 or self.read_bytes is None:
+        # Only schema 12 on writes them, and only for a task the run scored: an older run's file
+        # of that name, or one beside the run for another task, isn't its own.
+        scored = any(t.task == task for t in self.tasks)
+        if self.schema_version < 12 or self.read_bytes is None or not scored:
             return None
         data = self.read_bytes(name)
         if data is None:
