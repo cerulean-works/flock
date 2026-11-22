@@ -6,7 +6,10 @@ A run with an output directory writes `results.json` and one predictions file pe
 <out>/
   results.json
   predictions/<task>.jsonl
+  predictions/<task>.tokens.parquet
 ```
+
+The `.tokens.parquet` files hold [per-token values](#per-token-values), for multiple-choice tasks unless you pass `--no-tokens`.
 
 ## `results.json`
 
@@ -139,6 +142,35 @@ A perplexity task's file has no header, and no text, since its docs are whole te
 
 `source` and `domain` let you pool the rows of many tasks and split them again by either. Files written before schema version 12 have neither.
 
+## Per-token values
+
+A multiple-choice task's `predictions/<task>.tokens.parquet` holds what the model made of each token, for analyses that summed log-probabilities can't support: where along a choice two checkpoints diverge, which tokens surprise a model, and contamination checks such as Min-K% (Shi et al. 2023) and Min-K%++ (Zhang et al. 2024). The predictions file stays as it is, so readers of rows don't change. The file is [Parquet](https://parquet.apache.org/), compressed with zstd, as LightEval writes its per-sample details. Each row is one token sequence of one doc:
+
+| Column | Meaning |
+|---|---|
+| `id` | The doc's id, as in its prediction row. |
+| `choice` | The choice the sequence belongs to: for a `context` or `greedy` row, the first choice with that context. |
+| `part` | `continuation`: a choice's scored tokens, one row per choice. `greedy`: the first 32 tokens greedy decoding writes after the doc's context, one row per distinct context. `context`: the context's own tokens, with `--context-tokens`. |
+| `token_ids` | The tokens, from the tokenizer the provenance names and hashes. |
+| `logprob` | Each token's natural-log probability. A continuation's add up to its `logprob` in the prediction row, to FP32 rounding. |
+| `rank` | 1 plus the number of tokens the model found more likely, so the model's own choice has rank 1. |
+| `entropy` | The entropy, in nats, of the distribution each token was drawn against. Its negative is the mean log-probability under that distribution, Min-K%++'s mu. |
+| `top1_logprob` | The log-probability of the most likely token at that position. |
+| `logprob_std` | The standard deviation of the log-probability under that distribution, Min-K%++'s sigma. |
+
+A `greedy` row has no values. A Flock model has no `greedy` rows: it keeps no key-value cache, and decoding without one would read each context 32 times over. A `context` row covers every token of the context but its first, which nothing predicts, after the context loses tokens from the left to leave room for 32 decoded ones.
+
+Context values and greedy tokens come from a pass of their own over each doc's distinct contexts, once per context, not once per choice. Scoring itself runs as it does without the file, so every score and every prediction row is the same, bit for bit, with or without it.
+
+A private dataset's per-token file is readable by its owner only, and goes under `private/` on a tracker run, as its predictions do: token ids are the dataset's text. A training loop that scores between steps writes none unless it asks (`score_prepared(..., tokens=True)`).
+
+Read a task's rows, or only some docs', with [`~eval.results.WrittenResults.tokens`]:
+
+```python
+run = read_results("results/olmo2-1b")
+rows = run.tokens("arc_easy", ids=["Mercury_7017010"])  # None if the run has no file for it
+```
+
 ## Reading a run back
 
 [`~eval.results.read_results`] reads a written run from its folder, or from a tracker run that uploaded its files (see [Tracker runs](commands#tracker-runs)) as `run:<entity>/<project>/<id>`. It reads schema versions 8 to 12, and reads a task's predictions only when you ask for them, without the header line:
@@ -168,3 +200,9 @@ A tracker run is read as the user signed in with `flock login`, on that server. 
 [[autodoc]] eval.results.read_results
 
 [[autodoc]] eval.results.WrittenResults
+
+[[autodoc]] eval.results.write_tokens
+
+[[autodoc]] eval.requests.TokenValues
+
+[[autodoc]] eval.requests.ContextScores
