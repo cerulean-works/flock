@@ -1,6 +1,6 @@
 # Self-hosted CI runners
 
-Flock's pull request checks (`.github/workflows/pull-request.yaml`) run on four GitHub Actions runners on our Dokploy server, labelled `flock-ci`. This folder is the Compose service that runs them.
+Flock's pytest suite (the `Tests` job of `.github/workflows/pull-request.yaml`) runs on four GitHub Actions runners on our Dokploy server, labelled `flock-ci`. This folder is the Compose service that runs them. Every other job, including lint and the docs, stays on GitHub-hosted runners.
 
 ## How it works
 
@@ -18,13 +18,18 @@ Pull request code runs on the same server as production Flock, so the service:
 
 - **Runs jobs as an unprivileged user.** Jobs run as `runner` (uid 1001). The image removes sudo and every setuid binary, Compose drops all capabilities but the two the entrypoint needs to switch to `runner`, and `no-new-privileges` stops anything regaining them.
 - **Keeps the App key from jobs.** Only the entrypoint's root process holds the key, and `runner` can't read a root process's environment. Jobs start with a clean environment. The App can only manage runners, only on this repository, and each installation token is revoked as soon as the runner is registered.
+- **Has no Docker daemon.** The image has the `docker` CLI and Compose plugin, because the tests validate Compose files with `docker compose config`, which needs no daemon.
 - **Lets jobs write almost nowhere.** The root filesystem is read-only, including the installed runner. Jobs can write only to their own home volume and a 2 GB `/tmp`, which are both wiped before the next job.
 - **Gives jobs no way out.** There's no Docker socket and no host mount, and the runners sit on their own network, apart from `dokploy-network`.
-- **Caps what a job can take.** Each runner gets at most 3 CPUs, 6 GB of memory (no swap) and 4096 processes. The kernel kills a runner first when the server runs out of memory, and every job times out after 30 minutes.
+- **Caps what a job can take.** Each runner gets at most 3 CPUs, 8 GB of memory (no swap) and 4096 processes. The kernel kills a runner first when the server runs out of memory, and every job times out after 30 minutes.
 
 On GitHub, the repository requires approval before workflows run for every pull request from an outside contributor, not only their first.
 
 Jobs can still reach anything the server can reach over the network.
+
+## Memory
+
+The pytest suite peaks at about 7.7 GB with `-n 6`, page cache included, and fails at 6 GB: the kernel kills an xdist worker and pytest hangs. Four runners at 8 GB add up to more than the server's 31 GB. That's fine while they rarely peak together, and if they do, the kernel kills a runner rather than production.
 
 ## Deploy on Dokploy
 
@@ -39,7 +44,7 @@ RUNNER_REPOSITORY=cerulean-works/flock
 RUNNER_LABELS=flock-ci
 RUNNER_REPLICAS=4
 RUNNER_CPUS=3
-RUNNER_MEMORY=6g
+RUNNER_MEMORY=8g
 ```
 
 Deploys are manual: changes merged here take effect when you press **Deploy**. A deploy restarts the runners, which cancels the jobs they're running.

@@ -40,9 +40,9 @@ services:
       resources:
         limits:
           cpus: "${RUNNER_CPUS:-3}"
-          memory: ${RUNNER_MEMORY:-6g}
+          memory: ${RUNNER_MEMORY:-8g}
           pids: 4096
-    memswap_limit: ${RUNNER_MEMORY:-6g}
+    memswap_limit: ${RUNNER_MEMORY:-8g}
 
     logging:
       driver: json-file
