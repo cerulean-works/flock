@@ -886,7 +886,7 @@ class ScoringModel:
 class _BatchScores(NamedTuple):
     """What `ScoringModel._score` returns for one batch, on the model's device."""
 
-    # float32 `[rows]`: each continuation's summed log-probability.
+    # FP32 `[rows]`: each continuation's summed log-probability.
     logprob: torch.Tensor
     # bool `[rows]`: whether each continuation is the greedy one.
     is_greedy: torch.Tensor
