@@ -354,7 +354,9 @@ def test_doc_rejects_bad_choices_or_gold(choices: tuple[()], gold: int, match: s
 @pytest.mark.parametrize(
     ("kwargs", "match"),
     [
-        pytest.param({}, "either ids or rows", id="neither"),
+        pytest.param({}, "first num_shots rows", id="neither"),
+        pytest.param({"split": "train"}, "first num_shots rows", id="first-rows-without-count"),
+        pytest.param({"split": "train", "num_shots": 0}, "at least 1", id="first-rows-zero"),
         pytest.param(
             {"split": "train", "ids": ("a",), "rows": ({"id": "b"},)}, "either", id="both"
         ),
@@ -386,6 +388,26 @@ def test_task_rejects_num_shots_from_another_split() -> None:
     fewshot = Fewshot("train", ("shot-1", "shot-2"), num_shots=1)
     with pytest.raises(ValueError, match="scored split 'test', not 'train'"):
         dataclasses.replace(TASK, fewshot=fewshot)
+
+
+def test_first_rows_of_another_split_are_the_examples_in_its_order() -> None:
+    task = dataclasses.replace(TASK, fewshot=Fewshot("train", num_shots=2))
+    docs, shots = task.load()
+
+    assert [shot.id for shot in shots] == ["shot-1", "shot-2"]
+    # Every doc sees the same prefix: nothing is dropped by id across splits.
+    built = task.requests(docs, shots)
+    assert built.requests[0].context.startswith("Question: Which gas do plants take in?")
+    assert built.requests[0].context.count("\n\n") == 2
+
+
+def test_first_rows_need_enough_rows_and_another_split() -> None:
+    task = dataclasses.replace(TASK, fewshot=Fewshot("train", num_shots=4))
+    with pytest.raises(ValueError, match="train has 3 rows, fewer than num_shots 4"):
+        task.load()
+    # The scored split's own first rows would show those docs themselves.
+    with pytest.raises(ValueError, match="first rows of the scored split"):
+        dataclasses.replace(TASK, fewshot=Fewshot("test", num_shots=1))
 
 
 def test_fewshot_rows_go_through_to_doc() -> None:
