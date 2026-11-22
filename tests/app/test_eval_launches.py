@@ -194,13 +194,17 @@ def test_only_public_suites_tasks_and_models_are_launched(
 def test_launches_are_off_without_the_modal_token_price_and_public_url(
     make_server: Callable[..., tuple[FlockServer, FakeModal]],
 ) -> None:
-    for missing in ("modal_token_secret", "eval_launch_usd_per_hour", "api_public_url"):
-        server, modal = make_server(
-            **{missing: None if missing != "eval_launch_usd_per_hour" else 0.0}
-        )
+    # Compose's default public URL is loopback: the worker on Modal couldn't log to it.
+    for setting, value in (
+        ("modal_token_secret", None),
+        ("eval_launch_usd_per_hour", 0.0),
+        ("api_public_url", None),
+        ("api_public_url", "http://localhost:8080"),
+    ):
+        server, modal = make_server(**{setting: value})
         api = server.client()
-        assert api.get(f"{LAUNCHES}/catalogue").status == 404, missing
-        assert api.post(LAUNCHES, body()).status == 404, missing
+        assert api.get(f"{LAUNCHES}/catalogue").status == 404, (setting, value)
+        assert api.post(LAUNCHES, body()).status == 404, (setting, value)
         assert modal.spawned == []
 
 

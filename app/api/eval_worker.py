@@ -82,7 +82,9 @@ def catalogue() -> dict[str, list[str]]:
     return json.loads(in_workspace("catalogue"))
 
 
-@app.function(gpu="H100")
+# Starting the container (pulling the image, mostly) gets 8 of the 10 minutes the server keeps
+# out of the time limit for it; scaling down takes 2 s.
+@app.function(gpu="H100", startup_timeout=8 * 60)
 def run_eval(model: str, suites: list[str], tasks: list[str], add_bos: bool, project: str) -> str:
     """Score one launch; returns the flock commit that scored it. The app sets the timeout from
     the launch's cap and the tracker's ``WANDB_*`` variables, its key among them, per call."""
