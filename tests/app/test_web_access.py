@@ -213,7 +213,7 @@ def test_eval_results_comparisons_and_model_evals_follow_the_projects_access(
             refused = outside.get(path)
             assert refused.status_code == 404, path
             assert "secret_task" not in refused.text
-        evals = "/api/models/flock/m/versions/1/evals"
+        evals = "/api/models/flock/m/-/versions/1/evals"
         found = inside.get(evals)
         assert found.status_code == 200, found.text
         assert [run["id"] for run in found.json()["runs"]] == ["a", "b"]

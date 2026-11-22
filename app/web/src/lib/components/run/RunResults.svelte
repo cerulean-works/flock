@@ -44,8 +44,8 @@
 <div class="absolute inset-0 overflow-y-auto">
 	{#if !RESULT_SCHEMAS.includes(results.schema_version)}
 		<EmptyState>
-			This run’s results file has schema {results.schema_version}; the dashboard reads schemas 8 and
-			9.
+			This run’s results file has schema {results.schema_version}; the dashboard reads schemas
+			{RESULT_SCHEMAS.join(', ')}.
 		</EmptyState>
 	{:else}
 		<div class="grid max-w-250 gap-8 px-5 pt-6 pb-16 text-[13px]">

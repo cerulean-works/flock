@@ -184,7 +184,7 @@ export const loadSnippet = (ref: string, project: string | null = null) =>
 	].join('\n');
 
 /** A word for the shell, quoted when it needs to be. */
-const shellWord = (word: string) =>
+export const shellWord = (word: string) =>
 	/^[\w.@/:+-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`;
 
 /** The command that downloads a model, as `loadSnippet` names it. */

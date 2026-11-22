@@ -532,7 +532,7 @@ describe('ModelView', () => {
 			hash: key.split('@')[1]
 		});
 		const calls = serve({
-			[`${API}/olmo2-1b/versions/12/evals`]: () => ({
+			[`${API}/olmo2-1b/-/versions/12/evals`]: () => ({
 				runs: [
 					run('e1', 'base easy', {
 						rows: [row('mmlu/acc_raw@h', 'task', 'mmlu', 'acc_raw')],
@@ -550,7 +550,13 @@ describe('ModelView', () => {
 			})
 		});
 		resetApp('http://flock.test/models/acme/olmo2-1b?tab=evals');
-		render(ModelView, { org: 'acme', info, version: scored, requested: null, now: NOW });
+		render(ModelView, {
+			scope: { org: 'acme', project: null },
+			info,
+			version: scored,
+			requested: null,
+			now: NOW
+		});
 		await expect.element(screen.getByRole('link', { name: 'base easy' })).toBeVisible();
 		expect(screen.getByRole('link', { name: 'e2' }).element().getAttribute('href')).toBe(
 			'/acme/evals/runs/e2'
@@ -568,7 +574,7 @@ describe('ModelView', () => {
 				.all()
 				.map((c) => c.element().textContent!.trim())
 		).toEqual(['0.5', '0.625', '–']);
-		expect(calls[0].url).toBe(`${API}/olmo2-1b/versions/12/evals`);
+		expect(calls[0].url).toBe(`${API}/olmo2-1b/-/versions/12/evals`);
 
 		// Two checked runs give the comparison's link; a third can't be checked.
 		await screen.getByRole('checkbox', { name: 'Compare base easy' }).click();

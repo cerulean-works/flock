@@ -991,8 +991,9 @@ def test_0025_keeps_the_eval_links_table_an_early_0015_made(postgres: Any, tmp_p
     url = postgres.create(migrated=False)
     before = tmp_path / "before"
     before.mkdir()
-    for path in Migrations().files()[:21]:
-        shutil.copy(path, before)
+    for path in Migrations().files():
+        if int(path.name[:4]) < 25:  # every migration before 0025
+            shutil.copy(path, before)
     asyncio.run(Migrations(before).apply(url))
 
     async def scenario() -> list[str]:

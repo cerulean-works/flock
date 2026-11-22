@@ -4,7 +4,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 	import { compareHref, evalRows } from '#lib/evals.ts';
-	import { modelApi, modelCall } from '#lib/models.ts';
+	import { modelApi, modelCall, shellWord } from '#lib/models.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import type { ModelEvalRun, ModelVersionDetail } from '#lib/types.ts';
 	import { formatNumber } from '#lib/utils.ts';
@@ -38,7 +38,8 @@
 		for (const row of rows) count[row.name] = (count[row.name] ?? 0) + 1;
 		return count;
 	});
-	const ref = $derived(`flock:${version.model}@${version.number}`);
+	// A project's name may hold spaces or shell syntax, so the ref is one quoted word.
+	const ref = $derived(shellWord(`flock:${version.model}@${version.number}`));
 
 	// Two checked runs, in the table's order, are compared doc by doc (025 D185).
 	const checked = new SvelteSet<string>();
