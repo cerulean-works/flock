@@ -21,6 +21,23 @@ RUN set -eux; \
     echo "$sha  $plugin" | sha256sum -c -; \
     chmod 0755 "$plugin"
 
+# The app tests need PostgreSQL. Elsewhere they start it in a container, but jobs here get no
+# Docker daemon, so the workflow starts a private server from these binaries as `runner` instead.
+ARG POSTGRES_MAJOR=18
+RUN set -eux; \
+    install -d /etc/apt/keyrings; \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /tmp/pgdg.asc; \
+    gpg --show-keys --with-colons /tmp/pgdg.asc | grep -q '^fpr:::::::::B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8:$'; \
+    gpg --dearmor -o /etc/apt/keyrings/pgdg.gpg /tmp/pgdg.asc; \
+    rm -rf /tmp/pgdg.asc /root/.gnupg; \
+    echo "deb [signed-by=/etc/apt/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
+      > /etc/apt/sources.list.d/pgdg.list; \
+    install -d /etc/postgresql-common; \
+    echo "create_main_cluster = false" > /etc/postgresql-common/createcluster.conf; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends "postgresql-$POSTGRES_MAJOR"; \
+    rm -rf /var/lib/apt/lists/*
+
 RUN set -eux; \
     rm -rf /usr/bin/sudo /usr/bin/sudoedit /etc/sudoers /etc/sudoers.d; \
     find / -xdev -type f -perm /6000 -exec chmod a-s {} +; \

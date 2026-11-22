@@ -18,7 +18,7 @@ Pull request code runs on the same server as production Flock, so the service:
 
 - **Runs jobs as an unprivileged user.** Jobs run as `runner` (uid 1001). The image removes sudo and every setuid binary, Compose drops all capabilities but the two the entrypoint needs to switch to `runner`, and `no-new-privileges` stops anything regaining them.
 - **Keeps the App key from jobs.** Only the entrypoint's root process holds the key, and `runner` can't read a root process's environment. Jobs start with a clean environment. The App can only manage runners, only on this repository, and each installation token is revoked as soon as the runner is registered.
-- **Has no Docker daemon.** The image has the `docker` CLI and Compose plugin, because the tests validate Compose files with `docker compose config`, which needs no daemon.
+- **Has no Docker daemon.** The image has the `docker` CLI and Compose plugin, because the tests validate Compose files with `docker compose config`, which needs no daemon. The app tests' PostgreSQL normally runs in a container, so the image ships PostgreSQL 18 instead. The pytest job starts a private server as `runner` in its temp folder and points the tests at it with `FLOCK_TEST_DATABASE_URL`. The server dies with the job.
 - **Lets jobs write almost nowhere.** The root filesystem is read-only, including the installed runner. Jobs can write only to their own home volume and a 2 GB `/tmp`, which are both wiped before the next job.
 - **Gives jobs no way out.** There's no Docker socket and no host mount, and the runners sit on their own network, apart from `dokploy-network`.
 - **Caps what a job can take.** Each runner gets at most 3 CPUs, 12 GB of memory (no swap) and 4096 processes. The kernel kills a runner first when the server runs out of memory, and every job times out after 30 minutes.
@@ -29,7 +29,7 @@ Jobs can still reach anything the server can reach over the network.
 
 ## Memory
 
-The pytest suite peaks at about 7.7 GB with `-n 6`, page cache included, and fails at 6 GB: the kernel kills an xdist worker and pytest hangs. Each runner gets 12 GB for headroom. The server has 31 GB and also runs production, so before adding runners with `RUNNER_REPLICAS`, check that their total still leaves production room. If memory does run out, the kernel kills a runner rather than production.
+With PostgreSQL, the pytest suite peaks at about 11.5 GB with `-n 6`, page cache included. Without enough memory, the kernel kills an xdist worker and pytest hangs. Each runner gets 12 GB. The server has 31 GB and also runs production, so before adding runners with `RUNNER_REPLICAS`, check that their total still leaves production room. If memory does run out, the kernel kills a runner rather than production.
 
 ## Deploy on Dokploy
 
