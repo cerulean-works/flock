@@ -12,7 +12,7 @@ from typing import Literal, get_args
 import torch
 
 from flock.eval import hub
-from flock.eval.metrics import bits_per_byte, multiple_choice
+from flock.eval.metrics import bits_per_byte, multiple_choice, scale
 from flock.eval.model import DEFAULT_BATCH_TOKENS, Encoded, ScoringModel
 from flock.eval.provenance import Provenance
 from flock.eval.results import (
@@ -52,7 +52,7 @@ class EvalConfig:
 
     Args:
         model (`str`):
-            The model as `repo@revision`, a version in the Flock registry as `flock:org/name`, `flock:org/name@{number}`, `flock:org/name@{tag}` or `flock:org/name@primary`, or a local folder as `local:folder@digest`.
+            The model as `repo@revision`, or a version in the Flock registry as `flock:org/path`, `flock:org/path@{number}`, `flock:org/path@{tag}` or `flock:org/path@primary`, with folders in the path, for a project's model in your default org `flock:project:path[@version]`, or a local folder as `local:folder@digest`.
         tasks (`tuple[str, ...]`, *optional*):
             Registry names of the tasks to run, in order.
         out (`Path`, *optional*):
@@ -175,6 +175,9 @@ def evaluate(config: EvalConfig) -> Results:
     provenance = Provenance.collect(
         model=model.name,
         model_digest=model.digest,
+        model_org=model.flock_ref.org if model.flock_ref else None,
+        model_project=model.flock_ref.project if model.flock_ref else None,
+        model_path=model.flock_ref.path if model.flock_ref else None,
         command=config.command,
         device=model.device,
         dtype=model.dtype,
@@ -216,7 +219,11 @@ def evaluate(config: EvalConfig) -> Results:
         # `score_prepared`, doesn't import wandb.
         from flock.eval.tracking import log_to_tracker
 
-        log_to_tracker(results.to_dict(), config.wandb_project)
+        log_to_tracker(
+            results.to_dict(),
+            config.wandb_project,
+            results_file=config.out / "results.json" if config.out is not None else None,
+        )
 
     return results
 
@@ -412,7 +419,11 @@ def score_prepared(
     truncation = requests.truncation(request_scores)
 
     if predictions is not None:
-        write_predictions(predictions, requests.docs, scores)
+        # Each doc's outcome under the primary metric, when it is an accuracy, from the values
+        # just averaged, so models can be compared doc by doc.
+        primary = per_doc[task.primary_metric]
+        correct = primary if scale(task.primary_metric) == "accuracy" else None
+        write_predictions(predictions, requests.docs, scores, correct)
 
     return TaskResult(
         task=task.name,

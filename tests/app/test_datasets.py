@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import quote, urlencode
 
 import asyncpg
+import boto3
 import pytest
 
 from app.api.src.core.datasets import Datasets
@@ -671,7 +672,7 @@ def test_delete_moves_to_the_trash_and_restores(
 
     restored = api.post(f"{DATASETS}/trash/{entry['id']}/restore", {})
     assert restored.status == 200, restored.body
-    assert restored.json() == {"path": path}
+    assert restored.json() == {"path": path, "project": None}
     assert keys(flock, bucket, f"{path}/") == before
     assert keys(flock, trash, prefix) == []
     assert get(api, f"{DATASETS}/trash").json()["entries"] == []
@@ -886,7 +887,7 @@ def test_rename_keeps_everything(flock: S3Flock, writer: Writer) -> None:
 
     renamed = api.post(f"{DATASETS}/rename", {"path": "scratch/mmlu", "to": "eval/new/mmlu"})
     assert renamed.status == 200, renamed.body
-    assert renamed.json() == {"path": "eval/new/mmlu"}
+    assert renamed.json() == {"path": "eval/new/mmlu", "project": None}
     assert keys(flock, upstream_name(flock), "scratch/") == []
     assert get(api, f"{DATASETS}/at", path="scratch/mmlu").status == 404
 
@@ -1167,6 +1168,7 @@ def test_move_several_when_one_fails(flock: S3Flock, writer: Writer) -> None:
             {
                 "path": "eval/mmlu",
                 "to": "archive/mmlu",
+                "project": None,
                 "moved": True,
                 "error": None,
                 "taken": False,
@@ -1174,6 +1176,7 @@ def test_move_several_when_one_fails(flock: S3Flock, writer: Writer) -> None:
             {
                 "path": "eval/arc",
                 "to": "archive/arc",
+                "project": None,
                 "moved": False,
                 "error": "Something already exists at archive/arc.",
                 "taken": True,
@@ -1181,6 +1184,7 @@ def test_move_several_when_one_fails(flock: S3Flock, writer: Writer) -> None:
             {
                 "path": "eval/notes",
                 "to": "archive/notes",
+                "project": None,
                 "moved": True,
                 "error": None,
                 "taken": False,
@@ -1188,6 +1192,7 @@ def test_move_several_when_one_fails(flock: S3Flock, writer: Writer) -> None:
             {
                 "path": "eval/nope",
                 "to": "archive/nope",
+                "project": None,
                 "moved": False,
                 "error": "Nothing exists at eval/nope.",
                 "taken": False,
@@ -1233,7 +1238,14 @@ def test_move_a_folder_with_its_loose_files(
     moved = api.post(f"{DATASETS}/move", {"paths": ["scratch"], "to": "eval"})
     assert moved.status == 200, moved.body
     assert moved.json()["results"] == [
-        {"path": "scratch", "to": "eval/scratch", "moved": True, "error": None, "taken": False}
+        {
+            "path": "scratch",
+            "to": "eval/scratch",
+            "project": None,
+            "moved": True,
+            "error": None,
+            "taken": False,
+        }
     ]
     assert keys(flock, bucket, "scratch/") == []
     assert keys(flock, bucket, "eval/scratch/") == ["eval/" + k for k in before]
@@ -1250,7 +1262,7 @@ def test_move_a_folder_with_its_loose_files(
     # Renaming a folder is the same move, to any path.
     renamed = api.post(f"{DATASETS}/rename", {"path": "eval/scratch", "to": "done"})
     assert renamed.status == 200, renamed.body
-    assert renamed.json() == {"path": "done"}
+    assert renamed.json() == {"path": "done", "project": None}
     assert keys(flock, bucket, "done/") == ["done/" + k.removeprefix("scratch/") for k in before]
     assert get(api, f"{DATASETS}/info", path="done/deep/b").json()["rows"] == 2
     listing = get(api, f"{DATASETS}/at", path="done").json()
@@ -1375,7 +1387,7 @@ def test_delete_a_folder_and_restore_it(
     assert taken.status == 409 and taken.json()["taken"] is True
     restored = api.post(f"{DATASETS}/trash/{entry['id']}/restore", {"to": "g"})
     assert restored.status == 200, restored.body
-    assert restored.json() == {"path": "g"}
+    assert restored.json() == {"path": "g", "project": None}
     assert keys(flock, bucket, "g/") == ["g/" + k.removeprefix("f/") for k in before]
     assert get(api, f"{DATASETS}/info", path="g/b/c").json()["rows"] == 2
     assert keys(flock, trash, prefix) == []
@@ -1634,3 +1646,156 @@ def test_obsolete_read_predicate_stays_closed_after_cutover(flock: S3Flock, writ
         sql(flock, "UPDATE orgs SET open_datasets = true WHERE name = 'flock'")
     assert get(flock.anonymous(), f"{DATASETS}/rows", path="existing").status == 404
     assert get(flock.anonymous(), f"{DATASETS}/rows", path="new").status == 404
+
+
+# ---------------------------------------------------------------------- project scopes (022)
+
+
+def project(flock: S3Flock, name: str = "pretrain") -> int:
+    """A project of the flock org; returns its pk."""
+    made = flock.client().post("/api/v1/projects", {"entity": "flock", "name": name})
+    assert made.status == 201, made.body
+    return sql(flock, "SELECT pk FROM projects WHERE name = $1", name)[0][0]
+
+
+def test_a_project_s_datasets_live_under_its_folder(flock: S3Flock, writer: Writer) -> None:
+    api = flock.client()
+    pk = project(flock, "pre train")  # a space, as wandb allows
+    scoped = {"project": "pre train"}
+
+    where = get(api, f"{DATASETS}/location", path="eval/mmlu", **scoped)
+    assert where.status == 200, where.body
+    assert where.json() == {
+        "bucket": "flock-datasets",
+        "key": f"-projects/{pk}/eval/mmlu",
+        "uri": f"s3://flock-datasets/-projects/{pk}/eval/mmlu",
+        "path": "eval/mmlu",
+        "project": "pre train",
+    }
+    writer.write(f"-projects/{pk}/eval/mmlu", table(0, 3))
+    writer.write("eval/mmlu", table(0, 5))  # the global one of the same name
+
+    # Paths in answers are the project's own; the global root doesn't show -projects.
+    root = get(api, f"{DATASETS}/at", **scoped).json()
+    assert [f["path"] for f in root["folders"]] == ["eval"]
+    listed = get(api, f"{DATASETS}/at", path="eval", **scoped).json()
+    assert [(d["path"], d["version"]) for d in listed["datasets"]] == [("eval/mmlu", 1)]
+    assert [f["name"] for f in get(api, f"{DATASETS}/at").json()["folders"]] == ["eval"]
+    assert get(api, f"{DATASETS}/info", path="eval/mmlu", **scoped).json()["rows"] == 3
+    assert get(api, f"{DATASETS}/info", path="eval/mmlu").json()["rows"] == 5
+    tagged = api.request(
+        "PUT", query(f"{DATASETS}/tags/v1", **scoped), body={"path": "eval/mmlu", "version": 1}
+    )
+    assert tagged.status == 200, tagged.body
+    assert get(api, f"{DATASETS}/info", path="eval/mmlu", version="v1", **scoped).status == 200
+
+    # -projects is Flock's in the global scope, and a project that doesn't exist is 404.
+    assert get(api, f"{DATASETS}/at", path="-projects").status == 422
+    assert get(api, f"{DATASETS}/info", path=f"-projects/{pk}/eval/mmlu").status == 422
+    assert get(api, f"{DATASETS}/at", project="nope").status == 404
+    # Never public (D165).
+    assert api.request("PUT", query(f"{DATASETS}/public", path="eval/mmlu", **scoped)).status == 422
+
+
+def test_the_proxy_writes_only_into_live_projects(flock: S3Flock, writer: Writer) -> None:
+    pk = project(flock)
+    proxy = boto3.client(
+        "s3",
+        endpoint_url=flock.proxy.url,
+        aws_access_key_id=writer.options["aws_access_key_id"],
+        aws_secret_access_key=writer.options["aws_secret_access_key"],
+        region_name="us-east-1",
+    )
+    proxy.put_object(Bucket="flock-datasets", Key=f"-projects/{pk}/x.txt", Body=b"ok")
+    for key in ("-projects/999999/x.txt", "-projects/notes.txt", "-projects/abc/x.txt"):
+        with pytest.raises(Exception, match="AccessDenied"):
+            proxy.put_object(Bucket="flock-datasets", Key=key, Body=b"no")
+    # Reads and deletes still work, so what's there can be cleaned up.
+    assert proxy.get_object(Bucket="flock-datasets", Key=f"-projects/{pk}/x.txt")["Body"].read()
+    proxy.delete_object(Bucket="flock-datasets", Key=f"-projects/{pk}/x.txt")
+    assert keys(flock, upstream_name(flock), "-projects/") == []
+
+    # Once the project is deleted, writes there stop.
+    assert flock.client().delete("/api/v1/projects/flock/pretrain", force="true").status == 204
+    with pytest.raises(Exception, match="AccessDenied"):
+        proxy.put_object(Bucket="flock-datasets", Key=f"-projects/{pk}/y.txt", Body=b"late")
+
+
+def test_moving_datasets_between_scopes(flock: S3Flock, writer: Writer) -> None:
+    api = flock.client()
+    pk = project(flock)
+    bucket = upstream_name(flock)
+    writer.write(f"-projects/{pk}/scratch/mmlu", table(0, 3))
+    writer.write("eval/arc", table(0, 2))
+    made = api.request("PUT", query(f"{DATASETS}/public", path="eval/arc"))
+    assert made.status == 200, made.body
+
+    # Promote: project to global, arriving private (D155).
+    up = api.post(
+        query(f"{DATASETS}/move", project="pretrain"),
+        {"paths": ["scratch/mmlu"], "to": "eval", "to_project": None},
+    )
+    assert up.status == 200, up.body
+    assert up.json()["results"][0] | {"error": None} == {
+        "path": "scratch/mmlu",
+        "to": "eval/mmlu",
+        "project": None,
+        "moved": True,
+        "error": None,
+        "taken": False,
+    }
+    assert keys(flock, bucket, f"-projects/{pk}/scratch/") == []
+    assert get(api, f"{DATASETS}/info", path="eval/mmlu").json()["rows"] == 3
+    assert get(api, f"{DATASETS}/info", path="eval/mmlu").json()["public"] is False
+
+    # Into a project: the public grant doesn't follow (D165).
+    down = api.post(
+        f"{DATASETS}/rename", {"path": "eval/arc", "to": "eval/arc", "to_project": "pretrain"}
+    )
+    assert down.status == 200, down.body
+    assert down.json() == {"path": "eval/arc", "project": "pretrain"}
+    assert get(api, f"{DATASETS}/info", path="eval/arc", project="pretrain").json()["rows"] == 2
+    assert sql(flock, "SELECT path FROM public_datasets") == []
+    assert keys(flock, bucket, "eval/arc/") == []
+
+    # A taken target in the other scope.
+    writer.write("eval/arc", table(0, 1))
+    taken = api.post(
+        query(f"{DATASETS}/rename", project="pretrain"),
+        {"path": "eval/arc", "to": "eval/arc", "to_project": None},
+    )
+    assert taken.status == 409 and taken.json()["taken"] is True
+    assert taken.json()["error"] == "Something already exists at eval/arc."
+
+
+def test_a_project_s_trash_and_purge(flock: S3Flock, writer: Writer) -> None:
+    api = flock.client()
+    pk = project(flock)
+    bucket = upstream_name(flock)
+    writer.write(f"-projects/{pk}/a", table(0, 3))
+    writer.write(f"-projects/{pk}/b", table(0, 3))
+
+    deleted = api.post(query(f"{DATASETS}/delete", project="pretrain"), {"path": "a"})
+    assert deleted.status == 200, deleted.body
+    entry = deleted.json()
+    assert (entry["path"], entry["project"]) == ("a", "pretrain")
+    listed = api.get(f"{DATASETS}/trash").json()["entries"]
+    assert [(e["path"], e["project"]) for e in listed] == [("a", "pretrain")]
+    restored = api.post(f"{DATASETS}/trash/{entry['id']}/restore", {})
+    assert restored.status == 200 and restored.json() == {"path": "a", "project": "pretrain"}
+    assert keys(flock, bucket, f"-projects/{pk}/a/_versions/")
+
+    storage = api.get("/api/v1/projects/flock/pretrain/storage").json()
+    assert storage["datasets"] == 2 and storage["models"] == 0 and storage["bytes"] > 0
+    items = storage["items"]
+    assert [(i["kind"], i["path"]) for i in items] == [("dataset", "a"), ("dataset", "b")]
+    assert all(i["bytes"] > 0 for i in items) and sum(i["bytes"] for i in items) == storage["bytes"]
+
+    # Deleting the project deletes its datasets, and its trash, for good (D167).
+    trashed = api.post(query(f"{DATASETS}/delete", project="pretrain"), {"path": "b"}).json()
+    assert api.delete("/api/v1/projects/flock/pretrain", force="true").status == 204
+    flock.call(flock.store.flush())
+    assert keys(flock, bucket, f"-projects/{pk}/") == []
+    assert sql(flock, "SELECT pk FROM dataset_trash") == []
+    org_pk = flock.call(flock.store.org("flock")).pk
+    assert keys(flock, datasets(flock).trash, f"{org_pk:05d}/{trashed['id']}/") == []

@@ -39,17 +39,30 @@ In a folder of **Datasets**, members and admins can act on several datasets and 
 
 While rows are checked, the header shows how many, with **Move** and **Delete** for all of them.
 
+## A project's datasets
+
+Each project has its own datasets, apart from the organization's. Open the project from the sidebar, and click **Datasets** in the project's pages the sidebar slides over to. The page works like the organization's **Datasets** tab, and its empty state shows how to write a dataset into the project with `datasets.location`. See [Use a project's datasets](../hub/use-datasets#use-a-projects-datasets).
+
+A project's datasets are stored in `flock-datasets` under `-projects/{project id}/`. In **Storage**, each folder of `-projects/` links to its project's **Datasets** tab. Only the organization's members see a project's datasets, and deleting the project deletes them for good.
+
 ## Move datasets and folders
 
-1. Check the datasets and folders to move, and click **Move**.
-2. Type the destination folder, or browse to it in the list below. Leave it empty for the top of `flock-datasets`.
-3. Click **Move**.
+1. Check the datasets and folders to move, and click **Move**, or use **Move…** in a row's **⋯** menu.
+2. Under **Project**, keep the place shown, or pick **Workspace** for the organization's datasets or another project.
+3. Type the destination folder, or browse to it in the list below. Leave it empty for the top.
+4. Click **Move**.
+
+Moving a dataset out of a project makes it visible to the whole organization, and the dialog says at which path. A public dataset moved into a project stops being public, since a project's datasets never are.
 
 Each item keeps its last name. `eval/mmlu` moved to `archive` becomes `archive/mmlu`. A folder moves with everything in it, datasets and loose files. Nothing may exist at an item's new path, and a folder can't move into itself.
 
 Each item moves on its own. If one fails, for example because its new path is taken, the rest still move. The dialog then lists the items that didn't move, each with the reason.
 
 Stop writers first. A move copies the objects to the new path and then deletes the old ones. If a dataset is written to during the move, that item doesn't move.
+
+## Fork and blend datasets
+
+A dataset's page has **Fork**, and a folder has **New blend**, to make datasets that copy no rows. See [Fork a dataset](../hub/fork-datasets) and [Blend datasets](../hub/blend-datasets). A dataset that a fork or blend reads can't be renamed, moved or deleted.
 
 ## Rename, delete and restore
 

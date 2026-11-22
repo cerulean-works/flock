@@ -68,7 +68,7 @@ def test_chunk_sampler_resumes_the_same_suffix(
     collator = LanceBatchCollator(tokenizer, "text", token_chunks=True)
     outputs = []
     for skip in [0, 1]:
-        sampler = ResumableBatchDataSampler(8, len(dataset), seed=37, skip_batches=skip)
+        sampler = ResumableBatchDataSampler(8, len(dataset), seed=37, batch_cursor=skip)
         loader = DataLoader(
             dataset,
             batch_sampler=sampler,

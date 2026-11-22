@@ -1,8 +1,14 @@
 <script lang="ts">
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import CoinsIcon from '@lucide/svelte/icons/coins';
+	import CpuIcon from '@lucide/svelte/icons/cpu';
+	import FolderIcon from '@lucide/svelte/icons/folder';
+	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import { page } from '$app/state';
 	import Avatar from '#lib/components/Avatar.svelte';
+	import MetaItem from '#lib/components/MetaItem.svelte';
+	import MetaRow from '#lib/components/MetaRow.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import type { Budget } from '#lib/types.ts';
 	import { count, gpus, hours, money, monthName, shiftMonth } from '#lib/utils.ts';
@@ -17,6 +23,9 @@
 	}
 
 	let { budget, thisMonth, admin }: Props = $props();
+
+	/** The breakdown lists the costliest projects only. */
+	const TOP_PROJECTS = 5;
 
 	const fmt = $derived((v: number) => money(v, budget.currency));
 
@@ -92,9 +101,10 @@
 			>
 				<div class={['h-full rounded-full', tone]} style:width="{Math.min(100, used * 100)}%"></div>
 			</div>
-			<p class="text-[13px] text-muted-foreground">
-				{fmt(budget.spent)} spent · {hours(budget.gpu_hours)} GPU hours
-			</p>
+			<MetaRow>
+				<MetaItem icon={CoinsIcon}>{fmt(budget.spent)} spent</MetaItem>
+				<MetaItem icon={CpuIcon}>{hours(budget.gpu_hours)} GPU hours</MetaItem>
+			</MetaRow>
 		{:else}
 			<p class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
 				<span class="text-[34px] leading-none tracking-[-0.025em] tabular-nums">
@@ -102,12 +112,14 @@
 				</span>
 				<span class="text-muted-foreground">spent</span>
 			</p>
-			<p class="text-[13px] text-muted-foreground">
-				{hours(budget.gpu_hours)} GPU hours · no monthly budget
-				{#if admin}· <a class="text-link hover:underline" href={orgHref(budget.org, 'budget')}
-						>Set one</a
-					>{/if}
-			</p>
+			<MetaRow>
+				<MetaItem icon={CpuIcon}>{hours(budget.gpu_hours)} GPU hours</MetaItem>
+				<span>
+					No monthly budget{#if admin}.
+						<a class="text-link hover:underline" href={orgHref(budget.org, 'budget')}>Set one</a
+						>{/if}
+				</span>
+			</MetaRow>
 		{/if}
 	</div>
 
@@ -137,8 +149,8 @@
 		<div>
 			<h3 class="text-xs font-medium text-muted-foreground">By project</h3>
 			<ul class="mt-2">
-				{#each budget.projects as p (p.project)}
-					<li class="py-1.5">
+				{#each budget.projects.slice(0, TOP_PROJECTS) as p (p.project)}
+					<li class="py-2">
 						<div class="flex items-baseline gap-2">
 							{#if p.project}
 								<a
@@ -160,15 +172,16 @@
 							{/if}
 							<span class="tabular-nums">{fmt(p.cost)}</span>
 						</div>
-						<div class="mt-1 h-1 rounded-full bg-muted">
+						<div class="mt-1.5 h-1 rounded-full bg-muted">
 							<div
 								class="h-full rounded-full bg-link/70"
 								style:width="{maxCost ? (p.cost / maxCost) * 100 : 0}%"
 							></div>
 						</div>
-						<p class="mt-0.5 text-xs text-muted-foreground">
-							{hours(p.gpu_hours)} GPU h · {count(p.runs, 'run')}
-						</p>
+						<MetaRow class="mt-1.5 gap-x-4 text-xs">
+							<MetaItem icon={CpuIcon}>{hours(p.gpu_hours)} GPU-hr</MetaItem>
+							<MetaItem icon={ActivityIcon}>{count(p.runs, 'run')}</MetaItem>
+						</MetaRow>
 					</li>
 				{:else}
 					<li class="py-1.5 text-[13px] text-muted-foreground">
@@ -176,6 +189,11 @@
 					</li>
 				{/each}
 			</ul>
+			{#if budget.projects.length > TOP_PROJECTS}
+				<p class="mt-1 text-xs text-faint">
+					And {count(budget.projects.length - TOP_PROJECTS, 'more project')}
+				</p>
+			{/if}
 		</div>
 
 		{#if budget.top_runs.length}
@@ -184,12 +202,13 @@
 				<ol class="mt-1">
 					{#each budget.top_runs as run (`${run.project}/${run.id}`)}
 						{@const hardware = gpus(run.gpu_type, run.gpu_count)}
-						<li class="flex items-center gap-2.5 border-b border-divider py-2 last:border-0">
-							<span title={run.owner?.name}>
+						<!-- Three columns, each centred on the row: who, which run, and what it cost. -->
+						<li class="flex items-center gap-3 border-b border-divider py-2.5 last:border-0">
+							<span class="flex-none" title={run.owner?.name}>
 								<Avatar
 									name={run.owner?.name ?? '?'}
 									src={run.owner?.avatar_url}
-									class="size-6 text-[10px]"
+									class="size-7 text-[10px]"
 								/>
 							</span>
 							<div class="min-w-0 flex-1">
@@ -199,13 +218,20 @@
 								>
 									{run.display_name ?? run.id}
 								</a>
-								<p class="truncate text-xs text-muted-foreground">
-									{run.project}{#if hardware}<span class="ml-1">· {hardware}</span>{/if}<span
-										class="ml-1">· {hours(run.gpu_hours)} h</span
-									>{#if run.owner}<span class="ml-1">· {run.owner.name}</span>{/if}
+								<MetaRow class="mt-0.5 flex-nowrap text-xs">
+									<MetaItem icon={FolderIcon} class="min-w-0 truncate">{run.project}</MetaItem>
+								</MetaRow>
+							</div>
+							<div class="flex-none pl-2 text-right">
+								<p class="font-medium tabular-nums">{fmt(run.cost)}</p>
+								<p
+									class="mt-0.5 text-xs text-muted-foreground tabular-nums"
+									title={hardware ? `${hardware}, ${hours(run.gpu_hours)} GPU hours` : undefined}
+								>
+									{hours(run.gpu_hours)}
+									{run.gpu_type ?? 'GPU'}-hr
 								</p>
 							</div>
-							<span class="flex-none tabular-nums">{fmt(run.cost)}</span>
 						</li>
 					{/each}
 				</ol>

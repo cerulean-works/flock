@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import httpx
 import orjson
 
-from app.api.src.core.datasets import TAG
+from app.api.src.core.datasets import GLOBAL, TAG, Scope
 from app.api.src.core.errors import BadGateway, Conflict, Forbidden, Invalid, NotFound
 from app.api.src.s3_proxy.upstream import DELETE_BATCH, ListedObject, Upstream, UpstreamError
 
@@ -40,13 +40,17 @@ log = logging.getLogger(__name__)
 
 MIB = 1024 * 1024
 GIB = 1024 * MIB
-# Model names (D98): one segment of lowercase letters, digits, `.`, `-` and `_`.
+# A segment of a model's name (D98): lowercase letters, digits, `.`, `-` and `_`. A name is a
+# path of segments (D158).
 NAME = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}")
+NAME_LIMIT = 255
 CHECKPOINT = re.compile(r"checkpoint-\d+")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 # A ULID's alphabet (Crockford's base32), and the folder of an upload under flock-models.
 CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-UPLOAD_FOLDER = re.compile(r"([^/]+)/u/([0-9A-HJKMNP-TV-Z]{26})/")
+# A model's folder may be nested (D158, D161). Segments are lowercase and a ULID is upper case, so
+# the first `/u/{ulid}/` is the upload's.
+UPLOAD_FOLDER = re.compile(r"(.+?)/u/([0-9A-HJKMNP-TV-Z]{26})/")
 INDEX = "model.safetensors.index.json"
 SINGLE = "model.safetensors"
 REQUIRED = ("config.json", "flock.json")
@@ -62,11 +66,20 @@ def new_ulid() -> str:
 
 
 def check_name(name: str) -> None:
-    if not NAME.fullmatch(name):
+    """Raises ``Invalid`` unless ``name`` is a model's path: folders and a name joined by ``/``
+    (D158)."""
+    if not 0 < len(name) <= NAME_LIMIT or not all(NAME.fullmatch(s) for s in name.split("/")):
         raise Invalid(
-            "Model names are up to 100 lowercase letters, digits, dots, hyphens and underscores, "
-            "starting with a letter or digit."
+            "Model names are folders and a name joined by /, each up to 100 lowercase letters, "
+            "digits, dots, hyphens and underscores, starting with a letter or digit, and at most "
+            f"{NAME_LIMIT} characters in all."
         )
+
+
+def display(org: str, project: str | None, name: str) -> str:
+    """How a model is written (D162): ``org/name`` when global, ``project:name`` in a
+    project."""
+    return f"{project}:{name}" if project is not None else f"{org}/{name}"
 
 
 def is_checkpoint(tag: str) -> bool:
@@ -143,6 +156,12 @@ class Model:
     deleted_at: float | None
     deleted_by: int | None
     prefix: str  # its folder in flock-models (D134)
+    project_pk: int | None = None  # its scope (D159): None for global
+    project: str | None = None
+
+    @property
+    def scope(self) -> Scope:
+        return Scope(self.project_pk, self.project)
 
 
 @dataclass(frozen=True)
@@ -177,13 +196,14 @@ class Upload:
     created_at: float
     last_activity_at: float
     prefix: str  # its model's folder (D134)
+    project: str | None = None  # its model's project (D159)
 
 
 MODEL_COLUMNS = (
     "m.pk, m.org_pk, m.name, m.created_by, extract(epoch FROM m.created_at)::float8, "
     "m.last_number, m.primary_version_pk, m.primary_set_by, "
     "extract(epoch FROM m.primary_set_at)::float8, extract(epoch FROM m.deleted_at)::float8, "
-    "m.deleted_by, m.prefix"
+    "m.deleted_by, m.prefix, m.project_pk, (SELECT name FROM projects WHERE pk = m.project_pk)"
 )
 RUN_PATH = (
     "(SELECT o.name || '/' || p.name || '/' || r.name FROM runs r "
@@ -202,7 +222,8 @@ UPLOAD_COLUMNS = (
     "u.pk, u.ulid, u.model_pk, u.user_pk, u.state, u.files::text, u.metadata::text, u.tags, "
     f"u.make_primary, {RUN_PATH.format(column='u.run_pk')}, u.step, u.dedupe_key, "
     "extract(epoch FROM u.created_at)::float8, extract(epoch FROM u.last_activity_at)::float8, "
-    "(SELECT prefix FROM models WHERE pk = u.model_pk)"
+    "(SELECT prefix FROM models WHERE pk = u.model_pk), "
+    "(SELECT p.name FROM models m JOIN projects p ON p.pk = m.project_pk WHERE m.pk = u.model_pk)"
 )
 
 
@@ -315,18 +336,85 @@ class Models:
     # ------------------------------------------------------------------ lookups
 
     @staticmethod
-    async def _model(conn: asyncpg.Connection, org: Org, name: str, lock: bool = False) -> Model:
-        check_name(name)
+    async def _find(
+        conn: asyncpg.Connection, org: Org, name: str, scope: Scope, lock: bool = False
+    ) -> Model | None:
         record = await conn.fetchrow(
-            f"SELECT {MODEL_COLUMNS} FROM models m "
-            "WHERE m.org_pk = $1 AND m.name = $2 AND m.deleted_at IS NULL"
+            f"SELECT {MODEL_COLUMNS} FROM models m WHERE m.org_pk = $1 AND m.name = $2 "
+            "AND m.project_pk IS NOT DISTINCT FROM $3 AND m.deleted_at IS NULL"
             + (" FOR UPDATE" if lock else ""),
             org.pk,
             name,
+            scope.pk,
         )
-        if record is None:
-            raise NotFound(f"model {org.name}/{name} not found")
-        return Model(*record)
+        return Model(*record) if record is not None else None
+
+    @staticmethod
+    async def _model(
+        conn: asyncpg.Connection, org: Org, name: str, lock: bool = False, scope: Scope = GLOBAL
+    ) -> Model:
+        check_name(name)
+        found = await Models._find(conn, org, name, scope, lock)
+        if found is None:
+            raise NotFound(f"model {display(org.name, scope.name, name)} not found")
+        return found
+
+    @staticmethod
+    async def _lock_scopes(conn: asyncpg.Connection, org: Org, *scopes: Scope) -> None:
+        """Hold the lock of each scope's names (D158): creating, moving and restoring models
+        in a scope wait for each other, so a path never becomes a model and a folder at once."""
+        for pk in sorted({-1 if s.pk is None else s.pk for s in scopes}):
+            await conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+                f"models:{org.pk}:{pk}",
+            )
+
+    @staticmethod
+    async def _check_free(
+        conn: asyncpg.Connection,
+        org: Org,
+        scope: Scope,
+        name: str,
+        skip: int | None = None,
+        deleted: bool = True,
+    ) -> None:
+        """Raises ``Taken`` unless ``name`` is free in ``scope`` (D158): no model has it (a
+        deleted one too, with ``deleted``), it isn't a folder of models, and it isn't under a
+        model. ``skip`` is a model to leave out (the one moving). Take ``_lock_scopes``
+        first."""
+        records = await conn.fetch(
+            "SELECT name, deleted_at IS NOT NULL FROM models WHERE org_pk = $1 "
+            "AND project_pk IS NOT DISTINCT FROM $2 AND pk IS DISTINCT FROM $4 "
+            "AND ($5 OR deleted_at IS NULL) AND (name = $3 "
+            "OR left(name, length($3) + 1) = $3 || '/' OR left($3, length(name) + 1) = name || '/') "
+            "ORDER BY deleted_at IS NOT NULL, length(name)",
+            org.pk,
+            scope.pk,
+            name,
+            skip,
+            deleted,
+        )
+        for other, gone in records:
+            if other == name:
+                raise Taken(
+                    f"A deleted model is named {name}. Delete it for good first, or pick another "
+                    "name."
+                    if gone
+                    else f"A model named {name} exists already."
+                )
+        for other, gone in records:
+            if other.startswith(f"{name}/"):
+                raise Taken(f"{name} is a folder of models.")
+            raise Taken(f"{other} is a {'deleted ' if gone else ''}model.")
+        # A folder made with New folder, at the path or under it.
+        if await conn.fetchval(
+            "SELECT 1 FROM model_folders WHERE org_pk = $1 AND project_pk IS NOT DISTINCT FROM $2 "
+            "AND (path = $3 OR left(path, length($3) + 1) = $3 || '/')",
+            org.pk,
+            scope.pk,
+            name,
+        ):
+            raise Taken(f"{name} is a folder.")
 
     @staticmethod
     async def _version(conn: asyncpg.Connection, pk: int) -> Version:
@@ -340,7 +428,7 @@ class Models:
     async def _version_pk(conn: asyncpg.Connection, org: Org, model: Model, ref: str | None) -> int:
         """The live version ``ref`` names: a number, a tag, or ``primary`` (also None or ``""``,
         D103)."""
-        what = f"{org.name}/{model.name}"
+        what = display(org.name, model.project, model.name)
         if ref is None or ref == "" or ref == "primary":
             if model.primary_version is None:
                 raise NotFound(f"{what} has no versions")
@@ -365,7 +453,9 @@ class Models:
     @staticmethod
     def _info(org: Org, model: Model, version: Version) -> dict[str, Any]:
         return {
-            "model": f"{org.name}/{model.name}",
+            "model": display(org.name, model.project, model.name),
+            "org": org.name,
+            "project": model.project,
             "name": model.name,
             "number": version.number,
             "digest": version.digest,
@@ -406,49 +496,261 @@ class Models:
 
     # ------------------------------------------------------------------ reading (D103)
 
-    async def list_models(self, org: Org) -> list[dict[str, Any]]:
-        """The org's models by name: their latest and primary versions."""
-        records = await self.store.db.fetch(
-            "SELECT m.name, m.prefix, extract(epoch FROM m.created_at)::float8, m.created_by, "
-            "(SELECT count(*) FROM model_versions c WHERE c.model_pk = m.pk "
-            "AND c.deleted_at IS NULL)::int, l.number, extract(epoch FROM l.created_at)::float8, "
-            "p.number, p.total_bytes FROM models m "
-            "LEFT JOIN LATERAL (SELECT number, created_at FROM model_versions "
-            "WHERE model_pk = m.pk AND deleted_at IS NULL ORDER BY number DESC LIMIT 1) l ON true "
-            "LEFT JOIN model_versions p ON p.pk = m.primary_version_pk "
-            "WHERE m.org_pk = $1 AND m.deleted_at IS NULL ORDER BY m.name",
-            org.pk,
-        )
-        return [
-            {
-                "name": name,
-                "model": f"{org.name}/{name}",
-                "prefix": f"{prefix}/",
-                "created_at": created_at,
-                "created_by": created_by,
-                "versions": versions,
-                "latest": latest,
-                "primary": primary,
-                "size": size,
-                "updated_at": updated_at if updated_at is not None else created_at,
-            }
-            for (
-                name,
-                prefix,
-                created_at,
-                created_by,
-                versions,
-                latest,
-                updated_at,
-                primary,
-                size,
-            ) in records
-        ]
+    PAGE: ClassVar[int] = 100  # folder entries per page (D158)
 
-    async def model_info(self, org: Org, name: str) -> dict[str, Any]:
+    async def list_folder(
+        self, org: Org, folder: str = "", scope: Scope = GLOBAL, cursor: str | None = None
+    ) -> dict[str, Any]:
+        """One level of a folder of models (D158): its models, then its folders with how many
+        models are under each, 100 a page. ``{kind: "model"}`` when ``folder`` is a model. A
+        folder other than the root with no live model under it, and not made with New folder,
+        is ``NotFound``. Folders made empty count as folders with no models."""
+        folder = folder.strip("/")
+        if folder:
+            check_name(folder)
+        prefix = f"{folder}/" if folder else ""
+        async with self.store.db.pool.acquire() as conn:
+            if folder and await self._find(conn, org, folder, scope) is not None:
+                return {"kind": "model", "name": folder, "project": scope.name}
+            records = await conn.fetch(
+                "SELECT m.name, m.prefix, extract(epoch FROM m.created_at)::float8, m.created_by, "
+                "(SELECT count(*) FROM model_versions c WHERE c.model_pk = m.pk "
+                "AND c.deleted_at IS NULL)::int, l.number, "
+                "extract(epoch FROM l.created_at)::float8, p.number, p.total_bytes FROM models m "
+                "LEFT JOIN LATERAL (SELECT number, created_at FROM model_versions "
+                "WHERE model_pk = m.pk AND deleted_at IS NULL ORDER BY number DESC LIMIT 1) l "
+                "ON true LEFT JOIN model_versions p ON p.pk = m.primary_version_pk "
+                "WHERE m.org_pk = $1 AND m.project_pk IS NOT DISTINCT FROM $2 "
+                "AND m.deleted_at IS NULL AND left(m.name, length($3)) = $3 "
+                'ORDER BY m.name COLLATE "C"',
+                org.pk,
+                scope.pk,
+                prefix,
+            )
+            made = await conn.fetch(
+                "SELECT path FROM model_folders WHERE org_pk = $1 "
+                "AND project_pk IS NOT DISTINCT FROM $2 AND (left(path, length($3)) = $3 "
+                "OR path = $4)",
+                org.pk,
+                scope.pk,
+                prefix,
+                folder,
+            )
+        if folder and not records and not made:
+            raise NotFound(f"folder {folder} not found")
+        models: list[dict[str, Any]] = []
+        counts: dict[str, int] = {}
+        for (
+            name,
+            model_prefix,
+            created_at,
+            created_by,
+            versions,
+            latest,
+            updated_at,
+            primary,
+            size,
+        ) in records:
+            rest = name.removeprefix(prefix)
+            if "/" in rest:
+                sub = rest.partition("/")[0]
+                counts[sub] = counts.get(sub, 0) + 1
+                continue
+            models.append(
+                {
+                    "name": name,
+                    "model": display(org.name, scope.name, name),
+                    "org": org.name,
+                    "project": scope.name,
+                    "prefix": f"{model_prefix}/",
+                    "created_at": created_at,
+                    "created_by": created_by,
+                    "versions": versions,
+                    "latest": latest,
+                    "primary": primary,
+                    "size": size,
+                    "updated_at": updated_at if updated_at is not None else created_at,
+                }
+            )
+        for (path,) in made:
+            if path != folder:
+                counts.setdefault(path.removeprefix(prefix).partition("/")[0], 0)
+        folders = [
+            {"name": sub, "path": f"{prefix}{sub}", "models": n}
+            for sub, n in sorted(counts.items())
+        ]
+        # One sequence, models first, paged by the last entry's key.
+        entries = [("m", m["name"], m) for m in models] + [("f", f["path"], f) for f in folders]
+        start = 0
+        if cursor:
+            keys = [f"{kind}:{key}" for kind, key, _ in entries]
+            start = keys.index(cursor) + 1 if cursor in keys else len(entries)
+        page = entries[start : start + self.PAGE]
+        more = start + self.PAGE < len(entries)
+        return {
+            "kind": "folder",
+            "folder": folder,
+            "project": scope.name,
+            "models": [e for kind, _, e in page if kind == "m"],
+            "folders": [e for kind, _, e in page if kind == "f"],
+            "cursor": f"{page[-1][0]}:{page[-1][1]}" if more and page else None,
+        }
+
+    async def create_folder(
+        self, org: Org, user: User, path: str, scope: Scope = GLOBAL
+    ) -> dict[str, Any]:
+        """Make an empty folder at ``path``, which stays until it's deleted, models or not.
+        ``Taken`` when the path is a folder already, a model (live or deleted), or under one."""
+        path = path.strip("/")
+        check_name(path)
+        async with self.store.db.pool.acquire() as conn, conn.transaction():
+            await self._lock_scopes(conn, org, scope)
+            await self._check_free(conn, org, scope, path)
+            await conn.execute(
+                "INSERT INTO model_folders (org_pk, project_pk, path, created_by) "
+                "VALUES ($1, $2, $3, $4)",
+                org.pk,
+                scope.pk,
+                path,
+                user.pk,
+            )
+        return {"path": path, "project": scope.name}
+
+    async def delete_folder(self, org: Org, path: str, scope: Scope = GLOBAL) -> None:
+        """Delete an empty folder and the empty folders in it. ``Conflict`` while a model is
+        under it; ``NotFound`` when no folder was made there."""
+        path = path.strip("/")
+        check_name(path)
+        async with self.store.db.pool.acquire() as conn, conn.transaction():
+            await self._lock_scopes(conn, org, scope)
+            if await conn.fetchval(
+                "SELECT 1 FROM models WHERE org_pk = $1 AND project_pk IS NOT DISTINCT FROM $2 "
+                "AND deleted_at IS NULL AND left(name, length($3) + 1) = $3 || '/'",
+                org.pk,
+                scope.pk,
+                path,
+            ):
+                raise Conflict(f"{path} has models in it. Move or delete them first.")
+            deleted = await conn.execute(
+                "DELETE FROM model_folders WHERE org_pk = $1 "
+                "AND project_pk IS NOT DISTINCT FROM $2 "
+                "AND (path = $3 OR left(path, length($3) + 1) = $3 || '/')",
+                org.pk,
+                scope.pk,
+                path,
+            )
+            if deleted == "DELETE 0":
+                raise NotFound(f"folder {path} not found")
+
+    async def move_folder(
+        self,
+        org: Org,
+        path: str,
+        to: str,
+        scope: Scope = GLOBAL,
+        to_scope: Scope | None = None,
+    ) -> dict[str, Any]:
+        """Rename or move the folder at ``path`` to ``to``, into ``to_scope`` if given (D158,
+        D166): every live model under it is renamed as ``rename`` renames one, with the empty
+        folders made in it, in one transaction. ``Taken`` as for a model's new path; ``Conflict``
+        while an upload to one of its models is open or an import into one is running.
+        ``NotFound`` when nothing is at ``path``."""
+        path, to = path.strip("/"), to.strip("/")
+        check_name(path)
+        check_name(to)
+        target = scope if to_scope is None else to_scope
+        if target == scope and (to == path or to.startswith(f"{path}/")):
+            raise Invalid("The new path can't be the folder or inside it.")
+        async with self.store.db.pool.acquire() as conn, conn.transaction():
+            await self._lock_scopes(conn, org, scope, target)
+            inside = await conn.fetch(
+                "SELECT pk, name FROM models WHERE org_pk = $1 "
+                "AND project_pk IS NOT DISTINCT FROM $2 AND deleted_at IS NULL "
+                "AND left(name, length($3) + 1) = $3 || '/' FOR UPDATE",
+                org.pk,
+                scope.pk,
+                path,
+            )
+            made = await conn.fetch(
+                "SELECT pk FROM model_folders WHERE org_pk = $1 "
+                "AND project_pk IS NOT DISTINCT FROM $2 "
+                "AND (path = $3 OR left(path, length($3) + 1) = $3 || '/') FOR UPDATE",
+                org.pk,
+                scope.pk,
+                path,
+            )
+            if not inside and not made:
+                raise NotFound(f"folder {path} not found")
+            # Free of everything but the folder itself, when it moves up into its own scope.
+            pks = [r["pk"] for r in inside]
+            records = await conn.fetch(
+                "SELECT name FROM models WHERE org_pk = $1 AND project_pk IS NOT DISTINCT FROM $2 "
+                "AND NOT (pk = ANY($4)) AND (name = $3 OR left(name, length($3) + 1) = $3 || '/' "
+                "OR left($3, length(name) + 1) = name || '/') ORDER BY length(name) LIMIT 1",
+                org.pk,
+                target.pk,
+                to,
+                pks,
+            )
+            if records:
+                other = records[0]["name"]
+                raise Taken(
+                    f"{to} is a folder of models."
+                    if other.startswith(f"{to}/")
+                    else f"{other} is a model."
+                )
+            if await conn.fetchval(
+                "SELECT 1 FROM model_folders WHERE org_pk = $1 "
+                "AND project_pk IS NOT DISTINCT FROM $2 AND NOT (pk = ANY($4)) "
+                "AND (path = $3 OR left(path, length($3) + 1) = $3 || '/')",
+                org.pk,
+                target.pk,
+                to,
+                [r["pk"] for r in made],
+            ):
+                raise Taken(f"{to} is a folder.")
+            what = display(org.name, scope.name, path)
+            if pks and await conn.fetchval(
+                "SELECT 1 FROM model_uploads WHERE model_pk = ANY($1) AND state = 'open'", pks
+            ):
+                raise Conflict(f"A model in {what} has an upload open. Move it once it's done.")
+            if pks and await conn.fetchval(
+                "SELECT 1 FROM hf_imports WHERE org_pk = $1 AND kind = 'model' "
+                "AND project_pk IS NOT DISTINCT FROM $2 AND state = 'running' "
+                "AND left(dest, length($3) + 1) = $3 || '/'",
+                org.pk,
+                scope.pk,
+                path,
+            ):
+                raise Conflict(f"An import into {what} is running. Move it after.")
+            try:
+                await conn.execute(
+                    "UPDATE models SET name = $2 || substr(name, length($3) + 1), project_pk = $4 "
+                    "WHERE pk = ANY($1)",
+                    pks,
+                    to,
+                    path,
+                    target.pk,
+                )
+                await conn.execute(
+                    "UPDATE model_folders SET path = $2 || substr(path, length($3) + 1), "
+                    "project_pk = $4 WHERE pk = ANY($1)",
+                    [r["pk"] for r in made],
+                    to,
+                    path,
+                    target.pk,
+                )
+            except Exception as e:  # asyncpg's UniqueViolationError: a deleted model's name
+                if type(e).__name__ == "UniqueViolationError":
+                    raise Taken(f"A model under {to} exists already.") from None
+                raise
+        return {"path": to, "project": target.name, "models": len(pks)}
+
+    async def model_info(self, org: Org, name: str, scope: Scope = GLOBAL) -> dict[str, Any]:
         """A model: its primary version and who set it (D107), its latest and its tags."""
         async with self.store.db.pool.acquire() as conn:
-            return await self._model_info(conn, org, await self._model(conn, org, name))
+            model = await self._model(conn, org, name, scope=scope)
+            return await self._model_info(conn, org, model)
 
     async def _model_info(self, conn: asyncpg.Connection, org: Org, model: Model) -> dict[str, Any]:
         """A model's answer (``model_info``)."""
@@ -470,7 +772,9 @@ class Models:
         )
         return {
             "name": model.name,
-            "model": f"{org.name}/{model.name}",
+            "model": display(org.name, model.project, model.name),
+            "org": org.name,
+            "project": model.project,
             "prefix": f"{model.prefix}/",
             "created_at": model.created_at,
             "created_by": model.created_by,
@@ -485,12 +789,17 @@ class Models:
         }
 
     async def versions(
-        self, org: Org, name: str, before: int | None, checkpoints: bool = False
+        self,
+        org: Org,
+        name: str,
+        before: int | None,
+        checkpoints: bool = False,
+        scope: Scope = GLOBAL,
     ) -> dict[str, Any]:
         """Live versions, newest first, 100 a page below ``before``; with ``checkpoints``, only
         those with a ``checkpoint-{step}`` tag (D107)."""
         async with self.store.db.pool.acquire() as conn:
-            model = await self._model(conn, org, name)
+            model = await self._model(conn, org, name, scope=scope)
             checkpoint = (
                 "AND EXISTS (SELECT 1 FROM model_tags t WHERE t.version_pk = v.pk "
                 "AND t.name ~ '^checkpoint-[0-9]+$') "
@@ -513,11 +822,13 @@ class Models:
             "cursor": page[-1].number if len(found) > len(page) else None,
         }
 
-    async def version(self, org: Org, name: str, ref: str | None) -> dict[str, Any]:
+    async def version(
+        self, org: Org, name: str, ref: str | None, scope: Scope = GLOBAL
+    ) -> dict[str, Any]:
         """The version ``ref`` names (a number, a tag, or the primary when None), with its
         files: what a download needs (D103)."""
         async with self.store.db.pool.acquire() as conn:
-            model = await self._model(conn, org, name)
+            model = await self._model(conn, org, name, scope=scope)
             pk = await self._version_pk(conn, org, model, ref)
             return await self._detail(conn, org, model, pk)
 
@@ -575,6 +886,7 @@ class Models:
         run: str | None,
         step: int | None,
         dedupe_key: str | None,
+        scope: Scope = GLOBAL,
     ) -> tuple[bool, dict[str, Any]]:
         """Open an upload of a new version, creating the model if it's new (D100). Returns
         ``(True, upload)``, or ``(False, version)`` when a live version has ``dedupe_key``."""
@@ -590,15 +902,30 @@ class Models:
         await self.bucket(org, ensure=True)
         run_pk = await self._run_pk(org, run)
         async with self.store.db.pool.acquire() as conn, conn.transaction():
-            await conn.execute(
-                "INSERT INTO models (org_pk, name, prefix, created_by, created_at) "
-                "VALUES ($1, $2, $2, $3, now()) ON CONFLICT (org_pk, name) WHERE deleted_at IS NULL "
-                "DO NOTHING",
-                org.pk,
-                name,
-                user.pk,
-            )
-            model = await self._model(conn, org, name, lock=True)
+            if await self._find(conn, org, name, scope) is None:
+                # A new model: its path must be free in its scope (D158), and its folder is
+                # under -projects/{pk}/ in a project (D161).
+                await self._lock_scopes(conn, org, scope)
+                if await self._find(conn, org, name, scope) is None:
+                    await self._check_free(conn, org, scope, name, deleted=False)
+                    try:
+                        await conn.execute(
+                            "INSERT INTO models (org_pk, project_pk, name, prefix, created_by, "
+                            "created_at) VALUES ($1, $2, $3, $4, $5, now())",
+                            org.pk,
+                            scope.pk,
+                            name,
+                            scope.key(name),
+                            user.pk,
+                        )
+                    except Exception as e:  # asyncpg's UniqueViolationError
+                        # Until 0023's contract, names are also unique across the org (D170).
+                        if type(e).__name__ == "UniqueViolationError":
+                            raise Taken(
+                                f"{name} is taken by a model elsewhere in {org.name}."
+                            ) from None
+                        raise
+            model = await self._model(conn, org, name, lock=True, scope=scope)
             if dedupe_key is not None:
                 pk = await conn.fetchval(
                     "SELECT pk FROM model_versions "
@@ -639,7 +966,10 @@ class Models:
     def _upload_info(self, org: Org, name: str, upload: Upload) -> dict[str, Any]:
         return {
             "ulid": upload.ulid,
-            "model": f"{org.name}/{name}",
+            "model": display(org.name, upload.project, name),
+            "name": name,
+            "org": org.name,
+            "project": upload.project,
             "state": upload.state,
             "user": upload.user,
             "bucket": "flock-models",
@@ -662,26 +992,38 @@ class Models:
         }
 
     async def _upload(
-        self, conn: asyncpg.Connection, org: Org, name: str, ulid: str, lock: bool = False
+        self,
+        conn: asyncpg.Connection,
+        org: Org,
+        name: str,
+        ulid: str,
+        lock: bool = False,
+        scope: Scope = GLOBAL,
     ) -> Upload:
         check_name(name)
         record = await conn.fetchrow(
             f"SELECT {UPLOAD_COLUMNS} FROM model_uploads u JOIN models m ON m.pk = u.model_pk "
-            "WHERE u.ulid = $1 AND m.org_pk = $2 AND m.name = $3"
-            + (" FOR UPDATE OF u" if lock else ""),
+            "WHERE u.ulid = $1 AND m.org_pk = $2 AND m.name = $3 "
+            "AND m.project_pk IS NOT DISTINCT FROM $4" + (" FOR UPDATE OF u" if lock else ""),
             ulid,
             org.pk,
             name,
+            scope.pk,
         )
         if record is None:
-            raise NotFound(f"upload {ulid} of {org.name}/{name} not found")
+            raise NotFound(f"upload {ulid} of {display(org.name, scope.name, name)} not found")
         return Upload(*record)
 
-    async def get_upload(self, org: Org, name: str, ulid: str) -> dict[str, Any]:
+    async def get_upload(
+        self, org: Org, name: str, ulid: str, scope: Scope = GLOBAL
+    ) -> dict[str, Any]:
         async with self.store.db.pool.acquire() as conn:
-            return self._upload_info(org, name, await self._upload(conn, org, name, ulid))
+            upload = await self._upload(conn, org, name, ulid, scope=scope)
+            return self._upload_info(org, name, upload)
 
-    async def uploads(self, org: Org, name: str, user: User, state: str) -> list[dict[str, Any]]:
+    async def uploads(
+        self, org: Org, name: str, user: User, state: str, scope: Scope = GLOBAL
+    ) -> list[dict[str, Any]]:
         """``user``'s uploads of the model in ``state``, oldest first."""
         check_name(name)
         if state not in STATES:
@@ -689,16 +1031,23 @@ class Models:
         records = await self.store.db.fetch(
             f"SELECT {UPLOAD_COLUMNS} FROM model_uploads u JOIN models m ON m.pk = u.model_pk "
             "WHERE m.org_pk = $1 AND m.name = $2 AND m.deleted_at IS NULL AND u.user_pk = $3 "
-            "AND u.state = $4 ORDER BY u.pk",
+            "AND u.state = $4 AND m.project_pk IS NOT DISTINCT FROM $5 ORDER BY u.pk",
             org.pk,
             name,
             user.pk,
             state,
+            scope.pk,
         )
         return [self._upload_info(org, name, Upload(*r)) for r in records]
 
     async def commit(
-        self, org: Org, name: str, ulid: str, user: User, hashes: dict[str, str]
+        self,
+        org: Org,
+        name: str,
+        ulid: str,
+        user: User,
+        hashes: dict[str, str],
+        scope: Scope = GLOBAL,
     ) -> dict[str, Any]:
         """Make an open upload a version (D100): check its objects, their safetensors headers
         and their ``x-amz-meta-sha256``, then number it. Committing again answers the same."""
@@ -712,7 +1061,7 @@ class Models:
         async with self.store.db.pool.acquire() as conn, conn.transaction():
             # Held until the version is in: commits of one upload wait for each other, and the
             # sweep doesn't expire it meanwhile.
-            upload = await self._upload(conn, org, name, ulid, lock=True)
+            upload = await self._upload(conn, org, name, ulid, lock=True, scope=scope)
             if upload.state != "open":
                 return await self._answered(conn, org, upload)
             if upload.user != user.pk:
@@ -752,9 +1101,11 @@ class Models:
             await self._clean(bucket, aborted)
         if answer is None:
             if gone:
-                raise Conflict(f"{org.name}/{name} was deleted while this upload was open.")
+                what = display(org.name, scope.name, name)
+                raise Conflict(f"{what} was deleted while this upload was open.")
             async with self.store.db.pool.acquire() as conn:
-                return await self._answered(conn, org, await self._upload(conn, org, name, ulid))
+                upload = await self._upload(conn, org, name, ulid, scope=scope)
+                return await self._answered(conn, org, upload)
         pk, info = answer
         await self._write_manifest(bucket, pk)
         return info
@@ -993,7 +1344,8 @@ class Models:
         try:
             async with self.store.db.pool.acquire() as conn:
                 record = await conn.fetchrow(
-                    "SELECT o.name, m.name, m.prefix, v.number, v.digest, v.metadata::text, u.ulid "
+                    "SELECT o.name, m.name, m.prefix, v.number, v.digest, v.metadata::text, u.ulid, "
+                    "(SELECT name FROM projects WHERE pk = m.project_pk) "
                     "FROM model_versions v JOIN models m ON m.pk = v.model_pk "
                     "JOIN orgs o ON o.pk = m.org_pk JOIN model_uploads u ON u.pk = v.upload_pk "
                     "WHERE v.pk = $1",
@@ -1005,10 +1357,10 @@ class Models:
                     pk,
                 )
             assert record is not None
-            org, name, prefix, number, version_digest, metadata, ulid = record
+            org, name, prefix, number, version_digest, metadata, ulid, project = record
             manifest = {
                 "format": 1,
-                "model": f"{org}/{name}",
+                "model": display(org, project, name),
                 "number": number,
                 "digest": version_digest,
                 "files": [{"path": p, "size": s, "sha256": h} for p, s, h in files],
@@ -1041,11 +1393,13 @@ class Models:
                 written += 1
         return written
 
-    async def abort(self, org: Org, name: str, ulid: str, user: User) -> None:
+    async def abort(
+        self, org: Org, name: str, ulid: str, user: User, scope: Scope = GLOBAL
+    ) -> None:
         """Abort an open upload (its opener, or an admin), removing what landed (D102)."""
         bucket = (await self.bucket(org)).upstream_name
         async with self.store.db.pool.acquire() as conn, conn.transaction():
-            upload = await self._upload(conn, org, name, ulid, lock=True)
+            upload = await self._upload(conn, org, name, ulid, lock=True, scope=scope)
             if upload.state == "committed":
                 raise Conflict("This upload is committed: delete the version instead.")
             if upload.state != "open":
@@ -1077,10 +1431,12 @@ class Models:
 
     # ------------------------------------------------------------------ the primary and tags
 
-    async def set_primary(self, org: Org, name: str, number: int, user: User) -> dict[str, Any]:
+    async def set_primary(
+        self, org: Org, name: str, number: int, user: User, scope: Scope = GLOBAL
+    ) -> dict[str, Any]:
         """Make version ``number`` the primary (D107), recording who and when."""
         async with self.store.db.pool.acquire() as conn, conn.transaction():
-            model = await self._model(conn, org, name, lock=True)
+            model = await self._model(conn, org, name, lock=True, scope=scope)
             pk = await self._version_pk(conn, org, model, str(number))
             previous = None
             if model.primary_version is not None and model.primary_version != pk:
@@ -1095,17 +1451,24 @@ class Models:
                     pk,
                     user.pk,
                 )
-            model = await self._model(conn, org, name)
+            model = await self._model(conn, org, name, scope=scope)
             return {**await self._detail(conn, org, model, pk), "previous": previous}
 
     async def set_tag(
-        self, org: Org, name: str, tag: str, number: int, move: bool, user: User
+        self,
+        org: Org,
+        name: str,
+        tag: str,
+        number: int,
+        move: bool,
+        user: User,
+        scope: Scope = GLOBAL,
     ) -> dict[str, Any]:
         """Put ``tag`` on version ``number``. A tag on another version moves only with ``move``,
         and a ``checkpoint-{step}`` tag never does (D107); otherwise ``TagTaken``."""
         check_tag(tag)
         async with self.store.db.pool.acquire() as conn, conn.transaction():
-            model = await self._model(conn, org, name, lock=True)
+            model = await self._model(conn, org, name, lock=True, scope=scope)
             pk = await self._version_pk(conn, org, model, str(number))
             current = await conn.fetchrow(
                 "SELECT t.version_pk, v.number FROM model_tags t "
@@ -1127,63 +1490,69 @@ class Models:
                 )
         return {"tag": tag, "version": number}
 
-    async def delete_tag(self, org: Org, name: str, tag: str) -> None:
+    async def delete_tag(self, org: Org, name: str, tag: str, scope: Scope = GLOBAL) -> None:
         async with self.store.db.pool.acquire() as conn, conn.transaction():
-            model = await self._model(conn, org, name, lock=True)
+            model = await self._model(conn, org, name, lock=True, scope=scope)
             deleted = await conn.fetchval(
                 "DELETE FROM model_tags WHERE model_pk = $1 AND name = $2 RETURNING name",
                 model.pk,
                 tag,
             )
         if deleted is None:
-            raise NotFound(f"tag {tag} of {org.name}/{name} not found")
+            raise NotFound(f"tag {tag} of {display(org.name, scope.name, name)} not found")
 
     # ------------------------------------------------------------------ renaming (D134)
 
-    async def rename(self, org: Org, name: str, to: str) -> dict[str, Any]:
-        """Rename a model (D134). Only the name changes, in the registry, so it's instant: the
-        files stay in the model's folder (``prefix``). ``Taken`` if a model has the name, live
-        or deleted; ``Conflict`` while an upload to the model is open or an import into it is
+    async def rename(
+        self,
+        org: Org,
+        name: str,
+        to: str,
+        scope: Scope = GLOBAL,
+        to_scope: Scope | None = None,
+    ) -> dict[str, Any]:
+        """Rename a model, move it to another folder, or to another scope (D134, D166). Only the
+        registry changes, so it's instant: the files stay in the model's folder (``prefix``).
+        ``Taken`` if the new path is a model, live or deleted, a folder of models, or under a
+        model (D158); ``Conflict`` while an upload to the model is open or an import into it is
         running, since its client holds the old name. The old name doesn't resolve after."""
         check_name(to)
+        target = scope if to_scope is None else to_scope
         async with self.store.db.pool.acquire() as conn, conn.transaction():
-            model = await self._model(conn, org, name, lock=True)
-            if to == model.name:
+            await self._lock_scopes(conn, org, scope, target)
+            model = await self._model(conn, org, name, lock=True, scope=scope)
+            if to == model.name and target == scope:
                 return await self._model_info(conn, org, model)
-            deleted = await conn.fetchval(
-                "SELECT deleted_at IS NOT NULL FROM models WHERE org_pk = $1 AND name = $2 "
-                "ORDER BY deleted_at IS NOT NULL LIMIT 1",
-                org.pk,
-                to,
-            )
-            if deleted is not None:
-                raise Taken(
-                    f"A deleted model is named {to}. Delete it for good first, or pick another name."
-                    if deleted
-                    else f"A model named {to} exists already."
-                )
+            await self._check_free(conn, org, target, to, skip=model.pk)
+            what = display(org.name, scope.name, name)
             if await conn.fetchval(
                 "SELECT 1 FROM model_uploads WHERE model_pk = $1 AND state = 'open'", model.pk
             ):
                 raise Conflict(
-                    f"{org.name}/{name} has an upload open. Rename it once the upload is "
-                    "committed or aborted."
+                    f"{what} has an upload open. Rename it once the upload is committed or aborted."
                 )
             if await conn.fetchval(
                 "SELECT 1 FROM hf_imports WHERE org_pk = $1 AND kind = 'model' AND dest = $2 "
-                "AND state = 'running'",
+                "AND project_pk IS NOT DISTINCT FROM $3 AND state = 'running'",
                 org.pk,
                 name,
+                scope.pk,
             ):
-                raise Conflict(f"An import into {org.name}/{name} is running. Rename it after.")
-            # The unique index on live names catches a model made with ``to`` meanwhile.
+                raise Conflict(f"An import into {what} is running. Rename it after.")
+            # The unique indexes on live names catch a model made with ``to`` meanwhile.
             try:
-                await conn.execute("UPDATE models SET name = $2 WHERE pk = $1", model.pk, to)
+                await conn.execute(
+                    "UPDATE models SET name = $2, project_pk = $3 WHERE pk = $1",
+                    model.pk,
+                    to,
+                    target.pk,
+                )
             except Exception as e:  # asyncpg's UniqueViolationError
                 if type(e).__name__ == "UniqueViolationError":
                     raise Taken(f"A model named {to} exists already.") from None
                 raise
-            return await self._model_info(conn, org, dataclasses.replace(model, name=to))
+            moved = dataclasses.replace(model, name=to, project_pk=target.pk, project=target.name)
+            return await self._model_info(conn, org, moved)
 
     # ------------------------------------------------------------------ deleting (D109)
 
@@ -1216,11 +1585,13 @@ class Models:
             sorted(t for (t,) in tags),
         )
 
-    async def delete_version(self, org: Org, name: str, number: int, user: User) -> dict[str, Any]:
+    async def delete_version(
+        self, org: Org, name: str, number: int, user: User, scope: Scope = GLOBAL
+    ) -> dict[str, Any]:
         """Delete version ``number``: it's gone at once, and its files move to the trash in the
         background, where admins can restore it for 14 days (D109)."""
         async with self.store.db.pool.acquire() as conn, conn.transaction():
-            model = await self._model(conn, org, name, lock=True)
+            model = await self._model(conn, org, name, lock=True, scope=scope)
             pk = await self._version_pk(conn, org, model, str(number))
             if (why := await self._refusal(conn, model, pk, f"Version {number}")) is not None:
                 raise Conflict(why)
@@ -1229,11 +1600,13 @@ class Models:
         entries = await self._version_entries(org, [pk])
         return entries[0]
 
-    async def delete_model(self, org: Org, name: str, user: User) -> dict[str, Any]:
+    async def delete_model(
+        self, org: Org, name: str, user: User, scope: Scope = GLOBAL
+    ) -> dict[str, Any]:
         """Delete a model with every version in it (D109). Its tags and primary stay, for a
         restore; its open uploads are aborted."""
         async with self.store.db.pool.acquire() as conn, conn.transaction():
-            model = await self._model(conn, org, name, lock=True)
+            model = await self._model(conn, org, name, lock=True, scope=scope)
             await conn.execute(
                 "UPDATE models SET deleted_at = now(), deleted_by = $2 WHERE pk = $1",
                 model.pk,
@@ -1335,7 +1708,8 @@ class Models:
         """Deleted versions of live models (or those of ``pks``), newest first."""
         records = await self.store.db.fetch(
             "SELECT v.pk, m.name, v.number, v.deleted_by, extract(epoch FROM v.deleted_at)::float8, "
-            "v.trashed_at IS NOT NULL, v.total_bytes, v.deleted_tags "
+            "v.trashed_at IS NOT NULL, v.total_bytes, v.deleted_tags, "
+            "(SELECT name FROM projects WHERE pk = m.project_pk) "
             "FROM model_versions v JOIN models m ON m.pk = v.model_pk "
             "WHERE m.org_pk = $1 AND v.deleted_at IS NOT NULL "
             "AND ($2::bigint[] IS NULL OR v.pk = ANY($2)) "
@@ -1349,7 +1723,8 @@ class Models:
                 "kind": "version",
                 "id": pk,
                 "name": name,
-                "model": f"{org.name}/{name}",
+                "model": display(org.name, project, name),
+                "project": project,
                 "number": number,
                 "deleted_by": deleted_by,
                 "deleted_at": deleted_at,
@@ -1358,7 +1733,7 @@ class Models:
                 "bytes": size,
                 "tags": tags,
             }
-            for pk, name, number, deleted_by, deleted_at, moved, size, tags in records
+            for pk, name, number, deleted_by, deleted_at, moved, size, tags, project in records
         ]
 
     async def _model_entries(self, org: Org, pks: list[int] | None = None) -> list[dict[str, Any]]:
@@ -1367,7 +1742,8 @@ class Models:
         records = await self.store.db.fetch(
             "SELECT m.pk, m.name, m.deleted_by, extract(epoch FROM m.deleted_at)::float8, "
             "count(v.pk)::int, coalesce(sum(v.total_bytes), 0)::bigint, "
-            "coalesce(bool_and(v.trashed_at IS NOT NULL), true) "
+            "coalesce(bool_and(v.trashed_at IS NOT NULL), true), "
+            "(SELECT name FROM projects WHERE pk = m.project_pk) "
             "FROM models m LEFT JOIN model_versions v "
             "ON v.model_pk = m.pk AND v.deleted_at = m.deleted_at "
             "WHERE m.org_pk = $1 AND m.deleted_at IS NOT NULL "
@@ -1381,7 +1757,8 @@ class Models:
                 "kind": "model",
                 "id": pk,
                 "name": name,
-                "model": f"{org.name}/{name}",
+                "model": display(org.name, project, name),
+                "project": project,
                 "deleted_by": deleted_by,
                 "deleted_at": deleted_at,
                 "expires_at": deleted_at + self.TRASH_DAYS * 86400,
@@ -1389,12 +1766,15 @@ class Models:
                 "versions": versions,
                 "bytes": size,
             }
-            for pk, name, deleted_by, deleted_at, versions, size, moved in records
+            for pk, name, deleted_by, deleted_at, versions, size, moved, project in records
         ]
 
-    async def trash_entries(self, org: Org) -> list[dict[str, Any]]:
-        """The org's deleted models and deleted versions of live models, newest first."""
+    async def trash_entries(self, org: Org, scope: Scope | None = None) -> list[dict[str, Any]]:
+        """The org's deleted models and deleted versions of live models, newest first: every
+        scope's (each entry says its ``project``, D168), or only ``scope``'s."""
         entries = await self._model_entries(org) + await self._version_entries(org)
+        if scope is not None:
+            entries = [e for e in entries if e["project"] == scope.name]
         return sorted(entries, key=lambda e: (-e["deleted_at"], e["kind"], -e["id"]))
 
     @staticmethod
@@ -1446,7 +1826,8 @@ class Models:
             assert record is not None
             model = Model(*record)
             if model.deleted_at is not None:
-                raise Conflict(f"{org.name}/{model.name} is deleted. Restore the model instead.")
+                what = display(org.name, model.project, model.name)
+                raise Conflict(f"{what} is deleted. Restore the model instead.")
             (record,) = await self._lock_nowait(
                 conn,
                 "SELECT v.trashed_at IS NOT NULL, v.deleted_tags, v.dedupe_key, u.ulid "
@@ -1496,12 +1877,16 @@ class Models:
             if not records:
                 raise NotFound(f"deleted model {pk} not found")
             model = Model(*records[0])
-            if await conn.fetchval(
-                "SELECT 1 FROM models WHERE org_pk = $1 AND name = $2 AND deleted_at IS NULL",
-                org.pk,
-                model.name,
-            ):
-                raise Taken(f"A model named {model.name} exists now.")
+            # Back into its own scope (D168), if its path is still free there (D158).
+            await self._lock_scopes(conn, org, model.scope)
+            try:
+                await self._check_free(
+                    conn, org, model.scope, model.name, skip=model.pk, deleted=False
+                )
+            except Taken as e:
+                if "exists already" in e.message:
+                    raise Taken(f"A model named {model.name} exists now.") from None
+                raise
             versions = await self._lock_nowait(
                 conn,
                 "SELECT v.pk, v.trashed_at IS NOT NULL, u.ulid FROM model_versions v "
@@ -1523,7 +1908,7 @@ class Models:
                 "UPDATE models SET deleted_at = NULL, deleted_by = NULL WHERE pk = $1", pk
             )
         await self._forget_trash(trash, org.pk, (v for v, _ in restored))
-        return await self.model_info(org, model.name)
+        return await self.model_info(org, model.name, model.scope)
 
     async def delete_version_now(self, org: Org, pk: int) -> None:
         """Remove a deleted version from the trash for good."""
@@ -1576,6 +1961,46 @@ class Models:
             await self._remove(trash, self._trash_prefix(org_pk, version))
         await conn.execute("DELETE FROM models WHERE pk = $1", pk)
 
+    async def purge_project(self, org_pk: int, project_pk: int) -> None:
+        """A deleted project's models, for good (D167): every upload's folder (aborting what's
+        open), the trash copies of their deleted versions, then the rows. Files are found
+        through each model's ``prefix``, never ``-projects/{pk}/`` as a whole, since a model
+        promoted out of the project keeps its folder there (D161)."""
+        await self.store.db.execute(
+            "UPDATE model_uploads SET state = 'aborted' WHERE state = 'open' "
+            "AND model_pk IN (SELECT pk FROM models WHERE project_pk = $1)",
+            project_pk,
+        )
+        if self.store.s3.upstream is not None:
+            bucket = await self._bucket_of(org_pk)
+            trash = await self._ensure_trash()
+            uploads = await self.store.db.fetch(
+                "SELECT m.prefix, u.ulid FROM model_uploads u JOIN models m ON m.pk = u.model_pk "
+                "WHERE m.project_pk = $1 ORDER BY u.pk",
+                project_pk,
+            )
+            for prefix, ulid in uploads:
+                if bucket is not None:
+                    await self._clean(bucket, self._folder(prefix, ulid))
+            for (pk,) in await self.store.db.fetch(
+                "SELECT v.pk FROM model_versions v JOIN models m ON m.pk = v.model_pk "
+                "WHERE m.project_pk = $1 AND v.deleted_at IS NOT NULL",
+                project_pk,
+            ):
+                await self._remove(trash, self._trash_prefix(org_pk, pk))
+        await self.store.db.execute("DELETE FROM models WHERE project_pk = $1", project_pk)
+
+    async def project_storage(self, project_pk: int) -> list[tuple[str, int]]:
+        """A project's live models by name, with the bytes of their live versions."""
+        rows = await self.store.db.pool.fetch(
+            "SELECT m.name, coalesce(sum(v.total_bytes), 0)::bigint AS bytes "
+            "FROM models m LEFT JOIN model_versions v ON v.model_pk = m.pk "
+            "AND v.deleted_at IS NULL WHERE m.project_pk = $1 AND m.deleted_at IS NULL "
+            "GROUP BY m.pk, m.name ORDER BY m.name",
+            project_pk,
+        )
+        return [(r["name"], r["bytes"]) for r in rows]
+
     async def delete_org(self, conn: asyncpg.Connection, org: Org) -> None:
         """In the org's deletion's transaction: forget its models. Their objects go with its
         buckets, and their trash with the dataset trash's ``purge_org``."""
@@ -1627,15 +2052,24 @@ class Models:
         those older than a day with no upload row at all; returns how many folders."""
         upstream = self._upstream()
         buckets = await self.store.db.fetch(
-            "SELECT b.upstream_name FROM s3_buckets b JOIN orgs o ON o.pk = b.org_pk "
+            "SELECT b.upstream_name, b.org_pk FROM s3_buckets b JOIN orgs o ON o.pk = b.org_pk "
             "WHERE b.managed = 'models' AND b.deleted_at IS NULL AND o.deleted_at IS NULL "
             "ORDER BY b.pk"
         )
         cutoff = time.time() - self.STRAY_AFTER
         removed = 0
-        for (bucket,) in buckets:
+        for bucket, org_pk in buckets:
+            # Top-level folders, and every model's folder the registry knows: nested ones and
+            # projects' (D158, D161) aren't found by listing one level.
+            models = set(await self._prefixes(bucket, ""))
+            models |= {
+                f"{prefix}/"
+                for (prefix,) in await self.store.db.fetch(
+                    "SELECT DISTINCT prefix FROM models WHERE org_pk = $1", org_pk
+                )
+            }
             folders: list[str] = []
-            for model in await self._prefixes(bucket, ""):
+            for model in sorted(models):
                 folders.extend(await self._prefixes(bucket, f"{model}u/"))
             unfinished = await self._call(upstream.list_uploads(bucket))
             ulids = {m[2] for f in folders if (m := UPLOAD_FOLDER.fullmatch(f))}

@@ -13,8 +13,7 @@ import {
 	parentOf,
 	pathError,
 	readSnippet,
-	tagError,
-	writeSnippet
+	tagError
 } from './datasets.ts';
 
 describe('dataset URLs', () => {
@@ -91,11 +90,6 @@ describe('display', () => {
 		expect(cellText({ k: 'vec', dtype: 'float', len: 768, head: [] })).toBe('float[768]');
 		expect(cellCut({ k: 'str', v: 'abc', len: 600 })).toBe(true);
 		expect(cellCut({ k: 'str', v: 'abc' })).toBe(false);
-	});
-
-	it('writes the snippet for the org', () => {
-		expect(writeSnippet('acme')).toContain('s3.credentials("acme")');
-		expect(writeSnippet('acme')).toContain('creds.uri("flock-datasets", "eval", "mmlu")');
 	});
 });
 

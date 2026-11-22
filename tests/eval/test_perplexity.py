@@ -152,6 +152,11 @@ def test_task_hash_leaves_out_the_primary_metric_and_keeps_paloma_hashes() -> No
     assert isinstance(wikitext, PerplexityTask)
     reread = dataclasses.replace(wikitext, primary_metric="perplexity")
     assert reread.task_hash(docs) == wikitext.task_hash(docs)
+    # Nor whether its dataset is private.
+    private = dataclasses.replace(
+        wikitext, dataset=dataclasses.replace(wikitext.dataset, private=True)
+    )
+    assert private.task_hash(docs) == wikitext.task_hash(docs)
     # The hashes `main` gave before the field existed, so no bank or results file goes stale.
     assert wikitext.task_hash(docs) == (
         "889027a97129888e4050e8b3ae822dc53e6df5d65be1bcdf9bad6bd0af7b4846"
@@ -180,6 +185,7 @@ def test_score_task_writes_one_prediction_row_per_doc_and_never_replaces_it(
         assert row["windows"] == math.ceil(len(ids) / TEXT_TASK.window)
         assert row["logprob"] < 0
         assert row["is_greedy"] is False  # a random model doesn't predict a whole text
+        assert "correct" not in row  # perplexity has no per-doc outcome
 
     # A second run into the same directory is refused before anything is scored.
     monkeypatch.setattr(scorer, "rolling_loglikelihood", None)  # scoring would fail on None

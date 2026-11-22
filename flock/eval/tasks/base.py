@@ -32,6 +32,8 @@ class Dataset:
             The split a task is scored on.
         row_index (`bool`, *optional*, defaults to `False`):
             Whether each row gets its position in its split as `"index"`, for datasets with no id column. A `to_doc` then reads the doc's id as `str(row["index"])`, as OLMES does for MMLU (`oe_eval/tasks/oe_eval_tasks/mmlu.py`). Written-out `Fewshot.rows` don't go through `load`, so they need an `"index"` of their own.
+        private (`bool`, *optional*, defaults to `False`):
+            Whether the repo is private. A run's per-doc predictions of a task on a private dataset are never uploaded to a public tracker project. Task hashes leave it out: it changes no request.
     """
 
     repo: str
@@ -39,6 +41,7 @@ class Dataset:
     subset: str | None
     split: str
     row_index: bool = False
+    private: bool = False
 
     def load(self, split: str | None = None) -> list[dict[str, Any]]:
         """
@@ -530,7 +533,12 @@ class MultipleChoiceTask:
             for field in dataclasses.fields(self)
             if field.name not in ("to_doc", "keep")
         }
-        # `default` turns the nested `Dataset` and `Fewshot` dataclasses into dicts for `json`.
+        # Who may read the rows changes no request, and leaving it out keeps the hashes of tasks
+        # defined before the field existed.
+        dataset = dataclasses.asdict(self.dataset)
+        del dataset["private"]
+        fields["dataset"] = dataset
+        # `default` turns the nested `Fewshot` dataclass into a dict for `json`.
         digest = hashlib.sha256(
             json.dumps(fields, default=dataclasses.asdict, sort_keys=True).encode()
         )

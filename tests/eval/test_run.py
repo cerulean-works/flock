@@ -49,7 +49,7 @@ def test_evaluate_writes_results_and_predictions(offline_model: None, tmp_path: 
     results = evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path))
 
     data = json.loads((tmp_path / "results.json").read_text())
-    assert data["schema_version"] == 8
+    assert data["schema_version"] == 10
     assert data["provenance"]["model"] == "tiny@0"
     assert data["provenance"]["model_digest"] is None  # only a Flock version has one
     assert data["provenance"]["flock_commit"] == "abc123"
@@ -78,6 +78,9 @@ def test_evaluate_writes_results_and_predictions(offline_model: None, tmp_path: 
     first, second = map(json.loads, lines)
     assert (first["id"], first["gold"], len(first["logprob"])) == ("q-1", 0, 3)
     assert len(second["logprob_uncond"]) == 4
+    # Each doc's outcome under the primary metric, which averages to its value.
+    assert type(first["correct"]) is bool
+    assert (first["correct"] + second["correct"]) / 2 == task["metrics"]["acc_per_char"]
 
     with pytest.raises(FileExistsError):  # a second run can't replace this one
         results.write(tmp_path)
@@ -118,6 +121,10 @@ def test_predictions_recompute_every_metric_and_the_truncation(
         "bpb": sum(bpb(row, row["gold"]) for row in rows) / len(rows),
     }
     assert recomputed == pytest.approx(task.metrics, abs=1e-6)
+    # `correct` is the primary metric's pick, `acc_per_char`, doc by doc.
+    for row in rows:
+        per_char = [row["logprob"][i] / row["num_chars"][i] for i in range(len(row["logprob"]))]
+        assert row["correct"] == (per_char.index(max(per_char)) == row["gold"])
 
     cuts = [row["tokens_cut"] + row["tokens_cut_uncond"] for row in rows]
     assert task.truncation.requests == sum(sum(n > 0 for n in cut) for cut in cuts) > 0
@@ -340,12 +347,13 @@ def test_prediction_rows_drop_padded_choices(tmp_path: Path) -> None:
         tokens_cut=counts + 30,
     )
 
-    rows = prediction_rows(docs, scores)
+    rows = prediction_rows(docs, scores, correct=torch.tensor([1.0, 0.0]))
 
     assert rows == [
         {
             "id": "a",
             "gold": 1,
+            "correct": True,
             "logprob": [-1.0, -2.0],
             "num_tokens": [1, 2],
             "num_chars": [11, 12],
@@ -356,6 +364,7 @@ def test_prediction_rows_drop_padded_choices(tmp_path: Path) -> None:
         {
             "id": "b",
             "gold": 0,
+            "correct": False,
             "logprob": [-3.0, -4.0, -5.0],
             "num_tokens": [3, 4, 5],
             "num_chars": [13, 14, 15],
@@ -367,6 +376,10 @@ def test_prediction_rows_drop_padded_choices(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="1 docs but scores for 2"):
         prediction_rows(docs[:1], scores)
+    with pytest.raises(ValueError, match="2 docs but outcomes for 1"):
+        prediction_rows(docs, scores, correct=torch.tensor([1.0]))
+    # Without an accuracy to follow, rows have no outcome.
+    assert all("correct" not in row for row in prediction_rows(docs, scores))
 
     # A file another run wrote while this one scored is refused at write time, not replaced.
     path = tmp_path / "toy.jsonl"
@@ -423,6 +436,15 @@ def test_score_task_averages_greedy_match_over_gold_only_docs(
     assert result.metrics["acc_greedy"] == 0.5  # one doc of two, read from its one request
     lines = (tmp_path / "predictions" / "toy:gold_only.jsonl").read_text().splitlines()
     assert [json.loads(line)["is_greedy"] for line in lines] == [[False], [True]]
+    assert [json.loads(line)["correct"] for line in lines] == [False, True]  # acc_greedy's
+
+
+def test_a_task_read_first_by_bpb_writes_no_outcome(scorer: ScoringModel, tmp_path: Path) -> None:
+    by_bpb = dataclasses.replace(TASK, primary_metric="bpb")
+    score_task(scorer, by_bpb, out=tmp_path)
+
+    lines = (tmp_path / "predictions" / "toy.jsonl").read_text().splitlines()
+    assert all("correct" not in json.loads(line) for line in lines)
 
 
 def test_score_task_reports_only_the_tasks_metrics(scorer: ScoringModel) -> None:

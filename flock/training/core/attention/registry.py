@@ -1,21 +1,18 @@
 from dataclasses import dataclass
-from typing import ClassVar, Protocol
+from typing import Any, ClassVar, Protocol
 
 import torch
 
-from .flash_attention_3 import flash_attention_3
-from .masking import prepare_flash_attention_mask, prepare_sdpa_mask
+from .flash_attention import flash_attention_3, flash_attention_4
+from .masking import prepare_sdpa_mask, prepare_varlen_metadata
 from .sdpa import sdpa_attention
 
 
-class AttentionFunction(Protocol):
+class AttentionFunction[MetadataT](Protocol):
     """Compute attention from prepared Q/K/V in [batch, heads, sequence, head_dim] order.
 
-    Return the same layout, with Q's heads and sequence length. Each function
-    defines its supported mask formats and handles GQA. Models use the registered
-    mask preparer; direct callers supply an already prepared mask. `is_causal`
-    describes the attention pattern; SDPA masks must already include causality.
-    The caller owns projections, normalization and RoPE.
+    Return the same layout and handle GQA. `MetadataT` is the metadata kind the
+    function reads, as returned by its paired mask preparer.
     """
 
     def __call__(
@@ -24,54 +21,55 @@ class AttentionFunction(Protocol):
         k: torch.Tensor,
         v: torch.Tensor,
         *,
-        attention_mask: torch.Tensor | None = None,
+        attention_metadata: MetadataT | None = None,
         is_causal: bool = False,
     ) -> torch.Tensor: ...
 
 
-class _MaskPreparationFunction(Protocol):
+class _MaskPreparationFunction[MetadataT](Protocol):
     def __call__(
         self, padding_mask: torch.Tensor | None, *, is_causal: bool
-    ) -> torch.Tensor | None: ...
+    ) -> MetadataT | None: ...
 
 
 @dataclass(frozen=True)
-class _AttentionBackend:
-    function: AttentionFunction
-    mask_preparer: _MaskPreparationFunction
+class _AttentionBackend[MetadataT]:
+    function: AttentionFunction[MetadataT]
+    mask_preparer: _MaskPreparationFunction[MetadataT]
 
 
 class AttentionInterface:
     """Register attention functions and their mask preparers together by name."""
 
-    _global_mapping: ClassVar[dict[str, _AttentionBackend]] = {
+    _global_mapping: ClassVar[dict[str, _AttentionBackend[Any]]] = {
         "sdpa": _AttentionBackend(sdpa_attention, prepare_sdpa_mask),
-        "flash_attention_3": _AttentionBackend(flash_attention_3, prepare_flash_attention_mask),
+        "flash_attention_3": _AttentionBackend(flash_attention_3, prepare_varlen_metadata),
+        "flash_attention_4": _AttentionBackend(flash_attention_4, prepare_varlen_metadata),
     }
 
     @classmethod
-    def register(
+    def register[MetadataT](
         cls,
         name: str,
-        function: AttentionFunction,
+        function: AttentionFunction[MetadataT],
         *,
-        mask_preparer: _MaskPreparationFunction,
+        mask_preparer: _MaskPreparationFunction[MetadataT],
     ) -> None:
         """Register or replace an attention function with an explicit mask preparer."""
         cls._global_mapping[name] = _AttentionBackend(function, mask_preparer)
 
     @classmethod
-    def get_interface(cls, attn_implementation: str) -> AttentionFunction:
+    def get_interface(cls, attn_implementation: str) -> AttentionFunction[Any]:
         """Resolve an implementation name to its attention function."""
         return cls._get_backend(attn_implementation).function
 
     @classmethod
-    def get_mask_preparer(cls, attn_implementation: str) -> _MaskPreparationFunction:
+    def get_mask_preparer(cls, attn_implementation: str) -> _MaskPreparationFunction[Any]:
         """Resolve an implementation name to its model-level mask preparer."""
         return cls._get_backend(attn_implementation).mask_preparer
 
     @classmethod
-    def _get_backend(cls, attn_implementation: str) -> _AttentionBackend:
+    def _get_backend(cls, attn_implementation: str) -> _AttentionBackend[Any]:
         try:
             return cls._global_mapping[attn_implementation]
         except KeyError:

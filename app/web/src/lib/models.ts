@@ -2,10 +2,12 @@
 
 import { resolve } from '$app/paths';
 import type { ResolvedPathname } from '$app/types';
-import { tagError as datasetTagError } from './datasets.ts';
+import { tagError as datasetTagError, pyString } from './datasets.ts';
+import { type Scope, asScope, scopeQuery } from './scope.ts';
 import { PREVIEW_BYTES, bucketCall, objectHref } from './storage.ts';
 import type { Presigned } from './types.ts';
 import { unreachable } from './uploads.svelte.ts';
+import { projectHref } from './workspace/url.ts';
 
 /** The org's managed bucket, as S3 clients name it. */
 export const MODELS_BUCKET = 'flock-models';
@@ -13,18 +15,33 @@ export const MODELS_BUCKET = 'flock-models';
 export const TRASH_DAYS = 14;
 
 // ----------------------------------------------------------------------------------------------
-// URLs: `/models/{org}` and `/models/{org}/{name}`.
+// URLs: `/models/{org}/{path…}` for global, `/{org}/{project}/models/{path…}` for a project's
+// (D169); a folder or a model (the API decides).
 
-/** The org's models, or one model. */
-export const modelsHref = (org: string, name?: string) =>
-	name === undefined
-		? resolve('/(app)/models/[org]', { org })
-		: resolve('/(app)/models/[org]/[name]', { org, name });
+const segments = (path: string) => path.split('/').map(encodeURIComponent).join('/');
+
+/**
+ * A scope's models (an org alone is its global scope), or a folder or model in it. Each part of
+ * the path is encoded on its own.
+ */
+export function modelsHref(scope: Scope | string, path = '') {
+	const { org, project } = asScope(scope);
+	const root =
+		project === null
+			? resolve('/(app)/models/[org]/[...path]', { org, path: '' }).replace(/\/$/, '')
+			: `${projectHref(org, project)}/models`;
+	return `${root}${path ? `/${segments(path)}` : ''}` as ResolvedPathname;
+}
 
 /** A model at a version (a number or a tag), and optionally a tab. */
-export function versionHref(org: string, name: string, version: string | number, tab?: string) {
+export function versionHref(
+	scope: Scope | string,
+	name: string,
+	version: string | number,
+	tab?: string
+) {
 	const search = new URLSearchParams({ version: String(version), ...(tab ? { tab } : {}) });
-	return `${modelsHref(org, name)}?${search}` as ResolvedPathname;
+	return `${modelsHref(scope, name)}?${search}` as ResolvedPathname;
 }
 
 /** A version's folder in flock-models, in the Storage tab. */
@@ -43,28 +60,33 @@ export function runPathHref(path: string): ResolvedPathname | null {
 
 export { DatasetError as ModelError, datasetCall as modelCall } from './datasets.ts';
 
-/** The dashboard's endpoint for one of an org's model routes, with its query. */
-export function modelsApi(
-	org: string,
-	op: string,
-	query: Record<string, string | number | boolean | null | undefined> = {}
-): string {
+type Query = Record<string, string | number | boolean | null | undefined>;
+
+/**
+ * The dashboard's endpoint for one of an org's model routes (`op`; none for a folder's
+ * listing), with its query and the scope's `project` (D163).
+ */
+export function modelsApi(scope: Scope | string, op: string, query: Query = {}): string {
+	const { org } = asScope(scope);
 	const search = new URLSearchParams();
-	for (const [name, value] of Object.entries(query)) {
+	for (const [name, value] of Object.entries({ ...query, ...scopeQuery(scope) })) {
 		if (value === null || value === undefined) continue;
 		search.append(name, String(value));
 	}
 	const qs = search.toString();
-	return `/api/models/${encodeURIComponent(org)}/${op}${qs ? `?${qs}` : ''}`;
+	return `/api/models/${encodeURIComponent(org)}${op ? `/${op}` : ''}${qs ? `?${qs}` : ''}`;
 }
 
-/** The endpoint of one model's route (`op` after its name, or none for the model itself). */
-export const modelApi = (
-	org: string,
-	name: string,
-	op = '',
-	query: Record<string, string | number | boolean | null | undefined> = {}
-) => modelsApi(org, `${encodeURIComponent(name)}${op ? `/${op}` : ''}`, query);
+/**
+ * The endpoint of one model's route, `{path}/-/{op}` (D163), or `{path}/-` for the model
+ * itself.
+ */
+export const modelApi = (scope: Scope | string, name: string, op = '', query: Query = {}) =>
+	modelsApi(scope, `${segments(name)}/-${op ? `/${op}` : ''}`, query);
+
+/** The endpoint of one level of a scope's models (D158), from `cursor` on. */
+export const folderApi = (scope: Scope | string, folder: string, cursor: string | null = null) =>
+	modelsApi(scope, '', { folder, cursor });
 
 /**
  * The text of a file of a version (`key` in flock-models), its first MiB, straight from the S3
@@ -91,12 +113,14 @@ export async function readText(org: string, key: string): Promise<string> {
 
 const NAME = /^[a-z0-9][a-z0-9._-]*$/;
 
-/** Why a model can't be renamed to `name` (one segment, D134), or null. */
+/** Why `name` can't be a model's path (D158: segments of D98's names, 255 characters), or null. */
 export function modelNameError(name: string): string | null {
 	if (!name) return 'Enter a name';
-	if (name.length > 100) return 'Use at most 100 characters';
-	if (!NAME.test(name))
-		return 'Use lowercase letters, digits, dots, hyphens and underscores, starting with a letter or digit';
+	if (name.length > 255) return 'Use at most 255 characters';
+	const parts = name.split('/');
+	if (parts.some((p) => p.length > 100)) return 'Use at most 100 characters between slashes';
+	if (!parts.every((p) => NAME.test(p)))
+		return 'Use lowercase letters, digits, dots, hyphens and underscores, each part starting with a letter or digit, with / between folders';
 	return null;
 }
 
@@ -135,16 +159,54 @@ export function tagError(name: string): string | null {
 // ----------------------------------------------------------------------------------------------
 // Display
 
-/** `acme/olmo2-1b@12`, the name the delete dialogs ask for. */
-export const versionRef = (org: string, name: string, number: number) => `${org}/${name}@${number}`;
+/**
+ * How refs name a model (D162): `acme/eval/olmo2-1b` when global, `pretrain:sweeps/lr-3e-4` in
+ * a project, as `ModelVersion` prints it.
+ */
+export const modelRef = (scope: Scope | string, name: string) => {
+	const { org, project } = asScope(scope);
+	return project === null ? `${org}/${name}` : `${project}:${name}`;
+};
 
-/** The snippet that loads the version shown with `load_from_hub`. */
-export const loadSnippet = (ref: string) =>
+/** `acme/olmo2-1b@12`, the name the delete dialogs ask for. */
+export const versionRef = (scope: Scope | string, name: string, number: number) =>
+	`${modelRef(scope, name)}@${number}`;
+
+/**
+ * The snippet that loads a model with `load_from_hub`: `ref` is `name@version` in a project,
+ * which it names with `project=` (D162), else the global ref.
+ */
+export const loadSnippet = (ref: string, project: string | null = null) =>
 	[
 		'from flock.hub import models',
 		'',
-		`model = models.load_from_hub("${ref}", device="cuda")`
+		`model = models.load_from_hub("${ref}"${project === null ? '' : `, project=${pyString(project)}`}, device="cuda")`
 	].join('\n');
 
-/** The command that downloads the version shown. */
-export const pullSnippet = (ref: string) => `flock models pull ${ref}`;
+/** A word for the shell, quoted when it needs to be. */
+const shellWord = (word: string) =>
+	/^[\w.@/:+-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`;
+
+/** The command that downloads a model, as `loadSnippet` names it. */
+export const pullSnippet = (ref: string, project: string | null = null) =>
+	`flock models pull ${ref}${project === null ? '' : ` --project ${shellWord(project)}`}`;
+
+/** The snippet that saves a model into a scope (D164), for the empty listing. */
+export function saveSnippet(scope: Scope | string, name = 'my-model') {
+	const { org, project } = asScope(scope);
+	return [
+		'from flock.hub import models',
+		'',
+		project === null
+			? `models.save_to_hub(model, "${org}/${name}")`
+			: `models.save_to_hub(model, "${name}", project=${pyString(project)})`
+	].join('\n');
+}
+
+/** The command that pushes a folder as a model into a scope. */
+export const pushSnippet = (scope: Scope | string, name = 'my-model') => {
+	const { org, project } = asScope(scope);
+	return project === null
+		? `flock models push ./model ${org}/${name}`
+		: `flock models push ./model ${name} --project ${shellWord(project)}`;
+};

@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { page as screen } from 'vitest/browser';
+import { page as screen, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '../../routes/layout.css';
 import { runWorkspace } from '#lib/data/run.ts';
 import { app, page, resetApp } from '#lib/testing/app.svelte.ts';
 import WorkspaceHarness from '#lib/testing/WorkspaceHarness.svelte';
 import type { ProjectInfo, RunDetail } from '#lib/types.ts';
+import DeleteProjectDialog from './DeleteProjectDialog.svelte';
 import MoveRunsDialog from './MoveRunsDialog.svelte';
 import ProjectDialog from './ProjectDialog.svelte';
 import RunsTable from './RunsTable.svelte';
@@ -184,6 +185,97 @@ describe('moving runs', () => {
 		await screen.getByLabelText('Project').click();
 		await screen.getByRole('option', { name: /gpt/ }).click();
 		await expect.element(warning).toBeVisible();
+	});
+});
+
+describe('deleting a project (D167)', () => {
+	const asked: string[] = [];
+	const answering = (storage: unknown, status = 200) => {
+		asked.length = 0;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (url: string) => {
+				asked.push(url);
+				return Response.json(storage, { status });
+			})
+		);
+	};
+
+	it('says which datasets and models go with it, linking to each tab', async () => {
+		viewing('member');
+		answering({ datasets: 3, models: 12, bytes: 412 * 1024 ** 3 });
+		render(DeleteProjectDialog, {
+			open: true,
+			entity: 'acme',
+			project: project('my run', 'private')
+		});
+		await expect
+			.element(screen.getByRole('status'))
+			.toHaveTextContent(
+				'3 datasets and 12 models (412 GB) are deleted with this project. Move anything you want to keep to Workspace first, from its Datasets and Models tabs.'
+			);
+		expect(asked).toEqual(['/api/projects/acme/my%20run/storage']);
+		const models = screen.getByRole('link', { name: 'Models' });
+		expect(models.element().getAttribute('href')).toBe('/acme/my run/models');
+	});
+
+	it('lists what goes with the project on a second screen before deleting', async () => {
+		viewing('member');
+		answering({
+			datasets: 1,
+			models: 1,
+			bytes: 3072,
+			items: [
+				{ kind: 'dataset', path: 'eval/mmlu', bytes: 1024 },
+				{ kind: 'model', path: 'my-model', bytes: 2048 }
+			]
+		});
+		render(DeleteProjectDialog, {
+			open: true,
+			entity: 'acme',
+			project: project('bert', 'private')
+		});
+		await expect.element(screen.getByRole('status')).toBeVisible();
+		const next = screen.getByRole('button', { name: 'Continue' });
+		await expect.element(next).toBeDisabled();
+		await screen.getByRole('textbox').fill('bert');
+		await next.click();
+		const list = screen.getByRole('list', { name: 'Datasets and models deleted with the project' });
+		await expect.element(list).toHaveTextContent('eval/mmlu');
+		await expect.element(list).toHaveTextContent('my-model');
+		await expect
+			.element(screen.getByRole('button', { name: 'Delete project and 2 items' }))
+			.toBeEnabled();
+		await screen.getByRole('button', { name: 'Back' }).click();
+		await expect.element(screen.getByRole('textbox')).toHaveValue('bert');
+		// Enter in the name field moves on to the list too, rather than deleting.
+		await screen.getByRole('textbox').click();
+		await userEvent.keyboard('{Enter}');
+		await expect
+			.element(screen.getByRole('list', { name: 'Datasets and models deleted with the project' }))
+			.toBeVisible();
+	});
+
+	it('says one model in the singular, and nothing when there is none', async () => {
+		viewing('member');
+		answering({ datasets: 0, models: 1, bytes: 2048 });
+		const { unmount } = render(DeleteProjectDialog, {
+			open: true,
+			entity: 'acme',
+			project: project('bert', 'private')
+		});
+		await expect
+			.element(screen.getByRole('status'))
+			.toHaveTextContent(/^1 model \(2\.0 KB\) is deleted with this project\..* its Models tab\.$/);
+		unmount();
+		answering({ datasets: 0, models: 0, bytes: 0 });
+		render(DeleteProjectDialog, {
+			open: true,
+			entity: 'acme',
+			project: project('bert', 'private')
+		});
+		await expect.element(screen.getByText('Deletes its 3 runs', { exact: false })).toBeVisible();
+		expect(screen.getByRole('status').query()).toBeNull();
 	});
 });
 

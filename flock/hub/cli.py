@@ -6,7 +6,7 @@ import shutil
 import sys
 import threading
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -14,8 +14,8 @@ from typing import Any
 import click
 
 from flock.hub import models, s3
-from flock.hub.models import cache, hf, upload
-from flock.hub.models._common import Ref, human
+from flock.hub.models import cache, hf, registry, upload
+from flock.hub.models._common import Ref, human, parse_ref
 from flock.hub.s3 import S3Error
 
 UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
@@ -235,11 +235,36 @@ def _failing() -> Generator[None]:
         raise click.ClickException(str(error)) from None
 
 
-def _ref(text: str, version: bool = True) -> Ref:
-    try:
-        return Ref.parse(text, version)
-    except ValueError as error:
-        raise click.BadParameter(str(error)) from None
+def _scope_options[F: Callable[..., Any]](command: F) -> F:
+    """`--project` and `--org`, which every `flock models` command takes (D164)."""
+    command = click.option(
+        "--org", help="The org of --project or of a project:path (default: your default org)."
+    )(command)
+    return click.option(
+        "--project",
+        help="The project the model belongs to, by name or as org/project. The model is then "
+        "a path inside it.",
+    )(command)
+
+
+def _ref(
+    text: str, version: bool = True, *, project: str | None = None, org: str | None = None
+) -> Ref:
+    """`text` as a reference, asking Flock for your default org if a project's ref needs it."""
+    with _failing():
+        try:
+            return parse_ref(text, version, project=project, org=org)
+        except ValueError as error:
+            raise click.BadParameter(str(error)) from None
+
+
+def _scoped(ref: Ref) -> tuple[str, dict[str, Any]]:
+    """A parsed reference as the text and keywords `flock.hub.models` takes again, with the org
+    already found, and a project named as `project=` (its name may hold a `:`)."""
+    if ref.project is None:
+        return str(ref), {}
+    text = ref.name if ref.version is None else f"{ref.name}@{ref.version}"
+    return text, {"project": ref.project, "org": ref.org}
 
 
 class _Progress:
@@ -275,7 +300,13 @@ class _Progress:
 
 @click.group("models")
 def models_group() -> None:
-    """Push, pull, tag and list models stored in Flock."""
+    """Push, pull, tag, move and list models stored in Flock.
+
+    \b
+    A model is ORG/PATH for the org's global models, such as acme/eval/olmo2-1b, or a path in
+    a project: PROJECT:PATH (pretrain:sweeps/lr-3e-4), or PATH with --project. A version is
+    @NUMBER or @TAG after it.
+    """
 
 
 @models_group.command("push")
@@ -283,14 +314,22 @@ def models_group() -> None:
 @click.argument("name")
 @click.option("--tag", "tags", multiple=True, help="Tag the new version (repeat for more).")
 @click.option("--primary", is_flag=True, help="Make the new version primary once it's committed.")
-def push_command(folder: Path, name: str, tags: tuple[str, ...], primary: bool) -> None:
-    """Push FOLDER as a new version of NAME (org/name).
+@_scope_options
+def push_command(
+    folder: Path,
+    name: str,
+    tags: tuple[str, ...],
+    primary: bool,
+    project: str | None,
+    org: str | None,
+) -> None:
+    """Push FOLDER as a new version of NAME (org/path, project:path, or a path with --project).
 
     FOLDER holds config.json, flock.json and model.safetensors (or shards with
     model.safetensors.index.json). Hidden files are skipped. Running the same push again
     after it stopped resumes it.
     """
-    ref = _ref(name, version=False)
+    ref = _ref(name, version=False, project=project, org=org)
     options = {"metadata": {}, "tags": list(tags), "primary": primary}
     progress = _Progress("Sent")
     with _failing():
@@ -305,22 +344,36 @@ def push_command(folder: Path, name: str, tags: tuple[str, ...], primary: bool) 
 @click.option("--revision", help="A branch, tag or commit of the Hub repository (default: main).")
 @click.option("--tag", "tags", multiple=True, help="Tag the new version (repeat for more).")
 @click.option("--primary", is_flag=True, help="Make the new version primary once it's committed.")
+@_scope_options
 def import_command(
-    repo: str, name: str, revision: str | None, tags: tuple[str, ...], primary: bool
+    repo: str,
+    name: str,
+    revision: str | None,
+    tags: tuple[str, ...],
+    primary: bool,
+    project: str | None,
+    org: str | None,
 ) -> None:
-    """Import the Hugging Face model REPO as a new version of NAME (org/name).
+    """Import the Hugging Face model REPO as a new version of NAME (org/path, project:path, or
+    a path with --project).
 
     REPO is a Hub repository such as Qwen/Qwen3-0.6B, or a local folder holding one. The
     weights must be safetensors. They're renamed for Flock without being loaded, and checked
     against the architecture before anything is uploaded. Running the same import again after
     it stopped resumes it.
     """
-    _ref(name, version=False)
+    text, scope = _scoped(_ref(name, version=False, project=project, org=org))
     progress = _Progress("Sent")
     with _failing():
         try:
             version = hf.import_model(
-                repo, name, revision=revision, tags=tags, primary=primary, progress=progress
+                repo,
+                text,
+                revision=revision,
+                tags=tags,
+                primary=primary,
+                progress=progress,
+                **scope,
             )
         except ValueError as error:
             raise click.ClickException(str(error)) from None
@@ -334,15 +387,19 @@ def import_command(
     "--to", type=click.Path(file_okay=False, path_type=Path), help="Copy the files here too."
 )
 @click.option("--include-training-state", is_flag=True, help="Also download training_state/.")
-def pull_command(ref: str, to: Path | None, include_training_state: bool) -> None:
-    """Download a version (ORG/NAME[@REF], default the primary) into the cache.
+@_scope_options
+def pull_command(
+    ref: str, to: Path | None, include_training_state: bool, project: str | None, org: str | None
+) -> None:
+    """Download a version (ORG/PATH[@REF] or PROJECT:PATH[@REF], default the primary) into the
+    cache.
 
     Prints the folder the files are in: the cache's, or --to's.
     """
-    _ref(ref)
+    text, scope = _scoped(_ref(ref, project=project, org=org))
     progress = _Progress("Received")
     with _failing():
-        version = cache.resolve(ref)
+        version = cache.resolve(text, **scope)
         assert version.files is not None
         files = cache.select(version.files, None, None, include_training_state)
         folder = cache.fetch(version, files, progress)
@@ -354,14 +411,28 @@ def pull_command(ref: str, to: Path | None, include_training_state: bool) -> Non
 
 
 @models_group.command("list")
-@click.option("--org", help="The org (default: your default org).")
-def list_models_command(org: str | None) -> None:
-    """List an org's models, with their latest and primary versions."""
+@click.argument("folder", required=False)
+@_scope_options
+def list_models_command(folder: str | None, project: str | None, org: str | None) -> None:
+    """List one level of FOLDER: its models, with their latest and primary versions, then its
+    folders.
+
+    FOLDER is ORG or ORG/PATH for the org's global models, PROJECT:PATH for a project's, or a
+    path with --project. Without it, the root of --project, or of your org's global models.
+    """
     with _failing():
-        found = models.list_models(org)
-    if not found:
-        click.echo("No models yet. Push one with: flock models push DIR ORG/NAME")
-    for model in found:
+        try:
+            where = registry.folder_ref(folder, project=project, org=org)
+        except ValueError as error:
+            raise click.BadParameter(str(error)) from None
+        found = models.list_models(where.name, project=where.project, org=where.org)
+    shown = f"{where.org}/" if where.project is None else f"{where.project}:"
+    if found["kind"] == "model":
+        click.echo(f"{shown}{found['name']} is a model. Its versions: flock models versions REF")
+        return
+    if not (found["models"] or found["folders"]):
+        click.echo("No models yet. Push one with: flock models push DIR ORG/PATH")
+    for model in found["models"]:
         if model["latest"] is None:
             click.echo(f"{model['model']}\tno versions")
             continue
@@ -369,17 +440,23 @@ def list_models_command(org: str | None) -> None:
         click.echo(
             f"{model['model']}\tlatest {model['latest']}, primary {model['primary']} ({size})"
         )
+    for sub in found["folders"]:
+        count = sub["models"]
+        click.echo(f"{shown}{sub['path']}/\t{count} model{'' if count == 1 else 's'}")
 
 
 @models_group.command("versions")
 @click.argument("name")
-def versions_command(name: str) -> None:
-    """List the versions of NAME (org/name), newest first."""
-    _ref(name, version=False)
+@_scope_options
+def versions_command(name: str, project: str | None, org: str | None) -> None:
+    """List the versions of NAME (org/path, project:path, or a path with --project), newest
+    first."""
+    ref = _ref(name, version=False, project=project, org=org)
+    text, scope = _scoped(ref)
     with _failing():
-        found = models.versions(name)
+        found = models.versions(text, **scope)
     if not found:
-        click.echo(f"{name} has no versions.")
+        click.echo(f"{ref.model} has no versions.")
     for version in found:
         created = time.strftime("%Y-%m-%d %H:%M", time.localtime(version.created_at))
         cells = [
@@ -395,36 +472,78 @@ def versions_command(name: str) -> None:
 
 @models_group.command("primary")
 @click.argument("ref")
-def primary_command(ref: str) -> None:
-    """Make the version REF (org/name@number or @tag) primary."""
-    if _ref(ref).version is None:
+@_scope_options
+def primary_command(ref: str, project: str | None, org: str | None) -> None:
+    """Make the version REF (a model with @number or @tag) primary."""
+    parsed = _ref(ref, project=project, org=org)
+    if parsed.version is None:
         raise click.BadParameter(f"name the version, such as {ref}@12")
+    text, scope = _scoped(parsed)
     with _failing():
-        version = models.set_primary(ref)
-    click.echo(f"✓ {version} is the primary version of {version.org}/{version.name}.")
+        version = models.set_primary(text, **scope)
+    click.echo(f"✓ {version} is the primary version of {version.model}.")
 
 
 @models_group.command("tag")
 @click.argument("ref")
 @click.argument("tag")
 @click.option("--move", is_flag=True, help="Move the tag if it's on another version.")
-def tag_command(ref: str, tag: str, move: bool) -> None:
-    """Tag the version REF (org/name@number, @tag, or the primary without @)."""
-    _ref(ref)
+@_scope_options
+def tag_command(ref: str, tag: str, move: bool, project: str | None, org: str | None) -> None:
+    """Tag the version REF (a model with @number, @tag, or the primary without @)."""
+    text, scope = _scoped(_ref(ref, project=project, org=org))
     with _failing():
-        version = models.tag(ref, tag, move=move)
+        version = models.tag(text, tag, move=move, **scope)
     click.echo(f"✓ Tagged {version} {tag}.")
 
 
 @models_group.command("untag")
 @click.argument("name")
 @click.argument("tag")
-def untag_command(name: str, tag: str) -> None:
-    """Remove TAG from NAME (org/name). The version stays."""
-    _ref(name, version=False)
+@_scope_options
+def untag_command(name: str, tag: str, project: str | None, org: str | None) -> None:
+    """Remove TAG from NAME (org/path, project:path, or a path with --project). The version
+    stays."""
+    ref = _ref(name, version=False, project=project, org=org)
+    text, scope = _scoped(ref)
     with _failing():
-        models.untag(name, tag)
-    click.echo(f"✓ Removed the tag {tag} from {name}.")
+        models.untag(text, tag, **scope)
+    click.echo(f"✓ Removed the tag {tag} from {ref.model}.")
+
+
+@models_group.command("move")
+@click.argument("ref")
+@click.argument("new_path")
+@click.option("--to-project", help="Move the model into this project of its org.")
+@click.option("--to-global", is_flag=True, help="Move the model to the org's global models.")
+@_scope_options
+def move_command(
+    ref: str,
+    new_path: str,
+    to_project: str | None,
+    to_global: bool,
+    project: str | None,
+    org: str | None,
+) -> None:
+    """Rename the model REF to NEW_PATH, which may be in another folder, and with --to-project
+    or --to-global, in another scope.
+
+    NEW_PATH is a path without an org or project, such as eval/olmo2-1b. Versions, tags and
+    files come along, and the move is instant. The old name stops resolving.
+
+    \b
+    flock models move pretrain:sweeps/lr-3e-4 released/olmo2-1b-lr --to-global
+    """
+    if to_project is not None and to_global:
+        raise click.UsageError("give --to-project or --to-global, not both")
+    parsed = _ref(ref, version=False, project=project, org=org)
+    text, scope = _scoped(parsed)
+    with _failing():
+        try:
+            moved = models.move(text, new_path, to_project=to_project, to_global=to_global, **scope)
+        except ValueError as error:
+            raise click.BadParameter(str(error)) from None
+    click.echo(f"✓ Moved {parsed.model} to {moved['model']}.")
 
 
 @models_group.group("uploads")
@@ -461,11 +580,21 @@ def uploads_resume_command(ulid: str) -> None:
 
 @uploads_group.command("abort")
 @click.argument("ulid")
-@click.option("--model", help="The model (org/name), for an upload started on another machine.")
-def uploads_abort_command(ulid: str, model: str | None) -> None:
+@click.option(
+    "--model",
+    help="The model (org/path, or project:path or a path with --project), for an upload "
+    "started on another machine.",
+)
+@_scope_options
+def uploads_abort_command(
+    ulid: str, model: str | None, project: str | None, org: str | None
+) -> None:
     """Abort the upload ULID, deleting what it sent and its local folder."""
+    scope: dict[str, Any] = {}
     if model is not None:
-        _ref(model, version=False)
+        model, scope = _scoped(_ref(model, version=False, project=project, org=org))
+    elif project is not None:
+        raise click.UsageError("--project names the scope of --model")
     with _failing():
-        upload.abort(ulid, model)
+        upload.abort(ulid, model, **scope)
     click.echo(f"✓ Aborted the upload {ulid}.")

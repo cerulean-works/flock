@@ -174,7 +174,9 @@ class Snapshot:
                     slot[5] = x_len
                     xs.append(x[idx])
                     x_len += len(idx)
-                ys.append(y[idx].astype("<f4"))
+                # Float32 overflow becomes signed infinity, which the chart skips.
+                with np.errstate(over="ignore"):
+                    ys.append(y[idx].astype("<f4"))
                 y_len += len(idx)
 
         # Mappings keep float64 values (wall times) and their own x values, as knots.

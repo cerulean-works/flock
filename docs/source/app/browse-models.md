@@ -2,7 +2,23 @@
 
 Use the dashboard's **Models** tab to see your organization's stored models, choose which version loads by default, tag versions, rename models and delete the ones you no longer need. To push and load models, see [Store and load models](../hub/store-models).
 
-**Models** is in the sidebar when the Flock server has S3 storage. It lists each model with its latest version, its primary version, the primary version's size and when it last changed. A model appears once its first upload starts, and its first version once that upload finishes.
+**Models** is in the sidebar when the Flock server has S3 storage. It lists each model with its latest version, its primary version, the primary version's size and when it last changed, then the folders, with how many models each holds. Open a folder to see the models in it. To set up folders before you have models in them, click **New folder** and enter a name: the folder is made inside the one shown and stays, even empty, until it's deleted. A folder's **⋯** menu renames it, moves it with its models (to a project too), or deletes it once it has no models in it. A model appears once its first upload starts, and its first version once that upload finishes.
+
+## A project's models
+
+Each project has its own models, apart from the organization's. Open the project from the sidebar: the sidebar slides over to the project's pages, **Runs**, **Datasets** and **Models**, with **Home** at the top to go back. Click **Models**. The page works like the organization's **Models** tab, with the project in its breadcrumbs and in the snippets it shows, such as `models.save_to_hub(model, "my-model", project="pretrain")`. Only the organization's members see a project's models and datasets, even in a public project.
+
+Deleting a project deletes its models and datasets for good. Its delete dialog says how many go with it, for example "3 datasets and 12 models (412 GB) are deleted with this project."
+
+## Move models
+
+Check the models to move and click **Move**, or use **Move…** in a model's **⋯** menu.
+
+1. Pick the destination under **Project**: the organization's models, shown as **Workspace**, or one of its projects. It starts at the place shown.
+2. Pick or type the folder. Each model keeps its last name: `sweeps/lr-3e-4` moved to `released` becomes `released/lr-3e-4`.
+3. Click **Move**.
+
+A move is instant, like a rename, and has the same effects: old refs stop working, and the files stay where they are in `flock-models`. A model moved out of a project becomes visible to the whole organization, and the dialog says where.
 
 ## Look at a model
 
@@ -76,7 +92,7 @@ Only the name changes, so a rename is instant whatever the model's size. The mod
 
 ## Restore from the trash
 
-Deleted models and versions wait 14 days in the trash. Organization admins find them under **Deleted models** in the organization's settings:
+Deleted models and versions wait 14 days in the trash. Organization admins find them under **Deleted models** in the organization's settings, with the project of each one, empty for the organization's models. Restoring puts a model back where it was deleted from:
 
 - **Restore** brings a version back with its number and its checkpoint tags, or a model back with the versions deleted with it. A model can't be restored while another model has its name.
 - **Delete now** removes it for good, after you type its name. There is no undo.
@@ -91,4 +107,4 @@ To keep a checkpoint for good, tag it, for example `best`, or make it primary.
 
 ## Models on a run's page
 
-A run's **Overview** lists the model versions the run saved under **Checkpoints**, with their steps and tags. Each one links to the version in the Models tab. [Models API and CLI reference](../hub/models) · [Model registry endpoints](api/models)
+A run's **Overview** lists the model versions the run saved under **Checkpoints**, with their steps and tags. A project's model shows with its project, such as `pretrain:sweeps/lr-3e-4@7`. Each one links to the version in the Models tab. [Models API and CLI reference](../hub/models) · [Model registry endpoints](api/models)

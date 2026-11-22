@@ -14,7 +14,21 @@ folder = datasets.download_from_hf(
     "HuggingFaceFW/fineweb-edu", "/scratch/fineweb-edu", config="sample-10BT"
 )
 written = datasets.convert(folder, "web/fineweb-edu", workers=64)
+
+# A dataset of the project pretrain, found by its path
+where = datasets.location("eval/mmlu-filtered", project="pretrain")
+lance.write_dataset(table, where.uri, storage_options=where.storage_options)
+
+# Forks and blends (023) read their sources' files in place
+datasets.fork("web/fineweb-edu/sample-10BT", "exp/alice/edu")
+datasets.fork("web/fineweb-edu/sample-10BT", "pretrain:edu")  # into a project
+datasets.blend({"web/fineweb-edu/sample-10BT": 100_000, "code/stack/train": 200_000}, "mixes/a")
 ```
+
+Each dataset is global (the org's) or belongs to one project, whose datasets are in
+`flock-datasets` too, under a folder of `-projects/` named by the project's id. Paths are
+relative to the scope, and `project=` picks it. Forks and blends, which may cross scopes,
+name a project's dataset `project:path` instead.
 
 Downloading needs only the Hugging Face Hub, and converting only Flock, which signs in as
 [`~cli.credentials.resolve`] does.
@@ -26,9 +40,27 @@ from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
-from flock.hub.datasets._common import MANIFEST, DataFile, DatasetError, Manifest
+from flock.hub._scope import split_project
+from flock.hub.datasets._common import (
+    MANIFEST,
+    DataFile,
+    DatasetError,
+    DatasetLocation,
+    Manifest,
+    call,
+    location,
+)
 from flock.hub.datasets._convert import BUCKET, ConvertedSplit, Mode, convert
 from flock.hub.datasets._download import Configs, download_from_hf
+from flock.hub.datasets._forks import (
+    DEFAULT_SEED,
+    blend,
+    blend_preview,
+    fork,
+    make_independent,
+    null,
+    value,
+)
 
 
 def import_from_hf(
@@ -42,6 +74,7 @@ def import_from_hf(
     org: str | None = None,
     workers: int | None = None,
     mode: Mode = "create",
+    project: str | None = None,
 ) -> list[ConvertedSplit]:
     """
     Imports a Hugging Face dataset to Lance datasets in your org's `flock-datasets` bucket:
@@ -51,7 +84,7 @@ def import_from_hf(
         repo (`str`):
             The dataset, as `owner/name`.
         dest (`str`):
-            The folder of `flock-datasets` to write to, such as `web/fineweb-edu`.
+            The folder to write to in the scope, such as `web/fineweb-edu`.
         config (`str`, `Collection[str]` or `Mapping[str, Collection[str] | None]`, *optional*):
             The configs, by name, or as a mapping from each name to its splits (`None` for those
             `splits` picks). Defaults to the only one, the card's default, or `default`. With
@@ -71,6 +104,9 @@ def import_from_hf(
             Processes converting files at once. Defaults to the CPUs this process may use.
         mode (`str`, *optional*, defaults to `"create"`):
             `create`, `overwrite` or `append`, as [`convert`] takes.
+        project (`str`, *optional*):
+            The project to import into, by name or as `org/project`. Defaults to the org's
+            global datasets.
 
     Returns:
         `list[ConvertedSplit]`: each split's config, path, version and rows.
@@ -80,23 +116,28 @@ def import_from_hf(
     """
     if to is not None:
         folder = download_from_hf(repo, to, config=config, splits=splits, revision=revision)
-        return convert(folder, dest, org=org, workers=workers, mode=mode)
+        return convert(folder, dest, org=org, workers=workers, mode=mode, project=project)
     temporary = Path(tempfile.mkdtemp(prefix="flock-hf-"))
     try:
         folder = download_from_hf(repo, temporary, config=config, splits=splits, revision=revision)
-        return convert(folder, dest, org=org, workers=workers, mode=mode)
+        return convert(folder, dest, org=org, workers=workers, mode=mode, project=project)
     finally:
         shutil.rmtree(temporary, ignore_errors=True)
 
 
-def list_datasets(path: str = "", *, org: str | None = None) -> dict[str, Any]:
+def list_datasets(
+    path: str = "", *, project: str | None = None, org: str | None = None
+) -> dict[str, Any]:
     """
-    What the Datasets tab shows at a folder of `flock-datasets`, as
-    `GET /api/v1/orgs/{org}/datasets/at` answers, with every page joined.
+    What the Datasets tab shows at a folder, as `GET /api/v1/orgs/{org}/datasets/at` answers,
+    with every page joined.
 
     Args:
         path (`str`, *optional*):
-            The folder. Defaults to the bucket's root.
+            The folder. Defaults to the scope's root.
+        project (`str`, *optional*):
+            The project whose datasets to list, by name or as `org/project`. Defaults to the
+            org's global datasets.
         org (`str`, *optional*):
             The org. Defaults to your default org.
 
@@ -107,35 +148,89 @@ def list_datasets(path: str = "", *, org: str | None = None) -> dict[str, Any]:
     Raises:
         [`~hub.datasets.DatasetError`]: without a sign-in, or when Flock refuses.
     """
-    from flock.hub.s3 import S3Error
-    from flock.hub.s3.client import _Api
-
-    path = path.strip("/")
-    try:
-        with _Api(None, None) as api:
-            route = f"orgs/{api.default_org(org)}/datasets/at"
-            params: dict[str, Any] = {"path": path}
-            found = api.call("GET", route, params=params)
-            while found.get("kind") == "folder" and found.get("cursor"):
-                params["cursor"] = found["cursor"]
-                page = api.call("GET", route, params=params)
-                for key in ("datasets", "folders", "files"):
-                    found[key] += page[key]
-                found["cursor"] = page["cursor"]
-    except S3Error as error:
-        raise DatasetError(str(error), error.status, error.body) from None
+    params: dict[str, Any] = {"path": path.strip("/")}
+    found = call("GET", "at", project=project, org=org, params=params)
+    while found.get("kind") == "folder" and found.get("cursor"):
+        params["cursor"] = found["cursor"]
+        page = call("GET", "at", project=project, org=org, params=params)
+        for key in ("datasets", "folders", "files"):
+            found[key] += page[key]
+        found["cursor"] = page["cursor"]
     return found
+
+
+def move(
+    paths: Collection[str],
+    to: str,
+    *,
+    to_project: str | None = None,
+    to_global: bool = False,
+    project: str | None = None,
+    org: str | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Moves datasets and folders into the folder `to`, each keeping its last name, as the
+    Datasets tab's Move does: `eval/mmlu` moved to `archive` becomes `archive/mmlu`. With
+    `to_project` or `to_global`, they move to another scope (D166), from a project to global
+    (promoting them) or back. The objects are copied, then deleted at the old path.
+
+    Args:
+        paths (`Collection[str]`):
+            The datasets and folders, by path in their scope.
+        to (`str`):
+            The folder to move them into, in the scope they end up in. `""` is its root.
+        to_project (`str`, *optional*):
+            Move them into this project of the org, by name or as `org/project`.
+        to_global (`bool`, *optional*, defaults to `False`):
+            Move them to the org's global datasets.
+        project (`str`, *optional*):
+            The project they belong to now, by name or as `org/project`. Defaults to the org's
+            global datasets.
+        org (`str`, *optional*):
+            The org. Defaults to your default org.
+
+    Returns:
+        `list[dict[str, Any]]`: for each path, its `path` (in the old scope), `to` (in the
+        new one), whether it `moved`, and if not the `error` (with `taken` set when something
+        is already there). One that fails doesn't stop the rest.
+
+    Raises:
+        [`~hub.datasets.DatasetError`]: when they're over the size limits together, before
+            anything moves (`body["command"]` has the `aws s3 mv` commands to run instead),
+            or Flock refuses.
+    """
+    if to_project is not None and to_global:
+        raise ValueError("give to_project or to_global, not both")
+    if project is not None:
+        org, project = split_project(project, org)
+    body: dict[str, Any] = {"paths": [p.strip("/") for p in paths], "to": to.strip("/")}
+    if to_global:
+        body["to_project"] = None
+    elif to_project is not None:
+        target_org, body["to_project"] = split_project(to_project, org)
+        org = org or target_org
+    return call("POST", "move", project=project, org=org, body=body)["results"]
 
 
 __all__ = [
     "BUCKET",
+    "DEFAULT_SEED",
     "MANIFEST",
     "ConvertedSplit",
     "DataFile",
     "DatasetError",
+    "DatasetLocation",
     "Manifest",
+    "blend",
+    "blend_preview",
     "convert",
     "download_from_hf",
+    "fork",
     "import_from_hf",
     "list_datasets",
+    "location",
+    "make_independent",
+    "move",
+    "null",
+    "value",
 ]

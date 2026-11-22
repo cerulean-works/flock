@@ -1,6 +1,8 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import TagIcon from '@lucide/svelte/icons/tag';
 	import type { ResolvedPathname } from '$app/types';
 	import { goto } from '$app/navigation';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -9,7 +11,7 @@
 	import type { ModelTag, ModelVersion, ModelVersionsPage } from '#lib/types.ts';
 
 	interface Props {
-		org: string;
+		scope: Scope;
 		name: string;
 		/** The version shown. */
 		version: number;
@@ -22,7 +24,7 @@
 		versionHref: (version: string | null) => ResolvedPathname;
 	}
 
-	let { org, name, version, requested, primary, tags, versionHref }: Props = $props();
+	let { scope, name, version, requested, primary, tags, versionHref }: Props = $props();
 
 	let open = $state(false);
 	let versions = $state<ModelVersion[] | null>(null);
@@ -32,7 +34,7 @@
 	$effect(() => {
 		if (!open || versions !== null) return;
 		const controller = new AbortController();
-		modelCall<ModelVersionsPage>(modelApi(org, name, 'versions'), { signal: controller.signal })
+		modelCall<ModelVersionsPage>(modelApi(scope, name, 'versions'), { signal: controller.signal })
 			.then((page) => (versions = page.versions))
 			.catch((e: Error) => {
 				if (!controller.signal.aborted) failed = e.message;
@@ -53,7 +55,12 @@
 	<DropdownMenu.Trigger>
 		{#snippet child({ props })}
 			<Button {...props} variant="outline" size="sm" class="gap-1.5 font-normal">
-				Version {version}{#if tagged}<span class="text-muted-foreground">· {tagged}</span>{/if}
+				<span class="tabular-nums">Version {version}</span>
+				{#if tagged}
+					<span class="ml-1 inline-flex items-center gap-1 text-muted-foreground">
+						<TagIcon class="size-3" />{tagged}
+					</span>
+				{/if}
 				<ChevronDownIcon class="text-muted-foreground" />
 			</Button>
 		{/snippet}

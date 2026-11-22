@@ -46,7 +46,7 @@
 		pending = true;
 		try {
 			const done = await datasetCall<{ path: string }>(
-				datasetsApi(org, `trash/${entry.id}/restore`),
+				datasetsApi({ org, project: entry.project ?? null }, `trash/${entry.id}/restore`),
 				{ method: 'POST', body: target === null ? {} : { to: target } }
 			);
 			toast.success(`Restored ${done.path}`);
@@ -77,7 +77,7 @@
 				{#if taken}
 					Something already exists at {entry?.path}. Restore it to another path.
 				{:else}
-					It goes back to {entry?.path}
+					It goes back to {entry?.path}{entry?.project ? ` in ${entry.project}` : ''}
 					{entry?.kind === 'folder' ? 'with everything in it' : 'with all its versions'}.
 				{/if}
 			</Dialog.Description>

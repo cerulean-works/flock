@@ -1,5 +1,11 @@
 <script lang="ts">
+	import BriefcaseIcon from '@lucide/svelte/icons/briefcase';
+	import LayersIcon from '@lucide/svelte/icons/layers';
+	import TagIcon from '@lucide/svelte/icons/tag';
 	import Avatar from '#lib/components/Avatar.svelte';
+	import DataTable, { type Column, ROW_LINK } from '#lib/components/DataTable.svelte';
+	import MetaItem from '#lib/components/MetaItem.svelte';
+	import MetaRow from '#lib/components/MetaRow.svelte';
 	import StateBadge from '#lib/components/StateBadge.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { FeedPager } from '#lib/data/feed.svelte.ts';
@@ -20,92 +26,84 @@
 	// svelte-ignore state_referenced_locally
 	const pager = new FeedPager(first, query);
 
-	// Fixed columns so the header and rows line up: run, project, state, owner, GPUs, runtime,
-	// started. Narrower windows drop owner, GPUs and runtime, then state.
-	const GRID =
-		'grid grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)_72px] md:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)_112px_80px] lg:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)_112px_minmax(0,0.6fr)_96px_88px_80px] items-center gap-x-4 px-5';
-	const MD = 'hidden md:block';
-	const LG = 'hidden lg:block';
+	// Narrower windows drop owner, GPUs and runtime, then state.
+	const COLUMNS: Column[] = [
+		{ id: 'run', label: 'Run' },
+		{ id: 'project', label: 'Project' },
+		{ id: 'state', label: 'State', size: 'fit', from: 'md' },
+		{ id: 'owner', label: 'Owner', from: 'lg' },
+		{ id: 'gpus', label: 'GPUs', size: 'fit', from: 'lg' },
+		{ id: 'runtime', label: 'Runtime', from: 'lg', align: 'end' },
+		{ id: 'started', label: 'Started', align: 'end' }
+	];
+	const runs = $derived(pager.items.filter((item) => item.run));
 </script>
 
-<div
-	class={[
-		GRID,
-		'sticky top-0 z-1 h-10 border-b bg-background text-xs font-medium text-muted-foreground'
-	]}
+<DataTable
+	columns={COLUMNS}
+	rows={runs}
+	key={(item) => item.id}
+	name={(item) => item.run?.display_name ?? item.run?.id ?? item.id}
+	label="Latest runs"
+	empty={none}
+	footer={pager.next ? more : undefined}
 >
-	<span>Run</span>
-	<span>Project</span>
-	<span class={MD}>State</span>
-	<span class={LG}>Owner</span>
-	<span class={LG}>GPUs</span>
-	<span class={[LG, 'text-right']}>Runtime</span>
-	<span class="text-right">Started</span>
-</div>
-<ul>
-	{#each pager.items as item (item.id)}
-		{@const run = item.run}
-		{#if run}
-			<li class={[GRID, 'relative min-h-14 border-b border-divider py-2.5 hover:bg-muted']}>
-				<div class="min-w-0">
-					<div class="flex items-center gap-2">
-						<!-- The link covers the row. -->
-						<a
-							class="truncate font-medium after:absolute after:inset-0 hover:text-link"
-							href={projectHref(item.org, item.project)}
-						>
-							{run.display_name ?? run.id}
-						</a>
-						{#if run.state === 'running' || run.state === 'preempting'}
-							<!-- The state column is hidden on phones. -->
-							<span
-								class="size-1.5 flex-none animate-live rounded-full bg-state-running text-state-running motion-reduce:animate-none md:hidden"
-								title="Running"
-							></span>
-						{/if}
-					</div>
-					{#if run.tags.length || run.job_type || run.group}
-						<p class="mt-0.5 truncate text-[13px] text-muted-foreground">
-							{[run.job_type, run.group, ...run.tags].filter(Boolean).join(' · ')}
-						</p>
-					{/if}
-				</div>
-				<span class="truncate text-muted-foreground">{item.project}</span>
-				<span class={MD}><StateBadge state={run.state} /></span>
-				<span class={[LG, 'min-w-0']}>
-					{#if item.actor}
-						<span class="flex min-w-0 items-center gap-2">
-							<Avatar
-								name={item.actor.name}
-								src={item.actor.avatar_url}
-								class="size-6 text-[10px]"
-							/>
-							<span class="truncate">{item.actor.name}</span>
-						</span>
-					{:else}
-						<span class="text-faint">–</span>
-					{/if}
+	{#snippet cell(item, column)}
+		{@const run = item.run!}
+		{#if column === 'run'}
+			<div class="flex items-center gap-2">
+				<a
+					class={['truncate font-medium hover:text-link', ROW_LINK]}
+					href={projectHref(item.org, item.project)}
+				>
+					{run.display_name ?? run.id}
+				</a>
+				{#if run.state === 'running' || run.state === 'preempting'}
+					<!-- The state column is hidden on phones. -->
+					<span
+						class="size-1.5 flex-none animate-live rounded-full bg-state-running text-state-running motion-reduce:animate-none md:hidden"
+						title="Running"
+					></span>
+				{/if}
+			</div>
+			{#if run.tags.length || run.job_type || run.group}
+				<MetaRow class="mt-0.5 flex-nowrap gap-x-3 overflow-hidden">
+					{#if run.job_type}<MetaItem icon={BriefcaseIcon} title="Job type">{run.job_type}</MetaItem
+						>{/if}
+					{#if run.group}<MetaItem icon={LayersIcon} title="Group">{run.group}</MetaItem>{/if}
+					{#if run.tags.length}<MetaItem icon={TagIcon} title="Tags">{run.tags.join(', ')}</MetaItem
+						>{/if}
+				</MetaRow>
+			{/if}
+		{:else if column === 'project'}
+			<span class="block truncate text-muted-foreground">{item.project}</span>
+		{:else if column === 'state'}
+			<StateBadge state={run.state} />
+		{:else if column === 'owner'}
+			{#if item.actor}
+				<span class="flex min-w-0 items-center gap-2">
+					<Avatar name={item.actor.name} src={item.actor.avatar_url} class="size-6 text-[10px]" />
+					<span class="truncate">{item.actor.name}</span>
 				</span>
-				<span class={[LG, 'truncate']}>
-					{gpus(run.gpu_type, run.gpu_count) ?? '–'}
-				</span>
-				<span class={[LG, 'text-right text-muted-foreground tabular-nums']}>
-					{duration(run.runtime)}
-				</span>
-				<span class="text-right text-muted-foreground" title={dateTime(item.at)}>
-					{relativeTime(item.at, now)}
-				</span>
-			</li>
+			{:else}
+				<span class="text-faint">–</span>
+			{/if}
+		{:else if column === 'gpus'}
+			<span class="block truncate">{gpus(run.gpu_type, run.gpu_count) ?? '–'}</span>
+		{:else if column === 'runtime'}
+			<span class="text-muted-foreground">{duration(run.runtime)}</span>
+		{:else}
+			<span class="text-muted-foreground" title={dateTime(item.at)}>
+				{relativeTime(item.at, now)}
+			</span>
 		{/if}
-	{:else}
-		<li class="border-b border-divider px-5 py-6 text-muted-foreground">{empty}</li>
-	{/each}
-</ul>
-{#if pager.next}
-	<div class="flex items-center gap-3 px-5 pt-4">
-		<Button variant="outline" onclick={() => pager.more()} disabled={pager.loading}>
-			{pager.loading ? 'Loading…' : 'Show more'}
-		</Button>
-		{#if pager.failed}<span class="text-[13px] text-destructive">Couldn’t load more</span>{/if}
-	</div>
-{/if}
+	{/snippet}
+</DataTable>
+
+{#snippet none()}{empty}{/snippet}
+{#snippet more()}
+	<Button variant="outline" onclick={() => pager.more()} disabled={pager.loading}>
+		{pager.loading ? 'Loading…' : 'Show more'}
+	</Button>
+	{#if pager.failed}<span class="text-[13px] text-destructive">Couldn’t load more</span>{/if}
+{/snippet}

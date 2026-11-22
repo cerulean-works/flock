@@ -3,20 +3,22 @@
 	import { toast } from 'svelte-sonner';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import type { HFImportList } from '#lib/hf.svelte.ts';
+	import type { Scope } from '#lib/scope.ts';
 	import type { HFImport } from '#lib/types.ts';
 	import HFDatasetDialog from './HFDatasetDialog.svelte';
 	import HFModelDialog from './HFModelDialog.svelte';
 
-	// "Import from Hugging Face" on the Datasets and Models tabs (D124), for members and admins.
+	// "Import from HF" on the Datasets and Models tabs (D124), for members and admins.
 	interface Props {
-		org: string;
+		/** Where the import lands: the org's global scope or one of its projects (D159). */
+		scope: Scope;
 		kind: 'dataset' | 'model';
 		list: HFImportList;
 		/** The folder shown, for datasets. */
 		folder?: string;
 	}
 
-	let { org, kind, list, folder = '' }: Props = $props();
+	let { scope, kind, list, folder = '' }: Props = $props();
 
 	let open = $state(false);
 
@@ -26,11 +28,12 @@
 	}
 </script>
 
-<Button variant="outline" size="sm" onclick={() => (open = true)}>
-	<DownloadIcon /> Import from Hugging Face
+<!-- The page's one filled action. "HF" keeps it short; the hover text spells it out. -->
+<Button title="Import from Hugging Face" onclick={() => (open = true)}>
+	<DownloadIcon /><span class="max-sm:sr-only">Import from HF</span>
 </Button>
 {#if kind === 'dataset'}
-	<HFDatasetDialog bind:open {org} {folder} onstarted={started} />
+	<HFDatasetDialog bind:open {scope} {folder} onstarted={started} />
 {:else}
-	<HFModelDialog bind:open {org} onstarted={started} />
+	<HFModelDialog bind:open {scope} onstarted={started} />
 {/if}

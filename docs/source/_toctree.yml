@@ -22,6 +22,10 @@ guide:
     title: Use datasets
   - local: hub/import-datasets-from-hf
     title: Import datasets from Hugging Face
+  - local: hub/fork-datasets
+    title: Fork a dataset
+  - local: hub/blend-datasets
+    title: Blend datasets
   - local: hub/store-models
     title: Store and load models
   - local: hub/import-from-hf
@@ -93,6 +97,8 @@ reference:
     title: Python S3 API
 - title: Hub
   sections:
+  - local: hub/forks-and-blends
+    title: Forks and blends
   - local: hub/model-storage
     title: Model storage and uploads
   - local: hub/models

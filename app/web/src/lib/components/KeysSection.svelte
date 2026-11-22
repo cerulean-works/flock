@@ -1,8 +1,14 @@
 <script lang="ts">
+	import Building2Icon from '@lucide/svelte/icons/building-2';
+	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
+	import LockIcon from '@lucide/svelte/icons/lock';
+	import TerminalIcon from '@lucide/svelte/icons/terminal';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import MetaItem from '#lib/components/MetaItem.svelte';
+	import MetaRow from '#lib/components/MetaRow.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
@@ -78,7 +84,7 @@
 {/snippet}
 
 {#snippet wandbKeys()}
-	<p class="max-w-[62ch] text-muted-foreground">Use these keys with the wandb SDK.</p>
+	<p class="text-muted-foreground">Use these keys with the wandb SDK.</p>
 	{#if keys.length}
 		<ul class="mt-4 divide-y divide-divider border-t border-divider">
 			{#each keys as key (key.id)}
@@ -134,10 +140,11 @@
 							<li class="flex min-h-12 items-center gap-4 border-b border-divider py-2">
 								<div class="min-w-0 flex-1">
 									<p class="truncate font-medium">{key.name}</p>
-									<p class="truncate text-[13px] text-muted-foreground">
-										<span class="font-mono text-[12.5px]">{key.access_key_id}</span>
-										· {orgName(key.org)}{key.read_only ? ' · read-only' : ''}
-									</p>
+									<MetaRow class="mt-0.5">
+										<MetaItem mono>{key.access_key_id}</MetaItem>
+										<MetaItem icon={Building2Icon}>{orgName(key.org)}</MetaItem>
+										{#if key.read_only}<MetaItem icon={LockIcon}>Read-only</MetaItem>{/if}
+									</MetaRow>
 								</div>
 								<span class="hidden w-36 text-[13px] text-muted-foreground sm:block">
 									{key.expires_at === null
@@ -159,12 +166,16 @@
 										{count(group.keys.length, 'ephemeral key')} from
 										<span class="font-medium">{group.source}</span>
 									</p>
-									<p class="truncate text-[13px] text-muted-foreground">
-										{group.kind === 'machine'
-											? 'Issued to a command line sign-in'
-											: 'Issued to an API key'} ·
-										{[...new Set(group.keys.map((k) => orgName(k.org)))].join(', ')}
-									</p>
+									<MetaRow class="mt-0.5">
+										<MetaItem icon={group.kind === 'machine' ? TerminalIcon : KeyRoundIcon}>
+											{group.kind === 'machine'
+												? 'Issued to a command line sign-in'
+												: 'Issued to an API key'}
+										</MetaItem>
+										<MetaItem icon={Building2Icon}>
+											{[...new Set(group.keys.map((k) => orgName(k.org)))].join(', ')}
+										</MetaItem>
+									</MetaRow>
 								</div>
 								<span class="hidden w-36 text-[13px] text-muted-foreground sm:block">
 									{Number.isFinite(used) ? `Used ${relativeTime(used, now)}` : 'Not used yet'}

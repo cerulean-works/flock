@@ -6,6 +6,7 @@ from torch import nn
 
 from flock.training.core.attention import (
     AttentionInterface,
+    AttentionMetadata,
     GroupedAttentionWithRoPE,
 )
 from flock.training.core.nn import SwiGLU
@@ -129,7 +130,7 @@ class Olmo2DecoderLayer(nn.Module):
         x: torch.Tensor,
         cos: torch.Tensor,
         sin: torch.Tensor,
-        attention_mask: torch.Tensor | None,
+        attention_metadata: AttentionMetadata,
     ) -> torch.Tensor:
         """Return updated hidden states with the same shape as `x`.
 
@@ -137,8 +138,8 @@ class Olmo2DecoderLayer(nn.Module):
             x (`torch.Tensor`): Hidden states shaped `[batch, sequence, hidden]`.
             cos (`torch.Tensor`): RoPE cosines broadcastable to attention heads.
             sin (`torch.Tensor`): RoPE sines with the same shape as `cos`.
-            attention_mask (`torch.Tensor` or `None`):
-                Mask prepared for the selected attention implementation.
+            attention_metadata (`AttentionMetadata`):
+                Metadata prepared for the selected attention implementation.
 
         Returns:
             `torch.Tensor`: Hidden states shaped `[batch, sequence, hidden]`.
@@ -146,7 +147,7 @@ class Olmo2DecoderLayer(nn.Module):
         attention_output = self.self_attn(
             x,
             position_embeddings=(cos, sin),
-            attention_mask=attention_mask,
+            attention_metadata=attention_metadata,
             is_causal=True,
         )
         x = x + self.post_attention_layernorm(attention_output)
@@ -189,7 +190,8 @@ class Olmo2Model(nn.Module):
         Returns:
             `torch.Tensor`: Normalized states shaped `[batch, sequence, hidden]`.
         """
-        mask = self.mask_preparer(attention_mask, is_causal=True)
+        # Prepare once per forward; every layer reuses the metadata.
+        metadata = self.mask_preparer(attention_mask, is_causal=True)
         x: Any = self.embed_tokens(input_ids)
         # Build frequencies in float32 even when model weights are cast to bfloat16.
         inv_freq = self.rope_theta ** (
@@ -199,7 +201,7 @@ class Olmo2Model(nn.Module):
         angles = torch.cat((freqs, freqs), dim=-1).unsqueeze(1)
         cos, sin = angles.cos(), angles.sin()
         for layer in self.layers:
-            x: Any = layer(x, cos, sin, mask)
+            x: Any = layer(x, cos, sin, metadata)
         return self.norm(x)
 
 

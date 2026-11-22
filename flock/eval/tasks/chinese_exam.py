@@ -108,6 +108,8 @@ class Benchmark:
             The subjects by the benchmark's own categories.
         averages_categories (`bool`, *optional*, defaults to `False`):
             Whether the benchmark's score is the mean of its category means, as TMMLU+'s card computes its total (005), rather than the mean of its subjects, as C-Eval and CMMLU report (C-Eval Table 3 caption, CMMLU Table 1 caption; 033.D3).
+        private (`bool`, *optional*, defaults to `False`):
+            Whether the repo is private, as [`~eval.tasks.Dataset`] reads it.
     """
 
     name: str
@@ -118,6 +120,7 @@ class Benchmark:
     to_doc: Callable[[dict[str, Any]], MCDoc]
     categories: tuple[Category, ...]
     averages_categories: bool = False
+    private: bool = False
 
     @cached_property
     def tasks(self) -> dict[str, MultipleChoiceTask]:
@@ -133,6 +136,7 @@ class Benchmark:
                         subset=subject.name,
                         split="test",
                         row_index=True,
+                        private=self.private,
                     ),
                     to_doc=self.to_doc,
                     # As OLMES scores MMLU (`mmlu_<subject>:rc::olmes` in

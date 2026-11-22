@@ -15,7 +15,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TextIO
 from urllib.parse import urlsplit
 
-from flock.hub.datasets._common import DataFile, DatasetError, Manifest
+from flock.hub._scope import split_project
+from flock.hub.datasets._common import DataFile, DatasetError, Manifest, call, check_global
 
 if TYPE_CHECKING:
     import lance
@@ -48,9 +49,10 @@ class ConvertedSplit:
         split (`str`):
             The split, such as `train`.
         path (`str`):
-            Where it is in `flock-datasets`, such as `web/fineweb-edu/train`.
+            Where it is in its scope, such as `web/fineweb-edu/train`.
         uri (`str`):
-            The dataset's URI, such as `s3://flock-datasets/web/fineweb-edu/train`.
+            The dataset's URI, such as `s3://flock-datasets/web/fineweb-edu/train`, or under
+            `-projects/{id}/` for a project's dataset.
         version (`int`):
             The Lance version the import committed.
         rows (`int`):
@@ -430,7 +432,9 @@ class Target:
         return cls(path, pafs.LocalFileSystem(), path)
 
     @classmethod
-    def s3(cls, creds: S3Credentials) -> Target:
+    def s3(cls, creds: S3Credentials, root: str = "") -> Target:
+        """`flock-datasets` through the proxy, or its folder `root`, such as a project's
+        `-projects/412`."""
         import pyarrow.fs as pafs
 
         current = creds.current()
@@ -446,7 +450,8 @@ class Target:
             allow_bucket_deletion=False,
             check_directory_existence_before_creation=False,
         )
-        return cls(f"s3://{BUCKET}", filesystem, BUCKET)
+        base = f"{BUCKET}/{root.strip('/')}" if root.strip("/") else BUCKET
+        return cls(f"s3://{base}", filesystem, base)
 
     def uri(self, path: str) -> str:
         return f"{self.root}/{path}"
@@ -690,6 +695,7 @@ def convert(
     org: str | None = None,
     workers: int | None = None,
     mode: Mode = "create",
+    project: str | None = None,
 ) -> list[ConvertedSplit]:
     """
     Converts a folder that [`~hub.datasets.download_from_hf`] filled to Lance datasets in your
@@ -708,7 +714,7 @@ def convert(
         folder (`str` or `Path`):
             The downloaded folder, with its `flock-import.json`.
         dest (`str`):
-            The folder of `flock-datasets` to write to, such as `web/fineweb-edu`.
+            The folder to write to in the scope, such as `web/fineweb-edu`.
         org (`str`, *optional*):
             The org whose `flock-datasets` to write to. Defaults to your default org.
         workers (`int`, *optional*):
@@ -717,6 +723,9 @@ def convert(
         mode (`str`, *optional*, defaults to `"create"`):
             `create` refuses a destination that holds a dataset, `overwrite` replaces its rows
             with a new version, and `append` adds them. Old versions stay in Lance's history.
+        project (`str`, *optional*):
+            The project the datasets belong to, by name or as `org/project`. Defaults to the
+            org's global datasets.
 
     Returns:
         `list[ConvertedSplit]`: each split's config, path, version and rows.
@@ -739,7 +748,16 @@ def convert(
     if mode not in MODES:
         raise ValueError(f"mode must be one of {', '.join(MODES)}, not {mode!r}")
     Manifest.read(Path(folder).expanduser())  # a missing manifest fails before signing in
+    root = ""
+    if project is None:
+        check_global(dest)
+    else:
+        # A project's datasets are under a folder named by its id, which only the API knows.
+        org, project = split_project(project, org)
+        path = check_dest(dest)
+        found = call("GET", "location", project=project, org=org, params={"path": path})
+        root = found["key"].removesuffix(found["path"]).rstrip("/")
     # Workers are spawned, so they inherit the renewable credentials this sets up.
     s3.get_process(org=org)
-    target = Target.s3(s3.credentials(org))
+    target = Target.s3(s3.credentials(org), root)
     return run(folder, dest, target, workers=workers, mode=mode, stream=sys.stderr)

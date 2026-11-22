@@ -109,7 +109,7 @@
 							<Input
 								name="new_type"
 								class="h-8 max-sm:col-span-2"
-								placeholder="Another GPU, e.g. H200"
+								placeholder="Add a GPU, e.g., H200"
 								aria-label="GPU type to price"
 								autocomplete="off"
 								spellcheck="false"
@@ -124,7 +124,7 @@
 								min="0"
 								step="any"
 								class="h-8"
-								placeholder="Price"
+								placeholder="e.g., 2.50"
 								aria-label="Its price per GPU hour"
 								bind:value={newRate}
 							/>

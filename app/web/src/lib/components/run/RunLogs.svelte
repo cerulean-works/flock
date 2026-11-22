@@ -730,7 +730,7 @@
 											? 'text-ansi-red/60'
 											: 'text-faint/70'
 								]}
-								title={l.stderr ? 'Printed to stderr · link to this line' : 'Link to this line'}
+								title={l.stderr ? 'Link to this line (printed to stderr)' : 'Link to this line'}
 								onclick={(e) => pick(e, l.line)}>{l.line + 1}</a
 							>
 							{#if stamps !== 'hidden'}
@@ -771,7 +771,7 @@
 						>{laterCount.toLocaleString('en-US')} later{q ? ', not searched' : ''}</span
 					>
 				{:else if live}
-					{known.toLocaleString('en-US')} lines · new ones appear as the run prints them
+					{known.toLocaleString('en-US')} lines so far, and new ones appear as the run prints them
 				{/if}
 			</div>
 		{/if}

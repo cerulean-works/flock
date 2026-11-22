@@ -5,7 +5,7 @@
 | Status | in review |
 | Date | 2026-11-19 |
 | Builds on | [014](014-run-provenance.md) (provenance), [018](018-bank-schema6.md) (`model_digest` in results), [021](021-compare-changed-suites.md) (`compare` refuses another `model` or `model_digest`), the hub's [014-model-registry](../../../../app/api/docs/agents/014-model-registry.md) (D98: a version's digest) |
-| Keeps | every score, request, task hash and suite; Hugging Face and Flock model ids load and are recorded as before (their remote code, which none uses, is now refused; a Flock model's tokenizer loads as before); the results schema stays 8 |
+| Keeps | every score, request, task hash and suite; Hugging Face and Flock model ids load and are recorded as before (their remote code, which none uses, is now refused; a Flock model's tokenizer loads as before); uses the existing results schema |
 | Result | a `local:folder@digest` model id, checked against the folder's files before anything loads and recorded as `local:digest` with the digest in `model_digest`; `flock eval digest` prints the id; a local folder named as `repo@revision` is refused |
 
 ## 1. Goal

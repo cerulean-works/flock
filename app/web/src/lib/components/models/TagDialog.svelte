@@ -1,15 +1,23 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import { toast } from 'svelte-sonner';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
-	import { ModelError, isCheckpoint, modelApi, modelCall, tagError } from '#lib/models.ts';
+	import {
+		ModelError,
+		isCheckpoint,
+		modelApi,
+		modelCall,
+		modelRef,
+		tagError
+	} from '#lib/models.ts';
 	import FormError from '../FormError.svelte';
 
 	interface Props {
 		open: boolean;
-		org: string;
+		scope: Scope;
 		name: string;
 		/** The version to tag. */
 		version: number;
@@ -17,7 +25,7 @@
 		ontagged: () => void;
 	}
 
-	let { open = $bindable(), org, name, version, ontagged }: Props = $props();
+	let { open = $bindable(), scope, name, version, ontagged }: Props = $props();
 
 	// Reset once the dialog has closed, so its text stays put while it animates closed.
 	let tag = $state('');
@@ -43,7 +51,7 @@
 		error = null;
 		pending = true;
 		try {
-			await modelCall(modelApi(org, name, `tags/${encodeURIComponent(tag)}`), {
+			await modelCall(modelApi(scope, name, `tags/${encodeURIComponent(tag)}`), {
 				method: 'PUT',
 				body: { version, move }
 			});
@@ -66,7 +74,7 @@
 		<Dialog.Header>
 			<Dialog.Title>Tag version {version}</Dialog.Title>
 			<Dialog.Description>
-				Load it as {org}/{name}@{tag || 'tag'} once it’s tagged.
+				Load it as {modelRef(scope, name)}@{tag || 'tag'} once it’s tagged.
 			</Dialog.Description>
 		</Dialog.Header>
 		<form
@@ -85,7 +93,7 @@
 						taken = fixed = null;
 						error = null;
 					}}
-					placeholder="release"
+					placeholder="e.g., release"
 					autocomplete="off"
 					spellcheck="false"
 				/>

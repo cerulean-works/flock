@@ -479,6 +479,26 @@ def test_the_size_limit_refuses_with_the_command_to_run(
     assert refused.json()["command"] == (
         "flock datasets import acme/data hf/data --config default --split train --org flock"
     )
+    # Into a project, the command imports into it too (D159).
+    assert api.post("/api/v1/projects", {"entity": "flock", "name": "my run"}).status == 201
+    refused = api.post(IMPORTS, model_body(project="my run"))
+    assert refused.json()["command"] == (
+        "flock models import acme/tiny tiny --org flock --project 'my run'"
+    )
+    refused = api.post(
+        IMPORTS,
+        {
+            "kind": "dataset",
+            "repo": "acme/data",
+            "dest": "hf/data",
+            "configs": {"default": ["train"]},
+            "project": "my run",
+        },
+    )
+    assert refused.json()["command"] == (
+        "flock datasets import acme/data hf/data --config default --split train --org flock "
+        "--project 'my run'"
+    )
     assert sql(flock, "SELECT count(*) FROM hf_imports")[0][0] == 0
 
 

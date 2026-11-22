@@ -1,6 +1,8 @@
 <script lang="ts">
+	import type { Scope } from '#lib/scope.ts';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import TagIcon from '@lucide/svelte/icons/tag';
 	import type { ResolvedPathname } from '$app/types';
 	import { goto } from '$app/navigation';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -9,7 +11,7 @@
 	import type { DatasetVersion, VersionsPage } from '#lib/types.ts';
 
 	interface Props {
-		org: string;
+		scope: Scope;
 		path: string;
 		/** The version shown. */
 		version: number;
@@ -20,7 +22,7 @@
 		versionHref: (version: string | null) => ResolvedPathname;
 	}
 
-	let { org, path, version, requested, tags, versionHref }: Props = $props();
+	let { scope, path, version, requested, tags, versionHref }: Props = $props();
 
 	let open = $state(false);
 	let versions = $state<DatasetVersion[] | null>(null);
@@ -31,7 +33,7 @@
 	$effect(() => {
 		if (!open || versions !== null) return;
 		const controller = new AbortController();
-		datasetCall<VersionsPage>(datasetsApi(org, 'versions', { path }), {
+		datasetCall<VersionsPage>(datasetsApi(scope, 'versions', { path }), {
 			signal: controller.signal
 		})
 			.then((page) => {
@@ -57,7 +59,12 @@
 	<DropdownMenu.Trigger>
 		{#snippet child({ props })}
 			<Button {...props} variant="outline" size="sm" class="gap-1.5 font-normal">
-				Version {version}{#if tagged}<span class="text-muted-foreground">· {tagged}</span>{/if}
+				<span class="tabular-nums">Version {version}</span>
+				{#if tagged}
+					<span class="ml-1 inline-flex items-center gap-1 text-muted-foreground">
+						<TagIcon class="size-3" />{tagged}
+					</span>
+				{/if}
 				<ChevronDownIcon class="text-muted-foreground" />
 			</Button>
 		{/snippet}

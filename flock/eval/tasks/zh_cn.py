@@ -125,6 +125,7 @@ CMMLU = Benchmark(
     name="cmmlu",
     repo="cerulean-works/cmmlu",
     revision="46bb6edee95673e17186965063d2fba50ec23e00",
+    private=True,
     fewshot_split="dev",
     header="以下是关于{}的单项选择题，请直接给出正确答案的选项。",
     to_doc=cmmlu_doc,

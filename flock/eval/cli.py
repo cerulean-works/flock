@@ -1,5 +1,6 @@
 """The `flock eval` command line."""
 
+import json
 import shlex
 import sys
 from pathlib import Path
@@ -9,8 +10,9 @@ import click
 
 from flock.eval import hub
 from flock.eval.compare import Comparison, compare
+from flock.eval.diff import ItemDiff, diff
 from flock.eval.model import DEFAULT_BATCH_TOKENS, folder_digest
-from flock.eval.results import Results
+from flock.eval.results import Results, read_results
 from flock.eval.run import Dtype, EvalConfig, evaluate
 from flock.eval.tasks import SUITES, TASKS
 
@@ -24,7 +26,10 @@ def main() -> None:
 @click.option(
     "--model",
     required=True,
-    help="Model as repo@revision, flock:org/name[@version] or local:folder@digest.",
+    help=(
+        "Model as repo@revision, flock:org/path[@version], flock:project:path[@version] "
+        "or local:folder@digest."
+    ),
 )
 @click.option(
     "--task",
@@ -71,7 +76,10 @@ def main() -> None:
     help="Start every non-empty context with the tokenizer's BOS token, as OLMES does for Gemma.",
 )
 @click.option("--device", help="Torch device (default: cuda if available).")
-@click.option("--wandb-project", help="Also log the summary to this tracker project.")
+@click.option(
+    "--wandb-project",
+    help="Also log the summary to this tracker project, with results.json and predictions/.",
+)
 @click.option(
     "--verbose",
     is_flag=True,
@@ -139,11 +147,28 @@ def compare_command(banked: Path, new: Path) -> None:
     sys.exit(2 if comparison.changed else 1 if comparison.breaches else 0)
 
 
+@main.command(name="diff")
+@click.argument("a")
+@click.argument("b")
+@click.option("--json", "as_json", is_flag=True, help="Print the diff as JSON.")
+def diff_command(a: str, b: str, as_json: bool) -> None:
+    """Compare two runs doc by doc, each a folder holding results.json or a tracker run as run:ENTITY/PROJECT/ID, on every accuracy task both scored under the same task hash. Exits 2 if the runs can't be compared."""
+    try:
+        found = diff(read_results(a), read_results(b))
+    # A missing or damaged results file, another instrument, or a refused or unreachable run.
+    except (OSError, ValueError, click.ClickException) as error:
+        message = error.format_message() if isinstance(error, click.ClickException) else error
+        click.echo(f"refused: {message}", err=True)
+        sys.exit(2)
+
+    click.echo(json.dumps(found.to_dict(), indent=2) if as_json else format_diff(found))
+
+
 @main.command(name="log")
 @click.argument("results", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--project", required=True, help="The tracker project to log to.")
 def log_command(results: Path, project: str) -> None:
-    """Log a written results.json to the tracker as written, in your default organization. Refuses a file whose model and start time already have a run in the project."""
+    """Log a written results.json to the tracker as written, in your default organization, with the predictions beside it from schema 9 on. Refuses a file whose model and start time already have a run in the project, and a private dataset's predictions for a public project."""
     # Imported here so the other commands don't import wandb.
     from wandb.errors import Error as WandbError
 
@@ -212,6 +237,24 @@ def format_comparison(comparison: Comparison) -> str:
         f"compared: tasks {len(comparison.tasks)}, suites {len(comparison.suites)}, "
         f"breaches {len(comparison.breaches)}"
     )
+    return "\n".join(lines)
+
+
+def format_diff(found: ItemDiff) -> str:
+    """Formats the two models, one line per compared task with its four cell counts, then the tasks not compared with why."""
+    lines = [f"a  {found.a}", f"b  {found.b}"]
+
+    width = max([len("task")] + [len(task.task) for task in found.tasks])
+    lines.append(f"{'task':<{width}}  docs  both right  both wrong  only a  only b")
+    for task in found.tasks:
+        lines.append(
+            f"{task.task:<{width}}  {task.num_docs:>4}  {task.both_right:>10}  "
+            f"{task.both_wrong:>10}  {len(task.only_a):>6}  {len(task.only_b):>6}"
+        )
+
+    if found.not_compared:
+        names = ", ".join(f"{name} ({reason})" for name, reason in found.not_compared)
+        lines.append(f"not compared: {names}")
     return "\n".join(lines)
 
 

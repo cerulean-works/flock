@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { untrack } from 'svelte';
@@ -210,7 +211,7 @@
 			<Input
 				id="panel-{axis}-min"
 				value={min}
-				placeholder="Min: auto"
+				placeholder="Min (auto)"
 				inputmode="decimal"
 				autocomplete="off"
 				aria-label="{axis.toUpperCase()} minimum"
@@ -219,7 +220,7 @@
 			/>
 			<Input
 				value={max}
-				placeholder="Max: auto"
+				placeholder="Max (auto)"
 				inputmode="decimal"
 				autocomplete="off"
 				aria-label="{axis.toUpperCase()} maximum"
@@ -246,7 +247,9 @@
 			<Dialog.Header class="border-b border-divider px-5 pt-4 pb-3.5">
 				<Dialog.Title>{creating ? 'Add panel' : 'Edit panel'}</Dialog.Title>
 				<Dialog.Description class="truncate">
-					{def.section}{preview.title ? ` · ${preview.title}` : ''}
+					{def.section}{#if preview.title}<ChevronRightIcon
+							class="mx-1 inline size-3.5 align-[-2px] text-faint"
+						/>{preview.title}{/if}
 				</Dialog.Description>
 			</Dialog.Header>
 			<div class="flex min-h-0 flex-1 max-md:flex-col">
@@ -321,7 +324,7 @@
 										bind:value={adding}
 										{options}
 										mono
-										placeholder="Add a metric…"
+										placeholder="Add a metric"
 										aria-label="Add a metric"
 										onPick={(o) => addMetric(o.value)}
 									/>

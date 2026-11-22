@@ -50,6 +50,19 @@ class Org:
     max_ttl: int | None  # seconds; None: keys may live forever
     buckets: dict[str, Bucket]  # live buckets by name
 
+    def bucket(self, name: str) -> Bucket | None:
+        """The live bucket called ``name``, or the org's flock-datasets by its upstream name
+        (023, D172): forks and blends name their sources that way in their manifests, so Lance
+        clients reading them through the proxy ask for it. Another org's upstream name is no
+        bucket of this one."""
+        found = self.buckets.get(name)
+        if found is not None:
+            return found
+        for bucket in self.buckets.values():
+            if bucket.managed == "datasets" and bucket.upstream_name == name:
+                return bucket
+        return None
+
 
 @dataclass(frozen=True)
 class Caller:
@@ -212,6 +225,18 @@ class Directory:
         task = asyncio.create_task(update())
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
+
+    async def live_projects(self, org_pk: int) -> frozenset[int]:
+        """The pks of the org's live projects: writes under ``-projects/{pk}/`` of its
+        flock-datasets go only into these (D160). Dropped on ``s3_invalidate`` when projects are
+        created or deleted (migration 0022)."""
+        return await self._cached(("projects", org_pk), lambda: self._load_projects(org_pk))
+
+    async def _load_projects(self, org_pk: int) -> frozenset[int]:
+        rows = await self.pool.fetch(
+            "SELECT pk FROM projects WHERE org_pk = $1 AND deleted_at IS NULL", org_pk
+        )
+        return frozenset(row[0] for row in rows)
 
     async def open_upload(self, ulid: str) -> Upload | None:
         """The open upload ``ulid``, if there is one. Only open ones are cached (and dropped when

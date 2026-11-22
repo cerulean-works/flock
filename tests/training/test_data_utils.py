@@ -62,6 +62,84 @@ def test_collator_does_not_mutate_rows(tokenizer: TokenizersBackend) -> None:
     assert rows == [{"text": "a b c", "metadata": {"id": 1}}]
 
 
+@pytest.mark.parametrize(
+    "dataset_size, world_size, yield_empty, expected",
+    [
+        (0, 1, True, [[]]),
+        (0, 2, True, [[], []]),
+        (4, 1, None, [[[0, 1], [2, 3]]]),
+        (4, 1, False, [[[0, 1], [2, 3]]]),
+        (8, 2, True, [[[0, 1], [4, 5]], [[2, 3], [6, 7]]]),
+        (8, 2, False, [[[0, 1], [4, 5]], [[2, 3], [6, 7]]]),
+        (5, 2, True, [[[0, 1], [4]], [[2, 3], []]]),
+        (5, 2, False, [[[0, 1], [4]], [[2, 3]]]),
+        (1, 3, None, [[[0]], [[]], [[]]]),
+        (1, 3, False, [[[0]], [], []]),
+    ],
+)
+def test_sampler_keeps_complete_batches_and_handles_rank_tails(
+    dataset_size: int,
+    world_size: int,
+    yield_empty: bool | None,
+    expected: list[list[list[int]]],
+) -> None:
+    for rank in range(world_size):
+        sampler = ResumableBatchDataSampler(
+            batch_size=2,
+            dataset_size=dataset_size,
+            shuffle=False,
+            rank=rank,
+            world_size=world_size,
+            yield_empty_last_batch=yield_empty,
+        )
+        assert len(sampler) == len(expected[rank])
+        assert list(sampler) == expected[rank]
+
+
+@pytest.mark.parametrize("shuffle", [False, True])
+@pytest.mark.parametrize("yield_empty", [False, True])
+def test_sampler_shards_one_permutation_and_resumes_each_rank(
+    shuffle: bool, yield_empty: bool
+) -> None:
+    rng_state = torch.get_rng_state().clone()
+    batches = []
+    for rank in range(3):
+        sampler = ResumableBatchDataSampler(
+            batch_size=2,
+            dataset_size=13,
+            shuffle=shuffle,
+            seed=17,
+            rank=rank,
+            world_size=3,
+            yield_empty_last_batch=yield_empty,
+        )
+        full = list(sampler)
+        assert list(sampler) == full
+        for cursor in range(5):
+            sampler.batch_cursor = cursor
+            assert len(sampler) == len(full)
+            assert list(sampler) == full[cursor:]
+        batches.append(full)
+    ordered_rows = [
+        row
+        for step in range(max(map(len, batches)))
+        for rank_batches in batches
+        if step < len(rank_batches)
+        for row in rank_batches[step]
+    ]
+    expected = (
+        torch.randperm(13, generator=torch.Generator().manual_seed(17)).tolist()
+        if shuffle
+        else list(range(13))
+    )
+    assert ordered_rows == expected
+    if yield_empty:
+        assert [len(rank_batches) for rank_batches in batches] == [3, 3, 3]
+    else:
+        assert all(batch for rank_batches in batches for batch in rank_batches)
+    torch.testing.assert_close(torch.get_rng_state(), rng_state, rtol=0, atol=0)
+
+
 @pytest.mark.parametrize("version", [7, "release"])
 @pytest.mark.parametrize("uri", ["s3://offline-bucket/text", "/offline/text.lance"])
 def test_dataset_factory_configures_native_credentials_for_s3(
@@ -125,7 +203,7 @@ def test_sampler_cap_keeps_the_seeded_order(
 ) -> None:
     full = list(ResumableBatchDataSampler(batch_size=2, dataset_size=5))
     sampler = ResumableBatchDataSampler(
-        batch_size=2, dataset_size=5, skip_batches=skip_batches, max_batches=max_batches
+        batch_size=2, dataset_size=5, batch_cursor=skip_batches, max_batches=max_batches
     )
     assert len(sampler) == (3 if max_batches is None else min(3, max_batches))
     assert list(sampler) == [full[index] for index in expected]

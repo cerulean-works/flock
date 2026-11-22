@@ -6,16 +6,16 @@
 	import FeedFilters from '#lib/components/home/FeedFilters.svelte';
 	import LatestRuns from '#lib/components/home/LatestRuns.svelte';
 	import PublicOrg from '#lib/components/home/PublicOrg.svelte';
-	import PageHeader from '#lib/components/PageHeader.svelte';
+	import ListPage from '#lib/components/ListPage.svelte';
 	import ProjectDialog from '#lib/components/ProjectDialog.svelte';
 	import SegmentedNav from '#lib/components/SegmentedNav.svelte';
 	import WandbKeyCreator from '#lib/components/WandbKeyCreator.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { page } from '$app/state';
 	import { pollFeed } from '#lib/data/feed.svelte.ts';
+	import { wandbSnippet } from '#lib/snippets.ts';
 	import { count } from '#lib/utils.ts';
 	import { orgHref, withParam } from '#lib/workspace/url.ts';
-	import Page from '#lib/components/Page.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, params }: PageProps = $props();
@@ -48,11 +48,8 @@
 {/snippet}
 
 <!-- The feed's own controls, under the title once there are runs to show. -->
-{#snippet feedToolbar()}
-	<h2 class="text-[13px] font-medium whitespace-nowrap max-sm:sr-only">Latest runs</h2>
-	<div class="ml-auto">
-		<FeedFilters projects={data.shell.projects.map((p) => p.name)} project={data.project} />
-	</div>
+{#snippet feedControls()}
+	<FeedFilters projects={data.shell.projects.map((p) => p.name)} project={data.project} />
 	<SegmentedNav
 		label="Show"
 		items={TABS.map(([key, label]) => ({
@@ -63,78 +60,93 @@
 	/>
 {/snippet}
 
-<Page width="full">
-	<PageHeader
-		title={data.org.display_name}
-		toolbar={fresh || data.outside ? undefined : feedToolbar}
-		actions={data.outside ? undefined : actions}
-	>
-		{#snippet subtitle()}
-			{#if data.outside}
-				Public projects
-			{:else}
-				{count(data.org.project_count, 'project')} · {count(data.org.member_count, 'member')}
-			{/if}
-			{#if running}
-				· <span class="text-state-running">{count(running, 'run')} running</span>
-			{/if}
-		{/snippet}
-	</PageHeader>
+<ListPage
+	title={data.org.display_name}
+	heading={fresh || data.outside ? undefined : 'Latest runs'}
+	controls={fresh || data.outside ? undefined : feedControls}
+	actions={data.outside ? undefined : actions}
+>
+	{#snippet subtitle()}
+		{#if data.outside || running}
+			<span class="inline-flex items-center gap-x-4">
+				{#if data.outside}<span>Public projects</span>{/if}
+				{#if running}
+					<span class="inline-flex items-center gap-1.5 text-state-running">
+						<span class="size-1.5 rounded-full bg-current" aria-hidden="true"></span>
+						{count(running, 'run')} running
+					</span>
+				{/if}
+			</span>
+		{/if}
+	{/snippet}
 
 	{#if data.outside}
-		<main class="relative min-h-0 flex-1 overflow-y-auto pb-10">
-			<PublicOrg org={params.entity} projects={data.shell.projects} now={data.now} />
-		</main>
+		<PublicOrg org={params.entity} projects={data.shell.projects} now={data.now} />
 	{:else if fresh || !data.feed}
-		<main class="relative min-h-0 flex-1 overflow-y-auto">
-			<EmptyState variant="onboarding" title="Log your first run">
-				{#snippet lead()}Runs appear here once they’re logged.{/snippet}
-				<ol class="mt-8 grid gap-8">
-					<li class="grid gap-3">
-						<p><span class="mr-2 text-muted-foreground">1</span>Install the SDK</p>
-						<CopyBlock code="pip install wandb" />
-					</li>
-					<li class="grid gap-3">
-						<p>
-							<span class="mr-2 text-muted-foreground">2</span>Log in to
+		<EmptyState variant="onboarding" title="Log your first run">
+			{#snippet lead()}Runs from every project show up here once they’re logged.{/snippet}
+			<ol class="grid gap-7">
+				<li class="grid gap-2.5">
+					<p class="flex items-baseline gap-2.5">
+						<span class="step">1</span>Install the SDK
+					</p>
+					<CopyBlock lang="bash" code="pip install wandb" />
+				</li>
+				<li class="grid gap-2.5">
+					<p class="flex items-baseline gap-2.5">
+						<span class="step">2</span>
+						<span>
+							Log in to
 							<span class="font-mono text-[0.9em]">{data.flockUrl}</span> with this key
-						</p>
-						<WandbKeyCreator />
-					</li>
-					<li class="grid gap-3">
-						<p>
-							<span class="mr-2 text-muted-foreground">3</span>Log a run to {data.org.display_name}
-						</p>
-						<CopyBlock
-							code={`import wandb\n\nrun = wandb.init(entity="${params.entity}", project="my-project")\nfor step in range(100):\n    run.log({"loss": 1 / (step + 1)})\nrun.finish()`}
-						/>
-					</li>
-				</ol>
-				<p class="mt-10 text-[13px] text-muted-foreground">
-					Or
-					<Button variant="link" class="h-auto p-0 text-[13px]" onclick={() => (creating = true)}>
-						create an empty project
-					</Button>.
-				</p>
-			</EmptyState>
-		</main>
+						</span>
+					</p>
+					<WandbKeyCreator />
+				</li>
+				<li class="grid gap-2.5">
+					<p class="flex items-baseline gap-2.5">
+						<span class="step">3</span>Log a run to {data.org.display_name}
+					</p>
+					<CopyBlock lang="python" code={wandbSnippet(params.entity, 'my-project')} />
+				</li>
+			</ol>
+			{#snippet actions()}
+				<Button variant="ghost" onclick={() => (creating = true)}>
+					<PlusIcon /> Create an empty project
+				</Button>
+			{/snippet}
+		</EmptyState>
 	{:else}
 		{@const feed = data.feed}
-		<main class="relative min-h-0 flex-1 overflow-y-auto pb-10">
-			{#key JSON.stringify(data.query)}
-				<LatestRuns
-					first={() => feed}
-					query={data.query}
-					now={data.now}
-					empty={data.project
-						? `No runs in ${data.project}${data.mine ? ' by you' : ''} yet.`
-						: data.mine
-							? 'You haven’t logged any runs here yet.'
-							: 'No runs yet.'}
-				/>
-			{/key}
-		</main>
+		{#key JSON.stringify(data.query)}
+			<LatestRuns
+				first={() => feed}
+				query={data.query}
+				now={data.now}
+				empty={data.project
+					? `No runs in ${data.project}${data.mine ? ' by you' : ''} yet.`
+					: data.mine
+						? 'You haven’t logged any runs here yet.'
+						: 'No runs yet.'}
+			/>
+		{/key}
 	{/if}
-</Page>
+</ListPage>
 
 {#if !data.outside}<ProjectDialog bind:open={creating} entity={params.entity} />{/if}
+
+<style>
+	/* The steps' numbers: small, quiet and the same width, so the step text lines up. */
+	.step {
+		display: inline-grid;
+		flex: none;
+		place-items: center;
+		width: 1.25rem;
+		height: 1.25rem;
+		border-radius: 9999px;
+		background: var(--muted);
+		color: var(--muted-foreground);
+		font-size: 12px;
+		font-variant-numeric: tabular-nums;
+		transform: translateY(-1px);
+	}
+</style>

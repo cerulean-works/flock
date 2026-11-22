@@ -41,3 +41,11 @@ Run GPU tests on a CUDA machine:
 ```sh
 uv run --no-sync python -m pytest -q tests/training -m gpu -n 0
 ```
+
+CI runs them on a Modal H100 (`tests/modal_gpu.py`). Run the same thing from your machine
+once `modal` is logged in, passing other pytest arguments if you like:
+
+```sh
+uv run --no-sync modal run tests/modal_gpu.py
+uv run --no-sync modal run tests/modal_gpu.py --pytest-args "-q tests/training -m 'gpu and fa4' -n 0"
+```

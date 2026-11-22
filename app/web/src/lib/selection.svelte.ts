@@ -10,7 +10,7 @@
 import { clickSelect } from './storage.ts';
 
 /** A dialog opened from the selection bar or a row's menu. */
-export type RowAction = 'move' | 'delete' | 'rename';
+export type RowAction = 'move' | 'delete' | 'rename' | 'fork';
 
 export class Selection {
 	/** The selectable rows, in the order they're listed. */

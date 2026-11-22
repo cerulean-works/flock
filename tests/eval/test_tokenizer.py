@@ -224,7 +224,11 @@ def test_a_file_the_hub_answers_404_for_is_absent(
 
 @pytest.mark.parametrize("failing", ["tokenizer.json", "tokenizer.model"])
 def test_a_failed_hub_request_chooses_nothing(
-    failing: str, model_file: Path, monkeypatch: pytest.MonkeyPatch, auto: list[tuple[str, str]]
+    failing: str,
+    model_file: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    auto: list[tuple[str, str]],
 ) -> None:
     def download(repo: str, filename: str, revision: str) -> str:
         if filename == failing:
@@ -233,6 +237,8 @@ def test_a_failed_hub_request_chooses_nothing(
             return str(model_file)
         raise RemoteEntryNotFoundError("404", response=Mock())
 
+    monkeypatch.setattr(constants, "HF_HUB_OFFLINE", False)
+    monkeypatch.setattr(constants, "HF_HUB_CACHE", str(tmp_path))
     monkeypatch.setattr(model, "hf_hub_download", download)
     # The next request may succeed and choose differently, so this one doesn't fall through.
     with pytest.raises(LocalEntryNotFoundError):

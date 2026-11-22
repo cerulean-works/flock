@@ -55,7 +55,7 @@
 		{options}
 		onValueChange={(v) => (text = v)}
 		onPick={pick}
-		placeholder="Step, time or a metric…"
+		placeholder="Step, time or a metric"
 		aria-label="X axis"
 		class={className}
 	/>

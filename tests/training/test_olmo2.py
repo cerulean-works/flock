@@ -68,11 +68,11 @@ def test_attn_implementation_survives_config_round_trip_and_reaches_every_layer(
         k: torch.Tensor,
         v: torch.Tensor,
         *,
-        attention_mask: torch.Tensor | None = None,
+        attention_metadata: torch.Tensor | None = None,
         is_causal: bool = False,
     ) -> torch.Tensor:
-        calls.append(attention_mask)
-        return sdpa_attention(q, k, v, attention_mask=attention_mask, is_causal=is_causal)
+        calls.append(attention_metadata)
+        return sdpa_attention(q, k, v, attention_metadata=attention_metadata, is_causal=is_causal)
 
     monkeypatch.setattr(
         AttentionInterface, "_global_mapping", AttentionInterface._global_mapping.copy()
@@ -118,13 +118,13 @@ def test_model_resolves_mask_preparer_at_construction_and_prepares_once_per_forw
         k: torch.Tensor,
         v: torch.Tensor,
         *,
-        attention_mask: torch.Tensor | None = None,
+        attention_metadata: torch.Tensor | None = None,
         is_causal: bool = False,
     ) -> torch.Tensor:
-        assert attention_mask is preparations[-1]
+        assert attention_metadata is preparations[-1]
         assert is_causal is True
-        calls.append((attention_mask, is_causal))
-        return sdpa_attention(q, k, v, attention_mask=attention_mask, is_causal=is_causal)
+        calls.append((attention_metadata, is_causal))
+        return sdpa_attention(q, k, v, attention_metadata=attention_metadata, is_causal=is_causal)
 
     def replacement(*args: Any, **kwargs: Any) -> NoReturn:
         pytest.fail("an existing model looked up a replaced backend")

@@ -4,11 +4,12 @@ import type { RequestHandler } from './$types';
 
 /** The dataset routes the browser may reach through here (D94). */
 const ROUTES =
-	/^(at|info|rows|cell|versions|readme|public|delete|move|rename|trash|trash\/\d+(\/restore)?|tags\/[^/]+)$/;
+	/^(at|info|location|rows|cell|versions|readme|public|delete|move|rename|trash|trash\/\d+(\/restore)?|tags\/[^/]+|fork|blend|blend\/preview|independent|jobs|jobs\/\d+)$/;
 
 /**
  * The org's dataset routes, for the dataset page's tabs and dialogs and the org page's trash:
- * the browser never reaches Flock itself, so its calls come through here.
+ * the browser never reaches Flock itself, so its calls come through here. The scope's `project`
+ * comes along in the query.
  */
 const relay: RequestHandler = async ({ params, request }) => {
 	if (!ROUTES.test(params.op)) error(404, 'Not found');

@@ -30,6 +30,7 @@ class ProjectCreate(BaseModel):
     entity: Name
     name: Name
     description: str | None = None
+    visibility: Literal["private", "public"] = "private"
 
 
 class ProjectUpdate(BaseModel):
@@ -66,9 +67,14 @@ async def list_projects(
 
 @router.post("/projects", status_code=201)
 async def create_project(body: ProjectCreate, store: StoreDep, user: UserDep) -> Response:
-    """Create an empty project in an org of the user (``wandb.init`` also creates projects)."""
+    """Create an empty project in an org of the user (``wandb.init`` also creates projects).
+
+    ``visibility: public`` publishes it as its creator would right after (D110, D118), so the
+    change is recorded like any other."""
     await visible_org(body.entity, store, user)
     project = await store.create_project(body.entity, body.name, body.description, creator=user.pk)
+    if body.visibility == "public":
+        project = await store.update_project(project, {"visibility": "public"}, user)
     return JSONResponse(await store.project_info(project), status_code=201)
 
 
@@ -92,6 +98,28 @@ async def list_owners(project: ReadableProjectDep, store: StoreDep, viewer: View
     public_only = store.accounts.access(viewer, project) == "public"
     briefs = await store.accounts.briefs((pk for (pk,) in pks), public_only)
     return JSONResponse({"owners": sorted(briefs.values(), key=lambda b: b["id"])})
+
+
+@router.get("/projects/{entity}/{project}/storage")
+async def project_storage(project: MemberProjectDep, store: StoreDep) -> Response:
+    """What deleting the project deletes with it (D167): how many datasets and models it has,
+    their bytes, and each one by path with its own bytes (``items``, datasets first, for the
+    delete dialog's list). Zeros and no items when S3 is off."""
+    if store.s3.upstream is None:
+        return JSONResponse({"datasets": 0, "models": 0, "bytes": 0, "items": []})
+    datasets, dataset_bytes = await store.datasets.project_storage(project.org, project.pk)
+    models = await store.models.project_storage(project.pk)
+    items = [{"kind": "dataset", "path": p, "bytes": b} for p, b in datasets] + [
+        {"kind": "model", "path": p, "bytes": b} for p, b in models
+    ]
+    return JSONResponse(
+        {
+            "datasets": len(datasets),
+            "models": len(models),
+            "bytes": dataset_bytes + sum(b for _, b in models),
+            "items": items,
+        }
+    )
 
 
 @router.patch("/projects/{entity}/{project}")

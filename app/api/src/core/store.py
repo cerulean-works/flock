@@ -17,10 +17,11 @@ from app.api.src.core.accounts import Accounts, User
 from app.api.src.core.avatars import Avatars
 from app.api.src.core.budgets import Budgets
 from app.api.src.core.bus import Bus
-from app.api.src.core.datasets import Datasets
+from app.api.src.core.datasets import Datasets, Scope
 from app.api.src.core.errors import Conflict, Discarded, Forbidden, NotFound
 from app.api.src.core.feed import Feed
 from app.api.src.core.files import file_store
+from app.api.src.core.forks import Forks
 from app.api.src.core.hf_imports import HFImports
 from app.api.src.core.history import History, Series, write_chunks
 from app.api.src.core.imports import Imports
@@ -391,6 +392,7 @@ class Store:
         self.imports = Imports(self)
         self.s3 = S3(self)
         self.datasets = Datasets(self)
+        self.forks = Forks(self)
         self.models = Models(self)
         self.hf_imports = HFImports(self)
 
@@ -431,6 +433,7 @@ class Store:
             await self.datasets.load()
             await self.models.load()
             await self.hf_imports.load()
+            await self.forks.load()
             self._background(self._detect_missing_gpus())
             self._worker = asyncio.get_running_loop().create_task(self._work_loop())
             # With migrations on startup off, the migration Job applies contracts too.
@@ -446,6 +449,7 @@ class Store:
             raise
 
     async def close(self) -> None:
+        await self.forks.close()
         await self.hf_imports.close()
         await self.models.close()
         await self.datasets.close()
@@ -594,6 +598,8 @@ class Store:
             runs, active = counts.get(project.pk, (0, 0))
             out.append(
                 {
+                    # Names its folder in flock-datasets and flock-models, -projects/{id}/ (D160).
+                    "id": project.pk,
                     "entity": project.entity,
                     "name": project.name,
                     "description": project.description,
@@ -1505,6 +1511,7 @@ class Store:
         async with self.db.pool.acquire() as conn, conn.transaction():
             await self._lock_org(conn, project.org)
             await self._lock_projects(conn, [project], update=True)
+            await self.forks.refuse_project(conn, project.org, Scope(project.pk).root)
             await self._delete_projects(conn, [project], force, now)
         self._work_wanted.set()
 
@@ -2057,6 +2064,9 @@ class Store:
         """Remove deleted runs (``pks``, or a batch of any) with what they logged, then
         deleted projects and orgs left empty; returns how many runs. Runs are claimed, so
         replicas purging at once don't wait on each other."""
+        kept: list[int] = []  # deleted projects whose storage couldn't be removed yet
+        if pks is None:
+            kept = await self._purge_project_storage()
         async with self.db.pool.acquire() as conn, conn.transaction():
             rows = await conn.fetch(
                 "SELECT r.pk, r.project_pk, p.deleted_at IS NULL FROM runs r "
@@ -2078,7 +2088,9 @@ class Store:
             if pks is None:
                 await conn.execute(
                     "DELETE FROM projects p WHERE p.deleted_at IS NOT NULL "
-                    "AND NOT EXISTS (SELECT FROM runs r WHERE r.project_pk = p.pk)"
+                    "AND NOT EXISTS (SELECT FROM runs r WHERE r.project_pk = p.pk) "
+                    "AND p.pk <> ALL($1)",
+                    kept,
                 )
                 await conn.execute(
                     "DELETE FROM orgs o WHERE o.deleted_at IS NOT NULL "
@@ -2087,6 +2099,23 @@ class Store:
         if purged:
             await self._remove_files(purged)
         return len(purged)
+
+    async def _purge_project_storage(self) -> list[int]:
+        """Remove the datasets and models of deleted projects whose runs are gone, before their
+        rows go (D167); returns the projects whose removal failed, to try again next time."""
+        projects = await self.db.fetch(
+            "SELECT p.pk, p.org_pk FROM projects p WHERE p.deleted_at IS NOT NULL "
+            "AND NOT EXISTS (SELECT FROM runs r WHERE r.project_pk = p.pk) ORDER BY p.pk"
+        )
+        failed = []
+        for pk, org_pk in projects:
+            try:
+                await self.models.purge_project(org_pk, pk)
+                await self.datasets.purge_project(org_pk, pk)
+            except Exception:
+                log.exception("could not remove the datasets and models of project %d", pk)
+                failed.append(pk)
+        return failed
 
     async def _remove_files(self, pks: Iterable[int]) -> None:
         await self.files.delete_runs(pks)

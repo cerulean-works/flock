@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import Response
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
+from app.api.src.api.datasets import scope_of
 from app.api.src.api.deps import APIError, JSONResponse, OrgDep, StoreDep, UserDep, rest_user
 from app.api.src.core.hf_imports import HFImport, HubError, TooLarge
 from app.api.src.core.store import Store
@@ -63,6 +64,9 @@ class HFImportBody(BaseModel):
         | None
     ) = None
     dest: Annotated[str, Field(min_length=1, max_length=512)] | None = None
+    project: str | None = Field(
+        None, max_length=128, description="the project to import into (default: global)"
+    )
     # A model's name, the new version's tags, and whether to make it primary.
     name: Annotated[str, Field(min_length=1, max_length=100)] | None = None
     tags: list[Annotated[str, Field(max_length=100)]] = Field(default_factory=list, max_length=100)
@@ -136,6 +140,7 @@ async def start_import(org: OrgDep, body: HFImportBody, user: UserDep, store: St
     s3 = store.s3
     s3.require()
     hf = store.hf_imports
+    scope = await scope_of(store, org, body.project)
     try:
         if body.kind == "model":
             assert body.name is not None
@@ -148,6 +153,7 @@ async def start_import(org: OrgDep, body: HFImportBody, user: UserDep, store: St
                 body.tags,
                 body.primary,
                 body.token,
+                scope,
             )
         else:
             assert body.dest is not None
@@ -159,6 +165,7 @@ async def start_import(org: OrgDep, body: HFImportBody, user: UserDep, store: St
                 body.configs,
                 body.dest,
                 body.token,
+                scope,
             )
     except (HubError, TooLarge) as e:
         raise refused(e) from None

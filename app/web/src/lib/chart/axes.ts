@@ -153,11 +153,14 @@ export function remap(series: Series, map: MapSource, offset = 0): Series {
 		ys[k] = sy[i];
 		k++;
 	}
-	if (sorted) return new Series(ys.slice(0, k), xs.slice(0, k));
+	// The points kept stand for as many rows each as before (an EMA decays by them).
+	const rows = { raw: n ? Math.round((series.rows * k) / n) : 0, x0: 0, dx: 1 };
+	if (sorted) return new Series(ys.slice(0, k), xs.slice(0, k), rows);
 	const order = Array.from({ length: k }, (_, i) => i).sort((a, b) => xs[a] - xs[b] || a - b);
 	return new Series(
 		Float32Array.from(order, (i) => ys[i]),
-		Float64Array.from(order, (i) => xs[i])
+		Float64Array.from(order, (i) => xs[i]),
+		rows
 	);
 }
 

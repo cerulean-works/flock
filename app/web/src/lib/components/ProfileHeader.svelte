@@ -1,7 +1,10 @@
 <script lang="ts">
+	import MailIcon from '@lucide/svelte/icons/mail';
 	import Avatar from '#lib/components/Avatar.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import type { UserInfo } from '#lib/types.ts';
+	import MetaItem from './MetaItem.svelte';
+	import MetaRow from './MetaRow.svelte';
 	import PasswordDialog from './PasswordDialog.svelte';
 	import ProfileDialog from './ProfileDialog.svelte';
 
@@ -16,10 +19,10 @@
 	<Avatar name={profile.name} src={profile.avatar_url} class="size-24 text-[32px]" />
 	<div class="grid min-w-0 gap-1">
 		<h1 class="truncate text-[34px] leading-[1.15] tracking-[-0.025em]">{profile.name}</h1>
-		<p class="truncate text-muted-foreground">
-			{profile.email}
-			{#if profile.is_superadmin}<span>· Super admin</span>{/if}
-		</p>
+		<MetaRow class="text-sm">
+			<MetaItem icon={MailIcon}>{profile.email}</MetaItem>
+			{#if profile.is_superadmin}<MetaItem chip>Super admin</MetaItem>{/if}
+		</MetaRow>
 		<div class="mt-2 flex flex-wrap gap-2">
 			<Button variant="outline" onclick={() => (editing = true)}>Change profile</Button>
 			<Button variant="outline" onclick={() => (changingPassword = true)}>
