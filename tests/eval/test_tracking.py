@@ -313,7 +313,7 @@ def test_schemas_before_6_are_refused_before_any_query(
     written = json.loads((LOGGED / "schema6.json").read_text())
     path.write_text(json.dumps({**written, "schema_version": 5}))
 
-    with pytest.raises(ValueError, match="schema 5; only 6 to 11 log"):
+    with pytest.raises(ValueError, match="schema 5; only 6 to 12 log"):
         log_results_file(path, "model-evals")
 
     assert hub.queries == []

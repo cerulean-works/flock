@@ -296,9 +296,13 @@ def format_diff(found: ItemDiff) -> str:
 
 
 def format_item(item: Item) -> str:
-    """Formats a doc: its task, id and metric, each run's model and verdict, its question, then one line per choice with each run's probability and share, `*` on gold and `<` on each run's pick."""
+    """Formats a doc: its task, id and metric, where it comes from when the run says, each run's model and verdict, its question, then one line per choice with each run's probability and share, `*` on gold and `<` on each run's pick."""
     letters = "ab"[: len(item.runs)]
     lines = [f"{_escaped(item.task)}  {_escaped(item.id)}  {_escaped(item.metric)}"]
+    # The hashes and `meta` are for joining and filtering, and print with `--json`.
+    shown = [key for key in ("split", "source_index", "native_id", "subject") if key in item.source]
+    if shown:
+        lines.append("  ".join(f"{key} {_escaped(str(item.source[key]))}" for key in shown))
     for letter, answer in zip(letters, item.runs, strict=True):
         verdict = "right" if answer.correct else "wrong"
         lines.append(f"{letter}  {_escaped(answer.model)}  {verdict}, picks {answer.pick}")

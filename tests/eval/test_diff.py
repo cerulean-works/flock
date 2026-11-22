@@ -265,7 +265,7 @@ def test_reading_a_folder_refuses_what_is_not_a_results_file(tmp_path: Path) -> 
         read_results(str(tmp_path))
 
     a = write_run(tmp_path / "a", {"t": ("h", [True])}, schema=7)
-    with pytest.raises(ValueError, match="schema 7; only 8 to 11 are read"):
+    with pytest.raises(ValueError, match="schema 7; only 8 to 12 are read"):
         read_results(a)
 
     (tmp_path / "b").mkdir()

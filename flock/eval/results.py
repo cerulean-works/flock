@@ -1,6 +1,7 @@
 """The versioned results file of an eval run, and the per-doc predictions beside it."""
 
 import dataclasses
+import hashlib
 import json
 import math
 import os
@@ -27,7 +28,7 @@ if TYPE_CHECKING:
 
 # The layouts `WrittenResults.read` accepts. The Flock app's dashboard reads the same ones, and a
 # test holds its list to this one.
-READ_SCHEMAS = (8, 9, 10, 11)
+READ_SCHEMAS = (8, 9, 10, 11, 12)
 
 
 def scale(metric: str) -> str:
@@ -126,7 +127,7 @@ class Results:
     """
     Every task's scores from one run, and its provenance.
 
-    `schema_version`, 11, is the version of the file's layout, bumped when a field changes. It isn't an argument, so a file can't claim a layout it doesn't have.
+    `schema_version`, 12, is the version of the file's layout, bumped when a field changes. It isn't an argument, so a file can't claim a layout it doesn't have.
 
     Args:
         provenance (`Provenance`):
@@ -140,7 +141,7 @@ class Results:
     provenance: Provenance
     tasks: list[TaskResult]
     suites: list[SuiteResult] = field(default_factory=list)
-    schema_version: int = field(default=11, init=False)
+    schema_version: int = field(default=12, init=False)
 
     def to_dict(self) -> dict[str, Any]:
         """Returns the results as plain JSON-ready data, with each task's `docs_per_second` added."""
@@ -202,7 +203,13 @@ def write_predictions(
 
 
 def write_perplexity_predictions(
-    path: Path, docs: Sequence[TextDoc], scores: Scores, num_bytes: Sequence[int], window: int
+    path: Path,
+    docs: Sequence[TextDoc],
+    scores: Scores,
+    num_bytes: Sequence[int],
+    window: int,
+    source: str | None = None,
+    domain: str | None = None,
 ) -> None:
     """
     Writes `perplexity_prediction_rows` to `path` as JSON lines, creating its directory if needed.
@@ -210,7 +217,7 @@ def write_perplexity_predictions(
     Raises:
         `FileExistsError`: if `path` exists, so two runs never write one file.
     """
-    _write_rows(path, perplexity_prediction_rows(docs, scores, num_bytes, window))
+    _write_rows(path, perplexity_prediction_rows(docs, scores, num_bytes, window, source, domain))
 
 
 def _write_rows(path: Path, rows: Sequence[dict[str, Any]], mode: int = 0o666) -> None:
@@ -234,6 +241,8 @@ def prediction_rows(
     Returns one row per doc with its id, gold index, outcome, text, and each choice's scores and lengths, enough to recompute every metric and the truncation counts, dropping the padding past each doc's last choice.
 
     A row's text is the doc's own `question` (the context its choices share) and its `choices` (each continuation exactly as scored, leading space included). A doc whose choices have their own contexts, such as Winogrande's, has `question` null and `contexts`, one per choice. A doc shown other than every few-shot example in order has `shots`, the indices of those it was shown in the header [`write_predictions`] writes.
+
+    A doc that [`~eval.tasks.MultipleChoiceTask.load`] loaded also has its row's `split`, `source_index` (its position in the split) and `doc_hash`, then `native_id`, `subject` and `meta` where the task's `row_fields` gives them. Every row has `prompt_hash`. Both hashes are lm-evaluation-harness's, so its samples of the same rows join on them.
 
     Args:
         requests (`MCRequests`):
@@ -276,6 +285,7 @@ def prediction_rows(
     every_shot = tuple(range(len(requests.shots)))
 
     rows = []
+    first_request = 0
     for i, doc in enumerate(docs):
         row: dict[str, Any] = {"id": doc.id, "gold": doc.gold}
         if outcomes is not None:
@@ -291,16 +301,37 @@ def prediction_rows(
             row["shots"] = list(requests.shown[i])
         for name, per_doc in values.items():
             row[name] = per_doc[i][: len(doc.choices)]
+
+        if doc.source is not None:
+            row["split"] = doc.source.split
+            row["source_index"] = doc.source.index
+            if doc.source.native_id is not None:
+                row["native_id"] = doc.source.native_id
+            if doc.source.subject is not None:
+                row["subject"] = doc.source.subject
+            if doc.source.meta:
+                row["meta"] = doc.source.meta
+            row["doc_hash"] = doc.source.doc_hash
+        # lm-evaluation-harness's `prompt_hash`: the sha256 of its first request's context, few-shot
+        # examples included (`lm_eval/evaluator.py`, v0.4.3). A doc's requests are consecutive.
+        context = requests.requests[first_request].context
+        row["prompt_hash"] = hashlib.sha256(context.encode()).hexdigest()
+        first_request += len(doc.choices)
         rows.append(row)
 
     return rows
 
 
 def perplexity_prediction_rows(
-    docs: Sequence[TextDoc], scores: Scores, num_bytes: Sequence[int], window: int
+    docs: Sequence[TextDoc],
+    scores: Scores,
+    num_bytes: Sequence[int],
+    window: int,
+    source: str | None = None,
+    domain: str | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Returns one row per doc with its id, summed log-probability, token and UTF-8 byte counts, number of windows and whether every token is the greedy one, so any domain's `bits_per_byte`, `loss_per_token` and `perplexity` can be recomputed.
+    Returns one row per doc with its id, summed log-probability, token and UTF-8 byte counts, number of windows and whether every token is the greedy one, so any domain's `bits_per_byte`, `loss_per_token` and `perplexity` can be recomputed. Each row also names the doc's `source` (the dataset subset, a Paloma source) and `domain` (its `subdomain`), each `null` where there is none, so rows of many tasks pool and split again by either.
 
     Raises:
         `ValueError`: if `scores` or `num_bytes` doesn't hold one entry per doc.
@@ -327,6 +358,8 @@ def perplexity_prediction_rows(
                 # The last window holds what is left.
                 "windows": math.ceil(num_tokens / window),
                 "is_greedy": is_greedy,
+                "source": source,
+                "domain": domain,
             }
         )
 
@@ -342,7 +375,7 @@ class WrittenResults:
         source (`str`):
             Where it was read: a folder, or a tracker run as `run:entity/project/id`.
         schema_version (`int`):
-            The file's layout, 8 to 11. Only rows from schema 9 on hold `correct`, and only schema 9 on records `dataset.private`: an older file's datasets read as not private. Schema 10 adds the provenance's `model_org`, `model_project` and `model_path`, which read as `None` before it. Only rows from schema 11 on hold the doc's text and `pick`.
+            The file's layout, 8 to 12. Only rows from schema 9 on hold `correct`, and only schema 9 on records `dataset.private`: an older file's datasets read as not private. Schema 10 adds the provenance's `model_org`, `model_project` and `model_path`, which read as `None` before it. Only rows from schema 11 on hold the doc's text and `pick`. Schema 12 adds each row's source fields and hashes, each perplexity row's `source` and `domain`, and the provenance's `tokenizer` and `tokenizer_hash`, which read as `None` before it. A reader ignores row fields and `meta` keys it doesn't know, so a later schema can add them.
         provenance (`Provenance`):
             What produced the run.
         tasks (`list[TaskResult]`):
@@ -362,7 +395,7 @@ class WrittenResults:
 
     def predictions(self, task: str) -> list[dict[str, Any]] | None:
         """
-        Returns `task`'s prediction rows, one per doc, or `None` if the run has no predictions file for it. A schema 11 file's header line is left out. On a tracker run, a task on a private dataset is read from `private/predictions/<task>.jsonl`.
+        Returns `task`'s prediction rows, one per doc, or `None` if the run has no predictions file for it. The header line a file has from schema 11 on is left out. On a tracker run, a task on a private dataset is read from `private/predictions/<task>.jsonl`.
 
         Raises:
             `ValueError`: if `task` isn't a single file name, so a name read from a file can't reach outside `predictions/`.
@@ -393,7 +426,7 @@ class WrittenResults:
 
         Raises:
             `FileNotFoundError`: if `read_file` finds no `results.json`.
-            `ValueError`: if `results.json` isn't a results file of schema 8 to 11.
+            `ValueError`: if `results.json` isn't a results file of schema 8 to 12.
         """
         text = read_file("results.json")
         if text is None:
@@ -403,7 +436,7 @@ class WrittenResults:
             # Schema 8 holds every field these types have but `dataset.private` and schema 10's
             # provenance fields, which default; older files lack other provenance fields.
             if data.get("schema_version") not in READ_SCHEMAS:
-                raise ValueError(f"schema {data.get('schema_version')}; only 8 to 11 are read")
+                raise ValueError(f"schema {data.get('schema_version')}; only 8 to 12 are read")
             # An object or a string would iterate as nothing, and a diff would read every task as
             # missing from this run.
             if not isinstance(data["tasks"], list) or not isinstance(data["suites"], list):
@@ -451,7 +484,7 @@ def read_results(source: str) -> WrittenResults:
 
     Raises:
         `FileNotFoundError`: if the folder or run has no `results.json`.
-        `ValueError`: if `results.json` isn't a results file of schema 8 to 11, `run:` isn't followed by `entity/project/id`, or Flock refuses the read.
+        `ValueError`: if `results.json` isn't a results file of schema 8 to 12, `run:` isn't followed by `entity/project/id`, or Flock refuses the read.
         `click.ClickException`: if Flock can't be reached.
     """
     if source.startswith("run:"):

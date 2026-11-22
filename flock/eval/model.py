@@ -1,5 +1,6 @@
 """Batched loglikelihood scoring with a causal language model, kept on the model's device."""
 
+import hashlib
 import itertools
 import logging
 import re
@@ -437,6 +438,20 @@ class ScoringModel:
     def checks_resegmentation(self) -> bool:
         """Whether [`encode_requests`] refuses a continuation that changes its context's tokens: only on a [`~eval.tokenizer.SentencePieceTokenizer`], which segments a whole string at once. Other tokenizers keep lm-evaluation-harness's slice with no check, so the refusal can't move their scores."""
         return isinstance(self.tokenizer, SentencePieceTokenizer)
+
+    @property
+    def tokenizer_name(self) -> str:
+        """Where the tokenizer was loaded from, its `name_or_path`: the repo or folder of a Hugging Face tokenizer, the model file of a [`~eval.tokenizer.SentencePieceTokenizer`]."""
+        return self.tokenizer.name_or_path
+
+    @property
+    def tokenizer_hash(self) -> str:
+        """The sha256 of the tokenizer's whole definition, so token ids written by a run can be checked against the tokenizer that made them: its `tokenizer.json` as the Tokenizers library serializes it, or the SentencePiece model's bytes."""
+        if isinstance(self.tokenizer, SentencePieceTokenizer):
+            data = self.tokenizer.processor.serialized_model_proto()
+        else:
+            data = self.tokenizer.backend_tokenizer.to_str().encode()
+        return hashlib.sha256(data).hexdigest()
 
     @property
     def sdpa_backend(self) -> str | None:
