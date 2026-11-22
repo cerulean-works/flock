@@ -114,7 +114,8 @@ export async function evalRuns(scope: Scope, name: string, number: number): Prom
 						? results.provenance.model_org === scope.org &&
 							results.provenance.model_project === scope.project &&
 							results.provenance.model_path === version.name
-						: scope.project === null)
+						: scope.project === null &&
+							(results.provenance.model_org ?? scope.org) === scope.org)
 						? evalScores(results)
 						: null
 			};

@@ -18,11 +18,18 @@ export async function readEvalResults(run: string): Promise<EvalResults | null> 
 		await res.body?.cancel();
 		return null;
 	}
-	// An own `__proto__` key would pass the check but fail the page's serialization, so none is
-	// kept.
+	// An own `__proto__` key would pass the check but fail the page's serialization, so a file
+	// holding one isn't shown.
+	let proto = false;
 	const found: unknown = await res
 		.text()
-		.then((text) => JSON.parse(text, (key, value) => (key === '__proto__' ? undefined : value)))
+		.then((text) =>
+			JSON.parse(text, (key, value) => {
+				if (key === '__proto__') proto = true;
+				return value;
+			})
+		)
 		.catch(() => null);
+	if (proto) return null;
 	return isEvalResults(found) ? found : null;
 }
