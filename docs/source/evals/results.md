@@ -201,8 +201,6 @@ A tracker run is read as the user signed in with `flock login`, on that server. 
 
 [[autodoc]] eval.results.WrittenResults
 
-[[autodoc]] eval.results.write_tokens
-
 [[autodoc]] eval.requests.TokenValues
 
 [[autodoc]] eval.requests.ContextScores

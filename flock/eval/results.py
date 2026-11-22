@@ -495,7 +495,7 @@ class WrittenResults:
 
     def tokens(self, task: str, ids: Collection[str] | None = None) -> list[dict[str, Any]] | None:
         """
-        Returns the per-token rows of `task`'s docs, or of those in `ids`, as [`write_tokens`] wrote them, or `None` if the run has none for the task: it was written before schema 12, without them, or this reader has no `read_bytes`. Read on demand, one task at a time, as a page shows one doc. On a tracker run, a task on a private dataset is read from under `private/`.
+        Returns the per-token rows of `task`'s docs, or of those in `ids`, as `write_tokens` wrote them, or `None` if the run has none for the task: it was written before schema 12, without them, or this reader has no `read_bytes`. Read on demand, one task at a time, as a page shows one doc. On a tracker run, a task on a private dataset is read from under `private/`.
 
         Raises:
             `ValueError`: if `task` isn't a single file name.
