@@ -20,8 +20,10 @@ from flock.eval.results import (
     SuiteResult,
     TaskResult,
     scale,
+    tokens_name,
     write_perplexity_predictions,
     write_predictions,
+    write_tokens,
 )
 from flock.eval.tasks import (
     SUITES,
@@ -74,9 +76,13 @@ class EvalConfig:
             Registry names of the suites to run. Their tasks run after `tasks`, each task once, and each suite and the suites it holds are scored.
         add_bos (`bool`, *optional*, defaults to `False`):
             Passed to [`~eval.model.ScoringModel`]. Set it for Gemma models, as OLMES does.
+        tokens (`bool`, *optional*, defaults to `True`):
+            With `out`, write each multiple-choice task's per-token values beside its predictions, as `predictions/<task>.tokens.parquet`: each choice's tokens with their values, and the first 32 tokens greedy decoding writes after each context (see [`~eval.results.write_tokens`]).
+        context_tokens (`bool`, *optional*, defaults to `False`):
+            Also write the per-token values of each doc's context, few-shot examples included, as contamination checks such as Min-K%++ read them. It needs `tokens`. They are read from each distinct context once, in the pass that starts greedy decoding, which then keeps the logits of every position.
 
     Raises:
-        `ValueError`: if no task or suite is given, a task or suite repeats, or `limit` or `batch_tokens` is less than 1, or `dtype` is not `"bfloat16"` or `"float32"`, before any model loads.
+        `ValueError`: if no task or suite is given, a task or suite repeats, `limit` or `batch_tokens` is less than 1, `dtype` is not `"bfloat16"` or `"float32"`, or `context_tokens` is set without `tokens`, before any model loads.
     """
 
     model: str
@@ -90,6 +96,8 @@ class EvalConfig:
     command: str | None = None
     suites: tuple[str, ...] = ()
     add_bos: bool = False
+    tokens: bool = True
+    context_tokens: bool = False
 
     def __post_init__(self) -> None:
         if not self.tasks and not self.suites:
@@ -106,6 +114,8 @@ class EvalConfig:
             raise ValueError(f"batch_tokens must be at least 1, got {self.batch_tokens}")
         if self.dtype not in get_args(Dtype):
             raise ValueError(f"dtype must be bfloat16 or float32, got {self.dtype}")
+        if self.context_tokens and not self.tokens:
+            raise ValueError("context_tokens writes into the per-token values, so it needs tokens")
 
 
 def evaluate(config: EvalConfig) -> Results:
@@ -190,7 +200,10 @@ def evaluate(config: EvalConfig) -> Results:
         attention=model.attention,
         sdpa_backend=model.sdpa_backend,
     )
-    task_results = [score_task(model, task, config.limit, config.out) for task in tasks]
+    task_results = [
+        score_task(model, task, config.limit, config.out, config.tokens, config.context_tokens)
+        for task in tasks
+    ]
 
     # Suite scores are means of the per-task means already on the host. A suite's hash covers
     # each member's hash, and `held` puts every suite after its members, so equal hashes mean
@@ -308,7 +321,12 @@ type PreparedTask = PreparedMultipleChoice | PreparedPerplexity
 
 
 def score_task(
-    model: ScoringModel, task: Task, limit: int | None = None, out: Path | None = None
+    model: ScoringModel,
+    task: Task,
+    limit: int | None = None,
+    out: Path | None = None,
+    tokens: bool = False,
+    context_tokens: bool = False,
 ) -> TaskResult:
     """
     Scores one task with an already loaded model. A training loop that scores the same task at many steps calls [`prepare_task`] once and [`score_prepared`] at each step instead, which gives the same result.
@@ -322,12 +340,16 @@ def score_task(
             Score only the first `limit` docs.
         out (`Path`, *optional*):
             Write per-doc scores to `out/predictions/<task>.jsonl`. A training loop gives each step its own `out`. No `results.json` is written: that is [`evaluate`]'s job.
+        tokens (`bool`, *optional*, defaults to `False`):
+            With `out`, also write a multiple-choice task's per-token values, as [`EvalConfig`]'s `tokens`.
+        context_tokens (`bool`, *optional*, defaults to `False`):
+            With `tokens`, also write its contexts' values, as [`EvalConfig`]'s `context_tokens`.
 
     Raises:
         `ValueError`: if `limit` is less than 1, or a request's continuation changes its context's tokens on a [`~eval.tokenizer.SentencePieceTokenizer`].
         `FileExistsError`: if the predictions file already exists, before anything is scored.
     """
-    return score_prepared(model, prepare_task(model, task, limit), out)
+    return score_prepared(model, prepare_task(model, task, limit), out, tokens, context_tokens)
 
 
 def prepare_task(model: ScoringModel, task: Task, limit: int | None = None) -> PreparedTask:
@@ -369,7 +391,11 @@ def prepare_task(model: ScoringModel, task: Task, limit: int | None = None) -> P
 
 
 def score_prepared(
-    model: ScoringModel, prepared: PreparedTask, out: Path | None = None
+    model: ScoringModel,
+    prepared: PreparedTask,
+    out: Path | None = None,
+    tokens: bool = False,
+    context_tokens: bool = False,
 ) -> TaskResult:
     """
     Scores a task from [`prepare_task`] with an already loaded model, as training loops do between steps. The result is the one [`score_task`] gives.
@@ -381,10 +407,14 @@ def score_prepared(
             The prepared task. It can be scored any number of times.
         out (`Path`, *optional*):
             Write per-doc scores to `out/predictions/<task>.jsonl`. A training loop gives each step its own `out`.
+        tokens (`bool`, *optional*, defaults to `False`):
+            With `out`, also write a multiple-choice task's per-token values, as [`EvalConfig`]'s `tokens`. Off by default, so a training loop pays for them only when it asks.
+        context_tokens (`bool`, *optional*, defaults to `False`):
+            With `tokens`, also write its contexts' values, as [`EvalConfig`]'s `context_tokens`.
 
     Raises:
         `ValueError`: if `model`'s tokenizer isn't the one the task was prepared with, or a multiple-choice task was prepared with another `add_bos`.
-        `FileExistsError`: if the predictions file already exists, before anything is scored.
+        `FileExistsError`: if the predictions file or the per-token values already exist, before anything is scored.
     """
     task = prepared.task
     # The token ids are this tokenizer's: another one would score other tokens without an error.
@@ -406,10 +436,24 @@ def score_prepared(
         raise FileExistsError(f"{predictions} exists: {_ONE_RUN}")
     if isinstance(prepared, PreparedPerplexity):
         return _score_perplexity(model, prepared, predictions)
+    # Per-token values are written only beside predictions.
+    token_values = out / tokens_name(task.name) if out is not None and tokens else None
+    if token_values is not None and token_values.exists():
+        raise FileExistsError(f"{token_values} exists: {_ONE_RUN}")
 
     requests = prepared.requests
     start = time.perf_counter()
-    request_scores = model.loglikelihood(requests.requests, prepared.encoded)
+    request_scores = model.loglikelihood(
+        requests.requests, prepared.encoded, tokens=token_values is not None
+    )
+    # Each distinct context is read once, inside the timed span, so `seconds` counts what the
+    # per-token values cost.
+    contexts = None
+    if token_values is not None:
+        contexts = model.score_contexts(
+            [prepared.encoded[i].context for i in requests.context_requests],
+            values=context_tokens,
+        )
     scores = requests.choice_scores(request_scores)
     reported = task.reported_metrics
     per_doc = {name: values for name, values in multiple_choice(scores).items() if name in reported}
@@ -430,6 +474,8 @@ def score_prepared(
         ranked = ranking_scores(scores).get(task.primary_metric)
         pick = best_choice(ranked, scores.valid) if ranked is not None else None
         write_predictions(predictions, requests, scores, correct, pick, task.dataset.private)
+    if token_values is not None:
+        write_tokens(token_values, requests, request_scores, contexts, task.dataset.private)
 
     return TaskResult(
         task=task.name,
