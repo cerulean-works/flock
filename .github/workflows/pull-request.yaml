@@ -3,10 +3,20 @@ name: Automatic Code Quality Tests
 on:
   pull_request:
 
+# These jobs run pull request code on our self-hosted runners (.github/runner/), so they get a
+# read-only token. A new push cancels the run still testing the old one, to free the runners.
+permissions:
+  contents: read
+
+concurrency:
+  group: pull-request-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   Lint:
     name: Lint, Format and Type Check
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, flock-ci]
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v7.0.1
@@ -35,7 +45,8 @@ jobs:
 
   Tests:
     name: Run pytest suite
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, flock-ci]
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v7.0.1
@@ -58,7 +69,8 @@ jobs:
 
   Snapshot:
     name: Eval task snapshot
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, flock-ci]
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v7.0.1
@@ -81,7 +93,8 @@ jobs:
 
   GPU:
     name: Run GPU tests on Modal
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, flock-ci]
+    timeout-minutes: 30
     # Pull requests from forks get no secrets, so they cannot reach Modal.
     if: github.event.pull_request.head.repo.full_name == github.repository
     concurrency:
