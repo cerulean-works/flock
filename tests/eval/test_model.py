@@ -1034,3 +1034,16 @@ def test_rolling_loglikelihood_rejects_a_window_outside_max_length(
 def test_rolling_loglikelihood_rejects_an_empty_text(scorer: ScoringModel) -> None:
     with pytest.raises(ValueError, match="text has no tokens"):
         scorer.rolling_loglikelihood(["fox", ""], 8)
+
+
+@pytest.mark.parametrize("chunk_positions", [1, 2, 4096])
+def test_target_values_are_the_same_in_any_chunks_of_positions(chunk_positions: int) -> None:
+    # One row of 5 positions: chunks of 1 and 2 positions split it, 4096 keeps it whole.
+    torch.manual_seed(0)
+    logits = torch.randn(1, 5, 7)
+    targets = torch.randint(7, (1, 5))
+    _, _, chunked = model._target_logprobs(logits, targets, True, chunk_positions)
+    _, _, whole = model._target_logprobs(logits, targets, True, 4096)
+    assert chunked is not None and whole is not None
+    for name, value in whole.items():
+        torch.testing.assert_close(chunked[name], value)
