@@ -1276,6 +1276,40 @@ export interface HFImport {
 	finished_at: number | null;
 }
 
+/** What a launch may score (`GET /orgs/{org}/evals/launches/catalogue`, 026): suites and tasks whose datasets are all public, and the caps in US dollars. */
+export interface EvalCatalogue {
+	suites: string[];
+	tasks: string[];
+	/** The most one launch may cost. */
+	max_usd: number;
+	/** The most the org's launches may cost in a month. */
+	monthly_usd: number;
+}
+
+/** An eval launched on a Modal H100 (026), as `GET /orgs/{org}/evals/launches` lists it. */
+export interface EvalLaunch {
+	id: number;
+	project: string;
+	/** The Hugging Face repository, and the revision asked for. */
+	model: string;
+	revision: string;
+	/** The commit the revision resolved to. */
+	sha: string;
+	suites: string[];
+	tasks: string[];
+	add_bos: boolean;
+	/** Its run's id in `project`, named when it starts. */
+	run: string;
+	state: 'running' | 'finished' | 'failed' | 'cancelled';
+	cap_usd: number;
+	/** The flock commit that scored it, once finished. */
+	flock_commit: string | null;
+	error: string | null;
+	started_by: Person | null;
+	started_at: number;
+	finished_at: number | null;
+}
+
 /** A split of a Hugging Face dataset, with its size when the Hub knows it. */
 export interface HFSplit {
 	name: string;

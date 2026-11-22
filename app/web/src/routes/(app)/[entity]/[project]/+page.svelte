@@ -19,6 +19,8 @@
 	import CopyBlock from '#lib/components/CopyBlock.svelte';
 	import EmptyState from '#lib/components/EmptyState.svelte';
 	import EditRunDialog from '#lib/components/EditRunDialog.svelte';
+	import EvalLaunchButton from '#lib/components/launches/EvalLaunchButton.svelte';
+	import EvalLaunchRows from '#lib/components/launches/EvalLaunchRows.svelte';
 	import MoveRunsDialog from '#lib/components/MoveRunsDialog.svelte';
 	import LiveStatus from '#lib/components/LiveStatus.svelte';
 	import Pager from '#lib/components/Pager.svelte';
@@ -39,6 +41,7 @@
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { clearRunPages, prefetchRunPage } from '#lib/data/cache.ts';
 	import { compareHref } from '#lib/evals.ts';
+	import { LaunchList } from '#lib/launches.svelte.ts';
 	import { LiveConnection, type ProjectEvent } from '#lib/data/live.ts';
 	import { leftWorkspace, rememberFilters, showingProject } from '#lib/workspace/remembered.ts';
 	import { entityHref, workspaceHrefWith } from '#lib/workspace/url.ts';
@@ -113,6 +116,10 @@
 
 	/** Outside the org: read-only, with no run actions (D116). */
 	const readonly = $derived(data.shell.access === 'public');
+
+	// Members and admins launch evals into the project (026); its launches show above its runs.
+	const launches = $derived(new LaunchList(ws.meta.entity, ws.meta.project));
+	$effect(() => (readonly ? undefined : launches.watch()));
 
 	// Runs created or removed elsewhere, and metrics first logged, shift the page: it is read
 	// again by itself, at most once every `RELOAD_MS` however many arrive, and not while the
@@ -317,6 +324,9 @@
 		{/snippet}
 		{#snippet actions()}
 			<LiveStatus />
+			{#if !readonly}
+				<EvalLaunchButton org={ws.meta.entity} project={ws.meta.project} list={launches} />
+			{/if}
 		{/snippet}
 		{#snippet toolbar()}
 			<Tabs.Root value={view} onValueChange={(v) => setView(v as View)}>
@@ -390,6 +400,16 @@
 			{/if}
 		{/snippet}
 	</PageHeader>
+
+	{#if !readonly}
+		<EvalLaunchRows
+			org={ws.meta.entity}
+			project={ws.meta.project}
+			list={launches}
+			me={data.shell.me?.id ?? null}
+			admin={data.shell.access === 'admin'}
+		/>
+	{/if}
 
 	<main class="relative min-h-0 flex-1">
 		<RunsTable bind:this={table} mode={view} {nameW} />
