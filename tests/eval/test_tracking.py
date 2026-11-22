@@ -458,6 +458,39 @@ def test_a_banked_copy_arrives_as_results_json_and_an_older_schema_without_predi
     assert logged["files"]["results.json"][0] == banked.read_text()
 
 
+def test_a_renamed_schema_9_file_is_refused_since_the_predictions_beside_it_may_not_be_its(
+    logged: dict[str, Any], hub: FakeHub, tmp_path: Path
+) -> None:
+    path = written_run(tmp_path / "run")
+    renamed = path.with_name("olmo2-1b-results.json")
+    path.rename(renamed)
+
+    with pytest.raises(ValueError, match="isn't a file named results.json"):
+        log_results_file(renamed, "model-evals")
+
+    assert "init" not in logged
+
+
+def test_a_linked_results_file_or_a_repeated_task_is_refused_before_any_run(
+    logged: dict[str, Any], hub: FakeHub, tmp_path: Path
+) -> None:
+    # A link would pair the target's privacy marks with the predictions beside the link.
+    path = written_run(tmp_path / "run", private=True)
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "results.json").symlink_to(path)
+    with pytest.raises(ValueError, match="isn't a file named results.json"):
+        log_results_file(other / "results.json", "model-evals")
+
+    # Repeated with another mark, one file would go up under both names.
+    results = json.loads(path.read_text())
+    results["tasks"].append({**results["tasks"][1], "dataset": {"private": False}})
+    with pytest.raises(ValueError, match="exam.jsonl is the predictions file of two tasks"):
+        log_to_tracker(results, "model-evals", results_file=path)
+
+    assert "init" not in logged
+
+
 def test_private_predictions_go_only_to_a_private_project(
     logged: dict[str, Any], hub: FakeHub, tmp_path: Path
 ) -> None:
@@ -469,13 +502,18 @@ def test_private_predictions_go_only_to_a_private_project(
     # The run goes to the API and organization whose project was read as private.
     assert logged["init"]["entity"] == "acme"
     assert logged["init"]["settings"].base_url == HOST
-    assert "predictions/exam.jsonl" in logged["files"]
+    # Under `private/`, which the tracker keeps to members if the project is made public.
+    assert set(logged["files"]) == {
+        "results.json",
+        "predictions/toy.jsonl",
+        "private/predictions/exam.jsonl",
+    }
 
 
 @pytest.mark.parametrize(
     ("project", "match"),
     [
-        ("public", "acme/model-evals is public, and the predictions of exam read a private"),
+        ("public", "acme/model-evals is public, and private/predictions/exam.jsonl hold"),
         ((403, {"error": "forbidden"}), "refused the project query \\(forbidden\\)"),
         ((404, {"detail": "Not Found"}), "refused the project query"),
     ],
@@ -571,6 +609,27 @@ def test_a_run_reads_back_as_its_folder_does(hub: FakeHub, tmp_path: Path) -> No
     assert remote.predictions("toy") == local.predictions("toy")
     assert remote.predictions("exam") is None  # not uploaded
     assert read_run_file("acme/model-evals/run-1", "results.json") == path.read_text()
+
+
+def test_a_run_reads_a_private_tasks_predictions_from_its_private_folder(
+    hub: FakeHub, tmp_path: Path
+) -> None:
+    written_run(tmp_path / "run", private=True)
+    folder = tmp_path / "run"
+    hub.files["results.json"] = (folder / "results.json").read_text()
+    hub.files["private/predictions/exam.jsonl"] = (folder / "predictions/exam.jsonl").read_text()
+    hub.files["predictions/toy.jsonl"] = (folder / "predictions/toy.jsonl").read_text()
+
+    remote = read_results("run:acme/model-evals/run-1")
+    local = read_results(str(folder))
+
+    # The folder keeps every task in predictions/; only the run names private ones apart.
+    assert remote.predictions("exam") == local.predictions("exam")
+    assert remote.predictions("toy") == local.predictions("toy")
+    # A copy under the public name is never read for a private task.
+    hub.files["predictions/exam.jsonl"] = "not read\n"
+    del hub.files["private/predictions/exam.jsonl"]
+    assert remote.predictions("exam") is None
 
 
 def test_a_run_keeps_reading_with_the_sign_in_it_was_opened_with(

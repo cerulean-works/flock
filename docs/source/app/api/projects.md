@@ -161,6 +161,8 @@ Moved runs keep everything they logged, and their owner. Active runs answer 409,
 
 The SDK uploads files such as `config.yaml`, `requirements.txt`, `wandb-metadata.json` and `wandb-summary.json`. Files can't be deleted one at a time: they go when the run is deleted.
 
+Files in a top-level `private/` folder, such as `private/predictions/exam.jsonl`, are for the organization's members only, whatever the project's visibility. On a public project, outsiders don't see them in the list, and reading one answers the same 404 as a missing file. A run that uploads such files keeps them members-only when its project is made public or the run is moved into a public project.
+
 ## Run models[[run-models]]
 
 `GET .../runs/{run}/models` returns the model versions the run saved, in its own organization, as `save_to_hub` with `run` records them:
