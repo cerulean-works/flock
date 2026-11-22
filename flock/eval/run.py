@@ -84,7 +84,7 @@ class EvalConfig:
         greedy_tokens (`bool`, *optional*, defaults to `False`):
             Also write the first 32 tokens greedy decoding writes after each distinct context, for first-divergence views. It needs `tokens`. Off by default: decoding 32 tokens one step at a time took a run about half as long again as scoring it.
         perplexity_tokens (`bool`, *optional*, defaults to `False`):
-            With `out`, write each perplexity task's per-token values beside its predictions, as `predictions/<task>.tokens.parquet`: each token's loss and where it ends in the text's bytes, but no token ids (see [`~eval.results.write_perplexity_tokens`]).
+            With `out`, write each perplexity task's per-token values beside its predictions, as `predictions/<task>.tokens.parquet`: each token's loss and where it ends in the text's bytes, but no token ids (see [Per-token values](results#per-token-values)).
 
     Raises:
         `ValueError`: if no task or suite is given, a task or suite repeats, `limit` or `batch_tokens` is less than 1, `dtype` is not `"bfloat16"` or `"float32"`, or `context_tokens` or `greedy_tokens` is set without `tokens`, before any model loads.
