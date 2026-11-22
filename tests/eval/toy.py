@@ -2,10 +2,12 @@
 
 import dataclasses
 import functools
+import json
+from pathlib import Path
 from typing import Any
 
 from flock.eval.provenance import Provenance
-from flock.eval.results import TaskResult, Truncation
+from flock.eval.results import Results, TaskResult, Truncation
 from flock.eval.tasks import (
     CHINESE_ANSWER_PREFIX,
     CHINESE_QUESTION_PREFIX,
@@ -222,3 +224,35 @@ def task_result(name: str, metrics: dict[str, float], seconds: float = 1.0) -> T
         seconds=seconds,
         truncation=Truncation(requests=0, docs=0, max_tokens_cut=0),
     )
+
+
+def write_run(
+    folder: Path,
+    tasks: dict[str, tuple[str, list[bool] | None]],
+    provenance: Provenance = PROVENANCE,
+    schema: int = 10,
+) -> str:
+    """Writes a run whose tasks are read by `acc_raw`, each as `name: (task_hash, outcomes)`, with docs `d-0`, `d-1`, ..., and returns its folder. Outcomes of `None` write no predictions file."""
+    results = []
+    for name, (task_hash, outcomes) in tasks.items():
+        right = sum(outcomes) / len(outcomes) if outcomes else 0.0
+        result = dataclasses.replace(task_result(name, {"acc_raw": right}), task_hash=task_hash)
+        results.append(dataclasses.replace(result, num_docs=len(outcomes or [])))
+    data = Results(provenance, results).to_dict()
+    data["schema_version"] = schema
+    folder.mkdir(parents=True)
+    (folder / "results.json").write_text(json.dumps(data))
+
+    (folder / "predictions").mkdir()
+    for name, (_, outcomes) in tasks.items():
+        if outcomes is None:
+            continue
+        rows = []
+        for i, right in enumerate(outcomes):
+            row: dict[str, Any] = {"id": f"d-{i}", "gold": 0}
+            if schema >= 9:
+                row["correct"] = right
+            rows.append(row)
+        text = "".join(json.dumps(row) + "\n" for row in rows)
+        (folder / "predictions" / f"{name}.jsonl").write_text(text)
+    return str(folder)
