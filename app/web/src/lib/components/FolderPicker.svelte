@@ -2,12 +2,18 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import FolderPlusIcon from '@lucide/svelte/icons/folder-plus';
+	import PickerList from '#lib/components/PickerList.svelte';
 	import { DATASETS_BUCKET, datasetCall, datasetsApi, pathError } from '#lib/datasets.ts';
 	import { folderApi, modelNameError } from '#lib/models.ts';
 	import type { Scope } from '#lib/scope.ts';
 	import type { DatasetFolder, ModelAt, ModelFolder } from '#lib/types.ts';
 
+	/**
+	 * Where a move goes, as a panel always open in its dialog: the folder open is the one picked,
+	 * its folders are listed to open, and one that doesn't exist yet is named in place.
+	 */
 	interface Props {
+		/** The search box's id, for the dialog's label. */
 		id: string;
 		/** The folder picked, relative to the scope. */
 		value: string;
@@ -29,14 +35,28 @@
 		kind === 'dataset' && scope.project === null ? DATASETS_BUCKET : (scope.project ?? scope.org)
 	);
 
+	let query = $state('');
+	let active = $state(0);
+
+	/** Opens a folder, unsearched. */
+	function go(path: string) {
+		// The last folder's rows aren't picked while another one loads.
+		if (path !== target) folders = null;
+		value = path;
+		query = '';
+		active = 0;
+	}
+
 	// The folders in the destination, read as it's typed, and again when the scope changes.
 	let browsing = $state<string | null>(null);
 	let folders = $state<{ name: string; path: string }[] | null>(null);
+	let failed = $state<string | null>(null);
 	$effect(() => {
 		const at = target;
 		const where = { ...scope };
 		if (at && invalid(at)) {
 			folders = [];
+			failed = null;
 			return;
 		}
 		const controller = new AbortController();
@@ -55,6 +75,7 @@
 	async function list(where: Scope, at: string, signal: AbortSignal) {
 		const found: { name: string; path: string }[] = [];
 		let cursor: string | null = null;
+		failed = null;
 		try {
 			for (let n = 0; n < PAGES; n++) {
 				const page: DatasetFolder | ModelFolder | ModelAt =
@@ -70,10 +91,17 @@
 			}
 		} catch (e) {
 			if ((e as Error).name === 'AbortError') return;
+			// A folder that doesn't exist yet (named here, or kept from another project) is made by
+			// the move: empty, not an error.
+			if ((e as { status?: number }).status !== 404) failed = (e as Error).message;
 		}
 		browsing = at;
 		folders = found.filter((f) => !exclude?.(f.path));
 	}
+
+	const shown = $derived(
+		(folders ?? []).filter((f) => f.name.toLowerCase().includes(query.trim().toLowerCase()))
+	);
 
 	/** Each folder on the way down, for the breadcrumbs. */
 	const crumbs = $derived(
@@ -95,7 +123,7 @@
 		const path = target ? `${target}/${name}` : name;
 		draftError = name.includes('/') ? 'One folder at a time' : invalid(path);
 		if (draftError) return;
-		value = path;
+		go(path);
 		naming = false;
 		draft = '';
 	}
@@ -104,7 +132,6 @@
 <div class="overflow-hidden rounded-lg border border-input text-[13px]">
 	<!-- Where the items go: each step back up is a click away. -->
 	<div
-		{id}
 		class="flex min-h-9 flex-wrap items-center gap-0.5 border-b border-input bg-muted/40 px-1.5 py-1"
 		role="group"
 		aria-label="Folder"
@@ -117,7 +144,7 @@
 			]}
 			{disabled}
 			aria-current={target ? undefined : 'location'}
-			onclick={() => (value = '')}
+			onclick={() => go('')}
 		>
 			{root}
 		</button>
@@ -131,69 +158,78 @@
 				]}
 				{disabled}
 				aria-current={i === crumbs.length - 1 ? 'location' : undefined}
-				onclick={() => (value = crumb.path)}
+				onclick={() => go(crumb.path)}
 			>
 				{crumb.name}
 			</button>
 		{/each}
 	</div>
-	<div class="h-44 overflow-y-auto py-1" role="group" aria-label="Folders">
-		{#each folders ?? [] as f (f.path)}
-			<button
-				type="button"
-				class="flex h-8 w-full items-center gap-2 px-2.5 text-left hover:bg-muted"
-				{disabled}
-				onclick={() => (value = f.path)}
-			>
-				<FolderIcon class="size-4 flex-none text-muted-foreground" />
-				<span class="truncate">{f.name}/</span>
-			</button>
-		{:else}
-			<p class="px-2.5 py-1.5 text-muted-foreground">
-				{folders === null ? 'Loading folders…' : 'No folders here.'}
-			</p>
-		{/each}
-		{#if naming}
-			<div class="flex h-8 items-center gap-2 px-2.5">
-				<FolderPlusIcon class="size-4 flex-none text-muted-foreground" />
-				<!-- svelte-ignore a11y_autofocus -->
-				<input
-					class="h-6 min-w-0 flex-1 rounded border border-input bg-transparent px-1.5 outline-none focus-visible:border-ring"
-					aria-label="New folder name"
-					placeholder="e.g., archive"
-					autocomplete="off"
-					spellcheck="false"
-					autofocus
-					bind:value={draft}
-					oninput={() => (draftError = null)}
-					onkeydown={(e) => {
-						if (e.key === 'Enter') {
-							e.preventDefault();
-							addFolder();
-						} else if (e.key === 'Escape') {
-							e.preventDefault();
-							e.stopPropagation();
-							naming = false;
-						}
+	<PickerList
+		options={shown}
+		key={(f) => f.path}
+		noun="folders"
+		label="Search folders"
+		placeholder="Search folders…"
+		bind:query
+		bind:active
+		loading={folders === null}
+		error={failed}
+		verb="open"
+		{id}
+		{disabled}
+		class="h-44"
+		onpick={(f) => go(f.path)}
+		onup={target ? () => go(crumbs.at(-2)?.path ?? '') : undefined}
+	>
+		{#snippet row(f: { name: string; path: string })}
+			<FolderIcon class="size-4 flex-none text-muted-foreground" />
+			<span class="truncate">{f.name}/</span>
+		{/snippet}
+		{#snippet actions()}
+			{#if naming}
+				<div class="flex h-8 items-center gap-2 px-3">
+					<FolderPlusIcon class="size-4 flex-none text-muted-foreground" />
+					<!-- svelte-ignore a11y_autofocus -->
+					<input
+						class="h-6 min-w-0 flex-1 rounded border border-input bg-transparent px-1.5 outline-none focus-visible:border-ring"
+						aria-label="New folder name"
+						placeholder="e.g., archive"
+						autocomplete="off"
+						spellcheck="false"
+						autofocus
+						bind:value={draft}
+						oninput={() => (draftError = null)}
+						onkeydown={(e) => {
+							if (e.key === 'Enter') {
+								e.preventDefault();
+								addFolder();
+							} else if (e.key === 'Escape') {
+								e.preventDefault();
+								e.stopPropagation();
+								naming = false;
+							}
+						}}
+						onblur={addFolder}
+					/>
+				</div>
+				{#if draftError}<p class="px-3 pb-1 text-xs text-destructive" role="alert">
+						{draftError}
+					</p>{/if}
+			{:else}
+				<button
+					type="button"
+					class="flex h-8 w-full items-center gap-2 px-3 text-left text-muted-foreground hover:bg-muted"
+					{disabled}
+					onclick={() => {
+						draft = '';
+						draftError = null;
+						naming = true;
 					}}
-					onblur={addFolder}
-				/>
-			</div>
-			{#if draftError}<p class="px-2.5 text-xs text-destructive" role="alert">{draftError}</p>{/if}
-		{:else}
-			<button
-				type="button"
-				class="flex h-8 w-full items-center gap-2 px-2.5 text-left text-muted-foreground hover:bg-muted"
-				{disabled}
-				onclick={() => {
-					draft = '';
-					draftError = null;
-					naming = true;
-				}}
-			>
-				<FolderPlusIcon class="size-4 flex-none" />
-				New folder
-			</button>
-		{/if}
-	</div>
+				>
+					<FolderPlusIcon class="size-4 flex-none" />
+					New folder
+				</button>
+			{/if}
+		{/snippet}
+	</PickerList>
 </div>
