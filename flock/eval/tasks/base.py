@@ -458,13 +458,22 @@ class MultipleChoiceTask:
         docs = []
         fields = self.row_fields
         for index, row in rows[:limit]:
-            doc = self.to_doc(row)
+            # Read before `to_doc`, which may change the row it is given.
             # The row as the dataset gives it: `row_index` adds the index, which isn't a column.
             original = dict(row)
             if self.dataset.row_index:
                 del original["index"]
+            # `default=str` as lm-evaluation-harness's `handle_non_serializable` falls back, so a
+            # column JSON can't hold (a timestamp, bytes) doesn't stop scoring; rows of plain
+            # values hash exactly as there.
+            doc_hash = hashlib.sha256(
+                json.dumps(original, indent=2, ensure_ascii=False, default=str).encode()
+            ).hexdigest()
             native_id = str(row[fields.native_id]) if fields.native_id is not None else None
+            subject = str(row[fields.subject]) if fields.subject is not None else None
             meta = {column: row[column] for column in fields.meta}
+
+            doc = self.to_doc(row)
             if any(type(value) not in (str, int, float, bool, NoneType) for value in meta.values()):
                 raise ValueError(
                     f"{self.name}: doc {doc.id}: meta columns must hold scalars: {meta}"
@@ -472,11 +481,9 @@ class MultipleChoiceTask:
             source = SourceRow(
                 split=self.dataset.split,
                 index=index,
-                doc_hash=hashlib.sha256(
-                    json.dumps(original, indent=2, ensure_ascii=False).encode()
-                ).hexdigest(),
+                doc_hash=doc_hash,
                 native_id=native_id if native_id != doc.id else None,
-                subject=str(row[fields.subject]) if fields.subject is not None else None,
+                subject=subject,
                 meta=meta,
             )
             docs.append(dataclasses.replace(doc, source=source))

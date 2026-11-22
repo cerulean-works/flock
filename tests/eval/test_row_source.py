@@ -200,3 +200,27 @@ def test_a_tokenizer_without_a_tokenizers_backend_has_no_hash(
     scorer = ScoringModel(lm, tokenizer, name="tiny@0")
     scorer.tokenizer = PythonTokenizer()  # ty: ignore[invalid-assignment]
     assert scorer.tokenizer_hash is None  # its vocabulary alone wouldn't identify it
+
+
+def test_a_row_is_recorded_before_to_doc_sees_it_and_any_column_hashes(
+    rows_by_split: dict[str, list[dict[str, Any]]],
+) -> None:
+    import datetime
+
+    def popping_doc(row: dict[str, Any]) -> Any:
+        row.pop("answerKey")  # a formatter that changes the row it is given
+        return TASK.to_doc({**ROWS["test"][0]} | {"id": row["id"]})
+
+    stamp = datetime.datetime(2026, 1, 1)
+    rows = [{**ROWS["test"][0], "seen": stamp}]
+    # Copies: the formatter changes every row it reads, the examples' too.
+    rows_by_split.update(test=rows, train=[dict(row) for row in ROWS["train"]])
+    task = dataclasses.replace(TASK, to_doc=popping_doc, row_fields=RowFields(meta=("answerKey",)))
+
+    [doc], _ = task.load()
+    assert doc.source is not None
+    assert doc.source.meta == {"answerKey": "A"}
+    expected = json.dumps(
+        {**ROWS["test"][0], "seen": stamp}, indent=2, ensure_ascii=False, default=str
+    )
+    assert doc.source.doc_hash == hashlib.sha256(expected.encode()).hexdigest()
