@@ -162,8 +162,11 @@ def test_a_long_context_is_cut_from_the_left_to_leave_room_for_the_tokens_writte
     # With room for 4 context tokens, the last 3 have values.
     read = short.score_contexts([context], num_tokens=4, values=True)
     assert read.values is not None and read.values.token_ids.tolist() == context[-3:]
-    with pytest.raises(ValueError, match="no tokens to decode"):
-        short.score_contexts([[1]], num_tokens=0)
+    with pytest.raises(ValueError, match="can't decode -1 tokens"):
+        short.score_contexts([[1]], num_tokens=-1)
+    # None decoded, for the values alone.
+    read = short.score_contexts([context], num_tokens=0, values=True)
+    assert read.greedy is None and read.values is not None
 
 
 def test_a_flock_model_writes_no_greedy_tokens_but_reads_its_contexts(
@@ -191,7 +194,10 @@ def test_a_flock_model_writes_no_greedy_tokens_but_reads_its_contexts(
 def test_the_sidecar_holds_each_choice_each_context_and_its_greedy_tokens(
     offline_model: None, scorer: ScoringModel, tmp_path: Path
 ) -> None:
-    evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path, context_tokens=True))
+    config = EvalConfig(
+        model="tiny@0", tasks=("toy",), out=tmp_path, context_tokens=True, greedy_tokens=True
+    )
+    evaluate(config)
     written = read_results(str(tmp_path))
     rows = written.tokens("toy")
     assert rows is not None
@@ -260,10 +266,15 @@ def test_without_the_flags_no_sidecar_is_written_and_a_run_reads_without_one(
     score_prepared(scorer, prepare_task(scorer, TASK), tmp_path / "step")
     assert not (tmp_path / "step" / "predictions" / "toy.tokens.parquet").exists()
 
-    # The default writes the choices and the greedy tokens, not the contexts.
+    # The default writes the choices alone; greedy tokens and contexts each take a flag.
     evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path / "on"))
     parts = {row["part"] for row in read_results(str(tmp_path / "on")).tokens("toy") or []}
+    assert parts == {"continuation"}
+    evaluate(EvalConfig(model="tiny@0", tasks=("toy",), out=tmp_path / "g", greedy_tokens=True))
+    parts = {row["part"] for row in read_results(str(tmp_path / "g")).tokens("toy") or []}
     assert parts == {"continuation", "greedy"}
+    with pytest.raises(ValueError, match="greedy_tokens writes"):
+        EvalConfig(model="m@0", tasks=("toy",), tokens=False, greedy_tokens=True)
 
 
 def test_the_scores_are_the_same_with_and_without_the_sidecar(
