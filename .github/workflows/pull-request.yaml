@@ -77,7 +77,7 @@ jobs:
 
       - name: Run tests
         timeout-minutes: 10
-        run: uv run --no-sync python -m pytest -q tests -n 6
+        run: uv run --no-sync python -m pytest -q tests -n 10
 
   Snapshot:
     name: Eval task snapshot

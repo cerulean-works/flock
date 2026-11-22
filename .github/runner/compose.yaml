@@ -39,10 +39,10 @@ services:
       replicas: ${RUNNER_REPLICAS:-2}
       resources:
         limits:
-          cpus: "${RUNNER_CPUS:-3}"
-          memory: ${RUNNER_MEMORY:-12g}
+          cpus: "${RUNNER_CPUS:-8}"
+          memory: ${RUNNER_MEMORY:-14g}
           pids: 4096
-    memswap_limit: ${RUNNER_MEMORY:-12g}
+    memswap_limit: ${RUNNER_MEMORY:-14g}
 
     logging:
       driver: json-file

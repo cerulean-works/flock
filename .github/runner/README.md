@@ -21,7 +21,7 @@ Pull request code runs on the same server as production Flock, so the service:
 - **Has no Docker daemon.** The image has the `docker` CLI and Compose plugin, because the tests validate Compose files with `docker compose config`, which needs no daemon. The app tests' PostgreSQL normally runs in a container, so the image ships PostgreSQL 18 instead. The pytest job starts a private server as `runner` in its temp folder and points the tests at it with `FLOCK_TEST_DATABASE_URL`. The server dies with the job.
 - **Lets jobs write almost nowhere.** The root filesystem is read-only, including the installed runner. Jobs can write only to their own home volume and a 2 GB `/tmp`, which are both wiped before the next job.
 - **Gives jobs no way out.** There's no Docker socket and no host mount, and the runners sit on their own network, apart from `dokploy-network`.
-- **Caps what a job can take.** Each runner gets at most 3 CPUs, 12 GB of memory (no swap) and 4096 processes. The kernel kills a runner first when the server runs out of memory, and every job times out after 30 minutes.
+- **Caps what a job can take.** Each runner gets at most 8 CPUs, 14 GB of memory (no swap) and 4096 processes. The kernel kills a runner first when the server runs out of memory, and every job times out after 30 minutes.
 
 On GitHub, the repository requires approval before workflows run for every pull request from an outside contributor, not only their first.
 
@@ -29,7 +29,7 @@ Jobs can still reach anything the server can reach over the network.
 
 ## Memory
 
-With PostgreSQL, the pytest suite peaks at about 11.5 GB with `-n 6`, page cache included. Without enough memory, the kernel kills an xdist worker and pytest hangs. Each runner gets 12 GB. The server has 31 GB and also runs production, so before adding runners with `RUNNER_REPLICAS`, check that their total still leaves production room. If memory does run out, the kernel kills a runner rather than production.
+With PostgreSQL and `-n 10` on 8 CPUs, the pytest suite takes about 3 minutes and peaks at about 13.9 GB, of which 11.6 GB can't be reclaimed (the rest is page cache). Without enough memory, the kernel kills an xdist worker and pytest hangs. Each runner gets 14 GB. Change `-n` in the workflow and `RUNNER_CPUS` and `RUNNER_MEMORY` together. The server has 31 GB and also runs production, so before adding runners with `RUNNER_REPLICAS`, check that their total still leaves production room. If memory does run out, the kernel kills a runner rather than production.
 
 ## Deploy on Dokploy
 
@@ -43,8 +43,8 @@ GITHUB_APP_PRIVATE_KEY_B64=...
 RUNNER_REPOSITORY=cerulean-works/flock
 RUNNER_LABELS=flock-ci
 RUNNER_REPLICAS=2
-RUNNER_CPUS=3
-RUNNER_MEMORY=12g
+RUNNER_CPUS=8
+RUNNER_MEMORY=14g
 ```
 
 Deploys are manual: changes merged here take effect when you press **Deploy**. A deploy restarts the runners, which cancels the jobs they're running.
