@@ -12,8 +12,9 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	const other = url.searchParams.get('with') ?? '';
 	const path = `${projectPath(params.entity, params.project)}/runs/${encodeURIComponent(params.run)}`;
 	// Both runs first, so one the viewer can't read is the usual 404 (or sign-in), as on its page.
-	const [entity, project, run] = other.split('/');
-	if (!entity || !project || !run) error(404, `run ${other} not found`);
+	const parts = other.split('/');
+	const [entity, project, run] = parts;
+	if (parts.length !== 3 || !entity || !project || !run) error(404, `run ${other} not found`);
 	const [a, b] = await Promise.all([
 		flock(path).then((res) => res.json() as Promise<RunDetail>),
 		flock(`${projectPath(entity, project)}/runs/${encodeURIComponent(run)}`).then(

@@ -108,12 +108,13 @@ export async function evalRuns(scope: Scope, name: string, number: number): Prom
 					RESULT_SCHEMAS.includes(results.schema_version) &&
 					results.provenance.model === `flock:${version.model}@${version.number}` &&
 					results.provenance.model_digest === version.digest &&
-					// A project's model is written without its org (D162), so its file must name the
-					// org (schema 10); a global model's ref names it already.
-					(scope.project === null
-						? (results.provenance.model_org ?? scope.org) === scope.org
-						: results.provenance.model_org === scope.org &&
-							results.provenance.model_project === scope.project)
+					// From schema 10 the file names the model's org, project and path, which must be
+					// this version's; before it only a global model's ref, which names the org.
+					(results.schema_version >= 10
+						? results.provenance.model_org === scope.org &&
+							results.provenance.model_project === scope.project &&
+							results.provenance.model_path === version.name
+						: scope.project === null)
 						? evalScores(results)
 						: null
 			};

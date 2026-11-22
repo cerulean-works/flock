@@ -18,6 +18,11 @@ export async function readEvalResults(run: string): Promise<EvalResults | null> 
 		await res.body?.cancel();
 		return null;
 	}
-	const found: unknown = await res.json().catch(() => null);
+	// An own `__proto__` key would pass the check but fail the page's serialization, so none is
+	// kept.
+	const found: unknown = await res
+		.text()
+		.then((text) => JSON.parse(text, (key, value) => (key === '__proto__' ? undefined : value)))
+		.catch(() => null);
 	return isEvalResults(found) ? found : null;
 }

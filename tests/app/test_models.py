@@ -640,6 +640,8 @@ def test_schema_10_configs_link_a_projects_model_by_org_project_and_path(
         {**named, "model_org": "lab"},
         {**named, "model_project": 3},
         {**named, "model": "flock:pretrain:sweeps/lr@primary"},
+        # A global ref with only some of the fields, which contradict it.
+        {"model": "flock:flock/sweeps/lr@1", "model_digest": ours["digest"], "model_path": "x"},
     ]
     for i, config in enumerate(refused):
         assert api.create_run("evals", f"r{i}", config=config)["inserted"], config

@@ -161,6 +161,7 @@ describe('a version’s eval runs', () => {
 			if (url.includes('/models/'))
 				return Response.json({
 					model: 'pretrain:sweeps/lr',
+					name: 'sweeps/lr',
 					number: 3,
 					digest: 'd3',
 					evals: ['acme/evals/ours', 'acme/evals/lab']

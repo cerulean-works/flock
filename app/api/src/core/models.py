@@ -874,7 +874,8 @@ class Models:
         digest = fields["model_digest"]
         if ref is None or not isinstance(digest, str) or not SHA256.fullmatch(digest):
             return
-        if fields["model_org"] is None:  # before schema 10
+        if all(fields[key] is None for key in ("model_org", "model_project", "model_path")):
+            # Before schema 10: a global model, as `org/path`.
             owner, _, path = ref[1].partition("/")
             project = None
         else:
