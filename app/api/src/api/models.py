@@ -322,7 +322,7 @@ async def versions(
 async def get_version(
     org: OrgDep, name: str, number: int, store: StoreDep, project: ProjectQuery = None
 ) -> Response:
-    """A version with its files."""
+    """A version with its files and eval runs."""
     found = await models(store).version(org, name, str(number), await scope(store, org, project))
     return JSONResponse(await with_user(store, found))
 
