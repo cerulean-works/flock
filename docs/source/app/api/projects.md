@@ -173,7 +173,25 @@ Files in a top-level `private/` folder, such as `private/predictions/exam.jsonl`
 | 404 | Either run is unknown, or you can't read its project. Both cases give the same answer, so a private project's runs aren't revealed. Also when either run has no `results.json`. |
 | 409 | The diff refuses the pair: the runs used another instrument (`dtype`, `batch_tokens`, `attention` or `sdpa_backend`), a run's predictions don't match its results, or a file is over 64 MiB or the pair over 1 GiB. `error` says which. |
 
-Anyone may call it on two public projects. Item text isn't returned, only doc ids. A task on a private dataset is compared from the runs' `private/predictions/` files for the organization's members only: to anyone else reading a public project it's in `not_compared` as `no_predictions`, as [Run files](#run-files) keep those files from them.
+Anyone may call it on two public projects. Item text isn't returned, only doc ids: [Eval items](#run-items) returns it. A task on a private dataset is compared from the runs' `private/predictions/` files for the organization's members only: to anyone else reading a public project it's in `not_compared` as `no_predictions`, as [Run files](#run-files) keep those files from them.
+
+## Eval items[[run-items]]
+
+`GET .../runs/{run}/items?task={task}&keep={keep}` returns a page of one task's docs with their text and the run's answer, as [`flock eval items --json`](../../evals/commands#flock-eval-items) prints them. With `with={entity}/{project}/{run}`, it returns two runs' answers side by side, the run in the path first.
+
+| Parameter | Meaning |
+|---|---|
+| `task` | The task, whose primary metric must be an accuracy. |
+| `keep` | One run: `wrong`, `right` or `all`. Two runs: `only_a`, `only_b`, `both_wrong` or `both_right`. |
+| `with` | The other run, as `entity/project/id`. |
+| `sort` | `margin` (the default): with two runs, the biggest gap between their margins first, with one run the biggest margin either way. A run's margin is its gold choice's score minus its best wrong choice's, in the primary metric's units; items without one (`acc_greedy`) come last. `doc`: the dataset's order. |
+| `offset`, `limit` | The page: `limit` from 1 to 100, 20 by default. |
+
+```json
+{"total": 268, "offset": 0, "items": [{"task": "arc_easy", "metric": "acc_per_char", "id": "Mercury_7017010", "question": "...", "contexts": null, "choices": [" ...", " ..."], "gold": 1, "runs": [{"model": "...", "pick": 1, "correct": true, "logprob": [...], "prob": [...], "share": [...]}, ...]}]}
+```
+
+Each item is eval's `Item`, unchanged; `total` counts every doc the filter keeps. The answers are those of the [diff](#run-diff): 404 for a run that's unknown, you can't read, or has no `results.json`, and 409 with eval's reason when the items can't be read, such as runs scored with another instrument, a task one run didn't score, a `keep` that doesn't fit the number of runs, a run whose results schema is older than 11, whose predictions hold no text, or a page of more than 16 MiB (ask for a smaller `limit`). A task on a private dataset is read for the organization's members only: to anyone else its predictions don't exist, and the answer is a 409 with no text.
 
 ## Run models[[run-models]]
 
