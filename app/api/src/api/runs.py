@@ -1,5 +1,7 @@
 import asyncio
+import math
 import mimetypes
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
@@ -29,10 +31,12 @@ from app.api.src.api.deps import (
 from app.api.src.api.home import GpuType
 from app.api.src.api.models import with_users
 from app.api.src.core import query
+from app.api.src.core.accounts import User
 from app.api.src.core.errors import NotFound
 from app.api.src.core.evals import PairFiles
 from app.api.src.core.store import RUN_COLUMNS, Project, Run, Store
 from flock.eval.diff import diff
+from flock.eval.items import Item, items
 from flock.eval.results import WrittenResults
 
 router = APIRouter(prefix="/api/v1", tags=["flock"], dependencies=[Depends(rest_user)])
@@ -40,6 +44,9 @@ router = APIRouter(prefix="/api/v1", tags=["flock"], dependencies=[Depends(rest_
 # that need the default executor's threads, so sharing it could deadlock. Four at a time also
 # bound the files held in memory.
 DIFFS = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diff")
+# The largest page of items sent. A run's own fields (its model's name) repeat in every answer, so
+# a page can be far larger than the files it was read from.
+PAGE_BYTES = 16 << 20
 # Reads that answer outsiders too, on public projects (D112): they need no credential.
 public = APIRouter(prefix="/api/v1", tags=["flock"])
 
@@ -583,6 +590,34 @@ async def get_run_file(
     return StreamingResponse(chunks, media_type=media_type, headers={"content-length": str(size)})
 
 
+async def eval_readers(
+    run: Run, other: str | None, store: Store, viewer: User | None
+) -> list[tuple[str, Callable[[str], str | None]]]:
+    """The run, and ``other`` (``entity/project/id``) if given, as eval reads tracker runs: each one's ``run:`` source and a reader of its files, the two sharing one ``PairFiles`` budget. The other run must be readable too; either one unknown or unreadable is the same 404."""
+    # The readers are called from a thread of `DIFFS` and read each file through this loop.
+    files = PairFiles(store, asyncio.get_running_loop())
+    runs = [(run, f"{run.entity}/{run.project.name}/{run.name}")]
+    if other is not None:
+        parts = other.split("/")
+        if len(parts) != 3 or not all(parts):
+            raise APIError(404, f"run {other} not found")
+        entity, project, name = parts
+        readable = await get_readable_project(entity, project, store, viewer)
+        runs.append((await find_run(store, readable, name), other))
+
+    def read(of: Run, public: bool, name: str) -> str | None:
+        # A private dataset's rows, under `private/` (D181), are read for the run's org members
+        # only. To anyone else its task has no predictions, so no count, id or text of it leaves.
+        return files.read(of, name, readable=not (public and members_only(name)))
+
+    # As tracker runs (`run:`), so a private dataset's task is read from `private/`.
+    readers = []
+    for of, source in runs:
+        public = store.accounts.access(viewer, of.project) == "public"
+        readers.append((f"run:{source}", partial(read, of, public)))
+    return readers
+
+
 @public.get("/projects/{entity}/{project}/runs/{run}/diff")
 async def diff_runs(
     run: ReadableRunDep,
@@ -594,27 +629,10 @@ async def diff_runs(
     it: eval's ``ItemDiff`` (025, D185). The other run must be readable too; either one unknown
     or unreadable is the same 404. 404 if either has no ``results.json``, and 409 with eval's
     reason if the diff refuses the pair."""
-    parts = other.split("/")
-    if len(parts) != 3 or not all(parts):
-        raise APIError(404, f"run {other} not found")
-    entity, project, name = parts
-    found = await find_run(store, await get_readable_project(entity, project, store, viewer), name)
     loop = asyncio.get_running_loop()
-
     # The diff runs in a thread of its own pool and reads a file only when a task needs it, each
     # through this loop, so two runs' hundreds of files never travel to the client.
-    files = PairFiles(store, loop)
-
-    def read(of: Run, public: bool, name: str) -> str | None:
-        # A private dataset's rows, under `private/` (D181), are read for the run's org members
-        # only. To anyone else its task has no predictions, so no count or doc id of it leaves.
-        return files.read(of, name, readable=not (public and members_only(name)))
-
-    # As tracker runs (`run:`), so a private dataset's task is read from `private/`.
-    pair = []
-    for of, source in ((run, f"{run.entity}/{run.project.name}/{run.name}"), (found, other)):
-        public = store.accounts.access(viewer, of.project) == "public"
-        pair.append((f"run:{source}", partial(read, of, public)))
+    pair = await eval_readers(run, other, store, viewer)
 
     def compare() -> dict[str, Any]:
         a, b = (WrittenResults.read(source, reader) for source, reader in pair)
@@ -625,4 +643,79 @@ async def diff_runs(
     except FileNotFoundError as exc:
         raise APIError(404, str(exc)) from exc
     except ValueError as exc:  # another instrument, or files that don't match their results
+        raise APIError(409, str(exc)) from exc
+
+
+@public.get("/projects/{entity}/{project}/runs/{run}/items")
+async def run_items(
+    run: ReadableRunDep,
+    store: StoreDep,
+    viewer: ViewerDep,
+    task: Annotated[str, Query(description="the task whose docs are listed")],
+    keep: Annotated[
+        Literal["wrong", "right", "all", "only_a", "only_b", "both_wrong", "both_right"],
+        Query(description="one run's docs by outcome, or a cell of two runs' diff"),
+    ],
+    other: Annotated[
+        str | None, Query(alias="with", description="the other run, as entity/project/id")
+    ] = None,
+    sort: Annotated[
+        Literal["margin", "doc"],
+        Query(description="the biggest margin gap first (two runs), or the surest first (one)"),
+    ] = "margin",
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> Response:
+    """A page of one task's docs with their text and each run's answer, as ``flock eval items --json`` prints them: eval's ``Item`` objects, ``total`` counting them all (027).
+
+    By default the items most likely to tell something come first (D198): for two runs, the largest gap between their margins, for one run the largest margin either way. A run's margin is its gold choice's score minus the best wrong choice's, in the primary metric's own units. ``sort=doc`` keeps the dataset's order.
+
+    One run keeps its ``wrong``, ``right`` or ``all`` docs; with ``with=``, two runs keep a cell of their diff. Access is the diff's: a private dataset's task has no predictions to anyone but the org's members. 404 if a run has no ``results.json``, and 409 with eval's reason when the items can't be read (another instrument, a run before schema 11, which holds no text)."""
+    loop = asyncio.get_running_loop()
+    readers = await eval_readers(run, other, store, viewer)
+
+    def read() -> bytes:
+        runs = [WrittenResults.read(source, reader) for source, reader in readers]
+        found = items(runs, task, keep)
+        if sort == "margin":
+
+            def rank(item: Item) -> tuple[int, float]:
+                margins = []
+                for answer in item.runs:
+                    # `share` is a softmax of the metric's scores, so the log of a ratio of shares
+                    # is a gap between scores. `acc_greedy` ranks no choices, and a task with one
+                    # choice has no wrong one: no margin. A share that underflowed is floored.
+                    wrong = [s for k, s in enumerate(answer.share or []) if k != item.gold]
+                    if answer.share is None or not wrong:
+                        margins.append(None)
+                        continue
+                    gold = max(answer.share[item.gold], 1e-300)
+                    margins.append(math.log(gold) - math.log(max(max(wrong), 1e-300)))
+                # One run: the surest first, right or wrong. Two: the biggest gap first. Items
+                # without a margin go last, in doc order (the sort is stable).
+                known = [m for m in margins if m is not None]
+                if len(known) < len(margins):
+                    return (1, 0.0)
+                gap = known[0] if len(known) == 1 else known[0] - known[1]
+                return (0, -abs(gap))
+
+            found = sorted(found, key=rank)
+        # Encoded here, off the event loop, one item at a time within the budget.
+        head = b'{"total":%d,"offset":%d,"items":[' % (len(found), offset)
+        parts = []
+        size = len(head) + len(b"]}")
+        for item in found[offset : offset + limit]:
+            parts.append(orjson.dumps(item.to_dict()))
+            size += len(parts[-1]) + (len(parts) > 1)  # a comma before all but the first
+            if size > PAGE_BYTES:
+                raise ValueError(
+                    f"this page of items is over {PAGE_BYTES >> 20} MiB: ask for fewer"
+                )
+        return head + b",".join(parts) + b"]}"
+
+    try:
+        return Response(await loop.run_in_executor(DIFFS, read), media_type="application/json")
+    except FileNotFoundError as exc:
+        raise APIError(404, str(exc)) from exc
+    except ValueError as exc:  # eval's refusal, which says how to get the items where it can
         raise APIError(409, str(exc)) from exc
