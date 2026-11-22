@@ -383,9 +383,10 @@ describe('ModelView', () => {
 		serve({ ...storage(), [`${API}/olmo2-1b/-/versions`]: () => page(versions) });
 		view();
 		await screen.getByRole('button', { name: /^Version 12/ }).click();
-		const menu = screen.getByRole('menu');
-		const items = menu
-			.getByRole('menuitem')
+		const list = screen.getByRole('listbox');
+		await expect.element(list.getByRole('option', { name: /^primary/ })).toBeVisible();
+		const items = list
+			.getByRole('option')
 			.all()
 			.map((i) => i.element().textContent!.replace(/\s+/g, ' ').trim());
 		expect(items.slice(0, 4)).toEqual([
@@ -394,12 +395,12 @@ describe('ModelView', () => {
 			'checkpoint-900 version 13',
 			'checkpoint-12000 version 14'
 		]);
-		await menu.getByRole('menuitem', { name: /^release/ }).click();
+		await list.getByRole('option', { name: /^release/ }).click();
 		expect(goto).toHaveBeenLastCalledWith('/models/acme/olmo2-1b?version=release', {
 			reset: false
 		});
 		await screen.getByRole('button', { name: /^Version 12/ }).click();
-		await screen.getByRole('menuitem', { name: /Version 14/ }).click();
+		await screen.getByRole('option', { name: /Version 14/ }).click();
 		expect(goto).toHaveBeenLastCalledWith('/models/acme/olmo2-1b?version=14', { reset: false });
 	});
 

@@ -494,12 +494,20 @@ describe('DatasetView', () => {
 		});
 		view();
 		await screen.getByRole('button', { name: /Version 3/ }).click();
-		const menu = screen.getByRole('menu');
-		await expect.element(menu.getByText('latest')).toBeVisible();
-		await menu.getByRole('menuitem', { name: /Version 2/ }).click();
+		const list = screen.getByRole('listbox');
+		await expect.element(list.getByText('latest')).toBeVisible();
+		// It opens on the version shown, checked.
+		await expect
+			.element(list.getByRole('option', { name: /Version 3/ }))
+			.toHaveAttribute('aria-selected', 'true');
+		await list.getByRole('option', { name: /Version 2/ }).click();
 		expect(goto).toHaveBeenLastCalledWith('/datasets/acme/eval/mmlu?version=2', { reset: false });
 		await screen.getByRole('button', { name: /Version 3/ }).click();
-		await screen.getByRole('menuitem', { name: /^best/ }).click();
+		// Opening focuses the search box; a search narrows the list to the tag.
+		const search = screen.getByRole('combobox', { name: 'Search versions' });
+		await expect.element(search).toHaveFocus();
+		await search.fill('best');
+		await screen.getByRole('option', { name: /^best/ }).click();
 		expect(goto).toHaveBeenLastCalledWith('/datasets/acme/eval/mmlu?version=best', {
 			reset: false
 		});

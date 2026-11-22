@@ -15,6 +15,7 @@
 	import { page } from '$app/state';
 	import ConfirmDialog from '#lib/components/ConfirmDialog.svelte';
 	import PublicBadge from '#lib/components/PublicBadge.svelte';
+	import VersionPicker from '#lib/components/VersionPicker.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import { Mutation } from '#lib/data/mutation.svelte.ts';
@@ -29,7 +30,7 @@
 		refScope
 	} from '#lib/datasets.ts';
 	import { objectHref } from '#lib/storage.ts';
-	import type { Access, DatasetInfo, S3Config } from '#lib/types.ts';
+	import type { Access, DatasetInfo, S3Config, VersionsPage } from '#lib/types.ts';
 	import { withParam } from '#lib/workspace/url.ts';
 	import type { BlendStart } from '#lib/forks.ts';
 	import AboutTab from './AboutTab.svelte';
@@ -42,7 +43,6 @@
 	import RowsTab from './RowsTab.svelte';
 	import S3AccessDialog from './S3AccessDialog.svelte';
 	import SchemaTab from './SchemaTab.svelte';
-	import VersionPicker from './VersionPicker.svelte';
 	import VersionsTab from './VersionsTab.svelte';
 
 	interface Props {
@@ -109,6 +109,15 @@
 
 	/** Where to see another version: `?version=`, the tab kept. */
 	const versionHref = (version: string | null) => withParam(page.url, 'version', version);
+
+	/** The newest versions for the picker, each with its tags and whether it's the latest. */
+	const readVersions = (signal: AbortSignal) =>
+		datasetCall<VersionsPage>(datasetsApi(scope, 'versions', { path }), { signal }).then((p) =>
+			p.versions.map((v) => ({
+				number: v.version,
+				names: v.version === p.latest ? ['latest', ...v.tags] : v.tags
+			}))
+		);
 
 	const newer = $derived(
 		info && info.latest_version !== null && info.latest_version > info.version
@@ -183,11 +192,10 @@
 		<div class="mt-3 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-2">
 			{#if info}
 				<VersionPicker
-					{scope}
-					{path}
 					version={info.version}
 					{requested}
 					tags={allTags}
+					read={readVersions}
 					{versionHref}
 				/>
 			{/if}

@@ -12,8 +12,9 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
-	import { folderHref } from '#lib/models.ts';
-	import type { ModelInfo, ModelVersionDetail } from '#lib/types.ts';
+	import VersionPicker from '#lib/components/VersionPicker.svelte';
+	import { folderHref, modelApi, modelCall, sortTags } from '#lib/models.ts';
+	import type { ModelInfo, ModelVersionDetail, ModelVersionsPage } from '#lib/types.ts';
 	import { withParam } from '#lib/workspace/url.ts';
 	import DeleteModelDialog from './DeleteModelDialog.svelte';
 	import EvalsTab from './EvalsTab.svelte';
@@ -21,7 +22,6 @@
 	import LoadDialog from './LoadDialog.svelte';
 	import OverviewTab from './OverviewTab.svelte';
 	import RenameModelDialog from './RenameModelDialog.svelte';
-	import VersionPicker from './VersionPicker.svelte';
 	import VersionsTab from './VersionsTab.svelte';
 
 	interface Props {
@@ -60,6 +60,15 @@
 	/** Where to see another version (a number or a tag; null: the primary), the tab kept. */
 	const versionHref = (ref: string | null) => withParam(page.url, 'version', ref);
 
+	/** The newest versions for the picker, each with the primary and its tags. */
+	const readVersions = (signal: AbortSignal) =>
+		modelCall<ModelVersionsPage>(modelApi(scope, info.name, 'versions'), { signal }).then((p) =>
+			p.versions.map((v) => ({
+				number: v.number,
+				names: v.primary ? ['primary', ...sortTags(v.tags)] : sortTags(v.tags)
+			}))
+		);
+
 	/**
 	 * Read the page again after a change. The version shown stays as it is, by number, even if
 	 * the tag or the primary it was opened by moved.
@@ -89,12 +98,11 @@
 		<!-- The version and whether it's the primary, all at the picker's height so the row sits level. -->
 		<div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2">
 			<VersionPicker
-				{scope}
-				name={info.name}
 				version={version.number}
 				{requested}
 				primary={info.primary}
-				tags={info.tags}
+				tags={sortTags(info.tags)}
+				read={readVersions}
 				{versionHref}
 			/>
 			{#if version.primary}
