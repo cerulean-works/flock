@@ -96,7 +96,8 @@ class Fewshot:
     def __post_init__(self) -> None:
         if self.ids and self.rows:
             raise ValueError("Fewshot takes either ids or rows, not both")
-        if not (self.ids or self.rows) and (self.split is None or self.num_shots is None):
+        # Not `is None`: `Dataset.load` reads an empty split name as the scored split.
+        if not (self.ids or self.rows) and (not self.split or self.num_shots is None):
             raise ValueError("Fewshot takes ids, rows, or a split's first num_shots rows")
         if self.ids and self.split is None:
             raise ValueError("Fewshot ids need a split")

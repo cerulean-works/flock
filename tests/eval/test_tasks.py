@@ -356,6 +356,9 @@ def test_doc_rejects_bad_choices_or_gold(choices: tuple[()], gold: int, match: s
     [
         pytest.param({}, "first num_shots rows", id="neither"),
         pytest.param({"split": "train"}, "first num_shots rows", id="first-rows-without-count"),
+        pytest.param(
+            {"split": "", "num_shots": 1}, "first num_shots rows", id="first-rows-no-split"
+        ),
         pytest.param({"split": "train", "num_shots": 0}, "at least 1", id="first-rows-zero"),
         pytest.param(
             {"split": "train", "ids": ("a",), "rows": ({"id": "b"},)}, "either", id="both"
