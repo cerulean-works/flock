@@ -24,8 +24,8 @@ uv run flock eval run \
 | `--dtype` | `bfloat16` | The weights' dtype, `bfloat16` or `float32`. Log-softmax runs in float32 either way. Compare only runs with the same value. |
 | `--add-bos` | off | Start every non-empty context with the tokenizer's BOS token. Set it for Gemma models, as OLMES does. Compare only runs with the same value. See [Tokenizing a request](scoring#tokenizing-a-request). |
 | `--no-tokens` | off | Don't write each multiple-choice task's [per-token values](results#per-token-values) beside its predictions. They change no score, and they cost scoring time and disk: see the page. |
-| `--greedy-tokens` | off | Also write the first 32 tokens greedy decoding writes after each doc's context, for seeing where two models' outputs part. It roughly adds half the scoring time. Not with `--no-tokens`. |
-| `--context-tokens` | off | Also write the per-token values of each doc's context, few-shot examples included, as contamination checks such as Min-K%++ read them. Needs the per-token values, so not with `--no-tokens`. |
+| `--greedy-tokens` | off | Also write the first 32 tokens greedy decoding writes after each doc's context, for seeing where two models' outputs part. It added about half the scoring time in a measured run (see [Per-token values](results#per-token-values)). Not with `--no-tokens`. |
+| `--context-tokens` | off | Also write the per-token values of each doc's context, few-shot examples included, as contamination checks such as Min-K%++ read them. With every flag, a measured run took about twice as long and wrote three times the files (see [Per-token values](results#per-token-values)). Needs the per-token values, so not with `--no-tokens`. |
 | `--device` | `cuda` if available, else `cpu` | The torch device. |
 | `--wandb-project` | off | Also log the run to this project through the `wandb` SDK, with `results.json` and the predictions as files of the run. [Connect the SDK](../cli/sign-in#wandb-sdk) first so it goes to Flock. See [Tracker runs](#tracker-runs). |
 | `--verbose` | off | Print every metric of each task, primary first, with its speed and the start of its task hash, then each suite with its members. |
