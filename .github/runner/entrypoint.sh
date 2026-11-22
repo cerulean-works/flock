@@ -81,8 +81,16 @@ token=$(jq -n --arg repo "${RUNNER_REPOSITORY#*/}" \
   fail "couldn't get an installation token."
 unset jwt
 
+# Just-in-time runners get only the labels they're given, so add the ones every runner has.
+case $(uname -m) in
+  x86_64) arch=x64 ;;
+  aarch64) arch=arm64 ;;
+  *) arch=$(uname -m) ;;
+esac
+labels="self-hosted,linux,$arch,$RUNNER_LABELS"
+
 name="flock-$(hostname)-$(openssl rand -hex 3)"
-jitconfig=$(jq -n --arg name "$name" --arg labels "$RUNNER_LABELS" \
+jitconfig=$(jq -n --arg name "$name" --arg labels "$labels" \
   '{name: $name, runner_group_id: 1, labels: ($labels | split(",")), work_folder: "_work"}' |
   api -X POST -H "Authorization: Bearer $token" --data @- \
     "https://api.github.com/repos/$RUNNER_REPOSITORY/actions/runners/generate-jitconfig" |
@@ -92,7 +100,7 @@ api -X DELETE -H "Authorization: Bearer $token" https://api.github.com/installat
   echo "flock-runner: couldn't revoke the installation token; it expires within an hour." >&2
 unset token
 
-echo "flock-runner: registered $name with labels $RUNNER_LABELS."
+echo "flock-runner: registered $name with labels $labels."
 
 # 3. Take one job.
 exec setpriv --reuid=runner --regid=runner --clear-groups -- \
