@@ -42,7 +42,7 @@ A run with an output directory writes `results.json` and one predictions file pe
       "score": null
     }
   ],
-  "schema_version": 10
+  "schema_version": 11
 }
 ```
 
@@ -76,13 +76,30 @@ A context too long for the model loses tokens from the left, and the continuatio
 
 ## Predictions
 
-Each line of `predictions/<task>.jsonl` is one doc, with enough to recompute every metric of the task and its truncation counts:
+A multiple-choice task's `predictions/<task>.jsonl` opens with one header line, the text every doc's context starts with:
+
+```json
+{"prompt": {"description": "", "shots": [{"id": "MCAS_2007_8_5189", "text": "Question: Lichens are symbiotic organisms made of green algae and fungi. What do the green algae supply to the fungi in this symbiotic relationship?\nAnswer: food"}, ...]}}
+```
+
+`description` is the task's text before its examples, and `shots` lists each few-shot example as another doc is shown it. A doc's scored context is `description`, then each example it was shown followed by a blank line, then its own `question`. The header is written once per task rather than in every row, since repeating it would triple the size of a Base Easy run's files.
+
+Each later line is one doc, with its text and enough to recompute every metric of the task and its truncation counts:
+
+```json
+{"id": "Mercury_7017010", "gold": 0, "correct": false, "pick": 3, "question": "Question: Which tools are needed to measure the effects of friction on a block of wood?\nAnswer:", "choices": [" meter stick, spring scale", " balance, stopwatch", " balance, meter stick", " meter stick, stopwatch"], "logprob": [-11.73, -7.96, -9.27, -9.11], "num_tokens": [5, 3, 4, 4], "num_chars": [26, 19, 21, 23], ...}
+```
 
 | Field | Meaning |
 |---|---|
 | `id` | The doc's id in the dataset. |
 | `gold` | The index of the correct choice. |
 | `correct` | Whether the doc counts as right under the task's primary metric, for a task whose primary metric is an accuracy. It is the value that metric averages, so the rows' count of `true` over the doc count is the metric in `results.json`. Tasks read first by `bpb` have no `correct`, and neither do files written before schema version 9. |
+| `pick` | The index of the choice the primary metric picks, ties going to the first. Only a primary metric that ranks choices has it, so `acc_greedy` and `bpb` tasks don't. `correct` is `pick == gold`. |
+| `question` | The doc's own context, which its choices share, as scored. `null` if each choice has its own context. |
+| `contexts` | Each choice's own context, only when `question` is `null`, as in Winogrande, which puts each option into the sentence. |
+| `choices` | Each choice's continuation exactly as scored, leading space included, so `num_chars` counts it. |
+| `shots` | The indices in the header's `shots` of the examples this doc was shown, only when it saw other than all of them in order. A task that draws its examples from the scored split, such as `basic_skills`, never shows a doc itself. |
 | `logprob` | Each choice's summed log-probability. |
 | `num_tokens` | Each choice's token count. |
 | `num_chars` | Each choice's character count, leading space included. |
@@ -94,7 +111,9 @@ Each line of `predictions/<task>.jsonl` is one doc, with enough to recompute eve
 
 [Metrics](metrics) gives each metric's formula over these fields.
 
-A perplexity task's line has other fields, enough to recompute each of its metrics over any set of docs:
+Text is written as UTF-8, not escaped, so a Chinese task reads as written. Files written before schema version 11 have no header and no `pick`, `question`, `contexts`, `choices` or `shots`. Task hashes don't change: they already cover every scored request, and the text is output, not part of the task's definition. A private dataset's text stays in its predictions file, so it follows that file's privacy rule.
+
+A perplexity task's file has no header, and no text, since its docs are whole texts. Its lines have other fields, enough to recompute each of its metrics over any set of docs:
 
 | Field | Meaning |
 |---|---|
@@ -107,7 +126,7 @@ A perplexity task's line has other fields, enough to recompute each of its metri
 
 ## Reading a run back
 
-[`~eval.results.read_results`] reads a written run from its folder, or from a tracker run that uploaded its files (see [Tracker runs](commands#tracker-runs)) as `run:<entity>/<project>/<id>`. It reads schema versions 8 to 10, and reads a task's predictions only when you ask for them:
+[`~eval.results.read_results`] reads a written run from its folder, or from a tracker run that uploaded its files (see [Tracker runs](commands#tracker-runs)) as `run:<entity>/<project>/<id>`. It reads schema versions 8 to 11, and reads a task's predictions only when you ask for them, without the header line:
 
 ```python
 from flock.eval.results import read_results
@@ -117,7 +136,7 @@ print(run.provenance.model, [task.task for task in run.tasks][:3])
 rows = run.predictions("arc_easy")  # None if the run has no predictions file for it
 ```
 
-A tracker run is read as the user signed in with `flock login`, on that server. [`flock eval diff`](commands#flock-eval-diff) compares two runs read this way.
+A tracker run is read as the user signed in with `flock login`, on that server. [`flock eval diff`](commands#flock-eval-diff) compares two runs read this way, and [`flock eval items`](commands#flock-eval-items) prints their docs with the text.
 
 ## Classes
 

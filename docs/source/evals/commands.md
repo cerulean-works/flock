@@ -61,6 +61,27 @@ uv run flock eval diff results/olmo2-1b run:acme/model-evals/k3v9x2pa
 
 It exits with code 2 if the runs can't be compared: a missing or damaged results file, a run it can't read, or runs scored with another `dtype`, `batch_tokens`, `attention` or `sdpa_backend`. [Doc-by-doc diff](comparison#doc-by-doc-diff) lists which tasks it compares.
 
+## `flock eval items`
+
+Prints a task's docs with their question, choices and each run's answer: from one run, its wrong (or right, or all) docs; from two runs, one cell of their [doc-by-doc diff](comparison#doc-by-doc-diff). Use it to read what a model gets wrong, not only how often.
+
+```bash
+uv run flock eval items results/olmo2-1b --task arc_easy --limit 5
+uv run flock eval items results/olmo2-1b run:acme/model-evals/k3v9x2pa --task arc_easy --cell only_b --json
+```
+
+| Argument or flag | Default | Meaning |
+|---|---|---|
+| `RUNS` | required | One run or two, each a folder or `run:<entity>/<project>/<id>`, as for `flock eval diff`. |
+| `--task` | required | The task. Its primary metric must be an accuracy. |
+| `--only` | `wrong` | One run: print its `wrong`, `right` or `all` docs. |
+| `--cell` | required with two runs | Two runs: print the docs of `only_a`, `only_b`, `both_wrong` or `both_right`. |
+| `--limit` | all | Print at most this many docs, the first ones in doc order. |
+| `--seed` | none | With `--limit`, print a sample drawn with this seed instead, still in doc order. |
+| `--json` | off | Print one JSON object per doc instead of text. See [Reading items](comparison#reading-items) for its fields. |
+
+The text form prints, per doc, the task, id and metric, each run's model, verdict and pick, the question, then one line per choice: each run's probability (`p`) and share (`s`), `*` on the gold choice and `<` on each run's pick. Two runs must be readable by `flock eval diff`, with the task under one hash in both. Runs written before schema version 11 hold no text, so the command refuses them: score the model again. It exits with code 2 on any refusal.
+
 ## `flock eval log`
 
 Logs a `results.json` written earlier to a tracker project, as written, without scoring anything. Use it for results scored without `--wandb-project`.
@@ -71,7 +92,7 @@ uv run flock eval log results/olmo2-1b/results.json --project model-evals
 
 | Argument or flag | Default | Meaning |
 |---|---|---|
-| `RESULTS` | required | The `results.json` to log. It must have `schema_version` 6 to 10. It goes on the run as `results.json`, whatever its name, and from schema version 9 on so do the predictions in the `predictions/` folder beside it. From schema version 9 on, the file must be named `results.json`, so the predictions beside it are its own. |
+| `RESULTS` | required | The `results.json` to log. It must have `schema_version` 6 to 11. It goes on the run as `results.json`, whatever its name, and from schema version 9 on so do the predictions in the `predictions/` folder beside it. From schema version 9 on, the file must be named `results.json`, so the predictions beside it are its own. |
 | `--project` | required | The tracker project. |
 
 It needs both sign-ins: `flock login` for the duplicate check, and the wandb SDK's key for the same server to log the run. [Sign in](../cli/sign-in) sets up both. The run goes to the server you signed in to with `flock login` and to your default organization, online, whatever the SDK's own settings and `WANDB_MODE` say. A `WANDB_API_KEY` set for another server fails with HTTP 401.
@@ -120,6 +141,6 @@ A run has its project's visibility, so anyone can read the predictions of a run 
 > [!WARNING]
 > A Flock server older than this release serves `private/` files like any other run file. On such a server, the private project is the only protection: don't make it public, and don't move its runs into a public project.
 
-`read_results` and `flock eval diff` read a private task's predictions from `private/predictions/<task>.jsonl` on a run, and from `predictions/` in a folder.
+`read_results`, `flock eval diff` and `flock eval items` read a private task's predictions from `private/predictions/<task>.jsonl` on a run, and from `predictions/` in a folder.
 
 When the config's `model` is a version stored in Flock (`flock:org/path@{number}`, or `flock:project:path@{number}` for a project's model) and its `model_digest` is that version's digest, Flock lists the run among the version's eval runs, in the run's own organization. A project's model is found by the config's `model_org`, `model_project` and `model_path`. See [Score a model stored in Flock](run-evaluation#score-a-model-stored-in-flock). The run's page shows its scores in a **Results** tab, and two runs can be compared doc by doc in the dashboard as `flock eval diff` compares them (see [Eval results in the dashboard](../app/explore-runs#eval-results)).
