@@ -796,6 +796,8 @@ class ScoringModel:
                     stats = {k: v.to(self.device, non_blocking=True) for k, v in stats.items()}
                     buffer.write(batch, [width - 1] * len(batch), stats)
                 if not decodes:
+                    # Released before the next batch's pass, so two batches' logits never coexist.
+                    del output
                     continue
 
                 for step in range(num_tokens):
@@ -814,6 +816,8 @@ class ScoringModel:
                         use_cache=True,
                         logits_to_keep=1,
                     )
+                # The batch's cache goes before the next batch fills its own.
+                del output
 
         return ContextScores(
             greedy=greedy if decodes else None,
